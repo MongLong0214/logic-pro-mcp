@@ -36,6 +36,17 @@ struct ProjectDispatcher {
         router: ChannelRouter,
         cache: StateCache
     ) async -> CallTool.Result {
+        // Destructive operation gate (PRD §6.4)
+        let confirmed = params["confirmed"]?.boolValue ?? false
+        if !confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
+            return CallTool.Result(content: [.text(response)], isError: false)
+        }
+
+        // Audit log for L1+ commands
+        if DestructivePolicy.needsAuditLog(for: command) {
+            Log.info("[AUDIT] project.\(command) executed", subsystem: "project")
+        }
+
         switch command {
         case "new":
             let result = await router.route(operation: "project.new")

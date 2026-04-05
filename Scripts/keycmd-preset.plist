@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LogicProMCP Key Commands Preset
+  MIDI Channel 16, CC 20-93
+  Generated for Logic Pro 12.0.1
+  Reference: PRD §4.11
+
+  Install: Logic Pro > Key Commands > Edit (⌥K) > Import
+  Or use: Scripts/install-keycmds.sh
+-->
+<plist version="1.0">
+<dict>
+    <key>LogicProMCP-KeyCommands</key>
+    <dict>
+        <!-- Track Creation (CC 20-25) -->
+        <key>CC20_CH16</key>
+        <string>New Audio Track</string>
+        <key>CC21_CH16</key>
+        <string>New Software Instrument Track</string>
+        <key>CC22_CH16</key>
+        <string>New External MIDI Track</string>
+        <key>CC23_CH16</key>
+        <string>Duplicate Track</string>
+        <key>CC24_CH16</key>
+        <string>Delete Track</string>
+        <key>CC25_CH16</key>
+        <string>Create Track Stack</string>
+
+        <!-- Editing (CC 30-37) -->
+        <key>CC30_CH16</key>
+        <string>Undo</string>
+        <key>CC31_CH16</key>
+        <string>Redo</string>
+        <key>CC32_CH16</key>
+        <string>Cut</string>
+        <key>CC33_CH16</key>
+        <string>Copy</string>
+        <key>CC34_CH16</key>
+        <string>Paste</string>
+        <key>CC35_CH16</key>
+        <string>Select All</string>
+        <key>CC36_CH16</key>
+        <string>Split Regions/Events at Playhead</string>
+        <key>CC37_CH16</key>
+        <string>Bounce Regions in Place</string>
+
+        <!-- MIDI Editing (CC 40-44) -->
+        <key>CC40_CH16</key>
+        <string>Quantize</string>
+        <key>CC41_CH16</key>
+        <string>Force Legato</string>
+        <key>CC42_CH16</key>
+        <string>Remove Overlaps</string>
+        <key>CC43_CH16</key>
+        <string>Join</string>
+        <key>CC44_CH16</key>
+        <string>Toggle Step Input Keyboard</string>
+
+        <!-- View Toggles (CC 50-58) -->
+        <key>CC50_CH16</key>
+        <string>Show/Hide Mixer</string>
+        <key>CC51_CH16</key>
+        <string>Show/Hide Piano Roll</string>
+        <key>CC52_CH16</key>
+        <string>Show/Hide Score Editor</string>
+        <key>CC53_CH16</key>
+        <string>Show/Hide List Editors</string>
+        <key>CC54_CH16</key>
+        <string>Show/Hide Smart Controls</string>
+        <key>CC55_CH16</key>
+        <string>Show/Hide Library</string>
+        <key>CC56_CH16</key>
+        <string>Show/Hide Inspector</string>
+        <key>CC57_CH16</key>
+        <string>Toggle Automation View</string>
+        <key>CC58_CH16</key>
+        <string>Show/Hide All Plug-in Windows</string>
+
+        <!-- Project (CC 60-63) -->
+        <key>CC60_CH16</key>
+        <string>Save</string>
+        <key>CC61_CH16</key>
+        <string>Save As</string>
+        <key>CC62_CH16</key>
+        <string>Bounce Project or Section</string>
+        <key>CC63_CH16</key>
+        <string>Export Selection as MIDI File</string>
+
+        <!-- Transport (CC 70-73) -->
+        <key>CC70_CH16</key>
+        <string>Set Tempo by Selection</string>
+        <key>CC71_CH16</key>
+        <string>Toggle Metronome</string>
+        <key>CC72_CH16</key>
+        <string>Toggle Cycle Mode</string>
+        <key>CC73_CH16</key>
+        <string>Capture Recording</string>
+
+        <!-- Automation (CC 80-83) -->
+        <key>CC80_CH16</key>
+        <string>Toggle Automation Off/Read</string>
+        <key>CC81_CH16</key>
+        <string>Set All Tracks to Automation Read</string>
+        <key>CC82_CH16</key>
+        <string>Set All Tracks to Automation Touch</string>
+        <key>CC83_CH16</key>
+        <string>Set All Tracks to Automation Latch</string>
+
+        <!-- Note Manipulation (CC 90-93) -->
+        <key>CC90_CH16</key>
+        <string>Nudge Region/Event Position Up</string>
+        <key>CC91_CH16</key>
+        <string>Nudge Region/Event Position Down</string>
+        <key>CC92_CH16</key>
+        <string>Transpose Up One Octave</string>
+        <key>CC93_CH16</key>
+        <string>Transpose Down One Octave</string>
+    </dict>
+</dict>
+</plist>

@@ -8,54 +8,59 @@ import Foundation
 actor ChannelRouter {
     private var channels: [ChannelID: any Channel] = [:]
 
-    /// Static routing table: operation → ordered list of channels to try.
-    /// Operations are prefixed by category (e.g., "transport.play", "track.mute").
-    private static let routingTable: [String: [ChannelID]] = [
-        // Transport — MMC via CoreMIDI, fallback to keyboard, then AppleScript
-        "transport.play":             [.coreMIDI, .cgEvent, .appleScript],
-        "transport.stop":             [.coreMIDI, .cgEvent, .appleScript],
-        "transport.record":           [.coreMIDI, .cgEvent, .appleScript],
-        "transport.pause":            [.coreMIDI, .cgEvent, .appleScript],
-        "transport.rewind":           [.coreMIDI, .cgEvent],
-        "transport.fast_forward":     [.coreMIDI, .cgEvent],
-        "transport.toggle_cycle":     [.cgEvent, .accessibility],
-        "transport.toggle_metronome": [.cgEvent, .accessibility],
-        "transport.set_tempo":        [.osc, .accessibility],
+    /// V2 routing table: MCU primary for mixer/transport/track state, MIDIKeyCommands for editing.
+    /// PRD §4.3 + §4.3.1 contract changes.
+    static let v2RoutingTable: [String: [ChannelID]] = [
+        // Transport — MCU primary, CoreMIDI + CGEvent fallback
+        "transport.play":             [.mcu, .coreMIDI, .cgEvent],
+        "transport.stop":             [.mcu, .coreMIDI, .cgEvent],
+        "transport.record":           [.mcu, .coreMIDI, .cgEvent],
+        "transport.pause":            [.coreMIDI, .cgEvent],
+        "transport.rewind":           [.mcu, .coreMIDI, .cgEvent],
+        "transport.fast_forward":     [.mcu, .coreMIDI, .cgEvent],
+        "transport.toggle_cycle":     [.mcu, .midiKeyCommands, .cgEvent],
+        "transport.toggle_metronome": [.midiKeyCommands, .cgEvent],
+        "transport.set_tempo":        [.midiKeyCommands, .cgEvent],  // MCU has no native tempo set
         "transport.get_state":        [.accessibility],
-        "transport.goto_position":    [.coreMIDI, .cgEvent],
+        "transport.goto_position":    [.mcu, .coreMIDI, .cgEvent],
         "transport.set_cycle_range":  [.accessibility],
+        "transport.toggle_count_in":  [.midiKeyCommands, .cgEvent],
+        "transport.capture_recording":[.midiKeyCommands, .cgEvent],
 
         // Track state reading
         "track.get_tracks":           [.accessibility],
         "track.get_selected":         [.accessibility],
 
-        // Track mutation — AX click, fallback to keyboard
-        "track.select":               [.accessibility, .cgEvent],
-        "track.create_audio":         [.cgEvent, .accessibility],
-        "track.create_instrument":    [.cgEvent, .accessibility],
-        "track.create_drummer":       [.cgEvent, .accessibility],
-        "track.create_external_midi": [.cgEvent, .accessibility],
-        "track.delete":               [.cgEvent, .accessibility],
+        // Track mutation — MCU for mute/solo/arm/select, KeyCmd for creation
+        "track.select":               [.mcu, .accessibility, .cgEvent],
+        "track.create_audio":         [.midiKeyCommands, .cgEvent],
+        "track.create_instrument":    [.midiKeyCommands, .cgEvent],
+        "track.create_drummer":       [.midiKeyCommands, .cgEvent],
+        "track.create_external_midi": [.midiKeyCommands, .cgEvent],
+        "track.delete":               [.midiKeyCommands, .cgEvent],
         "track.rename":               [.accessibility],
-        "track.set_mute":             [.accessibility, .cgEvent],
-        "track.set_solo":             [.accessibility, .cgEvent],
-        "track.set_arm":              [.accessibility, .cgEvent],
-        "track.duplicate":            [.cgEvent],
+        "track.set_mute":             [.mcu, .accessibility, .cgEvent],
+        "track.set_solo":             [.mcu, .accessibility, .cgEvent],
+        "track.set_arm":              [.mcu, .accessibility, .cgEvent],
+        "track.duplicate":            [.midiKeyCommands, .cgEvent],
         "track.set_color":            [.accessibility],
+        "track.set_automation":       [.mcu],  // §4.3.1 new command
+        "track.create_stack":         [.midiKeyCommands, .cgEvent],
 
-        // Mixer — OSC primary for continuous, AX fallback
-        "mixer.get_state":            [.accessibility],
-        "mixer.set_volume":           [.osc, .accessibility],
-        "mixer.set_pan":              [.osc, .accessibility],
-        "mixer.set_send":             [.osc, .accessibility],
+        // Mixer — MCU primary, NO fallback (PRD §4.3)
+        "mixer.get_state":            [.mcu, .accessibility],
+        "mixer.set_volume":           [.mcu],
+        "mixer.set_pan":              [.mcu],
+        "mixer.set_send":             [.mcu],
         "mixer.set_output":           [.accessibility],
         "mixer.set_input":            [.accessibility],
-        "mixer.get_channel_strip":    [.accessibility],
-        "mixer.set_master_volume":    [.osc, .accessibility],
-        "mixer.set_output_volume":    [.osc, .accessibility],
+        "mixer.get_channel_strip":    [.mcu, .accessibility],
+        "mixer.set_master_volume":    [.mcu],
+        "mixer.set_output_volume":    [.mcu],
         "mixer.get_bus_routing":      [.accessibility],
-        "mixer.toggle_eq":            [.accessibility],
-        "mixer.reset_strip":          [.accessibility],
+        "mixer.toggle_eq":            [.mcu, .accessibility],
+        "mixer.reset_strip":          [.mcu, .accessibility],
+        "mixer.set_plugin_param":     [.mcu, .scripter],  // §4.3.1 new command
 
         // MIDI — CoreMIDI only
         "midi.send_note":             [.coreMIDI],
@@ -68,6 +73,7 @@ actor ChannelRouter {
         "midi.list_ports":            [.coreMIDI],
         "midi.get_input_state":       [.coreMIDI],
         "midi.create_virtual_port":   [.coreMIDI],
+        "midi.step_input":            [.coreMIDI],  // §4.3.1 new command
 
         // MMC
         "mmc.play":                   [.coreMIDI],
@@ -77,47 +83,54 @@ actor ChannelRouter {
         "mmc.locate":                 [.coreMIDI],
         "mmc.pause":                  [.coreMIDI],
 
-        // Navigation — keyboard primary, AX menu fallback
-        "nav.goto_bar":               [.cgEvent, .accessibility],
-        "nav.goto_marker":            [.cgEvent, .accessibility],
-        "nav.create_marker":          [.cgEvent],
-        "nav.delete_marker":          [.cgEvent, .accessibility],
+        // Navigation — MCU jog + KeyCmd views, CGEvent fallback
+        "nav.goto_bar":               [.mcu, .cgEvent],
+        "nav.goto_marker":            [.midiKeyCommands, .cgEvent],
+        "nav.create_marker":          [.midiKeyCommands, .cgEvent],
+        "nav.delete_marker":          [.midiKeyCommands, .cgEvent],
         "nav.rename_marker":          [.accessibility],
         "nav.get_markers":            [.accessibility],
-        "nav.zoom_to_fit":            [.cgEvent],
-        "nav.set_zoom_level":         [.cgEvent],
+        "nav.zoom_to_fit":            [.midiKeyCommands, .cgEvent],
+        "nav.set_zoom_level":         [.midiKeyCommands, .cgEvent],
 
-        // Editing — keyboard primary
-        "edit.undo":                  [.cgEvent, .accessibility],
-        "edit.redo":                  [.cgEvent, .accessibility],
-        "edit.cut":                   [.cgEvent],
-        "edit.copy":                  [.cgEvent],
-        "edit.paste":                 [.cgEvent],
-        "edit.delete":                [.cgEvent],
-        "edit.select_all":            [.cgEvent],
-        "edit.split":                 [.cgEvent],
-        "edit.join":                  [.cgEvent, .accessibility],
-        "edit.quantize":              [.cgEvent, .accessibility],
-        "edit.bounce_in_place":       [.cgEvent, .accessibility],
-        "edit.normalize":             [.cgEvent, .accessibility],
+        // Editing — MIDIKeyCommands primary, CGEvent fallback
+        "edit.undo":                  [.midiKeyCommands, .cgEvent],
+        "edit.redo":                  [.midiKeyCommands, .cgEvent],
+        "edit.cut":                   [.midiKeyCommands, .cgEvent],
+        "edit.copy":                  [.midiKeyCommands, .cgEvent],
+        "edit.paste":                 [.midiKeyCommands, .cgEvent],
+        "edit.delete":                [.midiKeyCommands, .cgEvent],
+        "edit.select_all":            [.midiKeyCommands, .cgEvent],
+        "edit.split":                 [.midiKeyCommands, .cgEvent],
+        "edit.join":                  [.midiKeyCommands, .cgEvent],
+        "edit.quantize":              [.midiKeyCommands, .cgEvent],
+        "edit.bounce_in_place":       [.midiKeyCommands, .cgEvent],
+        "edit.normalize":             [.midiKeyCommands, .cgEvent],
+        "edit.toggle_step_input":     [.midiKeyCommands, .cgEvent],  // §4.3.1 new command
+        "edit.duplicate":             [.midiKeyCommands, .cgEvent],
 
-        // Project — AppleScript for lifecycle, keyboard for save/bounce
+        // Project — AppleScript for lifecycle, KeyCmd for save/bounce
         "project.new":                [.appleScript],
         "project.open":               [.appleScript],
-        "project.save":               [.cgEvent, .appleScript],
-        "project.save_as":            [.cgEvent],
-        "project.close":              [.cgEvent, .appleScript],
+        "project.save":               [.midiKeyCommands, .cgEvent, .appleScript],
+        "project.save_as":            [.midiKeyCommands, .cgEvent],
+        "project.close":              [.appleScript],
         "project.get_info":           [.accessibility],
-        "project.bounce":             [.cgEvent, .accessibility],
-        "project.is_running":         [],  // No channel needed — pure process check
+        "project.bounce":             [.midiKeyCommands, .cgEvent],
+        "project.is_running":         [],
+        "project.launch":             [.appleScript],
+        "project.quit":               [.appleScript],
 
-        // Views — keyboard toggle
-        "view.toggle_mixer":          [.cgEvent, .accessibility],
-        "view.toggle_piano_roll":     [.cgEvent, .accessibility],
-        "view.toggle_score_editor":   [.cgEvent, .accessibility],
-        "view.toggle_step_editor":    [.cgEvent, .accessibility],
-        "view.toggle_library":        [.cgEvent, .accessibility],
-        "view.toggle_inspector":      [.cgEvent, .accessibility],
+        // Views — MIDIKeyCommands primary
+        "view.toggle_mixer":          [.midiKeyCommands, .cgEvent],
+        "view.toggle_piano_roll":     [.midiKeyCommands, .cgEvent],
+        "view.toggle_score_editor":   [.midiKeyCommands, .cgEvent],
+        "view.toggle_step_editor":    [.midiKeyCommands, .cgEvent],
+        "view.toggle_library":        [.midiKeyCommands, .cgEvent],
+        "view.toggle_inspector":      [.midiKeyCommands, .cgEvent],
+        "view.toggle_smart_controls": [.midiKeyCommands, .cgEvent],
+        "view.toggle_automation":     [.midiKeyCommands, .cgEvent],
+        "view.toggle_plugin_windows": [.midiKeyCommands, .cgEvent],
 
         // Regions
         "region.get_regions":         [.accessibility],
@@ -130,14 +143,21 @@ actor ChannelRouter {
         // Plugins
         "plugin.list":                [.accessibility],
         "plugin.insert":              [.accessibility],
-        "plugin.bypass":              [.accessibility],
+        "plugin.bypass":              [.mcu, .accessibility],
         "plugin.remove":              [.accessibility],
+        "plugin.set_param":           [.scripter, .mcu],  // Scripter primary, MCU fallback
 
         // Automation
         "automation.get_mode":        [.accessibility],
-        "automation.set_mode":        [.accessibility, .cgEvent],
-        "automation.toggle_view":     [.cgEvent, .accessibility],
+        "automation.set_mode":        [.mcu, .midiKeyCommands, .cgEvent],
+        "automation.toggle_view":     [.midiKeyCommands, .cgEvent],
         "automation.get_parameter":   [.accessibility],
+
+        // Note manipulation
+        "note.up_semitone":           [.midiKeyCommands, .cgEvent],
+        "note.down_semitone":         [.midiKeyCommands, .cgEvent],
+        "note.up_octave":             [.midiKeyCommands, .cgEvent],
+        "note.down_octave":           [.midiKeyCommands, .cgEvent],
 
         // System — no channel needed
         "system.health":              [],
@@ -145,6 +165,9 @@ actor ChannelRouter {
         "system.refresh":             [],
         "system.permissions":         [],
     ]
+
+    /// Active routing table (v2)
+    private static let routingTable = v2RoutingTable
 
     // MARK: - Lifecycle
 

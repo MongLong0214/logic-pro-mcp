@@ -172,9 +172,18 @@ struct MIDIDispatcher {
             )
             return CallTool.Result(content: [.text(result.message)], isError: !result.isSuccess)
 
+        case "step_input":
+            let note = params["note"]?.intValue ?? 60
+            let duration = params["duration"]?.stringValue ?? "1/4"
+            let result = await router.route(
+                operation: "midi.step_input",
+                params: ["note": String(note), "duration": duration]
+            )
+            return CallTool.Result(content: [.text(result.message)], isError: !result.isSuccess)
+
         default:
             return CallTool.Result(
-                content: [.text("Unknown MIDI command: \(command). Available: send_note, send_chord, send_cc, send_program_change, send_pitch_bend, send_aftertouch, send_sysex, create_virtual_port, mmc_play, mmc_stop, mmc_record, mmc_locate")],
+                content: [.text("Unknown MIDI command: \(command). Available: send_note, send_chord, send_cc, send_program_change, send_pitch_bend, send_aftertouch, send_sysex, create_virtual_port, step_input, mmc_play, mmc_stop, mmc_record, mmc_locate")],
                 isError: true
             )
         }

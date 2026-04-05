@@ -23,7 +23,7 @@ actor AppleScriptChannel: Channel {
             guard let path = params["path"] else {
                 return .error("Missing 'path' parameter for project.open")
             }
-            return await runScript(openProjectScript(path: path))
+            return openProjectViaWorkspace(path: path)
 
         case "project.close":
             let saving = params["saving"] ?? "yes"
@@ -32,15 +32,13 @@ actor AppleScriptChannel: Channel {
         case "project.save":
             return await runScript(saveProjectScript())
 
-        // Transport fallbacks (AppleScript is last resort for these)
-        case "transport.play":
-            return await runScript(transportScript(action: "play"))
-        case "transport.stop":
-            return await runScript(transportScript(action: "stop"))
-        case "transport.record":
-            return await runScript(transportScript(action: "record"))
-        case "transport.pause":
-            return await runScript(transportScript(action: "pause"))
+        // Transport fallbacks — whitelist enforced (PRD §6.3)
+        case "transport.play", "transport.stop", "transport.record", "transport.pause":
+            let action = operation.replacingOccurrences(of: "transport.", with: "")
+            guard AppleScriptSafety.isAllowedTransportAction(action) else {
+                return .error("Transport action not in whitelist: \(action)")
+            }
+            return await runScript(transportScript(action: action))
 
         default:
             return .error("Unsupported AppleScript operation: \(operation)")
@@ -57,21 +55,23 @@ actor AppleScriptChannel: Channel {
     // MARK: - Script execution
 
     private func runScript(_ source: String) async -> ChannelResult {
-        // NSAppleScript must run on the main thread-ish context, but within
-        // an actor we are already serialized. The actual execution is synchronous.
-        var errorDict: NSDictionary?
-        let script = NSAppleScript(source: source)
-        let result = script?.executeAndReturnError(&errorDict)
+        // Run NSAppleScript on a detached task to avoid blocking the actor's
+        // cooperative thread pool. executeAndReturnError can take seconds.
+        return await Task.detached(priority: .userInitiated) {
+            var errorDict: NSDictionary?
+            let script = NSAppleScript(source: source)
+            let result = script?.executeAndReturnError(&errorDict)
 
-        if let error = errorDict {
-            let message = error[NSAppleScript.errorMessage] as? String ?? "Unknown AppleScript error"
-            let number = error[NSAppleScript.errorNumber] as? Int ?? -1
-            Log.error("AppleScript error \(number): \(message)", subsystem: "appleScript")
-            return .error("AppleScript error: \(message)")
-        }
+            if let error = errorDict {
+                let message = error[NSAppleScript.errorMessage] as? String ?? "Unknown AppleScript error"
+                let number = error[NSAppleScript.errorNumber] as? Int ?? -1
+                Log.error("AppleScript error \(number): \(message)", subsystem: "appleScript")
+                return ChannelResult.error("AppleScript error: \(message)")
+            }
 
-        let output = result?.stringValue ?? "OK"
-        return .success("{\"result\":\"\(escapeJSON(output))\"}")
+            let output = result?.stringValue ?? "OK"
+            return ChannelResult.success("{\"result\":\"\(AppleScriptChannel.escapeJSON(output))\"}")
+        }.value
     }
 
     // MARK: - Script templates
@@ -90,14 +90,14 @@ actor AppleScriptChannel: Channel {
         """
     }
 
-    private func openProjectScript(path: String) -> String {
-        let escaped = path.replacingOccurrences(of: "\"", with: "\\\"")
-        return """
-        tell application "Logic Pro"
-            activate
-            open POSIX file "\(escaped)"
-        end tell
-        """
+    private func openProjectViaWorkspace(path: String) -> ChannelResult {
+        // Use NSWorkspace.open instead of AppleScript string interpolation
+        // to completely prevent injection attacks (PRD §6.3)
+        if AppleScriptSafety.openFile(at: path) {
+            return .success("Opened: \(path)")
+        } else {
+            return .error("Failed to open: \(path)")
+        }
     }
 
     private func closeProjectScript(saving: String) -> String {
@@ -135,7 +135,7 @@ actor AppleScriptChannel: Channel {
 
     // MARK: - Helpers
 
-    private func escapeJSON(_ string: String) -> String {
+    private static func escapeJSON(_ string: String) -> String {
         string
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")

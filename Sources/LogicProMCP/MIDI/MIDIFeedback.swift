@@ -40,84 +40,95 @@ enum MIDIFeedback {
     static func parseBytes(_ bytes: [UInt8]) -> [Event] {
         var events: [Event] = []
         var i = 0
+        var runningStatus: UInt8 = 0  // Running status byte
 
         while i < bytes.count {
             let byte = bytes[i]
 
-            // SysEx start
+            // SysEx start — resets running status
             if byte == 0xF0 {
-                // Find F7 end.
+                runningStatus = 0
                 if let endIndex = bytes[i...].firstIndex(of: 0xF7) {
                     let sysex = Array(bytes[i...endIndex])
                     events.append(.sysEx(sysex))
                     i = endIndex + 1
                 } else {
-                    // Incomplete SysEx — emit what we have.
                     events.append(.sysEx(Array(bytes[i...])))
                     break
                 }
                 continue
             }
 
-            // Channel voice messages.
-            guard byte & 0x80 != 0 else {
-                // Data byte without a status — skip.
+            // Determine status byte: new status or running status
+            let status: UInt8
+            let channel: UInt8
+            if byte & 0x80 != 0 {
+                // New status byte
+                runningStatus = byte
+                status = byte & 0xF0
+                channel = byte & 0x0F
+                i += 1  // consume status byte
+            } else if runningStatus != 0 {
+                // Running status: reuse previous status
+                status = runningStatus & 0xF0
+                channel = runningStatus & 0x0F
+                // don't consume — byte is first data byte
+            } else {
+                // Data byte with no prior status — skip
                 i += 1
                 continue
             }
 
-            let status = byte & 0xF0
-            let channel = byte & 0x0F
-
+            // i now points to first data byte (status already consumed or running)
             switch status {
             case 0x90:
-                guard i + 2 < bytes.count else { break }
-                let note = bytes[i + 1] & 0x7F
-                let vel = bytes[i + 2] & 0x7F
+                guard i + 1 < bytes.count else { i += 1; break }
+                let note = bytes[i] & 0x7F
+                let vel = bytes[i + 1] & 0x7F
                 if vel == 0 {
                     events.append(.noteOff(channel: channel, note: note, velocity: 0))
                 } else {
                     events.append(.noteOn(channel: channel, note: note, velocity: vel))
                 }
-                i += 3
+                i += 2
                 continue
             case 0x80:
-                guard i + 2 < bytes.count else { break }
-                events.append(.noteOff(channel: channel, note: bytes[i + 1] & 0x7F, velocity: bytes[i + 2] & 0x7F))
-                i += 3
+                guard i + 1 < bytes.count else { i += 1; break }
+                events.append(.noteOff(channel: channel, note: bytes[i] & 0x7F, velocity: bytes[i + 1] & 0x7F))
+                i += 2
                 continue
             case 0xB0:
-                guard i + 2 < bytes.count else { break }
-                events.append(.controlChange(channel: channel, controller: bytes[i + 1] & 0x7F, value: bytes[i + 2] & 0x7F))
-                i += 3
+                guard i + 1 < bytes.count else { i += 1; break }
+                events.append(.controlChange(channel: channel, controller: bytes[i] & 0x7F, value: bytes[i + 1] & 0x7F))
+                i += 2
                 continue
             case 0xC0:
-                guard i + 1 < bytes.count else { break }
-                events.append(.programChange(channel: channel, program: bytes[i + 1] & 0x7F))
-                i += 2
+                guard i < bytes.count else { break }
+                events.append(.programChange(channel: channel, program: bytes[i] & 0x7F))
+                i += 1
                 continue
             case 0xE0:
-                guard i + 2 < bytes.count else { break }
-                let lsb = UInt16(bytes[i + 1] & 0x7F)
-                let msb = UInt16(bytes[i + 2] & 0x7F)
+                guard i + 1 < bytes.count else { i += 1; break }
+                let lsb = UInt16(bytes[i] & 0x7F)
+                let msb = UInt16(bytes[i + 1] & 0x7F)
                 events.append(.pitchBend(channel: channel, value: (msb << 7) | lsb))
-                i += 3
-                continue
-            case 0xD0:
-                guard i + 1 < bytes.count else { break }
-                events.append(.aftertouch(channel: channel, pressure: bytes[i + 1] & 0x7F))
                 i += 2
                 continue
+            case 0xD0:
+                guard i < bytes.count else { break }
+                events.append(.aftertouch(channel: channel, pressure: bytes[i] & 0x7F))
+                i += 1
+                continue
             case 0xA0:
-                guard i + 2 < bytes.count else { break }
-                events.append(.polyAftertouch(channel: channel, note: bytes[i + 1] & 0x7F, pressure: bytes[i + 2] & 0x7F))
-                i += 3
+                guard i + 1 < bytes.count else { i += 1; break }
+                events.append(.polyAftertouch(channel: channel, note: bytes[i] & 0x7F, pressure: bytes[i + 1] & 0x7F))
+                i += 2
                 continue
             default:
                 break
             }
 
-            // Unknown or incomplete — skip this byte.
+            // Unknown status — skip one byte
             i += 1
         }
 

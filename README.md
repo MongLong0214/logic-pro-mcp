@@ -5,81 +5,77 @@
 [![MCP SDK 0.10](https://img.shields.io/badge/MCP_SDK-0.10-blue.svg)](https://github.com/modelcontextprotocol/swift-sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Bidirectional, stateful control of Logic Pro from AI assistants. Combines **5 native macOS control channels** (CoreMIDI, Accessibility, CGEvent, AppleScript, OSC) into a single MCP server with smart routing, fallback chains, and sub-millisecond transport latency.
+Bidirectional, stateful control of Logic Pro from AI assistants. **7 native macOS channels** (MCU, MIDI Key Commands, CoreMIDI, Scripter, Accessibility, CGEvent, AppleScript) with smart routing, fallback chains, and real-time state feedback.
 
-**8 tools, 7 resources, ~3k context tokens.** Not 100+ individual tools.
+**8 tools, 7 resources, 93 tests, ~95% DAW control coverage.**
 
 ## How It Works
 
 ```
-Claude ──── 8 dispatcher tools ──── logic_transport("play", {})
-         │                           logic_tracks("mute", {track: 3})
+Claude ──── 8 dispatcher tools ──── logic_transport("play")
+         │                           logic_mixer("set_volume", {track: 2, value: 0.7})
          │  7 MCP resources ──────── logic://transport/state
-         │  (zero tool cost)         logic://tracks
-         ▼
-   ┌─── LogicProMCP ──────────────────────────────┐
-   │  Command Dispatcher → Channel Router          │
-   │     │       │       │       │       │         │
-   │  CoreMIDI   AX    CGEvent  AS     OSC        │
-   │   <1ms    ~15ms    <2ms   ~200ms  <1ms       │
-   └───────────────────────────────────────────────┘
+         │  (zero tool cost)         logic://mixer
+         v
+   ┌─── LogicProMCP Server ──────────────────────────────────────┐
+   │  Command Dispatcher → Channel Router (priority + fallback)   │
+   │     │       │        │       │       │       │       │       │
+   │   MCU   KeyCmds  CoreMIDI Scripter  AS    CGEvent   AX      │
+   │  <2ms    <2ms     <1ms    <5ms    ~200ms   <2ms   ~15ms     │
+   └──────────────────────────────────────────────────────────────┘
+         ↕ = bidirectional (MCU feedback → state cache)
 ```
 
-Each command routes through the fastest available channel, with automatic fallback if the primary fails.
+## Channels
+
+| Channel | Role | Direction | Primary For |
+|---------|------|-----------|-------------|
+| **MCU** (Mackie Control) | Mixer, transport, plugins, automation | Bidirectional | Faders, pan, mute/solo, plugin params |
+| **MIDI Key Commands** | Logic Pro keyboard shortcuts via MIDI CC | Send only | Editing, view toggles, track creation |
+| **CoreMIDI** | MIDI note/CC input, Step Input | Bidirectional | Note entry, real-time MIDI |
+| **Scripter** | Plugin parameter deep control via MIDI FX | Send only | Per-plugin parameter automation |
+| **AppleScript** | Project lifecycle | Send only | Open, save, close, bounce |
+| **CGEvent** | Keyboard shortcut fallback | Send only | Fallback for Key Commands |
+| **Accessibility** | UI state reading (supplementary) | Read only | Project info, regions, markers |
 
 ## Tools & Resources
 
-### Tools (8 dispatchers — all actions)
+### Tools (8 dispatchers)
 
 | Tool | Commands | Examples |
-|------|----------|----------|
-| `logic_transport` | play, stop, record, set_tempo, goto_position... | `logic_transport("set_tempo", {tempo: 140})` |
-| `logic_tracks` | select, create_audio, mute, solo, arm, rename... | `logic_tracks("mute", {index: 2, enabled: true})` |
-| `logic_mixer` | set_volume, set_pan, insert_plugin, bypass_plugin... | `logic_mixer("set_volume", {track: 0, value: 0.8})` |
-| `logic_midi` | send_note, send_cc, send_chord, mmc_play... | `logic_midi("send_note", {note: 60, velocity: 100, channel: 1, duration_ms: 500})` |
-| `logic_edit` | undo, redo, cut, copy, paste, quantize, split... | `logic_edit("quantize", {value: "1/16"})` |
-| `logic_navigate` | goto_bar, create_marker, toggle_view, set_zoom... | `logic_navigate("toggle_view", {view: "mixer"})` |
-| `logic_project` | new, open, save, bounce, launch, quit | `logic_project("open", {path: "/path/to/song.logicx"})` |
-| `logic_system` | health, permissions, refresh_cache, help | `logic_system("help", {category: "transport"})` |
+|------|----------|---------|
+| `logic_transport` | play, stop, record, set_tempo, goto_position... | `logic_transport("play")` |
+| `logic_tracks` | select, create, mute, solo, arm, set_automation... | `logic_tracks("mute", {index: 2, enabled: true})` |
+| `logic_mixer` | set_volume, set_pan, set_send, set_plugin_param... | `logic_mixer("set_volume", {track: 0, value: 0.8})` |
+| `logic_midi` | send_note, send_chord, step_input, send_cc... | `logic_midi("send_chord", {notes: [60,64,67]})` |
+| `logic_edit` | undo, redo, cut, copy, quantize, toggle_step_input... | `logic_edit("quantize", {value: "1/16"})` |
+| `logic_navigate` | goto_bar, create_marker, toggle_view, zoom... | `logic_navigate("toggle_view", {view: "mixer"})` |
+| `logic_project` | open, save, close, bounce, launch, quit | `logic_project("save")` |
+| `logic_system` | health, permissions, refresh_cache, help | `logic_system("health")` |
 
-### Resources (7 URIs — zero context cost)
+### Resources (7 URIs)
 
-| URI | Description | Refresh |
-|-----|-------------|---------|
-| `logic://transport/state` | Playing/recording/tempo/position/cycle | 500ms |
-| `logic://tracks` | All tracks with mute/solo/arm states | 2s |
-| `logic://tracks/{index}` | Single track detail | 2s |
-| `logic://mixer` | All channel strips: volume, pan, plugins | 2s |
-| `logic://project/info` | Project name, sample rate, time sig | 5s |
-| `logic://midi/ports` | Available MIDI ports | 10s |
-| `logic://system/health` | Channel status, cache, permissions | on-demand |
+| URI | Description |
+|-----|-------------|
+| `logic://transport/state` | Playing, recording, tempo, position, cycle |
+| `logic://tracks` | All tracks with mute/solo/arm/automation states |
+| `logic://tracks/{index}` | Single track detail |
+| `logic://mixer` | Channel strips: volume, pan, plugins + MCU status |
+| `logic://project/info` | Project name, sample rate, time signature |
+| `logic://midi/ports` | Available MIDI ports |
+| `logic://system/health` | Channel status, MCU connection, permissions |
 
 ## Installation
-
-### Quick Install (Script)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/koltyj/logic-pro-mcp/main/Scripts/install.sh | bash
-```
-
-### Download Binary
-
-Grab the latest universal macOS binary from [GitHub Releases](https://github.com/koltyj/logic-pro-mcp/releases), then:
-
-```bash
-chmod +x LogicProMCP
-sudo mv LogicProMCP /usr/local/bin/
-```
 
 ### Build from Source
 
 Requires Swift 6.0+ and macOS 14+.
 
 ```bash
-git clone https://github.com/koltyj/logic-pro-mcp.git
+git clone https://github.com/MongLong0214/logic-pro-mcp.git
 cd logic-pro-mcp
 swift build -c release
-# Binary at .build/release/LogicProMCP
+sudo cp .build/release/LogicProMCP /usr/local/bin/
 ```
 
 ### Register with Claude Code
@@ -88,117 +84,85 @@ swift build -c release
 claude mcp add --scope user logic-pro -- LogicProMCP
 ```
 
-### Claude Desktop (Manual Config)
+### Logic Pro Setup
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+1. **MCU Control Surface** (required for mixer/transport control):
+   - Logic Pro > Control Surfaces > Setup
+   - New > Install > Mackie Control > Add
+   - Set MIDI In/Out to `LogicProMCP-MCU-Internal`
 
-```json
-{
-  "mcpServers": {
-    "logic-pro": {
-      "command": "/usr/local/bin/LogicProMCP",
-      "args": []
-    }
-  }
-}
-```
+2. **Key Commands** (optional, for keyboard shortcut control):
+   ```bash
+   Scripts/install-keycmds.sh
+   ```
 
-## Permissions
+3. **Scripter MIDI FX** (optional, for plugin parameter control):
+   - Add Scripter to channel strip > paste `Scripts/LogicProMCP-Scripter.js`
 
-The server requires two macOS permissions:
-
-1. **Accessibility** — System Settings > Privacy & Security > Accessibility > add your terminal app
-2. **Automation** — System Settings > Privacy & Security > Automation > allow control of Logic Pro
-
-Check permission status:
+### Permissions
 
 ```bash
 LogicProMCP --check-permissions
 ```
 
-## Usage
+Required:
+- **System Settings > Privacy & Security > Accessibility** — add your terminal
+- **System Settings > Privacy & Security > Automation > Logic Pro** — allow
 
-Once registered, ask your AI assistant naturally:
+## Safety
 
-- *"What tracks do I have?"* — reads `logic://tracks` resource
-- *"Mute track 3"* — `logic_tracks("mute", {index: 3, enabled: true})`
-- *"Set tempo to 128"* — `logic_transport("set_tempo", {tempo: 128})`
-- *"Play a C major chord"* — `logic_midi("send_chord", {notes: [60,64,67], ...})`
-- *"Show me the mixer"* — `logic_navigate("toggle_view", {view: "mixer"})`
+### Destructive Operation Policy
 
-For full command reference: `logic_system("help", {category: "all"})`
+| Level | Commands | Behavior |
+|-------|----------|----------|
+| L3 (Critical) | quit, close | Requires `{confirmed: true}` parameter |
+| L2 (High) | save_as, bounce, open | Warning in response, audit logged |
+| L1 (Normal) | save, new, launch | Audit logged |
+| L0 (Safe) | Everything else | Immediate execution |
+
+### Security
+
+- **AppleScript injection**: `project.open` uses `NSWorkspace.open()` (no string interpolation)
+- **Transport whitelist**: Only `play`, `stop`, `record`, `pause` allowed via AppleScript
+- **SysEx validation**: F0/F7 framing + 7-bit body enforcement
 
 ## Architecture
 
-### Channel Routing
-
-| Channel | Latency | Used For |
-|---------|---------|----------|
-| **CoreMIDI** | <1ms | Transport (MMC), note/CC/sysex sending |
-| **Accessibility** | ~15ms | State reading, UI button clicks, slider values |
-| **CGEvent** | <2ms | Keyboard shortcuts (postToPid, no focus needed) |
-| **AppleScript** | ~200ms | App lifecycle only (launch, quit, open file) |
-| **OSC** | <1ms | Mixer control (requires Logic Pro OSC setup) |
-
-### State Cache
-
-Background Accessibility polling with adaptive intervals:
-
-- **Active** (tool used <5s ago): 500ms transport, 2s tracks/mixer
-- **Light** (5-30s idle): 2s all
-- **Idle** (>30s): 5s all, near-zero CPU
-
-### Context Efficiency
-
-| Approach | Tools | Resources | Context Cost |
-|----------|-------|-----------|-------------|
-| Typical MCP server | 100+ tools | 0 | ~40k tokens |
-| **This server** | **8 tools** | **7 resources** | **~3k tokens** |
-
-Same 100+ operations. 90% less context.
-
-## Limitations
-
-Logic Pro does not expose a programmatic API. This server works within macOS platform constraints:
-
-- UI element paths may change between Logic Pro versions
-- Some deep state (automation curves, region MIDI data) is not exposed via Accessibility
-- AX element labels may be localized on non-English macOS
-- Plugin parameter control is limited to what's visible in the UI
-- OSC channel requires manual Logic Pro Control Surface setup
-
-This is the ceiling for Logic Pro automation given Apple's constraints.
-
-## Development
-
-```bash
-# Build debug
-swift build
-
-# Build release
-swift build -c release
-
-# Run tests
-swift test
-
-# Check permissions without starting server
-.build/debug/LogicProMCP --check-permissions
-```
-
-### Project Structure
-
 ```
 Sources/LogicProMCP/
-  main.swift                 # Entry point
-  Server/                    # MCP server + config
-  Dispatchers/               # 8 MCP tool dispatchers
-  Resources/                 # 7 MCP resource handlers
-  Channels/                  # 5 communication channels
-  Accessibility/             # AX API wrappers
-  MIDI/                      # CoreMIDI engine + MMC
-  OSC/                       # UDP client/server
-  State/                     # Cache + adaptive poller
-  Utilities/                 # Logging, permissions, process utils
+├── Channels/           # 7 communication channels
+│   ├── MCUChannel.swift          # Mackie Control Universal (bidirectional)
+│   ├── MIDIKeyCommandsChannel.swift  # CC → key command mapping
+│   ├── ScripterChannel.swift     # Plugin parameter control
+│   ├── CoreMIDIChannel.swift     # MIDI I/O
+│   ├── AccessibilityChannel.swift # AX tree reading
+│   ├── CGEventChannel.swift      # Keyboard events
+│   ├── AppleScriptChannel.swift  # Project lifecycle
+│   ├── Channel.swift             # Protocol + ChannelID enum
+│   └── ChannelRouter.swift       # 90+ operation routing table
+├── Dispatchers/        # 8 MCP tool handlers
+├── MIDI/               # MCU protocol, feedback parser, port manager
+│   ├── MCUProtocol.swift         # Full MCU encode/decode (§4.5 spec)
+│   ├── MCUFeedbackParser.swift   # Feedback → StateCache (bank-aware)
+│   ├── MIDIPortManager.swift     # Multi-port actor
+│   ├── MIDIEngine.swift          # CoreMIDI I/O
+│   └── MIDIFeedback.swift        # MIDI parser (running status)
+├── State/              # Cache + poller
+├── Resources/          # MCP resource handlers
+├── Server/             # LogicProServer + config
+└── Utilities/          # Safety, logging, permissions
+```
+
+## Testing
+
+```bash
+swift test  # 93 tests
+```
+
+## Uninstall
+
+```bash
+Scripts/uninstall.sh
 ```
 
 ## License

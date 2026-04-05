@@ -74,7 +74,11 @@ struct ResourceHandlers {
 
     private static func readMixer(cache: StateCache, uri: String) async throws -> ReadResource.Result {
         let strips = await cache.getChannelStrips()
-        let json = encodeJSON(strips)
+        let conn = await cache.getMCUConnection()
+        let stripsJSON = encodeJSON(strips)
+        let json = """
+            {"mcu_connected":\(conn.isConnected),"registered":\(conn.registeredAsDevice),"strips":\(stripsJSON)}
+            """
         return ReadResource.Result(
             contents: [.text(json, uri: uri, mimeType: "application/json")]
         )
@@ -100,35 +104,17 @@ struct ResourceHandlers {
         router: ChannelRouter,
         uri: String
     ) async throws -> ReadResource.Result {
-        let report = await router.healthReport()
-        var channels: [[String: String]] = []
-        for (id, health) in report.sorted(by: { $0.key.rawValue < $1.key.rawValue }) {
-            channels.append([
-                "channel": id.rawValue,
-                "available": String(health.available),
-                "latency_ms": health.latencyMs.map { String(format: "%.1f", $0) } ?? "N/A",
-                "detail": health.detail,
-            ])
+        // Delegate to SystemDispatcher for canonical source (PRD §4.3.2, T8 fix)
+        let toolResult = await SystemDispatcher.handle(
+            command: "health", params: [:], router: router, cache: cache
+        )
+        // Extract text from tool result
+        let json: String
+        if case .text(let text, _, _) = toolResult.content.first {
+            json = text
+        } else {
+            json = "{}"
         }
-        let snap = await cache.snapshot()
-        let permissions = PermissionChecker.check()
-        let channelsJSON = encodeJSON(channels)
-        let json = """
-            {
-              "logic_pro_running": \(ProcessUtils.isLogicProRunning),
-              "channels": \(channelsJSON),
-              "cache": {
-                "poll_mode": "\(snap.pollMode)",
-                "transport_age_sec": \(String(format: "%.1f", snap.transportAge)),
-                "track_count": \(snap.trackCount),
-                "project": "\(snap.projectName)"
-              },
-              "permissions": {
-                "accessibility": \(permissions.accessibility),
-                "automation": \(permissions.automationLogicPro)
-              }
-            }
-            """
         return ReadResource.Result(
             contents: [.text(json, uri: uri, mimeType: "application/json")]
         )

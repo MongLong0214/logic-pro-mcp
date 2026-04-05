@@ -1,8 +1,11 @@
 import Foundation
 
-/// Adaptive background poller that reads Logic Pro state via the Accessibility channel
-/// and updates the StateCache. Poll frequency adapts based on how recently tools were called.
+/// AX Supplementary Poller — reads Region/Marker/ProjectInfo via Accessibility channel.
+/// MCU feedback handles transport/tracks/mixer state (event-driven).
+/// This poller runs at a fixed 5-second interval for data MCU doesn't cover.
 actor StatePoller {
+    // Note: Kept as "StatePoller" for backward compatibility with LogicProServer.
+    // Internally operates as AX supplementary poller only.
     private let axChannel: AccessibilityChannel
     private let cache: StateCache
     private var pollingTask: Task<Void, Never>?
@@ -39,108 +42,35 @@ actor StatePoller {
     // MARK: - Poll loop
 
     private func pollLoop(axChannel: AccessibilityChannel, cache: StateCache) async {
-        var transportCounter: UInt64 = 0
+        // AX Supplementary Poller: fixed 5-second interval.
+        // Transport/tracks/mixer state is handled by MCU feedback (event-driven).
+        // This poller only reads data MCU doesn't cover: regions, markers, project info.
+        let intervalNs: UInt64 = 5_000_000_000 // 5 seconds
 
         while !Task.isCancelled {
-            let idle = await cache.timeSinceLastToolAccess()
-            let interval: PollInterval = Self.intervalForIdleTime(idle)
+            // Poll supplementary data only (regions, markers, project info)
+            await pollProjectInfo(axChannel: axChannel, cache: cache)
 
-            // Always poll transport (it changes most frequently)
-            await pollTransport(axChannel: axChannel, cache: cache)
-            transportCounter += 1
-
-            // Poll tracks/mixer less frequently.
-            // In active mode, poll tracks every 4 transport cycles (~2s at 500ms).
-            // In light/idle mode, poll every cycle since the interval is already longer.
-            let shouldPollTracks: Bool
-            switch interval.mode {
-            case .active:
-                shouldPollTracks = transportCounter % 4 == 0
-            case .light, .idle:
-                shouldPollTracks = true
-            }
-
-            if shouldPollTracks {
-                await pollTracks(axChannel: axChannel, cache: cache)
-            }
-
-            // Sleep until next poll
             do {
-                try await Task.sleep(nanoseconds: interval.nanoseconds)
+                try await Task.sleep(nanoseconds: intervalNs)
             } catch {
-                // Task was cancelled during sleep
                 break
             }
         }
 
-        Log.info("StatePoller loop exited", subsystem: "poller")
+        Log.info("AX Supplementary Poller loop exited", subsystem: "poller")
     }
 
-    // MARK: - Individual pollers
-
-    private func pollTransport(axChannel: AccessibilityChannel, cache: StateCache) async {
-        let result = await axChannel.execute(operation: "transport.get_state", params: [:])
-        guard case .success(let json) = result else {
-            Log.debug("Transport poll failed: \(result.message)", subsystem: "poller")
-            return
-        }
+    private func pollProjectInfo(axChannel: AccessibilityChannel, cache: StateCache) async {
+        let result = await axChannel.execute(operation: "project.get_info", params: [:])
+        guard case .success(let json) = result else { return }
         guard let data = json.data(using: .utf8) else { return }
         do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let state = try decoder.decode(TransportState.self, from: data)
-            await cache.updateTransport(state)
+            let info = try JSONDecoder().decode(ProjectInfo.self, from: data)
+            await cache.updateProject(info)
         } catch {
-            Log.debug("Transport decode failed: \(error)", subsystem: "poller")
+            Log.debug("ProjectInfo poll failed: \(error)", subsystem: "poller")
         }
     }
 
-    private func pollTracks(axChannel: AccessibilityChannel, cache: StateCache) async {
-        let result = await axChannel.execute(operation: "track.get_tracks", params: [:])
-        guard case .success(let json) = result else {
-            Log.debug("Tracks poll failed: \(result.message)", subsystem: "poller")
-            return
-        }
-        guard let data = json.data(using: .utf8) else { return }
-        do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let tracks = try decoder.decode([TrackState].self, from: data)
-            await cache.updateTracks(tracks)
-        } catch {
-            Log.debug("Tracks decode failed: \(error)", subsystem: "poller")
-        }
-    }
-
-    // MARK: - Adaptive interval
-
-    private enum PollMode {
-        case active  // <5s idle
-        case light   // 5-30s idle
-        case idle    // >30s idle
-    }
-
-    private struct PollInterval {
-        let mode: PollMode
-        let nanoseconds: UInt64
-    }
-
-    private static func intervalForIdleTime(_ idle: TimeInterval) -> PollInterval {
-        if idle < ServerConfig.lightIdleThreshold {
-            return PollInterval(
-                mode: .active,
-                nanoseconds: UInt64(ServerConfig.activeTransportPollInterval * 1_000_000_000)
-            )
-        } else if idle < ServerConfig.idleThreshold {
-            return PollInterval(
-                mode: .light,
-                nanoseconds: UInt64(ServerConfig.lightPollInterval * 1_000_000_000)
-            )
-        } else {
-            return PollInterval(
-                mode: .idle,
-                nanoseconds: UInt64(ServerConfig.idlePollInterval * 1_000_000_000)
-            )
-        }
-    }
 }

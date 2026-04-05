@@ -39,7 +39,9 @@ enum ChannelID: String, Sendable, CaseIterable {
     case accessibility = "Accessibility"
     case cgEvent = "CGEvent"
     case appleScript = "AppleScript"
-    case osc = "OSC"
+    case mcu = "MCU"
+    case midiKeyCommands = "MIDIKeyCommands"
+    case scripter = "Scripter"
 }
 
 /// Protocol that all communication channels conform to.

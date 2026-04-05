@@ -88,20 +88,16 @@ struct EditDispatcher {
             return CallTool.Result(content: [.text(result.message)], isError: !result.isSuccess)
 
         case "duplicate":
-            let result = await router.route(operation: "edit.select_all")
-            guard result.isSuccess else {
-                return CallTool.Result(content: [.text(result.message)], isError: true)
-            }
-            let copyResult = await router.route(operation: "edit.copy")
-            guard copyResult.isSuccess else {
-                return CallTool.Result(content: [.text(copyResult.message)], isError: true)
-            }
-            let pasteResult = await router.route(operation: "edit.paste")
-            return CallTool.Result(content: [.text(pasteResult.message)], isError: !pasteResult.isSuccess)
+            let result = await router.route(operation: "edit.duplicate")
+            return CallTool.Result(content: [.text(result.message)], isError: !result.isSuccess)
+
+        case "toggle_step_input":
+            let result = await router.route(operation: "edit.toggle_step_input")
+            return CallTool.Result(content: [.text(result.message)], isError: !result.isSuccess)
 
         default:
             return CallTool.Result(
-                content: [.text("Unknown edit command: \(command). Available: undo, redo, cut, copy, paste, delete, select_all, split, join, quantize, bounce_in_place, normalize, duplicate")],
+                content: [.text("Unknown edit command: \(command). Available: undo, redo, cut, copy, paste, delete, select_all, split, join, quantize, bounce_in_place, normalize, duplicate, toggle_step_input")],
                 isError: true
             )
         }

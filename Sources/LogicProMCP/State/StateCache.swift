@@ -9,7 +9,8 @@ actor StateCache {
     private(set) var regions: [RegionState] = []
     private(set) var markers: [MarkerState] = []
     private(set) var project = ProjectInfo()
-    private(set) var automationMode = AutomationMode.off
+    private(set) var mcuConnection = MCUConnectionState()
+    private(set) var mcuDisplay = MCUDisplayState()
 
     /// Timestamp of last tool call — drives adaptive poll intervals.
     private(set) var lastToolAccess: Date = .distantPast
@@ -32,7 +33,8 @@ actor StateCache {
     func getRegions() -> [RegionState] { regions }
     func getMarkers() -> [MarkerState] { markers }
     func getProject() -> ProjectInfo { project }
-    func getAutomationMode() -> AutomationMode { automationMode }
+    func getMCUConnection() -> MCUConnectionState { mcuConnection }
+    func getMCUDisplay() -> MCUDisplayState { mcuDisplay }
 
     // MARK: - Write access (poller calls these)
 
@@ -65,8 +67,37 @@ actor StateCache {
         project = info
     }
 
-    func updateAutomationMode(_ mode: AutomationMode) {
-        automationMode = mode
+    // MARK: - MCU Feedback Write
+
+    func updateFader(strip: Int, volume: Double) {
+        guard channelStrips.indices.contains(strip) else { return }
+        channelStrips[strip].volume = volume
+    }
+
+    func updateMCUConnection(_ state: MCUConnectionState) {
+        mcuConnection = state
+    }
+
+    func updateMCUDisplay(_ display: MCUDisplayState) {
+        mcuDisplay = display
+    }
+
+    func updateMCUDisplayRow(upper: Bool, text: String, offset: Int) {
+        if upper {
+            var row = Array(mcuDisplay.upperRow)
+            for (i, ch) in text.enumerated() {
+                let pos = offset + i
+                if pos < row.count { row[pos] = ch }
+            }
+            mcuDisplay.upperRow = String(row)
+        } else {
+            var row = Array(mcuDisplay.lowerRow)
+            for (i, ch) in text.enumerated() {
+                let pos = (offset - 0x38) + i
+                if pos >= 0 && pos < row.count { row[pos] = ch }
+            }
+            mcuDisplay.lowerRow = String(row)
+        }
     }
 
     // MARK: - Tool access tracking
@@ -92,14 +123,7 @@ actor StateCache {
 
     func snapshot() -> CacheSnapshot {
         let idle = timeSinceLastToolAccess()
-        let mode: String
-        if idle < ServerConfig.lightIdleThreshold {
-            mode = "active"
-        } else if idle < ServerConfig.idleThreshold {
-            mode = "light"
-        } else {
-            mode = "idle"
-        }
+        let mode = idle < 5 ? "active" : "idle"
         return CacheSnapshot(
             transportAge: Date().timeIntervalSince(transport.lastUpdated),
             trackCount: tracks.count,

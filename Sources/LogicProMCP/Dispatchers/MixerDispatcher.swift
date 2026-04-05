@@ -133,6 +133,17 @@ struct MixerDispatcher {
             )
             return CallTool.Result(content: [.text(result.message)], isError: !result.isSuccess)
 
+        case "set_plugin_param":
+            let track = params["track"]?.intValue ?? 0
+            let insert = params["insert"]?.intValue ?? 0
+            let param = params["param"]?.intValue ?? 0
+            let value = params["value"]?.doubleValue ?? 0.0
+            let result = await router.route(
+                operation: "mixer.set_plugin_param",
+                params: ["track": String(track), "insert": String(insert), "param": String(param), "value": String(value)]
+            )
+            return CallTool.Result(content: [.text(result.message)], isError: !result.isSuccess)
+
         default:
             return CallTool.Result(
                 content: [.text("Unknown mixer command: \(command). Available: set_volume, set_pan, set_send, set_output, set_input, set_master_volume, toggle_eq, reset_strip, insert_plugin, bypass_plugin")],

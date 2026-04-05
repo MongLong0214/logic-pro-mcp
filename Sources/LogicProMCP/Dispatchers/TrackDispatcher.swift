@@ -117,7 +117,7 @@ struct TrackDispatcher {
             let enabled = params["enabled"]?.boolValue ?? true
             let result = await router.route(
                 operation: "track.set_mute",
-                params: ["index": String(index), "muted": String(enabled)]
+                params: ["index": String(index), "enabled": String(enabled)]
             )
             return CallTool.Result(content: [.text(result.message)], isError: !result.isSuccess)
 
@@ -126,7 +126,7 @@ struct TrackDispatcher {
             let enabled = params["enabled"]?.boolValue ?? true
             let result = await router.route(
                 operation: "track.set_solo",
-                params: ["index": String(index), "soloed": String(enabled)]
+                params: ["index": String(index), "enabled": String(enabled)]
             )
             return CallTool.Result(content: [.text(result.message)], isError: !result.isSuccess)
 
@@ -135,7 +135,7 @@ struct TrackDispatcher {
             let enabled = params["enabled"]?.boolValue ?? true
             let result = await router.route(
                 operation: "track.set_arm",
-                params: ["index": String(index), "armed": String(enabled)]
+                params: ["index": String(index), "enabled": String(enabled)]
             )
             return CallTool.Result(content: [.text(result.message)], isError: !result.isSuccess)
 
@@ -145,6 +145,15 @@ struct TrackDispatcher {
             let result = await router.route(
                 operation: "track.set_color",
                 params: ["index": String(index), "color": String(color)]
+            )
+            return CallTool.Result(content: [.text(result.message)], isError: !result.isSuccess)
+
+        case "set_automation":
+            let index = params["index"]?.intValue ?? 0
+            let mode = params["mode"]?.stringValue ?? "read"
+            let result = await router.route(
+                operation: "track.set_automation",
+                params: ["index": String(index), "mode": mode]
             )
             return CallTool.Result(content: [.text(result.message)], isError: !result.isSuccess)
 

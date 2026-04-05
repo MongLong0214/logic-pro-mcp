@@ -131,10 +131,10 @@ actor MIDIEngine {
 
     // MARK: - Send: SysEx
 
-    /// Send a complete SysEx message (must start with 0xF0 and end with 0xF7).
+    /// Send a complete SysEx message (must start with 0xF0 and end with 0xF7, middle bytes < 0x80).
     func sendSysEx(_ bytes: [UInt8]) {
-        guard bytes.first == 0xF0, bytes.last == 0xF7 else {
-            Log.error("Invalid SysEx: must start with F0 and end with F7", subsystem: "midi")
+        guard MCUProtocol.isValidSysEx(bytes) else {
+            Log.error("Invalid SysEx: must start with F0, end with F7, middle bytes < 0x80", subsystem: "midi")
             return
         }
         sendRawBytes(bytes)
@@ -143,17 +143,23 @@ actor MIDIEngine {
     // MARK: - Send: Raw
 
     /// Send arbitrary MIDI bytes through the virtual source.
+    /// Uses dynamic buffer for large messages (SysEx 256+ bytes).
     func sendRawBytes(_ bytes: [UInt8]) {
         guard isRunning else {
             Log.warn("MIDIEngine not running — dropping message", subsystem: "midi")
             return
         }
-        bytes.withUnsafeBufferPointer { buffer in
-            guard let baseAddress = buffer.baseAddress else { return }
-            var packetList = MIDIPacketList()
-            var packet = MIDIPacketListInit(&packetList)
-            packet = MIDIPacketListAdd(&packetList, MemoryLayout<MIDIPacketList>.size, packet, 0, bytes.count, baseAddress)
-            let status = MIDIReceived(virtualSource, &packetList)
+        let bufferSize = max(MemoryLayout<MIDIPacketList>.size, MemoryLayout<MIDIPacketList>.size + bytes.count)
+        var buffer = [UInt8](repeating: 0, count: bufferSize)
+        buffer.withUnsafeMutableBytes { rawBuf in
+            let packetList = rawBuf.baseAddress!.assumingMemoryBound(to: MIDIPacketList.self)
+            var pkt = MIDIPacketListInit(packetList)
+            bytes.withUnsafeBufferPointer { dataBuf in
+                guard let base = dataBuf.baseAddress else { return }
+                let added = MIDIPacketListAdd(packetList, bufferSize, pkt, 0, bytes.count, base)
+                pkt = added
+            }
+            let status = MIDIReceived(virtualSource, packetList)
             if status != noErr {
                 Log.error("MIDIReceived failed with status \(status)", subsystem: "midi")
             }

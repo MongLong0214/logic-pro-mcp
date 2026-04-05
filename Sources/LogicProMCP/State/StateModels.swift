@@ -37,6 +37,7 @@ struct TrackState: Sendable, Codable, Identifiable {
     var isSelected: Bool = false
     var volume: Double = 0.0   // dB, 0 = unity
     var pan: Double = 0.0      // -1.0 (L) to 1.0 (R)
+    var automationMode: AutomationMode = .off
     var color: String?
 }
 
@@ -93,6 +94,31 @@ enum AutomationMode: String, Sendable, Codable {
     case touch
     case latch
     case write
+}
+
+/// MCU connection state.
+struct MCUConnectionState: Sendable {
+    var isConnected: Bool = false
+    var registeredAsDevice: Bool = false
+    var lastFeedbackAt: Date? = nil
+    var portName: String = ""
+}
+
+/// MCU LCD display state.
+struct MCUDisplayState: Sendable {
+    var upperRow: String = String(repeating: " ", count: 56)  // 56 chars
+    var lowerRow: String = String(repeating: " ", count: 56)
+}
+
+/// Plugin parameter state.
+struct PluginState: Sendable, Codable {
+    var name: String = ""
+    var parameters: [PluginParam] = []
+
+    struct PluginParam: Sendable, Codable {
+        var name: String
+        var value: Double
+    }
 }
 
 /// Project-level info.

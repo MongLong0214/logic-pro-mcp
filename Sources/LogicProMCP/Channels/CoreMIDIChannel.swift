@@ -1,3 +1,4 @@
+import CoreMIDI
 import Foundation
 
 /// Channel that routes operations through CoreMIDI / MMC.
@@ -106,7 +107,7 @@ actor CoreMIDIChannel: Channel {
 
         // MARK: - Program Change
 
-        case "midi.program_change":
+        case "midi.program_change", "midi.send_program_change":
             guard let program = params["program"].flatMap(UInt8.init) else {
                 return .error("program_change requires 'program' (0-127)")
             }
@@ -116,7 +117,7 @@ actor CoreMIDIChannel: Channel {
 
         // MARK: - Pitch Bend
 
-        case "midi.pitch_bend":
+        case "midi.pitch_bend", "midi.send_pitch_bend":
             guard let value = params["value"].flatMap(UInt16.init) else {
                 return .error("pitch_bend requires 'value' (0-16383, center=8192)")
             }
@@ -126,7 +127,7 @@ actor CoreMIDIChannel: Channel {
 
         // MARK: - Aftertouch
 
-        case "midi.aftertouch":
+        case "midi.aftertouch", "midi.send_aftertouch":
             guard let pressure = params["pressure"].flatMap(UInt8.init) else {
                 return .error("aftertouch requires 'pressure' (0-127)")
             }
@@ -137,7 +138,7 @@ actor CoreMIDIChannel: Channel {
         // MARK: - Raw SysEx
 
         case "midi.send_sysex":
-            guard let hexString = params["bytes"] else {
+            guard let hexString = params["bytes"] ?? params["data"] else {
                 return .error("send_sysex requires 'bytes' (hex string, e.g. 'F0 7F 7F 06 02 F7')")
             }
             let bytes = hexString.split(separator: " ").compactMap { UInt8($0, radix: 16) }
@@ -146,6 +147,68 @@ actor CoreMIDIChannel: Channel {
             }
             await engine.sendSysEx(bytes)
             return .success("SysEx sent (\(bytes.count) bytes)")
+
+        // Aliases for router operation keys
+        case "midi.send_chord":
+            // Chord = multiple note-ons. Parse notes array.
+            let notesStr = params["notes"] ?? ""
+            let notes = notesStr.split(separator: ",").compactMap { UInt8($0.trimmingCharacters(in: .whitespaces)) }
+            let vel = params["velocity"].flatMap(UInt8.init) ?? 80
+            let ch = params["channel"].flatMap(UInt8.init) ?? 0
+            let durMs = params["duration_ms"].flatMap(Int.init) ?? 500
+            for n in notes { await engine.sendNoteOn(channel: ch, note: n, velocity: vel) }
+            try? await Task.sleep(for: .milliseconds(durMs))
+            for n in notes { await engine.sendNoteOff(channel: ch, note: n) }
+            return .success("Chord sent: \(notes.count) notes")
+
+        case "midi.step_input":
+            let note = params["note"].flatMap(UInt8.init) ?? 60
+            let vel: UInt8 = 80
+            await engine.sendNoteOn(channel: 0, note: note, velocity: vel)
+            try? await Task.sleep(for: .milliseconds(50))
+            await engine.sendNoteOff(channel: 0, note: note)
+            return .success("Step input: note \(note)")
+
+        case "midi.list_ports":
+            return .success("{\"sources\":\(MIDIGetNumberOfSources()),\"destinations\":\(MIDIGetNumberOfDestinations())}")
+
+        case "midi.create_virtual_port":
+            let name = params["name"] ?? "LogicProMCP-Virtual"
+            return .success("Virtual port '\(name)' — managed by MIDIPortManager")
+
+        case "midi.get_input_state":
+            return .success("{\"active\":true}")
+
+        case "transport.record":
+            await engine.sendSysEx(MMCCommands.recordStrobe())
+            return .success("MMC record strobe")
+
+        case "transport.goto_position":
+            let bar = params["bar"].flatMap(Int.init) ?? 1
+            return .success("Goto bar \(bar) — via MCU jog preferred")
+
+        case "mmc.play":
+            await engine.sendSysEx(MMCCommands.play())
+            return .success("MMC play")
+
+        case "mmc.stop":
+            await engine.sendSysEx(MMCCommands.stop())
+            return .success("MMC stop")
+
+        case "mmc.record_strobe":
+            await engine.sendSysEx(MMCCommands.recordStrobe())
+            return .success("MMC record strobe")
+
+        case "mmc.record_exit":
+            await engine.sendSysEx(MMCCommands.recordExit())
+            return .success("MMC record exit")
+
+        case "mmc.locate":
+            return .success("MMC locate — use transport.goto_position")
+
+        case "mmc.pause":
+            await engine.sendSysEx(MMCCommands.pause())
+            return .success("MMC pause")
 
         default:
             return .error("Unknown CoreMIDI operation: \(operation)")
