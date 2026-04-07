@@ -38,6 +38,27 @@ actor StateCache {
 
     // MARK: - Write access (poller calls these)
 
+    private func ensureTrackExists(at index: Int) {
+        guard index >= 0 else { return }
+        while tracks.count <= index {
+            let nextIndex = tracks.count
+            tracks.append(
+                TrackState(
+                    id: nextIndex,
+                    name: "Track \(nextIndex + 1)",
+                    type: .unknown
+                )
+            )
+        }
+    }
+
+    private func ensureChannelStripExists(at index: Int) {
+        guard index >= 0 else { return }
+        while channelStrips.count <= index {
+            channelStrips.append(ChannelStripState(trackIndex: channelStrips.count))
+        }
+    }
+
     func updateTransport(_ state: TransportState) {
         transport = state
     }
@@ -47,6 +68,7 @@ actor StateCache {
     }
 
     func updateTrack(at index: Int, mutator: (inout TrackState) -> Void) {
+        ensureTrackExists(at: index)
         guard tracks.indices.contains(index) else { return }
         mutator(&tracks[index])
     }
@@ -70,6 +92,7 @@ actor StateCache {
     // MARK: - MCU Feedback Write
 
     func updateFader(strip: Int, volume: Double) {
+        ensureChannelStripExists(at: strip)
         guard channelStrips.indices.contains(strip) else { return }
         channelStrips[strip].volume = volume
     }

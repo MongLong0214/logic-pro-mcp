@@ -3,7 +3,7 @@ import Foundation
 /// Protocol for MCU MIDI transport — abstracted for testing.
 protocol MCUTransportProtocol: Actor {
     func send(_ bytes: [UInt8]) async
-    func start(onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void) async
+    func start(onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void) async throws
     func stop() async
 }
 
@@ -34,7 +34,7 @@ actor MCUChannel: Channel {
             await self?.currentBank ?? 0
         }
 
-        await transport.start { [weak self] event in
+        try await transport.start { [weak self] event in
             guard let self else { return }
             Task { await self.receiveFeedback(event) }
         }
@@ -43,14 +43,14 @@ actor MCUChannel: Channel {
         let query = MCUProtocol.encodeDeviceQuery()
         await transport.send(query)
 
-        // Note: registeredAsDevice is updated by feedbackParser when MCU Device Response SysEx is received.
-        // We don't block on response here to avoid actor deadlock.
         var conn = await cache.getMCUConnection()
-        conn.isConnected = true
+        conn.isConnected = false
+        conn.registeredAsDevice = false
+        conn.lastFeedbackAt = nil
         conn.portName = "LogicProMCP-MCU-Internal"
         await cache.updateMCUConnection(conn)
 
-        Log.info("MCU Channel started, handshake query sent", subsystem: "mcu")
+        Log.info("MCU Channel started, handshake query sent; waiting for feedback", subsystem: "mcu")
     }
 
     func stop() async {
@@ -67,8 +67,10 @@ actor MCUChannel: Channel {
             return await executeSetVolume(params)
         case "mixer.set_pan":
             return await executeSetPan(params)
+        case "mixer.set_master_volume":
+            return await executeSetMasterVolume(params)
         case "mixer.set_send":
-            return await executeSetSend(params)
+            return .error("MCU send targeting is not deterministic enough for the production MCP contract")
         case "transport.play":
             return await sendTransport(.play)
         case "transport.stop":
@@ -90,7 +92,7 @@ actor MCUChannel: Channel {
         case "track.select":
             return await executeStripButton(.select, params: params)
         case "mixer.set_plugin_param":
-            return await executePluginParam(params)
+            return .error("Use plugin.set_param via the Scripter channel for deterministic plugin parameter control")
         case "track.set_automation":
             return await executeAutomation(params)
         default:
@@ -101,11 +103,14 @@ actor MCUChannel: Channel {
     func healthCheck() async -> ChannelHealth {
         let conn = await cache.getMCUConnection()
         if !conn.isConnected {
-            return .unavailable("MCU not connected. Register in Logic Pro > Control Surfaces > Setup")
+            let portName = conn.portName.isEmpty ? "LogicProMCP-MCU-Internal" : conn.portName
+            return .unavailable(
+                "MCU feedback not detected. Register '\(portName)' in Logic Pro > Control Surfaces > Setup"
+            )
         }
         let age = conn.lastFeedbackAt.map { Date().timeIntervalSince($0) } ?? .infinity
         let stale = age > 5.0
-        let registered = conn.registeredAsDevice ? "registered" : "MIDI only (MCU not registered)"
+        let registered = conn.registeredAsDevice ? "device registration confirmed" : "MIDI feedback active, device registration not confirmed"
         let detail = stale
             ? "MCU \(registered), feedback stale (\(Int(age))s)"
             : "MCU \(registered), feedback active"
@@ -157,10 +162,11 @@ actor MCUChannel: Channel {
         }
     }
 
-    private func executeSetSend(_ params: [String: String]) async -> ChannelResult {
-        let bytes = MCUProtocol.encodeButton(.assignSend, on: true)
+    private func executeSetMasterVolume(_ params: [String: String]) async -> ChannelResult {
+        let value = Double(params["volume"] ?? "0") ?? 0.0
+        let bytes = MCUProtocol.encodeFader(track: 8, value: value)
         await transport.send(bytes)
-        return .success("Send mode entered")
+        return .success("Master volume set to \(value)")
     }
 
     private func sendTransport(_ command: MCUProtocol.TransportCommand) async -> ChannelResult {

@@ -16,14 +16,75 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app
 
+      - name: Validate release signing configuration
+        env:
+          MACOS_CERT_BASE64: ${{ secrets.MACOS_CERT_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+          APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
+        run: |
+          required=(
+            MACOS_CERT_BASE64
+            MACOS_CERT_PASSWORD
+            MACOS_SIGNING_IDENTITY
+            MACOS_KEYCHAIN_PASSWORD
+            APPLE_NOTARY_APPLE_ID
+            APPLE_NOTARY_TEAM_ID
+            APPLE_NOTARY_APP_PASSWORD
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is required for a release build"
+              exit 1
+            fi
+          done
+
       - name: Build universal binary
         run: |
           swift build -c release --arch arm64 --arch x86_64
           cp .build/apple/Products/Release/LogicProMCP LogicProMCP
           chmod +x LogicProMCP
 
-      - name: Package
+      - name: Codesign binary
+        env:
+          MACOS_CERT_BASE64: ${{ secrets.MACOS_CERT_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
         run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+          echo "$MACOS_CERT_BASE64" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_IDENTITY" LogicProMCP
+
+      - name: Notarize binary
+        env:
+          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+          APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
+        run: |
+          xcrun notarytool submit LogicProMCP --apple-id "$APPLE_NOTARY_APPLE_ID" --team-id "$APPLE_NOTARY_TEAM_ID" --password "$APPLE_NOTARY_APP_PASSWORD" --wait
+          xcrun stapler staple LogicProMCP
+
+      - name: Verify signed artifact
+        run: |
+          codesign --verify --strict --verbose=2 LogicProMCP
+          spctl --assess --type execute LogicProMCP
+
+      - name: Package
+        env:
+          APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+        run: |
+          printf '{\n  "version": "%s",\n  "team_id": "%s"\n}\n' "$GITHUB_REF_NAME" "$APPLE_NOTARY_TEAM_ID" > RELEASE-METADATA.json
           tar czf LogicProMCP-macOS-universal.tar.gz LogicProMCP
           shasum -a 256 LogicProMCP-macOS-universal.tar.gz > SHA256SUMS.txt
           shasum -a 256 LogicProMCP >> SHA256SUMS.txt
@@ -35,4 +96,39 @@ jobs:
           files: |
             LogicProMCP
             LogicProMCP-macOS-universal.tar.gz
+            RELEASE-METADATA.json
             SHA256SUMS.txt
+
+  validate-install:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-13]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate installer and uninstaller against release asset
+        env:
+          LOGIC_PRO_MCP_VERSION: ${{ github.ref_name }}
+          LOGIC_PRO_MCP_INSTALL_DIR: ${{ runner.temp }}/logic-pro-bin
+          LOGIC_PRO_MCP_SKIP_SUDO: "1"
+          LOGIC_PRO_MCP_REGISTER_CLAUDE: "0"
+          LOGIC_PRO_MCP_INSTALL_KEYCMDS: "1"
+          LOGIC_PRO_MCP_KEYCMD_DIR: ${{ runner.temp }}/key-commands
+          LOGIC_PRO_MCP_KEYCMD_AUTO_RESTORE: "1"
+        run: |
+          mkdir -p "$LOGIC_PRO_MCP_INSTALL_DIR"
+          bash Scripts/install.sh | tee install.log
+          test -x "$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP"
+          bash Scripts/uninstall.sh | tee uninstall.log
+          test ! -e "$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP"
+
+      - name: Upload install validation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-validation-${{ matrix.os }}
+          path: |
+            install.log
+            uninstall.log

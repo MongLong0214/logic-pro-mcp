@@ -10,6 +10,11 @@ struct ResourceHandlers {
         cache: StateCache,
         router: ChannelRouter
     ) async throws -> ReadResource.Result {
+        // Health must be side-effect free so the resource stays aligned with the tool contract.
+        if uri == "logic://system/health" {
+            return try await readSystemHealth(cache: cache, router: router, uri: uri)
+        }
+
         await cache.recordToolAccess()
 
         // Handle parameterized URIs like logic://tracks/{index}
@@ -35,10 +40,6 @@ struct ResourceHandlers {
 
         case "logic://midi/ports":
             return try await readMIDIPorts(router: router, uri: uri)
-
-        case "logic://system/health":
-            return try await readSystemHealth(cache: cache, router: router, uri: uri)
-
         default:
             throw MCPError.invalidParams("Unknown resource URI: \(uri)")
         }
@@ -94,8 +95,18 @@ struct ResourceHandlers {
 
     private static func readMIDIPorts(router: ChannelRouter, uri: String) async throws -> ReadResource.Result {
         let result = await router.route(operation: "midi.list_ports")
+        let payload: String
+        if result.isSuccess,
+           let data = result.message.data(using: .utf8),
+           (try? JSONSerialization.jsonObject(with: data)) != nil {
+            payload = result.message
+        } else if result.isSuccess {
+            payload = encodeJSON(["message": result.message])
+        } else {
+            payload = encodeJSON(["error": result.message])
+        }
         return ReadResource.Result(
-            contents: [.text(result.message, uri: uri, mimeType: "application/json")]
+            contents: [.text(payload, uri: uri, mimeType: "application/json")]
         )
     }
 

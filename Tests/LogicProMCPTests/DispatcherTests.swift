@@ -1,6 +1,217 @@
 import Testing
 import Foundation
+import MCP
 @testable import LogicProMCP
+
+private func dispatcherText(_ result: CallTool.Result) -> String {
+    guard let content = result.content.first else { return "" }
+    switch content {
+    case .text(let text, _, _):
+        return text
+    default:
+        return ""
+    }
+}
+
+private func expectExecutedOp(
+    _ actual: (String, [String: String]),
+    equals expected: (String, [String: String])
+) {
+    #expect(actual.0 == expected.0)
+    #expect(actual.1 == expected.1)
+}
+
+private func expectExecutedOps(
+    _ actual: [(String, [String: String])],
+    equals expected: [(String, [String: String])]
+) {
+    #expect(actual.count == expected.count)
+    for index in expected.indices {
+        expectExecutedOp(actual[index], equals: expected[index])
+    }
+}
+
+private func makeLogicProjectPath(name: String = UUID().uuidString, create: Bool) throws -> String {
+    let path = FileManager.default.temporaryDirectory
+        .appendingPathComponent(name)
+        .appendingPathExtension("logicx")
+    if create {
+        try FileManager.default.createDirectory(at: path, withIntermediateDirectories: true)
+    }
+    return path.path
+}
+
+private final class ProjectLifecycleHarness {
+    var scripts: [String] = []
+    var runningStates: [Bool]
+    var sleepCalls: [UInt64] = []
+    let execution: ProjectDispatcher.LifecycleExecution
+
+    init(execution: ProjectDispatcher.LifecycleExecution, runningStates: [Bool]) {
+        self.execution = execution
+        self.runningStates = runningStates
+    }
+
+    func execute(script: String) async -> ProjectDispatcher.LifecycleExecution {
+        scripts.append(script)
+        return execution
+    }
+
+    func isRunning() -> Bool {
+        guard !runningStates.isEmpty else { return false }
+        if runningStates.count == 1 {
+            return runningStates[0]
+        }
+        return runningStates.removeFirst()
+    }
+
+    func sleep(nanoseconds: UInt64) async {
+        sleepCalls.append(nanoseconds)
+    }
+}
+
+private actor FailingExecuteChannel: Channel {
+    nonisolated let id: ChannelID
+    let message: String
+
+    init(id: ChannelID, message: String) {
+        self.id = id
+        self.message = message
+    }
+
+    func start() async throws {}
+    func stop() async {}
+
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        .error(message)
+    }
+
+    func healthCheck() async -> ChannelHealth {
+        .healthy(detail: "failing execute channel")
+    }
+}
+
+// MARK: - TransportDispatcher
+
+@Test func testTransportDispatcherRoutesPrimaryCommands() async {
+    let cases: [(command: String, operation: String)] = [
+        ("play", "transport.play"),
+        ("stop", "transport.stop"),
+        ("record", "transport.record"),
+        ("pause", "transport.pause"),
+        ("rewind", "transport.rewind"),
+        ("fast_forward", "transport.fast_forward"),
+        ("toggle_cycle", "transport.toggle_cycle"),
+        ("toggle_metronome", "transport.toggle_metronome"),
+        ("toggle_count_in", "transport.toggle_count_in"),
+    ]
+
+    for testCase in cases {
+        let router = ChannelRouter()
+        let channelID: ChannelID = switch testCase.operation {
+        case "transport.pause": .coreMIDI
+        case "transport.toggle_metronome", "transport.toggle_count_in": .midiKeyCommands
+        default: .mcu
+        }
+        let channel = MockChannel(id: channelID)
+        await router.register(channel)
+        let cache = StateCache()
+
+        let result = await TransportDispatcher.handle(
+            command: testCase.command,
+            params: [:],
+            router: router,
+            cache: cache
+        )
+
+        #expect(!result.isError!, "Expected \(testCase.command) to succeed")
+        let ops = await channel.executedOps
+        #expect(ops.count == 1)
+        #expect(ops[0].0 == testCase.operation)
+    }
+}
+
+@Test func testTransportDispatcherSetTempoGotoPositionAndCycleRange() async {
+    let tempoRouter = ChannelRouter()
+    let keyCmd = MockChannel(id: .midiKeyCommands)
+    await tempoRouter.register(keyCmd)
+    let cache = StateCache()
+
+    let tempoResult = await TransportDispatcher.handle(
+        command: "set_tempo",
+        params: ["bpm": .double(128.5)],
+        router: tempoRouter,
+        cache: cache
+    )
+
+    #expect(!tempoResult.isError!)
+    let tempoOps = await keyCmd.executedOps
+    expectExecutedOps(tempoOps, equals: [("transport.set_tempo", ["bpm": "128.5"])])
+
+    let gotoRouter = ChannelRouter()
+    let mcu = MockChannel(id: .mcu)
+    let ax = MockChannel(id: .accessibility)
+    await gotoRouter.register(mcu)
+    await gotoRouter.register(ax)
+
+    let gotoBarResult = await TransportDispatcher.handle(
+        command: "goto_position",
+        params: ["bar": .int(9)],
+        router: gotoRouter,
+        cache: cache
+    )
+    let gotoTimeResult = await TransportDispatcher.handle(
+        command: "goto_position",
+        params: ["time": .string("00:00:10:12")],
+        router: gotoRouter,
+        cache: cache
+    )
+    let cycleResult = await TransportDispatcher.handle(
+        command: "set_cycle_range",
+        params: ["start": .int(4), "end": .int(12)],
+        router: gotoRouter,
+        cache: cache
+    )
+
+    #expect(!gotoBarResult.isError!)
+    #expect(!gotoTimeResult.isError!)
+    #expect(!cycleResult.isError!)
+    let gotoOps = await mcu.executedOps
+    #expect(gotoOps.count == 2)
+    expectExecutedOp(gotoOps[0], equals: ("transport.goto_position", ["position": "9.1.1.1"]))
+    expectExecutedOp(gotoOps[1], equals: ("transport.goto_position", ["position": "00:00:10:12"]))
+    let axOps = await ax.executedOps
+    expectExecutedOps(axOps, equals: [("transport.set_cycle_range", ["start": "4.1.1.1", "end": "12.1.1.1"])])
+}
+
+@Test func testTransportDispatcherGotoPositionDefaultsToStart() async {
+    let router = ChannelRouter()
+    let mcu = MockChannel(id: .mcu)
+    await router.register(mcu)
+
+    let result = await TransportDispatcher.handle(
+        command: "goto_position",
+        params: [:],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(!result.isError!)
+    let ops = await mcu.executedOps
+    expectExecutedOps(ops, equals: [("transport.goto_position", ["position": "1.1.1.1"])])
+}
+
+@Test func testTransportDispatcherUnknownCommandFailsInDispatcherSuite() async {
+    let result = await TransportDispatcher.handle(
+        command: "warp_drive",
+        params: [:],
+        router: ChannelRouter(),
+        cache: StateCache()
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("Unknown transport command"))
+}
 
 // MARK: - MixerDispatcher
 
@@ -26,7 +237,9 @@ import Foundation
 @Test func testMixerDispatcherSetPluginParam() async {
     let router = ChannelRouter()
     let mcu = MockChannel(id: .mcu)
+    let scripter = MockChannel(id: .scripter)
     await router.register(mcu)
+    await router.register(scripter)
     let cache = StateCache()
 
     let result = await MixerDispatcher.handle(
@@ -35,6 +248,137 @@ import Foundation
         router: router, cache: cache
     )
     #expect(!result.isError!)
+    let mcuOps = await mcu.executedOps
+    let scripterOps = await scripter.executedOps
+    expectExecutedOps(mcuOps, equals: [("track.select", ["index": "1"])])
+    expectExecutedOps(scripterOps, equals: [("plugin.set_param", ["track": "1", "insert": "0", "param": "3", "value": "0.5"])])
+}
+
+@Test func testMixerDispatcherSetPluginParamRejectsUnsupportedInsertAndSelectionFailure() async {
+    let invalidInsertResult = await MixerDispatcher.handle(
+        command: "set_plugin_param",
+        params: ["track": .int(1), "insert": .int(2), "param": .int(3), "value": .double(0.5)],
+        router: ChannelRouter(),
+        cache: StateCache()
+    )
+    #expect(invalidInsertResult.isError!)
+    #expect(dispatcherText(invalidInsertResult).contains("insert: 0"))
+
+    let router = ChannelRouter()
+    let mcu = FailingExecuteChannel(id: .mcu, message: "selection failed")
+    let scripter = MockChannel(id: .scripter)
+    await router.register(mcu)
+    await router.register(scripter)
+
+    let selectionFailure = await MixerDispatcher.handle(
+        command: "set_plugin_param",
+        params: ["track": .int(1), "insert": .int(0), "param": .int(3), "value": .double(0.5)],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(selectionFailure.isError!)
+    #expect(dispatcherText(selectionFailure).contains("selection failed"))
+    let scripterOps = await scripter.executedOps
+    #expect(scripterOps.isEmpty)
+}
+
+@Test func testMixerDispatcherRoutesPanSendIOAndMasterCommands() async {
+    let router = ChannelRouter()
+    let mcu = MockChannel(id: .mcu)
+    let ax = MockChannel(id: .accessibility)
+    await router.register(mcu)
+    await router.register(ax)
+    let cache = StateCache()
+
+    let panResult = await MixerDispatcher.handle(
+        command: "set_pan",
+        params: ["index": .int(4), "pan": .double(-0.25)],
+        router: router,
+        cache: cache
+    )
+    let sendResult = await MixerDispatcher.handle(
+        command: "set_send",
+        params: ["track": .int(2), "send_index": .int(1), "level": .double(0.33)],
+        router: router,
+        cache: cache
+    )
+    let outputResult = await MixerDispatcher.handle(
+        command: "set_output",
+        params: ["track": .int(5), "output": .string("Bus 1")],
+        router: router,
+        cache: cache
+    )
+    let inputResult = await MixerDispatcher.handle(
+        command: "set_input",
+        params: ["index": .int(5), "input": .string("Input 3")],
+        router: router,
+        cache: cache
+    )
+    let masterResult = await MixerDispatcher.handle(
+        command: "set_master_volume",
+        params: ["volume": .double(0.82)],
+        router: router,
+        cache: cache
+    )
+    let eqResult = await MixerDispatcher.handle(
+        command: "toggle_eq",
+        params: ["track": .int(3)],
+        router: router,
+        cache: cache
+    )
+    let resetResult = await MixerDispatcher.handle(
+        command: "reset_strip",
+        params: ["index": .int(6)],
+        router: router,
+        cache: cache
+    )
+
+    #expect(!panResult.isError!)
+    #expect(sendResult.isError!)
+    #expect(outputResult.isError!)
+    #expect(inputResult.isError!)
+    #expect(!masterResult.isError!)
+    #expect(eqResult.isError!)
+    #expect(resetResult.isError!)
+
+    let mcuOps = await mcu.executedOps
+    expectExecutedOps(mcuOps, equals: [
+        ("mixer.set_pan", ["index": "4", "pan": "-0.25"]),
+        ("mixer.set_master_volume", ["volume": "0.82"]),
+    ])
+
+    let axOps = await ax.executedOps
+    #expect(axOps.isEmpty)
+}
+
+@Test func testMixerDispatcherPluginCommandsRouteCorrectly() async {
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility)
+    let mcu = MockChannel(id: .mcu)
+    await router.register(ax)
+    await router.register(mcu)
+    let cache = StateCache()
+
+    let insertResult = await MixerDispatcher.handle(
+        command: "insert_plugin",
+        params: ["track_index": .int(7), "slot": .int(2), "plugin_name": .string("Compressor")],
+        router: router,
+        cache: cache
+    )
+    let bypassResult = await MixerDispatcher.handle(
+        command: "bypass_plugin",
+        params: ["track": .int(7), "slot": .int(2), "bypassed": .bool(false)],
+        router: router,
+        cache: cache
+    )
+
+    #expect(!insertResult.isError!)
+    #expect(!bypassResult.isError!)
+    let axOps = await ax.executedOps
+    let mcuOps = await mcu.executedOps
+    expectExecutedOps(axOps, equals: [("plugin.insert", ["track_index": "7", "plugin_name": "Compressor", "slot": "2"])])
+    expectExecutedOps(mcuOps, equals: [("plugin.bypass", ["track_index": "7", "slot": "2", "bypassed": "false"])])
 }
 
 @Test func testMixerDispatcherUnknown() async {
@@ -42,6 +386,18 @@ import Foundation
     let cache = StateCache()
     let result = await MixerDispatcher.handle(command: "nonexistent", params: [:], router: router, cache: cache)
     #expect(result.isError!)
+}
+
+@Test func testMixerDispatcherToolMetadataDocumentsPluginParamCommand() {
+    let tool = MixerDispatcher.tool
+    let description = tool.description ?? ""
+    #expect(tool.name == "logic_mixer")
+    #expect(description.contains("set_plugin_param"))
+    _ = tool.inputSchema
+    #expect(description.contains("set_master_volume"))
+    #expect(!description.contains("set_output"))
+    #expect(!description.contains("set_input"))
+    #expect(!description.contains("set_send"))
 }
 
 // MARK: - TrackDispatcher
@@ -76,6 +432,205 @@ import Foundation
     #expect(!result.isError!)
 }
 
+@Test func testTrackDispatcherSelectByIndexAndName() async {
+    let indexRouter = ChannelRouter()
+    let mcu = MockChannel(id: .mcu)
+    await indexRouter.register(mcu)
+    let cache = StateCache()
+    await cache.updateTracks([
+        TrackState(id: 0, name: "Kick", type: .audio),
+        TrackState(id: 1, name: "Lead Vocal", type: .audio),
+    ])
+
+    let indexResult = await TrackDispatcher.handle(
+        command: "select",
+        params: ["index": .int(1)],
+        router: indexRouter,
+        cache: cache
+    )
+    let nameResult = await TrackDispatcher.handle(
+        command: "select",
+        params: ["name": .string("lead")],
+        router: indexRouter,
+        cache: cache
+    )
+
+    #expect(!indexResult.isError!)
+    #expect(!nameResult.isError!)
+    let ops = await mcu.executedOps
+    expectExecutedOps(ops, equals: [
+        ("track.select", ["index": "1"]),
+        ("track.select", ["index": "1"]),
+    ])
+}
+
+@Test func testTrackDispatcherSelectErrorsWhenParamsMissingOrNameUnknown() async {
+    let cache = StateCache()
+    let router = ChannelRouter()
+
+    let missingParamResult = await TrackDispatcher.handle(
+        command: "select",
+        params: [:],
+        router: router,
+        cache: cache
+    )
+
+    await cache.updateTracks([TrackState(id: 0, name: "Bass", type: .audio)])
+    let missingTrackResult = await TrackDispatcher.handle(
+        command: "select",
+        params: ["name": .string("vocal")],
+        router: router,
+        cache: cache
+    )
+
+    #expect(missingParamResult.isError!)
+    #expect(dispatcherText(missingParamResult).contains("requires 'index' or 'name'"))
+    #expect(missingTrackResult.isError!)
+    #expect(dispatcherText(missingTrackResult).contains("No track found matching"))
+}
+
+@Test func testTrackDispatcherCreateCommandsAndMutations() async {
+    let router = ChannelRouter()
+    let mcu = MockChannel(id: .mcu)
+    let keyCmd = MockChannel(id: .midiKeyCommands)
+    let ax = MockChannel(id: .accessibility)
+    await router.register(mcu)
+    await router.register(keyCmd)
+    await router.register(ax)
+    let cache = StateCache()
+
+    let commands = [
+        ("create_audio", "track.create_audio"),
+        ("create_instrument", "track.create_instrument"),
+        ("create_drummer", "track.create_drummer"),
+        ("create_external_midi", "track.create_external_midi"),
+    ]
+
+    for (command, operation) in commands {
+        let result = await TrackDispatcher.handle(command: command, params: [:], router: router, cache: cache)
+        #expect(!result.isError!, "Expected \(command) to succeed")
+        let ops = await keyCmd.executedOps
+        #expect(ops.last?.0 == operation)
+    }
+
+    let renameResult = await TrackDispatcher.handle(
+        command: "rename",
+        params: ["index": .int(5), "name": .string("Pad Bus")],
+        router: router,
+        cache: cache
+    )
+    let soloResult = await TrackDispatcher.handle(
+        command: "solo",
+        params: ["index": .int(5), "enabled": .bool(true)],
+        router: router,
+        cache: cache
+    )
+    let armResult = await TrackDispatcher.handle(
+        command: "arm",
+        params: ["index": .int(5), "enabled": .bool(false)],
+        router: router,
+        cache: cache
+    )
+    let colorResult = await TrackDispatcher.handle(
+        command: "set_color",
+        params: ["index": .int(5), "color": .int(12)],
+        router: router,
+        cache: cache
+    )
+
+    #expect(!renameResult.isError!)
+    #expect(!soloResult.isError!)
+    #expect(!armResult.isError!)
+    #expect(colorResult.isError!)
+
+    let mcuOps = await mcu.executedOps
+    let axOps = await ax.executedOps
+    expectExecutedOps(mcuOps, equals: [
+        ("track.set_solo", ["index": "5", "enabled": "true"]),
+        ("track.set_arm", ["index": "5", "enabled": "false"]),
+    ])
+    expectExecutedOps(axOps, equals: [
+        ("track.rename", ["index": "5", "name": "Pad Bus"]),
+    ])
+}
+
+@Test func testTrackDispatcherDeleteAndDuplicateRespectSelectionFlow() async {
+    let successRouter = ChannelRouter()
+    let mcu = MockChannel(id: .mcu)
+    let keyCmd = MockChannel(id: .midiKeyCommands)
+    await successRouter.register(mcu)
+    await successRouter.register(keyCmd)
+    let cache = StateCache()
+
+    let deleteResult = await TrackDispatcher.handle(
+        command: "delete",
+        params: ["index": .int(2)],
+        router: successRouter,
+        cache: cache
+    )
+    let duplicateResult = await TrackDispatcher.handle(
+        command: "duplicate",
+        params: ["index": .int(2)],
+        router: successRouter,
+        cache: cache
+    )
+
+    #expect(!deleteResult.isError!)
+    #expect(!duplicateResult.isError!)
+    let mcuOps = await mcu.executedOps
+    let keyCmdOps = await keyCmd.executedOps
+    expectExecutedOps(mcuOps, equals: [
+        ("track.select", ["index": "2"]),
+        ("track.select", ["index": "2"]),
+    ])
+    expectExecutedOps(keyCmdOps, equals: [
+        ("track.delete", [:]),
+        ("track.duplicate", [:]),
+    ])
+
+    let failureRouter = ChannelRouter()
+    await failureRouter.register(keyCmd)
+    let failureResult = await TrackDispatcher.handle(
+        command: "delete",
+        params: ["index": .int(9)],
+        router: failureRouter,
+        cache: cache
+    )
+
+    #expect(failureResult.isError!)
+}
+
+@Test func testTrackDispatcherDuplicateReturnsSelectionFailure() async {
+    let router = ChannelRouter()
+    let mcu = FailingExecuteChannel(id: .mcu, message: "selection failed")
+    let keyCmd = MockChannel(id: .midiKeyCommands)
+    await router.register(mcu)
+    await router.register(keyCmd)
+
+    let result = await TrackDispatcher.handle(
+        command: "duplicate",
+        params: ["index": .int(9)],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("selection failed"))
+    #expect(await keyCmd.executedOps.isEmpty)
+}
+
+@Test func testTrackDispatcherUnknownFails() async {
+    let result = await TrackDispatcher.handle(
+        command: "explode_stack",
+        params: [:],
+        router: ChannelRouter(),
+        cache: StateCache()
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("Unknown track command"))
+}
+
 // MARK: - EditDispatcher
 
 @Test func testEditDispatcherToggleStepInput() async {
@@ -86,6 +641,94 @@ import Foundation
 
     let result = await EditDispatcher.handle(command: "toggle_step_input", params: [:], router: router, cache: cache)
     #expect(!result.isError!)
+}
+
+@Test func testEditDispatcherRoutesPrimaryCommands() async {
+    let cases: [(command: String, operation: String)] = [
+        ("undo", "edit.undo"),
+        ("redo", "edit.redo"),
+        ("cut", "edit.cut"),
+        ("copy", "edit.copy"),
+        ("paste", "edit.paste"),
+        ("delete", "edit.delete"),
+        ("select_all", "edit.select_all"),
+        ("split", "edit.split"),
+        ("join", "edit.join"),
+        ("bounce_in_place", "edit.bounce_in_place"),
+        ("normalize", "edit.normalize"),
+        ("duplicate", "edit.duplicate"),
+    ]
+
+    for testCase in cases {
+        let router = ChannelRouter()
+        let keyCmd = MockChannel(id: .midiKeyCommands)
+        await router.register(keyCmd)
+        let cache = StateCache()
+
+        let result = await EditDispatcher.handle(
+            command: testCase.command,
+            params: [:],
+            router: router,
+            cache: cache
+        )
+
+        #expect(!result.isError!, "Expected \(testCase.command) to succeed")
+        let ops = await keyCmd.executedOps
+        #expect(ops.count == 1)
+        #expect(ops[0].0 == testCase.operation)
+    }
+}
+
+@Test func testEditDispatcherQuantizeUsesExplicitAndDefaultValues() async {
+    let explicitRouter = ChannelRouter()
+    let explicitKeyCmd = MockChannel(id: .midiKeyCommands)
+    await explicitRouter.register(explicitKeyCmd)
+    let explicitCache = StateCache()
+
+    let explicitResult = await EditDispatcher.handle(
+        command: "quantize",
+        params: ["value": .string("1/8")],
+        router: explicitRouter,
+        cache: explicitCache
+    )
+
+    #expect(!explicitResult.isError!)
+    let explicitOps = await explicitKeyCmd.executedOps
+    #expect(explicitOps.count == 1)
+    #expect(explicitOps[0].0 == "edit.quantize")
+    #expect(explicitOps[0].1["value"] == "1/8")
+
+    let defaultRouter = ChannelRouter()
+    let defaultKeyCmd = MockChannel(id: .midiKeyCommands)
+    await defaultRouter.register(defaultKeyCmd)
+    let defaultCache = StateCache()
+
+    let defaultResult = await EditDispatcher.handle(
+        command: "quantize",
+        params: [:],
+        router: defaultRouter,
+        cache: defaultCache
+    )
+
+    #expect(!defaultResult.isError!)
+    let defaultOps = await defaultKeyCmd.executedOps
+    #expect(defaultOps.count == 1)
+    #expect(defaultOps[0].0 == "edit.quantize")
+    #expect(defaultOps[0].1["value"] == "1/16")
+}
+
+@Test func testEditDispatcherUnknownFails() async {
+    let router = ChannelRouter()
+    let cache = StateCache()
+
+    let result = await EditDispatcher.handle(
+        command: "warp_quantum",
+        params: [:],
+        router: router,
+        cache: cache
+    )
+
+    #expect(result.isError!)
 }
 
 // MARK: - ProjectDispatcher + DestructivePolicy
@@ -102,6 +745,36 @@ import Foundation
     }
 }
 
+@Test func testProjectDispatcherL2CommandsRequireConfirmation() async throws {
+    let router = ChannelRouter()
+    let cache = StateCache()
+    let existingPath = try makeLogicProjectPath(create: true)
+    let saveAsPath = try makeLogicProjectPath(create: false)
+
+    let openResult = await ProjectDispatcher.handle(
+        command: "open",
+        params: ["path": .string(existingPath)],
+        router: router,
+        cache: cache
+    )
+    let saveAsResult = await ProjectDispatcher.handle(
+        command: "save_as",
+        params: ["path": .string(saveAsPath)],
+        router: router,
+        cache: cache
+    )
+    let bounceResult = await ProjectDispatcher.handle(command: "bounce", params: [:], router: router, cache: cache)
+
+    for result in [openResult, saveAsResult, bounceResult] {
+        #expect(!result.isError!)
+        if case .text(let text, _, _) = result.content.first {
+            #expect(text.contains("confirmation_required"))
+        } else {
+            Issue.record("Expected confirmation response")
+        }
+    }
+}
+
 @Test func testProjectDispatcherSaveNoConfirmation() async {
     let router = ChannelRouter()
     let keyCmd = MockChannel(id: .midiKeyCommands)
@@ -111,6 +784,295 @@ import Foundation
     let result = await ProjectDispatcher.handle(command: "save", params: [:], router: router, cache: cache)
     // Save is L1 — should execute immediately (no confirmation)
     #expect(!result.isError!)
+}
+
+@Test func testProjectDispatcherRoutesLifecycleCommandsAndValidatesPaths() async throws {
+    let router = ChannelRouter()
+    let keyCmd = MockChannel(id: .midiKeyCommands)
+    let appleScript = MockChannel(id: .appleScript)
+    await router.register(keyCmd)
+    await router.register(appleScript)
+    let cache = StateCache()
+
+    let existingPath = try makeLogicProjectPath(create: true)
+    let saveAsPath = try makeLogicProjectPath(create: false)
+
+    let newResult = await ProjectDispatcher.handle(command: "new", params: [:], router: router, cache: cache)
+    let openResult = await ProjectDispatcher.handle(
+        command: "open",
+        params: ["path": .string(existingPath), "confirmed": .bool(true)],
+        router: router,
+        cache: cache
+    )
+    let saveAsResult = await ProjectDispatcher.handle(
+        command: "save_as",
+        params: ["path": .string(saveAsPath), "confirmed": .bool(true)],
+        router: router,
+        cache: cache
+    )
+    let closeResult = await ProjectDispatcher.handle(
+        command: "close",
+        params: ["confirmed": .bool(true)],
+        router: router,
+        cache: cache
+    )
+    let bounceResult = await ProjectDispatcher.handle(command: "bounce", params: ["confirmed": .bool(true)], router: router, cache: cache)
+
+    #expect(!newResult.isError!)
+    #expect(!openResult.isError!)
+    #expect(!saveAsResult.isError!)
+    #expect(!closeResult.isError!)
+    #expect(!bounceResult.isError!)
+
+    let keyCmdOps = await keyCmd.executedOps
+    let appleScriptOps = await appleScript.executedOps
+    expectExecutedOps(keyCmdOps, equals: [
+        ("project.bounce", [:]),
+    ])
+    expectExecutedOps(appleScriptOps, equals: [
+        ("project.new", [:]),
+        ("project.open", ["path": existingPath]),
+        ("project.save_as", ["path": saveAsPath]),
+        ("project.close", [:]),
+    ])
+}
+
+@Test func testProjectDispatcherRejectsInvalidPathsAndUnknownCommands() async {
+    let cache = StateCache()
+    let router = ChannelRouter()
+
+    let missingPathResult = await ProjectDispatcher.handle(
+        command: "open",
+        params: [:],
+        router: router,
+        cache: cache
+    )
+    let invalidOpenResult = await ProjectDispatcher.handle(
+        command: "open",
+        params: ["path": .string("relative.logicx")],
+        router: router,
+        cache: cache
+    )
+    let invalidSaveAsResult = await ProjectDispatcher.handle(
+        command: "save_as",
+        params: ["path": .string("/tmp/not-a-logic-project.txt")],
+        router: router,
+        cache: cache
+    )
+    let unknownResult = await ProjectDispatcher.handle(
+        command: "archive",
+        params: [:],
+        router: router,
+        cache: cache
+    )
+
+    #expect(missingPathResult.isError!)
+    #expect(dispatcherText(missingPathResult).contains("open requires 'path' param"))
+    #expect(invalidOpenResult.isError!)
+    #expect(dispatcherText(invalidOpenResult).contains("existing absolute .logicx"))
+    #expect(invalidSaveAsResult.isError!)
+    #expect(dispatcherText(invalidSaveAsResult).contains("absolute .logicx"))
+    #expect(unknownResult.isError!)
+}
+
+@Test func testProjectDispatcherRejectsSaveAsWithoutPath() async {
+    let result = await ProjectDispatcher.handle(
+        command: "save_as",
+        params: [:],
+        router: ChannelRouter(),
+        cache: StateCache()
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("save_as requires 'path' param"))
+}
+
+@Test func testProjectDispatcherLaunchAndQuitShortCircuitOnRunningState() async {
+    let router = ChannelRouter()
+    let cache = StateCache()
+
+    let alreadyRunning = await ProjectDispatcher.handle(
+        command: "launch",
+        params: [:],
+        router: router,
+        cache: cache,
+        isLogicProRunning: { true }
+    )
+    let notRunning = await ProjectDispatcher.handle(
+        command: "quit",
+        params: ["confirmed": .bool(true)],
+        router: router,
+        cache: cache,
+        isLogicProRunning: { false }
+    )
+
+    #expect(!alreadyRunning.isError!)
+    #expect(dispatcherText(alreadyRunning).contains("already running"))
+    #expect(!notRunning.isError!)
+    #expect(dispatcherText(notRunning).contains("not running"))
+}
+
+@Test func testProjectDispatcherIsRunningReflectsInjectedProcessState() async {
+    let running = await ProjectDispatcher.handle(
+        command: "is_running",
+        params: [:],
+        router: ChannelRouter(),
+        cache: StateCache(),
+        isLogicProRunning: { true }
+    )
+    let stopped = await ProjectDispatcher.handle(
+        command: "is_running",
+        params: [:],
+        router: ChannelRouter(),
+        cache: StateCache(),
+        isLogicProRunning: { false }
+    )
+
+    #expect(!running.isError!)
+    #expect(!stopped.isError!)
+    #expect(dispatcherText(running) == "true")
+    #expect(dispatcherText(stopped) == "false")
+}
+
+@Test func testProjectDispatcherLaunchUsesLifecycleRunnerAndSucceedsAfterStateTransition() async {
+    let harness = ProjectLifecycleHarness(
+        execution: .init(executionError: nil, timedOut: false, terminationStatus: 0, stderrOutput: ""),
+        runningStates: [false, true]
+    )
+
+    let result = await ProjectDispatcher.handle(
+        command: "launch",
+        params: [:],
+        router: ChannelRouter(),
+        cache: StateCache(),
+        isLogicProRunning: { harness.isRunning() },
+        executeLifecycleScript: { script in await harness.execute(script: script) },
+        sleep: { duration in await harness.sleep(nanoseconds: duration) }
+    )
+
+    #expect(!result.isError!)
+    #expect(dispatcherText(result).contains("Logic Pro launched"))
+    #expect(harness.scripts == ["tell application \"Logic Pro\" to activate"])
+}
+
+@Test func testProjectDispatcherLifecycleRunnerSurfacesExecutionErrorsAndTimeouts() async {
+    let launchHarness = ProjectLifecycleHarness(
+        execution: .init(executionError: "spawn failed", timedOut: false, terminationStatus: -1, stderrOutput: ""),
+        runningStates: [false]
+    )
+    let launchResult = await ProjectDispatcher.handle(
+        command: "launch",
+        params: [:],
+        router: ChannelRouter(),
+        cache: StateCache(),
+        isLogicProRunning: { launchHarness.isRunning() },
+        executeLifecycleScript: { script in await launchHarness.execute(script: script) },
+        sleep: { duration in await launchHarness.sleep(nanoseconds: duration) }
+    )
+
+    let quitHarness = ProjectLifecycleHarness(
+        execution: .init(executionError: nil, timedOut: true, terminationStatus: 0, stderrOutput: ""),
+        runningStates: [true]
+    )
+    let quitResult = await ProjectDispatcher.handle(
+        command: "quit",
+        params: ["confirmed": .bool(true)],
+        router: ChannelRouter(),
+        cache: StateCache(),
+        isLogicProRunning: { quitHarness.isRunning() },
+        executeLifecycleScript: { script in await quitHarness.execute(script: script) },
+        sleep: { duration in await quitHarness.sleep(nanoseconds: duration) }
+    )
+
+    #expect(launchResult.isError!)
+    #expect(dispatcherText(launchResult).contains("spawn failed"))
+    #expect(quitResult.isError!)
+    #expect(dispatcherText(quitResult).contains("timed out"))
+}
+
+@Test func testProjectDispatcherLifecycleRunnerHandlesExitStatusAndStateMismatch() async {
+    let statusHarness = ProjectLifecycleHarness(
+        execution: .init(executionError: nil, timedOut: false, terminationStatus: 1, stderrOutput: ""),
+        runningStates: [true]
+    )
+    let statusResult = await ProjectDispatcher.handle(
+        command: "quit",
+        params: ["confirmed": .bool(true)],
+        router: ChannelRouter(),
+        cache: StateCache(),
+        isLogicProRunning: { statusHarness.isRunning() },
+        executeLifecycleScript: { script in await statusHarness.execute(script: script) },
+        sleep: { duration in await statusHarness.sleep(nanoseconds: duration) }
+    )
+
+    let mismatchHarness = ProjectLifecycleHarness(
+        execution: .init(executionError: nil, timedOut: false, terminationStatus: 0, stderrOutput: ""),
+        runningStates: Array(repeating: true, count: 60)
+    )
+    let mismatchResult = await ProjectDispatcher.handle(
+        command: "quit",
+        params: ["confirmed": .bool(true)],
+        router: ChannelRouter(),
+        cache: StateCache(),
+        isLogicProRunning: { mismatchHarness.isRunning() },
+        executeLifecycleScript: { script in await mismatchHarness.execute(script: script) },
+        sleep: { duration in await mismatchHarness.sleep(nanoseconds: duration) }
+    )
+
+    #expect(statusResult.isError!)
+    #expect(dispatcherText(statusResult).contains("osascript exited with status 1"))
+    #expect(mismatchResult.isError!)
+    #expect(dispatcherText(mismatchResult).contains("did not reach expected running state"))
+    #expect(!mismatchHarness.sleepCalls.isEmpty)
+}
+
+@Test func testProjectDispatcherLifecycleRunnerPrefersStderrForExitStatus() async {
+    let harness = ProjectLifecycleHarness(
+        execution: .init(executionError: nil, timedOut: false, terminationStatus: 1, stderrOutput: "permission denied"),
+        runningStates: [true]
+    )
+
+    let result = await ProjectDispatcher.handle(
+        command: "quit",
+        params: ["confirmed": .bool(true)],
+        router: ChannelRouter(),
+        cache: StateCache(),
+        isLogicProRunning: { harness.isRunning() },
+        executeLifecycleScript: { script in await harness.execute(script: script) },
+        sleep: { duration in await harness.sleep(nanoseconds: duration) }
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("permission denied"))
+}
+
+@Test func testProjectDispatcherExecuteAppleScriptSucceedsForValidScript() async {
+    let execution = await ProjectDispatcher.executeAppleScript("return 1")
+
+    #expect(execution.executionError == nil)
+    #expect(execution.timedOut == false)
+    #expect(execution.terminationStatus == 0)
+    #expect(execution.stderrOutput.isEmpty)
+}
+
+@Test func testProjectDispatcherExecuteAppleScriptCapturesInvalidScriptFailure() async {
+    let execution = await ProjectDispatcher.executeAppleScript("this is not valid AppleScript")
+
+    #expect(execution.executionError == nil)
+    #expect(execution.timedOut == false)
+    #expect(execution.terminationStatus != 0)
+    #expect(!execution.stderrOutput.isEmpty)
+}
+
+@Test func testProjectDispatcherExecuteAppleScriptSurfacesProcessLaunchFailure() async {
+    let execution = await ProjectDispatcher.executeAppleScript(
+        "return 1",
+        executableURL: URL(fileURLWithPath: "/tmp/logic-pro-mcp-missing-osascript")
+    )
+
+    #expect(execution.executionError != nil)
+    #expect(execution.timedOut == false)
+    #expect(execution.terminationStatus == -1)
 }
 
 // MARK: - MIDIDispatcher
@@ -127,4 +1089,382 @@ import Foundation
         router: router, cache: cache
     )
     #expect(!result.isError!)
+    let ops = await coreMidi.executedOps
+    expectExecutedOps(ops, equals: [("midi.step_input", ["note": "60", "duration": "1/4"])])
+}
+
+@Test func testMIDIDispatcherRoutesCoreCommands() async {
+    let router = ChannelRouter()
+    let coreMidi = MockChannel(id: .coreMIDI)
+    await router.register(coreMidi)
+    let cache = StateCache()
+
+    let noteResult = await MIDIDispatcher.handle(
+        command: "send_note",
+        params: ["note": .int(64), "velocity": .int(90), "channel": .int(2), "duration_ms": .int(750)],
+        router: router,
+        cache: cache
+    )
+    let ccResult = await MIDIDispatcher.handle(
+        command: "send_cc",
+        params: ["controller": .int(74), "value": .int(127), "channel": .int(3)],
+        router: router,
+        cache: cache
+    )
+    let pcResult = await MIDIDispatcher.handle(
+        command: "send_program_change",
+        params: ["program": .int(8), "channel": .int(4)],
+        router: router,
+        cache: cache
+    )
+    let bendResult = await MIDIDispatcher.handle(
+        command: "send_pitch_bend",
+        params: ["value": .int(-512), "channel": .int(5)],
+        router: router,
+        cache: cache
+    )
+    let aftertouchResult = await MIDIDispatcher.handle(
+        command: "send_aftertouch",
+        params: ["value": .int(55), "channel": .int(6)],
+        router: router,
+        cache: cache
+    )
+
+    #expect(!noteResult.isError!)
+    #expect(!ccResult.isError!)
+    #expect(!pcResult.isError!)
+    #expect(!bendResult.isError!)
+    #expect(!aftertouchResult.isError!)
+    let ops = await coreMidi.executedOps
+    expectExecutedOps(ops, equals: [
+        ("midi.send_note", ["note": "64", "velocity": "90", "channel": "2", "duration_ms": "750"]),
+        ("midi.send_cc", ["controller": "74", "value": "127", "channel": "3"]),
+        ("midi.send_program_change", ["program": "8", "channel": "4"]),
+        ("midi.send_pitch_bend", ["value": "-512", "channel": "5"]),
+        ("midi.send_aftertouch", ["value": "55", "channel": "6"]),
+    ])
+}
+
+@Test func testMIDIDispatcherNormalizesChordSysexMMCAndVirtualPortCommands() async {
+    let router = ChannelRouter()
+    let coreMidi = MockChannel(id: .coreMIDI)
+    let mcu = MockChannel(id: .mcu)
+    await router.register(coreMidi)
+    await router.register(mcu)
+    let cache = StateCache()
+
+    let chordArrayResult = await MIDIDispatcher.handle(
+        command: "send_chord",
+        params: ["notes": .array([.int(60), .int(64), .int(67)]), "velocity": .int(80)],
+        router: router,
+        cache: cache
+    )
+    let chordStringResult = await MIDIDispatcher.handle(
+        command: "send_chord",
+        params: ["notes": .string("72,76,79")],
+        router: router,
+        cache: cache
+    )
+    let sysexResult = await MIDIDispatcher.handle(
+        command: "send_sysex",
+        params: ["bytes": .array([.int(240), .int(66), .int(247)])],
+        router: router,
+        cache: cache
+    )
+    let portResult = await MIDIDispatcher.handle(
+        command: "create_virtual_port",
+        params: ["name": .string("LogicProMCP-Test")],
+        router: router,
+        cache: cache
+    )
+    let playResult = await MIDIDispatcher.handle(command: "mmc_play", params: [:], router: router, cache: cache)
+    let stopResult = await MIDIDispatcher.handle(command: "mmc_stop", params: [:], router: router, cache: cache)
+    let recordResult = await MIDIDispatcher.handle(command: "mmc_record", params: [:], router: router, cache: cache)
+    let locateBarResult = await MIDIDispatcher.handle(
+        command: "mmc_locate",
+        params: ["bar": .int(17)],
+        router: router,
+        cache: cache
+    )
+    let locateTimeResult = await MIDIDispatcher.handle(
+        command: "mmc_locate",
+        params: ["time": .string("01:02:03:04")],
+        router: router,
+        cache: cache
+    )
+
+    #expect(!chordArrayResult.isError!)
+    #expect(!chordStringResult.isError!)
+    #expect(!sysexResult.isError!)
+    #expect(!portResult.isError!)
+    #expect(!playResult.isError!)
+    #expect(!stopResult.isError!)
+    #expect(!recordResult.isError!)
+    #expect(!locateBarResult.isError!)
+    #expect(!locateTimeResult.isError!)
+
+    let coreOps = await coreMidi.executedOps
+    let mcuOps = await mcu.executedOps
+    expectExecutedOps(coreOps, equals: [
+        ("midi.send_chord", ["notes": "60,64,67", "velocity": "80", "channel": "1", "duration_ms": "500"]),
+        ("midi.send_chord", ["notes": "72,76,79", "velocity": "100", "channel": "1", "duration_ms": "500"]),
+        ("midi.send_sysex", ["data": "F0 42 F7"]),
+        ("midi.create_virtual_port", ["name": "LogicProMCP-Test"]),
+        ("mmc.play", [:]),
+        ("mmc.stop", [:]),
+        ("mmc.record_strobe", [:]),
+        ("mmc.locate", ["time": "01:02:03:04"]),
+    ])
+    expectExecutedOps(mcuOps, equals: [
+        ("transport.goto_position", ["position": "17.1.1.1"]),
+    ])
+}
+
+@Test func testMIDIDispatcherAcceptsSysexDataStringBranch() async {
+    let router = ChannelRouter()
+    let coreMidi = MockChannel(id: .coreMIDI)
+    await router.register(coreMidi)
+
+    let result = await MIDIDispatcher.handle(
+        command: "send_sysex",
+        params: ["data": .string("F0 7D 01 F7")],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(!result.isError!)
+    expectExecutedOps(await coreMidi.executedOps, equals: [
+        ("midi.send_sysex", ["data": "F0 7D 01 F7"]),
+    ])
+}
+
+@Test func testMIDIDispatcherUnknownCommandFailsInDispatcherSuite() async {
+    let result = await MIDIDispatcher.handle(
+        command: "panic_all_channels",
+        params: [:],
+        router: ChannelRouter(),
+        cache: StateCache()
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("Unknown MIDI command"))
+}
+
+// MARK: - NavigateDispatcher
+
+@Test func testNavigateDispatcherRoutesMarkerAndZoomCommands() async {
+    let router = ChannelRouter()
+    let mcu = MockChannel(id: .mcu)
+    let keyCmd = MockChannel(id: .midiKeyCommands)
+    let ax = MockChannel(id: .accessibility)
+    await router.register(mcu)
+    await router.register(keyCmd)
+    await router.register(ax)
+    let cache = StateCache()
+    await cache.updateMarkers([
+        MarkerState(id: 1, name: "Verse", position: "9.1.1.1"),
+        MarkerState(id: 2, name: "Chorus", position: "17.1.1.1"),
+    ])
+
+    let gotoBarResult = await NavigateDispatcher.handle(
+        command: "goto_bar",
+        params: ["bar": .int(12)],
+        router: router,
+        cache: cache
+    )
+    let gotoMarkerIndexResult = await NavigateDispatcher.handle(
+        command: "goto_marker",
+        params: ["index": .int(2)],
+        router: router,
+        cache: cache
+    )
+    let gotoMarkerNameResult = await NavigateDispatcher.handle(
+        command: "goto_marker",
+        params: ["name": .string("chor")],
+        router: router,
+        cache: cache
+    )
+    let createMarkerResult = await NavigateDispatcher.handle(
+        command: "create_marker",
+        params: ["name": .string("Bridge")],
+        router: router,
+        cache: cache
+    )
+    let deleteMarkerResult = await NavigateDispatcher.handle(
+        command: "delete_marker",
+        params: ["index": .int(1)],
+        router: router,
+        cache: cache
+    )
+    let renameMarkerResult = await NavigateDispatcher.handle(
+        command: "rename_marker",
+        params: ["index": .int(2), "name": .string("Big Chorus")],
+        router: router,
+        cache: cache
+    )
+    let zoomFitResult = await NavigateDispatcher.handle(
+        command: "zoom_to_fit",
+        params: [:],
+        router: router,
+        cache: cache
+    )
+    let zoomInResult = await NavigateDispatcher.handle(
+        command: "set_zoom",
+        params: ["level": .string("in")],
+        router: router,
+        cache: cache
+    )
+    let zoomOutResult = await NavigateDispatcher.handle(
+        command: "set_zoom",
+        params: ["level": .string("out")],
+        router: router,
+        cache: cache
+    )
+    let zoomCustomResult = await NavigateDispatcher.handle(
+        command: "set_zoom",
+        params: ["level": .string("5")],
+        router: router,
+        cache: cache
+    )
+
+    #expect(!gotoBarResult.isError!)
+    #expect(!gotoMarkerIndexResult.isError!)
+    #expect(!gotoMarkerNameResult.isError!)
+    #expect(!createMarkerResult.isError!)
+    #expect(!deleteMarkerResult.isError!)
+    #expect(!renameMarkerResult.isError!)
+    #expect(!zoomFitResult.isError!)
+    #expect(!zoomInResult.isError!)
+    #expect(!zoomOutResult.isError!)
+    #expect(!zoomCustomResult.isError!)
+
+    let mcuOps = await mcu.executedOps
+    let keyCmdOps = await keyCmd.executedOps
+    let axOps = await ax.executedOps
+    expectExecutedOps(mcuOps, equals: [("nav.goto_bar", ["bar": "12"])])
+    expectExecutedOps(keyCmdOps, equals: [
+        ("nav.goto_marker", ["index": "2"]),
+        ("nav.goto_marker", ["index": "2"]),
+        ("nav.create_marker", ["name": "Bridge"]),
+        ("nav.delete_marker", ["index": "1"]),
+        ("nav.zoom_to_fit", [:]),
+        ("nav.set_zoom_level", ["level": "8"]),
+        ("nav.set_zoom_level", ["level": "2"]),
+        ("nav.set_zoom_level", ["level": "5"]),
+    ])
+    expectExecutedOps(axOps, equals: [("nav.rename_marker", ["index": "2", "name": "Big Chorus"])])
+}
+
+@Test func testNavigateDispatcherToggleViewAndErrors() async {
+    let router = ChannelRouter()
+    let keyCmd = MockChannel(id: .midiKeyCommands)
+    await router.register(keyCmd)
+    let cache = StateCache()
+
+    let viewCases: [(String, String)] = [
+        ("mixer", "view.toggle_mixer"),
+        ("piano_roll", "view.toggle_piano_roll"),
+        ("score", "view.toggle_score_editor"),
+        ("step_editor", "view.toggle_step_editor"),
+        ("library", "view.toggle_library"),
+        ("inspector", "view.toggle_inspector"),
+        ("automation", "automation.toggle_view"),
+    ]
+
+    for (view, operation) in viewCases {
+        let result = await NavigateDispatcher.handle(
+            command: "toggle_view",
+            params: ["view": .string(view)],
+            router: router,
+            cache: cache
+        )
+        #expect(!result.isError!, "Expected toggle_view for \(view) to succeed")
+        let ops = await keyCmd.executedOps
+        #expect(ops.last?.0 == operation)
+    }
+
+    let missingMarkerResult = await NavigateDispatcher.handle(
+        command: "goto_marker",
+        params: ["name": .string("Outro")],
+        router: router,
+        cache: cache
+    )
+    let missingParamResult = await NavigateDispatcher.handle(
+        command: "goto_marker",
+        params: [:],
+        router: router,
+        cache: cache
+    )
+    let badViewResult = await NavigateDispatcher.handle(
+        command: "toggle_view",
+        params: ["view": .string("notation")],
+        router: router,
+        cache: cache
+    )
+    let unknownResult = await NavigateDispatcher.handle(
+        command: "teleport",
+        params: [:],
+        router: router,
+        cache: cache
+    )
+
+    #expect(missingMarkerResult.isError!)
+    #expect(missingParamResult.isError!)
+    #expect(badViewResult.isError!)
+    #expect(dispatcherText(badViewResult).contains("Unknown view"))
+    #expect(unknownResult.isError!)
+}
+
+@Test func testMIDIDispatcherToolMetadataDocumentsMMCAndStepInput() {
+    let tool = MIDIDispatcher.tool
+    let description = tool.description ?? ""
+
+    #expect(tool.name == "logic_midi")
+    #expect(description.contains("mmc_locate"))
+    #expect(description.contains("step_input"))
+    _ = tool.inputSchema
+}
+
+@Test func testTrackDispatcherToolMetadataDocumentsAutomationAndCreateCommands() {
+    let tool = TrackDispatcher.tool
+    let description = tool.description ?? ""
+
+    #expect(tool.name == "logic_tracks")
+    #expect(description.contains("set_automation"))
+    #expect(description.contains("create_external_midi"))
+    _ = tool.inputSchema
+}
+
+@Test func testNavigateDispatcherToolMetadataDocumentsViewsAndFitZoom() async {
+    let tool = NavigateDispatcher.tool
+    let description = tool.description ?? ""
+    #expect(tool.name == "logic_navigate")
+    #expect(description.contains("toggle_view"))
+    #expect(description.contains("set_zoom"))
+    _ = tool.inputSchema
+
+    let router = ChannelRouter()
+    let keyCmd = MockChannel(id: .midiKeyCommands)
+    await router.register(keyCmd)
+
+    let fitResult = await NavigateDispatcher.handle(
+        command: "set_zoom",
+        params: ["level": .string("fit")],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(!fitResult.isError!)
+    let ops = await keyCmd.executedOps
+    expectExecutedOps(ops, equals: [("nav.zoom_to_fit", [:])])
+}
+
+@Test func testProjectDispatcherToolMetadataDocumentsLifecycleCommands() {
+    let tool = ProjectDispatcher.tool
+    let description = tool.description ?? ""
+
+    #expect(tool.name == "logic_project")
+    #expect(description.contains("save_as"))
+    #expect(description.contains("launch"))
+    _ = tool.inputSchema
 }

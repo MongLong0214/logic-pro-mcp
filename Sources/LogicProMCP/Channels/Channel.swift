@@ -19,17 +19,45 @@ enum ChannelResult: Sendable {
 }
 
 /// Health status of a channel.
+enum ChannelVerificationStatus: String, Sendable {
+    case runtimeReady = "runtime_ready"
+    case manualValidationRequired = "manual_validation_required"
+    case unavailable = "unavailable"
+}
+
 struct ChannelHealth: Sendable {
     let available: Bool
     let latencyMs: Double?
     let detail: String
+    let verificationStatus: ChannelVerificationStatus
 
-    static func healthy(latencyMs: Double? = nil, detail: String = "OK") -> ChannelHealth {
-        ChannelHealth(available: true, latencyMs: latencyMs, detail: detail)
+    var ready: Bool {
+        available && verificationStatus == .runtimeReady
     }
 
-    static func unavailable(_ reason: String) -> ChannelHealth {
-        ChannelHealth(available: false, latencyMs: nil, detail: reason)
+    static func healthy(
+        latencyMs: Double? = nil,
+        detail: String = "OK",
+        verificationStatus: ChannelVerificationStatus = .runtimeReady
+    ) -> ChannelHealth {
+        ChannelHealth(
+            available: true,
+            latencyMs: latencyMs,
+            detail: detail,
+            verificationStatus: verificationStatus
+        )
+    }
+
+    static func unavailable(
+        _ reason: String,
+        verificationStatus: ChannelVerificationStatus = .unavailable
+    ) -> ChannelHealth {
+        ChannelHealth(
+            available: false,
+            latencyMs: nil,
+            detail: reason,
+            verificationStatus: verificationStatus
+        )
     }
 }
 

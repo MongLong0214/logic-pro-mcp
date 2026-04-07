@@ -42,6 +42,33 @@ import Foundation
     #expect(tracks[3].isMuted == true)
 }
 
+@Test func testMCUFeedbackSeedsTrackStateWithoutAXBootstrap() async {
+    let transport = MockMCUTransport()
+    let cache = StateCache()
+    let channel = MCUChannel(transport: transport, cache: cache)
+
+    await channel.handleFeedback(.noteOn(channel: 0, note: 0x13, velocity: 0x7F))
+
+    let tracks = await cache.getTracks()
+    #expect(tracks.count >= 4)
+    #expect(tracks[3].isMuted == true)
+    #expect(tracks[3].name == "Track 4")
+}
+
+@Test func testMCUFeedbackSeedsChannelStripStateWithoutAXBootstrap() async {
+    let transport = MockMCUTransport()
+    let cache = StateCache()
+    let channel = MCUChannel(transport: transport, cache: cache)
+
+    let feedbackValue: UInt16 = UInt16(0.5 * 16383)
+    await channel.handleFeedback(.pitchBend(channel: 5, value: feedbackValue))
+
+    let strips = await cache.getChannelStrips()
+    #expect(strips.count >= 6)
+    #expect(abs(strips[5].volume - 0.5) < 0.02)
+    #expect(strips[5].trackIndex == 5)
+}
+
 // MARK: - Router End-to-End
 
 @Test func testRouterToChannelEndToEnd() async {

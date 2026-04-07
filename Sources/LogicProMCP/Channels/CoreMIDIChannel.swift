@@ -4,10 +4,12 @@ import Foundation
 /// Channel that routes operations through CoreMIDI / MMC.
 actor CoreMIDIChannel: Channel {
     let id: ChannelID = .coreMIDI
-    private let engine: MIDIEngine
+    private let engine: any CoreMIDIEngineProtocol
+    private let portManager: (any VirtualPortManaging)?
 
-    init(engine: MIDIEngine) {
+    init(engine: any CoreMIDIEngineProtocol, portManager: (any VirtualPortManaging)? = nil) {
         self.engine = engine
+        self.portManager = portManager
     }
 
     func start() async throws {
@@ -74,7 +76,7 @@ actor CoreMIDIChannel: Channel {
             let durationMs = params["duration_ms"].flatMap(UInt64.init) ?? 250
             await engine.sendNoteOn(channel: channel, note: note, velocity: velocity)
             try? await Task.sleep(nanoseconds: durationMs * 1_000_000)
-            await engine.sendNoteOff(channel: channel, note: note)
+            await engine.sendNoteOff(channel: channel, note: note, velocity: 0)
             return .success("Note \(note) on ch \(channel) vel \(velocity) dur \(durationMs)ms")
 
         case "midi.note_on":
@@ -91,7 +93,7 @@ actor CoreMIDIChannel: Channel {
                 return .error("note_off requires 'note' (0-127)")
             }
             let channel = params["channel"].flatMap(UInt8.init) ?? 0
-            await engine.sendNoteOff(channel: channel, note: note)
+            await engine.sendNoteOff(channel: channel, note: note, velocity: 0)
             return .success("Note off \(note) ch \(channel)")
 
         // MARK: - CC
@@ -118,7 +120,16 @@ actor CoreMIDIChannel: Channel {
         // MARK: - Pitch Bend
 
         case "midi.pitch_bend", "midi.send_pitch_bend":
-            guard let value = params["value"].flatMap(UInt16.init) else {
+            let value: UInt16?
+            if let signed = params["value"].flatMap(Int.init) {
+                let normalized = min(max(signed, -8192), 8191) + 8192
+                value = UInt16(normalized)
+            } else if let raw = params["value"].flatMap(UInt16.init) {
+                value = min(raw, 16383)
+            } else {
+                value = nil
+            }
+            guard let value else {
                 return .error("pitch_bend requires 'value' (0-16383, center=8192)")
             }
             let channel = params["channel"].flatMap(UInt8.init) ?? 0
@@ -128,7 +139,8 @@ actor CoreMIDIChannel: Channel {
         // MARK: - Aftertouch
 
         case "midi.aftertouch", "midi.send_aftertouch":
-            guard let pressure = params["pressure"].flatMap(UInt8.init) else {
+            guard let pressure = params["pressure"].flatMap(UInt8.init)
+                ?? params["value"].flatMap(UInt8.init) else {
                 return .error("aftertouch requires 'pressure' (0-127)")
             }
             let channel = params["channel"].flatMap(UInt8.init) ?? 0
@@ -158,23 +170,32 @@ actor CoreMIDIChannel: Channel {
             let durMs = params["duration_ms"].flatMap(Int.init) ?? 500
             for n in notes { await engine.sendNoteOn(channel: ch, note: n, velocity: vel) }
             try? await Task.sleep(for: .milliseconds(durMs))
-            for n in notes { await engine.sendNoteOff(channel: ch, note: n) }
+            for n in notes { await engine.sendNoteOff(channel: ch, note: n, velocity: 0) }
             return .success("Chord sent: \(notes.count) notes")
 
         case "midi.step_input":
             let note = params["note"].flatMap(UInt8.init) ?? 60
+            let durationMs = stepInputDurationMs(from: params["duration"] ?? params["duration_ms"])
             let vel: UInt8 = 80
             await engine.sendNoteOn(channel: 0, note: note, velocity: vel)
-            try? await Task.sleep(for: .milliseconds(50))
-            await engine.sendNoteOff(channel: 0, note: note)
-            return .success("Step input: note \(note)")
+            try? await Task.sleep(for: .milliseconds(durationMs))
+            await engine.sendNoteOff(channel: 0, note: note, velocity: 0)
+            return .success("Step input: note \(note), duration \(durationMs)ms")
 
         case "midi.list_ports":
-            return .success("{\"sources\":\(MIDIGetNumberOfSources()),\"destinations\":\(MIDIGetNumberOfDestinations())}")
+            return .success(listMIDIPortsJSON())
 
         case "midi.create_virtual_port":
+            guard let portManager else {
+                return .error("Dynamic virtual port creation unavailable in this context")
+            }
             let name = params["name"] ?? "LogicProMCP-Virtual"
-            return .success("Virtual port '\(name)' — managed by MIDIPortManager")
+            do {
+                _ = try await portManager.createSendOnlyPort(name: name)
+                return .success("Virtual port '\(name)' ready")
+            } catch {
+                return .error("Failed to create virtual port '\(name)': \(error)")
+            }
 
         case "midi.get_input_state":
             return .success("{\"active\":true}")
@@ -184,8 +205,7 @@ actor CoreMIDIChannel: Channel {
             return .success("MMC record strobe")
 
         case "transport.goto_position":
-            let bar = params["bar"].flatMap(Int.init) ?? 1
-            return .success("Goto bar \(bar) — via MCU jog preferred")
+            return .error("CoreMIDI cannot position the playhead directly; use MCU or CGEvent fallback")
 
         case "mmc.play":
             await engine.sendSysEx(MMCCommands.play())
@@ -204,7 +224,21 @@ actor CoreMIDIChannel: Channel {
             return .success("MMC record exit")
 
         case "mmc.locate":
-            return .success("MMC locate — use transport.goto_position")
+            guard
+                let time = params["time"],
+                let components = parseMMCLocateTime(time)
+            else {
+                return .error("MMC locate requires time in HH:MM:SS:FF")
+            }
+            await engine.sendSysEx(
+                MMCCommands.locate(
+                    hours: components.hours,
+                    minutes: components.minutes,
+                    seconds: components.seconds,
+                    frames: components.frames
+                )
+            )
+            return .success("MMC locate sent to \(time)")
 
         case "mmc.pause":
             await engine.sendSysEx(MMCCommands.pause())
@@ -222,5 +256,70 @@ actor CoreMIDIChannel: Channel {
         } else {
             return .unavailable("CoreMIDI client not initialized")
         }
+    }
+
+    private func parseMMCLocateTime(_ time: String) -> (hours: UInt8, minutes: UInt8, seconds: UInt8, frames: UInt8)? {
+        let parts = time.split(separator: ":")
+        guard parts.count == 4 else { return nil }
+        guard
+            let hours = UInt8(parts[0]),
+            let minutes = UInt8(parts[1]),
+            let seconds = UInt8(parts[2]),
+            let frames = UInt8(parts[3])
+        else {
+            return nil
+        }
+        return (hours, minutes, seconds, frames)
+    }
+
+    private func stepInputDurationMs(from rawDuration: String?) -> Int {
+        guard let rawDuration, !rawDuration.isEmpty else { return 250 }
+        if let durationMs = Int(rawDuration) {
+            return max(1, durationMs)
+        }
+        switch rawDuration {
+        case "1/1": return 1000
+        case "1/2": return 500
+        case "1/4": return 250
+        case "1/8": return 125
+        case "1/16": return 63
+        case "1/32": return 32
+        default: return 250
+        }
+    }
+
+    private func listMIDIPortsJSON() -> String {
+        struct PortListing: Encodable {
+            let sources: [String]
+            let destinations: [String]
+        }
+
+        let listing = PortListing(
+            sources: listEndpointNames(count: MIDIGetNumberOfSources(), getter: MIDIGetSource),
+            destinations: listEndpointNames(count: MIDIGetNumberOfDestinations(), getter: MIDIGetDestination)
+        )
+        return encodeJSON(listing)
+    }
+
+    private func listEndpointNames(
+        count: Int,
+        getter: (Int) -> MIDIEndpointRef
+    ) -> [String] {
+        (0..<count).map { index in
+            endpointName(getter(index))
+        }
+    }
+
+    private func endpointName(_ endpoint: MIDIEndpointRef) -> String {
+        var cfName: Unmanaged<CFString>?
+        if MIDIObjectGetStringProperty(endpoint, kMIDIPropertyDisplayName, &cfName) == noErr,
+           let name = cfName?.takeRetainedValue() as String? {
+            return name
+        }
+        if MIDIObjectGetStringProperty(endpoint, kMIDIPropertyName, &cfName) == noErr,
+           let name = cfName?.takeRetainedValue() as String? {
+            return name
+        }
+        return "Unnamed MIDI Endpoint"
     }
 }

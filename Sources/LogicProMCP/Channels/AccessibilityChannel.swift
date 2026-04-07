@@ -6,15 +6,71 @@ import Foundation
 /// (clicking mute/solo buttons, reading fader values, etc.)
 actor AccessibilityChannel: Channel {
     let id: ChannelID = .accessibility
+    private let runtime: Runtime
+
+    enum MixerTarget {
+        case volume
+        case pan
+    }
+
+    struct Runtime: @unchecked Sendable {
+        let isTrusted: @Sendable () -> Bool
+        let isLogicProRunning: @Sendable () -> Bool
+        let appRoot: @Sendable () -> AXUIElement?
+        let transportState: @Sendable () -> ChannelResult
+        let toggleTransportButton: @Sendable (String) -> ChannelResult
+        let setTempo: @Sendable ([String: String]) -> ChannelResult
+        let setCycleRange: @Sendable ([String: String]) -> ChannelResult
+        let tracks: @Sendable () -> ChannelResult
+        let selectedTrack: @Sendable () -> ChannelResult
+        let selectTrack: @Sendable ([String: String]) -> ChannelResult
+        let setTrackToggle: @Sendable ([String: String], String) -> ChannelResult
+        let renameTrack: @Sendable ([String: String]) -> ChannelResult
+        let mixerState: @Sendable () -> ChannelResult
+        let channelStrip: @Sendable ([String: String]) -> ChannelResult
+        let setMixerValue: @Sendable ([String: String], MixerTarget) -> ChannelResult
+        let projectInfo: @Sendable () -> ChannelResult
+
+        static func axBacked(
+            isTrusted: @escaping @Sendable () -> Bool = AXIsProcessTrusted,
+            isLogicProRunning: @escaping @Sendable () -> Bool = { ProcessUtils.isLogicProRunning },
+            logicRuntime: AXLogicProElements.Runtime = .production
+        ) -> Runtime {
+            Runtime(
+                isTrusted: isTrusted,
+                isLogicProRunning: isLogicProRunning,
+                appRoot: { AXLogicProElements.appRoot(runtime: logicRuntime) },
+                transportState: { AccessibilityChannel.defaultGetTransportState(runtime: logicRuntime) },
+                toggleTransportButton: { AccessibilityChannel.defaultToggleTransportButton(named: $0, runtime: logicRuntime) },
+                setTempo: { AccessibilityChannel.defaultSetTempo(params: $0, runtime: logicRuntime) },
+                setCycleRange: AccessibilityChannel.defaultSetCycleRange,
+                tracks: { AccessibilityChannel.defaultGetTracks(runtime: logicRuntime) },
+                selectedTrack: { AccessibilityChannel.defaultGetSelectedTrack(runtime: logicRuntime) },
+                selectTrack: { AccessibilityChannel.defaultSelectTrack(params: $0, runtime: logicRuntime) },
+                setTrackToggle: { AccessibilityChannel.defaultSetTrackToggle(params: $0, button: $1, runtime: logicRuntime) },
+                renameTrack: { AccessibilityChannel.defaultRenameTrack(params: $0, runtime: logicRuntime) },
+                mixerState: { AccessibilityChannel.defaultGetMixerState(runtime: logicRuntime) },
+                channelStrip: { AccessibilityChannel.defaultGetChannelStrip(params: $0, runtime: logicRuntime) },
+                setMixerValue: { AccessibilityChannel.defaultSetMixerValue(params: $0, target: $1, runtime: logicRuntime) },
+                projectInfo: { AccessibilityChannel.defaultGetProjectInfo(runtime: logicRuntime) }
+            )
+        }
+
+        static let production = Runtime.axBacked()
+    }
+
+    init(runtime: Runtime = .production) {
+        self.runtime = runtime
+    }
 
     func start() async throws {
         // Verify AX trust. If not trusted, the process needs to be added to
         // System Preferences > Privacy & Security > Accessibility.
-        let trusted = AXIsProcessTrusted()
+        let trusted = runtime.isTrusted()
         guard trusted else {
             throw AccessibilityError.notTrusted
         }
-        guard ProcessUtils.isLogicProRunning else {
+        guard runtime.isLogicProRunning() else {
             Log.warn("Logic Pro not running at AX channel start", subsystem: "ax")
             return
         }
@@ -26,56 +82,56 @@ actor AccessibilityChannel: Channel {
     }
 
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
-        guard ProcessUtils.isLogicProRunning else {
+        guard runtime.isLogicProRunning() else {
             return .error("Logic Pro is not running")
         }
 
         switch operation {
         // MARK: - Transport reads
         case "transport.get_state":
-            return getTransportState()
+            return runtime.transportState()
 
         // MARK: - Transport mutations
         case "transport.toggle_cycle":
-            return toggleTransportButton(named: "Cycle")
+            return runtime.toggleTransportButton("Cycle")
         case "transport.toggle_metronome":
-            return toggleTransportButton(named: "Metronome")
+            return runtime.toggleTransportButton("Metronome")
         case "transport.set_tempo":
-            return setTempo(params: params)
+            return runtime.setTempo(params)
         case "transport.set_cycle_range":
-            return setCycleRange(params: params)
+            return runtime.setCycleRange(params)
 
         // MARK: - Track reads
         case "track.get_tracks":
-            return getTracks()
+            return runtime.tracks()
         case "track.get_selected":
-            return getSelectedTrack()
+            return runtime.selectedTrack()
 
         // MARK: - Track mutations
         case "track.select":
-            return selectTrack(params: params)
+            return runtime.selectTrack(params)
         case "track.set_mute":
-            return setTrackToggle(params: params, button: "Mute")
+            return runtime.setTrackToggle(params, "Mute")
         case "track.set_solo":
-            return setTrackToggle(params: params, button: "Solo")
+            return runtime.setTrackToggle(params, "Solo")
         case "track.set_arm":
-            return setTrackToggle(params: params, button: "Record")
+            return runtime.setTrackToggle(params, "Record")
         case "track.rename":
-            return renameTrack(params: params)
+            return runtime.renameTrack(params)
         case "track.set_color":
             return .error("Track color setting not supported via AX")
 
         // MARK: - Mixer reads
         case "mixer.get_state":
-            return getMixerState()
+            return runtime.mixerState()
         case "mixer.get_channel_strip":
-            return getChannelStrip(params: params)
+            return runtime.channelStrip(params)
 
         // MARK: - Mixer mutations
         case "mixer.set_volume":
-            return setMixerValue(params: params, target: .volume)
+            return runtime.setMixerValue(params, .volume)
         case "mixer.set_pan":
-            return setMixerValue(params: params, target: .pan)
+            return runtime.setMixerValue(params, .pan)
         case "mixer.set_send":
             return .error("Send adjustment not yet implemented via AX")
         case "mixer.set_input", "mixer.set_output":
@@ -93,7 +149,7 @@ actor AccessibilityChannel: Channel {
 
         // MARK: - Project
         case "project.get_info":
-            return getProjectInfo()
+            return runtime.projectInfo()
 
         // MARK: - Regions
         case "region.get_regions":
@@ -117,14 +173,14 @@ actor AccessibilityChannel: Channel {
     }
 
     func healthCheck() async -> ChannelHealth {
-        guard AXIsProcessTrusted() else {
+        guard runtime.isTrusted() else {
             return .unavailable("Accessibility not trusted — add this process in System Preferences")
         }
-        guard ProcessUtils.isLogicProRunning else {
+        guard runtime.isLogicProRunning() else {
             return .unavailable("Logic Pro is not running")
         }
         // Quick smoke test: can we reach the app root?
-        guard AXLogicProElements.appRoot() != nil else {
+        guard runtime.appRoot() != nil else {
             return .unavailable("Cannot access Logic Pro AX element")
         }
         return .healthy(detail: "AX connected to Logic Pro")
@@ -132,45 +188,56 @@ actor AccessibilityChannel: Channel {
 
     // MARK: - Transport
 
-    private func getTransportState() -> ChannelResult {
-        guard let transport = AXLogicProElements.getTransportBar() else {
+    private static func defaultGetTransportState(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
+        guard let transport = AXLogicProElements.getTransportBar(runtime: runtime) else {
             return .error("Cannot locate transport bar")
         }
-        let state = AXValueExtractors.extractTransportState(from: transport)
+        let state = AXValueExtractors.extractTransportState(from: transport, runtime: runtime.ax)
         return encodeResult(state)
     }
 
-    private func toggleTransportButton(named name: String) -> ChannelResult {
-        guard let button = AXLogicProElements.findTransportButton(named: name) else {
+    private static func defaultToggleTransportButton(
+        named name: String,
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult {
+        guard let button = AXLogicProElements.findTransportButton(named: name, runtime: runtime) else {
             return .error("Cannot find transport button: \(name)")
         }
-        guard AXHelpers.performAction(button, kAXPressAction) else {
+        guard AXHelpers.performAction(button, kAXPressAction, runtime: runtime.ax) else {
             return .error("Failed to press transport button: \(name)")
         }
         return .success("{\"toggled\":\"\(name)\"}")
     }
 
-    private func setTempo(params: [String: String]) -> ChannelResult {
+    private static func defaultSetTempo(
+        params: [String: String],
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult {
         guard let tempoStr = params["tempo"], let _ = Double(tempoStr) else {
             return .error("Missing or invalid 'tempo' parameter")
         }
-        guard let transport = AXLogicProElements.getTransportBar() else {
+        guard let transport = AXLogicProElements.getTransportBar(runtime: runtime) else {
             return .error("Cannot locate transport bar")
         }
         // Find the tempo text field and set its value
-        let texts = AXHelpers.findAllDescendants(of: transport, role: kAXTextFieldRole, maxDepth: 4)
+        let texts = AXHelpers.findAllDescendants(
+            of: transport,
+            role: kAXTextFieldRole,
+            maxDepth: 4,
+            runtime: runtime.ax
+        )
         for field in texts {
-            let desc = AXHelpers.getDescription(field)?.lowercased() ?? ""
+            let desc = AXHelpers.getDescription(field, runtime: runtime.ax)?.lowercased() ?? ""
             if desc.contains("tempo") || desc.contains("bpm") {
-                AXHelpers.setAttribute(field, kAXValueAttribute, tempoStr as CFTypeRef)
-                AXHelpers.performAction(field, kAXConfirmAction)
+                AXHelpers.setAttribute(field, kAXValueAttribute, tempoStr as CFTypeRef, runtime: runtime.ax)
+                AXHelpers.performAction(field, kAXConfirmAction, runtime: runtime.ax)
                 return .success("{\"tempo\":\(tempoStr)}")
             }
         }
         return .error("Cannot locate tempo field")
     }
 
-    private func setCycleRange(params: [String: String]) -> ChannelResult {
+    private static func defaultSetCycleRange(params: [String: String]) -> ChannelResult {
         // Cycle range setting via AX is fragile — requires locating the cycle locators
         guard let _ = params["start"], let _ = params["end"] else {
             return .error("Missing 'start' and/or 'end' parameters")
@@ -180,96 +247,101 @@ actor AccessibilityChannel: Channel {
 
     // MARK: - Tracks
 
-    private func getTracks() -> ChannelResult {
-        let headers = AXLogicProElements.allTrackHeaders()
+    private static func defaultGetTracks(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
+        let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
         if headers.isEmpty {
             return .error("No track headers found — is a project open?")
         }
         var tracks: [TrackState] = []
         for (index, header) in headers.enumerated() {
-            let track = AXValueExtractors.extractTrackState(from: header, index: index)
+            let track = AXValueExtractors.extractTrackState(from: header, index: index, runtime: runtime.ax)
             tracks.append(track)
         }
         return encodeResult(tracks)
     }
 
-    private func getSelectedTrack() -> ChannelResult {
-        let headers = AXLogicProElements.allTrackHeaders()
+    private static func defaultGetSelectedTrack(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
+        let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
         for (index, header) in headers.enumerated() {
-            if AXValueExtractors.extractSelectedState(header) == true {
-                let track = AXValueExtractors.extractTrackState(from: header, index: index)
+            if AXValueExtractors.extractSelectedState(header, runtime: runtime.ax) == true {
+                let track = AXValueExtractors.extractTrackState(from: header, index: index, runtime: runtime.ax)
                 return encodeResult(track)
             }
         }
         return .error("No track is currently selected")
     }
 
-    private func selectTrack(params: [String: String]) -> ChannelResult {
+    private static func defaultSelectTrack(
+        params: [String: String],
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult {
         guard let indexStr = params["index"], let index = Int(indexStr) else {
             return .error("Missing or invalid 'index' parameter")
         }
-        guard let header = AXLogicProElements.findTrackHeader(at: index) else {
+        guard let header = AXLogicProElements.findTrackHeader(at: index, runtime: runtime) else {
             return .error("Track at index \(index) not found")
         }
-        guard AXHelpers.performAction(header, kAXPressAction) else {
+        guard AXHelpers.performAction(header, kAXPressAction, runtime: runtime.ax) else {
             return .error("Failed to select track \(index)")
         }
         return .success("{\"selected\":\(index)}")
     }
 
-    private func setTrackToggle(params: [String: String], button buttonName: String) -> ChannelResult {
+    private static func defaultSetTrackToggle(
+        params: [String: String],
+        button buttonName: String,
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult {
         guard let indexStr = params["index"], let index = Int(indexStr) else {
             return .error("Missing or invalid 'index' parameter")
         }
         let finder: (Int) -> AXUIElement? = switch buttonName {
-        case "Mute": AXLogicProElements.findTrackMuteButton
-        case "Solo": AXLogicProElements.findTrackSoloButton
-        case "Record": AXLogicProElements.findTrackArmButton
+        case "Mute": { AXLogicProElements.findTrackMuteButton(trackIndex: $0, runtime: runtime) }
+        case "Solo": { AXLogicProElements.findTrackSoloButton(trackIndex: $0, runtime: runtime) }
+        case "Record": { AXLogicProElements.findTrackArmButton(trackIndex: $0, runtime: runtime) }
         default: { _ in nil }
         }
         guard let button = finder(index) else {
             return .error("Cannot find \(buttonName) button on track \(index)")
         }
-        guard AXHelpers.performAction(button, kAXPressAction) else {
+        guard AXHelpers.performAction(button, kAXPressAction, runtime: runtime.ax) else {
             return .error("Failed to click \(buttonName) on track \(index)")
         }
         return .success("{\"track\":\(index),\"toggled\":\"\(buttonName)\"}")
     }
 
-    private func renameTrack(params: [String: String]) -> ChannelResult {
+    private static func defaultRenameTrack(
+        params: [String: String],
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult {
         guard let indexStr = params["index"], let index = Int(indexStr),
               let name = params["name"] else {
             return .error("Missing 'index' or 'name' parameter")
         }
-        guard let field = AXLogicProElements.findTrackNameField(trackIndex: index) else {
+        guard let field = AXLogicProElements.findTrackNameField(trackIndex: index, runtime: runtime) else {
             return .error("Cannot find name field for track \(index)")
         }
         // Double-click to enter edit mode, then set value
-        AXHelpers.performAction(field, kAXPressAction)
-        AXHelpers.setAttribute(field, kAXValueAttribute, name as CFTypeRef)
-        AXHelpers.performAction(field, kAXConfirmAction)
+        AXHelpers.performAction(field, kAXPressAction, runtime: runtime.ax)
+        AXHelpers.setAttribute(field, kAXValueAttribute, name as CFTypeRef, runtime: runtime.ax)
+        AXHelpers.performAction(field, kAXConfirmAction, runtime: runtime.ax)
         return .success("{\"track\":\(index),\"name\":\"\(name)\"}")
     }
 
     // MARK: - Mixer
 
-    private enum MixerTarget {
-        case volume
-        case pan
-    }
-
-    private func getMixerState() -> ChannelResult {
-        guard let mixer = AXLogicProElements.getMixerArea() else {
+    private static func defaultGetMixerState(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
+        guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else {
             return .error("Cannot locate mixer — is it visible?")
         }
-        let strips = AXHelpers.getChildren(mixer)
+        let strips = AXHelpers.getChildren(mixer, runtime: runtime.ax)
         var channelStrips: [ChannelStripState] = []
 
         for (index, strip) in strips.enumerated() {
-            let sliders = AXHelpers.findAllDescendants(of: strip, role: kAXSliderRole, maxDepth: 4)
-            let volume = sliders.first.flatMap { AXValueExtractors.extractSliderValue($0) } ?? 0.0
+            let sliders = AXHelpers.findAllDescendants(of: strip, role: kAXSliderRole, maxDepth: 4, runtime: runtime.ax)
+            let volume = sliders.first.flatMap { AXValueExtractors.extractSliderValue($0, runtime: runtime.ax) } ?? 0.0
             let pan = sliders.count > 1
-                ? AXValueExtractors.extractSliderValue(sliders[1]) ?? 0.0
+                ? AXValueExtractors.extractSliderValue(sliders[1], runtime: runtime.ax) ?? 0.0
                 : 0.0
 
             channelStrips.append(ChannelStripState(
@@ -281,29 +353,36 @@ actor AccessibilityChannel: Channel {
         return encodeResult(channelStrips)
     }
 
-    private func getChannelStrip(params: [String: String]) -> ChannelResult {
+    private static func defaultGetChannelStrip(
+        params: [String: String],
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult {
         guard let indexStr = params["index"], let index = Int(indexStr) else {
             return .error("Missing or invalid 'index' parameter")
         }
-        guard let mixer = AXLogicProElements.getMixerArea() else {
+        guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else {
             return .error("Cannot locate mixer — is it visible?")
         }
-        let strips = AXHelpers.getChildren(mixer)
+        let strips = AXHelpers.getChildren(mixer, runtime: runtime.ax)
         guard index >= 0 && index < strips.count else {
             return .error("Channel strip index \(index) out of range")
         }
         let strip = strips[index]
-        let sliders = AXHelpers.findAllDescendants(of: strip, role: kAXSliderRole, maxDepth: 4)
-        let volume = sliders.first.flatMap { AXValueExtractors.extractSliderValue($0) } ?? 0.0
+        let sliders = AXHelpers.findAllDescendants(of: strip, role: kAXSliderRole, maxDepth: 4, runtime: runtime.ax)
+        let volume = sliders.first.flatMap { AXValueExtractors.extractSliderValue($0, runtime: runtime.ax) } ?? 0.0
         let pan = sliders.count > 1
-            ? AXValueExtractors.extractSliderValue(sliders[1]) ?? 0.0
+            ? AXValueExtractors.extractSliderValue(sliders[1], runtime: runtime.ax) ?? 0.0
             : 0.0
 
         let state = ChannelStripState(trackIndex: index, volume: volume, pan: pan)
         return encodeResult(state)
     }
 
-    private func setMixerValue(params: [String: String], target: MixerTarget) -> ChannelResult {
+    private static func defaultSetMixerValue(
+        params: [String: String],
+        target: MixerTarget,
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult {
         guard let indexStr = params["index"], let index = Int(indexStr),
               let valueStr = params["value"], let value = Double(valueStr) else {
             return .error("Missing 'index' or 'value' parameter")
@@ -311,25 +390,25 @@ actor AccessibilityChannel: Channel {
         let element: AXUIElement?
         switch target {
         case .volume:
-            element = AXLogicProElements.findFader(trackIndex: index)
+            element = AXLogicProElements.findFader(trackIndex: index, runtime: runtime)
         case .pan:
-            element = AXLogicProElements.findPanKnob(trackIndex: index)
+            element = AXLogicProElements.findPanKnob(trackIndex: index, runtime: runtime)
         }
         guard let slider = element else {
             return .error("Cannot find \(target) control for track \(index)")
         }
-        AXHelpers.setAttribute(slider, kAXValueAttribute, NSNumber(value: value))
+        AXHelpers.setAttribute(slider, kAXValueAttribute, NSNumber(value: value), runtime: runtime.ax)
         let label = target == .volume ? "volume" : "pan"
         return .success("{\"\(label)\":\(value),\"track\":\(index)}")
     }
 
     // MARK: - Project
 
-    private func getProjectInfo() -> ChannelResult {
-        guard let window = AXLogicProElements.mainWindow() else {
+    private static func defaultGetProjectInfo(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
+        guard let window = AXLogicProElements.mainWindow(runtime: runtime) else {
             return .error("Cannot locate Logic Pro main window")
         }
-        let title = AXHelpers.getTitle(window) ?? "Unknown"
+        let title = AXHelpers.getTitle(window, runtime: runtime.ax) ?? "Unknown"
         var info = ProjectInfo()
         info.name = title
         info.lastUpdated = Date()
@@ -338,7 +417,7 @@ actor AccessibilityChannel: Channel {
 
     // MARK: - JSON encoding
 
-    private func encodeResult<T: Encodable>(_ value: T) -> ChannelResult {
+    private static func encodeResult<T: Encodable>(_ value: T) -> ChannelResult {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         do {

@@ -91,6 +91,7 @@ struct MarkerState: Sendable, Codable, Identifiable {
 enum AutomationMode: String, Sendable, Codable {
     case off
     case read
+    case trim
     case touch
     case latch
     case write

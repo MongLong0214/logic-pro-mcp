@@ -1,8 +1,15 @@
 import Foundation
 
+struct KeyCmdTransportReadiness: Sendable {
+    let available: Bool
+    let detail: String
+}
+
 /// Protocol for Key Commands MIDI transport — send-only.
 protocol KeyCmdTransportProtocol: Actor {
-    func send(_ bytes: [UInt8]) async
+    func prepare() async throws
+    func send(_ bytes: [UInt8]) async throws
+    func readiness() async -> KeyCmdTransportReadiness
 }
 
 /// MIDI Key Commands channel: triggers Logic Pro key commands via MIDI CC on Channel 16.
@@ -11,10 +18,15 @@ actor MIDIKeyCommandsChannel: Channel {
     nonisolated let id = ChannelID.midiKeyCommands
 
     private let transport: any KeyCmdTransportProtocol
+    private let approvalStore: any ManualValidationStoring
     private static let midiChannel: UInt8 = 15 // 0-indexed, = channel 16
 
-    init(transport: any KeyCmdTransportProtocol) {
+    init(
+        transport: any KeyCmdTransportProtocol,
+        approvalStore: any ManualValidationStoring = ManualValidationStore()
+    ) {
         self.transport = transport
+        self.approvalStore = approvalStore
     }
 
     /// Operation → CC# mapping table (PRD §4.11).
@@ -104,7 +116,12 @@ actor MIDIKeyCommandsChannel: Channel {
     ]
 
     func start() async throws {
-        Log.info("MIDIKeyCommands channel started (\(Self.mappingTable.count) commands mapped)", subsystem: "keycmd")
+        try await transport.prepare()
+        let readiness = await transport.readiness()
+        Log.info(
+            "MIDIKeyCommands channel started (\(Self.mappingTable.count) commands mapped) — \(readiness.detail)",
+            subsystem: "keycmd"
+        )
     }
 
     func stop() async {
@@ -118,16 +135,33 @@ actor MIDIKeyCommandsChannel: Channel {
 
         // CC message on channel 16: 0xBF = CC status on ch15 (zero-indexed)
         let bytes: [UInt8] = [0xB0 | Self.midiChannel, cc, 0x7F]
-        await transport.send(bytes)
-
-        // Send CC value 0 to "release" (some Logic Pro commands need note-off style)
         let releaseBytes: [UInt8] = [0xB0 | Self.midiChannel, cc, 0x00]
-        await transport.send(releaseBytes)
+
+        do {
+            try await transport.send(bytes)
+            // Send CC value 0 to "release" (some Logic Pro commands need note-off style)
+            try await transport.send(releaseBytes)
+        } catch {
+            return .error("Failed to send key command for \(operation): \(error)")
+        }
 
         return .success("Key command triggered: \(operation) (CC \(cc) CH 16)")
     }
 
     func healthCheck() async -> ChannelHealth {
-        .healthy(detail: "MIDIKeyCommands ready (\(Self.mappingTable.count) commands)")
+        let readiness = await transport.readiness()
+        guard readiness.available else {
+            return .unavailable(readiness.detail)
+        }
+        if await approvalStore.isApproved(.midiKeyCommands) {
+            return .healthy(
+                detail: "\(readiness.detail). Logic Key Commands preset approved by operator",
+                verificationStatus: .runtimeReady
+            )
+        }
+        return .healthy(
+            detail: "\(readiness.detail). Logic Key Commands preset installation is not verifiable programmatically. Run `LogicProMCP --approve-channel MIDIKeyCommands` after manual validation",
+            verificationStatus: .manualValidationRequired
+        )
     }
 }

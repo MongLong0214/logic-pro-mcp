@@ -57,15 +57,17 @@ import Testing
 @Test func testFeedbackParserUpdatesConnectionState() async {
     let cache = StateCache()
     let parser = MCUFeedbackParser(cache: cache)
+    var conn = await cache.getMCUConnection()
+    conn.portName = "LogicProMCP-MCU-Internal"
+    await cache.updateMCUConnection(conn)
 
     let event = MIDIFeedback.Event.noteOn(channel: 0, note: 0x5E, velocity: 0x7F)
     await parser.handle(event)
 
-    let conn = await cache.getMCUConnection()
-    #expect(conn.isConnected == true)
-    #expect(conn.lastFeedbackAt != nil)
-    // registeredAsDevice should NOT be true from general feedback
-    #expect(conn.registeredAsDevice == false)
+    let updated = await cache.getMCUConnection()
+    #expect(updated.isConnected == true)
+    #expect(updated.lastFeedbackAt != nil)
+    #expect(updated.registeredAsDevice == true)
 }
 
 @Test func testFeedbackParserBankOffsetApplied() async {
@@ -99,4 +101,42 @@ import Testing
     let strips = await cache.getChannelStrips()
     #expect(strips[0].volume == 0.0) // strip 0 untouched
     #expect(abs(strips[8].volume - 0.5) < 0.01) // strip 8 updated
+}
+
+@Test func testFeedbackParserHandlesNoteOffForRecArmAndSelect() async {
+    let cache = StateCache()
+    let parser = MCUFeedbackParser(cache: cache)
+    await cache.updateTracks((0..<8).map { index in
+        var track = TrackState(id: index, name: "Track \(index)", type: .audio)
+        track.isArmed = true
+        track.isSelected = true
+        return track
+    })
+
+    await parser.handle(.noteOff(channel: 0, note: 0x00, velocity: 0))
+    await parser.handle(.noteOff(channel: 0, note: 0x19, velocity: 0))
+
+    let tracks = await cache.getTracks()
+    #expect(tracks[0].isArmed == false)
+    #expect(tracks[1].isSelected == false)
+}
+
+@Test func testFeedbackParserIgnoresControlChangeAndDefaultEventsAfterUpdatingConnection() async {
+    let cache = StateCache()
+    let parser = MCUFeedbackParser(cache: cache)
+    await cache.updateTracks([TrackState(id: 0, name: "Track 0", type: .audio)])
+    var initialConn = await cache.getMCUConnection()
+    initialConn.portName = "LogicProMCP-MCU-Internal"
+    await cache.updateMCUConnection(initialConn)
+
+    await parser.handle(.controlChange(channel: 0, controller: 0x10, value: 0x20))
+    await parser.handle(.programChange(channel: 0, program: 0x01))
+
+    let conn = await cache.getMCUConnection()
+    let tracks = await cache.getTracks()
+    #expect(conn.isConnected == true)
+    #expect(conn.lastFeedbackAt != nil)
+    #expect(conn.registeredAsDevice == true)
+    #expect(tracks[0].isMuted == false)
+    #expect(tracks[0].isSoloed == false)
 }

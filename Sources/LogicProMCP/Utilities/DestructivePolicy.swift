@@ -26,12 +26,14 @@ enum DestructivePolicy {
         }
     }
 
-    /// Generate confirmation response JSON for L3 commands.
+    /// Generate confirmation response JSON for high-risk commands.
     /// Returns nil for commands that don't need confirmation.
     static func confirmationResponse(command: String) -> String? {
-        guard level(for: command) == .l3 else { return nil }
+        let level = level(for: command)
+        guard level >= .l2 else { return nil }
+        let levelLabel = level == .l3 ? "L3" : "L2"
         return """
-        {"status":"confirmation_required","command":"\(command)","level":"L3","message":"이 작업은 데이터 손실을 유발할 수 있습니다.","confirm_command":"logic_project(\\"\(command)\\", {confirmed: true})"}
+        {"status":"confirmation_required","command":"\(command)","level":"\(levelLabel)","message":"이 작업은 프로젝트 상태를 변경하거나 데이터 손실을 유발할 수 있습니다.","confirm_command":"logic_project(\\"\(command)\\", {confirmed: true})"}
         """
     }
 

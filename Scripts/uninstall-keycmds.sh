@@ -5,9 +5,10 @@
 
 set -euo pipefail
 
-KEYCMD_DIR="$HOME/Music/Audio Music Apps/Key Commands"
+KEYCMD_DIR="${LOGIC_PRO_MCP_KEYCMD_DIR:-$HOME/Music/Audio Music Apps/Key Commands}"
 BACKUP_DIR="$KEYCMD_DIR/backups"
 MCP_PRESET="$KEYCMD_DIR/LogicProMCP-KeyCommands.plist"
+AUTO_RESTORE="${LOGIC_PRO_MCP_KEYCMD_AUTO_RESTORE:-0}"
 
 echo "=== LogicProMCP Key Commands Uninstaller ==="
 echo ""
@@ -33,13 +34,18 @@ if [ -d "$BACKUP_DIR" ]; then
         # Restore latest backup
         LATEST=$(echo "$BACKUPS" | sort -r | head -1)
         echo ""
-        read -p "Restore from $(basename "$LATEST")? [y/N] " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
+        if [ "$AUTO_RESTORE" = "1" ]; then
             cp "$LATEST"/* "$KEYCMD_DIR/" 2>/dev/null || true
             echo "✓ Restored from: $(basename "$LATEST")"
         else
-            echo "Skipped restore."
+            read -p "Restore from $(basename "$LATEST")? [y/N] " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                cp "$LATEST"/* "$KEYCMD_DIR/" 2>/dev/null || true
+                echo "✓ Restored from: $(basename "$LATEST")"
+            else
+                echo "Skipped restore."
+            fi
         fi
     else
         echo "No backups found."

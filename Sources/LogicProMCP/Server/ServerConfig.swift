@@ -20,4 +20,20 @@ struct ServerConfig: Sendable {
     // MARK: - Logic Pro
     static let logicProBundleID = "com.apple.logic10"
     static let logicProProcessName = "Logic Pro"
+
+    // MARK: - Enterprise Safety
+    /// Channels that report `manual_validation_required` are not considered
+    /// execution-ready in enterprise mode and must not be used for routing.
+    static let allowManualValidationChannels = false
+
+    /// Channels that may fail to initialize without preventing the server from
+    /// starting in degraded mode. Their unavailability must still surface in
+    /// health/resource reporting.
+    static let optionalStartupChannels: Set<ChannelID> = [
+        .accessibility,
+        .coreMIDI,
+        .mcu,
+        .midiKeyCommands,
+        .scripter,
+    ]
 }

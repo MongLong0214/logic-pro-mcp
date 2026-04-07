@@ -23,10 +23,18 @@ actor MCUFeedbackParser {
 
     /// Handle a single MIDI feedback event from Logic Pro.
     func handle(_ event: MIDIFeedback.Event) async {
-        // Update connection timestamp (but not registeredAsDevice — handshake only)
+        // Update connection state.
+        //
+        // In practice, Logic Pro does not always emit a discrete Device Response after the MCU
+        // Device Query. Once we receive any well-formed feedback on the dedicated
+        // LogicProMCP-MCU-Internal port, registration is operationally established even if the
+        // explicit handshake response is absent.
         var conn = await cache.getMCUConnection()
         conn.lastFeedbackAt = Date()
         conn.isConnected = true
+        if !conn.portName.isEmpty {
+            conn.registeredAsDevice = true
+        }
         await cache.updateMCUConnection(conn)
 
         let offset = await trackOffset()
@@ -49,12 +57,6 @@ actor MCUFeedbackParser {
             }
 
         case .sysEx(let bytes):
-            // Check for MCU Device Response → registeredAsDevice
-            if MCUProtocol.isDeviceResponse(bytes) {
-                var c = await cache.getMCUConnection()
-                c.registeredAsDevice = true
-                await cache.updateMCUConnection(c)
-            }
             if let lcd = MCUProtocol.decodeLCDSysEx(bytes) {
                 await cache.updateMCUDisplayRow(
                     upper: lcd.row == .upper,

@@ -6,11 +6,16 @@ actor ScripterChannel: Channel {
     nonisolated let id = ChannelID.scripter
 
     private let transport: any KeyCmdTransportProtocol
+    private let approvalStore: any ManualValidationStoring
     private static let midiChannel: UInt8 = 15 // zero-indexed = channel 16
     private static let ccBase: UInt8 = 102      // CC 102-119 = param 0-17
 
-    init(transport: any KeyCmdTransportProtocol) {
+    init(
+        transport: any KeyCmdTransportProtocol,
+        approvalStore: any ManualValidationStoring = ManualValidationStore()
+    ) {
         self.transport = transport
+        self.approvalStore = approvalStore
     }
 
     /// Convert param index (0-17) to MIDI CC number (102-119).
@@ -25,7 +30,12 @@ actor ScripterChannel: Channel {
     }
 
     func start() async throws {
-        Log.info("Scripter channel started (CC \(Self.ccBase)-\(Self.ccBase + 17) on CH 16)", subsystem: "scripter")
+        try await transport.prepare()
+        let readiness = await transport.readiness()
+        Log.info(
+            "Scripter channel started (CC \(Self.ccBase)-\(Self.ccBase + 17) on CH 16) — \(readiness.detail)",
+            subsystem: "scripter"
+        )
     }
 
     func stop() async {
@@ -33,10 +43,14 @@ actor ScripterChannel: Channel {
     }
 
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
-        guard operation == "plugin.set_param" else {
+        guard operation == "plugin.set_param" || operation == "mixer.set_plugin_param" else {
             return .error("Scripter only handles plugin.set_param, got: \(operation)")
         }
 
+        let insert = Int(params["insert"] ?? "0") ?? 0
+        guard insert == 0 else {
+            return .error("Scripter only supports insert 0 on the selected track")
+        }
         let paramIndex = Int(params["param"] ?? "0") ?? 0
         let value = Double(params["value"] ?? "0") ?? 0.0
 
@@ -46,14 +60,29 @@ actor ScripterChannel: Channel {
 
         let midiVal = Self.midiValue(for: value)
         let bytes: [UInt8] = [0xB0 | Self.midiChannel, cc, midiVal]
-        await transport.send(bytes)
+        do {
+            try await transport.send(bytes)
+        } catch {
+            return .error("Failed to send Scripter param \(paramIndex): \(error)")
+        }
 
-        return .success("Scripter param \(paramIndex) set to \(value) (CC \(cc) val \(midiVal))")
+        return .success("Scripter param \(paramIndex) set to \(value) on insert \(insert) (CC \(cc) val \(midiVal))")
     }
 
     func healthCheck() async -> ChannelHealth {
-        // Can't detect Scripter installation programmatically.
-        // Port existence = available, but Scripter may not be installed.
-        .healthy(detail: "Scripter available (installation not verifiable)")
+        let readiness = await transport.readiness()
+        guard readiness.available else {
+            return .unavailable(readiness.detail)
+        }
+        if await approvalStore.isApproved(.scripter) {
+            return .healthy(
+                detail: "\(readiness.detail). Scripter insertion approved by operator",
+                verificationStatus: .runtimeReady
+            )
+        }
+        return .healthy(
+            detail: "\(readiness.detail). Scripter insertion is not verifiable programmatically. Run `LogicProMCP --approve-channel Scripter` after manual validation",
+            verificationStatus: .manualValidationRequired
+        )
     }
 }

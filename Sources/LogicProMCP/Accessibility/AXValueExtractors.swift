@@ -6,8 +6,8 @@ import Foundation
 enum AXValueExtractors {
     /// Extract a numeric value from a slider (volume fader, pan knob, etc.)
     /// Returns the AXValue as a Double, or nil if unavailable.
-    static func extractSliderValue(_ element: AXUIElement) -> Double? {
-        guard let value = AXHelpers.getValue(element) else { return nil }
+    static func extractSliderValue(_ element: AXUIElement, runtime: AXHelpers.Runtime = .production) -> Double? {
+        guard let value = AXHelpers.getValue(element, runtime: runtime) else { return nil }
         // AXSlider values can come as NSNumber or CFNumber
         if let number = value as? NSNumber {
             return number.doubleValue
@@ -21,20 +21,20 @@ enum AXValueExtractors {
 
     /// Extract a text value from a static text or text field element.
     /// Used for tempo display, position readout, track names, etc.
-    static func extractTextValue(_ element: AXUIElement) -> String? {
+    static func extractTextValue(_ element: AXUIElement, runtime: AXHelpers.Runtime = .production) -> String? {
         // Try kAXValueAttribute first (text fields, static text)
-        if let value = AXHelpers.getValue(element) as? String {
+        if let value = AXHelpers.getValue(element, runtime: runtime) as? String {
             return value
         }
         // Fallback to kAXTitleAttribute
-        return AXHelpers.getTitle(element)
+        return AXHelpers.getTitle(element, runtime: runtime)
     }
 
     /// Extract a boolean state from a button or checkbox element.
     /// For toggle buttons (mute, solo, arm, cycle, metronome), the value
     /// indicates pressed/active state.
-    static func extractButtonState(_ element: AXUIElement) -> Bool? {
-        guard let value = AXHelpers.getValue(element) else { return nil }
+    static func extractButtonState(_ element: AXUIElement, runtime: AXHelpers.Runtime = .production) -> Bool? {
+        guard let value = AXHelpers.getValue(element, runtime: runtime) else { return nil }
         // Toggle buttons typically report 0/1 as NSNumber
         if let number = value as? NSNumber {
             return number.boolValue
@@ -47,8 +47,8 @@ enum AXValueExtractors {
     }
 
     /// Extract checkbox state (a variant of button state, but checks kAXValueAttribute specifically).
-    static func extractCheckboxState(_ element: AXUIElement) -> Bool? {
-        guard let value: AnyObject = AXHelpers.getAttribute(element, kAXValueAttribute) else {
+    static func extractCheckboxState(_ element: AXUIElement, runtime: AXHelpers.Runtime = .production) -> Bool? {
+        guard let value: AnyObject = AXHelpers.getAttribute(element, kAXValueAttribute, runtime: runtime) else {
             return nil
         }
         if let number = value as? NSNumber {
@@ -58,8 +58,8 @@ enum AXValueExtractors {
     }
 
     /// Extract the selected state of an element.
-    static func extractSelectedState(_ element: AXUIElement) -> Bool? {
-        guard let value: AnyObject = AXHelpers.getAttribute(element, kAXSelectedAttribute) else {
+    static func extractSelectedState(_ element: AXUIElement, runtime: AXHelpers.Runtime = .production) -> Bool? {
+        guard let value: AnyObject = AXHelpers.getAttribute(element, kAXSelectedAttribute, runtime: runtime) else {
             return nil
         }
         if let number = value as? NSNumber {
@@ -74,9 +74,9 @@ enum AXValueExtractors {
         let max: Double
     }
 
-    static func extractSliderRange(_ element: AXUIElement) -> SliderRange? {
-        guard let minVal: AnyObject = AXHelpers.getAttribute(element, kAXMinValueAttribute),
-              let maxVal: AnyObject = AXHelpers.getAttribute(element, kAXMaxValueAttribute),
+    static func extractSliderRange(_ element: AXUIElement, runtime: AXHelpers.Runtime = .production) -> SliderRange? {
+        guard let minVal: AnyObject = AXHelpers.getAttribute(element, kAXMinValueAttribute, runtime: runtime),
+              let maxVal: AnyObject = AXHelpers.getAttribute(element, kAXMaxValueAttribute, runtime: runtime),
               let min = (minVal as? NSNumber)?.doubleValue,
               let max = (maxVal as? NSNumber)?.doubleValue else {
             return nil
@@ -85,13 +85,17 @@ enum AXValueExtractors {
     }
 
     /// Read a track header and extract its basic state.
-    static func extractTrackState(from header: AXUIElement, index: Int) -> TrackState {
-        let name = extractTrackName(from: header)
-        let muted = extractTrackButtonState(from: header, prefix: "Mute") ?? false
-        let soloed = extractTrackButtonState(from: header, prefix: "Solo") ?? false
-        let armed = extractTrackButtonState(from: header, prefix: "Record") ?? false
-        let selected = extractSelectedState(header) ?? false
-        let trackType = inferTrackType(from: header)
+    static func extractTrackState(
+        from header: AXUIElement,
+        index: Int,
+        runtime: AXHelpers.Runtime = .production
+    ) -> TrackState {
+        let name = extractTrackName(from: header, runtime: runtime)
+        let muted = extractTrackButtonState(from: header, prefix: "Mute", runtime: runtime) ?? false
+        let soloed = extractTrackButtonState(from: header, prefix: "Solo", runtime: runtime) ?? false
+        let armed = extractTrackButtonState(from: header, prefix: "Record", runtime: runtime) ?? false
+        let selected = extractSelectedState(header, runtime: runtime) ?? false
+        let trackType = inferTrackType(from: header, runtime: runtime)
 
         return TrackState(
             id: index,
@@ -103,19 +107,24 @@ enum AXValueExtractors {
             isSelected: selected,
             volume: 0.0,
             pan: 0.0,
-            color: extractTrackColor(from: header)
+            color: extractTrackColor(from: header, runtime: runtime)
         )
     }
 
     /// Read transport bar elements and build a TransportState.
-    static func extractTransportState(from transport: AXUIElement) -> TransportState {
+    static func extractTransportState(
+        from transport: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> TransportState {
         var state = TransportState()
 
         // Find and read transport button states
-        let buttons = AXHelpers.findAllDescendants(of: transport, role: kAXButtonRole, maxDepth: 4)
+        let buttons = AXHelpers.findAllDescendants(of: transport, role: kAXButtonRole, maxDepth: 4, runtime: runtime)
         for button in buttons {
-            let desc = AXHelpers.getDescription(button) ?? AXHelpers.getTitle(button) ?? ""
-            let pressed = extractButtonState(button) ?? false
+            let desc = AXHelpers.getDescription(button, runtime: runtime)
+                ?? AXHelpers.getTitle(button, runtime: runtime)
+                ?? ""
+            let pressed = extractButtonState(button, runtime: runtime) ?? false
             let descLower = desc.lowercased()
 
             if descLower.contains("play") {
@@ -130,10 +139,10 @@ enum AXValueExtractors {
         }
 
         // Find text fields for tempo, position
-        let texts = AXHelpers.findAllDescendants(of: transport, role: kAXStaticTextRole, maxDepth: 4)
+        let texts = AXHelpers.findAllDescendants(of: transport, role: kAXStaticTextRole, maxDepth: 4, runtime: runtime)
         for text in texts {
-            guard let value = extractTextValue(text) else { continue }
-            let desc = AXHelpers.getDescription(text) ?? ""
+            guard let value = extractTextValue(text, runtime: runtime) else { continue }
+            let desc = AXHelpers.getDescription(text, runtime: runtime) ?? ""
             let descLower = desc.lowercased()
 
             if descLower.contains("tempo") || descLower.contains("bpm") {
@@ -157,35 +166,41 @@ enum AXValueExtractors {
 
     // MARK: - Private helpers
 
-    private static func extractTrackName(from header: AXUIElement) -> String {
+    private static func extractTrackName(from header: AXUIElement, runtime: AXHelpers.Runtime) -> String {
         // Try static text first
-        if let text = AXHelpers.findDescendant(of: header, role: kAXStaticTextRole, maxDepth: 3),
-           let name = extractTextValue(text), !name.isEmpty {
+        if let text = AXHelpers.findDescendant(of: header, role: kAXStaticTextRole, maxDepth: 3, runtime: runtime),
+           let name = extractTextValue(text, runtime: runtime), !name.isEmpty {
             return name
         }
         // Try text field
-        if let field = AXHelpers.findDescendant(of: header, role: kAXTextFieldRole, maxDepth: 3),
-           let name = extractTextValue(field), !name.isEmpty {
+        if let field = AXHelpers.findDescendant(of: header, role: kAXTextFieldRole, maxDepth: 3, runtime: runtime),
+           let name = extractTextValue(field, runtime: runtime), !name.isEmpty {
             return name
         }
-        return AXHelpers.getTitle(header) ?? "Untitled"
+        return AXHelpers.getTitle(header, runtime: runtime) ?? "Untitled"
     }
 
-    private static func extractTrackButtonState(from header: AXUIElement, prefix: String) -> Bool? {
-        let buttons = AXHelpers.findAllDescendants(of: header, role: kAXButtonRole, maxDepth: 4)
+    private static func extractTrackButtonState(
+        from header: AXUIElement,
+        prefix: String,
+        runtime: AXHelpers.Runtime
+    ) -> Bool? {
+        let buttons = AXHelpers.findAllDescendants(of: header, role: kAXButtonRole, maxDepth: 4, runtime: runtime)
         for button in buttons {
-            let desc = AXHelpers.getDescription(button) ?? AXHelpers.getTitle(button) ?? ""
+            let desc = AXHelpers.getDescription(button, runtime: runtime)
+                ?? AXHelpers.getTitle(button, runtime: runtime)
+                ?? ""
             if desc.hasPrefix(prefix) || desc.lowercased().contains(prefix.lowercased()) {
-                return extractButtonState(button)
+                return extractButtonState(button, runtime: runtime)
             }
         }
         return nil
     }
 
-    private static func inferTrackType(from header: AXUIElement) -> TrackType {
+    private static func inferTrackType(from header: AXUIElement, runtime: AXHelpers.Runtime) -> TrackType {
         // Attempt to infer type from icon description or element identifiers
-        let desc = AXHelpers.getDescription(header)?.lowercased() ?? ""
-        let title = AXHelpers.getTitle(header)?.lowercased() ?? ""
+        let desc = AXHelpers.getDescription(header, runtime: runtime)?.lowercased() ?? ""
+        let title = AXHelpers.getTitle(header, runtime: runtime)?.lowercased() ?? ""
         let combined = desc + " " + title
 
         if combined.contains("audio") { return .audio }
@@ -198,9 +213,9 @@ enum AXValueExtractors {
         return .unknown
     }
 
-    private static func extractTrackColor(from header: AXUIElement) -> String? {
+    private static func extractTrackColor(from header: AXUIElement, runtime: AXHelpers.Runtime) -> String? {
         // Logic Pro may expose color via a custom attribute or the element's description
-        let desc = AXHelpers.getDescription(header) ?? ""
+        let desc = AXHelpers.getDescription(header, runtime: runtime) ?? ""
         if desc.lowercased().contains("color") {
             return desc
         }

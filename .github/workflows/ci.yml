@@ -20,3 +20,21 @@ jobs:
 
       - name: Run tests
         run: swift test
+
+      - name: Enforce line coverage
+        run: |
+          swift test --enable-code-coverage --no-parallel
+          find Sources/LogicProMCP -name '*.swift' | sort > /tmp/logicpro_sources.txt
+          xargs xcrun llvm-cov report \
+            .build/debug/LogicProMCPPackageTests.xctest/Contents/MacOS/LogicProMCPPackageTests \
+            -instr-profile .build/debug/codecov/default.profdata \
+            < /tmp/logicpro_sources.txt | tee coverage-report.txt
+          awk '
+            /^TOTAL/ {
+              gsub("%", "", $10)
+              if (($10 + 0) < 95.0) {
+                printf "Line coverage gate failed: %.2f%% < 95.0%%\n", ($10 + 0) > "/dev/stderr"
+                exit 1
+              }
+            }
+          ' coverage-report.txt

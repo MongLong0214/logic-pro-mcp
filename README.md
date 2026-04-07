@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>The missing API for Logic Pro.</strong><br/>
-  Control your entire DAW from AI assistants via the Model Context Protocol.
+  Control core Logic Pro workflows from AI assistants via the Model Context Protocol.
 </p>
 
 <p align="center">
@@ -12,7 +12,7 @@
   <a href="https://developer.apple.com/macos/"><img src="https://img.shields.io/badge/macOS-14+-000000.svg?style=flat-square&logo=apple" /></a>
   <a href="https://github.com/modelcontextprotocol/swift-sdk"><img src="https://img.shields.io/badge/MCP_SDK-0.10-blue.svg?style=flat-square" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
-  <img src="https://img.shields.io/badge/tests-93_passing-brightgreen.svg?style=flat-square" />
+  <img src="https://img.shields.io/badge/tests-green-brightgreen.svg?style=flat-square" />
   <img src="https://img.shields.io/badge/coverage-~95%25_DAW-blueviolet.svg?style=flat-square" />
 </p>
 
@@ -20,7 +20,7 @@
 
 Logic Pro has no public API. This server bridges that gap by combining **7 native macOS control channels** into a single MCP interface — giving AI assistants bidirectional, real-time control over mixing, transport, MIDI, plugins, automation, and project management.
 
-> **8 tools. 7 resources. 90+ routed operations. Sub-millisecond transport latency.**
+> **8 tools. 6 resources + 1 template. 90+ routed operations. Sub-millisecond transport latency.**
 
 ## Quick Start
 
@@ -36,16 +36,27 @@ sudo cp .build/release/LogicProMCP /usr/local/bin/
 claude mcp add --scope user logic-pro -- LogicProMCP
 ```
 
-Then in Logic Pro: **Control Surfaces > Setup > New > Mackie Control** — set MIDI In/Out to `LogicProMCP-MCU-Internal`.
+Then complete the required Logic Pro setup:
+- **Control Surfaces > Setup > New > Mackie Control** — set MIDI In/Out to `LogicProMCP-MCU-Internal`
+- **MIDI FX > Scripter** — load `Scripts/LogicProMCP-Scripter.js`
+- **Key Commands > Edit** — import the LogicProMCP preset
 
-That's it. Ask Claude to mix your track.
+Until those steps are finished, Key Commands and Scripter remain `manual_validation_required`.
+
+After validating them in Logic Pro, approve them for runtime use:
+
+```bash
+LogicProMCP --approve-channel MIDIKeyCommands
+LogicProMCP --approve-channel Scripter
+LogicProMCP --list-approvals
+```
 
 ## How It Works
 
 ```
                         ┌──────────────────────────────────┐
   Claude / AI ─────────>│     8 MCP Dispatcher Tools       │
-       ^                │     7 MCP Resources (zero cost)  │
+       ^                │   6 MCP Resources + 1 Template   │
        │                └──────────────┬───────────────────┘
        │                               │
        │                ┌──────────────v───────────────────┐
@@ -68,7 +79,7 @@ That's it. Ask Claude to mix your track.
                         └──────────────────────────────────┘
 ```
 
-Every command routes through the **fastest available channel**, with automatic fallback if the primary fails. MCU provides bidirectional state feedback — the server always knows what Logic Pro is doing.
+Every command routes through the **fastest available ready channel**, with fallback when a higher-priority path is unavailable. MCU provides bidirectional state feedback, while Accessibility polling supplements project metadata where supported.
 
 ## Channels
 
@@ -103,9 +114,8 @@ toggle_cycle, toggle_metronome, set_tempo, goto_position
 <summary><code>logic_mixer</code> — Mixer & plugin control</summary>
 
 ```
-set_volume, set_pan, set_send, set_master_volume,
-set_plugin_param, toggle_eq, reset_strip,
-insert_plugin, bypass_plugin
+set_volume, set_pan, set_master_volume,
+set_plugin_param, insert_plugin, bypass_plugin
 ```
 
 ```json
@@ -119,8 +129,8 @@ insert_plugin, bypass_plugin
 
 ```
 select, create_audio, create_instrument, create_drummer,
-delete, duplicate, mute, solo, arm, rename,
-set_automation, set_color
+create_external_midi, delete, duplicate, mute, solo, arm,
+rename, set_automation
 ```
 
 ```json
@@ -175,7 +185,7 @@ goto_bar, create_marker, toggle_view, zoom_to_fit
 open, save, save_as, close, bounce, launch, quit
 ```
 
-> `quit` and `close` require `{confirmed: true}` — see [Safety](#safety).
+> `open`, `save_as`, `bounce`, `quit`, and `close` require `{confirmed: true}` — see [Safety](#safety).
 
 </details>
 
@@ -217,6 +227,15 @@ cd logic-pro-mcp
 swift build -c release
 sudo cp .build/release/LogicProMCP /usr/local/bin/
 ```
+
+## Enterprise Ops
+
+- [Setup Guide](/Users/isaac/projects/logic-pro-mcp/docs/SETUP-GUIDE.md)
+- [Release Runbook](/Users/isaac/projects/logic-pro-mcp/docs/release/RELEASE-RUNBOOK.md)
+- [Clean Machine Validation](/Users/isaac/projects/logic-pro-mcp/docs/release/CLEAN-MACHINE-VALIDATION.md)
+- [Logic Pro E2E Checklist](/Users/isaac/projects/logic-pro-mcp/docs/release/LOGIC-PRO-E2E-CHECKLIST.md)
+- [Operator Approval Runbook](/Users/isaac/projects/logic-pro-mcp/docs/release/OPERATOR-APPROVAL-RUNBOOK.md)
+- [Support Matrix](/Users/isaac/projects/logic-pro-mcp/docs/release/SUPPORT-MATRIX.md)
 
 ### Register
 
@@ -354,12 +373,12 @@ Sources/LogicProMCP/
 | Plugin parameters | MCU + Scripter | MCU for browsing, Scripter for direct CC-to-parameter mapping. |
 | State reading | MCU feedback (primary) + AX polling (supplementary) | Event-driven for mixer/transport, 5s polling for project metadata only. |
 | AppleScript safety | NSWorkspace.open() | Eliminates string interpolation entirely for file paths. |
-| Concurrency | Swift actors throughout | All channels, cache, port manager, and feedback parser are actors. Zero race conditions by construction. |
+| Concurrency | Swift actors throughout | Channels, cache, port manager, and feedback parser are actor-isolated to reduce race-condition risk. |
 
 ## Testing
 
 ```bash
-swift test                          # 93 tests
+swift test
 swift build -c release              # production binary
 LogicProMCP --check-permissions     # verify macOS permissions
 ```

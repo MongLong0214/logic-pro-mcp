@@ -60,6 +60,11 @@ Scripts/install-keycmds.sh
 # 서버 직접 실행 (테스트)
 LogicProMCP --check-permissions
 # 출력: Accessibility: granted / Automation (Logic Pro): granted
+
+# 수동 검증 완료 후 승인
+LogicProMCP --approve-channel MIDIKeyCommands
+LogicProMCP --approve-channel Scripter
+LogicProMCP --list-approvals
 ```
 
 macOS 권한 필요:
@@ -77,3 +82,5 @@ Scripts/uninstall.sh
 2. `claude mcp remove logic-pro`
 3. Logic Pro > 컨트롤 서피스 > 설정 > MCU 장치 삭제
 4. `Scripts/uninstall-keycmds.sh` (Key Commands 복원)
+5. `LogicProMCP --revoke-channel MIDIKeyCommands`
+6. `LogicProMCP --revoke-channel Scripter`

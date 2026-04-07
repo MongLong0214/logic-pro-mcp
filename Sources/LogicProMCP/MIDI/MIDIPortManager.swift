@@ -1,12 +1,61 @@
 import CoreMIDI
 import Foundation
 
+protocol VirtualPortManaging: Actor {
+    func createSendOnlyPort(name: String) throws -> MIDIPortManager.MIDIPortPair
+    func createBidirectionalPort(
+        name: String,
+        onReceive: @escaping @Sendable (UnsafePointer<MIDIEventList>, UnsafeMutableRawPointer?) -> Void
+    ) throws -> MIDIPortManager.MIDIPortPair
+}
+
 /// Manages multiple virtual MIDI port pairs for the MCP server.
 /// Each channel (MCU, CoreMIDI, KeyCommands, Scripter) gets its own named port.
-actor MIDIPortManager {
+actor MIDIPortManager: VirtualPortManaging {
+    struct Runtime: Sendable {
+        let createClient: @Sendable (_ name: String, _ client: inout MIDIClientRef) -> OSStatus
+        let createSource: @Sendable (_ client: MIDIClientRef, _ name: String, _ source: inout MIDIEndpointRef) -> OSStatus
+        let createDestination: @Sendable (
+            _ client: MIDIClientRef,
+            _ name: String,
+            _ destination: inout MIDIEndpointRef,
+            _ onReceive: @escaping @Sendable (UnsafePointer<MIDIEventList>, UnsafeMutableRawPointer?) -> Void
+        ) -> OSStatus
+        let disposeEndpoint: @Sendable (_ endpoint: MIDIEndpointRef) -> OSStatus
+        let disposeClient: @Sendable (_ client: MIDIClientRef) -> OSStatus
+
+        static let production = Runtime(
+            createClient: { name, client in
+                MIDIClientCreateWithBlock(name as CFString, &client) { notification in
+                    Log.debug(
+                        "MIDIPortManager notification: \(notification.pointee.messageID.rawValue)",
+                        subsystem: "midi"
+                    )
+                }
+            },
+            createSource: { client, name, source in
+                MIDISourceCreateWithProtocol(client, name as CFString, ._1_0, &source)
+            },
+            createDestination: { client, name, destination, onReceive in
+                MIDIDestinationCreateWithProtocol(client, name as CFString, ._1_0, &destination, onReceive)
+            },
+            disposeEndpoint: { endpoint in
+                MIDIEndpointDispose(endpoint)
+            },
+            disposeClient: { client in
+                MIDIClientDispose(client)
+            }
+        )
+    }
+
     private var client: MIDIClientRef = 0
     private var ports: [String: MIDIPortPair] = [:]
     private var isRunning = false
+    private let runtime: Runtime
+
+    init(runtime: Runtime = .production) {
+        self.runtime = runtime
+    }
 
     struct MIDIPortPair: Sendable {
         let name: String
@@ -17,7 +66,7 @@ actor MIDIPortManager {
     /// Start the MIDI client.
     func start() throws {
         guard !isRunning else { return }
-        let status = MIDIClientCreate("LogicProMCP" as CFString, nil, nil, &client)
+        let status = runtime.createClient("LogicProMCP", &client)
         guard status == noErr else {
             throw MIDIPortError.clientCreationFailed(status)
         }
@@ -39,15 +88,15 @@ actor MIDIPortManager {
         }
 
         var source: MIDIEndpointRef = 0
-        var status = MIDISourceCreateWithProtocol(client, name as CFString, ._1_0, &source)
+        var status = runtime.createSource(client, name, &source)
         guard status == noErr else {
             throw MIDIPortError.sourceCreationFailed(name, status)
         }
 
         var dest: MIDIEndpointRef = 0
-        status = MIDIDestinationCreateWithProtocol(client, name as CFString, ._1_0, &dest, onReceive)
+        status = runtime.createDestination(client, name, &dest, onReceive)
         guard status == noErr else {
-            MIDIEndpointDispose(source)
+            _ = runtime.disposeEndpoint(source)
             throw MIDIPortError.destinationCreationFailed(name, status)
         }
 
@@ -67,7 +116,7 @@ actor MIDIPortManager {
         }
 
         var source: MIDIEndpointRef = 0
-        let status = MIDISourceCreateWithProtocol(client, name as CFString, ._1_0, &source)
+        let status = runtime.createSource(client, name, &source)
         guard status == noErr else {
             throw MIDIPortError.sourceCreationFailed(name, status)
         }
@@ -89,15 +138,15 @@ actor MIDIPortManager {
     /// Stop and dispose all ports.
     func stop() {
         for (name, pair) in ports {
-            MIDIEndpointDispose(pair.source)
+            _ = runtime.disposeEndpoint(pair.source)
             if let dest = pair.destination {
-                MIDIEndpointDispose(dest)
+                _ = runtime.disposeEndpoint(dest)
             }
             Log.info("Disposed port: \(name)", subsystem: "midi")
         }
         ports.removeAll()
         if client != 0 {
-            MIDIClientDispose(client)
+            _ = runtime.disposeClient(client)
             client = 0
         }
         isRunning = false

@@ -1,21 +1,32 @@
 import Foundation
 
-// Handle --check-permissions flag
-if CommandLine.arguments.contains("--check-permissions") {
-    let status = PermissionChecker.check()
-    FileHandle.standardError.write(Data((status.summary + "\n").utf8))
-    if status.allGranted {
-        exit(0)
-    } else {
-        exit(1)
+enum LogicProMCPMain {
+    static func defaultRunner(
+        arguments: [String],
+        permissionCheck: () -> PermissionChecker.PermissionStatus = PermissionChecker.check,
+        serverFactory: () -> any ServerStarting = { LogicProServer() },
+        approvalStoreFactory: () -> any ManualValidationStoring = { ManualValidationStore() },
+        writeStderr: (String) -> Void = { message in
+            FileHandle.standardError.write(Data(message.utf8))
+        }
+    ) async -> Int {
+        await MainEntrypoint.run(
+            arguments: arguments,
+            permissionCheck: permissionCheck,
+            serverFactory: serverFactory,
+            approvalStoreFactory: approvalStoreFactory,
+            writeStderr: writeStderr
+        )
+    }
+
+    static func exitCode(
+        arguments: [String],
+        runner: ([String]) async -> Int = { arguments in
+            await LogicProMCPMain.defaultRunner(arguments: arguments)
+        }
+    ) async -> Int32 {
+        Int32(await runner(arguments))
     }
 }
 
-// Start the MCP server
-let server = LogicProServer()
-do {
-    try await server.start()
-} catch {
-    Log.error("Server failed: \(error)", subsystem: "main")
-    exit(1)
-}
+exit(await LogicProMCPMain.exitCode(arguments: CommandLine.arguments))

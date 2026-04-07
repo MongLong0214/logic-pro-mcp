@@ -6,10 +6,12 @@ actor MockChannel: Channel {
     nonisolated let id: ChannelID
     var executedOps: [(String, [String: String])] = []
     var isAvailable: Bool = true
+    let healthOverride: ChannelHealth?
 
-    init(id: ChannelID, available: Bool = true) {
+    init(id: ChannelID, available: Bool = true, healthOverride: ChannelHealth? = nil) {
         self.id = id
         self.isAvailable = available
+        self.healthOverride = healthOverride
     }
 
     func start() async throws {}
@@ -21,7 +23,38 @@ actor MockChannel: Channel {
     }
 
     func healthCheck() async -> ChannelHealth {
-        isAvailable ? .healthy(detail: "Mock OK") : .unavailable("Mock unavailable")
+        if let healthOverride {
+            return healthOverride
+        }
+        return isAvailable
+            ? ChannelHealth.healthy(detail: "Mock OK")
+            : ChannelHealth.unavailable("Mock unavailable")
+    }
+}
+
+enum MockStartError: Error {
+    case startupFailed
+}
+
+actor FailingStartChannel: Channel {
+    nonisolated let id: ChannelID
+
+    init(id: ChannelID) {
+        self.id = id
+    }
+
+    func start() async throws {
+        throw MockStartError.startupFailed
+    }
+
+    func stop() async {}
+
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        .error("should not execute")
+    }
+
+    func healthCheck() async -> ChannelHealth {
+        .unavailable("startup failed")
     }
 }
 
@@ -66,6 +99,44 @@ actor MockChannel: Channel {
     #expect(cgOps.count == 1)     // fallback used
 }
 
+@Test func testRouterTransportFallsBackToAppleScript() async {
+    let router = ChannelRouter()
+    let mcu = MockChannel(id: .mcu, available: false)
+    let coreMIDI = MockChannel(id: .coreMIDI, available: false)
+    let cgEvent = MockChannel(id: .cgEvent, available: false)
+    let appleScript = MockChannel(id: .appleScript)
+    await router.register(mcu)
+    await router.register(coreMIDI)
+    await router.register(cgEvent)
+    await router.register(appleScript)
+
+    let result = await router.route(operation: "transport.stop")
+    #expect(result.isSuccess)
+
+    let appleScriptOps = await appleScript.executedOps
+    #expect(appleScriptOps.count == 1)
+    #expect(appleScriptOps[0].0 == "transport.stop")
+}
+
+@Test func testRouterSkipsManualValidationChannelsAndFallsBackToRuntimeReadyChannel() async {
+    let router = ChannelRouter()
+    let keyCmd = MockChannel(id: .midiKeyCommands, healthOverride: .healthy(
+        detail: "Preset installation is not verifiable programmatically",
+        verificationStatus: .manualValidationRequired
+    ))
+    let cgEvent = MockChannel(id: .cgEvent)
+    await router.register(keyCmd)
+    await router.register(cgEvent)
+
+    let result = await router.route(operation: "edit.undo")
+    #expect(result.isSuccess)
+
+    let keyCmdOps = await keyCmd.executedOps
+    let cgOps = await cgEvent.executedOps
+    #expect(keyCmdOps.isEmpty)
+    #expect(cgOps.count == 1)
+}
+
 @Test func testRouterSetTempoGoesToKeyCmd() async {
     let router = ChannelRouter()
     let mcu = MockChannel(id: .mcu)
@@ -93,8 +164,8 @@ actor MockChannel: Channel {
 
 @Test func testRouterNewCommandSetPluginParam() async {
     let router = ChannelRouter()
-    let mcu = MockChannel(id: .mcu)
-    await router.register(mcu)
+    let scripter = MockChannel(id: .scripter)
+    await router.register(scripter)
 
     let result = await router.route(operation: "mixer.set_plugin_param")
     #expect(result.isSuccess)
@@ -128,4 +199,28 @@ actor MockChannel: Channel {
         #expect(!channels.isEmpty, "Operation '\(op)' has no channels assigned")
     }
     #expect(table.count > 80, "Expected 80+ operations, got \(table.count)")
+}
+
+@Test func testRouterStartAllReportsChannelFailures() async {
+    let router = ChannelRouter()
+    await router.register(MockChannel(id: .coreMIDI))
+    await router.register(FailingStartChannel(id: .appleScript))
+
+    let report = await router.startAll()
+
+    #expect(report.started.contains(.coreMIDI))
+    #expect(report.failures[.appleScript] != nil)
+    #expect(report.hasFailures == true)
+}
+
+@Test func testRouterStartAllTreatsOptionalStartupFailureAsDegraded() async {
+    let router = ChannelRouter()
+    await router.register(FailingStartChannel(id: .accessibility))
+
+    let report = await router.startAll()
+
+    #expect(report.failures.isEmpty)
+    #expect(report.degraded[.accessibility] != nil)
+    #expect(report.hasFailures == false)
+    #expect(report.hasDegraded == true)
 }

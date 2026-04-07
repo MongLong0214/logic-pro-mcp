@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-KEYCMD_DIR="$HOME/Music/Audio Music Apps/Key Commands"
+KEYCMD_DIR="${LOGIC_PRO_MCP_KEYCMD_DIR:-$HOME/Music/Audio Music Apps/Key Commands}"
 BACKUP_DIR="$KEYCMD_DIR/backups"
 PRESET_SRC="$(dirname "$0")/keycmd-preset.plist"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -24,7 +24,7 @@ mkdir -p "$KEYCMD_DIR"
 mkdir -p "$BACKUP_DIR"
 
 # Backup existing key commands
-EXISTING_FILES=$(find "$KEYCMD_DIR" -maxdepth 1 -name "*.plist" -o -name "*.logickeycommands" 2>/dev/null | grep -v backups || true)
+EXISTING_FILES=$(find "$KEYCMD_DIR" -maxdepth 1 \( -name "*.plist" -o -name "*.logickeycommands" \) 2>/dev/null | grep -v backups || true)
 if [ -n "$EXISTING_FILES" ]; then
     echo "Backing up existing key commands to: $BACKUP_DIR/backup_$TIMESTAMP/"
     mkdir -p "$BACKUP_DIR/backup_$TIMESTAMP"

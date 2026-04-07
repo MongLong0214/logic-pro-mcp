@@ -6,6 +6,20 @@ import Foundation
 /// If the primary channel fails or is unavailable, the router tries
 /// each fallback in order.
 actor ChannelRouter {
+    struct StartReport: Sendable {
+        let started: [ChannelID]
+        let failures: [ChannelID: String]
+        let degraded: [ChannelID: String]
+
+        var hasFailures: Bool {
+            !failures.isEmpty
+        }
+
+        var hasDegraded: Bool {
+            !degraded.isEmpty
+        }
+    }
+
     private var channels: [ChannelID: any Channel] = [:]
 
     /// V2 routing table: MCU primary for mixer/transport/track state, MIDIKeyCommands for editing.
@@ -13,8 +27,8 @@ actor ChannelRouter {
     static let v2RoutingTable: [String: [ChannelID]] = [
         // Transport — MCU primary, CoreMIDI + CGEvent fallback
         "transport.play":             [.mcu, .coreMIDI, .cgEvent],
-        "transport.stop":             [.mcu, .coreMIDI, .cgEvent],
-        "transport.record":           [.mcu, .coreMIDI, .cgEvent],
+        "transport.stop":             [.mcu, .coreMIDI, .cgEvent, .appleScript],
+        "transport.record":           [.mcu, .coreMIDI, .cgEvent, .appleScript],
         "transport.pause":            [.coreMIDI, .cgEvent],
         "transport.rewind":           [.mcu, .coreMIDI, .cgEvent],
         "transport.fast_forward":     [.mcu, .coreMIDI, .cgEvent],
@@ -60,7 +74,7 @@ actor ChannelRouter {
         "mixer.get_bus_routing":      [.accessibility],
         "mixer.toggle_eq":            [.mcu, .accessibility],
         "mixer.reset_strip":          [.mcu, .accessibility],
-        "mixer.set_plugin_param":     [.mcu, .scripter],  // §4.3.1 new command
+        "mixer.set_plugin_param":     [.scripter],  // public path narrowed to deterministic Scripter flow
 
         // MIDI — CoreMIDI only
         "midi.send_note":             [.coreMIDI],
@@ -113,7 +127,7 @@ actor ChannelRouter {
         "project.new":                [.appleScript],
         "project.open":               [.appleScript],
         "project.save":               [.midiKeyCommands, .cgEvent, .appleScript],
-        "project.save_as":            [.midiKeyCommands, .cgEvent],
+        "project.save_as":            [.appleScript],
         "project.close":              [.appleScript],
         "project.get_info":           [.accessibility],
         "project.bounce":             [.midiKeyCommands, .cgEvent],
@@ -145,7 +159,7 @@ actor ChannelRouter {
         "plugin.insert":              [.accessibility],
         "plugin.bypass":              [.mcu, .accessibility],
         "plugin.remove":              [.accessibility],
-        "plugin.set_param":           [.scripter, .mcu],  // Scripter primary, MCU fallback
+        "plugin.set_param":           [.scripter],  // deterministic plugin parameter path
 
         // Automation
         "automation.get_mode":        [.accessibility],
@@ -175,15 +189,31 @@ actor ChannelRouter {
         channels[channel.id] = channel
     }
 
-    func startAll() async {
+    func startAll() async -> StartReport {
+        var started: [ChannelID] = []
+        var failures: [ChannelID: String] = [:]
+        var degraded: [ChannelID: String] = [:]
+
         for (id, channel) in channels {
             do {
                 try await channel.start()
                 Log.info("Channel \(id.rawValue) started", subsystem: "router")
+                started.append(id)
             } catch {
                 Log.warn("Channel \(id.rawValue) failed to start: \(error)", subsystem: "router")
+                if ServerConfig.optionalStartupChannels.contains(id) {
+                    degraded[id] = String(describing: error)
+                } else {
+                    failures[id] = String(describing: error)
+                }
             }
         }
+
+        return StartReport(
+            started: started.sorted { $0.rawValue < $1.rawValue },
+            failures: failures,
+            degraded: degraded
+        )
     }
 
     func stopAll() async {
@@ -218,6 +248,14 @@ actor ChannelRouter {
             guard health.available else {
                 Log.debug("Channel \(channelID.rawValue) unhealthy: \(health.detail), trying next", subsystem: "router")
                 lastError = "Channel \(channelID.rawValue): \(health.detail)"
+                continue
+            }
+            guard health.ready || ServerConfig.allowManualValidationChannels else {
+                Log.debug(
+                    "Channel \(channelID.rawValue) requires manual validation: \(health.detail), trying next",
+                    subsystem: "router"
+                )
+                lastError = "Channel \(channelID.rawValue) is not runtime-ready: \(health.detail)"
                 continue
             }
 
