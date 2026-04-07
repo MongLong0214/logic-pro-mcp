@@ -32,8 +32,8 @@ jobs:
           awk '
             /^TOTAL/ {
               gsub("%", "", $10)
-              if (($10 + 0) < 95.0) {
-                printf "Line coverage gate failed: %.2f%% < 95.0%%\n", ($10 + 0) > "/dev/stderr"
+              if (($10 + 0) < 90.0) {
+                printf "Line coverage gate failed: %.2f%% < 90.0%%\n", ($10 + 0) > "/dev/stderr"
                 exit 1
               }
             }

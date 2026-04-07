@@ -321,7 +321,7 @@ Commands that can cause data loss require explicit confirmation:
 | Level | Commands | Behavior |
 |:------|:---------|:---------|
 | **L3** Critical | `quit`, `close` | Returns `confirmation_required` — must re-call with `{confirmed: true}` |
-| **L2** High | `save_as`, `bounce`, `open` | Warning in response, audit logged |
+| **L2** High | `save_as`, `bounce`, `open` | Returns `confirmation_required` — must re-call with `{confirmed: true}` |
 | **L1** Normal | `save`, `new`, `launch` | Audit logged |
 | **L0** Safe | Everything else | Immediate execution |
 
