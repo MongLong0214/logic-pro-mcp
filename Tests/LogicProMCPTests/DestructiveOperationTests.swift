@@ -100,12 +100,37 @@ private final class AppleScriptOpenHarness: @unchecked Sendable {
     #expect(AppleScriptSafety.openFile(at: textFileURL.path) == false)
 }
 
-@Test func testAppleScriptOpenFileUsesInjectedRuntimeForExistingProject() throws {
-    let harness = AppleScriptOpenHarness()
+@Test func testAppleScriptOpenFileRejectsMalformedLogicPackage() throws {
+    let malformedURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("logicx")
+    try FileManager.default.createDirectory(at: malformedURL, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: malformedURL) }
+
+    let alternativesURL = malformedURL.appendingPathComponent("Alternatives/4294967295", isDirectory: true)
+    try FileManager.default.createDirectory(at: alternativesURL, withIntermediateDirectories: true)
+    try Data("undo".utf8).write(to: alternativesURL.appendingPathComponent("Undo Data.nosync"))
+
+    #expect(AppleScriptSafety.openFile(at: malformedURL.path) == false)
+    #expect(AppleScriptSafety.isValidProjectPath(malformedURL.path, requireExisting: true) == false)
+}
+
+private func makeExistingLogicProjectPackage() throws -> URL {
     let projectURL = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString)
         .appendingPathExtension("logicx")
-    try FileManager.default.createDirectory(at: projectURL, withIntermediateDirectories: true)
+    let resourcesURL = projectURL.appendingPathComponent("Resources", isDirectory: true)
+    let alternativeURL = projectURL.appendingPathComponent("Alternatives/000", isDirectory: true)
+    try FileManager.default.createDirectory(at: resourcesURL, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: alternativeURL, withIntermediateDirectories: true)
+    try Data("plist".utf8).write(to: resourcesURL.appendingPathComponent("ProjectInformation.plist"))
+    try Data("project".utf8).write(to: alternativeURL.appendingPathComponent("ProjectData"))
+    return projectURL
+}
+
+@Test func testAppleScriptOpenFileUsesInjectedRuntimeForExistingProject() throws {
+    let harness = AppleScriptOpenHarness()
+    let projectURL = try makeExistingLogicProjectPackage()
     defer { try? FileManager.default.removeItem(at: projectURL) }
 
     let opened = AppleScriptSafety.openFile(at: projectURL.path, runtime: harness.runtime())
@@ -118,10 +143,7 @@ private final class AppleScriptOpenHarness: @unchecked Sendable {
 @Test func testAppleScriptOpenFilePropagatesInjectedOpenFailure() throws {
     let harness = AppleScriptOpenHarness()
     harness.result = false
-    let projectURL = FileManager.default.temporaryDirectory
-        .appendingPathComponent(UUID().uuidString)
-        .appendingPathExtension("logicx")
-    try FileManager.default.createDirectory(at: projectURL, withIntermediateDirectories: true)
+    let projectURL = try makeExistingLogicProjectPackage()
     defer { try? FileManager.default.removeItem(at: projectURL) }
 
     let opened = AppleScriptSafety.openFile(at: projectURL.path, runtime: harness.runtime())

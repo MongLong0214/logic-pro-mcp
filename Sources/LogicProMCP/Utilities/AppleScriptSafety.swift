@@ -57,11 +57,46 @@ enum AppleScriptSafety {
             return nil
         }
         if requireExisting {
-            guard FileManager.default.fileExists(atPath: url.path) else {
+            guard isValidExistingProjectPackage(at: url) else {
                 return nil
             }
         }
         return url
+    }
+
+    static func isValidExistingProjectPackage(at url: URL) -> Bool {
+        guard url.pathExtension.lowercased() == "logicx" else {
+            return false
+        }
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue else {
+            return false
+        }
+
+        let projectInfo = url
+            .appendingPathComponent("Resources", isDirectory: true)
+            .appendingPathComponent("ProjectInformation.plist", isDirectory: false)
+        guard FileManager.default.fileExists(atPath: projectInfo.path) else {
+            return false
+        }
+
+        let alternativesURL = url.appendingPathComponent("Alternatives", isDirectory: true)
+        guard let enumerator = FileManager.default.enumerator(
+            at: alternativesURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return false
+        }
+
+        for case let candidate as URL in enumerator {
+            if candidate.lastPathComponent == "ProjectData" {
+                return true
+            }
+        }
+
+        return false
     }
 
     /// Open a file safely using NSWorkspace — no AppleScript injection possible.

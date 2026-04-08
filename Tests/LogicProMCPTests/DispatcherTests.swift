@@ -37,6 +37,12 @@ private func makeLogicProjectPath(name: String = UUID().uuidString, create: Bool
         .appendingPathExtension("logicx")
     if create {
         try FileManager.default.createDirectory(at: path, withIntermediateDirectories: true)
+        let resources = path.appendingPathComponent("Resources", isDirectory: true)
+        let alternative = path.appendingPathComponent("Alternatives/000", isDirectory: true)
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: alternative, withIntermediateDirectories: true)
+        try Data("plist".utf8).write(to: resources.appendingPathComponent("ProjectInformation.plist"))
+        try Data("project".utf8).write(to: alternative.appendingPathComponent("ProjectData"))
     }
     return path.path
 }
