@@ -122,7 +122,16 @@ private func makeAppleScriptRuntime(
     #expect(opened.isSuccess)
     #expect(opened.message == "Opened: \(path)")
     #expect(openRecorder.snapshot() == [path])
-    #expect(await scriptRecorder.snapshot().isEmpty)
+    let scripts = await scriptRecorder.snapshot()
+    #expect(scripts.count == 1)
+    #expect(scripts[0].contains("POSIX path of (path of front document)"))
+    #expect(scripts[0].contains(path))
+
+    await scriptRecorder.setResult(.error("front document never changed"))
+    let verifyFailed = await channel.execute(operation: "project.open", params: ["path": path])
+    #expect(!verifyFailed.isSuccess)
+    #expect(verifyFailed.message.contains("Failed to verify opened project"))
+    #expect(verifyFailed.message.contains(path))
 
     openRecorder.result = false
     let failed = await channel.execute(operation: "project.open", params: ["path": path])

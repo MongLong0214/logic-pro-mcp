@@ -59,7 +59,7 @@ actor AppleScriptChannel: Channel {
             guard let path = params["path"] else {
                 return .error("Missing 'path' parameter for project.open")
             }
-            return openProjectViaWorkspace(path: path)
+            return await openProjectViaWorkspace(path: path)
 
         case "project.close":
             let saving = params["saving"] ?? "yes"
@@ -165,13 +165,19 @@ actor AppleScriptChannel: Channel {
         """
     }
 
-    private func openProjectViaWorkspace(path: String) -> ChannelResult {
+    private func openProjectViaWorkspace(path: String) async -> ChannelResult {
         // Use NSWorkspace.open instead of AppleScript string interpolation
         // to completely prevent injection attacks (PRD §6.3)
-        if runtime.openFile(path) {
-            return .success("Opened: \(path)")
-        } else {
+        guard runtime.openFile(path) else {
             return .error("Failed to open: \(path)")
+        }
+
+        let verification = await runScript(verifyOpenedProjectScript(path: path))
+        switch verification {
+        case .success:
+            return .success("Opened: \(path)")
+        case .error(let message):
+            return .error("Failed to verify opened project: \(path). \(message)")
         }
     }
 
@@ -204,6 +210,25 @@ actor AppleScriptChannel: Channel {
         """
         tell application "Logic Pro"
             return name
+        end tell
+        """
+    }
+
+    private func verifyOpenedProjectScript(path: String) -> String {
+        let escapedPath = path.replacingOccurrences(of: "\"", with: "\\\"")
+        return """
+        tell application "Logic Pro"
+            repeat 25 times
+                if (count of documents) > 0 then
+                    try
+                        if (POSIX path of (path of front document)) is "\(escapedPath)" then
+                            return "opened"
+                        end if
+                    end try
+                end if
+                delay 0.2
+            end repeat
+            error "Timed out waiting for Logic Pro to surface opened project: \(escapedPath)"
         end tell
         """
     }
