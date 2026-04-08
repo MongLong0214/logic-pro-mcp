@@ -153,7 +153,8 @@ private func makeAppleScriptRuntime(
 
     let scripts = await recorder.snapshot()
     #expect(scripts.count == 6)
-    #expect(scripts[0].contains("click menu item \"New...\""))
+    #expect(scripts[0].contains("make new document"))
+    #expect(scripts[0].contains("return name of newDocument"))
     #expect(scripts[1].contains("save front document"))
     #expect(scripts[2].contains("save front document in (POSIX file"))
     #expect(scripts[2].contains("/tmp/export.logicx"))

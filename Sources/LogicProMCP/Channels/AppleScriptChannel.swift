@@ -158,12 +158,9 @@ actor AppleScriptChannel: Channel {
         """
         tell application "Logic Pro"
             activate
-            delay 0.5
-        end tell
-        tell application "System Events"
-            tell process "Logic Pro"
-                click menu item "New..." of menu "File" of menu bar 1
-            end tell
+            set newDocument to make new document
+            delay 0.2
+            return name of newDocument
         end tell
         """
     }
