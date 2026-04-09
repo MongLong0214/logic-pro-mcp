@@ -34,7 +34,7 @@ actor ChannelRouter {
         "transport.fast_forward":     [.mcu, .coreMIDI, .cgEvent],
         "transport.toggle_cycle":     [.mcu, .midiKeyCommands, .cgEvent],
         "transport.toggle_metronome": [.midiKeyCommands, .cgEvent],
-        "transport.set_tempo":        [.midiKeyCommands, .cgEvent],  // MCU has no native tempo set
+        "transport.set_tempo":        [.accessibility, .midiKeyCommands, .cgEvent],
         "transport.get_state":        [.accessibility],
         "transport.goto_position":    [.mcu, .coreMIDI, .cgEvent],
         "transport.set_cycle_range":  [.accessibility],

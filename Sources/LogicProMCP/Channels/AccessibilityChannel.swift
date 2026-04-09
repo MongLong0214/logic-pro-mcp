@@ -130,13 +130,13 @@ actor AccessibilityChannel: Channel {
 
         // MARK: - Track creation via menu click
         case "track.create_instrument":
-            return AccessibilityChannel.clickTrackMenu("새로운 소프트웨어 악기 트랙")
+            return AccessibilityChannel.createTrackViaMenu(korean: "새로운 소프트웨어 악기 트랙", english: "New Software Instrument Track")
         case "track.create_audio":
-            return AccessibilityChannel.clickTrackMenu("새로운 오디오 트랙")
+            return AccessibilityChannel.createTrackViaMenu(korean: "새로운 오디오 트랙", english: "New Audio Track")
         case "track.create_drummer":
-            return AccessibilityChannel.clickTrackMenu("새로운 Drummer 트랙")
+            return AccessibilityChannel.createTrackViaMenu(korean: "새로운 Drummer 트랙", english: "New Drummer Track")
         case "track.create_external_midi":
-            return AccessibilityChannel.clickTrackMenu("새로운 외부 MIDI 트랙")
+            return AccessibilityChannel.createTrackViaMenu(korean: "새로운 외부 MIDI 트랙", english: "New External MIDI Track")
 
         // MARK: - Mixer reads
         case "mixer.get_state":
@@ -403,6 +403,9 @@ actor AccessibilityChannel: Channel {
         }
 
         AXHelpers.setAttribute(filenameField, kAXValueAttribute, path as CFTypeRef, runtime: runtime.ax)
+        // Confirm the text entry so the save panel updates its internal path state
+        AXHelpers.performAction(filenameField, kAXConfirmAction, runtime: runtime.ax)
+        try? await Task.sleep(nanoseconds: 300_000_000) // 300ms for panel to process
 
         // Step 4: Find and click Save button
         let buttons = AXHelpers.findAllDescendants(of: saveSheet, role: "AXButton", runtime: runtime.ax)
@@ -421,7 +424,7 @@ actor AccessibilityChannel: Channel {
             return .error("Cannot find Save button in Save As dialog")
         }
 
-        // Step 6: Verify file exists (up to 5s)
+        // Step 5: Verify file exists (up to 5s)
         for _ in 0..<25 {
             try? await Task.sleep(nanoseconds: 200_000_000) // 200ms
             if FileManager.default.fileExists(atPath: path) {
@@ -453,6 +456,18 @@ actor AccessibilityChannel: Channel {
     }
 
     // MARK: - Track Creation via Menu
+
+    private static func createTrackViaMenu(
+        korean: String,
+        english: String,
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult {
+        // Try Korean locale first
+        let result = clickTrackMenu(korean, menuName: "트랙", englishMenuName: "Track", runtime: runtime)
+        if result.isSuccess { return result }
+        // Fallback: English locale with English item title
+        return clickTrackMenu(english, menuName: "Track", englishMenuName: "Track", runtime: runtime)
+    }
 
     private static func clickTrackMenu(
         _ menuItemTitle: String,

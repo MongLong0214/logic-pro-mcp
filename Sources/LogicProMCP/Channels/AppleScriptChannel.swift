@@ -263,7 +263,9 @@ actor AppleScriptChannel: Channel {
     }
 
     private func saveProjectAsScript(path: String) -> String {
-        let escapedPath = path.replacingOccurrences(of: "\"", with: "\\\"")
+        let escapedPath = path
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
         return """
         tell application "Logic Pro"
             save front document in (POSIX file "\(escapedPath)")
