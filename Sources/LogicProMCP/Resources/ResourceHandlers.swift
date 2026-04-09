@@ -17,8 +17,14 @@ struct ResourceHandlers {
 
         await cache.recordToolAccess()
 
+        // Check if Logic Pro has an open document — return error for stale reads
+        let hasDocument = await cache.getHasDocument()
+
         // Handle parameterized URIs like logic://tracks/{index}
         if uri.hasPrefix("logic://tracks/") {
+            guard hasDocument else {
+                throw MCPError.invalidParams("No Logic Pro document is open")
+            }
             let indexStr = String(uri.dropFirst("logic://tracks/".count))
             if let index = Int(indexStr) {
                 return try await readTrack(at: index, cache: cache, uri: uri)
@@ -86,6 +92,9 @@ struct ResourceHandlers {
     }
 
     private static func readProjectInfo(cache: StateCache, uri: String) async throws -> ReadResource.Result {
+        guard await cache.getHasDocument() else {
+            throw MCPError.invalidParams("No Logic Pro document is open")
+        }
         let info = await cache.getProject()
         let json = encodeJSON(info)
         return ReadResource.Result(

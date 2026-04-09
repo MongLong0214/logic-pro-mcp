@@ -220,3 +220,25 @@ private func makeCGEventRuntime(
 
     #expect(sent == true || sent == false)
 }
+
+// MARK: - T1: project.new via CGEvent Cmd+N
+
+@Test func testProjectNewCGEventPostsCmdN() async {
+    let recorder = CGEventRecorder()
+    let channel = CGEventChannel(runtime: makeCGEventRuntime(recorder: recorder))
+
+    let result = await channel.execute(operation: "project.new", params: [:])
+    #expect(result.isSuccess)
+
+    let events = recorder.snapshot()
+    #expect(events.count == 1)
+    #expect(events[0].keyCode == 45)  // N key = Cmd+N
+    #expect(events[0].flags == .maskCommand)
+}
+
+@Test func testProjectNewRoutingUsesCGEvent() {
+    let routes = ChannelRouter.v2RoutingTable["project.new"]
+    #expect(routes != nil)
+    #expect(routes?.contains(.cgEvent) == true)
+    #expect(routes?.contains(.appleScript) == false)
+}

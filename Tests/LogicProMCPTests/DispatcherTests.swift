@@ -515,7 +515,7 @@ private actor FailingExecuteChannel: Channel {
     for (command, operation) in commands {
         let result = await TrackDispatcher.handle(command: command, params: [:], router: router, cache: cache)
         #expect(!result.isError!, "Expected \(command) to succeed")
-        let ops = await keyCmd.executedOps
+        let ops = await ax.executedOps
         #expect(ops.last?.0 == operation)
     }
 
@@ -556,6 +556,10 @@ private actor FailingExecuteChannel: Channel {
         ("track.set_arm", ["index": "5", "enabled": "false"]),
     ])
     expectExecutedOps(axOps, equals: [
+        ("track.create_audio", [:]),
+        ("track.create_instrument", [:]),
+        ("track.create_drummer", [:]),
+        ("track.create_external_midi", [:]),
         ("track.rename", ["index": "5", "name": "Pad Bus"]),
     ])
 }
@@ -796,8 +800,10 @@ private actor FailingExecuteChannel: Channel {
     let router = ChannelRouter()
     let keyCmd = MockChannel(id: .midiKeyCommands)
     let appleScript = MockChannel(id: .appleScript)
+    let cgEvent = MockChannel(id: .cgEvent)
     await router.register(keyCmd)
     await router.register(appleScript)
+    await router.register(cgEvent)
     let cache = StateCache()
 
     let existingPath = try makeLogicProjectPath(create: true)
@@ -832,11 +838,14 @@ private actor FailingExecuteChannel: Channel {
 
     let keyCmdOps = await keyCmd.executedOps
     let appleScriptOps = await appleScript.executedOps
+    let cgEventOps = await cgEvent.executedOps
+    expectExecutedOps(cgEventOps, equals: [
+        ("project.new", [:]),
+    ])
     expectExecutedOps(keyCmdOps, equals: [
         ("project.bounce", [:]),
     ])
     expectExecutedOps(appleScriptOps, equals: [
-        ("project.new", [:]),
         ("project.open", ["path": existingPath]),
         ("project.save_as", ["path": saveAsPath]),
         ("project.close", [:]),

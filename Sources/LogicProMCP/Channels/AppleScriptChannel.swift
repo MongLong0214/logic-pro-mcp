@@ -119,6 +119,25 @@ actor AppleScriptChannel: Channel {
 
     static func executeAppleScript(_ source: String) async -> ChannelResult {
         await Task.detached(priority: .userInitiated) {
+            // Primary path: in-process NSAppleScript via main thread (inherits TCC permissions)
+            let inProcessResult: ChannelResult? = ProcessUtils.runAppKit {
+                let script = NSAppleScript(source: source)
+                var errorInfo: NSDictionary?
+                let result = script?.executeAndReturnError(&errorInfo)
+                if let errorInfo {
+                    let message = (errorInfo[NSAppleScript.errorMessage] as? String)
+                        ?? "NSAppleScript error \(errorInfo[NSAppleScript.errorNumber] ?? -1)"
+                    Log.error("NSAppleScript error: \(message)", subsystem: "appleScript")
+                    return ChannelResult.error("AppleScript error: \(message)")
+                }
+                let output = result?.stringValue ?? ""
+                return ChannelResult.success("{\"result\":\"\(AppleScriptChannel.escapeJSON(output))\"}")
+            }
+            if let inProcessResult {
+                return inProcessResult
+            }
+
+            // Fallback: osascript child process (for environments where main thread is unavailable)
             let process = Process()
             let stdout = Pipe()
             let stderr = Pipe()
@@ -215,20 +234,30 @@ actor AppleScriptChannel: Channel {
     }
 
     private func verifyOpenedProjectScript(path: String) -> String {
-        let escapedPath = path.replacingOccurrences(of: "\"", with: "\\\"")
+        // Normalize path to resolve /private/Users vs /Users symlink differences
+        let normalizedPath = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        let escapedPath = normalizedPath
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
         return """
         tell application "Logic Pro"
             repeat 25 times
                 if (count of documents) > 0 then
                     try
-                        if (POSIX path of (path of front document)) is "\(escapedPath)" then
-                            return "opened"
-                        end if
+                        set docPath to POSIX path of (path of front document)
+                        -- Normalize: strip trailing slash for comparison
+                        if docPath ends with "/" then set docPath to text 1 thru -2 of docPath
+                        set expectedPath to "\(escapedPath)"
+                        if expectedPath ends with "/" then set expectedPath to text 1 thru -2 of expectedPath
+                        if docPath is expectedPath then return "opened"
+                        -- Also check without /private prefix
+                        if docPath starts with "/private" and (text 9 thru -1 of docPath) is expectedPath then return "opened"
+                        if expectedPath starts with "/private" and docPath is (text 9 thru -1 of expectedPath) then return "opened"
                     end try
                 end if
                 delay 0.2
             end repeat
-            error "Timed out waiting for Logic Pro to surface opened project: \(escapedPath)"
+            error "Timed out waiting for Logic Pro to open: \(escapedPath)"
         end tell
         """
     }

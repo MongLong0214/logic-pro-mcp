@@ -47,10 +47,10 @@ actor ChannelRouter {
 
         // Track mutation — MCU for mute/solo/arm/select, KeyCmd for creation
         "track.select":               [.mcu, .accessibility, .cgEvent],
-        "track.create_audio":         [.midiKeyCommands, .cgEvent],
-        "track.create_instrument":    [.midiKeyCommands, .cgEvent],
-        "track.create_drummer":       [.midiKeyCommands, .cgEvent],
-        "track.create_external_midi": [.midiKeyCommands, .cgEvent],
+        "track.create_audio":         [.accessibility, .midiKeyCommands, .cgEvent],
+        "track.create_instrument":    [.accessibility, .midiKeyCommands, .cgEvent],
+        "track.create_drummer":       [.accessibility, .midiKeyCommands, .cgEvent],
+        "track.create_external_midi": [.accessibility, .midiKeyCommands, .cgEvent],
         "track.delete":               [.midiKeyCommands, .cgEvent],
         "track.rename":               [.accessibility],
         "track.set_mute":             [.mcu, .accessibility, .cgEvent],
@@ -124,11 +124,11 @@ actor ChannelRouter {
         "edit.duplicate":             [.midiKeyCommands, .cgEvent],
 
         // Project — AppleScript for lifecycle, KeyCmd for save/bounce
-        "project.new":                [.appleScript],
+        "project.new":                [.cgEvent],
         "project.open":               [.appleScript],
         "project.save":               [.midiKeyCommands, .cgEvent, .appleScript],
-        "project.save_as":            [.appleScript],
-        "project.close":              [.appleScript],
+        "project.save_as":            [.accessibility, .appleScript],
+        "project.close":              [.appleScript, .cgEvent],
         "project.get_info":           [.accessibility],
         "project.bounce":             [.midiKeyCommands, .cgEvent],
         "project.is_running":         [],

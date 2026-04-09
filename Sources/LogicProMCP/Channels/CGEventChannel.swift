@@ -92,6 +92,7 @@ actor CGEventChannel: Channel {
         "view.toggle_step_editor":    .cmdOption(34),   // Cmd+Option+I (approximate)
 
         // Project
+        "project.new":                .cmd(45),         // Cmd+N
         "project.save":               .cmd(1),          // Cmd+S
         "project.save_as":            .cmdShift(1),     // Cmd+Shift+S
         "project.close":              .cmd(13),         // Cmd+W

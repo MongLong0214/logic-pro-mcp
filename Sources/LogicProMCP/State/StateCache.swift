@@ -12,6 +12,10 @@ actor StateCache {
     private(set) var mcuConnection = MCUConnectionState()
     private(set) var mcuDisplay = MCUDisplayState()
 
+    /// Whether Logic Pro has an open document with a visible window.
+    /// Defaults to true (optimistic) — StatePoller sets to false when no document detected.
+    private(set) var hasDocument: Bool = true
+
     /// Timestamp of last tool call — drives adaptive poll intervals.
     private(set) var lastToolAccess: Date = .distantPast
 
@@ -35,6 +39,22 @@ actor StateCache {
     func getProject() -> ProjectInfo { project }
     func getMCUConnection() -> MCUConnectionState { mcuConnection }
     func getMCUDisplay() -> MCUDisplayState { mcuDisplay }
+    func getHasDocument() -> Bool { hasDocument }
+
+    // MARK: - Document state
+
+    func updateDocumentState(_ hasDoc: Bool) {
+        hasDocument = hasDoc
+        if !hasDoc {
+            clearProjectState()
+        }
+    }
+
+    func clearProjectState() {
+        project = ProjectInfo()
+        regions = []
+        markers = []
+    }
 
     // MARK: - Write access (poller calls these)
 

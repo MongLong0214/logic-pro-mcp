@@ -121,6 +121,23 @@ actor AccessibilityChannel: Channel {
         case "track.set_color":
             return .error("Track color setting not supported via AX")
 
+        // MARK: - Project save_as via AX dialog
+        case "project.save_as":
+            guard let path = params["path"] else {
+                return .error("Missing 'path' parameter for project.save_as")
+            }
+            return await AccessibilityChannel.saveAsViaAXDialog(path: path)
+
+        // MARK: - Track creation via menu click
+        case "track.create_instrument":
+            return AccessibilityChannel.clickTrackMenu("새로운 소프트웨어 악기 트랙")
+        case "track.create_audio":
+            return AccessibilityChannel.clickTrackMenu("새로운 오디오 트랙")
+        case "track.create_drummer":
+            return AccessibilityChannel.clickTrackMenu("새로운 Drummer 트랙")
+        case "track.create_external_midi":
+            return AccessibilityChannel.clickTrackMenu("새로운 외부 MIDI 트랙")
+
         // MARK: - Mixer reads
         case "mixer.get_state":
             return runtime.mixerState()
@@ -326,6 +343,146 @@ actor AccessibilityChannel: Channel {
         AXHelpers.setAttribute(field, kAXValueAttribute, name as CFTypeRef, runtime: runtime.ax)
         AXHelpers.performAction(field, kAXConfirmAction, runtime: runtime.ax)
         return .success("{\"track\":\(index),\"name\":\"\(name)\"}")
+    }
+
+    // MARK: - Save As via AX Dialog
+
+    private static func saveAsViaAXDialog(
+        path: String,
+        runtime: AXLogicProElements.Runtime = .production
+    ) async -> ChannelResult {
+        // Step 1: Trigger Save As via menu click (more reliable than CGEvent)
+        let menuResult = clickTrackMenu("다른 이름으로 저장…", menuName: "파일", runtime: runtime)
+        // Fallback to English
+        let triggered: Bool
+        switch menuResult {
+        case .success:
+            triggered = true
+        case .error:
+            // Try English menu
+            let englishResult = clickMenuItem("Save As…", menuName: "File", runtime: runtime)
+            triggered = englishResult.isSuccess
+        }
+
+        guard triggered else {
+            return .error("Failed to open Save As dialog via menu")
+        }
+
+        // Step 2: Wait for save dialog sheet to appear (up to 3s)
+        var sheet: AXUIElement?
+        for _ in 0..<15 {
+            try? await Task.sleep(nanoseconds: 200_000_000) // 200ms
+            guard let window = AXLogicProElements.mainWindow(runtime: runtime) else { continue }
+            // Look for a sheet (NSSavePanel appears as a sheet)
+            let children = AXHelpers.getChildren(window, runtime: runtime.ax)
+            for child in children {
+                let role = AXHelpers.getRole(child, runtime: runtime.ax)
+                if role == "AXSheet" || role == "AXWindow" {
+                    let descendants = AXHelpers.findAllDescendants(of: child, role: "AXTextField", runtime: runtime.ax)
+                    if !descendants.isEmpty {
+                        sheet = child
+                        break
+                    }
+                }
+            }
+            if sheet != nil { break }
+        }
+
+        guard let saveSheet = sheet else {
+            return .error("Save As dialog did not appear within 3 seconds")
+        }
+
+        // Step 3: Find filename text field and set value
+        let filename = URL(fileURLWithPath: path).lastPathComponent
+            .replacingOccurrences(of: ".logicx", with: "")
+        let textFields = AXHelpers.findAllDescendants(of: saveSheet, role: "AXTextField", runtime: runtime.ax)
+
+        guard let filenameField = textFields.first else {
+            return .error("Cannot find filename field in Save As dialog")
+        }
+
+        // Set filename
+        AXHelpers.setAttribute(filenameField, kAXValueAttribute, filename as CFTypeRef, runtime: runtime.ax)
+        // Focus and select all to replace
+        AXHelpers.performAction(filenameField, kAXConfirmAction, runtime: runtime.ax)
+
+        // Step 4: Set save location via path components
+        // For now, navigate to the directory by using the Go To Folder approach
+        // or set the full path in the filename field
+        let directory = URL(fileURLWithPath: path).deletingLastPathComponent().path
+        // Use the combined path approach: set full path in the text field
+        AXHelpers.setAttribute(filenameField, kAXValueAttribute, path as CFTypeRef, runtime: runtime.ax)
+
+        // Step 5: Find and click Save button
+        let buttons = AXHelpers.findAllDescendants(of: saveSheet, role: "AXButton", runtime: runtime.ax)
+
+        var saveClicked = false
+        for button in buttons {
+            let title = AXHelpers.getTitle(button, runtime: runtime.ax) ?? ""
+            if title.contains("저장") || title.contains("Save") || title == "확인" || title == "OK" {
+                AXHelpers.performAction(button, kAXPressAction, runtime: runtime.ax)
+                saveClicked = true
+                break
+            }
+        }
+
+        guard saveClicked else {
+            return .error("Cannot find Save button in Save As dialog")
+        }
+
+        // Step 6: Verify file exists (up to 5s)
+        for _ in 0..<25 {
+            try? await Task.sleep(nanoseconds: 200_000_000) // 200ms
+            if FileManager.default.fileExists(atPath: path) {
+                return .success("{\"saved_as\":\"\(AppleScriptChannel.escapeJSON(path))\"}")
+            }
+        }
+
+        // File might be saved with .logicx extension appended
+        let pathWithExt = path.hasSuffix(".logicx") ? path : path + ".logicx"
+        if FileManager.default.fileExists(atPath: pathWithExt) {
+            return .success("{\"saved_as\":\"\(AppleScriptChannel.escapeJSON(pathWithExt))\"}")
+        }
+
+        return .error("Save As completed but file not found at: \(path)")
+    }
+
+    private static func clickMenuItem(
+        _ itemTitle: String,
+        menuName: String,
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult {
+        guard let item = AXLogicProElements.menuItem(path: [menuName, itemTitle], runtime: runtime) else {
+            return .error("Cannot find menu item: \(menuName) > \(itemTitle)")
+        }
+        guard AXHelpers.performAction(item, kAXPressAction, runtime: runtime.ax) else {
+            return .error("Failed to click: \(menuName) > \(itemTitle)")
+        }
+        return .success("{\"menu_clicked\":\"\(itemTitle)\"}")
+    }
+
+    // MARK: - Track Creation via Menu
+
+    private static func clickTrackMenu(
+        _ menuItemTitle: String,
+        menuName: String = "트랙",
+        englishMenuName: String = "Track",
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult {
+        if let item = AXLogicProElements.menuItem(path: [menuName, menuItemTitle], runtime: runtime) {
+            guard AXHelpers.performAction(item, kAXPressAction, runtime: runtime.ax) else {
+                return .error("Failed to click menu item: \(menuItemTitle)")
+            }
+            return .success("{\"menu_clicked\":\"\(menuItemTitle)\"}")
+        }
+        // Fallback: English menu names for non-Korean locales
+        if let item = AXLogicProElements.menuItem(path: [englishMenuName, menuItemTitle], runtime: runtime) {
+            guard AXHelpers.performAction(item, kAXPressAction, runtime: runtime.ax) else {
+                return .error("Failed to click menu item: \(menuItemTitle)")
+            }
+            return .success("{\"menu_clicked\":\"\(menuItemTitle)\"}")
+        }
+        return .error("Cannot find menu item: \(menuName) > \(menuItemTitle)")
     }
 
     // MARK: - Mixer

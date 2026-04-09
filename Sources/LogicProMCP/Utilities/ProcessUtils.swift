@@ -77,6 +77,25 @@ enum ProcessUtils {
         runtime.logicProRunning() || logicProPID(runtime: runtime) != nil
     }
 
+    /// Check if Logic Pro has at least one visible on-screen window.
+    /// Uses CGWindowListCopyWindowInfo (no extra permissions needed).
+    static func hasVisibleWindow() -> Bool {
+        guard let pid = logicProPID() else { return false }
+        guard let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return false
+        }
+        return windowList.contains { info in
+            guard let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t,
+                  ownerPID == pid,
+                  let bounds = info[kCGWindowBounds as String] as? [String: CGFloat],
+                  let width = bounds["Width"], let height = bounds["Height"],
+                  width > 0, height > 0 else {
+                return false
+            }
+            return true
+        }
+    }
+
     /// Bring Logic Pro to front (used sparingly — most operations don't need focus).
     static func activateLogicPro() -> Bool {
         activateLogicPro(runtime: .production)
