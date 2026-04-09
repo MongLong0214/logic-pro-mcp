@@ -52,6 +52,8 @@ actor StateCache {
 
     func clearProjectState() {
         project = ProjectInfo()
+        tracks = []
+        channelStrips = []
         regions = []
         markers = []
     }

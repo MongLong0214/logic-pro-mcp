@@ -87,8 +87,9 @@ enum ProcessUtils {
         return windowList.contains { info in
             guard let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t,
                   ownerPID == pid,
-                  let bounds = info[kCGWindowBounds as String] as? [String: CGFloat],
-                  let width = bounds["Width"], let height = bounds["Height"],
+                  let bounds = info[kCGWindowBounds as String] as? [String: Any],
+                  let width = (bounds["Width"] as? NSNumber)?.doubleValue,
+                  let height = (bounds["Height"] as? NSNumber)?.doubleValue,
                   width > 0, height > 0 else {
                 return false
             }

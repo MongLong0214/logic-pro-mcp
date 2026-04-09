@@ -257,7 +257,7 @@ actor AppleScriptChannel: Channel {
                 end if
                 delay 0.2
             end repeat
-            error "Timed out waiting for Logic Pro to open: \(escapedPath)"
+            error "Timed out waiting for Logic Pro to open the requested project"
         end tell
         """
     }

@@ -351,18 +351,10 @@ actor AccessibilityChannel: Channel {
         path: String,
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ChannelResult {
-        // Step 1: Trigger Save As via menu click (more reliable than CGEvent)
-        let menuResult = clickTrackMenu("다른 이름으로 저장…", menuName: "파일", runtime: runtime)
-        // Fallback to English
-        let triggered: Bool
-        switch menuResult {
-        case .success:
-            triggered = true
-        case .error:
-            // Try English menu
-            let englishResult = clickMenuItem("Save As…", menuName: "File", runtime: runtime)
-            triggered = englishResult.isSuccess
-        }
+        // Step 1: Trigger Save As via menu click
+        let koreanResult = clickMenuItem("다른 이름으로 저장…", menuName: "파일", runtime: runtime)
+        let triggered = koreanResult.isSuccess
+            || clickMenuItem("Save As…", menuName: "File", runtime: runtime).isSuccess
 
         guard triggered else {
             return .error("Failed to open Save As dialog via menu")
@@ -371,9 +363,8 @@ actor AccessibilityChannel: Channel {
         // Step 2: Wait for save dialog sheet to appear (up to 3s)
         var sheet: AXUIElement?
         for _ in 0..<15 {
-            try? await Task.sleep(nanoseconds: 200_000_000) // 200ms
+            try? await Task.sleep(nanoseconds: 200_000_000)
             guard let window = AXLogicProElements.mainWindow(runtime: runtime) else { continue }
-            // Look for a sheet (NSSavePanel appears as a sheet)
             let children = AXHelpers.getChildren(window, runtime: runtime.ax)
             for child in children {
                 let role = AXHelpers.getRole(child, runtime: runtime.ax)
@@ -392,30 +383,29 @@ actor AccessibilityChannel: Channel {
             return .error("Save As dialog did not appear within 3 seconds")
         }
 
-        // Step 3: Find filename text field and set value
-        let filename = URL(fileURLWithPath: path).lastPathComponent
-            .replacingOccurrences(of: ".logicx", with: "")
-        let textFields = AXHelpers.findAllDescendants(of: saveSheet, role: "AXTextField", runtime: runtime.ax)
+        // Helper: dismiss dialog on failure (press Escape to avoid blocking UI)
+        func dismissDialog() {
+            let cancelButtons = AXHelpers.findAllDescendants(of: saveSheet, role: "AXButton", runtime: runtime.ax)
+            for btn in cancelButtons {
+                let title = AXHelpers.getTitle(btn, runtime: runtime.ax) ?? ""
+                if title.contains("취소") || title.contains("Cancel") {
+                    AXHelpers.performAction(btn, kAXPressAction, runtime: runtime.ax)
+                    return
+                }
+            }
+        }
 
+        // Step 3: Find filename text field and set full path
+        let textFields = AXHelpers.findAllDescendants(of: saveSheet, role: "AXTextField", runtime: runtime.ax)
         guard let filenameField = textFields.first else {
+            dismissDialog()
             return .error("Cannot find filename field in Save As dialog")
         }
 
-        // Set filename
-        AXHelpers.setAttribute(filenameField, kAXValueAttribute, filename as CFTypeRef, runtime: runtime.ax)
-        // Focus and select all to replace
-        AXHelpers.performAction(filenameField, kAXConfirmAction, runtime: runtime.ax)
-
-        // Step 4: Set save location via path components
-        // For now, navigate to the directory by using the Go To Folder approach
-        // or set the full path in the filename field
-        let directory = URL(fileURLWithPath: path).deletingLastPathComponent().path
-        // Use the combined path approach: set full path in the text field
         AXHelpers.setAttribute(filenameField, kAXValueAttribute, path as CFTypeRef, runtime: runtime.ax)
 
-        // Step 5: Find and click Save button
+        // Step 4: Find and click Save button
         let buttons = AXHelpers.findAllDescendants(of: saveSheet, role: "AXButton", runtime: runtime.ax)
-
         var saveClicked = false
         for button in buttons {
             let title = AXHelpers.getTitle(button, runtime: runtime.ax) ?? ""
@@ -427,6 +417,7 @@ actor AccessibilityChannel: Channel {
         }
 
         guard saveClicked else {
+            dismissDialog()
             return .error("Cannot find Save button in Save As dialog")
         }
 
