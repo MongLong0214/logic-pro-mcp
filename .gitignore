@@ -7,3 +7,11 @@ DerivedData/
 .netrc
 *.xcodeproj
 Package.resolved
+.agents/
+.codex/
+.idea/
+.omx/
+.serena/
+.tmp-clang-module-cache/
+AGENTS.md
+*.profraw

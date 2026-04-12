@@ -228,14 +228,27 @@ swift build -c release
 sudo cp .build/release/LogicProMCP /usr/local/bin/
 ```
 
-## Enterprise Ops
+## Documentation
 
-- [Setup Guide](/Users/isaac/projects/logic-pro-mcp/docs/SETUP-GUIDE.md)
-- [Release Runbook](/Users/isaac/projects/logic-pro-mcp/docs/release/RELEASE-RUNBOOK.md)
-- [Clean Machine Validation](/Users/isaac/projects/logic-pro-mcp/docs/release/CLEAN-MACHINE-VALIDATION.md)
-- [Logic Pro E2E Checklist](/Users/isaac/projects/logic-pro-mcp/docs/release/LOGIC-PRO-E2E-CHECKLIST.md)
-- [Operator Approval Runbook](/Users/isaac/projects/logic-pro-mcp/docs/release/OPERATOR-APPROVAL-RUNBOOK.md)
-- [Support Matrix](/Users/isaac/projects/logic-pro-mcp/docs/release/SUPPORT-MATRIX.md)
+- **[Architecture](docs/ARCHITECTURE.md)** — request flow, channel catalog, concurrency model, security boundaries
+- **[API Reference](docs/API.md)** — every tool command, resource, param, channel chain
+- **[MCU Setup](docs/MCU-SETUP.md)** — step-by-step Mackie Control registration in Logic Pro
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** — permissions, MCU handshake, MIDI routing, performance
+- **[Setup Guide (Korean)](docs/SETUP-GUIDE.md)** — 한국어 퀵 셋업
+
+### Enterprise Ops
+
+- [Release Runbook](docs/release/RELEASE-RUNBOOK.md)
+- [Clean Machine Validation](docs/release/CLEAN-MACHINE-VALIDATION.md)
+- [Logic Pro E2E Checklist](docs/release/LOGIC-PRO-E2E-CHECKLIST.md)
+- [Operator Approval Runbook](docs/release/OPERATOR-APPROVAL-RUNBOOK.md)
+- [Support Matrix](docs/release/SUPPORT-MATRIX.md)
+
+### Project
+
+- [Changelog](CHANGELOG.md)
+- [Security Policy](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
 
 ### Register
 
@@ -378,10 +391,15 @@ Sources/LogicProMCP/
 ## Testing
 
 ```bash
-swift test
+swift test                          # 500 Swift tests (unit + integration + E2E)
 swift build -c release              # production binary
 LogicProMCP --check-permissions     # verify macOS permissions
+
+# Live tests against a running Logic Pro instance (229 tests):
+python3 scripts/live-e2e-test.py
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for test organization and conventions.
 
 ## Uninstall
 

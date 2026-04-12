@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+Install:
+  mkdir -p ~/Library/LaunchAgents
+  cp scripts/com.logicpro.mcp.plist.template ~/Library/LaunchAgents/com.logicpro.mcp.plist
+  launchctl load ~/Library/LaunchAgents/com.logicpro.mcp.plist
+
+Uninstall:
+  launchctl unload ~/Library/LaunchAgents/com.logicpro.mcp.plist
+  rm ~/Library/LaunchAgents/com.logicpro.mcp.plist
+
+Note: This agent runs the server detached from Claude so Logic Pro always sees the virtual MIDI ports.
+Only use this if you need the ports available outside of Claude Code sessions. If you only use Claude
+Code, prefer `claude mcp add --scope user logic-pro -- LogicProMCP` and skip this plist.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.logicpro.mcp</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/LogicProMCP</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/logic-pro-mcp.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/logic-pro-mcp.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>LOG_LEVEL</key>
+        <string>INFO</string>
+    </dict>
+</dict>
+</plist>
