@@ -32,12 +32,24 @@ enum AXLogicProElements {
     /// Find the transport bar area (toolbar/group containing play, stop, record, etc.)
     static func getTransportBar(runtime: Runtime = .production) -> AXUIElement? {
         guard let window = mainWindow(runtime: runtime) else { return nil }
-        // Logic Pro's transport is typically an AXToolbar or AXGroup near the top
+
         if let toolbar = AXHelpers.findChild(of: window, role: kAXToolbarRole, runtime: runtime.ax) {
             return toolbar
         }
-        // Fallback: search for a group containing transport-like buttons
-        return AXHelpers.findDescendant(of: window, role: kAXGroupRole, identifier: "Transport", runtime: runtime.ax)
+        if let toolbar = AXHelpers.findDescendant(of: window, role: kAXToolbarRole, maxDepth: 6, runtime: runtime.ax),
+           looksLikeTransportContainer(toolbar, runtime: runtime.ax) {
+            return toolbar
+        }
+        if let group = AXHelpers.findDescendant(of: window, role: kAXGroupRole, identifier: "Transport", runtime: runtime.ax) {
+            return group
+        }
+
+        let groups = AXHelpers.findAllDescendants(of: window, role: kAXGroupRole, maxDepth: 6, runtime: runtime.ax)
+        if let candidate = groups.first(where: { looksLikeTransportContainer($0, runtime: runtime.ax) }) {
+            return candidate
+        }
+
+        return looksLikeTransportContainer(window, runtime: runtime.ax) ? window : nil
     }
 
     /// Find a specific transport button by its title or description.
@@ -64,25 +76,40 @@ enum AXLogicProElements {
     /// Find the track header area containing individual track rows.
     static func getTrackHeaders(runtime: Runtime = .production) -> AXUIElement? {
         guard let window = mainWindow(runtime: runtime) else { return nil }
-        // Track headers are typically in a scrollable list/table area
+        // Contracted / test-path lookups first.
         if let area = AXHelpers.findDescendant(
             of: window, role: kAXListRole, identifier: "Track Headers", runtime: runtime.ax
         ) {
             return area
         }
-        // Fallback: look for an AXScrollArea containing AXRow or AXGroup children
         if let area = AXHelpers.findDescendant(
             of: window, role: kAXScrollAreaRole, identifier: "Tracks", runtime: runtime.ax
         ) {
             return area
         }
-        return AXHelpers.findDescendant(of: window, role: kAXOutlineRole, maxDepth: 5, runtime: runtime.ax)
+
+        // Live Logic 12 commonly exposes the track header rail as AXGroup(desc: "트랙 헤더")
+        // inside the left scroll area rather than as an AXList/AXOutline identifier.
+        let groups = AXHelpers.findAllDescendants(of: window, role: kAXGroupRole, maxDepth: 8, runtime: runtime.ax)
+        if let headerGroup = groups.first(where: {
+            let desc = (AXHelpers.getDescription($0, runtime: runtime.ax) ?? "").lowercased()
+            return desc == "track headers" || desc == "트랙 헤더"
+        }) {
+            return headerGroup
+        }
+
+        if let outline = AXHelpers.findDescendant(of: window, role: kAXOutlineRole, maxDepth: 8, runtime: runtime.ax) {
+            return outline
+        }
+        if let table = AXHelpers.findDescendant(of: window, role: kAXTableRole, maxDepth: 8, runtime: runtime.ax) {
+            return table
+        }
+        return nil
     }
 
     /// Find a track header at a specific index (0-based).
     static func findTrackHeader(at index: Int, runtime: Runtime = .production) -> AXUIElement? {
-        guard let headers = getTrackHeaders(runtime: runtime) else { return nil }
-        let rows = AXHelpers.getChildren(headers, runtime: runtime.ax)
+        let rows = allTrackHeaders(runtime: runtime)
         guard index >= 0 && index < rows.count else { return nil }
         return rows[index]
     }
@@ -90,7 +117,23 @@ enum AXLogicProElements {
     /// Enumerate all track header rows.
     static func allTrackHeaders(runtime: Runtime = .production) -> [AXUIElement] {
         guard let headers = getTrackHeaders(runtime: runtime) else { return [] }
-        return AXHelpers.getChildren(headers, runtime: runtime.ax)
+        let directChildren = AXHelpers.getChildren(headers, runtime: runtime.ax)
+        if !directChildren.isEmpty {
+            if directChildren.contains(where: {
+                (AXHelpers.getRole($0, runtime: runtime.ax) ?? "") == (kAXLayoutItemRole as String)
+            }) {
+                return directChildren.filter {
+                    (AXHelpers.getRole($0, runtime: runtime.ax) ?? "") == (kAXLayoutItemRole as String)
+                }
+            }
+            return directChildren
+        }
+
+        let layoutItems = AXHelpers.findAllDescendants(of: headers, role: kAXLayoutItemRole, maxDepth: 3, runtime: runtime.ax)
+        if !layoutItems.isEmpty {
+            return layoutItems
+        }
+        return []
     }
 
     // MARK: - Mixer
@@ -223,5 +266,70 @@ enum AXLogicProElements {
             guard let desc = AXHelpers.getDescription(button, runtime: runtime) else { return false }
             return desc.hasPrefix(prefix)
         }
+    }
+
+    private static func looksLikeTransportContainer(
+        _ element: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        let metadata = [
+            AXHelpers.getIdentifier(element, runtime: runtime),
+            AXHelpers.getTitle(element, runtime: runtime),
+            AXHelpers.getDescription(element, runtime: runtime)
+        ]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+
+        if metadata.contains("transport") || metadata.contains("control bar") || metadata.contains("컨트롤 막대") {
+            return true
+        }
+
+        let transportKeywords = ["play", "stop", "record", "cycle", "loop", "metronome", "rewind", "forward", "재생", "녹음", "사이클", "메트로놈", "클릭"]
+        let controls = AXHelpers.findAllDescendants(of: element, role: kAXButtonRole, maxDepth: 4, runtime: runtime)
+            + AXHelpers.findAllDescendants(of: element, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime)
+        let controlHits = controls.reduce(into: Set<String>()) { hits, control in
+            let label = (
+                AXHelpers.getDescription(control, runtime: runtime)
+                    ?? AXHelpers.getTitle(control, runtime: runtime)
+                    ?? ""
+            ).lowercased()
+
+            for keyword in transportKeywords where label.contains(keyword) {
+                hits.insert(keyword)
+            }
+        }
+
+        if controlHits.count >= 2 {
+            return true
+        }
+
+        let sliderHits = AXHelpers.findAllDescendants(of: element, role: kAXSliderRole, maxDepth: 4, runtime: runtime).contains { slider in
+            let description = AXHelpers.getDescription(slider, runtime: runtime)?.lowercased() ?? ""
+            return description.contains("tempo")
+                || description.contains("bpm")
+                || description.contains("position")
+                || description.contains("템포")
+                || description.contains("재생헤드 위치")
+                || description.contains("마디")
+                || description.contains("비트")
+        }
+
+        let textRoles = [kAXStaticTextRole, kAXTextFieldRole]
+        let textHits = textRoles.flatMap {
+            AXHelpers.findAllDescendants(of: element, role: $0, maxDepth: 4, runtime: runtime)
+        }.contains { text in
+            let description = AXHelpers.getDescription(text, runtime: runtime)?.lowercased() ?? ""
+            let value = (AXValueExtractors.extractTextValue(text, runtime: runtime) ?? "").lowercased()
+            return description.contains("tempo")
+                || description.contains("bpm")
+                || description.contains("position")
+                || description.contains("템포")
+                || description.contains("재생헤드 위치")
+                || value.contains(" bpm")
+                || value.filter({ $0 == "." }).count >= 2
+                || value.contains(":")
+        }
+
+        return (controlHits.count >= 1 && (textHits || sliderHits)) || sliderHits
     }
 }

@@ -123,8 +123,8 @@ actor ChannelRouter {
         "edit.toggle_step_input":     [.midiKeyCommands, .cgEvent],  // §4.3.1 new command
         "edit.duplicate":             [.midiKeyCommands, .cgEvent],
 
-        // Project — AppleScript for lifecycle, KeyCmd for save/bounce
-        "project.new":                [.cgEvent],
+        // Project — AppleScript primary for new/open/close lifecycle, KeyCmd for save/bounce
+        "project.new":                [.appleScript, .cgEvent],
         "project.open":               [.appleScript],
         "project.save":               [.midiKeyCommands, .cgEvent, .appleScript],
         "project.save_as":            [.accessibility, .appleScript],

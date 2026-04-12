@@ -110,11 +110,11 @@ struct ProjectDispatcher {
             )
 
         case "quit":
-            if !isLogicProRunning() {
-                return toolTextResult("Logic Pro is not running")
-            }
             if !confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 return toolTextResult(response)
+            }
+            if !isLogicProRunning() {
+                return toolTextResult("Logic Pro is not running")
             }
             return await runLifecycleScript(
                 script: "tell application \"Logic Pro\" to quit",

@@ -73,7 +73,7 @@ actor CoreMIDIChannel: Channel {
             }
             let channel = params["channel"].flatMap(UInt8.init) ?? 0
             let velocity = params["velocity"].flatMap(UInt8.init) ?? 100
-            let durationMs = params["duration_ms"].flatMap(UInt64.init) ?? 250
+            let durationMs = min(params["duration_ms"].flatMap(UInt64.init) ?? 250, 30_000)
             await engine.sendNoteOn(channel: channel, note: note, velocity: velocity)
             try? await Task.sleep(nanoseconds: durationMs * 1_000_000)
             await engine.sendNoteOff(channel: channel, note: note, velocity: 0)
@@ -167,7 +167,7 @@ actor CoreMIDIChannel: Channel {
             let notes = notesStr.split(separator: ",").compactMap { UInt8($0.trimmingCharacters(in: .whitespaces)) }
             let vel = params["velocity"].flatMap(UInt8.init) ?? 80
             let ch = params["channel"].flatMap(UInt8.init) ?? 0
-            let durMs = params["duration_ms"].flatMap(Int.init) ?? 500
+            let durMs = min(params["duration_ms"].flatMap(Int.init) ?? 500, 30_000)
             for n in notes { await engine.sendNoteOn(channel: ch, note: n, velocity: vel) }
             try? await Task.sleep(for: .milliseconds(durMs))
             for n in notes { await engine.sendNoteOff(channel: ch, note: n, velocity: 0) }
@@ -189,7 +189,9 @@ actor CoreMIDIChannel: Channel {
             guard let portManager else {
                 return .error("Dynamic virtual port creation unavailable in this context")
             }
-            let name = params["name"] ?? "LogicProMCP-Virtual"
+            let name = String((params["name"] ?? "LogicProMCP-Virtual")
+                .filter { !$0.isNewline && $0 != "\0" }
+                .prefix(63))
             do {
                 _ = try await portManager.createSendOnlyPort(name: name)
                 return .success("Virtual port '\(name)' ready")
@@ -275,7 +277,7 @@ actor CoreMIDIChannel: Channel {
     private func stepInputDurationMs(from rawDuration: String?) -> Int {
         guard let rawDuration, !rawDuration.isEmpty else { return 250 }
         if let durationMs = Int(rawDuration) {
-            return max(1, durationMs)
+            return min(max(1, durationMs), 30_000)
         }
         switch rawDuration {
         case "1/1": return 1000

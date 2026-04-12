@@ -7,8 +7,16 @@ enum AppleScriptSafety {
 
         static let production = Runtime(
             openFileURL: { url in
-                ProcessUtils.runAppKit {
-                    NSWorkspace.shared.open(url)
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                process.arguments = ["-a", "Logic Pro", url.path]
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+                    return process.terminationStatus == 0
+                } catch {
+                    Log.error("Failed to launch project via open(1): \(error)", subsystem: "appleScript")
+                    return false
                 }
             }
         )
@@ -23,9 +31,6 @@ enum AppleScriptSafety {
     static func isAllowedTransportAction(_ action: String) -> Bool {
         allowedTransportActions.contains(action)
     }
-
-    /// For project.open, use NSWorkspace instead of AppleScript string interpolation.
-    static let shouldUseNSWorkspaceForOpen = true
 
     /// Validate a file path is non-empty and usable.
     static func isValidFilePath(_ path: String) -> Bool {

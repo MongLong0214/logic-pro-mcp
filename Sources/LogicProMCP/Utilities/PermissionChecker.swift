@@ -1,5 +1,6 @@
 import Foundation
 import ApplicationServices
+import Darwin
 
 /// Checks macOS permissions required for the server to operate.
 enum PermissionChecker {
@@ -131,20 +132,38 @@ enum PermissionChecker {
     private static func runAutomationProbeViaShell() -> Bool {
         let process = Process()
         let stdout = Pipe()
-        let stderr = Pipe()
         let stdin = Pipe()
         stdin.fileHandleForWriting.closeFile()
-        let script = "tell application id \"\(ServerConfig.logicProBundleID)\" to return name"
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-lc", "osascript -e '\(script.replacingOccurrences(of: "'", with: "'\"'\"'"))'"]
+        let escapedBundleID = ServerConfig.logicProBundleID
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let script = "tell application id \"\(escapedBundleID)\" to return name"
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
         process.standardInput = stdin
         process.standardOutput = stdout
-        process.standardError = stderr
+        process.standardError = Pipe()
+
+        let group = DispatchGroup()
+        group.enter()
+        process.terminationHandler = { _ in
+            group.leave()
+        }
 
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
+            return false
+        }
+
+        if group.wait(timeout: .now() + 1.0) == .timedOut {
+            if process.isRunning {
+                process.terminate()
+            }
+            if group.wait(timeout: .now() + 0.2) == .timedOut, process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+                _ = group.wait(timeout: .now() + 0.2)
+            }
             return false
         }
 

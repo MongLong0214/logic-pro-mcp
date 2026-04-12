@@ -19,19 +19,17 @@ enum ProcessUtils {
                 ProcessUtils.logicProPIDViaProcessList() ?? ProcessUtils.logicProPIDViaSystemEvents()
             },
             logicProRunning: {
-                ProcessUtils.logicProApp() != nil
-                    || ProcessUtils.logicProPIDViaProcessList() != nil
-                    || ProcessUtils.logicProRunningViaAppleScript()
+                ProcessUtils.logicProApp() != nil || ProcessUtils.logicProPIDViaProcessList() != nil
             },
             activateLogicPro: {
                 guard let app = ProcessUtils.logicProApp() else { return false }
-                return ProcessUtils.runAppKit { app.activate() }
+                return ProcessUtils.runAppKit { app.activate(); return true } ?? false
             },
             logicProBundleURL: {
                 ProcessUtils.runAppKit {
                     ProcessUtils.logicProApp()?.bundleURL
                         ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: ServerConfig.logicProBundleID)
-                }
+                } ?? nil
             }
         )
     }
@@ -42,11 +40,26 @@ enum ProcessUtils {
         let uptimeSec: Int
     }
 
-    private static let processStartDate = Date()
+    private struct TimedPIDCache {
+        let value: pid_t?
+        let expiresAt: Date
+    }
 
-    static func runAppKit<T>(_ body: () -> T) -> T {
+    private static let processStartDate = Date()
+    private static let subprocessTimeout: TimeInterval = 1.0
+    private static let pidCacheTTL: TimeInterval = 0.5
+    private static let pidCacheLock = NSLock()
+    nonisolated(unsafe) private static var pidProcessListCache: TimedPIDCache?
+
+    static func runAppKit<T>(_ body: () -> T) -> T? {
         if Thread.isMainThread {
             return body()
+        }
+        // In a CLI process without an AppKit runloop, DispatchQueue.main.sync
+        // would deadlock indefinitely. Guard against this by checking whether
+        // the main runloop is actually servicing events.
+        guard CFRunLoopIsWaiting(CFRunLoopGetMain()) || Thread.isMainThread else {
+            return nil
         }
         return DispatchQueue.main.sync(execute: body)
     }
@@ -56,7 +69,7 @@ enum ProcessUtils {
             NSRunningApplication.runningApplications(
                 withBundleIdentifier: ServerConfig.logicProBundleID
             ).first
-        }
+        } ?? nil
     }
 
     /// Returns the PID of Logic Pro if running, nil otherwise.
@@ -74,7 +87,13 @@ enum ProcessUtils {
     }
 
     static func isLogicProRunning(runtime: Runtime) -> Bool {
-        runtime.logicProRunning() || logicProPID(runtime: runtime) != nil
+        if runtime.logicProRunning() {
+            return true
+        }
+        if runtime.logicProPID() != nil {
+            return true
+        }
+        return runtime.fallbackLogicProPID() != nil
     }
 
     /// Check if Logic Pro has at least one visible on-screen window.
@@ -120,10 +139,13 @@ enum ProcessUtils {
     }
 
     private static func logicProPIDViaSystemEvents() -> pid_t? {
+        let escapedName = ServerConfig.logicProProcessName
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
         let script = """
         tell application "System Events"
             try
-                return unix id of first application process whose name is "\(ServerConfig.logicProProcessName)"
+                return unix id of first application process whose name is "\(escapedName)"
             on error
                 return ""
             end try
@@ -160,48 +182,30 @@ enum ProcessUtils {
     }
 
     private static func logicProPIDViaProcessList() -> pid_t? {
-        let process = Process()
-        let stdout = Pipe()
-        let stderr = Pipe()
-        let stdin = Pipe()
-        stdin.fileHandleForWriting.closeFile()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-axo", "pid=,command="]
-        process.standardInput = stdin
-        process.standardOutput = stdout
-        process.standardError = stderr
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            return nil
+        let now = Date()
+        pidCacheLock.lock()
+        if let cached = pidProcessListCache, cached.expiresAt > now {
+            let cachedValue = cached.value
+            pidCacheLock.unlock()
+            return cachedValue
         }
+        pidCacheLock.unlock()
 
-        guard process.terminationStatus == 0 else {
-            return nil
-        }
+        let output = runProcessAndCaptureStdout(
+            executablePath: "/bin/ps",
+            arguments: ["-axo", "pid=,comm="],
+            timeout: subprocessTimeout
+        ) ?? ""
+        let pid = parseLogicProPID(fromProcessList: output)
 
-        let output = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        return parseLogicProPID(fromProcessList: output)
-    }
-
-    private static func logicProRunningViaAppleScript() -> Bool {
-        let script = """
-        using terms from application "Logic Pro"
-            if application "Logic Pro" is running then
-                return "yes"
-            else
-                return "no"
-            end if
-        end using terms from
-        """
-        guard let output = runAppleScript(script) else { return false }
-        return output.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "yes"
+        pidCacheLock.lock()
+        pidProcessListCache = TimedPIDCache(value: pid, expiresAt: now.addingTimeInterval(pidCacheTTL))
+        pidCacheLock.unlock()
+        return pid
     }
 
     private static func runAppleScript(_ source: String) -> String? {
-        let inProcessResult: String? = runAppKit {
+        let inProcessResult: String?? = runAppKit {
             let script = NSAppleScript(source: source)
             var errorInfo: NSDictionary?
             let result = script?.executeAndReturnError(&errorInfo)
@@ -210,34 +214,15 @@ enum ProcessUtils {
             }
             return result?.stringValue
         }
-        if let inProcessResult {
-            return inProcessResult
+        if let outer = inProcessResult, let result = outer {
+            return result
         }
 
-        let process = Process()
-        let stdout = Pipe()
-        let stderr = Pipe()
-        let stdin = Pipe()
-        stdin.fileHandleForWriting.closeFile()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-lc", appleScriptShellCommand(for: source)]
-        process.standardInput = stdin
-        process.standardOutput = stdout
-        process.standardError = stderr
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            return nil
-        }
-
-        guard process.terminationStatus == 0 else {
-            return nil
-        }
-
-        let data = stdout.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8)
+        return runProcessAndCaptureStdout(
+            executablePath: "/bin/zsh",
+            arguments: ["-lc", appleScriptShellCommand(for: source)],
+            timeout: subprocessTimeout
+        )
     }
 
     private static func appleScriptShellCommand(for source: String) -> String {
@@ -251,6 +236,52 @@ enum ProcessUtils {
 
     private static func shellQuote(_ value: String) -> String {
         "'\(value.replacingOccurrences(of: "'", with: "'\"'\"'"))'"
+    }
+
+    private static func runProcessAndCaptureStdout(
+        executablePath: String,
+        arguments: [String],
+        timeout: TimeInterval
+    ) -> String? {
+        let process = Process()
+        let stdout = Pipe()
+        let stdin = Pipe()
+        stdin.fileHandleForWriting.closeFile()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = arguments
+        process.standardInput = stdin
+        process.standardOutput = stdout
+        process.standardError = Pipe()
+
+        let group = DispatchGroup()
+        group.enter()
+        process.terminationHandler = { _ in
+            group.leave()
+        }
+
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+
+        if group.wait(timeout: .now() + timeout) == .timedOut {
+            if process.isRunning {
+                process.terminate()
+            }
+            if group.wait(timeout: .now() + 0.2) == .timedOut, process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+                _ = group.wait(timeout: .now() + 0.2)
+            }
+            return nil
+        }
+
+        guard process.terminationStatus == 0 else {
+            return nil
+        }
+
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        return String(data: data, encoding: .utf8)
     }
 
     /// Lightweight server-process metrics for diagnostics.

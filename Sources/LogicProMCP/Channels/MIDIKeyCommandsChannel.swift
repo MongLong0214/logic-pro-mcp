@@ -47,21 +47,16 @@ actor MIDIKeyCommandsChannel: Channel {
         "edit.copy":                    33,
         "edit.paste":                   34,
         "edit.select_all":              35,
-        "edit.trim_at_playhead":        36,
         "edit.bounce_in_place":         37,
 
         // Piano roll / MIDI editing (CC 40-44)
         "edit.quantize":                40,
-        "edit.force_legato":            41,
-        "edit.remove_overlaps":         42,
         "edit.join":                    43,
         "edit.toggle_step_input":       44,
 
         // View toggles (CC 50-58)
         "view.toggle_mixer":            50,
         "view.toggle_piano_roll":       51,
-        "view.toggle_score":            52,
-        "view.toggle_list_editors":     53,
         "view.toggle_smart_controls":   54,
         "view.toggle_library":          55,
         "view.toggle_inspector":        56,
@@ -72,19 +67,11 @@ actor MIDIKeyCommandsChannel: Channel {
         "project.save":                 60,
         "project.save_as":              61,
         "project.bounce":               62,
-        "project.export_midi":          63,
 
         // Transport extras (CC 70-73)
         "transport.set_tempo":          70,
-        "transport.toggle_click":       71,
         "transport.toggle_cycle":       72,
         "transport.capture_recording":  73,
-
-        // Automation (CC 80-83)
-        "automation.off":               80,
-        "automation.read":              81,
-        "automation.touch":             82,
-        "automation.latch":             83,
 
         // Note manipulation (CC 90-93)
         "note.up_semitone":             90,

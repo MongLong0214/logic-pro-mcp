@@ -232,12 +232,6 @@ struct MCUProtocol {
         return .success(firmwareVersion: firmware)
     }
 
-    /// Legacy convenience: Check if bytes are a Device Response.
-    static func isDeviceResponse(_ bytes: [UInt8]) -> Bool {
-        if case .success = parseDeviceResponse(bytes) { return true }
-        return false
-    }
-
     // MARK: - LCD SysEx Decode
 
     /// Decode LCD SysEx: F0 00 00 66 14 12 [offset] [chars...] F7

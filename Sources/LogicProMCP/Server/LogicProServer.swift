@@ -235,7 +235,7 @@ actor LogicProServer {
                 case "logic_project":
                     return await ProjectDispatcher.handle(command: command, params: cmdParams, router: router, cache: cache)
                 case "logic_system":
-                    return await SystemDispatcher.handle(command: command, params: cmdParams, router: router, cache: cache)
+                    return await SystemDispatcher.handle(command: command, params: cmdParams, router: router, cache: cache, poller: self.poller)
                 default:
                     return toolTextResult("Unknown tool: \(name)", isError: true)
                 }
@@ -428,7 +428,7 @@ actor ProductionMCUTransport: MCUTransportProtocol {
                     .advanced(by: MemoryLayout.offset(of: \MIDIEventList.packet)!)
                     .assumingMemoryBound(to: MIDIEventPacket.self)
                 for _ in 0..<numPackets {
-                    let wordCount = Int(packetPtr.pointee.wordCount)
+                    let wordCount = min(Int(packetPtr.pointee.wordCount), 64)
                     if wordCount > 0 {
                         let bytes: [UInt8] = withUnsafeBytes(of: packetPtr.pointee.words) { raw in
                             Array(raw.prefix(wordCount * 4))

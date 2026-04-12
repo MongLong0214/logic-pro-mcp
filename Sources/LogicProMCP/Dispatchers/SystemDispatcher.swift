@@ -82,6 +82,8 @@ struct SystemDispatcher {
         }
 
         let logicProRunning: Bool
+        let logicProHasWindow: Bool
+        let logicProHasDocument: Bool
         let logicProVersion: String
         let mcu: MCUSection
         let channels: [ChannelSection]
@@ -91,6 +93,8 @@ struct SystemDispatcher {
 
         enum CodingKeys: String, CodingKey {
             case logicProRunning = "logic_pro_running"
+            case logicProHasWindow = "logic_pro_has_window"
+            case logicProHasDocument = "logic_pro_has_document"
             case logicProVersion = "logic_pro_version"
             case mcu
             case channels
@@ -130,7 +134,8 @@ struct SystemDispatcher {
         command: String,
         params: [String: Value],
         router: ChannelRouter,
-        cache: StateCache
+        cache: StateCache,
+        poller: StatePoller? = nil
     ) async -> CallTool.Result {
         switch command {
         case "health":
@@ -153,9 +158,14 @@ struct SystemDispatcher {
             let permissions = PermissionChecker.check()
             let process = ProcessUtils.currentProcessMetrics()
             let lastFeedbackAge = mcu.lastFeedbackAt.map { Date().timeIntervalSince($0) }
-            let logicProRunning = ProcessUtils.isLogicProRunning || (report[.appleScript]?.available ?? false)
+            let logicProPID = ProcessUtils.logicProPID()
+            let logicProRunning = logicProPID != nil || (report[.appleScript]?.available ?? false)
+            let logicProHasWindow = ProcessUtils.hasVisibleWindow()
+            let logicProHasDocument = await cache.getHasDocument()
             let health = HealthResponse(
                 logicProRunning: logicProRunning,
+                logicProHasWindow: logicProHasWindow,
+                logicProHasDocument: logicProHasDocument,
                 logicProVersion: ProcessUtils.logicProVersion() ?? "unknown",
                 mcu: .init(
                     connected: mcu.isConnected,
@@ -194,6 +204,10 @@ struct SystemDispatcher {
 
         case "refresh_cache":
             await cache.recordToolAccess()
+            if let poller {
+                await poller.refreshNow()
+                return toolTextResult("State refresh completed via AX fallback poller.")
+            }
             return toolTextResult("State refresh triggered. Cache will be updated on next poll cycle.")
 
         case "help":

@@ -36,12 +36,21 @@ struct ResourceHandlers {
             return try await readTransportState(cache: cache, uri: uri)
 
         case "logic://tracks":
+            guard hasDocument else {
+                throw MCPError.invalidParams("No Logic Pro document is open")
+            }
             return try await readTracks(cache: cache, uri: uri)
 
         case "logic://mixer":
+            guard hasDocument else {
+                throw MCPError.invalidParams("No Logic Pro document is open")
+            }
             return try await readMixer(cache: cache, uri: uri)
 
         case "logic://project/info":
+            guard hasDocument else {
+                throw MCPError.invalidParams("No Logic Pro document is open")
+            }
             return try await readProjectInfo(cache: cache, uri: uri)
 
         case "logic://midi/ports":

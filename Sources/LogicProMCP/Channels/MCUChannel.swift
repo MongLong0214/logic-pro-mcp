@@ -186,19 +186,6 @@ actor MCUChannel: Channel {
         }
     }
 
-    private func executePluginParam(_ params: [String: String]) async -> ChannelResult {
-        let modeBytes = MCUProtocol.encodeButton(.assignPlugin, on: true)
-        await transport.send(modeBytes)
-
-        let param = Int(params["param"] ?? "0") ?? 0
-        let value = Double(params["value"] ?? "0") ?? 0.0
-        let strip = param % 8
-        let speed: UInt8 = max(1, min(15, UInt8(value * 15)))
-        let vpotBytes = MCUProtocol.encodeVPot(strip: strip, direction: .clockwise, speed: speed)
-        await transport.send(vpotBytes)
-        return .success("Plugin param \(param) set to \(value)")
-    }
-
     private func executeAutomation(_ params: [String: String]) async -> ChannelResult {
         let mode = params["mode"] ?? "read"
         let function: MCUProtocol.ButtonFunction

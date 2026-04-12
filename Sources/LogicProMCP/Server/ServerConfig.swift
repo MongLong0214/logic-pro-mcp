@@ -21,6 +21,9 @@ struct ServerConfig: Sendable {
     static let logicProBundleID = "com.apple.logic10"
     static let logicProProcessName = "Logic Pro"
 
+    // MARK: - Polling
+    static let statePollingIntervalNs: UInt64 = 5_000_000_000 // 5 seconds
+
     // MARK: - Enterprise Safety
     /// Channels that report `manual_validation_required` are not considered
     /// execution-ready in enterprise mode and must not be used for routing.

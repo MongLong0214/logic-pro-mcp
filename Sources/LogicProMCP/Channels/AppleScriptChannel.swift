@@ -132,7 +132,7 @@ actor AppleScriptChannel: Channel {
                 }
                 let output = result?.stringValue ?? ""
                 return ChannelResult.success("{\"result\":\"\(AppleScriptChannel.escapeJSON(output))\"}")
-            }
+            } ?? nil
             if let inProcessResult {
                 return inProcessResult
             }
@@ -185,36 +185,160 @@ actor AppleScriptChannel: Channel {
     }
 
     private func openProjectViaWorkspace(path: String) async -> ChannelResult {
-        // Use NSWorkspace.open instead of AppleScript string interpolation
+        // Use Launch Services via open(1) instead of AppleScript string interpolation
         // to completely prevent injection attacks (PRD §6.3)
         guard runtime.openFile(path) else {
             return .error("Failed to open: \(path)")
         }
 
-        let verification = await runScript(verifyOpenedProjectScript(path: path))
-        switch verification {
+        let initialVerification = await runScript(verifyOpenedProjectScript(path: path))
+        switch initialVerification {
         case .success:
             return .success("Opened: \(path)")
-        case .error(let message):
-            return .error("Failed to verify opened project: \(path). \(message)")
+        case .error(let initialMessage):
+            // Retry once after a best-effort close only if Logic is still sitting on
+            // a different front document. This avoids dropping the current session
+            // before we've even tried the Launch Services open path.
+            guard runtime.isLogicProRunning() else {
+                return .error("Failed to verify opened project: \(path). \(initialMessage)")
+            }
+
+            let previousDocumentPath = await logicCurrentDocumentPath()
+            if let previousDocumentPath,
+               projectPathsMatch(previousDocumentPath, path) {
+                return .success("Opened: \(path)")
+            }
+
+            if previousDocumentPath != nil {
+                _ = await runScript(closeCurrentProjectIfAnyScript(saving: "no"))
+            }
+
+            guard runtime.openFile(path) else {
+                if let previousDocumentPath,
+                   !projectPathsMatch(previousDocumentPath, path) {
+                    _ = runtime.openFile(previousDocumentPath)
+                }
+                return .error("Failed to open after closing current project: \(path)")
+            }
+
+            let retryVerification = await runScript(verifyOpenedProjectScript(path: path))
+            switch retryVerification {
+            case .success:
+                return .success("Opened: \(path)")
+            case .error(let retryMessage):
+                if let currentDocumentPath = await logicCurrentDocumentPath(),
+                   projectPathsMatch(currentDocumentPath, path) {
+                    return .success("Opened: \(path)")
+                }
+                if let previousDocumentPath,
+                   !projectPathsMatch(previousDocumentPath, path) {
+                    _ = runtime.openFile(previousDocumentPath)
+                }
+                return .error("Failed to verify opened project: \(path). \(retryMessage)")
+            }
         }
     }
 
     private func closeProjectScript(saving: String) -> String {
-        let saveClause: String
-        switch saving.lowercased() {
-        case "no", "false":
-            saveClause = "saving no"
-        case "ask":
-            saveClause = "saving ask"
-        default:
-            saveClause = "saving yes"
-        }
+        let saveClause = closeProjectSaveClause(saving: saving)
         return """
         tell application "Logic Pro"
             close front document \(saveClause)
         end tell
         """
+    }
+
+    private func closeCurrentProjectIfAnyScript(saving: String) -> String {
+        let saveClause = closeProjectSaveClause(saving: saving)
+        return """
+        tell application "Logic Pro"
+            if (count of documents) > 0 then
+                close front document \(saveClause)
+            end if
+        end tell
+        """
+    }
+
+    private func hasOpenDocumentScript() -> String {
+        """
+        tell application "Logic Pro"
+            if (count of documents) > 0 then
+                return "open"
+            end if
+            return "none"
+        end tell
+        """
+    }
+
+    private func logicHasOpenDocument() async -> Bool {
+        let result = await runScript(hasOpenDocumentScript())
+        guard result.isSuccess else { return false }
+        return appleScriptResultText(from: result) == "open"
+    }
+
+    private func currentDocumentPathScript() -> String {
+        """
+        tell application "Logic Pro"
+            if (count of documents) > 0 then
+                try
+                    return path of front document as text
+                on error
+                    return ""
+                end try
+            end if
+            return ""
+        end tell
+        """
+    }
+
+    private func logicCurrentDocumentPath() async -> String? {
+        let result = await runScript(currentDocumentPathScript())
+        guard result.isSuccess,
+              let rawValue = appleScriptResultText(from: result)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawValue.isEmpty else {
+            return nil
+        }
+        return rawValue
+    }
+
+    private func projectPathsMatch(_ lhs: String, _ rhs: String) -> Bool {
+        let left = normalizedProjectPath(lhs)
+        let right = normalizedProjectPath(rhs)
+        if left == right { return true }
+        if left.hasPrefix("/private"), String(left.dropFirst(8)) == right { return true }
+        if right.hasPrefix("/private"), left == String(right.dropFirst(8)) { return true }
+        return false
+    }
+
+    private func normalizedProjectPath(_ path: String) -> String {
+        let normalized = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+        if normalized.hasSuffix("/") {
+            return String(normalized.dropLast())
+        }
+        return normalized
+    }
+
+    private func appleScriptResultText(from result: ChannelResult) -> String? {
+        guard result.isSuccess else { return nil }
+        let message = result.message
+        guard let data = message.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+              let value = object["result"]
+        else {
+            return message
+        }
+        return value
+    }
+
+    private func closeProjectSaveClause(saving: String) -> String {
+        switch saving.lowercased() {
+        case "no", "false":
+            return "saving no"
+        case "ask":
+            return "saving ask"
+        default:
+            return "saving yes"
+        }
     }
 
     private func saveProjectScript() -> String {
@@ -239,12 +363,14 @@ actor AppleScriptChannel: Channel {
         let escapedPath = normalizedPath
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "")
+            .replacingOccurrences(of: "\r", with: "")
         return """
         tell application "Logic Pro"
             repeat 25 times
                 if (count of documents) > 0 then
                     try
-                        set docPath to POSIX path of (path of front document)
+                        set docPath to path of front document as text
                         -- Normalize: strip trailing slash for comparison
                         if docPath ends with "/" then set docPath to text 1 thru -2 of docPath
                         set expectedPath to "\(escapedPath)"
@@ -266,6 +392,8 @@ actor AppleScriptChannel: Channel {
         let escapedPath = path
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "")
+            .replacingOccurrences(of: "\r", with: "")
         return """
         tell application "Logic Pro"
             save front document in (POSIX file "\(escapedPath)")

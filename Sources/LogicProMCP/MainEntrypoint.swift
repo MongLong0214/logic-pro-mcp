@@ -1,3 +1,4 @@
+import Dispatch
 import Foundation
 
 protocol ServerStarting {
@@ -59,6 +60,16 @@ enum MainEntrypoint {
             writeStderr(status.summary + "\n")
             return status.allGranted ? 0 : 1
         }
+
+        // Install SIGTERM/SIGINT handlers for graceful shutdown
+        let signalSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        let intSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+        signal(SIGTERM, SIG_IGN)
+        signal(SIGINT, SIG_IGN)
+        signalSource.setEventHandler { exit(0) }
+        intSource.setEventHandler { exit(0) }
+        signalSource.resume()
+        intSource.resume()
 
         do {
             try await serverFactory().start()

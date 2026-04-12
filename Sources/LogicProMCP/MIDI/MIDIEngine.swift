@@ -217,12 +217,6 @@ actor MIDIEngine: CoreMIDIEngineProtocol {
         sendShortMessage([status, pressure & 0x7F])
     }
 
-    /// Polyphonic key pressure.
-    func sendPolyAftertouch(channel: UInt8 = 0, note: UInt8, pressure: UInt8) {
-        let status: UInt8 = 0xA0 | (channel & 0x0F)
-        sendShortMessage([status, note & 0x7F, pressure & 0x7F])
-    }
-
     // MARK: - Send: SysEx
 
     /// Send a complete SysEx message (must start with 0xF0 and end with 0xF7, middle bytes < 0x80).

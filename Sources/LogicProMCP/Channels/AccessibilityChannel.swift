@@ -23,13 +23,52 @@ actor AccessibilityChannel: Channel {
         let setCycleRange: @Sendable ([String: String]) -> ChannelResult
         let tracks: @Sendable () -> ChannelResult
         let selectedTrack: @Sendable () -> ChannelResult
-        let selectTrack: @Sendable ([String: String]) -> ChannelResult
+        let selectTrack: @Sendable ([String: String]) async -> ChannelResult
         let setTrackToggle: @Sendable ([String: String], String) -> ChannelResult
         let renameTrack: @Sendable ([String: String]) -> ChannelResult
         let mixerState: @Sendable () -> ChannelResult
         let channelStrip: @Sendable ([String: String]) -> ChannelResult
         let setMixerValue: @Sendable ([String: String], MixerTarget) -> ChannelResult
         let projectInfo: @Sendable () -> ChannelResult
+        let logicRuntime: AXLogicProElements.Runtime
+
+        init(
+            isTrusted: @escaping @Sendable () -> Bool,
+            isLogicProRunning: @escaping @Sendable () -> Bool,
+            appRoot: @escaping @Sendable () -> AXUIElement?,
+            transportState: @escaping @Sendable () -> ChannelResult,
+            toggleTransportButton: @escaping @Sendable (String) -> ChannelResult,
+            setTempo: @escaping @Sendable ([String: String]) -> ChannelResult,
+            setCycleRange: @escaping @Sendable ([String: String]) -> ChannelResult,
+            tracks: @escaping @Sendable () -> ChannelResult,
+            selectedTrack: @escaping @Sendable () -> ChannelResult,
+            selectTrack: @escaping @Sendable ([String: String]) async -> ChannelResult,
+            setTrackToggle: @escaping @Sendable ([String: String], String) -> ChannelResult,
+            renameTrack: @escaping @Sendable ([String: String]) -> ChannelResult,
+            mixerState: @escaping @Sendable () -> ChannelResult,
+            channelStrip: @escaping @Sendable ([String: String]) -> ChannelResult,
+            setMixerValue: @escaping @Sendable ([String: String], MixerTarget) -> ChannelResult,
+            projectInfo: @escaping @Sendable () -> ChannelResult,
+            logicRuntime: AXLogicProElements.Runtime = .production
+        ) {
+            self.isTrusted = isTrusted
+            self.isLogicProRunning = isLogicProRunning
+            self.appRoot = appRoot
+            self.transportState = transportState
+            self.toggleTransportButton = toggleTransportButton
+            self.setTempo = setTempo
+            self.setCycleRange = setCycleRange
+            self.tracks = tracks
+            self.selectedTrack = selectedTrack
+            self.selectTrack = selectTrack
+            self.setTrackToggle = setTrackToggle
+            self.renameTrack = renameTrack
+            self.mixerState = mixerState
+            self.channelStrip = channelStrip
+            self.setMixerValue = setMixerValue
+            self.projectInfo = projectInfo
+            self.logicRuntime = logicRuntime
+        }
 
         static func axBacked(
             isTrusted: @escaping @Sendable () -> Bool = AXIsProcessTrusted,
@@ -46,13 +85,14 @@ actor AccessibilityChannel: Channel {
                 setCycleRange: AccessibilityChannel.defaultSetCycleRange,
                 tracks: { AccessibilityChannel.defaultGetTracks(runtime: logicRuntime) },
                 selectedTrack: { AccessibilityChannel.defaultGetSelectedTrack(runtime: logicRuntime) },
-                selectTrack: { AccessibilityChannel.defaultSelectTrack(params: $0, runtime: logicRuntime) },
+                selectTrack: { await AccessibilityChannel.defaultSelectTrack(params: $0, runtime: logicRuntime) },
                 setTrackToggle: { AccessibilityChannel.defaultSetTrackToggle(params: $0, button: $1, runtime: logicRuntime) },
                 renameTrack: { AccessibilityChannel.defaultRenameTrack(params: $0, runtime: logicRuntime) },
                 mixerState: { AccessibilityChannel.defaultGetMixerState(runtime: logicRuntime) },
                 channelStrip: { AccessibilityChannel.defaultGetChannelStrip(params: $0, runtime: logicRuntime) },
                 setMixerValue: { AccessibilityChannel.defaultSetMixerValue(params: $0, target: $1, runtime: logicRuntime) },
-                projectInfo: { AccessibilityChannel.defaultGetProjectInfo(runtime: logicRuntime) }
+                projectInfo: { AccessibilityChannel.defaultGetProjectInfo(runtime: logicRuntime) },
+                logicRuntime: logicRuntime
             )
         }
 
@@ -109,7 +149,7 @@ actor AccessibilityChannel: Channel {
 
         // MARK: - Track mutations
         case "track.select":
-            return runtime.selectTrack(params)
+            return await runtime.selectTrack(params)
         case "track.set_mute":
             return runtime.setTrackToggle(params, "Mute")
         case "track.set_solo":
@@ -126,17 +166,33 @@ actor AccessibilityChannel: Channel {
             guard let path = params["path"] else {
                 return .error("Missing 'path' parameter for project.save_as")
             }
-            return await AccessibilityChannel.saveAsViaAXDialog(path: path)
+            return await AccessibilityChannel.saveAsViaAXDialog(path: path, runtime: runtime.logicRuntime)
 
         // MARK: - Track creation via menu click
         case "track.create_instrument":
-            return AccessibilityChannel.createTrackViaMenu(korean: "새로운 소프트웨어 악기 트랙", english: "New Software Instrument Track")
+            return await AccessibilityChannel.createTrackViaMenu(
+                korean: "새로운 소프트웨어 악기 트랙",
+                english: "New Software Instrument Track",
+                runtime: runtime.logicRuntime
+            )
         case "track.create_audio":
-            return AccessibilityChannel.createTrackViaMenu(korean: "새로운 오디오 트랙", english: "New Audio Track")
+            return await AccessibilityChannel.createTrackViaMenu(
+                korean: "새로운 오디오 트랙",
+                english: "New Audio Track",
+                runtime: runtime.logicRuntime
+            )
         case "track.create_drummer":
-            return AccessibilityChannel.createTrackViaMenu(korean: "새로운 Drummer 트랙", english: "New Drummer Track")
+            return await AccessibilityChannel.createTrackViaMenu(
+                korean: "새로운 Drummer 트랙",
+                english: "New Drummer Track",
+                runtime: runtime.logicRuntime
+            )
         case "track.create_external_midi":
-            return AccessibilityChannel.createTrackViaMenu(korean: "새로운 외부 MIDI 트랙", english: "New External MIDI Track")
+            return await AccessibilityChannel.createTrackViaMenu(
+                korean: "새로운 외부 MIDI 트랙",
+                english: "New External MIDI Track",
+                runtime: runtime.logicRuntime
+            )
 
         // MARK: - Mixer reads
         case "mixer.get_state":
@@ -291,7 +347,7 @@ actor AccessibilityChannel: Channel {
     private static func defaultSelectTrack(
         params: [String: String],
         runtime: AXLogicProElements.Runtime = .production
-    ) -> ChannelResult {
+    ) async -> ChannelResult {
         guard let indexStr = params["index"], let index = Int(indexStr) else {
             return .error("Missing or invalid 'index' parameter")
         }
@@ -301,7 +357,21 @@ actor AccessibilityChannel: Channel {
         guard AXHelpers.performAction(header, kAXPressAction, runtime: runtime.ax) else {
             return .error("Failed to select track \(index)")
         }
-        return .success("{\"selected\":\(index)}")
+
+        let verification = await verifyTrackSelection(index: index, runtime: runtime)
+        switch verification {
+        case .verified:
+            return .success("{\"selected\":\(index),\"verified\":true}")
+        case .selectionMetadataUnavailable:
+            return .success("{\"selected\":\(index),\"verified\":false}")
+        case .mismatch(let selectedIndex):
+            if let selectedIndex {
+                return .error("Track selection did not settle on index \(index); current selected index is \(selectedIndex)")
+            }
+            return .error("Track selection did not settle on index \(index)")
+        case .trackDisappeared:
+            return .error("Track at index \(index) disappeared during selection verification")
+        }
     }
 
     private static func defaultSetTrackToggle(
@@ -335,14 +405,60 @@ actor AccessibilityChannel: Channel {
               let name = params["name"] else {
             return .error("Missing 'index' or 'name' parameter")
         }
+        let truncatedName = String(name.prefix(255))
         guard let field = AXLogicProElements.findTrackNameField(trackIndex: index, runtime: runtime) else {
             return .error("Cannot find name field for track \(index)")
         }
         // Double-click to enter edit mode, then set value
         AXHelpers.performAction(field, kAXPressAction, runtime: runtime.ax)
-        AXHelpers.setAttribute(field, kAXValueAttribute, name as CFTypeRef, runtime: runtime.ax)
+        AXHelpers.setAttribute(field, kAXValueAttribute, truncatedName as CFTypeRef, runtime: runtime.ax)
         AXHelpers.performAction(field, kAXConfirmAction, runtime: runtime.ax)
-        return .success("{\"track\":\(index),\"name\":\"\(name)\"}")
+        return .success("{\"track\":\(index),\"name\":\"\(AppleScriptChannel.escapeJSON(truncatedName))\"}")
+    }
+
+    private enum TrackSelectionVerification {
+        case verified
+        case selectionMetadataUnavailable
+        case mismatch(selectedIndex: Int?)
+        case trackDisappeared
+    }
+
+    private static func verifyTrackSelection(
+        index: Int,
+        runtime: AXLogicProElements.Runtime
+    ) async -> TrackSelectionVerification {
+        var sawSelectionMetadata = false
+
+        for attempt in 0..<6 {
+            let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
+            guard index >= 0 && index < headers.count else {
+                return .trackDisappeared
+            }
+
+            let selectionStates = headers.enumerated().map { offset, header in
+                (offset, AXValueExtractors.extractSelectedState(header, runtime: runtime.ax))
+            }
+            if selectionStates.contains(where: { $0.1 != nil }) {
+                sawSelectionMetadata = true
+            }
+            if selectionStates[index].1 == true {
+                return .verified
+            }
+
+            if attempt < 5 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+        }
+
+        guard sawSelectionMetadata else {
+            return .selectionMetadataUnavailable
+        }
+
+        let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
+        let selectedIndex = headers.enumerated().first {
+            AXValueExtractors.extractSelectedState($0.element, runtime: runtime.ax) == true
+        }?.offset
+        return .mismatch(selectedIndex: selectedIndex)
     }
 
     // MARK: - Save As via AX Dialog
@@ -351,6 +467,11 @@ actor AccessibilityChannel: Channel {
         path: String,
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ChannelResult {
+        // Validate path before setting it into the AX dialog
+        guard AppleScriptSafety.isValidProjectPath(path, requireExisting: false) else {
+            return .error("save_as requires an absolute .logicx project path")
+        }
+
         // Step 1: Trigger Save As via menu click
         let koreanResult = clickMenuItem("다른 이름으로 저장…", menuName: "파일", runtime: runtime)
         let triggered = koreanResult.isSuccess
@@ -461,12 +582,56 @@ actor AccessibilityChannel: Channel {
         korean: String,
         english: String,
         runtime: AXLogicProElements.Runtime = .production
-    ) -> ChannelResult {
+    ) async -> ChannelResult {
+        guard AXLogicProElements.mainWindow(runtime: runtime) != nil else {
+            return .error("No document open for track creation")
+        }
+
+        let beforeCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
+
         // Try Korean locale first
         let result = clickTrackMenu(korean, menuName: "트랙", englishMenuName: "Track", runtime: runtime)
-        if result.isSuccess { return result }
+        if result.isSuccess {
+            return await verifyTrackCreation(
+                title: korean,
+                beforeCount: beforeCount,
+                runtime: runtime
+            )
+        }
         // Fallback: English locale with English item title
-        return clickTrackMenu(english, menuName: "Track", englishMenuName: "Track", runtime: runtime)
+        let fallback = clickTrackMenu(english, menuName: "Track", englishMenuName: "Track", runtime: runtime)
+        guard fallback.isSuccess else { return fallback }
+        return await verifyTrackCreation(
+            title: english,
+            beforeCount: beforeCount,
+            runtime: runtime
+        )
+    }
+
+    private static func verifyTrackCreation(
+        title: String,
+        beforeCount: Int,
+        runtime: AXLogicProElements.Runtime
+    ) async -> ChannelResult {
+        var lastObservedCount = beforeCount
+
+        for attempt in 0..<4 {
+            let currentCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
+            lastObservedCount = currentCount
+            if currentCount > beforeCount {
+                return .success(
+                    "{\"menu_clicked\":\"\(AppleScriptChannel.escapeJSON(title))\",\"verified\":true,\"track_count_before\":\(beforeCount),\"track_count_after\":\(currentCount)}"
+                )
+            }
+
+            if attempt < 3 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+
+        return .error(
+            "Track creation did not increase visible track count after menu click '\(title)' (before: \(beforeCount), after: \(lastObservedCount))"
+        )
     }
 
     private static func clickTrackMenu(
