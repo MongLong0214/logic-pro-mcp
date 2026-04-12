@@ -236,9 +236,9 @@ private func makeCGEventRuntime(
     #expect(events[0].flags == .maskCommand)
 }
 
-@Test func testProjectNewRoutingUsesCGEvent() {
+@Test func testProjectNewRoutingPrefersAppleScriptWithCGEventFallback() {
     let routes = ChannelRouter.v2RoutingTable["project.new"]
     #expect(routes != nil)
+    #expect(routes?.first == .appleScript)
     #expect(routes?.contains(.cgEvent) == true)
-    #expect(routes?.contains(.appleScript) == false)
 }

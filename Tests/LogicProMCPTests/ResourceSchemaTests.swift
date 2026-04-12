@@ -30,12 +30,8 @@ private func toolText(_ result: CallTool.Result) -> String {
     return "{}"
 }
 
-private func parseJSON(_ text: String) throws -> Any {
-    try JSONSerialization.jsonObject(with: Data(text.utf8))
-}
-
 private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
-    var json = try parseJSON(text) as! [String: Any]
+    var json = try sharedParseJSON(text) as! [String: Any]
 
     if var cache = json["cache"] as? [String: Any] {
         cache.removeValue(forKey: "transport_age_sec")
@@ -47,6 +43,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
         json["mcu"] = mcu
     }
 
+    json.removeValue(forKey: "logic_pro_version")
     json.removeValue(forKey: "process")
     return json
 }
@@ -59,7 +56,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     let router = ChannelRouter()
 
     let result = try! await ResourceHandlers.read(uri: "logic://tracks", cache: cache, router: router)
-    let json = try! parseJSON(resourceText(result)) as! [[String: Any]]
+    let json = try! sharedParseJSON(resourceText(result)) as! [[String: Any]]
     #expect(json.count == 1)
     #expect(json[0]["automationMode"] as? String == "touch")
 }
@@ -71,7 +68,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     await cache.updateTracks([track])
 
     let result = try! await ResourceHandlers.read(uri: "logic://tracks", cache: cache, router: ChannelRouter())
-    let json = try! parseJSON(resourceText(result)) as! [[String: Any]]
+    let json = try! sharedParseJSON(resourceText(result)) as! [[String: Any]]
     #expect(json.count == 1)
     #expect(json[0]["automationMode"] as? String == "trim")
 }
@@ -88,7 +85,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     let router = ChannelRouter()
 
     let result = try! await ResourceHandlers.read(uri: "logic://transport/state", cache: cache, router: router)
-    let json = try! parseJSON(resourceText(result)) as! [String: Any]
+    let json = try! sharedParseJSON(resourceText(result)) as! [String: Any]
     #expect(json["isPlaying"] as? Bool == true)
     #expect(json["isCycleEnabled"] as? Bool == true)
     #expect(json["tempo"] as? Double == 128.5)
@@ -108,7 +105,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     let router = ChannelRouter()
 
     let result = try! await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router)
-    let json = try! parseJSON(resourceText(result)) as! [String: Any]
+    let json = try! sharedParseJSON(resourceText(result)) as! [String: Any]
     #expect(json["mcu_connected"] as? Bool == true)
     #expect(json["registered"] as? Bool == true)
     #expect((json["strips"] as? [[String: Any]])?.count == 1)
@@ -123,7 +120,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     let router = ChannelRouter()
 
     let result = try! await ResourceHandlers.read(uri: "logic://tracks/1", cache: cache, router: router)
-    let json = try! parseJSON(resourceText(result)) as! [String: Any]
+    let json = try! sharedParseJSON(resourceText(result)) as! [String: Any]
     #expect(json["id"] as? Int == 1)
     #expect(json["name"] as? String == "Bass")
     #expect(json["type"] as? String == "software_instrument")
@@ -139,6 +136,24 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     }
 }
 
+@Test func testTracksAndProjectResourcesRejectReadsWhenNoDocumentOpen() async {
+    let cache = StateCache()
+    let router = ChannelRouter()
+    await cache.updateDocumentState(false)
+
+    await #expect(throws: MCPError.self) {
+        try await ResourceHandlers.read(uri: "logic://tracks", cache: cache, router: router)
+    }
+
+    await #expect(throws: MCPError.self) {
+        try await ResourceHandlers.read(uri: "logic://project/info", cache: cache, router: router)
+    }
+
+    await #expect(throws: MCPError.self) {
+        try await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router)
+    }
+}
+
 @Test func testHealthResponseMCUFields() async {
     let cache = StateCache()
     var conn = MCUConnectionState()
@@ -150,7 +165,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     let router = ChannelRouter()
 
     let result = await SystemDispatcher.handle(command: "health", params: [:], router: router, cache: cache)
-    let json = try! parseJSON(toolText(result)) as! [String: Any]
+    let json = try! sharedParseJSON(toolText(result)) as! [String: Any]
     let mcu = (json["mcu"] as? [String: Any]) ?? [:]
     let connected = mcu["connected"] as? Bool
     let registered = mcu["registered_as_device"] as? Bool
@@ -167,7 +182,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     let router = ChannelRouter()
 
     let result = await SystemDispatcher.handle(command: "health", params: [:], router: router, cache: cache)
-    let json = try! parseJSON(toolText(result)) as! [String: Any]
+    let json = try! sharedParseJSON(toolText(result)) as! [String: Any]
     let process = (json["process"] as? [String: Any]) ?? [:]
     let memoryMB = process["memory_mb"] as? Double
     let cpuPercent = process["cpu_percent"] as? Double
@@ -185,7 +200,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     let router = ChannelRouter()
 
     let result = try! await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router)
-    let json = try! parseJSON(resourceText(result)) as! [String: Any]
+    let json = try! sharedParseJSON(resourceText(result)) as! [String: Any]
     let strips = (json["strips"] as? [[String: Any]]) ?? []
     let firstStrip = strips.first ?? [:]
     let plugins = (firstStrip["plugins"] as? [[String: Any]]) ?? []
@@ -207,7 +222,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     let router = ChannelRouter()
 
     let result = try! await ResourceHandlers.read(uri: "logic://project/info", cache: cache, router: router)
-    let json = try! parseJSON(resourceText(result)) as! [String: Any]
+    let json = try! sharedParseJSON(resourceText(result)) as! [String: Any]
     #expect(json["name"] as? String == "Commercial Mix")
     #expect(json["sampleRate"] as? Int == 48000)
     #expect(json["bitDepth"] as? Int == 32)
@@ -223,7 +238,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
 
     let result = try! await ResourceHandlers.read(uri: "logic://midi/ports", cache: cache, router: router)
 
-    let json = try! parseJSON(resourceText(result)) as! [String: Any]
+    let json = try! sharedParseJSON(resourceText(result)) as! [String: Any]
     #expect(json["message"] as? String == "Mock: midi.list_ports")
     let ops = await coreMIDI.executedOps
     #expect(ops.count == 1)
@@ -234,7 +249,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     let cache = StateCache()
     let router = ChannelRouter()
     let result = await SystemDispatcher.handle(command: "health", params: [:], router: router, cache: cache)
-    let json = try! parseJSON(toolText(result)) as! [String: Any]
+    let json = try! sharedParseJSON(toolText(result)) as! [String: Any]
     let mcu = (json["mcu"] as? [String: Any]) ?? [:]
     let connected = mcu["connected"] as? Bool
     let registered = mcu["registered_as_device"] as? Bool
@@ -256,7 +271,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     await router.register(mockChannel)
 
     let result = await SystemDispatcher.handle(command: "health", params: [:], router: router, cache: cache)
-    let json = try! parseJSON(toolText(result)) as! [String: Any]
+    let json = try! sharedParseJSON(toolText(result)) as! [String: Any]
     #expect(json["logic_pro_running"] as? Bool != nil)
     #expect(json["logic_pro_version"] as? String != nil)
     #expect(json["mcu"] as? [String: Any] != nil)
@@ -284,7 +299,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     )))
 
     let result = await SystemDispatcher.handle(command: "health", params: [:], router: router, cache: cache)
-    let json = try! parseJSON(toolText(result)) as! [String: Any]
+    let json = try! sharedParseJSON(toolText(result)) as! [String: Any]
     let channels = (json["channels"] as? [[String: Any]]) ?? []
     let byName: [String: [String: Any]] = Dictionary(uniqueKeysWithValues: channels.compactMap { entry in
         guard let name = entry["channel"] as? String else { return nil }

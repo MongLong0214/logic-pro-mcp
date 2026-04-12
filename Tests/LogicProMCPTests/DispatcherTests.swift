@@ -3,15 +3,7 @@ import Foundation
 import MCP
 @testable import LogicProMCP
 
-private func dispatcherText(_ result: CallTool.Result) -> String {
-    guard let content = result.content.first else { return "" }
-    switch content {
-    case .text(let text, _, _):
-        return text
-    default:
-        return ""
-    }
-}
+private let dispatcherText = sharedToolText
 
 private func expectExecutedOp(
     _ actual: (String, [String: String]),
@@ -839,13 +831,12 @@ private actor FailingExecuteChannel: Channel {
     let keyCmdOps = await keyCmd.executedOps
     let appleScriptOps = await appleScript.executedOps
     let cgEventOps = await cgEvent.executedOps
-    expectExecutedOps(cgEventOps, equals: [
-        ("project.new", [:]),
-    ])
+    expectExecutedOps(cgEventOps, equals: [])
     expectExecutedOps(keyCmdOps, equals: [
         ("project.bounce", [:]),
     ])
     expectExecutedOps(appleScriptOps, equals: [
+        ("project.new", [:]),
         ("project.open", ["path": existingPath]),
         ("project.save_as", ["path": saveAsPath]),
         ("project.close", [:]),

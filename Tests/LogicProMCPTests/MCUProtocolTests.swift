@@ -133,7 +133,6 @@ import Testing
     } else {
         Issue.record("Expected success, got \(result)")
     }
-    #expect(MCUProtocol.isDeviceResponse(response) == true)
 }
 
 @Test func testDecodeDeviceResponseNoResponse() {

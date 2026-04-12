@@ -3,32 +3,9 @@ import MCP
 import Testing
 @testable import LogicProMCP
 
-private func serverToolText(_ result: CallTool.Result) -> String {
-    guard let content = result.content.first else { return "" }
-    switch content {
-    case .text(let text, _, _):
-        return text
-    default:
-        return ""
-    }
-}
-
-private func serverResourceText(_ result: ReadResource.Result) -> String {
-    guard let content = result.contents.first else { return "" }
-    return content.text ?? ""
-}
-
-private actor ServerStartRecorder {
-    var events: [String] = []
-
-    func record(_ event: String) {
-        events.append(event)
-    }
-
-    func snapshot() -> [String] {
-        events
-    }
-}
+private let serverToolText = sharedToolText
+private let serverResourceText = sharedResourceText
+// ServerStartRecorder lives in SharedTestHelpers (SharedServerStartRecorder, aliased via EndToEndTests)
 
 @Test func testLogicProServerHandlersListCatalogAndTemplates() async {
     let server = LogicProServer()

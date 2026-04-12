@@ -3,17 +3,7 @@ import MCP
 import Testing
 @testable import LogicProMCP
 
-private func toolText(_ result: CallTool.Result) -> String {
-    guard let first = result.content.first else { return "" }
-    switch first {
-    case .text(let text, _, _):
-        return text
-    case .resource(let resource, _, _):
-        return resource.text ?? ""
-    default:
-        return ""
-    }
-}
+private let toolText = sharedToolText
 
 @Test func testTransportDispatcherGotoPositionBarFormatsBarPosition() async {
     let router = ChannelRouter()

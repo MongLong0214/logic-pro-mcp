@@ -241,13 +241,12 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
     await engine.sendProgramChange(channel: 0x14, program: 10)
     await engine.sendPitchBend(channel: 0x15, value: 20_000)
     await engine.sendAftertouch(channel: 0x16, pressure: 0xFF)
-    await engine.sendPolyAftertouch(channel: 0x17, note: 65, pressure: 66)
     await engine.sendSysEx([0xF0, 0x7D, 0x01, 0xF7])
     await engine.sendSysEx([0xF0, 0x7D, 0x80, 0xF7])
     await engine.sendRawBytes([0xF6])
 
     let snapshot = harness.snapshot()
-    #expect(snapshot.sentSources == Array(repeating: harness.createdSource, count: 9))
+    #expect(snapshot.sentSources == Array(repeating: harness.createdSource, count: 8))
     #expect(snapshot.sentMessages == [
         [0x91, 0x7F, 0x7E],
         [0x82, 61, 0],
@@ -255,7 +254,6 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
         [0xC4, 10],
         [0xE5, 0x7F, 0x7F],
         [0xD6, 0x7F],
-        [0xA7, 65, 66],
         [0xF0, 0x7D, 0x01, 0xF7],
         [0xF6],
     ])

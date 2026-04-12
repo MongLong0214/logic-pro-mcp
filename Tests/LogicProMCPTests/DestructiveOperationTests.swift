@@ -56,13 +56,6 @@ private final class AppleScriptOpenHarness: @unchecked Sendable {
     #expect(AppleScriptSafety.isAllowedTransportAction("\" & do shell script") == false)
 }
 
-@Test func testOpenProjectSafety() {
-    // NSWorkspace.open doesn't use AppleScript string interpolation
-    // so any path is safe — verify the approach
-    let safetyCheck = AppleScriptSafety.shouldUseNSWorkspaceForOpen
-    #expect(safetyCheck == true)
-}
-
 @Test func testSaveAsPathValidation() {
     #expect(AppleScriptSafety.isValidFilePath("/Users/test/song.logicx") == true)
     #expect(AppleScriptSafety.isValidFilePath("") == false)

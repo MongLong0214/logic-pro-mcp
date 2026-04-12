@@ -240,7 +240,9 @@ private func makeAXBackedAccessibilityChannel(
     decoder.dateDecodingStrategy = .iso8601
     let transportState = try decoder.decode(TransportState.self, from: Data(transportResult.message.utf8))
     #expect(transportState.isPlaying)
-    #expect(transportState.tempo == 128.5)
+    // Tempo field (AXTextField, "120.0") is now included alongside static text ("128.5 BPM");
+    // the text field value overrides because it appears later in the combined list.
+    #expect(transportState.tempo == 120.0)
     #expect(transportState.position == "9.1.1.1")
 
     let toggleResult = await channel.execute(operation: "transport.toggle_cycle", params: [:])
@@ -310,6 +312,84 @@ private func makeAXBackedAccessibilityChannel(
     #expect(pressFailure.message.contains("Failed to press transport button"))
 }
 
+@Test func testAccessibilityChannelCreateInstrumentVerifiesTrackCountIncrease() async {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(180)
+    let window = builder.element(181)
+    let menuBar = builder.element(182)
+    let trackMenu = builder.element(183)
+    let createItem = builder.element(184)
+    let trackList = builder.element(185)
+    let trackHeader = builder.element(186)
+    let createdTrackHeader = builder.element(187)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setChildren(window, [trackList])
+    builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setChildren(trackList, [trackHeader])
+
+    builder.setChildren(menuBar, [trackMenu])
+    builder.setAttribute(trackMenu, kAXTitleAttribute as String, "트랙")
+    builder.setChildren(trackMenu, [createItem])
+    builder.setAttribute(createItem, kAXTitleAttribute as String, "새로운 소프트웨어 악기 트랙")
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            if builder.elementID(element) == builder.elementID(createItem), action == kAXPressAction as String {
+                builder.setChildren(trackList, [trackHeader, createdTrackHeader])
+            }
+            return true
+        }
+    )
+    let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app, logicRuntime: runtime)
+
+    let result = await channel.execute(operation: "track.create_instrument", params: [:])
+
+    #expect(result.isSuccess)
+    #expect(result.message.contains("\"verified\":true"))
+    #expect(result.message.contains("\"track_count_before\":1"))
+    #expect(result.message.contains("\"track_count_after\":2"))
+}
+
+@Test func testAccessibilityChannelCreateInstrumentFailsWhenTrackCountDoesNotIncrease() async {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(190)
+    let window = builder.element(191)
+    let menuBar = builder.element(192)
+    let trackMenu = builder.element(193)
+    let createItem = builder.element(194)
+    let trackList = builder.element(195)
+    let trackHeader = builder.element(196)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setChildren(window, [trackList])
+    builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setChildren(trackList, [trackHeader])
+
+    builder.setChildren(menuBar, [trackMenu])
+    builder.setAttribute(trackMenu, kAXTitleAttribute as String, "트랙")
+    builder.setChildren(trackMenu, [createItem])
+    builder.setAttribute(createItem, kAXTitleAttribute as String, "새로운 소프트웨어 악기 트랙")
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { _, _ in true }
+    )
+    let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app, logicRuntime: runtime)
+
+    let result = await channel.execute(operation: "track.create_instrument", params: [:])
+
+    #expect(!result.isSuccess)
+    #expect(result.message.contains("Track creation did not increase visible track count"))
+}
+
 @Test func testAccessibilityChannelAXBackedTrackDefaultsUseFakeAXTree() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(200)
@@ -375,6 +455,74 @@ private func makeAXBackedAccessibilityChannel(
     #expect(renameResult.isSuccess)
     #expect((builder.attributeValue(nameField, kAXValueAttribute as String) as? String) == "Lead")
     #expect(builder.actionCalls.contains { $0.elementID == builder.elementID(nameField) && $0.action == kAXConfirmAction as String })
+}
+
+@Test func testAccessibilityChannelAXBackedTrackSelectVerifiesReadbackWhenSelectionMetadataExists() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(600)
+    let window = builder.element(601)
+    let trackList = builder.element(602)
+    let firstHeader = builder.element(603)
+    let secondHeader = builder.element(604)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [trackList])
+    builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setChildren(trackList, [firstHeader, secondHeader])
+    builder.setAttribute(firstHeader, kAXTitleAttribute as String, "Track 1")
+    builder.setAttribute(firstHeader, kAXSelectedAttribute as String, true)
+    builder.setAttribute(secondHeader, kAXTitleAttribute as String, "Track 2")
+    builder.setAttribute(secondHeader, kAXSelectedAttribute as String, false)
+
+    let logicRuntime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            guard action == kAXPressAction as String else { return true }
+            if element == secondHeader {
+                builder.setAttribute(firstHeader, kAXSelectedAttribute as String, false)
+                builder.setAttribute(secondHeader, kAXSelectedAttribute as String, true)
+            }
+            return true
+        }
+    )
+
+    let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app, logicRuntime: logicRuntime)
+    let selectResult = await channel.execute(operation: "track.select", params: ["index": "1"])
+    #expect(selectResult.isSuccess)
+    #expect(selectResult.message.contains("\"verified\":true"))
+
+    let selectedResult = await channel.execute(operation: "track.get_selected", params: [:])
+    #expect(selectedResult.isSuccess)
+    let decoder = JSONDecoder()
+    let selectedTrack = try decoder.decode(TrackState.self, from: Data(selectedResult.message.utf8))
+    #expect(selectedTrack.id == 1)
+    #expect(selectedTrack.isSelected)
+}
+
+@Test func testAccessibilityChannelAXBackedTrackSelectFailsWhenVerifiedSelectionSettlesElsewhere() async {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(610)
+    let window = builder.element(611)
+    let trackList = builder.element(612)
+    let firstHeader = builder.element(613)
+    let secondHeader = builder.element(614)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [trackList])
+    builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setChildren(trackList, [firstHeader, secondHeader])
+    builder.setAttribute(firstHeader, kAXTitleAttribute as String, "Track 1")
+    builder.setAttribute(firstHeader, kAXSelectedAttribute as String, true)
+    builder.setAttribute(secondHeader, kAXTitleAttribute as String, "Track 2")
+    builder.setAttribute(secondHeader, kAXSelectedAttribute as String, false)
+
+    let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app)
+    let selectResult = await channel.execute(operation: "track.select", params: ["index": "1"])
+    #expect(!selectResult.isSuccess)
+    #expect(selectResult.message.contains("did not settle on index 1"))
 }
 
 @Test func testAccessibilityChannelAXBackedTrackErrorPaths() async {

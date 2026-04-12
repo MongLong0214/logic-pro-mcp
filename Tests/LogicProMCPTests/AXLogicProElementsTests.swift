@@ -152,6 +152,22 @@ import Testing
     #expect(AXLogicProElements.findTransportButton(named: "Stop", runtime: runtime) == nil)
 }
 
+@Test func testAXLogicProElementsDoesNotTreatPlainWindowAsTransportWithoutTransportSignature() {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(40)
+    let window = builder.element(41)
+    let genericGroup = builder.element(42)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [genericGroup])
+    builder.setAttribute(genericGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(genericGroup, kAXIdentifierAttribute as String, "Inspector")
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+
+    #expect(AXLogicProElements.getTransportBar(runtime: runtime) == nil)
+}
+
 @Test func testAXLogicProElementsOutlineAndTextFieldFallbacks() {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(31)

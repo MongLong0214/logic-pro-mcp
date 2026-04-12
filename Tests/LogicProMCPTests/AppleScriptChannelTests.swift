@@ -124,7 +124,7 @@ private func makeAppleScriptRuntime(
     #expect(openRecorder.snapshot() == [path])
     let scripts = await scriptRecorder.snapshot()
     #expect(scripts.count == 1)
-    #expect(scripts[0].contains("POSIX path of (path of front document)"))
+    #expect(scripts[0].contains("path of front document as text"))
     #expect(scripts[0].contains(path))
 
     await scriptRecorder.setResult(.error("front document never changed"))
@@ -137,6 +137,91 @@ private func makeAppleScriptRuntime(
     let failed = await channel.execute(operation: "project.open", params: ["path": path])
     #expect(!failed.isSuccess)
     #expect(failed.message == "Failed to open: \(path)")
+}
+
+@Test func testAppleScriptProjectOpenRetriesAfterClosingCurrentDocument() async {
+    let openRecorder = OpenFileRecorder()
+    let path = "/tmp/reopen.logicx"
+    let channel = AppleScriptChannel(
+        runtime: .init(
+            isLogicProRunning: { true },
+            openFile: { openRecorder.open($0) },
+            runScript: { source in
+                if source.contains("close front document") {
+                    return .success("OK")
+                }
+                if source.contains("return path of front document as text") {
+                    return .success("/tmp/other.logicx")
+                }
+                if source.contains("path of front document as text") {
+                    return openRecorder.snapshot().count == 1
+                        ? .error("front document never changed")
+                        : .success("opened")
+                }
+                return .success("OK")
+            },
+            executeTransportAction: { _ in .success("OK") }
+        )
+    )
+
+    let result = await channel.execute(operation: "project.open", params: ["path": path])
+    #expect(result.isSuccess)
+    #expect(result.message == "Opened: \(path)")
+    #expect(openRecorder.snapshot() == [path, path])
+}
+
+@Test func testAppleScriptProjectOpenDoesNotPreemptivelyCloseCurrentDocument() async {
+    let openRecorder = OpenFileRecorder()
+    let path = "/tmp/failed.logicx"
+    let recorder = AppleScriptRecorder()
+    await recorder.setResult(.error("Timed out waiting for Logic Pro to open the requested project"))
+    let channel = AppleScriptChannel(
+        runtime: .init(
+            isLogicProRunning: { true },
+            openFile: { openRecorder.open($0) },
+            runScript: { source in
+                if source.contains("return path of front document as text") {
+                    return .success("")
+                }
+                return await recorder.run(source)
+            },
+            executeTransportAction: { _ in .success("OK") }
+        )
+    )
+
+    let result = await channel.execute(operation: "project.open", params: ["path": path])
+    #expect(!result.isSuccess)
+    #expect(result.message.contains("Failed to verify opened project"))
+    let scripts = await recorder.snapshot()
+    #expect(!scripts.contains(where: { $0.contains("close front document") }))
+}
+
+@Test func testAppleScriptProjectOpenRestoresPreviousSavedProjectAfterRetryFailure() async {
+    let openRecorder = OpenFileRecorder()
+    let path = "/tmp/failed.logicx"
+    let previous = "/tmp/previous.logicx"
+    let recorder = AppleScriptRecorder()
+    await recorder.setResult(.error("Timed out waiting for Logic Pro to open the requested project"))
+    let channel = AppleScriptChannel(
+        runtime: .init(
+            isLogicProRunning: { true },
+            openFile: { openRecorder.open($0) },
+            runScript: { source in
+                if source.contains("return path of front document as text") {
+                    return .success(previous)
+                }
+                if source.contains("close front document") {
+                    return .success("OK")
+                }
+                return await recorder.run(source)
+            },
+            executeTransportAction: { _ in .success("OK") }
+        )
+    )
+
+    let result = await channel.execute(operation: "project.open", params: ["path": path])
+    #expect(!result.isSuccess)
+    #expect(openRecorder.snapshot() == [path, path, previous])
 }
 
 @Test func testAppleScriptProjectCommandsGenerateExpectedScripts() async {
