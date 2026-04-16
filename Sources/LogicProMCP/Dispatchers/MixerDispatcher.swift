@@ -4,7 +4,7 @@ import MCP
 struct MixerDispatcher {
     static let tool = commandTool(
         name: "logic_mixer",
-        description: "Mixer actions in Logic Pro. Commands: set_volume, set_pan, set_master_volume, insert_plugin, bypass_plugin, set_plugin_param. Params: set_volume -> { track: Int, value: Float }; set_pan -> { track: Int, value: Float }; set_master_volume -> { value: Float }; insert_plugin -> { track: Int, slot: Int, name: String }; bypass_plugin -> { track: Int, slot: Int, bypassed: Bool }; set_plugin_param -> { track: Int, insert: 0, param: Int, value: Float } on the selected track via Scripter.",
+        description: "Mixer actions in Logic Pro. Commands: set_volume, set_pan, set_master_volume, set_plugin_param. Params: set_volume -> { track: Int, value: Float }; set_pan -> { track: Int, value: Float }; set_master_volume -> { value: Float }; set_plugin_param -> { track: Int, insert: 0, param: Int, value: Float } on the selected track via Scripter.",
         commandDescription: "Mixer command to execute"
     )
 
@@ -71,19 +71,16 @@ struct MixerDispatcher {
         case "reset_strip":
             return toolTextResult("reset_strip is not exposed in the production MCP contract", isError: true)
 
-        case "insert_plugin":
-            return await routedTextResult(router, operation: "plugin.insert", params: [
-                "track_index": String(intParam(params, "track", "track_index")),
-                "plugin_name": stringParam(params, "name", "plugin_name"),
-                "slot": String(intParam(params, "slot")),
-            ])
-
-        case "bypass_plugin":
-            return await routedTextResult(router, operation: "plugin.bypass", params: [
-                "track_index": String(intParam(params, "track", "track_index")),
-                "slot": String(intParam(params, "slot")),
-                "bypassed": String(boolParam(params, "bypassed", default: true)),
-            ])
+        case "insert_plugin", "bypass_plugin":
+            // Removed from the public surface: every channel that the router
+            // once considered for plugin.insert / plugin.bypass (accessibility,
+            // MCU) returns an error, so callers always got a failure dressed
+            // up as a feature. Use set_plugin_param on a selected track via
+            // Scripter for deterministic plugin parameter control instead.
+            return toolTextResult(
+                "\(command) is not exposed in the production MCP contract; use set_plugin_param via Scripter on the selected track instead",
+                isError: true
+            )
 
         case "set_plugin_param":
             let track = intParam(params, "track")
@@ -110,7 +107,7 @@ struct MixerDispatcher {
 
         default:
             return toolTextResult(
-                "Unknown mixer command: \(command). Available: set_volume, set_pan, set_master_volume, insert_plugin, bypass_plugin, set_plugin_param",
+                "Unknown mixer command: \(command). Available: set_volume, set_pan, set_master_volume, set_plugin_param",
                 isError: true
             )
         }

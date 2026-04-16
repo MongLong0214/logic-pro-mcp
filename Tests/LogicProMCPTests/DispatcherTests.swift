@@ -357,7 +357,11 @@ private actor FailingExecuteChannel: Channel {
     #expect(axOps.isEmpty)
 }
 
-@Test func testMixerDispatcherPluginCommandsRouteCorrectly() async {
+@Test func testMixerDispatcherPluginCommandsReturnNotExposed() async {
+    // insert_plugin / bypass_plugin were removed from the public contract
+    // because every channel that could handle them (AX, MCU) returned
+    // "not yet implemented" errors. The dispatcher must now short-circuit
+    // with an explicit non-exposure error and MUST NOT touch any channel.
     let router = ChannelRouter()
     let ax = MockChannel(id: .accessibility)
     let mcu = MockChannel(id: .mcu)
@@ -378,12 +382,18 @@ private actor FailingExecuteChannel: Channel {
         cache: cache
     )
 
-    #expect(!insertResult.isError!)
-    #expect(!bypassResult.isError!)
+    #expect(insertResult.isError == true)
+    #expect(bypassResult.isError == true)
+    if case .text(let text, _, _) = insertResult.content.first {
+        #expect(text.contains("insert_plugin"))
+        #expect(text.contains("not exposed"))
+    } else {
+        Issue.record("Expected text content for insert_plugin error")
+    }
     let axOps = await ax.executedOps
     let mcuOps = await mcu.executedOps
-    expectExecutedOps(axOps, equals: [("plugin.insert", ["track_index": "7", "plugin_name": "Compressor", "slot": "2"])])
-    expectExecutedOps(mcuOps, equals: [("plugin.bypass", ["track_index": "7", "slot": "2", "bypassed": "false"])])
+    #expect(axOps.isEmpty)
+    #expect(mcuOps.isEmpty)
 }
 
 @Test func testMixerDispatcherUnknown() async {
