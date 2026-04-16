@@ -121,6 +121,35 @@ import Testing
     #expect(tracks[1].isSelected == false)
 }
 
+@Test func testFeedbackParserSelectOnEnforcesSingleSelection() async {
+    let cache = StateCache()
+    let parser = MCUFeedbackParser(cache: cache)
+
+    // Pre-populate with a stale multi-selection that must be cleared the
+    // moment Logic Pro reports a new select event.
+    await cache.updateTracks((0..<8).map { index in
+        var track = TrackState(id: index, name: "Track \(index)", type: .audio)
+        track.isSelected = (index == 0 || index == 3)
+        return track
+    })
+
+    // Note 0x1A = select button on strip 2, velocity 0x7F = "on".
+    await parser.handle(.noteOn(channel: 0, note: 0x1A, velocity: 0x7F))
+
+    let tracks = await cache.getTracks()
+    for (i, track) in tracks.enumerated() {
+        #expect(track.isSelected == (i == 2), "track \(i) selection mismatch")
+    }
+    #expect(await cache.getSelectedTrack()?.id == 2)
+
+    // A subsequent on-event for a different strip must transfer selection,
+    // not add a second selected track.
+    await parser.handle(.noteOn(channel: 0, note: 0x1D, velocity: 0x7F))
+    let after = await cache.getTracks()
+    #expect(after.filter { $0.isSelected }.count == 1)
+    #expect(after[5].isSelected == true)
+}
+
 @Test func testFeedbackParserIgnoresControlChangeAndDefaultEventsAfterUpdatingConnection() async {
     let cache = StateCache()
     let parser = MCUFeedbackParser(cache: cache)

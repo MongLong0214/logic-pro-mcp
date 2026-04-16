@@ -100,3 +100,41 @@ import Testing
     #expect(tracks.isEmpty)
     #expect(strips.isEmpty)
 }
+
+@Test func testStateCacheClearResetsTransport() async {
+    let cache = StateCache()
+    await cache.updateTransport(
+        TransportState(
+            isPlaying: true,
+            isRecording: true,
+            tempo: 128.5,
+            position: "5.3.2.1"
+        )
+    )
+    await cache.updateProject(ProjectInfo(name: "Stale Project", trackCount: 3))
+
+    await cache.clearProjectState()
+
+    let transport = await cache.getTransport()
+    let project = await cache.getProject()
+    #expect(transport.isPlaying == false)
+    #expect(transport.isRecording == false)
+    #expect(transport.position == "1.1.1.1")
+    #expect(transport.tempo == 120.0)
+    #expect(project.name == "")
+}
+
+@Test func testStateCacheSelectOnlyEnforcesSingleSelection() async {
+    let cache = StateCache()
+    await cache.updateTrack(at: 0) { $0.isSelected = true }
+    await cache.updateTrack(at: 1) { $0.isSelected = true }
+    await cache.updateTrack(at: 2) { $0.isSelected = true }
+
+    await cache.selectOnly(trackAt: 1)
+
+    let tracks = await cache.getTracks()
+    #expect(tracks[0].isSelected == false)
+    #expect(tracks[1].isSelected == true)
+    #expect(tracks[2].isSelected == false)
+    #expect(await cache.getSelectedTrack()?.id == 1)
+}

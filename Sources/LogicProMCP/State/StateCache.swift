@@ -56,6 +56,7 @@ actor StateCache {
         channelStrips = []
         regions = []
         markers = []
+        transport = TransportState()
     }
 
     // MARK: - Write access (poller calls these)
@@ -93,6 +94,17 @@ actor StateCache {
         ensureTrackExists(at: index)
         guard tracks.indices.contains(index) else { return }
         mutator(&tracks[index])
+    }
+
+    /// Mark exactly one track as selected, clearing the flag on every other
+    /// track. Mirrors Logic Pro's single-selection model so the cache never
+    /// reports two tracks selected at once.
+    func selectOnly(trackAt index: Int) {
+        ensureTrackExists(at: index)
+        guard tracks.indices.contains(index) else { return }
+        for i in tracks.indices {
+            tracks[i].isSelected = (i == index)
+        }
     }
 
     func updateChannelStrips(_ strips: [ChannelStripState]) {

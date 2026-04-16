@@ -85,7 +85,15 @@ actor MCUFeedbackParser {
         case .recArm:
             await cache.updateTrack(at: trackIndex) { $0.isArmed = button.on }
         case .select:
-            await cache.updateTrack(at: trackIndex) { $0.isSelected = button.on }
+            // Logic Pro enforces single-track selection. A strip going
+            // "on" implicitly deselects every other strip; we model that
+            // by clearing all flags before setting this one. Strip going
+            // "off" just clears that one strip.
+            if button.on {
+                await cache.selectOnly(trackAt: trackIndex)
+            } else {
+                await cache.updateTrack(at: trackIndex) { $0.isSelected = false }
+            }
         default:
             break
         }
