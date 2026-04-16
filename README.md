@@ -114,14 +114,15 @@ toggle_cycle, toggle_metronome, set_tempo, goto_position
 <summary><code>logic_mixer</code> — Mixer & plugin control</summary>
 
 ```
-set_volume, set_pan, set_master_volume,
-set_plugin_param, insert_plugin, bypass_plugin
+set_volume, set_pan, set_master_volume, set_plugin_param
 ```
 
 ```json
 {"command": "set_volume", "params": {"track": 2, "value": 0.75}}
 {"command": "set_plugin_param", "params": {"track": 1, "insert": 0, "param": 3, "value": 0.65}}
 ```
+
+> `insert_plugin` and `bypass_plugin` were removed from the public surface in v2.2; no supported channel implements them. Use `set_plugin_param` on the selected track via Scripter for deterministic plugin parameter control.
 </details>
 
 <details>
@@ -130,12 +131,15 @@ set_plugin_param, insert_plugin, bypass_plugin
 ```
 select, create_audio, create_instrument, create_drummer,
 create_external_midi, delete, duplicate, mute, solo, arm,
+arm_only, record_sequence,
 rename, set_automation, set_instrument,
 list_library, scan_library, resolve_path
 ```
 
 ```json
 {"command": "mute", "params": {"index": 3, "enabled": true}}
+{"command": "arm_only", "params": {"index": 2}}
+{"command": "record_sequence", "params": {"index": 2, "countIn": true}}
 {"command": "set_automation", "params": {"index": 1, "mode": "touch"}}
 
 // Library enumeration + instrument loading (v2.2+)
@@ -184,22 +188,37 @@ split, join, quantize, duplicate, toggle_step_input
 <summary><code>logic_navigate</code> — Navigation & views</summary>
 
 ```
-goto_bar, create_marker, toggle_view, zoom_to_fit
+goto_bar, goto_marker, create_marker, delete_marker, rename_marker,
+toggle_view, zoom_to_fit, set_zoom
 ```
 
 ```json
 {"command": "toggle_view", "params": {"view": "mixer"}}
+{"command": "goto_marker", "params": {"name": "Hook"}}
 ```
+
+> ⚠️ The marker cache is not currently populated by the poller, so
+> `goto_marker` / `delete_marker` by name will return an empty-cache
+> error until `nav.get_markers` has a real implementation (tracked
+> in [docs/tickets/navigate-redesign/](docs/tickets/navigate-redesign/)).
+> `goto_bar` is documented but not yet routed to a live channel; prefer
+> `transport.goto_position` with `"bar.beat.sub.tick"` for now.
 </details>
 
 <details>
-<summary><code>logic_project</code> — Project lifecycle</summary>
+<summary><code>logic_project</code> — Project lifecycle + read-only state</summary>
 
 ```
-open, save, save_as, close, bounce, launch, quit
+new, open, save, save_as, close, bounce, launch, quit,
+is_running, get_regions
 ```
 
-> `open`, `save_as`, `bounce`, `quit`, and `close` require `{confirmed: true}` — see [Safety](#safety).
+```json
+{"command": "close", "params": {"saving": "no", "confirmed": true}}
+{"command": "get_regions"}
+```
+
+> `open`, `save_as`, `bounce`, `quit`, and `close` require `{confirmed: true}` — see [Safety](#safety). `close` accepts `saving: "yes" | "no" | "ask"` (defaults to `"yes"`).
 
 </details>
 
@@ -398,7 +417,7 @@ Sources/LogicProMCP/
 | Mixer control | MCU over OSC | Logic Pro has no native OSC support. MCU is bidirectional with 14-bit fader resolution. |
 | Keyboard shortcuts | MIDI CC over CGEvent | Locale-independent, no window focus required, reliable. |
 | Plugin parameters | MCU + Scripter | MCU for browsing, Scripter for direct CC-to-parameter mapping. |
-| State reading | MCU feedback (primary) + AX polling (supplementary) | Event-driven for mixer/transport, 5s polling for project metadata only. |
+| State reading | MCU feedback (primary) + AX polling (supplementary) | Event-driven for mixer/transport, 3s polling for project metadata only. |
 | AppleScript safety | NSWorkspace.open() | Eliminates string interpolation entirely for file paths. |
 | Concurrency | Swift actors throughout | Channels, cache, port manager, and feedback parser are actor-isolated to reduce race-condition risk. |
 

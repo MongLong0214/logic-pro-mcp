@@ -36,7 +36,7 @@ All tool invocations use:
 | `logic://tracks` | `TrackState[]` JSON | Cache (MCU + AX) |
 | `logic://tracks/{index}` | Single `TrackState` JSON | Cache — template |
 | `logic://mixer` | `{ mcu_connected, registered, strips }` | Cache |
-| `logic://project/info` | `ProjectInfo` JSON | Cache (5s AX poll) |
+| `logic://project/info` | `ProjectInfo` JSON | Cache (3s AX poll) |
 | `logic://midi/ports` | `{ sources, destinations }` | CoreMIDI live query |
 | `logic://system/health` | Health JSON (same schema as `logic_system health`) | Composed on read |
 
@@ -114,6 +114,8 @@ Prefer resources over repeated tool calls — they are cheap and safe to poll at
 | `mute` | `{ index: int, enabled?: bool }` | text | MCU → AX → CGEvent |
 | `solo` | `{ index: int, enabled?: bool }` | text | MCU → AX → CGEvent |
 | `arm` | `{ index: int, enabled?: bool }` | text | MCU → AX → CGEvent |
+| `arm_only` | `{ index: int }` | text | composite (disarm-all + arm target) |
+| `record_sequence` | `{ index: int, bar?: int, notes: "pitch,offsetMs,durMs[,vel[,ch]];..." }` | text | composite (select + arm_only + record + play + stop) |
 | `set_automation` | `{ index: int, mode: "off"\|"read"\|"touch"\|"latch"\|"write" }` | text | MCU |
 | `set_instrument` | `{ index: int, path?: string }` or `{ index: int, category: string, preset: string }` | text | Accessibility |
 | `list_library` | — | text | Accessibility |
@@ -174,8 +176,8 @@ Prefer resources over repeated tool calls — they are cheap and safe to poll at
 | `set_pan` | `{ index: int, value: number }` (-1.0–1.0) | text | **MCU only** |
 | `set_master_volume` | `{ volume: number }` (0.0–1.0) | text | **MCU only** |
 | `set_plugin_param` | `{ track: int, insert: int, param: int, value: number }` | text | Scripter |
-| `insert_plugin` | `{ track: int, slot: int, plugin: string }` | text | Accessibility |
-| `bypass_plugin` | `{ track: int, slot: int }` | text | MCU → AX |
+| `insert_plugin` | — | error | Removed in v2.2 — no supported channel; use `set_plugin_param` via Scripter |
+| `bypass_plugin` | — | error | Removed in v2.2 — no supported channel; use `set_plugin_param` via Scripter |
 | `set_send` | — | error | Not yet deterministic in production contract |
 | `set_output` | — | error | Not exposed in the production MCP contract |
 | `set_input` | — | error | Not exposed in the production MCP contract |
@@ -291,9 +293,13 @@ All commands route through `MIDIKeyCommands → CGEvent`.
 
 ## logic_navigate
 
+> ⚠️ Known gaps (tracked in [docs/tickets/navigate-redesign/](tickets/navigate-redesign/)):
+> - `goto_bar` is routed to `[MCU, CGEvent]` but neither channel implements it today; prefer `transport.goto_position` with `"bar.beat.sub.tick"` until the ticket lands.
+> - `goto_marker` by `{ name: ... }` consults the marker cache, which is currently not populated by the state poller. `goto_marker` by `{ index: ... }` (MIDIKeyCommands) remains reliable.
+
 | Command | Params | Returns | Channel |
 |---------|--------|---------|---------|
-| `goto_bar` | `{ bar: int }` | text | MCU → CGEvent |
+| `goto_bar` | `{ bar: int }` | text | MCU → CGEvent — **gap, see above** |
 | `goto_marker` | `{ name: string }` or `{ index: int }` | text | MIDIKeyCommands → CGEvent |
 | `create_marker` | `{ name?: string }` | text | MIDIKeyCommands → CGEvent |
 | `delete_marker` | `{ index: int }` | text | MIDIKeyCommands → CGEvent |
@@ -326,6 +332,7 @@ All commands route through `MIDIKeyCommands → CGEvent`.
 | `close` | `{ saving?: "yes"\|"no"\|"ask", confirmed?: bool }` | text | AppleScript → CGEvent | L3 |
 | `bounce` | `{ confirmed?: bool }` | text | MIDIKeyCommands → CGEvent | L2 |
 | `is_running` | — | `"true"` or `"false"` | (direct) | L0 |
+| `get_regions` | — | JSON `RegionInfo[]` | Accessibility (read-only arrange area scan) | L0 |
 | `launch` | — | text | AppleScript | L1 |
 | `quit` | `{ confirmed?: bool }` | text | AppleScript | L3 |
 
