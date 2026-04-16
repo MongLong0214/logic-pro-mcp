@@ -32,7 +32,7 @@ All tool invocations use:
 
 | URI | Content | Source |
 |-----|---------|--------|
-| `logic://transport/state` | `TransportState` JSON | Cache (MCU feedback + AX poll) |
+| `logic://transport/state` | `{ state: TransportState, has_document, transport_age_sec }` JSON (v2.2+ wrapper; see below) | Cache (MCU feedback + AX poll) |
 | `logic://tracks` | `TrackState[]` JSON | Cache (MCU + AX) |
 | `logic://tracks/{index}` | Single `TrackState` JSON | Cache — template |
 | `logic://mixer` | `{ mcu_connected, registered, strips }` | Cache |

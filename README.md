@@ -236,11 +236,11 @@ Returns channel status, MCU registration state, memory/CPU metrics.
 
 | URI | Description | Refresh |
 |:----|:------------|:-------:|
-| `logic://transport/state` | Playing, recording, tempo, position, cycle | Real-time (MCU) |
+| `logic://transport/state` | `{ state: TransportState, has_document, transport_age_sec }` — v2.2+ wrapper lets clients detect stale snapshots | Real-time (MCU) |
 | `logic://tracks` | All tracks: name, mute, solo, arm, automation mode | Real-time (MCU) |
 | `logic://tracks/{index}` | Single track detail | Real-time (MCU) |
 | `logic://mixer` | Channel strips + MCU connection status | Real-time (MCU) |
-| `logic://project/info` | Project name, sample rate, time signature | 5s (AX poll) |
+| `logic://project/info` | Project name, sample rate, time signature | 3s (AX poll) |
 | `logic://midi/ports` | Available MIDI ports | On-demand |
 | `logic://system/health` | All channel status, latency, permissions | On-demand |
 
