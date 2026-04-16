@@ -917,7 +917,39 @@ private actor FailingExecuteChannel: Channel {
         ("project.new", [:]),
         ("project.open", ["path": existingPath]),
         ("project.save_as", ["path": saveAsPath]),
-        ("project.close", [:]),
+        ("project.close", ["saving": "yes"]),
+    ])
+}
+
+@Test func testProjectDispatcherCloseHonoursSavingParameter() async {
+    let router = ChannelRouter()
+    let appleScript = MockChannel(id: .appleScript)
+    await router.register(appleScript)
+    let cache = StateCache()
+
+    for saving in ["yes", "no", "ask"] {
+        let result = await ProjectDispatcher.handle(
+            command: "close",
+            params: ["saving": .string(saving), "confirmed": .bool(true)],
+            router: router,
+            cache: cache
+        )
+        #expect(!result.isError!)
+    }
+
+    let invalidResult = await ProjectDispatcher.handle(
+        command: "close",
+        params: ["saving": .string("maybe"), "confirmed": .bool(true)],
+        router: router,
+        cache: cache
+    )
+    #expect(invalidResult.isError == true)
+
+    let ops = await appleScript.executedOps
+    expectExecutedOps(ops, equals: [
+        ("project.close", ["saving": "yes"]),
+        ("project.close", ["saving": "no"]),
+        ("project.close", ["saving": "ask"]),
     ])
 }
 

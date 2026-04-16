@@ -11,7 +11,7 @@ struct ProjectDispatcher {
 
     static let tool = commandTool(
         name: "logic_project",
-        description: "Project lifecycle + read-only project state in Logic Pro. Commands: new, open, save, save_as, close, bounce, launch, quit, get_regions. Params: open -> { path: String }; save_as -> { path: String }; bounce/launch/quit -> {}; get_regions -> {} (returns JSON array of { name, trackIndex, startBar, endBar, kind, rawHelp } parsed from Logic's arrange area via AX); others -> {}.",
+        description: "Project lifecycle + read-only project state in Logic Pro. Commands: new, open, save, save_as, close, bounce, launch, quit, get_regions. Params: open -> { path: String }; save_as -> { path: String }; close -> { saving?: \"yes\"|\"no\"|\"ask\" }; bounce/launch/quit -> {}; get_regions -> {} (returns JSON array of { name, trackIndex, startBar, endBar, kind, rawHelp } parsed from Logic's arrange area via AX); others -> {}.",
         commandDescription: "Project command to execute"
     )
 
@@ -82,10 +82,21 @@ struct ProjectDispatcher {
             return toolTextResult(result)
 
         case "close":
+            let savingRaw = stringParam(params, "saving", default: "yes")
+            let saving = ["yes", "no", "ask"].contains(savingRaw) ? savingRaw : "yes"
+            if savingRaw != saving {
+                return toolTextResult(
+                    "close 'saving' must be one of: yes, no, ask (got: \(savingRaw))",
+                    isError: true
+                )
+            }
             if !confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 return toolTextResult(response)
             }
-            let result = await router.route(operation: "project.close")
+            let result = await router.route(
+                operation: "project.close",
+                params: ["saving": saving]
+            )
             return toolTextResult(result)
 
         case "bounce":
