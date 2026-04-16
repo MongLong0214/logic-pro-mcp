@@ -56,6 +56,11 @@ actor StateCache {
         channelStrips = []
         regions = []
         markers = []
+        // Re-initialising transport picks up its default `lastUpdated =
+        // .distantPast`, which is how snapshot() signals "stale" to readers
+        // (transport_age_sec becomes astronomically large). Clients can
+        // combine hasDocument with transport_age_sec to distinguish
+        // "no project open" from "project open, idle playback".
         transport = TransportState()
     }
 

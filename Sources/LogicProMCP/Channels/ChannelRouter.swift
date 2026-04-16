@@ -172,11 +172,11 @@ actor ChannelRouter {
         "region.move":                [.accessibility],
         "region.resize":              [.accessibility],
 
-        // Plugins
+        // Plugins — insert/bypass/remove intentionally omitted from the
+        // routing table: no channel has a deterministic implementation, so
+        // surfacing them would only produce "not implemented" responses.
+        // Use plugin.set_param (Scripter) for parameter control instead.
         "plugin.list":                [.accessibility],
-        "plugin.insert":              [.accessibility],
-        "plugin.bypass":              [.mcu, .accessibility],
-        "plugin.remove":              [.accessibility],
         "plugin.set_param":           [.scripter],  // deterministic plugin parameter path
         "plugin.scan_presets":        [.accessibility],  // F2 — empirical T0 verdict MIXED (CGEvent popup + AXPress menu)
 

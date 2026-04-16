@@ -85,7 +85,16 @@ jobs:
           APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
         run: |
           printf '{\n  "version": "%s",\n  "team_id": "%s"\n}\n' "$GITHUB_REF_NAME" "$APPLE_NOTARY_TEAM_ID" > RELEASE-METADATA.json
-          tar czf LogicProMCP-macOS-universal.tar.gz LogicProMCP
+          # Homebrew formula's pkgshare.install references these files
+          # relative to the tarball root. Keep this list in sync with
+          # Formula/logic-pro-mcp.rb's install block.
+          tar czf LogicProMCP-macOS-universal.tar.gz \
+            LogicProMCP \
+            docs/MCU-SETUP.md \
+            Scripts/install-keycmds.sh \
+            Scripts/uninstall-keycmds.sh \
+            Scripts/keycmd-preset.plist \
+            Scripts/LogicProMCP-Scripter.js
           shasum -a 256 LogicProMCP-macOS-universal.tar.gz > SHA256SUMS.txt
           shasum -a 256 LogicProMCP >> SHA256SUMS.txt
 

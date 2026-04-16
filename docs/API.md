@@ -114,8 +114,8 @@ Prefer resources over repeated tool calls — they are cheap and safe to poll at
 | `mute` | `{ index: int, enabled?: bool }` | text | MCU → AX → CGEvent |
 | `solo` | `{ index: int, enabled?: bool }` | text | MCU → AX → CGEvent |
 | `arm` | `{ index: int, enabled?: bool }` | text | MCU → AX → CGEvent |
-| `arm_only` | `{ index: int }` | text | composite (disarm-all + arm target) |
-| `record_sequence` | `{ index: int, bar?: int, notes: "pitch,offsetMs,durMs[,vel[,ch]];..." }` | text | composite (select + arm_only + record + play + stop) |
+| `arm_only` | `{ index: int }` | text | composite (disarm-all + arm target) — ⚠️ MCU unregistered ⇒ disarm best-effort |
+| `record_sequence` | `{ index: int, bar?: int, notes: "pitch,offsetMs,durMs[,vel[,ch]];..." }` | text | composite (select + arm_only + record + play + stop) — ⚠️ **known: uncompensated record-arm latency + silent mid-step failures** |
 | `set_automation` | `{ index: int, mode: "off"\|"read"\|"touch"\|"latch"\|"write" }` | text | MCU |
 | `set_instrument` | `{ index: int, path?: string }` or `{ index: int, category: string, preset: string }` | text | Accessibility |
 | `list_library` | — | text | Accessibility |
@@ -159,6 +159,13 @@ Prefer resources over repeated tool calls — they are cheap and safe to poll at
 ```
 
 **Input validation:** `rename` truncates names to 255 chars. Unicode (including emoji, Korean, Japanese) is fully supported.
+
+**`record_sequence` known limitations (as of v2.2):**
+1. Record-arm latency is variable (50–300 ms) and uncompensated — notes land at `bar + latency`, not `bar`. Multi-track sync is similarly drift-prone.
+2. The composite pipeline `goto → record → sleep → play → stop` discards intermediate channel errors, so an arm or transport failure can surface as a success response.
+3. In MCU-unregistered environments, `arm_only`'s per-track disarm step is best-effort and may leave multiple tracks armed, causing MIDI duplication.
+
+For reliable recording today, prefer live `send_chord` / `send_note` over `record_sequence`. The full fix is tracked in the internal `record_sequence sync bug` memory entry and will ship as a Level 2 redesign (likely server-side SMF generation + AX import).
 
 **Library preconditions:** `list_library`, `scan_library`, and `set_instrument` require the Library panel to be visible in Logic Pro. `resolve_path` is cache-backed and requires a prior successful `scan_library`.
 
