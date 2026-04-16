@@ -6,7 +6,8 @@ private func makeStatePollerAccessibilityRuntime(
     projectInfoResult: ChannelResult,
     transportResult: ChannelResult = .success("{}"),
     tracksResult: ChannelResult = .success("[]"),
-    mixerResult: ChannelResult = .success("[]")
+    mixerResult: ChannelResult = .success("[]"),
+    markersResult: ChannelResult = .success("[]")
 ) -> AccessibilityChannel.Runtime {
     .init(
         isTrusted: { true },
@@ -24,7 +25,8 @@ private func makeStatePollerAccessibilityRuntime(
         mixerState: { mixerResult },
         channelStrip: { _ in .success("{}") },
         setMixerValue: { _, _ in .success("{}") },
-        projectInfo: { projectInfoResult }
+        projectInfo: { projectInfoResult },
+        markers: { markersResult }
     )
 }
 
@@ -165,4 +167,72 @@ private func makeStatePollerAccessibilityRuntime(
     #expect(await cache.getHasDocument() == true) // still trusts cache after 2 misses
     await poller.refreshNow()
     #expect(await cache.getHasDocument() == false) // 3rd miss clears
+}
+
+@Test func testStatePollerPopulatesMarkerCache() async {
+    let cache = StateCache()
+    let markerPayload = """
+    [{"id":0,"name":"Intro","position":"1.1.1.1"},{"id":1,"name":"Verse","position":"9.1.1.1"},{"id":2,"name":"Chorus","position":"25.1.1.1"}]
+    """
+    let channel = AccessibilityChannel(
+        runtime: makeStatePollerAccessibilityRuntime(
+            projectInfoResult: .success(#"{"name":"Markers Test","sampleRate":44100,"bitDepth":24,"tempo":120,"timeSignature":"4/4","trackCount":1,"filePath":null,"lastUpdated":"2026-04-16T00:00:00Z"}"#),
+            markersResult: .success(markerPayload)
+        )
+    )
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(hasVisibleWindow: { true })
+    )
+
+    await poller.refreshNow()
+
+    let markers = await cache.getMarkers()
+    #expect(markers.count == 3)
+    #expect(markers[0].name == "Intro")
+    #expect(markers[1].name == "Verse")
+    #expect(markers[2].position == "25.1.1.1")
+}
+
+@Test func testStatePollerClearsMarkersWhenDocumentCloses() async {
+    let cache = StateCache()
+    await cache.updateMarkers([
+        MarkerState(id: 0, name: "Stale", position: "1.1.1.1"),
+    ])
+    #expect(await cache.getMarkers().count == 1)
+
+    let channel = AccessibilityChannel(
+        runtime: makeStatePollerAccessibilityRuntime(projectInfoResult: .error("unavailable"))
+    )
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(hasVisibleWindow: { false })
+    )
+
+    await poller.refreshNow()
+    await poller.refreshNow()
+    await poller.refreshNow()
+
+    #expect(await cache.getMarkers().isEmpty)
+}
+
+@Test func testStatePollerIgnoresInvalidMarkerPayload() async {
+    let cache = StateCache()
+    let channel = AccessibilityChannel(
+        runtime: makeStatePollerAccessibilityRuntime(
+            projectInfoResult: .success(#"{"name":"Bad Markers","sampleRate":44100,"bitDepth":24,"tempo":120,"timeSignature":"4/4","trackCount":1,"filePath":null,"lastUpdated":"2026-04-16T00:00:00Z"}"#),
+            markersResult: .success("{invalid-json")
+        )
+    )
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(hasVisibleWindow: { true })
+    )
+
+    await poller.refreshNow()
+
+    #expect(await cache.getMarkers().isEmpty)
 }

@@ -372,6 +372,50 @@ enum AXLogicProElements {
             ?? AXHelpers.findDescendant(of: header, role: kAXTextFieldRole, maxDepth: 4, runtime: runtime.ax)
     }
 
+    // MARK: - Markers
+
+    /// Enumerate markers visible in the arrangement area's marker ruler.
+    /// Logic Pro 12 renders the marker ruler as a row of AXStaticText elements
+    /// (or AXGroup children) whose title/description contains the marker name.
+    /// Position is extracted from the AXDescription or AXValue when available.
+    static func enumerateMarkers(
+        in arrangementArea: AXUIElement,
+        runtime: Runtime = .production
+    ) -> [MarkerState] {
+        let markerKeywords = ["marker", "마커"]
+        let groups = AXHelpers.findAllDescendants(
+            of: arrangementArea, role: kAXGroupRole, maxDepth: 6, runtime: runtime.ax
+        )
+        var rulerElement: AXUIElement? = nil
+        for group in groups {
+            let id = AXHelpers.getIdentifier(group, runtime: runtime.ax)?.lowercased() ?? ""
+            let desc = AXHelpers.getDescription(group, runtime: runtime.ax)?.lowercased() ?? ""
+            let title = AXHelpers.getTitle(group, runtime: runtime.ax)?.lowercased() ?? ""
+            let combined = "\(id) \(desc) \(title)"
+            if markerKeywords.contains(where: { combined.contains($0) }) {
+                rulerElement = group
+                break
+            }
+        }
+        guard let ruler = rulerElement else { return [] }
+
+        let texts = AXHelpers.findAllDescendants(
+            of: ruler, role: kAXStaticTextRole, maxDepth: 4, runtime: runtime.ax
+        )
+        var markers: [MarkerState] = []
+        for (index, text) in texts.enumerated() {
+            let name = AXHelpers.getTitle(text, runtime: runtime.ax)
+                ?? AXHelpers.getDescription(text, runtime: runtime.ax)
+                ?? AXValueExtractors.extractTextValue(text, runtime: runtime.ax)
+                ?? ""
+            guard !name.isEmpty else { continue }
+            let posDesc = AXHelpers.getHelp(text, runtime: runtime.ax) ?? ""
+            let position = posDesc.isEmpty ? "\(index + 1).1.1.1" : posDesc
+            markers.append(MarkerState(id: index, name: name, position: position))
+        }
+        return markers
+    }
+
     // MARK: - Helpers
 
     private static func findButtonByDescriptionPrefix(

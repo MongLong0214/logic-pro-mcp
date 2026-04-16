@@ -599,6 +599,9 @@ def main():
     r = call_tool(client, "logic_navigate", "goto_bar", {"bar": 8})
     T("nav.goto_bar(8) dispatches", r, lambda _: len(tool_text(r)) > 0)
 
+    r = call_tool(client, "logic_navigate", "goto_marker", {"name": "Intro"})
+    T("nav.goto_marker(name) dispatches", r, lambda _: len(tool_text(r)) > 0)
+
     r = call_tool(client, "logic_navigate", "create_marker")
     T("nav.create_marker dispatches", r, lambda _: len(tool_text(r)) > 0)
 

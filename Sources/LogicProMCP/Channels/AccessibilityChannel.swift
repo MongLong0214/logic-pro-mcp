@@ -37,6 +37,7 @@ actor AccessibilityChannel: Channel {
         let channelStrip: @Sendable ([String: String]) -> ChannelResult
         let setMixerValue: @Sendable ([String: String], MixerTarget) -> ChannelResult
         let projectInfo: @Sendable () -> ChannelResult
+        let markers: @Sendable () -> ChannelResult
         let logicRuntime: AXLogicProElements.Runtime
 
         init(
@@ -56,6 +57,7 @@ actor AccessibilityChannel: Channel {
             channelStrip: @escaping @Sendable ([String: String]) -> ChannelResult,
             setMixerValue: @escaping @Sendable ([String: String], MixerTarget) -> ChannelResult,
             projectInfo: @escaping @Sendable () -> ChannelResult,
+            markers: @escaping @Sendable () -> ChannelResult = { .success("[]") },
             logicRuntime: AXLogicProElements.Runtime = .production
         ) {
             self.isTrusted = isTrusted
@@ -74,6 +76,7 @@ actor AccessibilityChannel: Channel {
             self.channelStrip = channelStrip
             self.setMixerValue = setMixerValue
             self.projectInfo = projectInfo
+            self.markers = markers
             self.logicRuntime = logicRuntime
         }
 
@@ -102,6 +105,7 @@ actor AccessibilityChannel: Channel {
                 channelStrip: { AccessibilityChannel.defaultGetChannelStrip(params: $0, runtime: logicRuntime) },
                 setMixerValue: { AccessibilityChannel.defaultSetMixerValue(params: $0, target: $1, runtime: logicRuntime) },
                 projectInfo: { AccessibilityChannel.defaultGetProjectInfo(runtime: logicRuntime) },
+                markers: { AccessibilityChannel.defaultGetMarkers(runtime: logicRuntime) },
                 logicRuntime: logicRuntime
             )
         }
@@ -309,7 +313,7 @@ actor AccessibilityChannel: Channel {
 
         // MARK: - Navigation
         case "nav.get_markers":
-            return .error("Marker reading not yet implemented via AX")
+            return runtime.markers()
         case "nav.rename_marker":
             return .error("Marker renaming not yet implemented via AX")
 
@@ -1819,6 +1823,16 @@ actor AccessibilityChannel: Channel {
         info.name = title
         info.lastUpdated = Date()
         return encodeResult(info)
+    }
+
+    // MARK: - Markers
+
+    private static func defaultGetMarkers(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
+        guard let area = AXLogicProElements.getArrangementArea(runtime: runtime) else {
+            return .error("Cannot locate arrangement area for marker enumeration")
+        }
+        let markers = AXLogicProElements.enumerateMarkers(in: area, runtime: runtime)
+        return encodeResult(markers)
     }
 
     // MARK: - JSON encoding

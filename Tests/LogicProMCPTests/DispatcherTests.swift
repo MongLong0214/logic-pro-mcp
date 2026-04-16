@@ -1398,6 +1398,7 @@ private actor FailingExecuteChannel: Channel {
         router: router,
         cache: cache
     )
+    // goto_bar now delegates to transport.goto_position on AX — separate test covers this.
     let gotoMarkerIndexResult = await NavigateDispatcher.handle(
         command: "goto_marker",
         params: ["index": .int(2)],
@@ -1467,7 +1468,11 @@ private actor FailingExecuteChannel: Channel {
     let mcuOps = await mcu.executedOps
     let keyCmdOps = await keyCmd.executedOps
     let axOps = await ax.executedOps
-    expectExecutedOps(mcuOps, equals: [("nav.goto_bar", ["bar": "12"])])
+    #expect(mcuOps.isEmpty)
+    expectExecutedOps(axOps, equals: [
+        ("transport.goto_position", ["position": "12.1.1.1"]),
+        ("nav.rename_marker", ["index": "2", "name": "Big Chorus"]),
+    ])
     expectExecutedOps(keyCmdOps, equals: [
         ("nav.goto_marker", ["index": "2"]),
         ("nav.goto_marker", ["index": "2"]),
@@ -1478,7 +1483,6 @@ private actor FailingExecuteChannel: Channel {
         ("nav.set_zoom_level", ["level": "2"]),
         ("nav.set_zoom_level", ["level": "5"]),
     ])
-    expectExecutedOps(axOps, equals: [("nav.rename_marker", ["index": "2", "name": "Big Chorus"])])
 }
 
 @Test func testNavigateDispatcherToggleViewAndErrors() async {
@@ -1563,6 +1567,49 @@ private actor FailingExecuteChannel: Channel {
     #expect(description.contains("resolve_path"))
     #expect(description.contains("scan_plugin_presets"))
     _ = tool.inputSchema
+}
+
+@Test func testNavigateDispatcherGotoBarDelegatesToTransportGotoPosition() async {
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility)
+    await router.register(ax)
+    let cache = StateCache()
+
+    let result = await NavigateDispatcher.handle(
+        command: "goto_bar",
+        params: ["bar": .int(17)],
+        router: router,
+        cache: cache
+    )
+
+    #expect(!result.isError!)
+    let ops = await ax.executedOps
+    expectExecutedOps(ops, equals: [("transport.goto_position", ["position": "17.1.1.1"])])
+}
+
+@Test func testNavigateDispatcherGotoBarRejectsOutOfRange() async {
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility)
+    await router.register(ax)
+    let cache = StateCache()
+
+    let zero = await NavigateDispatcher.handle(
+        command: "goto_bar",
+        params: ["bar": .int(0)],
+        router: router,
+        cache: cache
+    )
+    let huge = await NavigateDispatcher.handle(
+        command: "goto_bar",
+        params: ["bar": .int(10000)],
+        router: router,
+        cache: cache
+    )
+
+    #expect(zero.isError!)
+    #expect(huge.isError!)
+    let ops = await ax.executedOps
+    #expect(ops.isEmpty)
 }
 
 @Test func testNavigateDispatcherToolMetadataDocumentsViewsAndFitZoom() async {

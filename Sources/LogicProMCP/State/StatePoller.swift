@@ -108,6 +108,7 @@ actor StatePoller {
 
         await pollTransport(axChannel: axChannel, cache: cache)
         await pollMixer(axChannel: axChannel, cache: cache)
+        await pollMarkers(axChannel: axChannel, cache: cache)
     }
 
     /// 3 consecutive misses (~9s at the 3s poll interval) before declaring
@@ -172,6 +173,18 @@ actor StatePoller {
             await cache.updateChannelStrips(strips)
         } catch {
             Log.debug("Mixer poll failed: \(error)", subsystem: "poller")
+        }
+    }
+
+    private func pollMarkers(axChannel: AccessibilityChannel, cache: StateCache) async {
+        let result = await axChannel.execute(operation: "nav.get_markers", params: [:])
+        guard case .success(let json) = result else { return }
+        guard let data = json.data(using: .utf8) else { return }
+        do {
+            let markers = try JSONDecoder().decode([MarkerState].self, from: data)
+            await cache.updateMarkers(markers)
+        } catch {
+            Log.debug("Marker poll failed: \(error)", subsystem: "poller")
         }
     }
 

@@ -21,8 +21,8 @@ struct NavigateDispatcher {
                 return toolTextResult("goto_bar 'bar' must be in 1..9999 (got \(bar))", isError: true)
             }
             let result = await router.route(
-                operation: "nav.goto_bar",
-                params: ["bar": String(bar)]
+                operation: "transport.goto_position",
+                params: ["position": "\(bar).1.1.1"]
             )
             return toolTextResult(result)
 

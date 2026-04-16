@@ -308,27 +308,23 @@ All commands route through `MIDIKeyCommands → CGEvent`.
 
 ## logic_navigate
 
-> ⚠️ Known gaps (tracked in [docs/tickets/navigate-redesign/](tickets/navigate-redesign/)):
-> - `goto_bar` is routed to `[MCU, CGEvent]` but neither channel implements it today; prefer `transport.goto_position` with `"bar.beat.sub.tick"` until the ticket lands.
-> - `goto_marker` by `{ name: ... }` consults the marker cache, which is currently not populated by the state poller. `goto_marker` by `{ index: ... }` (MIDIKeyCommands) remains reliable.
-
 | Command | Params | Returns | Channel |
 |---------|--------|---------|---------|
-| `goto_bar` | `{ bar: int }` | text | MCU → CGEvent — **gap, see above** |
-| `goto_marker` | `{ name: string }` or `{ index: int }` | text | MIDIKeyCommands → CGEvent |
+| `goto_bar` | `{ bar: int }` | text | Delegates to `transport.goto_position` (Accessibility bar-slider) |
+| `goto_marker` | `{ name: string }` or `{ index: int }` | text | By name: cache lookup → MIDIKeyCommands; by index: MIDIKeyCommands → CGEvent |
 | `create_marker` | `{ name?: string }` | text | MIDIKeyCommands → CGEvent |
 | `delete_marker` | `{ index: int }` | text | MIDIKeyCommands → CGEvent |
 | `rename_marker` | `{ index: int, name: string }` | text | Accessibility |
 | `zoom_to_fit` | — | text | MIDIKeyCommands → CGEvent |
-| `set_zoom` | `{ direction: "in"\|"out"\|"fit" }` | text | MIDIKeyCommands → CGEvent |
+| `set_zoom` | `{ level: "in"\|"out"\|"fit" }` | text | MIDIKeyCommands → CGEvent |
 | `toggle_view` | `{ view: "mixer"\|"piano_roll"\|"score"\|"step_editor"\|"library"\|"inspector"\|"automation" }` | text | MIDIKeyCommands → CGEvent |
 
 ### Reading markers
 
-**Not a tool command.** Read `logic://project/info` or use internal poller state.
+The state poller enumerates markers from the AX marker ruler every 3 seconds and caches them. `goto_marker { name: ... }` and `delete_marker { name: ... }` use this cache for name-based lookup.
 
 ```ts
-// MarkerState (inside other payloads)
+// MarkerState (polled into cache, also available in logic://project/info)
 { id: int, name: string, position: string }
 ```
 

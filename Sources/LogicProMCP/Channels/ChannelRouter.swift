@@ -115,8 +115,8 @@ actor ChannelRouter {
         "mmc.locate":                 [.coreMIDI],
         "mmc.pause":                  [.coreMIDI],
 
-        // Navigation — MCU jog + KeyCmd views, CGEvent fallback
-        "nav.goto_bar":               [.mcu, .cgEvent],
+        // Navigation — goto_bar is handled by NavigateDispatcher via
+        // transport.goto_position (AX bar-slider); no nav.goto_bar route needed.
         "nav.goto_marker":            [.midiKeyCommands, .cgEvent],
         "nav.create_marker":          [.midiKeyCommands, .cgEvent],
         "nav.delete_marker":          [.midiKeyCommands, .cgEvent],

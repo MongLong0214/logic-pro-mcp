@@ -193,16 +193,10 @@ toggle_view, zoom_to_fit, set_zoom
 ```
 
 ```json
-{"command": "toggle_view", "params": {"view": "mixer"}}
+{"command": "goto_bar", "params": {"bar": 17}}
 {"command": "goto_marker", "params": {"name": "Hook"}}
+{"command": "toggle_view", "params": {"view": "mixer"}}
 ```
-
-> ⚠️ The marker cache is not currently populated by the poller, so
-> `goto_marker` / `delete_marker` by name will return an empty-cache
-> error until `nav.get_markers` has a real implementation (tracked
-> in [docs/tickets/navigate-redesign/](docs/tickets/navigate-redesign/)).
-> `goto_bar` is documented but not yet routed to a live channel; prefer
-> `transport.goto_position` with `"bar.beat.sub.tick"` for now.
 </details>
 
 <details>

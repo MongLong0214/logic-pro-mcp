@@ -175,7 +175,6 @@ private func makeAXBackedAccessibilityChannel(
         ("mixer.set_output", "I/O routing not yet implemented via AX"),
         ("mixer.toggle_eq", "EQ toggle not yet implemented via AX"),
         ("mixer.reset_strip", "Strip reset not yet implemented via AX"),
-        ("nav.get_markers", "Marker reading not yet implemented via AX"),
         ("nav.rename_marker", "Marker renaming not yet implemented via AX"),
         ("region.select", "Region operations not yet implemented via AX"),
         ("plugin.list", "Plugin list reading not yet implemented via AX"),
