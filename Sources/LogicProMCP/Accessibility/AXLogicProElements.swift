@@ -406,12 +406,22 @@ enum AXLogicProElements {
         for (index, text) in texts.enumerated() {
             let name = AXHelpers.getTitle(text, runtime: runtime.ax)
                 ?? AXHelpers.getDescription(text, runtime: runtime.ax)
+                ?? axValueAsName(text, runtime: runtime.ax)
                 ?? ""
             guard !name.isEmpty else { continue }
             let position = extractMarkerPosition(text, runtime: runtime.ax)
             markers.append(MarkerState(id: index, name: name, position: position ?? "\(index + 1).1.1.1"))
         }
         return markers
+    }
+
+    private static func axValueAsName(
+        _ element: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> String? {
+        guard let v = AXValueExtractors.extractTextValue(element, runtime: runtime),
+              !v.isEmpty, !looksLikeBarPosition(v) else { return nil }
+        return v
     }
 
     private static func extractMarkerPosition(
