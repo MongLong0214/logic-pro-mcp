@@ -178,7 +178,7 @@ private func makeAXBackedAccessibilityChannel(
         ("nav.get_markers", "Marker reading not yet implemented via AX"),
         ("nav.rename_marker", "Marker renaming not yet implemented via AX"),
         ("region.select", "Region operations not yet implemented via AX"),
-        ("plugin.list", "Plugin operations not yet implemented via AX"),
+        ("plugin.list", "Plugin list reading not yet implemented via AX"),
         ("automation.get_mode", "Automation mode reading not yet implemented via AX"),
         ("automation.set_mode", "Automation mode setting not yet implemented via AX"),
         ("unknown.operation", "Unsupported AX operation"),

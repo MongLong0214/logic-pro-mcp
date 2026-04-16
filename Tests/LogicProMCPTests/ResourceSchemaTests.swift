@@ -82,15 +82,38 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     transport.position = "9.1.1.1"
     transport.timePosition = "00:01:23.456"
     await cache.updateTransport(transport)
+    await cache.updateDocumentState(true)
     let router = ChannelRouter()
 
     let result = try! await ResourceHandlers.read(uri: "logic://transport/state", cache: cache, router: router)
     let json = try! sharedParseJSON(resourceText(result)) as! [String: Any]
-    #expect(json["isPlaying"] as? Bool == true)
-    #expect(json["isCycleEnabled"] as? Bool == true)
-    #expect(json["tempo"] as? Double == 128.5)
-    #expect(json["position"] as? String == "9.1.1.1")
-    #expect(json["timePosition"] as? String == "00:01:23.456")
+    let state = json["state"] as! [String: Any]
+    #expect(state["isPlaying"] as? Bool == true)
+    #expect(state["isCycleEnabled"] as? Bool == true)
+    #expect(state["tempo"] as? Double == 128.5)
+    #expect(state["position"] as? String == "9.1.1.1")
+    #expect(state["timePosition"] as? String == "00:01:23.456")
+    #expect(json["has_document"] as? Bool == true)
+    #expect(json["transport_age_sec"] as? Double != nil)
+}
+
+@Test func testTransportStateResourceSignalsStaleAfterClose() async {
+    let cache = StateCache()
+    var transport = TransportState()
+    transport.isPlaying = true
+    transport.tempo = 128.5
+    await cache.updateTransport(transport)
+    await cache.updateDocumentState(true)
+    await cache.updateDocumentState(false)  // document closed
+    let router = ChannelRouter()
+
+    let result = try! await ResourceHandlers.read(uri: "logic://transport/state", cache: cache, router: router)
+    let json = try! sharedParseJSON(resourceText(result)) as! [String: Any]
+    let state = json["state"] as! [String: Any]
+    #expect(state["isPlaying"] as? Bool == false)
+    #expect(state["tempo"] as? Double == 120.0)
+    #expect(json["has_document"] as? Bool == false)
+    #expect((json["transport_age_sec"] as? Double ?? 0) > 1_000_000_000)
 }
 
 @Test func testMixerResponseIncludesMCUStatus() async {

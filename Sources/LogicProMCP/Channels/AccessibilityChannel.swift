@@ -324,8 +324,12 @@ actor AccessibilityChannel: Channel {
             return .error("Region operations not yet implemented via AX")
 
         // MARK: - Plugins
-        case "plugin.list", "plugin.insert", "plugin.bypass", "plugin.remove":
-            return .error("Plugin operations not yet implemented via AX")
+        // plugin.insert / plugin.bypass / plugin.remove were removed from the
+        // router in v2.2 — no public path reaches this branch for those ops.
+        // plugin.list is still advertised while we wait for a real AX
+        // enumeration; it is the only survivor here.
+        case "plugin.list":
+            return .error("Plugin list reading not yet implemented via AX")
 
         // MARK: - Automation
         case "automation.get_mode":

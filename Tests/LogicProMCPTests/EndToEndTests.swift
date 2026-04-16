@@ -556,7 +556,12 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     let text = e2eResourceText(r)
     let json = e2eJSON(text)
     #expect(json != nil)
-    #expect(json?["tempo"] != nil)
+    // Wrapped shape: { "state": TransportState, "has_document": Bool, "transport_age_sec": Double }
+    #expect(json?["state"] != nil)
+    #expect(json?["has_document"] != nil)
+    #expect(json?["transport_age_sec"] != nil)
+    let state = json?["state"] as? [String: Any]
+    #expect(state?["tempo"] != nil)
 }
 
 @Test func testE2EResourceTracksIsValidJSONArray() async throws {

@@ -71,20 +71,28 @@ Prefer resources over repeated tool calls — they are cheap and safe to poll at
 **Not a tool command.** Read `logic://transport/state` instead:
 
 ```ts
-// TransportState
+// logic://transport/state (v2.2+ wrapped shape)
 {
-  isPlaying: boolean,
-  isRecording: boolean,
-  isPaused: boolean,
-  isCycleEnabled: boolean,
-  isMetronomeEnabled: boolean,
-  tempo: number,           // BPM
-  position: string,        // "B.B.S.S" — e.g. "9.1.1.1"
-  timePosition: string,    // "HH:MM:SS.mmm"
-  sampleRate: number,
-  lastUpdated: string      // ISO 8601
+  state: {
+    isPlaying: boolean,
+    isRecording: boolean,
+    isPaused: boolean,
+    isCycleEnabled: boolean,
+    isMetronomeEnabled: boolean,
+    tempo: number,           // BPM
+    position: string,        // "B.B.S.S" — e.g. "9.1.1.1"
+    timePosition: string,    // "HH:MM:SS.mmm"
+    sampleRate: number,
+    lastUpdated: string      // ISO 8601
+  },
+  has_document: boolean,     // false ⇒ no project open; `state` is a default-initialised placeholder
+  transport_age_sec: number  // seconds since StatePoller last refreshed `state`; astronomically large when stale
 }
 ```
+
+Clients can detect stale snapshots without cross-referencing `logic://system/health`:
+- `has_document === false` → no project open.
+- `transport_age_sec` > poll interval (3 s) + tolerance → snapshot is outdated.
 
 ### Examples
 
