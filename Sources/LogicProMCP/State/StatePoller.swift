@@ -108,15 +108,21 @@ actor StatePoller {
 
         await pollTransport(axChannel: axChannel, cache: cache)
         await pollMixer(axChannel: axChannel, cache: cache)
-        await pollMarkers(axChannel: axChannel, cache: cache)
+        markerPollTick += 1
+        if markerPollTick >= Self.markerPollInterval {
+            markerPollTick = 0
+            await pollMarkers(axChannel: axChannel, cache: cache)
+        }
     }
 
     /// 3 consecutive misses (~9s at the 3s poll interval) before declaring
     /// the document closed. Anything shorter caused resource reads to flap
     /// "no document open" during normal Logic UI transitions.
     private static let failureThreshold = 3
+    private static let markerPollInterval = 5
     private var consecutiveWindowMisses = 0
     private var consecutivePollMisses = 0
+    private var markerPollTick = 4
 
     private static let iso8601Decoder: JSONDecoder = {
         let d = JSONDecoder()

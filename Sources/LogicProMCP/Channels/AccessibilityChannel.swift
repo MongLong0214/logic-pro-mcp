@@ -1571,8 +1571,8 @@ actor AccessibilityChannel: Channel {
                 targetBar = b
             }
         }
-        guard let bar = targetBar, bar >= 1 else {
-            return .error("goto_position requires 'bar' (Int >= 1) or 'position' (B.B.S.S)")
+        guard let bar = targetBar, (1...9999).contains(bar) else {
+            return .error("goto_position requires 'bar' (Int 1..9999) or 'position' (B.B.S.S)")
         }
 
         guard let slider = AXLogicProElements.findControlBarBarSlider(runtime: runtime) else {

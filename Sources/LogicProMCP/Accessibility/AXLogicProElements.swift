@@ -406,14 +406,34 @@ enum AXLogicProElements {
         for (index, text) in texts.enumerated() {
             let name = AXHelpers.getTitle(text, runtime: runtime.ax)
                 ?? AXHelpers.getDescription(text, runtime: runtime.ax)
-                ?? AXValueExtractors.extractTextValue(text, runtime: runtime.ax)
                 ?? ""
             guard !name.isEmpty else { continue }
-            let posDesc = AXHelpers.getHelp(text, runtime: runtime.ax) ?? ""
-            let position = posDesc.isEmpty ? "\(index + 1).1.1.1" : posDesc
-            markers.append(MarkerState(id: index, name: name, position: position))
+            let position = extractMarkerPosition(text, runtime: runtime.ax)
+            markers.append(MarkerState(id: index, name: name, position: position ?? "\(index + 1).1.1.1"))
         }
         return markers
+    }
+
+    private static func extractMarkerPosition(
+        _ element: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> String? {
+        let candidates = [
+            AXValueExtractors.extractTextValue(element, runtime: runtime),
+            AXHelpers.getHelp(element, runtime: runtime),
+            AXHelpers.getDescription(element, runtime: runtime),
+        ]
+        for candidate in candidates {
+            guard let raw = candidate, !raw.isEmpty else { continue }
+            if looksLikeBarPosition(raw) { return raw }
+        }
+        return nil
+    }
+
+    private static func looksLikeBarPosition(_ s: String) -> Bool {
+        let parts = s.split(separator: ".")
+        guard parts.count >= 2, parts.count <= 4 else { return false }
+        return parts.allSatisfy { $0.allSatisfy(\.isNumber) }
     }
 
     // MARK: - Helpers
