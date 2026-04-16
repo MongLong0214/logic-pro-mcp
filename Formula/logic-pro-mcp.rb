@@ -1,7 +1,9 @@
 class LogicProMcp < Formula
   desc "MCP server for Logic Pro — the missing API"
   homepage "https://github.com/MongLong0214/logic-pro-mcp"
-  version "2.1.0"
+  # Single source of truth is Sources/LogicProMCP/Server/ServerConfig.swift
+  # (ServerConfig.serverVersion). Bump both together.
+  version "2.2.0"
   license "MIT"
 
   # Apple Silicon + Intel unified binary via swift build -c release (macOS universal)
@@ -16,6 +18,14 @@ class LogicProMcp < Formula
 
   def install
     bin.install "LogicProMCP"
+    # The caveats reference these helper assets; ship them alongside the
+    # binary so users never need to re-clone the repo to follow the setup
+    # instructions below.
+    pkgshare.install "docs/MCU-SETUP.md"
+    pkgshare.install "Scripts/install-keycmds.sh"
+    pkgshare.install "Scripts/uninstall-keycmds.sh"
+    pkgshare.install "Scripts/keycmd-preset.plist"
+    pkgshare.install "Scripts/LogicProMCP-Scripter.js"
   end
 
   def caveats
@@ -41,9 +51,9 @@ class LogicProMcp < Formula
         LogicProMCP --check-permissions
 
       Additional setup for full functionality:
-        • MCU Control Surface — see docs/MCU-SETUP.md in the repo
-        • MIDI Key Commands — run Scripts/install-keycmds.sh from the repo
-        • Scripter MIDI FX — load Scripts/LogicProMCP-Scripter.js in Logic Pro
+        • MCU Control Surface — see #{pkgshare}/MCU-SETUP.md
+        • MIDI Key Commands — run #{pkgshare}/install-keycmds.sh
+        • Scripter MIDI FX — load #{pkgshare}/LogicProMCP-Scripter.js in Logic Pro
 
       After manual validation, approve the manual-validation channels:
         LogicProMCP --approve-channel MIDIKeyCommands

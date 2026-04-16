@@ -5,7 +5,7 @@ REPO="MongLong0214/logic-pro-mcp"
 BINARY="LogicProMCP"
 INSTALL_DIR="${LOGIC_PRO_MCP_INSTALL_DIR:-/usr/local/bin}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${LOGIC_PRO_MCP_VERSION:-v2.0.0}"
+VERSION="${LOGIC_PRO_MCP_VERSION:-v2.2.0}"
 SHA256="${LOGIC_PRO_MCP_SHA256:-}"
 EXPECTED_TEAM_ID="${LOGIC_PRO_MCP_TEAM_ID:-}"
 REGISTER_CLAUDE="${LOGIC_PRO_MCP_REGISTER_CLAUDE:-1}"
@@ -66,7 +66,7 @@ fi
 
 if [ "$VERSION" = "latest" ]; then
     echo "  Error: mutable 'latest' installs are not allowed in enterprise mode."
-    echo "    Set LOGIC_PRO_MCP_VERSION to a pinned tag, e.g. v2.0.0."
+    echo "    Set LOGIC_PRO_MCP_VERSION to a pinned tag, e.g. v2.2.0."
     exit 1
 fi
 
