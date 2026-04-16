@@ -185,25 +185,24 @@ struct TrackDispatcher {
             ))
 
         case "arm_only":
-            // Convenience: arm exactly one track, disarm every other.
-            // Solves the recurring "multiple armed tracks → MIDI duplicates"
-            // class of bug observed in user composition flows.
             let index = intParam(params, "index", "track", default: 0)
             let tracks = await cache.getTracks()
             var disarmed: [Int] = []
+            var failedDisarm: [Int] = []
             for t in tracks where t.id != index && t.isArmed {
                 let r = await router.route(
                     operation: "track.set_arm",
                     params: ["index": String(t.id), "enabled": "false"]
                 )
-                if r.isSuccess { disarmed.append(t.id) }
+                if r.isSuccess { disarmed.append(t.id) } else { failedDisarm.append(t.id) }
             }
             let armResult = await router.route(
                 operation: "track.set_arm",
                 params: ["index": String(index), "enabled": "true"]
             )
+            let detail = armResult.message.replacingOccurrences(of: "\"", with: "\\\"")
             return toolTextResult(.success(
-                "{\"armed\":\(index),\"disarmed\":\(disarmed),\"final\":\"\(armResult.message.replacingOccurrences(of: "\"", with: "\\\""))\"}"
+                "{\"armed\":\(index),\"armedSuccess\":\(armResult.isSuccess),\"disarmed\":\(disarmed),\"failedDisarm\":\(failedDisarm),\"detail\":\"\(detail)\"}"
             ))
 
         case "set_color":

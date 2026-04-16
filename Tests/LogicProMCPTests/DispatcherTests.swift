@@ -721,6 +721,83 @@ private actor FailingExecuteChannel: Channel {
     #expect(dispatcherText(result).contains("Unknown track command"))
 }
 
+// MARK: - arm_only error propagation
+
+private actor SelectiveFailChannel: Channel {
+    nonisolated let id: ChannelID
+    var executedOps: [(String, [String: String])] = []
+    let failOperations: Set<String>
+
+    init(id: ChannelID, failOperations: Set<String> = []) {
+        self.id = id
+        self.failOperations = failOperations
+    }
+
+    func start() async throws {}
+    func stop() async {}
+
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        executedOps.append((operation, params))
+        if failOperations.contains(operation) {
+            return .error("Mock failure: \(operation)")
+        }
+        return .success("Mock: \(operation)")
+    }
+
+    func healthCheck() async -> ChannelHealth {
+        .healthy(detail: "selective fail channel")
+    }
+}
+
+@Test func testArmOnlyReportsPartialDisarmFailure() async {
+    let router = ChannelRouter()
+    // All channels fail for track.set_arm → disarm should report failures
+    let ax = FailingExecuteChannel(id: .accessibility, message: "AX fail")
+    let mcu = FailingExecuteChannel(id: .mcu, message: "MCU fail")
+    let cg = FailingExecuteChannel(id: .cgEvent, message: "CG fail")
+    await router.register(ax)
+    await router.register(mcu)
+    await router.register(cg)
+    let cache = StateCache()
+    await cache.updateTracks([
+        TrackState(id: 0, name: "Track 1", type: .audio, isArmed: true),
+        TrackState(id: 1, name: "Target", type: .softwareInstrument),
+    ])
+
+    let result = await TrackDispatcher.handle(
+        command: "arm_only",
+        params: ["index": .int(1)],
+        router: router,
+        cache: cache
+    )
+
+    let text = dispatcherText(result)
+    #expect(text.contains("failedDisarm"))
+    #expect(text.contains("armedSuccess"))
+}
+
+@Test func testArmOnlySuccessPathReportsArmedSuccess() async {
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility)
+    await router.register(ax)
+    let cache = StateCache()
+    await cache.updateTracks([
+        TrackState(id: 0, name: "Track 1", type: .audio, isArmed: true),
+        TrackState(id: 1, name: "Target", type: .softwareInstrument),
+    ])
+
+    let result = await TrackDispatcher.handle(
+        command: "arm_only",
+        params: ["index": .int(1)],
+        router: router,
+        cache: cache
+    )
+
+    let text = dispatcherText(result)
+    #expect(text.contains("\"armedSuccess\":true"))
+    #expect(text.contains("\"armed\":1"))
+}
+
 // MARK: - EditDispatcher
 
 @Test func testEditDispatcherToggleStepInput() async {
