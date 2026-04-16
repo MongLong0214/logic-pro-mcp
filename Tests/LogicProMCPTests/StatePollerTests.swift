@@ -157,9 +157,12 @@ private func makeStatePollerAccessibilityRuntime(
         runtime: .init(hasVisibleWindow: { false })
     )
 
+    // Post-hardening: a single missed window check no longer clears state —
+    // 3 consecutive misses are required so transient AX glitches don't make
+    // resource reads flap "no document open" during normal Logic UI motion.
     await poller.refreshNow()
-
-    #expect(await cache.getHasDocument() == false)
-    #expect((await cache.getProject()).name.isEmpty)
-    #expect(await cache.getTracks().isEmpty)
+    await poller.refreshNow()
+    #expect(await cache.getHasDocument() == true) // still trusts cache after 2 misses
+    await poller.refreshNow()
+    #expect(await cache.getHasDocument() == false) // 3rd miss clears
 }

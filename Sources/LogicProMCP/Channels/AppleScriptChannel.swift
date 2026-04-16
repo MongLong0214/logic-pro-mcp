@@ -259,23 +259,6 @@ actor AppleScriptChannel: Channel {
         """
     }
 
-    private func hasOpenDocumentScript() -> String {
-        """
-        tell application "Logic Pro"
-            if (count of documents) > 0 then
-                return "open"
-            end if
-            return "none"
-        end tell
-        """
-    }
-
-    private func logicHasOpenDocument() async -> Bool {
-        let result = await runScript(hasOpenDocumentScript())
-        guard result.isSuccess else { return false }
-        return appleScriptResultText(from: result) == "open"
-    }
-
     private func currentDocumentPathScript() -> String {
         """
         tell application "Logic Pro"

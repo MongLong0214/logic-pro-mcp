@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import MCP
 
 struct SystemDispatcher {
@@ -58,6 +59,7 @@ struct SystemDispatcher {
             let accessibilityStatus: String
             let automationStatus: String
             let automationVerifiable: Bool
+            let postEventAccess: Bool   // T5: CGPreflightPostEventAccess() — required for CGEvent.post
 
             enum CodingKeys: String, CodingKey {
                 case accessibility
@@ -66,6 +68,7 @@ struct SystemDispatcher {
                 case accessibilityStatus = "accessibility_status"
                 case automationStatus = "automation_status"
                 case automationVerifiable = "automation_verifiable"
+                case postEventAccess = "post_event_access"
             }
         }
 
@@ -187,7 +190,8 @@ struct SystemDispatcher {
                     automationGranted: permissions.automationVerifiable ? permissions.automationLogicPro : nil,
                     accessibilityStatus: permissions.accessibilityState.rawValue,
                     automationStatus: permissions.automationState.rawValue,
-                    automationVerifiable: permissions.automationVerifiable
+                    automationVerifiable: permissions.automationVerifiable,
+                    postEventAccess: CGPreflightPostEventAccess()
                 ),
                 process: .init(
                     memoryMb: Double(String(format: "%.1f", process.memoryMB)) ?? process.memoryMB,
@@ -211,7 +215,7 @@ struct SystemDispatcher {
             return toolTextResult("State refresh triggered. Cache will be updated on next poll cycle.")
 
         case "help":
-            let category = params["category"]?.stringValue ?? "all"
+            let category = stringParam(params, "category", default: "all")
             let helpText = Self.helpText(for: category)
             return toolTextResult(helpText)
 
@@ -259,8 +263,15 @@ struct SystemDispatcher {
                   rename            -> { index: Int, name: String }
                   mute              -> { index: Int, enabled: Bool }
                   solo              -> { index: Int, enabled: Bool }
-                  arm               -> { index: Int, enabled: Bool }
+                  arm               -> { index: Int, enabled: Bool } — idempotent (reads checkbox state)
+                  arm_only          -> { index: Int } — disarms others, arms target
+                  record_sequence   -> { index: Int, bar?: Int, notes: "pitch,offsetMs,durMs[,vel[,ch]];..." } — one-shot
                   set_automation    -> { index: Int, mode: String } (read/write/touch/latch/trim)
+                  set_instrument    -> { index: Int, path?: String } or { index: Int, category: String, preset: String }
+                  list_library      -> {} — Read currently visible Library columns
+                  scan_library      -> {} — Full recursive Library scan
+                  resolve_path      -> { path: String } — Cache-backed Library lookup
+                  scan_plugin_presets -> { submenuOpenDelayMs?: Int } — Focused plugin Setting-menu scan
 
                 Read state via resources: logic://tracks, logic://tracks/{index}
                 """
@@ -288,6 +299,7 @@ struct SystemDispatcher {
                   send_pitch_bend   -> { value: Int, channel: Int } (-8192 to 8191)
                   send_aftertouch   -> { value: Int, channel: Int }
                   send_sysex        -> { bytes: [Int] } or { data: String }
+                  play_sequence     -> { notes: "pitch,offsetMs,durMs[,vel[,ch]];..." } — tight rhythm (≤256 events)
                   create_virtual_port -> { name: String }
                   step_input        -> { note: Int, duration: String|Int }
                   mmc_play          -> {}

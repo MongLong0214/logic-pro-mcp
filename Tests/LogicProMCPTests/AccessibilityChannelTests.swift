@@ -68,12 +68,14 @@ private func makeAXBackedAccessibilityChannel(
     app: AXUIElement,
     logicRuntime: AXLogicProElements.Runtime? = nil,
     isTrusted: Bool = true,
-    isRunning: Bool = true
+    isRunning: Bool = true,
+    runTempoFallback: @escaping @Sendable (String) -> Bool = { _ in false }
 ) -> AccessibilityChannel {
     let runtime = AccessibilityChannel.Runtime.axBacked(
         isTrusted: { isTrusted },
         isLogicProRunning: { isRunning },
-        logicRuntime: logicRuntime ?? builder.makeLogicRuntime(appElement: app)
+        logicRuntime: logicRuntime ?? builder.makeLogicRuntime(appElement: app),
+        runTempoFallback: runTempoFallback
     )
     return AccessibilityChannel(runtime: runtime)
 }
@@ -175,7 +177,6 @@ private func makeAXBackedAccessibilityChannel(
         ("mixer.reset_strip", "Strip reset not yet implemented via AX"),
         ("nav.get_markers", "Marker reading not yet implemented via AX"),
         ("nav.rename_marker", "Marker renaming not yet implemented via AX"),
-        ("region.get_regions", "Region reading not yet implemented via AX"),
         ("region.select", "Region operations not yet implemented via AX"),
         ("plugin.list", "Plugin operations not yet implemented via AX"),
         ("automation.get_mode", "Automation mode reading not yet implemented via AX"),
@@ -188,6 +189,60 @@ private func makeAXBackedAccessibilityChannel(
         #expect(!result.isSuccess)
         #expect(result.message.contains(message), "Expected \(operation) to return '\(message)'")
     }
+}
+
+@Test func testAccessibilityChannelAXBackedRegionReadReturnsParsedRegions() async throws {
+    func axPoint(_ x: CGFloat, _ y: CGFloat) -> AXValue {
+        var point = CGPoint(x: x, y: y)
+        return AXValueCreate(.cgPoint, &point)!
+    }
+
+    func axSize(_ width: CGFloat, _ height: CGFloat) -> AXValue {
+        var size = CGSize(width: width, height: height)
+        return AXValueCreate(.cgSize, &size)!
+    }
+
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(800)
+    let window = builder.element(801)
+    let headerRail = builder.element(802)
+    let trackHeader = builder.element(803)
+    let contentGroup = builder.element(804)
+    let region = builder.element(805)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [headerRail, contentGroup])
+
+    builder.setAttribute(headerRail, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(headerRail, kAXDescriptionAttribute as String, "트랙 헤더")
+    builder.setChildren(headerRail, [trackHeader])
+
+    builder.setAttribute(trackHeader, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    builder.setAttribute(trackHeader, kAXPositionAttribute as String, axPoint(0, 100))
+    builder.setAttribute(trackHeader, kAXSizeAttribute as String, axSize(200, 40))
+
+    builder.setAttribute(contentGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(contentGroup, kAXDescriptionAttribute as String, "트랙 콘텐츠")
+    builder.setChildren(contentGroup, [region])
+
+    builder.setAttribute(region, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    builder.setAttribute(region, kAXDescriptionAttribute as String, "Deluxe Classic")
+    builder.setAttribute(region, kAXHelpAttribute as String, "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전.")
+    builder.setAttribute(region, kAXPositionAttribute as String, axPoint(240, 108))
+    builder.setAttribute(region, kAXSizeAttribute as String, axSize(320, 24))
+
+    let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app)
+    let result = await channel.execute(operation: "region.get_regions", params: [:])
+
+    #expect(result.isSuccess)
+
+    let regions = try JSONDecoder().decode([RegionInfo].self, from: Data(result.message.utf8))
+    #expect(regions.count == 1)
+    #expect(regions[0].name == "Deluxe Classic")
+    #expect(regions[0].trackIndex == 0)
+    #expect(regions[0].startBar == 1)
+    #expect(regions[0].endBar == 3)
+    #expect(regions[0].kind == "midi")
 }
 
 @Test func testAccessibilityChannelAXBackedTransportDefaultsUseFakeAXTree() async throws {
@@ -262,8 +317,11 @@ private func makeAXBackedAccessibilityChannel(
         operation: "transport.set_cycle_range",
         params: ["start": "1.1.1.1", "end": "9.1.1.1"]
     )
+    // With the fake AX tree (no transport bar cycle fields) and osascript
+    // fallback unavailable in unit tests, the handler now returns a descriptive
+    // "locator fields not found" error rather than "not yet implemented".
     #expect(!cycleUnsupported.isSuccess)
-    #expect(cycleUnsupported.message.contains("not yet fully implemented"))
+    #expect(cycleUnsupported.message.contains("Cycle range") || cycleUnsupported.message.contains("locator"))
 }
 
 @Test func testAccessibilityChannelAXBackedTransportErrorPaths() async {
@@ -272,7 +330,11 @@ private func makeAXBackedAccessibilityChannel(
     let window = builder.element(151)
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
 
-    let missingTransportChannel = makeAXBackedAccessibilityChannel(builder: builder, app: app)
+    let missingTransportChannel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: app,
+        runTempoFallback: { _ in false }
+    )
     let missingTransport = await missingTransportChannel.execute(operation: "transport.get_state", params: [:])
     #expect(!missingTransport.isSuccess)
     #expect(missingTransport.message.contains("Cannot locate transport bar"))
@@ -292,7 +354,7 @@ private func makeAXBackedAccessibilityChannel(
 
     let missingTempoField = await missingTransportChannel.execute(operation: "transport.set_tempo", params: ["tempo": "126"])
     #expect(!missingTempoField.isSuccess)
-    #expect(missingTempoField.message.contains("Cannot locate tempo field"))
+    #expect(missingTempoField.message.contains("doesn't expose a tempo text field via AX"))
 
     let metronome = builder.element(153)
     builder.setChildren(transport, [metronome])
@@ -310,6 +372,51 @@ private func makeAXBackedAccessibilityChannel(
     let pressFailure = await failingChannel.execute(operation: "transport.toggle_metronome", params: [:])
     #expect(!pressFailure.isSuccess)
     #expect(pressFailure.message.contains("Failed to press transport button"))
+}
+
+@Test func testAccessibilityChannelAXBackedTempoFallbackCanBeInjected() async {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(160)
+    let window = builder.element(161)
+    let transport = builder.element(162)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [transport])
+    builder.setAttribute(transport, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(transport, kAXIdentifierAttribute as String, "Transport")
+
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: app,
+        runTempoFallback: { tempo in tempo == "126" }
+    )
+
+    let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "126"])
+    // Post-hardening: osascript fallback removed (was causing FD leaks under
+    // sustained calls, killing MCP server). AX tempo field absent → clear error.
+    #expect(!result.isSuccess)
+    #expect(result.message.contains("doesn't expose a tempo text field via AX"))
+}
+
+@Test func testAccessibilityChannelAXBackedTempoReturnsErrorWhenAXFieldMissing() async {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(700)
+    let window = builder.element(701)
+    let transport = builder.element(702)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [transport])
+    builder.setAttribute(transport, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(transport, kAXIdentifierAttribute as String, "Transport")
+
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: app,
+        runTempoFallback: { tempo in tempo == "126" }
+    )
+
+    let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "126"])
+    #expect(!result.isSuccess)
+    #expect(result.message.contains("doesn't expose a tempo text field via AX"))
 }
 
 @Test func testAccessibilityChannelCreateInstrumentVerifiesTrackCountIncrease() async {
@@ -447,8 +554,15 @@ private func makeAXBackedAccessibilityChannel(
     #expect(selectResult.isSuccess)
     #expect(builder.actionCalls.contains { $0.elementID == builder.elementID(header) && $0.action == kAXPressAction as String })
 
-    let muteResult = await channel.execute(operation: "track.set_mute", params: ["index": "0"])
-    #expect(muteResult.isSuccess)
+    // muteButton.kAXValue = 1 (already muted). Calling set_mute with default
+    // enabled=true is idempotent — no press is issued (toggle would flip OFF).
+    let muteNoopResult = await channel.execute(operation: "track.set_mute", params: ["index": "0"])
+    #expect(muteNoopResult.isSuccess)
+    #expect(muteNoopResult.message.contains("\"action\":\"no-op\""))
+    #expect(!builder.actionCalls.contains { $0.elementID == builder.elementID(muteButton) && $0.action == kAXPressAction as String })
+    // Explicitly request disable (enabled=false) — current=true, desired=false → press.
+    let muteOffResult = await channel.execute(operation: "track.set_mute", params: ["index": "0", "enabled": "false"])
+    #expect(muteOffResult.isSuccess)
     #expect(builder.actionCalls.contains { $0.elementID == builder.elementID(muteButton) && $0.action == kAXPressAction as String })
 
     let renameResult = await channel.execute(operation: "track.rename", params: ["index": "0", "name": "Lead"])
@@ -533,8 +647,11 @@ private func makeAXBackedAccessibilityChannel(
     let emptyChannel = makeAXBackedAccessibilityChannel(builder: emptyBuilder, app: emptyApp)
 
     let noHeaders = await emptyChannel.execute(operation: "track.get_tracks", params: [:])
-    #expect(!noHeaders.isSuccess)
-    #expect(noHeaders.message.contains("No track headers found"))
+    // Contract change: empty track list is a valid steady state (picker front /
+    // no project). Returning `.error` caused StatePoller to skip updates and
+    // retain ghost tracks from prior sessions, breaking rename/mute/arm on idx 0.
+    #expect(noHeaders.isSuccess)
+    #expect(noHeaders.message == "[]")
 
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(230)
@@ -591,9 +708,16 @@ private func makeAXBackedAccessibilityChannel(
     builder.setAttribute(soloButton, kAXRoleAttribute as String, kAXButtonRole as String)
     builder.setAttribute(soloButton, kAXDescriptionAttribute as String, "Solo Track 1")
 
+    // With performAction disabled, the fallback to direct AXValue write still
+    // succeeds (fake builder stores the value and read-back matches). New
+    // post-hardening contract: the handler reports success via "value-written"
+    // action marker rather than erroring out, because the desired state was
+    // actually reached through the alternate write path.
     let soloFailure = await failingChannel.execute(operation: "track.set_solo", params: ["index": "0"])
-    #expect(!soloFailure.isSuccess)
-    #expect(soloFailure.message.contains("Failed to click Solo on track 0"))
+    #expect(soloFailure.isSuccess)
+    // Strategy name: "value-nsnumber" is the first write-based strategy that
+    // succeeds in the fake builder (NSNumber round-trip works, press doesn't).
+    #expect(soloFailure.message.contains("\"action\":\"value-nsnumber\""))
 }
 
 @Test func testAccessibilityChannelAXBackedMixerAndProjectDefaultsUseFakeAXTree() async throws {
@@ -665,7 +789,7 @@ private func makeAXBackedAccessibilityChannel(
 
     let invalidMixerValue = await channel.execute(operation: "mixer.set_volume", params: ["index": "0"])
     #expect(!invalidMixerValue.isSuccess)
-    #expect(invalidMixerValue.message.contains("Missing 'index' or 'value'"))
+    #expect(invalidMixerValue.message.contains("Missing 'value' or 'volume'"))
 
     let mixer = builder.element(322)
     let strip = builder.element(323)

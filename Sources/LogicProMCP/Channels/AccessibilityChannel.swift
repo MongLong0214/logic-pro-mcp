@@ -1,4 +1,5 @@
 import ApplicationServices
+import AppKit
 import Foundation
 
 /// Channel that reads and mutates Logic Pro state via the macOS Accessibility API.
@@ -7,6 +8,12 @@ import Foundation
 actor AccessibilityChannel: Channel {
     let id: ChannelID = .accessibility
     private let runtime: Runtime
+
+    // T4: actor state for scanLibraryAll orchestration
+    private var scanInProgress: Bool = false
+    private var lastScan: LibraryRoot? = nil
+    private var lastRoutedCategory: String? = nil
+    private var lastRoutedPreset: String? = nil
 
     enum MixerTarget {
         case volume
@@ -73,7 +80,10 @@ actor AccessibilityChannel: Channel {
         static func axBacked(
             isTrusted: @escaping @Sendable () -> Bool = AXIsProcessTrusted,
             isLogicProRunning: @escaping @Sendable () -> Bool = { ProcessUtils.isLogicProRunning },
-            logicRuntime: AXLogicProElements.Runtime = .production
+            logicRuntime: AXLogicProElements.Runtime = .production,
+            runTempoFallback: @escaping @Sendable (String) -> Bool = { tempo in
+                AccessibilityChannel.runTempoFallbackScript(tempo: tempo)
+            }
         ) -> Runtime {
             Runtime(
                 isTrusted: isTrusted,
@@ -81,8 +91,8 @@ actor AccessibilityChannel: Channel {
                 appRoot: { AXLogicProElements.appRoot(runtime: logicRuntime) },
                 transportState: { AccessibilityChannel.defaultGetTransportState(runtime: logicRuntime) },
                 toggleTransportButton: { AccessibilityChannel.defaultToggleTransportButton(named: $0, runtime: logicRuntime) },
-                setTempo: { AccessibilityChannel.defaultSetTempo(params: $0, runtime: logicRuntime) },
-                setCycleRange: AccessibilityChannel.defaultSetCycleRange,
+                setTempo: { AccessibilityChannel.defaultSetTempo(params: $0, runtime: logicRuntime, runFallback: runTempoFallback) },
+                setCycleRange: { AccessibilityChannel.defaultSetCycleRange(params: $0, runtime: logicRuntime) },
                 tracks: { AccessibilityChannel.defaultGetTracks(runtime: logicRuntime) },
                 selectedTrack: { AccessibilityChannel.defaultGetSelectedTrack(runtime: logicRuntime) },
                 selectTrack: { await AccessibilityChannel.defaultSelectTrack(params: $0, runtime: logicRuntime) },
@@ -136,10 +146,25 @@ actor AccessibilityChannel: Channel {
             return runtime.toggleTransportButton("Cycle")
         case "transport.toggle_metronome":
             return runtime.toggleTransportButton("Metronome")
+        case "transport.toggle_count_in":
+            return runtime.toggleTransportButton("CountIn")
+
+        case "transport.play":
+            return runtime.toggleTransportButton("Play")
+        case "transport.stop":
+            return runtime.toggleTransportButton("Stop")
+        case "transport.record":
+            return runtime.toggleTransportButton("Record")
+
         case "transport.set_tempo":
             return runtime.setTempo(params)
         case "transport.set_cycle_range":
             return runtime.setCycleRange(params)
+
+        case "transport.goto_position":
+            return AccessibilityChannel.gotoPositionViaBarSlider(
+                params: params, runtime: runtime.logicRuntime
+            )
 
         // MARK: - Track reads
         case "track.get_tracks":
@@ -160,6 +185,54 @@ actor AccessibilityChannel: Channel {
             return runtime.renameTrack(params)
         case "track.set_color":
             return .error("Track color setting not supported via AX")
+
+        // MARK: - Library (instrument patch) operations
+        case "library.list":
+            return AccessibilityChannel.listLibrary(runtime: runtime.logicRuntime)
+        case "library.scan_all":
+            // E15: atomic check-and-set within actor step (no suspension points)
+            if scanInProgress {
+                return .error("Library scan already in progress")
+            }
+            scanInProgress = true
+            defer { scanInProgress = false }
+            return await self.runLiveScan(runtime: runtime.logicRuntime)
+        case "library.resolve_path":
+            return AccessibilityChannel.resolveLibraryPath(
+                params: params, lastScan: lastScan
+            )
+        case "plugin.scan_presets":
+            // F2 minimal scan handler — relies on currently-focused plugin window.
+            // Full T6 (cache, persistence, axScanInProgress rename, AC-1.5b trackIndex
+            // precedence) is follow-up. This handler delivers live menu enumeration.
+            if scanInProgress {
+                return .error("AX scan already in progress")
+            }
+            scanInProgress = true
+            defer { scanInProgress = false }
+            let settleMs = Int(params["submenuOpenDelayMs"] ?? "250") ?? 250
+            return await AccessibilityChannel.runLivePluginPresetScan(
+                runtime: runtime.logicRuntime, settleMs: settleMs
+            )
+        case "track.set_instrument":
+            let result = await AccessibilityChannel.setTrackInstrument(
+                params: params, runtime: runtime.logicRuntime
+            )
+            // T4 Tier-A cache population: remember what we routed for future scan restore.
+            // Covers both legacy {category, preset} and path-mode {path} callers.
+            if result.isSuccess {
+                if let cat = params["category"], !cat.isEmpty,
+                   let pre = params["preset"], !pre.isEmpty {
+                    lastRoutedCategory = cat
+                    lastRoutedPreset = pre
+                } else if let path = params["path"],
+                          let parts = LibraryAccessor.parsePath(path),
+                          parts.count >= 2 {
+                    lastRoutedCategory = parts[0]
+                    lastRoutedPreset = parts[parts.count - 1]
+                }
+            }
+            return result
 
         // MARK: - Project save_as via AX dialog
         case "project.save_as":
@@ -182,6 +255,15 @@ actor AccessibilityChannel: Channel {
                 runtime: runtime.logicRuntime
             )
         case "track.create_drummer":
+            // Logic 12.0.1+: menu renamed to "Session Player SI" with Drummer as
+            // a sub-option in the dialog. Try Logic 12 menu first; fall back to
+            // Logic 11's "Drummer 트랙" for older installs.
+            let l12 = await AccessibilityChannel.createTrackViaMenu(
+                korean: "새로운 Session Player SI 트랙…",
+                english: "New Session Player SI Track…",
+                runtime: runtime.logicRuntime
+            )
+            if l12.isSuccess { return l12 }
             return await AccessibilityChannel.createTrackViaMenu(
                 korean: "새로운 Drummer 트랙",
                 english: "New Drummer Track",
@@ -191,6 +273,17 @@ actor AccessibilityChannel: Channel {
             return await AccessibilityChannel.createTrackViaMenu(
                 korean: "새로운 외부 MIDI 트랙",
                 english: "New External MIDI Track",
+                runtime: runtime.logicRuntime
+            )
+
+        case "track.delete":
+            // Logic 12 has no default keyboard shortcut for "Delete Track" —
+            // CGEvent fallback was wrong (Cmd+Delete deletes regions, not the
+            // track). Click the Track menu item directly.
+            return AccessibilityChannel.clickTrackMenu(
+                "트랙 삭제",
+                menuName: "트랙",
+                englishMenuName: "Track",
                 runtime: runtime.logicRuntime
             )
 
@@ -226,7 +319,7 @@ actor AccessibilityChannel: Channel {
 
         // MARK: - Regions
         case "region.get_regions":
-            return .error("Region reading not yet implemented via AX")
+            return AccessibilityChannel.defaultGetRegions(runtime: runtime.logicRuntime)
         case "region.select", "region.loop", "region.set_name", "region.move", "region.resize":
             return .error("Region operations not yet implemented via AX")
 
@@ -273,6 +366,41 @@ actor AccessibilityChannel: Channel {
         named name: String,
         runtime: AXLogicProElements.Runtime = .production
     ) -> ChannelResult {
+        // Try the Logic Pro 12 control-bar checkbox first (Korean + English UI).
+        // Falls back to legacy toolbar button search.
+        let controlBarMapping: [String: (korean: String, english: String, desired: Bool?)] = [
+            "Cycle":      ("사이클",        "Cycle",     nil),
+            "Metronome":  ("메트로놈 클릭",  "Metronome", nil),
+            "CountIn":    ("카운트 인",     "Count-in",  nil),
+            "Play":       ("재생",          "Play",      true),
+            "Stop":       ("재생",          "Play",      false),
+            "Record":     ("녹음",          "Record",    true),
+        ]
+        // Stop semantics: clear Record too (else recording continues even after Play=false).
+        // Avoids regression where stop() during recording leaves track in armed-record loop.
+        if name == "Stop" {
+            _ = AccessibilityChannel.setControlBarCheckboxValue(
+                korean: "녹음", english: "Record", desired: false, runtime: runtime
+            )
+        }
+        if let mapping = controlBarMapping[name] {
+            if let desired = mapping.desired {
+                // Conditional toggle: only click if current != desired
+                if let result = AccessibilityChannel.setControlBarCheckboxValue(
+                    korean: mapping.korean, english: mapping.english, desired: desired, runtime: runtime
+                ) {
+                    return result
+                }
+            } else {
+                // Unconditional toggle
+                if let result = AccessibilityChannel.clickControlBarCheckbox(
+                    korean: mapping.korean, english: mapping.english, runtime: runtime
+                ) {
+                    return result
+                }
+            }
+        }
+        // Legacy fallback: search by role=Button with title/description.
         guard let button = AXLogicProElements.findTransportButton(named: name, runtime: runtime) else {
             return .error("Cannot find transport button: \(name)")
         }
@@ -284,38 +412,211 @@ actor AccessibilityChannel: Channel {
 
     private static func defaultSetTempo(
         params: [String: String],
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        runFallback: @escaping @Sendable (String) -> Bool = runTempoFallbackScript
     ) -> ChannelResult {
-        guard let tempoStr = params["tempo"], let _ = Double(tempoStr) else {
-            return .error("Missing or invalid 'tempo' parameter")
+        // TransportDispatcher passes the value under "bpm"; legacy callers may
+        // still send "tempo". Accept either to avoid silent contract drift.
+        guard let tempoStr = params["bpm"] ?? params["tempo"], let _ = Double(tempoStr) else {
+            return .error("Missing or invalid 'tempo'/'bpm' parameter")
         }
-        guard let transport = AXLogicProElements.getTransportBar(runtime: runtime) else {
-            return .error("Cannot locate transport bar")
-        }
-        // Find the tempo text field and set its value
-        let texts = AXHelpers.findAllDescendants(
-            of: transport,
-            role: kAXTextFieldRole,
-            maxDepth: 4,
-            runtime: runtime.ax
-        )
-        for field in texts {
-            let desc = AXHelpers.getDescription(field, runtime: runtime.ax)?.lowercased() ?? ""
-            if desc.contains("tempo") || desc.contains("bpm") {
-                AXHelpers.setAttribute(field, kAXValueAttribute, tempoStr as CFTypeRef, runtime: runtime.ax)
-                AXHelpers.performAction(field, kAXConfirmAction, runtime: runtime.ax)
-                return .success("{\"tempo\":\(tempoStr)}")
+        // Try AX text field first
+        if let transport = AXLogicProElements.getTransportBar(runtime: runtime) {
+            let texts = AXHelpers.findAllDescendants(
+                of: transport,
+                role: kAXTextFieldRole,
+                maxDepth: 4,
+                runtime: runtime.ax
+            )
+            for field in texts {
+                let desc = AXHelpers.getDescription(field, runtime: runtime.ax)?.lowercased() ?? ""
+                if desc.contains("tempo") || desc.contains("bpm") {
+                    AXHelpers.setAttribute(field, kAXValueAttribute, tempoStr as CFTypeRef, runtime: runtime.ax)
+                    AXHelpers.performAction(field, kAXConfirmAction, runtime: runtime.ax)
+                    return .success("{\"tempo\":\(tempoStr),\"via\":\"ax\"}")
+                }
             }
         }
-        return .error("Cannot locate tempo field")
+        // Fallback: AppleScript Tap-Tempo via Logic key command — at minimum locates
+        // the tempo display element via System Events and types the value.
+        // Logic Pro 12.0.1 transport bar exposes an AXButton whose AXDescription
+        // contains the tempo number. Open Tempo entry via menu "탐색 → 템포…" if available.
+        // osascript fallback was disabled — it opened a modal Tempo dialog that
+        // grabs Logic's UI thread, and sustained calls killed the MCP server
+        // via pipe/FD exhaustion (BrokenPipeError at §K in the matrix test).
+        // If AX tempo field is unreachable, just return a clear error — users
+        // can set tempo manually in Logic's transport bar.
+        _ = runFallback // retain parameter for test injection compatibility
+        return .error(
+            "set_tempo: Logic's transport bar doesn't expose a tempo text field via AX in this build. " +
+            "Set tempo manually in Logic's control bar (double-click the BPM display)."
+        )
     }
 
-    private static func defaultSetCycleRange(params: [String: String]) -> ChannelResult {
-        // Cycle range setting via AX is fragile — requires locating the cycle locators
-        guard let _ = params["start"], let _ = params["end"] else {
+    private static func runTempoFallbackScript(tempo: String) -> Bool {
+        let script = """
+        tell application "System Events"
+            tell process "Logic Pro"
+                set frontmost to true
+                delay 0.2
+                -- Open Tempo & Project Settings (⌥+⌘+T)
+                key code 17 using {command down, option down}
+                delay 0.4
+                -- The tempo input field should be focused; type new value
+                keystroke "\(tempo)"
+                delay 0.1
+                key code 36
+                delay 0.2
+                key code 53
+            end tell
+        end tell
+        """
+        let task = Process()
+        task.launchPath = "/usr/bin/osascript"
+        task.arguments = ["-e", script]
+        // Route output to the shared FileHandle.nullDevice — no FD opened per
+        // invocation. Earlier attempt with FileHandle(forWritingAtPath:"/dev/null")
+        // still leaked one FD per call because it wasn't explicitly closed.
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        do {
+            try task.run()
+        } catch {
+            return false
+        }
+        // 5s hard cap — script intent is < 1.5s, anything longer means Logic
+        // is unresponsive (modal dialog stuck, focus lost, etc.).
+        let deadline = Date().addingTimeInterval(5.0)
+        while task.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        if task.isRunning {
+            task.terminate()
+            Thread.sleep(forTimeInterval: 0.2)
+            if task.isRunning { task.interrupt() }
+            task.waitUntilExit() // reap zombie
+            return false
+        }
+        return task.terminationStatus == 0
+    }
+
+    private static func defaultSetCycleRange(
+        params: [String: String],
+        runtime: AXLogicProElements.Runtime = .production,
+        runFallback: @escaping @Sendable (String, String) -> Bool = runCycleRangeFallbackScript
+    ) -> ChannelResult {
+        guard let startStr = params["start"], let endStr = params["end"] else {
             return .error("Missing 'start' and/or 'end' parameters")
         }
-        return .error("Cycle range setting not yet fully implemented via AX")
+        // Normalise input: accept plain bar int ("5") or full bar/beat string ("5.1.1.1").
+        let startPos = startStr.contains(".") ? startStr : "\(startStr).1.1.1"
+        let endPos = endStr.contains(".") ? endStr : "\(endStr).1.1.1"
+
+        // AX path: locate cycle locator text fields in the transport bar.
+        // Logic Pro exposes two text fields whose descriptions contain
+        // "cycle" + "start"/"end" (both ko/en locales covered).
+        if let transport = AXLogicProElements.getTransportBar(runtime: runtime) {
+            let texts = AXHelpers.findAllDescendants(
+                of: transport,
+                role: kAXTextFieldRole,
+                maxDepth: 6,
+                runtime: runtime.ax
+            )
+            var startField: AXUIElement?
+            var endField: AXUIElement?
+            for field in texts {
+                let desc = (AXHelpers.getDescription(field, runtime: runtime.ax) ?? "").lowercased()
+                // Match on description fragments present in both Korean and English Logic builds.
+                if startField == nil && (desc.contains("cycle") || desc.contains("사이클"))
+                    && (desc.contains("start") || desc.contains("시작") || desc.contains("in") || desc.contains("left")) {
+                    startField = field
+                }
+                if endField == nil && (desc.contains("cycle") || desc.contains("사이클"))
+                    && (desc.contains("end") || desc.contains("끝") || desc.contains("out") || desc.contains("right")) {
+                    endField = field
+                }
+            }
+            if let s = startField, let e = endField {
+                AXHelpers.setAttribute(s, kAXValueAttribute, startPos as CFTypeRef, runtime: runtime.ax)
+                AXHelpers.performAction(s, kAXConfirmAction, runtime: runtime.ax)
+                AXHelpers.setAttribute(e, kAXValueAttribute, endPos as CFTypeRef, runtime: runtime.ax)
+                AXHelpers.performAction(e, kAXConfirmAction, runtime: runtime.ax)
+                return .success("{\"start\":\"\(startPos)\",\"end\":\"\(endPos)\",\"via\":\"ax\"}")
+            }
+        }
+
+        // Fallback: osascript using Logic's "Go To Position" dialog combined with
+        // "Set Cycle Locators by Selection" isn't reliable without a region.
+        // Use direct keystroke into the transport cycle display fields via
+        // `click at` on the transport strip. Success is reported as unverified
+        // because Logic's cycle locator state isn't readable via the cached
+        // transport snapshot (cycle bar positions aren't in the state schema).
+        if runFallback(startPos, endPos) {
+            return .success("{\"start\":\"\(startPos)\",\"end\":\"\(endPos)\",\"via\":\"osascript\",\"verified\":false}")
+        }
+        return .error(
+            "set_cycle_range: Logic's cycle locators aren't exposed as AX text fields in this build (tried ko/en locales). " +
+            "Workarounds: (1) select the region covering the desired cycle and use Navigate > '선택 범위로 로케이터 설정 및 사이클 활성화'. " +
+            "(2) Drag the upper ruler to set locators manually. " +
+            "The MCP server cannot currently set numeric cycle locators programmatically."
+        )
+    }
+
+    private static func runCycleRangeFallbackScript(startPos: String, endPos: String) -> Bool {
+        // Strategy: use Logic's "Go To > Go To Beginning" (not ideal) — we instead
+        // rely on the menu path "Navigate > Set Locators…" which opens a dialog
+        // with start/end text fields. Keystroke start, Tab, end, Return.
+        // Menu path (Logic 12, ko): "탐색 > 로케이터 설정…"; (en): "Navigate > Set Locators…"
+        let script = """
+        tell application "System Events"
+            tell process "Logic Pro"
+                set frontmost to true
+                delay 0.2
+                -- Attempt Korean menu first
+                try
+                    click menu item "로케이터 설정…" of menu 1 of menu bar item "탐색" of menu bar 1
+                on error
+                    try
+                        click menu item "Set Locators…" of menu 1 of menu bar item "Navigate" of menu bar 1
+                    on error
+                        return "no-menu"
+                    end try
+                end try
+                delay 0.3
+                keystroke "\(startPos)"
+                key code 48   -- Tab
+                delay 0.1
+                keystroke "\(endPos)"
+                delay 0.1
+                key code 36   -- Return
+                delay 0.2
+                return "ok"
+            end tell
+        end tell
+        """
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        // Stdout captured via Pipe (need the "ok" sentinel). Stderr discarded
+        // via nullDevice to avoid the FD leak that killed the MCP server under
+        // sustained matrix runs (sprint 51 osascript root cause).
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return false
+        }
+        guard process.terminationStatus == 0 else { return false }
+        // Read then close the pipe explicitly so its FDs release immediately
+        // rather than lingering until Pipe deinit.
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        try? stdout.fileHandleForReading.close()
+        try? stdout.fileHandleForWriting.close()
+        let result = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return result == "ok"
     }
 
     // MARK: - Tracks
@@ -323,7 +624,11 @@ actor AccessibilityChannel: Channel {
     private static func defaultGetTracks(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
         let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
         if headers.isEmpty {
-            return .error("No track headers found — is a project open?")
+            // Empty is a valid steady state (no project open / project picker
+            // front). Return an empty list so the StatePoller can overwrite
+            // stale cache from a prior session instead of silently holding
+            // onto ghost tracks that break rename/mute/arm ops on index 0.
+            return encodeResult([TrackState]())
         }
         var tracks: [TrackState] = []
         for (index, header) in headers.enumerated() {
@@ -391,10 +696,86 @@ actor AccessibilityChannel: Channel {
         guard let button = finder(index) else {
             return .error("Cannot find \(buttonName) button on track \(index)")
         }
-        guard AXHelpers.performAction(button, kAXPressAction, runtime: runtime.ax) else {
-            return .error("Failed to click \(buttonName) on track \(index)")
+        // Press toggles state. To make `enabled: true/false` idempotent (the
+        // user-visible contract), read current AXValue — only press when the
+        // target state differs. This fixes the class of bug where `arm off`
+        // was a silent no-op because MCU release-only was being sent and the
+        // AX press was unconditionally toggling regardless of desired state.
+        let desired: Bool = (params["enabled"] ?? "true") == "true"
+        let current: Bool? = {
+            if let raw = AXHelpers.getValue(button, runtime: runtime.ax) as? Int { return raw != 0 }
+            if let raw = AXHelpers.getValue(button, runtime: runtime.ax) as? Bool { return raw }
+            if let raw = AXHelpers.getValue(button, runtime: runtime.ax) as? NSNumber { return raw.boolValue }
+            return nil
+        }()
+        if let cur = current, cur == desired {
+            return .success("{\"track\":\(index),\"\(buttonName)\":\(desired),\"action\":\"no-op\"}")
         }
-        return .success("{\"track\":\(index),\"toggled\":\"\(buttonName)\"}")
+
+        func readCurrent() -> Bool? {
+            guard let v = AXHelpers.getValue(button, runtime: runtime.ax) else { return nil }
+            if let n = v as? NSNumber { return n.boolValue }
+            if let b = v as? Bool { return b }
+            if let i = v as? Int { return i != 0 }
+            if let s = v as? String { return s == "1" || s.lowercased() == "true" }
+            return nil
+        }
+
+        // Escalating strategy: each step verified by read-back. Stops on success.
+        // Logic Pro's custom AX checkboxes differ in what triggers them — some
+        // respond to AXPress, some only to direct value writes, some need a
+        // real mouse click at the button's screen position.
+        let strategies: [(String, () -> Void)] = [
+            ("press", { _ = AXHelpers.performAction(button, kAXPressAction, runtime: runtime.ax) }),
+            ("confirm", { _ = AXHelpers.performAction(button, kAXConfirmAction, runtime: runtime.ax) }),
+            ("value-nsnumber", {
+                let n: NSNumber = desired ? 1 : 0
+                AXHelpers.setAttribute(button, kAXValueAttribute, n as CFTypeRef, runtime: runtime.ax)
+            }),
+            ("value-cfbool", {
+                let b: CFBoolean = desired ? kCFBooleanTrue : kCFBooleanFalse
+                AXHelpers.setAttribute(button, kAXValueAttribute, b, runtime: runtime.ax)
+            }),
+            ("mouse-click", {
+                Self.postMouseClickAt(element: button, runtime: runtime.ax)
+            }),
+        ]
+        for (name, action) in strategies {
+            action()
+            // Logic Pro updates AX tree asynchronously after a click — a 50 ms
+            // settle is enough on Apple Silicon for the rec-arm checkbox to
+            // repaint and reflect the new value via AXValue.
+            usleep(50_000)
+            if let after = readCurrent(), after == desired {
+                return .success("{\"track\":\(index),\"\(buttonName)\":\(desired),\"action\":\"\(name)\"}")
+            }
+        }
+        return .error("Failed to set \(buttonName)=\(desired) on track \(index) — tried press/confirm/value/click, read-back never matched")
+    }
+
+    /// Simulate a real user mouse-click at the screen center of an AX element.
+    /// Used as a last resort when AXPress / AXValue writes don't propagate to
+    /// Logic Pro's internal handlers (observed with Logic 12 rec-arm checkboxes).
+    private static func postMouseClickAt(element: AXUIElement, runtime: AXHelpers.Runtime) {
+        var posValue: AnyObject?
+        var sizeValue: AnyObject?
+        let pr = AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &posValue)
+        let sr = AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeValue)
+        guard pr == .success, sr == .success,
+              let p = posValue, let s = sizeValue,
+              CFGetTypeID(p) == AXValueGetTypeID(),
+              CFGetTypeID(s) == AXValueGetTypeID() else { return }
+        var pt = CGPoint.zero
+        var sz = CGSize.zero
+        AXValueGetValue((p as! AXValue), .cgPoint, &pt)
+        AXValueGetValue((s as! AXValue), .cgSize, &sz)
+        let center = CGPoint(x: pt.x + sz.width / 2, y: pt.y + sz.height / 2)
+        let src = CGEventSource(stateID: .hidSystemState)
+        if let down = CGEvent(mouseEventSource: src, mouseType: .leftMouseDown, mouseCursorPosition: center, mouseButton: .left),
+           let up = CGEvent(mouseEventSource: src, mouseType: .leftMouseUp, mouseCursorPosition: center, mouseButton: .left) {
+            down.post(tap: .cghidEventTap)
+            up.post(tap: .cghidEventTap)
+        }
     }
 
     private static func defaultRenameTrack(
@@ -591,21 +972,47 @@ actor AccessibilityChannel: Channel {
 
         // Try Korean locale first
         let result = clickTrackMenu(korean, menuName: "트랙", englishMenuName: "Track", runtime: runtime)
+        let menuClickedTitle: String
         if result.isSuccess {
-            return await verifyTrackCreation(
-                title: korean,
-                beforeCount: beforeCount,
-                runtime: runtime
-            )
+            menuClickedTitle = korean
+        } else {
+            // Fallback: English locale with English item title
+            let fallback = clickTrackMenu(english, menuName: "Track", englishMenuName: "Track", runtime: runtime)
+            guard fallback.isSuccess else { return fallback }
+            menuClickedTitle = english
         }
-        // Fallback: English locale with English item title
-        let fallback = clickTrackMenu(english, menuName: "Track", englishMenuName: "Track", runtime: runtime)
-        guard fallback.isSuccess else { return fallback }
+
+        // Logic 12.0.1: menu click may show "새로운 트랙 생성" dialog (sometimes invisible
+        // to AX tree). Strategy: poll track count briefly. If track was already
+        // created without a dialog, do NOT send Return (avoids sending Enter to
+        // unrelated focused targets). If still unchanged after 400ms, assume
+        // dialog is up and send Return; verify after.
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        let midCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
+        if midCount == beforeCount {
+            // Track not created yet — assume New Track dialog is awaiting confirmation
+            sendReturnKey()
+        }
+
         return await verifyTrackCreation(
-            title: english,
+            title: menuClickedTitle,
             beforeCount: beforeCount,
             runtime: runtime
         )
+    }
+
+    /// Send Return key via CGEvent — used to auto-confirm Logic 12's
+    /// "New Track" dialog (which is sometimes opaque to AX tree).
+    private static func sendReturnKey() {
+        guard let src = CGEventSource(stateID: .hidSystemState) else { return }
+        let returnVK: CGKeyCode = 0x24
+        if let down = CGEvent(keyboardEventSource: src, virtualKey: returnVK, keyDown: true) {
+            down.post(tap: .cghidEventTap)
+        }
+        usleep(20_000)
+        if let up = CGEvent(keyboardEventSource: src, virtualKey: returnVK, keyDown: false) {
+            up.post(tap: .cghidEventTap)
+        }
     }
 
     private static func verifyTrackCreation(
@@ -706,14 +1113,541 @@ actor AccessibilityChannel: Channel {
         return encodeResult(state)
     }
 
+    // MARK: - Library operations
+
+    private static func listLibrary(
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult {
+        guard let inventory = LibraryAccessor.enumerate(runtime: runtime) else {
+            return .error("Library panel not found. Open Library (⌘L) in Logic Pro.")
+        }
+        do {
+            let data = try JSONEncoder().encode(inventory)
+            guard let json = String(data: data, encoding: .utf8) else {
+                return .error("Failed to serialize library inventory")
+            }
+            return .success(json)
+        } catch {
+            return .error("JSON encode failed: \(error)")
+        }
+    }
+
+    /// Production `library.scan_all` path — wires ScanOrchestration + live TreeProbe,
+    /// populates `lastScan` for resolve_path, restores Tier-A selection, writes JSON.
+    private func runLiveScan(runtime: AXLogicProElements.Runtime) async -> ChannelResult {
+        let t0 = Date()
+        Log.info("scan_all: entering runLiveScan", subsystem: "ax")
+
+        // Precondition: only start the scan if the Library panel is actually open.
+        // This is a < 100 ms AX check and avoids descending into a multi-second
+        // probe chain that has no Library to walk. Run FIRST so we bail before
+        // any expensive setup (probe construction, snapshot extraction).
+        guard LibraryAccessor.isLibraryPanelOpen(runtime: runtime) else {
+            Log.info("scan_all: preflight failed in \(Int(Date().timeIntervalSince(t0) * 1000))ms — panel closed", subsystem: "ax")
+            return .error("Library panel not found. Open Library (⌘L) in Logic Pro.")
+        }
+        Log.info("scan_all: preflight OK in \(Int(Date().timeIntervalSince(t0) * 1000))ms", subsystem: "ax")
+
+        let snapshot: (category: String, preset: String)? = {
+            if let c = lastRoutedCategory, let p = lastRoutedPreset { return (c, p) }
+            return nil
+        }()
+        let channel = self
+        let probe = Self.buildLiveTreeProbe(runtime: runtime)
+
+        // 150ms settle is empirically sufficient on Apple Silicon; 500ms was
+        // overly conservative and pushed full Library scans past the client
+        // read-timeout (observed 164s at 500ms vs ~50s at 150ms).
+        let result = await LibraryAccessor.ScanOrchestration.run(
+            probe: probe,
+            cachedSelection: snapshot,
+            restoreSelection: { c, p in
+                let okCat = LibraryAccessor.selectCategory(named: c, runtime: runtime)
+                if !okCat { return false }
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                return LibraryAccessor.selectPreset(named: p, runtime: runtime)
+            },
+            writeJSON: { root in Self.writeInventoryJSON(root) },
+            onComplete: { root in await channel.setLastScan(root) },
+            settleDelayMs: 150
+        )
+        guard let r = result else {
+            return .error("Library panel not found. Open Library (⌘L) in Logic Pro.")
+        }
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(r.root)
+            guard let s = String(data: data, encoding: .utf8) else {
+                return .error("Failed to encode library inventory JSON")
+            }
+            return .success(s)
+        } catch {
+            return .error("JSON encode failed: \(error)")
+        }
+    }
+
+    private func setLastScan(_ root: LibraryRoot) {
+        self.lastScan = root
+    }
+
+    // MARK: - F2 plugin.scan_presets minimal handler (T0 verdict MIXED)
+
+    /// Production `plugin.scan_presets` path — relies on currently-focused plugin
+    /// window. CGEvent-clicks the Setting popup to open the menu, then walks via
+    /// AXPress on AXMenuItems (T0 v0.6 empirical — popup AXPress unreliable, menu
+    /// item AXPress 100% reliable). Returns serialized PluginPresetNode tree.
+    /// Full T6 (cache, persistence, identity gate) is follow-up.
+    static func runLivePluginPresetScan(
+        runtime: AXLogicProElements.Runtime,
+        settleMs: Int = 250
+    ) async -> ChannelResult {
+        // 1. Resolve Logic app root
+        guard let appRoot = AXLogicProElements.appRoot(runtime: runtime) else {
+            return .error("Logic Pro is not running")
+        }
+        // 2. Find focused plugin window (heuristic: has AXPopUpButton with "Preset"/"기본" value)
+        guard let pluginWin = PluginInspector.findFocusedPluginWindowAX(in: appRoot) else {
+            return .error("No plugin window with Setting dropdown found. Open an instrument plugin window first.")
+        }
+        // 3. Locate Setting popup + its center point
+        guard let popup = PluginInspector.findSettingPopupAX(in: pluginWin) else {
+            return .error("Setting popup not found in plugin window")
+        }
+        guard let center = PluginInspector.centerPoint(of: popup) else {
+            return .error("Setting popup has no readable position/size")
+        }
+        // 4. CGEvent click to open menu (T0 verdict — popup AXPress unreliable)
+        guard LibraryAccessor.productionMouseClick(at: center) else {
+            return .error("CGEvent click on Setting popup failed (Post-Event permission?)")
+        }
+        // 5. Wait for menu to appear, then locate it
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        guard let menu = PluginInspector.findOpenSettingMenuAX(in: appRoot) else {
+            return .error("Setting menu did not appear after click (or already dismissed)")
+        }
+        // 6. Build live probe + walk
+        let probe = PluginInspector.liveMenuProbe(rootMenu: menu, settleMs: settleMs)
+        let scanStart = Date()
+        do {
+            let (root, cycleCount) = try await PluginInspector.enumerateMenuTree(
+                probe: probe, maxDepth: maxPluginMenuDepth, settleMs: settleMs
+            )
+            let durationMs = Int(Date().timeIntervalSince(scanStart) * 1000)
+            // 7. Dismiss menu
+            _ = AXUIElementPerformAction(menu, kAXCancelAction as CFString)
+            // 8. Compute counts
+            let counts = AccessibilityChannel.countNodes(root)
+            // 9. Build minimal cache (no persistence in this minimal handler)
+            let cache = PluginPresetCache(
+                schemaVersion: 1,
+                pluginName: "(focused-plugin)",
+                pluginIdentifier: "(unknown — T6 will resolve via AU registry)",
+                pluginVersion: nil,
+                contentHash: "(deferred)",
+                generatedAt: ISO8601DateFormatter().string(from: Date()),
+                scanDurationMs: durationMs,
+                measuredSubmenuOpenDelayMs: settleMs,
+                truncatedBranches: counts.truncated,
+                probeTimeouts: counts.probeTimeout,
+                cycleCount: cycleCount,
+                nodeCount: counts.total,
+                leafCount: counts.leaf,
+                folderCount: counts.folder,
+                root: root
+            )
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(cache)
+            guard let s = String(data: data, encoding: .utf8) else {
+                return .error("Failed to encode plugin preset cache JSON")
+            }
+            return .success(s)
+        } catch PluginError.menuMutated {
+            _ = AXUIElementPerformAction(menu, kAXCancelAction as CFString)
+            return .error("Plugin menu mutated mid-scan; aborted")
+        } catch PluginError.focusLost {
+            return .error("Logic Pro lost focus mid-scan")
+        } catch {
+            return .error("Plugin scan failed: \(error)")
+        }
+    }
+
+    /// Walk a `PluginPresetNode` tree and tally counts by kind.
+    private static func countNodes(_ node: PluginPresetNode) -> (total: Int, leaf: Int, folder: Int, truncated: Int, probeTimeout: Int) {
+        var total = 1
+        var leaf = node.kind == .leaf ? 1 : 0
+        var folder = node.kind == .folder ? 1 : 0
+        var truncated = node.kind == .truncated ? 1 : 0
+        var probeTimeout = node.kind == .probeTimeout ? 1 : 0
+        for c in node.children {
+            let s = countNodes(c)
+            total += s.total
+            leaf += s.leaf
+            folder += s.folder
+            truncated += s.truncated
+            probeTimeout += s.probeTimeout
+        }
+        return (total, leaf, folder, truncated, probeTimeout)
+    }
+
+    /// Detects external (non-scanner) mutation of the Library panel during a scan.
+    /// Compares column-1 category list against a snapshot taken at scan start.
+    /// Scanner's own `selectCategory` clicks change column 2 content only — column 1
+    /// category list is invariant under scanner actions.
+    private final class MutationDetector: @unchecked Sendable {
+        private let runtime: AXLogicProElements.Runtime
+        private let initialCategories: [String]
+        init(runtime: AXLogicProElements.Runtime) {
+            self.runtime = runtime
+            self.initialCategories = LibraryAccessor.enumerate(runtime: runtime)?.categories ?? []
+        }
+        func check() -> Bool {
+            let current = LibraryAccessor.enumerate(runtime: runtime)?.categories ?? []
+            return current != initialCategories
+        }
+    }
+
+    /// Build a live TreeProbe for the current flat 2-level Logic Library:
+    /// depth 0 → categories; depth 1 → click category + read presets; depth 2+ → leaf.
+    private static func buildLiveTreeProbe(runtime: AXLogicProElements.Runtime) -> TreeProbe {
+        let logicPID = NSWorkspace.shared.runningApplications.first(where: {
+            $0.bundleIdentifier == "com.apple.logic10"
+        })?.processIdentifier
+        let detector = MutationDetector(runtime: runtime)
+        return TreeProbe(
+            childrenAt: { path in
+                if path.isEmpty {
+                    guard let inv = LibraryAccessor.enumerate(runtime: runtime) else { return nil }
+                    return inv.categories
+                }
+                if path.count == 1 {
+                    guard LibraryAccessor.selectCategory(named: path[0], runtime: runtime) else {
+                        return nil
+                    }
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    return LibraryAccessor.currentPresets(runtime: runtime)
+                }
+                return []
+            },
+            focusOK: {
+                guard let pid = logicPID else { return true }
+                let sysWide = AXUIElementCreateSystemWide()
+                var focusedApp: AnyObject?
+                let r = AXUIElementCopyAttributeValue(
+                    sysWide, kAXFocusedApplicationAttribute as CFString, &focusedApp
+                )
+                guard r == .success, let app = focusedApp,
+                      CFGetTypeID(app) == AXUIElementGetTypeID() else { return true }
+                let focusedElement = app as! AXUIElement
+                var appPID: pid_t = 0
+                AXUIElementGetPid(focusedElement, &appPID)
+                return appPID == pid
+            },
+            mutationSinceLastCheck: { detector.check() },
+            sleep: { ms in
+                try? await Task.sleep(nanoseconds: UInt64(ms) * 1_000_000)
+            },
+            visitedHash: { path in
+                path.joined(separator: "\u{0001}").hashValue
+            }
+        )
+    }
+
+    private static func writeInventoryJSON(_ root: LibraryRoot) -> Bool {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(root) else { return false }
+        let fm = FileManager.default
+        let resDir = fm.currentDirectoryPath + "/Resources"
+        if !fm.fileExists(atPath: resDir) {
+            try? fm.createDirectory(atPath: resDir, withIntermediateDirectories: true)
+        }
+        let path = resDir + "/library-inventory.json"
+        do {
+            try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+            return true
+        } catch {
+            Log.warn("Library inventory write failed: \(error)", subsystem: "library")
+            return false
+        }
+    }
+
+    /// T6: compute the vertical viewport of the track list (Y min/max on screen).
+    /// Returns nil if the scroll area isn't resolvable — callers fall through
+    /// to click anyway (fail-open, documented in T6 EC-1).
+    private static func trackViewport(runtime: AXLogicProElements.Runtime) -> (minY: CGFloat, maxY: CGFloat)? {
+        guard let headers = AXLogicProElements.getTrackHeaders(runtime: runtime) else { return nil }
+        var posValue: AnyObject?
+        var sizeValue: AnyObject?
+        _ = AXUIElementCopyAttributeValue(headers, kAXPositionAttribute as CFString, &posValue)
+        _ = AXUIElementCopyAttributeValue(headers, kAXSizeAttribute as CFString, &sizeValue)
+        guard let pr = posValue, let sr = sizeValue,
+              CFGetTypeID(pr) == AXValueGetTypeID(),
+              CFGetTypeID(sr) == AXValueGetTypeID() else { return nil }
+        var p = CGPoint.zero
+        var s = CGSize.zero
+        AXValueGetValue((pr as! AXValue), .cgPoint, &p)
+        AXValueGetValue((sr as! AXValue), .cgSize, &s)
+        return (p.y, p.y + s.height)
+    }
+
+    private struct ResolvePathResponse: Encodable {
+        let exists: Bool
+        let kind: String?
+        let matchedPath: String?
+        let children: [String]?
+        let reason: String?
+    }
+
+    private struct SetInstrumentResponse: Encodable {
+        let category: String
+        let preset: String
+        let path: String
+    }
+
+    private static func resolveLibraryPath(
+        params: [String: String],
+        lastScan: LibraryRoot?
+    ) -> ChannelResult {
+        guard let path = params["path"], !path.isEmpty else {
+            return .error("Missing 'path' parameter for library.resolve_path")
+        }
+        guard let root = lastScan else {
+            return encodeOrError(ResolvePathResponse(
+                exists: false, kind: nil, matchedPath: nil, children: nil,
+                reason: "No cached library scan; call scan_library first"
+            ))
+        }
+        guard let res = LibraryAccessor.resolvePath(path, in: root) else {
+            return encodeOrError(ResolvePathResponse(
+                exists: false, kind: nil, matchedPath: nil, children: nil, reason: nil
+            ))
+        }
+        return encodeOrError(ResolvePathResponse(
+            exists: res.exists,
+            kind: res.kind?.rawValue,
+            matchedPath: res.matchedPath,
+            children: res.children,
+            reason: nil
+        ))
+    }
+
+    private static func encodeOrError<T: Encodable>(_ value: T) -> ChannelResult {
+        do {
+            let data = try JSONEncoder().encode(value)
+            guard let s = String(data: data, encoding: .utf8) else {
+                return .error("Failed to serialize response")
+            }
+            return .success(s)
+        } catch {
+            return .error("JSON encode failed: \(error)")
+        }
+    }
+
+    private static func setTrackInstrument(
+        params: [String: String],
+        runtime: AXLogicProElements.Runtime = .production
+    ) async -> ChannelResult {
+        // Resolve path-OR-legacy. Path wins when both provided.
+        let pathParam = params["path"].flatMap { $0.isEmpty ? nil : $0 }
+        let catParam = params["category"].flatMap { $0.isEmpty ? nil : $0 }
+        let presetParam = params["preset"].flatMap { $0.isEmpty ? nil : $0 }
+
+        let resolvedCategory: String
+        let resolvedPreset: String
+        let resolvedPath: String
+        if let p = pathParam {
+            guard let parts = LibraryAccessor.parsePath(p), parts.count >= 2 else {
+                return .error("Invalid 'path': must have at least category and preset segments")
+            }
+            // PRD AC-2.8: path must resolve to a leaf, not a folder. For production
+            // flat Library (depth 2) a 2-segment path is inherently a leaf.
+            // Deeper paths require cache check (T7); here we accept 2+ segments.
+            resolvedCategory = parts[0]
+            resolvedPreset = parts[parts.count - 1]
+            resolvedPath = p
+        } else if let c = catParam, let pr = presetParam {
+            resolvedCategory = c
+            resolvedPreset = pr
+            resolvedPath = "\(c)/\(pr)"
+        } else {
+            return .error("Missing path or (category+preset) for track.set_instrument")
+        }
+        let category = resolvedCategory
+        let preset = resolvedPreset
+
+        // Select the target track first — Library loads the instrument onto
+        // whichever track is currently focused. AXPressAction on track headers
+        // is unreliable in Logic Pro 12; inject a real CGEvent mouse click at
+        // the header's screen position (same pattern proven for Library).
+        if let indexStr = params["index"], let index = Int(indexStr) {
+            guard let header = AXLogicProElements.findTrackHeader(at: index, runtime: runtime) else {
+                return .error("Track at index \(index) not found")
+            }
+            var posValue: AnyObject?
+            var sizeValue: AnyObject?
+            _ = AXUIElementCopyAttributeValue(header, kAXPositionAttribute as CFString, &posValue)
+            _ = AXUIElementCopyAttributeValue(header, kAXSizeAttribute as CFString, &sizeValue)
+            if let posRaw = posValue, let sizeRaw = sizeValue,
+               CFGetTypeID(posRaw) == AXValueGetTypeID(),
+               CFGetTypeID(sizeRaw) == AXValueGetTypeID() {
+                var p = CGPoint.zero
+                var s = CGSize.zero
+                AXValueGetValue((posRaw as! AXValue), .cgPoint, &p)
+                AXValueGetValue((sizeRaw as! AXValue), .cgSize, &s)
+                // T6: viewport visibility check (AC-3.2 / E13)
+                if let vp = AccessibilityChannel.trackViewport(runtime: runtime) {
+                    let headerY = p.y + s.height / 2
+                    if headerY < vp.minY || headerY > vp.maxY {
+                        return .error("Track not visible; scroll tracklist to bring track \(index) into view")
+                    }
+                }
+                // E10b: preflight Post-Event capability before any CGEvent mutation
+                if !CGPreflightPostEventAccess() {
+                    return .error("Event-post permission required (Accessibility → Input Monitoring). Grant in System Settings.")
+                }
+                // Click near the left edge of the header (name area), not center,
+                // to avoid hitting record/mute/solo buttons on wider headers.
+                let clickPoint = CGPoint(x: p.x + min(60, s.width / 4), y: p.y + s.height / 2)
+                let clicked = LibraryAccessor.productionMouseClick(at: clickPoint)
+                guard clicked else {
+                    return .error("Failed to click track header at index \(index)")
+                }
+                try? await Task.sleep(nanoseconds: 350_000_000)
+            } else {
+                _ = AXHelpers.performAction(header, kAXPressAction, runtime: runtime.ax)
+                try? await Task.sleep(nanoseconds: 400_000_000)
+            }
+        }
+
+        // Select the category (injects CGEvent mouse click)
+        guard LibraryAccessor.selectCategory(named: category, runtime: runtime) else {
+            return .error("Category not found in Library: \(category)")
+        }
+        try? await Task.sleep(nanoseconds: 600_000_000)
+
+        // Select the preset (injects CGEvent mouse click)
+        guard LibraryAccessor.selectPreset(named: preset, runtime: runtime) else {
+            return .error("Preset not found in category '\(category)': \(preset)")
+        }
+        try? await Task.sleep(nanoseconds: 800_000_000) // let Logic load the instrument
+
+        return encodeOrError(SetInstrumentResponse(
+            category: category, preset: preset, path: resolvedPath
+        ))
+    }
+
+    // MARK: - Control-bar playhead position helper
+
+    /// Set the playhead to a specific bar using Logic Pro 12's 마디 slider in
+    /// the control bar. Accepts `{"bar": Int}` or `{"position": "B.B.S.S"}`.
+    private static func gotoPositionViaBarSlider(
+        params: [String: String],
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult {
+        // Prefer explicit bar int
+        var targetBar: Int? = nil
+        if let barStr = params["bar"], let b = Int(barStr) {
+            targetBar = b
+        } else if let pos = params["position"] {
+            // AX channel handles bar / B.B.S.S only. Timecode (HH:MM:SS:FF or
+            // HH:MM:SS) cannot be set via the bar-slider; defer to next channel
+            // (MCU mmc_locate handles SMPTE).
+            if pos.contains(":") {
+                return .error("AX gotoPositionViaBarSlider cannot handle timecode (use MCU mmc_locate)")
+            }
+            // Parse "B.B.S.S" → take first component
+            let parts = pos.split(separator: ".")
+            if let first = parts.first, let b = Int(first) {
+                targetBar = b
+            }
+        }
+        guard let bar = targetBar, bar >= 1 else {
+            return .error("goto_position requires 'bar' (Int >= 1) or 'position' (B.B.S.S)")
+        }
+
+        guard let slider = AXLogicProElements.findControlBarBarSlider(runtime: runtime) else {
+            return .error("마디 slider not found in control bar")
+        }
+        let setOK = AXHelpers.setAttribute(
+            slider, kAXValueAttribute, NSNumber(value: bar), runtime: runtime.ax
+        )
+        if !setOK {
+            return .error("Failed to set 마디 slider")
+        }
+        // Also reset 비트 to 1 so playhead lands exactly on bar.beat 1
+        if let beatSlider = AXLogicProElements.findControlBarBeatSlider(runtime: runtime) {
+            _ = AXHelpers.setAttribute(
+                beatSlider, kAXValueAttribute, NSNumber(value: 1), runtime: runtime.ax
+            )
+        }
+        // Confirm the slider change — Logic's transport doesn't commit until
+        // the slider control receives an AXConfirm action.
+        _ = AXHelpers.performAction(slider, kAXConfirmAction, runtime: runtime.ax)
+        return .success("{\"position\":\"\(bar).1.1.1\"}")
+    }
+
+    // MARK: - Control-bar checkbox helpers (Logic Pro 12 transport)
+
+    /// Click a control-bar checkbox by Korean/English name, toggling its value.
+    /// Returns nil if the checkbox couldn't be located — callers may fall back.
+    private static func clickControlBarCheckbox(
+        korean: String,
+        english: String,
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult? {
+        guard let cb = AXLogicProElements.findControlBarCheckbox(
+            named: korean, englishName: english, runtime: runtime
+        ) else {
+            return nil
+        }
+        guard AXHelpers.performAction(cb, kAXPressAction, runtime: runtime.ax) else {
+            return .error("Failed to click control-bar checkbox: \(korean)")
+        }
+        return .success("{\"clicked\":\"\(korean)\"}")
+    }
+
+    /// Ensure a control-bar checkbox matches `desired` state. Reads current
+    /// value and clicks only if it differs. Returns nil if the checkbox
+    /// cannot be located (caller may fall back).
+    private static func setControlBarCheckboxValue(
+        korean: String,
+        english: String,
+        desired: Bool,
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ChannelResult? {
+        guard let cb = AXLogicProElements.findControlBarCheckbox(
+            named: korean, englishName: english, runtime: runtime
+        ) else {
+            return nil
+        }
+        let current = AXLogicProElements.readControlBarCheckboxValue(
+            named: korean, englishName: english, runtime: runtime
+        )
+        if current == desired {
+            return .success("{\"\(korean)\":\(desired),\"unchanged\":true}")
+        }
+        guard AXHelpers.performAction(cb, kAXPressAction, runtime: runtime.ax) else {
+            return .error("Failed to click control-bar checkbox: \(korean)")
+        }
+        return .success("{\"\(korean)\":\(desired)}")
+    }
+
     private static func defaultSetMixerValue(
         params: [String: String],
         target: MixerTarget,
         runtime: AXLogicProElements.Runtime = .production
     ) -> ChannelResult {
-        guard let indexStr = params["index"], let index = Int(indexStr),
-              let valueStr = params["value"], let value = Double(valueStr) else {
-            return .error("Missing 'index' or 'value' parameter")
+        // Accept both `value` (legacy) and `volume`/`pan` (dispatcher-side aliases)
+        // — same contract-drift class of bug as transport.set_tempo's bpm/tempo.
+        guard let indexStr = params["index"], let index = Int(indexStr) else {
+            return .error("Missing 'index' parameter")
+        }
+        let label = target == .volume ? "volume" : "pan"
+        guard let valueStr = params["value"] ?? params[label],
+              let value = Double(valueStr) else {
+            return .error("Missing 'value' or '\(label)' parameter")
         }
         let element: AXUIElement?
         switch target {
@@ -726,8 +1660,148 @@ actor AccessibilityChannel: Channel {
             return .error("Cannot find \(target) control for track \(index)")
         }
         AXHelpers.setAttribute(slider, kAXValueAttribute, NSNumber(value: value), runtime: runtime.ax)
-        let label = target == .volume ? "volume" : "pan"
-        return .success("{\"\(label)\":\(value),\"track\":\(index)}")
+        // Read-back verification — same honesty principle as set_tempo.
+        let readBack: Double? = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax)
+        if let actual = readBack, abs(actual - value) < 0.01 {
+            return .success("{\"\(label)\":\(value),\"track\":\(index),\"verified\":true}")
+        }
+        return .success("{\"\(label)\":\(value),\"track\":\(index),\"verified\":false,\"actual\":\(readBack ?? -1)}")
+    }
+
+    // MARK: - Regions
+
+    /// Read all regions (MIDI/audio clips) currently shown in the arrange area.
+    ///
+    /// Uses AX traversal: locate the "트랙 콘텐츠"/"Track Content" AXGroup, collect
+    /// AXLayoutItem children whose AXHelp matches Logic's region-description pattern,
+    /// and parse bar positions from the localized help string.
+    ///
+    /// Track index is assigned by matching region Y-midpoint to the closest track-header
+    /// Y-midpoint. If no track headers can be read (e.g. scrolled offscreen), returns
+    /// index -1 so the caller can still see the regions.
+    private static func defaultGetRegions(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
+        guard let window = AXLogicProElements.mainWindow(runtime: runtime) else {
+            return .error("Cannot locate Logic Pro main window")
+        }
+        // Find the "Track Content" container — it holds all region AXLayoutItems as
+        // descendants. Logic's arrange area may have multiple AXGroups so match by description.
+        // Increase maxDepth to 14 — production Logic trees can run deeper than 10 under
+        // the arrange area once plugin/library panels are open.
+        let candidates = AXHelpers.findAllDescendants(
+            of: window, role: kAXGroupRole, maxDepth: 14, runtime: runtime.ax
+        )
+        var contentGroup: AXUIElement? = nil
+        var groupDescSamples: [String] = []
+        for g in candidates {
+            let desc = AXHelpers.getDescription(g, runtime: runtime.ax) ?? ""
+            if !desc.isEmpty { groupDescSamples.append(desc) }
+            // Logic's localized strings have varied over versions: "트랙 콘텐츠" (12.0),
+            // just "콘텐츠" (some builds), "Track Content" (en). Accept any that contains
+            // the stem — regions are the only content elements we care about underneath.
+            let lower = desc.lowercased()
+            if desc.contains("트랙 콘텐츠") || desc == "콘텐츠"
+                || lower == "track content" || lower == "content" {
+                contentGroup = g
+                break
+            }
+        }
+        guard let content = contentGroup else {
+            // Return diagnostic so the caller can see what group descriptions WERE found.
+            // Prevents silent "empty array" failures when Logic's localization differs.
+            // Emit each sample with Unicode code-point count + hex bytes so whitespace/
+            // hidden chars surface (was the problem chasing "콘텐츠" matching).
+            let detailed = groupDescSamples.prefix(20).map { s -> String in
+                let bytes = s.unicodeScalars.map { String(format: "U+%04X", $0.value) }.joined(separator: ",")
+                return "'\(s)'(\(s.unicodeScalars.count)=\(bytes))"
+            }.joined(separator: " | ")
+            return .error("Track Content group not found (scanned \(candidates.count) AXGroups; samples: \(detailed))")
+        }
+
+        // Track headers for Y→index mapping.
+        let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
+        let headerYs: [(index: Int, y: CGFloat)] = headers.enumerated().compactMap { pair in
+            guard let p = AXHelpers.getPosition(pair.element, runtime: runtime.ax),
+                  let s = AXHelpers.getSize(pair.element, runtime: runtime.ax) else { return nil }
+            return (pair.offset, p.y + s.height / 2)
+        }
+
+        // Collect all AXLayoutItems under content — regions look like:
+        //   AXLayoutItem [d="<region name>" | h="리전은 N 마디 에서 시작하여 M 마디 에서 끝납니다., MIDI 리전. …"]
+        // maxDepth=10 covers nested AXLayoutArea→AXLayoutItem structure seen in production.
+        let items = AXHelpers.findAllDescendants(
+            of: content, role: "AXLayoutItem", maxDepth: 10, runtime: runtime.ax
+        )
+        var regions: [RegionInfo] = []
+        var nonRegionCount = 0
+        for item in items {
+            let help = AXHelpers.getHelp(item, runtime: runtime.ax) ?? ""
+            // Heuristic: region help always contains "리전" (Korean) or "Region" (English).
+            // Track-content-lane headers and other AXLayoutItems don't.
+            let isRegion = help.contains("리전") || help.lowercased().contains("region")
+            guard isRegion else { nonRegionCount += 1; continue }
+
+            let name = AXHelpers.getDescription(item, runtime: runtime.ax) ?? ""
+            // Parse "리전은 N 마디 에서 시작하여 M 마디 에서 끝납니다" or
+            // "Region starts at bar N and ends at bar M".
+            let (startBar, endBar) = parseRegionBars(from: help)
+
+            // Detect kind from help text.
+            let lower = help.lowercased()
+            let kind: String
+            if help.contains("MIDI") || lower.contains("midi") {
+                kind = "midi"
+            } else if help.contains("오디오") || lower.contains("audio") {
+                kind = "audio"
+            } else {
+                kind = "unknown"
+            }
+
+            // Determine track index by Y match.
+            var trackIndex = -1
+            if let pos = AXHelpers.getPosition(item, runtime: runtime.ax),
+               let size = AXHelpers.getSize(item, runtime: runtime.ax),
+               !headerYs.isEmpty {
+                let regionMidY = pos.y + size.height / 2
+                let best = headerYs.min(by: { abs($0.y - regionMidY) < abs($1.y - regionMidY) })
+                trackIndex = best?.index ?? -1
+            }
+
+            regions.append(RegionInfo(
+                name: name,
+                trackIndex: trackIndex,
+                startBar: startBar,
+                endBar: endBar,
+                kind: kind,
+                rawHelp: help
+            ))
+        }
+        // When the array is empty, surface traversal counters so we can tell
+        // "no regions exist" from "parser missed them" without re-running a probe.
+        if regions.isEmpty {
+            return .success("{\"regions\":[],\"_debug\":{\"layoutItems\":\(items.count),\"nonRegion\":\(nonRegionCount)}}")
+        }
+        return encodeResult(regions)
+    }
+
+    /// Extract (startBar, endBar) from Logic's localized region help text.
+    /// Returns (-1, -1) if neither pattern matches — callers should inspect rawHelp.
+    private static func parseRegionBars(from help: String) -> (Int, Int) {
+        // Korean: "리전은 1 마디 에서 시작하여 2 마디 에서 끝납니다."
+        // English (guessed, pending real-world sample): "Region starts at bar 1 and ends at bar 2"
+        let patterns = [
+            #"리전은\s*(\d+)\s*마디.*?시작.*?(\d+)\s*마디.*?끝"#,
+            #"(?i)region\s+starts\s+at\s+bar\s+(\d+).*?ends\s+at\s+bar\s+(\d+)"#,
+        ]
+        for pat in patterns {
+            guard let rx = try? NSRegularExpression(pattern: pat, options: [.dotMatchesLineSeparators]) else { continue }
+            let range = NSRange(help.startIndex..., in: help)
+            guard let m = rx.firstMatch(in: help, range: range), m.numberOfRanges >= 3 else { continue }
+            guard let r1 = Range(m.range(at: 1), in: help),
+                  let r2 = Range(m.range(at: 2), in: help),
+                  let s = Int(help[r1]), let e = Int(help[r2]) else { continue }
+            return (s, e)
+        }
+        return (-1, -1)
     }
 
     // MARK: - Project

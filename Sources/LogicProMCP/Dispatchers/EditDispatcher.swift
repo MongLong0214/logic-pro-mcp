@@ -72,7 +72,14 @@ struct EditDispatcher {
             return toolTextResult(result)
 
         case "quantize":
-            let value = params["value"]?.stringValue ?? "1/16"
+            let value = stringParam(params, "value", "grid", default: "1/16")
+            let validGrids = ["1/1","1/2","1/4","1/8","1/16","1/32","1/64","1/4T","1/8T","1/16T"]
+            guard validGrids.contains(value) else {
+                return toolTextResult(
+                    "quantize 'value' must be one of \(validGrids.joined(separator: ", ")) (got '\(value)')",
+                    isError: true
+                )
+            }
             let result = await router.route(
                 operation: "edit.quantize",
                 params: ["value": value]

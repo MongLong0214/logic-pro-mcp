@@ -298,7 +298,7 @@ private let toolText = sharedToolText
 }
 
 @Test func testCoreMIDIChannelAftertouchAcceptsValueAlias() async {
-    let channel = CoreMIDIChannel(engine: MIDIEngine())
+    let channel = CoreMIDIChannel(engine: MockCoreMIDIEngine(active: true))
     let result = await channel.execute(
         operation: "midi.send_aftertouch",
         params: ["value": "91", "channel": "2"]
@@ -308,7 +308,7 @@ private let toolText = sharedToolText
 }
 
 @Test func testCoreMIDIChannelPitchBendNormalizesSignedValue() async {
-    let channel = CoreMIDIChannel(engine: MIDIEngine())
+    let channel = CoreMIDIChannel(engine: MockCoreMIDIEngine(active: true))
     let result = await channel.execute(
         operation: "midi.send_pitch_bend",
         params: ["value": "-8192", "channel": "1"]
@@ -318,7 +318,7 @@ private let toolText = sharedToolText
 }
 
 @Test func testCoreMIDIChannelGotoPositionRequiresFallback() async {
-    let channel = CoreMIDIChannel(engine: MIDIEngine())
+    let channel = CoreMIDIChannel(engine: MockCoreMIDIEngine(active: true))
     let result = await channel.execute(
         operation: "transport.goto_position",
         params: ["position": "12.1.1.1"]

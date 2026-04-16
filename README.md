@@ -130,13 +130,27 @@ set_plugin_param, insert_plugin, bypass_plugin
 ```
 select, create_audio, create_instrument, create_drummer,
 create_external_midi, delete, duplicate, mute, solo, arm,
-rename, set_automation
+rename, set_automation, set_instrument,
+list_library, scan_library, resolve_path
 ```
 
 ```json
 {"command": "mute", "params": {"index": 3, "enabled": true}}
 {"command": "set_automation", "params": {"index": 1, "mode": "touch"}}
+
+// Library enumeration + instrument loading (v2.2+)
+{"command": "scan_library"}                         // Full tree scan — returns LibraryRoot JSON, caches to Resources/library-inventory.json
+{"command": "list_library"}                         // Shallow — currently-visible columns only
+{"command": "resolve_path", "params": {"path": "Bass/Sub Bass"}}  // Cache-backed read-only lookup
+{"command": "set_instrument", "params": {"index": 0, "path": "Bass/Sub Bass"}}       // Path mode (preferred)
+{"command": "set_instrument", "params": {"index": 0, "category": "Bass", "preset": "Sub Bass"}}  // Legacy shape
 ```
+
+Notes:
+- The Library must be visible in Logic Pro (⌘L) for `list_library` / `scan_library` / `set_instrument`.
+- `scan_library` clicks through every category — don't touch Logic during scan.
+- `resolve_path` never injects a click; it requires a prior `scan_library` to populate the in-memory cache.
+- `Resources/library-inventory.json` is a **per-user artifact** — gitignored, regenerated on each scan.
 </details>
 
 <details>

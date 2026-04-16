@@ -136,22 +136,23 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     }
 }
 
-@Test func testTracksAndProjectResourcesRejectReadsWhenNoDocumentOpen() async {
+@Test func testTracksAndProjectResourcesReturnEmptyDataWhenNoDocumentOpen() async throws {
+    // Post-hardening: hasDocument gate was removed because the StatePoller's
+    // view of "document open" can flap during normal Logic UI activity. When
+    // hasDocument is false the cache returns its empty-state representation
+    // (empty array / empty struct) — clients distinguish this from missing.
     let cache = StateCache()
     let router = ChannelRouter()
     await cache.updateDocumentState(false)
 
-    await #expect(throws: MCPError.self) {
-        try await ResourceHandlers.read(uri: "logic://tracks", cache: cache, router: router)
-    }
+    let tracks = try await ResourceHandlers.read(uri: "logic://tracks", cache: cache, router: router)
+    #expect(tracks.contents.first?.text?.contains("[") == true)
 
-    await #expect(throws: MCPError.self) {
-        try await ResourceHandlers.read(uri: "logic://project/info", cache: cache, router: router)
-    }
+    let project = try await ResourceHandlers.read(uri: "logic://project/info", cache: cache, router: router)
+    #expect(project.contents.first?.text != nil)
 
-    await #expect(throws: MCPError.self) {
-        try await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router)
-    }
+    let mixer = try await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router)
+    #expect(mixer.contents.first?.text != nil)
 }
 
 @Test func testHealthResponseMCUFields() async {

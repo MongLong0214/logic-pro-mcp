@@ -177,7 +177,15 @@ actor MCUChannel: Channel {
 
     private func executeStripButton(_ function: MCUProtocol.ButtonFunction, params: [String: String]) async -> ChannelResult {
         let track = Int(params["index"] ?? "0") ?? 0
-        let enabled = params["enabled"] == "true" || params["enabled"] == "1"
+        // `track.select` is not a toggle — callers always mean "make this track
+        // the selected one." Forcing on=true avoids the previous bug where an
+        // absent `enabled` param silently deselected (→ Drummer stayed focused).
+        let enabled: Bool
+        if function == .select {
+            enabled = true
+        } else {
+            enabled = params["enabled"] == "true" || params["enabled"] == "1"
+        }
 
         return await withBanking(targetTrack: track) { strip in
             let bytes = MCUProtocol.encodeButton(function, strip: strip, on: enabled)
@@ -205,6 +213,13 @@ actor MCUChannel: Channel {
     // MARK: - Banking (Proper Queue)
 
     private func withBanking(targetTrack: Int, operation: @escaping (Int) async -> ChannelResult) async -> ChannelResult {
+        // Sanity cap: real Logic projects rarely exceed 256 tracks (32 MCU banks).
+        // A `track.select {index: 99999}` was seen to spend 25 s walking 12499
+        // bank-right presses then restoring — far past any client timeout. Reject
+        // up front rather than burning that time.
+        guard (0...255).contains(targetTrack) else {
+            return .error("MCU bank target track \(targetTrack) out of range (0..255)")
+        }
         let targetBank = targetTrack / 8
         let strip = targetTrack % 8
 

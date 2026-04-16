@@ -78,20 +78,44 @@ actor StatePoller {
 
     private func pollOnce(axChannel: AccessibilityChannel, cache: StateCache) async {
         guard runtime.hasVisibleWindow() else {
-            await cache.updateDocumentState(false)
+            // Be conservative: a single missed window check is often a transient
+            // AX query glitch (Logic mid-paint, plugin window briefly grabbing
+            // focus). Only flip hasDocument=false after `failureThreshold`
+            // consecutive misses so resource reads don't error during the
+            // transient window.
+            consecutiveWindowMisses += 1
+            if consecutiveWindowMisses >= Self.failureThreshold {
+                await cache.updateDocumentState(false)
+            }
             return
         }
+        consecutiveWindowMisses = 0
 
         let projectReady = await pollProjectInfo(axChannel: axChannel, cache: cache)
         let tracksReady = await pollTracks(axChannel: axChannel, cache: cache)
         let hasDocument = projectReady || tracksReady
-        await cache.updateDocumentState(hasDocument)
+        if hasDocument {
+            consecutivePollMisses = 0
+            await cache.updateDocumentState(true)
+        } else {
+            consecutivePollMisses += 1
+            if consecutivePollMisses >= Self.failureThreshold {
+                await cache.updateDocumentState(false)
+            }
+        }
 
         guard hasDocument else { return }
 
         await pollTransport(axChannel: axChannel, cache: cache)
         await pollMixer(axChannel: axChannel, cache: cache)
     }
+
+    /// 3 consecutive misses (~9s at the 3s poll interval) before declaring
+    /// the document closed. Anything shorter caused resource reads to flap
+    /// "no document open" during normal Logic UI transitions.
+    private static let failureThreshold = 3
+    private var consecutiveWindowMisses = 0
+    private var consecutivePollMisses = 0
 
     private static let iso8601Decoder: JSONDecoder = {
         let d = JSONDecoder()

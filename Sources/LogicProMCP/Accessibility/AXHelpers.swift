@@ -14,7 +14,13 @@ enum AXHelpers {
 
         static let production = Runtime(
             axApp: { pid in
-                AXUIElementCreateApplication(pid)
+                let element = AXUIElementCreateApplication(pid)
+                // Cap per-message AX wait. Default (~6s) stacks across multi-step
+                // ops (rename = find+press+set+confirm = 4 messages); under matrix
+                // load that exceeded the client's 15s tools/call timeout and
+                // stalled the stdio loop. 2.5s/msg keeps worst-case ~10s.
+                AXUIElementSetMessagingTimeout(element, 2.5)
+                return element
             },
             attributeValue: { element, attribute in
                 var value: AnyObject?
@@ -193,5 +199,30 @@ enum AXHelpers {
     /// Get the description of an element (kAXDescriptionAttribute).
     static func getDescription(_ element: AXUIElement, runtime: Runtime = .production) -> String? {
         getAttribute(element, kAXDescriptionAttribute, runtime: runtime)
+    }
+
+    /// Get the help/tooltip text of an element (kAXHelpAttribute).
+    static func getHelp(_ element: AXUIElement, runtime: Runtime = .production) -> String? {
+        getAttribute(element, kAXHelpAttribute, runtime: runtime)
+    }
+
+    /// Get element screen position (kAXPositionAttribute) as CGPoint.
+    static func getPosition(_ element: AXUIElement, runtime: Runtime = .production) -> CGPoint? {
+        guard let raw = runtime.attributeValue(element, kAXPositionAttribute) else { return nil }
+        // swiftlint:disable:next force_cast — AXValue bridging is well-defined for position attrs.
+        let v = raw as! AXValue
+        var pt = CGPoint.zero
+        guard AXValueGetValue(v, .cgPoint, &pt) else { return nil }
+        return pt
+    }
+
+    /// Get element screen size (kAXSizeAttribute) as CGSize.
+    static func getSize(_ element: AXUIElement, runtime: Runtime = .production) -> CGSize? {
+        guard let raw = runtime.attributeValue(element, kAXSizeAttribute) else { return nil }
+        // swiftlint:disable:next force_cast
+        let v = raw as! AXValue
+        var sz = CGSize.zero
+        guard AXValueGetValue(v, .cgSize, &sz) else { return nil }
+        return sz
     }
 }

@@ -16,7 +16,10 @@ struct NavigateDispatcher {
     ) async -> CallTool.Result {
         switch command {
         case "goto_bar":
-            let bar = params["bar"]?.intValue ?? 1
+            let bar = intParam(params, "bar", default: 1)
+            guard (1...9999).contains(bar) else {
+                return toolTextResult("goto_bar 'bar' must be in 1..9999 (got \(bar))", isError: true)
+            }
             let result = await router.route(
                 operation: "nav.goto_bar",
                 params: ["bar": String(bar)]
@@ -24,14 +27,16 @@ struct NavigateDispatcher {
             return toolTextResult(result)
 
         case "goto_marker":
-            if let index = params["index"]?.intValue {
+            if params["index"] != nil {
+                let index = intParam(params, "index", default: 0)
                 let result = await router.route(
                     operation: "nav.goto_marker",
                     params: ["index": String(index)]
                 )
                 return toolTextResult(result)
             }
-            if let name = params["name"]?.stringValue {
+            let name = stringParam(params, "name")
+            if !name.isEmpty {
                 let markers = await cache.getMarkers()
                 if let marker = markers.first(where: { $0.name.localizedCaseInsensitiveContains(name) }) {
                     let result = await router.route(
@@ -45,7 +50,7 @@ struct NavigateDispatcher {
             return toolTextResult("goto_marker requires 'index' or 'name' param", isError: true)
 
         case "create_marker":
-            let name = params["name"]?.stringValue ?? "Marker"
+            let name = stringParam(params, "name", default: "Marker")
             let result = await router.route(
                 operation: "nav.create_marker",
                 params: ["name": name]
@@ -53,7 +58,7 @@ struct NavigateDispatcher {
             return toolTextResult(result)
 
         case "delete_marker":
-            let index = params["index"]?.intValue ?? 0
+            let index = intParam(params, "index", default: 0)
             let result = await router.route(
                 operation: "nav.delete_marker",
                 params: ["index": String(index)]
@@ -61,8 +66,8 @@ struct NavigateDispatcher {
             return toolTextResult(result)
 
         case "rename_marker":
-            let index = params["index"]?.intValue ?? 0
-            let name = params["name"]?.stringValue ?? ""
+            let index = intParam(params, "index", default: 0)
+            let name = stringParam(params, "name")
             let result = await router.route(
                 operation: "nav.rename_marker",
                 params: ["index": String(index), "name": name]
@@ -74,7 +79,11 @@ struct NavigateDispatcher {
             return toolTextResult(result)
 
         case "set_zoom":
-            let level = params["level"]?.stringValue ?? "fit"
+            // Accept both `level` (docs) and `direction` (common caller term) —
+            // matrix tests and real callers drift across both. Silently ignoring
+            // a misnamed param was the class of bug that hid 100% false-positive
+            // test coverage earlier in the hardening loop.
+            let level = stringParam(params, "level", "direction", default: "fit")
             switch level {
             case "in":
                 let result = await router.route(
@@ -101,7 +110,7 @@ struct NavigateDispatcher {
             }
 
         case "toggle_view":
-            let view = params["view"]?.stringValue ?? "mixer"
+            let view = stringParam(params, "view", default: "mixer")
             let operation: String
             switch view {
             case "mixer": operation = "view.toggle_mixer"

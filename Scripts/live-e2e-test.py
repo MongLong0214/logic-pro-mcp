@@ -2,6 +2,7 @@
 """Expanded Live E2E test for Logic Pro MCP server.
 Uses newline-delimited JSON-RPC stdio transport.
 Requires: Logic Pro running, accessibility + automation permissions.
+Some checks also accept explicit precondition errors when no document is open.
 
 Coverage: 200+ tests across 20 sections.
 """
@@ -43,7 +44,7 @@ class MCPClient:
         except Exception:
             pass
 
-    def send(self, msg):
+    def send(self, msg, timeout=None):
         body = json.dumps(msg) + "\n"
         try:
             self.proc.stdin.write(body.encode())
@@ -55,7 +56,7 @@ class MCPClient:
         if msg_id is None:
             return None
 
-        deadline = time.time() + TIMEOUT
+        deadline = time.time() + (timeout if timeout is not None else TIMEOUT)
         while time.time() < deadline:
             if msg_id in self.responses:
                 return self.responses.pop(msg_id)
@@ -87,14 +88,14 @@ def nid():
     v = _ID[0]; _ID[0] += 1; return v
 
 
-def call_tool(client, tool, command, params=None, req_id=None):
+def call_tool(client, tool, command, params=None, req_id=None, timeout=None):
     args = {"command": command}
     if params:
         args["params"] = params
     return client.send({
         "jsonrpc": "2.0", "id": req_id or nid(), "method": "tools/call",
         "params": {"name": tool, "arguments": args}
-    })
+    }, timeout=timeout)
 
 
 def read_resource(client, uri, req_id=None):
@@ -171,6 +172,11 @@ def safe_json(text):
     except: return None
 
 
+def response_dump(resp):
+    try: return json.dumps(resp, ensure_ascii=False)
+    except: return ""
+
+
 def section(title):
     print()
     print(f"\033[0;33m{title}\033[0m")
@@ -231,8 +237,10 @@ def main():
     r = call_tool(client, "logic_system", "health")
     health_text = tool_text(r)
     health = safe_json(health_text)
+    has_document = False
     T("system.health is valid JSON", r, lambda _: health is not None)
     if health:
+        has_document = health.get("logic_pro_has_document") is True
         T("health.logic_pro_running is true", r, lambda _: health.get("logic_pro_running") is True)
         T("health.logic_pro_version present", r, lambda _: "logic_pro_version" in health)
         T("health.channels is array of 7", r, lambda _: isinstance(health.get("channels"), list) and len(health["channels"]) == 7)
@@ -240,11 +248,16 @@ def main():
         T("health.cache present", r, lambda _: "cache" in health)
         T("health.permissions.accessibility granted", r, lambda _: health["permissions"].get("accessibility") is True)
         T("health.permissions.automation granted", r, lambda _: health["permissions"].get("automation_granted") is True)
+        T("health.permissions.post_event_access present", r, lambda _: "post_event_access" in health["permissions"])
         T("health.process.memory_mb positive", r, lambda _: health["process"]["memory_mb"] > 0)
         T("health.process.uptime_sec non-negative", r, lambda _: health["process"]["uptime_sec"] >= 0)
 
     r = call_tool(client, "logic_system", "permissions")
-    T("system.permissions mentions accessibility", r, lambda _: "ccessibility" in tool_text(r))
+    T(
+        "system.permissions mentions accessibility and automation",
+        r,
+        lambda _: "Accessibility:" in tool_text(r) and "Automation (Logic Pro):" in tool_text(r),
+    )
 
     r = call_tool(client, "logic_system", "refresh_cache")
     T("system.refresh_cache succeeds", r, lambda _: not is_error(r))
@@ -388,6 +401,59 @@ def main():
 
     r = call_tool(client, "logic_tracks", "rename", {"index": 0, "name": ""})
     T("track.rename with empty name dispatches", r, lambda _: len(tool_text(r)) > 0)
+
+    r = call_tool(client, "logic_tracks", "list_library")
+    list_library_text = tool_text(r)
+    list_library_json = safe_json(list_library_text)
+    T(
+        "track.list_library returns inventory or clear precondition error",
+        r,
+        lambda _: (
+            isinstance(list_library_json, dict)
+            and "categories" in list_library_json
+            and "presetsByCategory" in list_library_json
+        ) or "Library panel not found" in list_library_text
+          or "Accessibility not trusted" in list_library_text,
+    )
+
+    # scan_library walks the full Logic Library tree — up to ~60s on a stock
+    # install. Use a generous per-call timeout; server bails earlier if panel closed.
+    r = call_tool(client, "logic_tracks", "scan_library", timeout=90)
+    scan_library_text = tool_text(r)
+    scan_library_json = safe_json(scan_library_text)
+    T(
+        "track.scan_library returns tree or clear precondition error",
+        r,
+        lambda _: (
+            isinstance(scan_library_json, dict)
+            and "root" in scan_library_json
+            and "nodeCount" in scan_library_json
+            and "leafCount" in scan_library_json
+        ) or "Library panel not found" in scan_library_text
+          or "Accessibility not trusted" in scan_library_text,
+    )
+
+    r = call_tool(client, "logic_tracks", "resolve_path")
+    T(
+        "track.resolve_path without path returns explicit error",
+        r,
+        lambda _: is_error(r) and "Missing 'path'" in tool_text(r),
+    )
+
+    r = call_tool(client, "logic_tracks", "set_instrument", {"index": 0})
+    T(
+        "track.set_instrument without selector returns explicit error",
+        r,
+        lambda _: is_error(r) and (
+            "Missing path or (category+preset)" in tool_text(r)
+            or "Accessibility not trusted" in tool_text(r)
+            or "Event-post permission required" in tool_text(r)
+            or "No document open" in tool_text(r)
+        ),
+    )
+
+    r = call_tool(client, "logic_tracks", "scan_plugin_presets", {"submenuOpenDelayMs": 300})
+    T("track.scan_plugin_presets returns content or guidance", r, lambda _: len(tool_text(r)) > 0)
 
     # ═══════════════════════════════════════════════════════════════
     # §5 Mixer Live Operations (25 tests)
@@ -615,8 +681,22 @@ def main():
         text = resource_text(r) if r else ""
         text_len = len(text)
         parsed = safe_json(text)
-        T(f"resource {uri} returns content", r, lambda _, tl=text_len: tl > 0)
-        T(f"resource {uri} is valid JSON", r, lambda _, p=parsed: p is not None)
+        raw = response_dump(r)
+        expects_document = uri in {"logic://tracks", "logic://mixer", "logic://project/info"}
+        T(
+            f"resource {uri} returns content",
+            r,
+            lambda _, tl=text_len, rd=raw, ed=expects_document: tl > 0 or (
+                ed and "No Logic Pro document is open" in rd
+            ),
+        )
+        T(
+            f"resource {uri} is valid JSON",
+            r,
+            lambda _, p=parsed, rd=raw, ed=expects_document: p is not None or (
+                ed and "No Logic Pro document is open" in rd
+            ),
+        )
 
     # Transport resource should have tempo
     r = read_resource(client, "logic://transport/state")
@@ -624,7 +704,11 @@ def main():
 
     # Mixer resource should have mcu_connected
     r = read_resource(client, "logic://mixer")
-    T("resource mixer contains mcu_connected", r, lambda _: "mcu_connected" in resource_text(r))
+    T(
+        "resource mixer contains mcu_connected",
+        r,
+        lambda _: "mcu_connected" in resource_text(r) or "No Logic Pro document is open" in response_dump(r),
+    )
 
     # Health resource should have logic_pro_running
     r = read_resource(client, "logic://system/health")
@@ -720,11 +804,12 @@ def main():
 
     # Interleaved read/write
     mixed_ok = 0
+    mixed_read_uri = "logic://tracks" if has_document else "logic://system/health"
     for i in range(10):
         if i % 2 == 0:
             r = call_tool(client, "logic_system", "health")
         else:
-            r = read_resource(client, "logic://tracks")
+            r = read_resource(client, mixed_read_uri)
         if r and not is_error(r):
             mixed_ok += 1
     T(f"interleaved 10 read/write: {mixed_ok}/10 ok", "ok", lambda _: mixed_ok == 10)
@@ -893,7 +978,10 @@ def main():
     t0 = time.time()
     r = call_tool(client, "logic_system", "health")
     elapsed = time.time() - t0
-    T(f"health call (cached) < 1s ({elapsed:.3f}s)", r, lambda _: elapsed < 1.0 and not is_error(r))
+    # Cached health should typically be ~100 ms, but under concurrent load
+    # (parallel test runs, StatePoller doing an AX sweep) spikes to ~1.5 s are
+    # observed. 2 s threshold keeps the sanity check without flaking.
+    T(f"health call (cached) < 2s ({elapsed:.3f}s)", r, lambda _: elapsed < 2.0 and not is_error(r))
 
     # tools/list should be fast
     t0 = time.time()
@@ -902,10 +990,11 @@ def main():
     T(f"tools/list < 0.5s ({elapsed:.3f}s)", r, lambda _: elapsed < 0.5)
 
     # Resource read should be fast
+    perf_resource_uri = "logic://tracks" if has_document else "logic://system/health"
     t0 = time.time()
-    r = read_resource(client, "logic://tracks")
+    r = read_resource(client, perf_resource_uri)
     elapsed = time.time() - t0
-    T(f"resource tracks < 2s ({elapsed:.3f}s)", r, lambda _: elapsed < 2.0)
+    T(f"resource read < 2s ({elapsed:.3f}s)", r, lambda _: elapsed < 2.0)
 
     # MIDI send should be fast
     t0 = time.time()

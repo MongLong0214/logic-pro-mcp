@@ -11,7 +11,7 @@ struct ProjectDispatcher {
 
     static let tool = commandTool(
         name: "logic_project",
-        description: "Project lifecycle in Logic Pro. Commands: new, open, save, save_as, close, bounce, launch, quit. Params: open -> { path: String }; save_as -> { path: String }; bounce -> {}; launch/quit -> {}; others -> {}.",
+        description: "Project lifecycle + read-only project state in Logic Pro. Commands: new, open, save, save_as, close, bounce, launch, quit, get_regions. Params: open -> { path: String }; save_as -> { path: String }; bounce/launch/quit -> {}; get_regions -> {} (returns JSON array of { name, trackIndex, startBar, endBar, kind, rawHelp } parsed from Logic's arrange area via AX); others -> {}.",
         commandDescription: "Project command to execute"
     )
 
@@ -20,15 +20,18 @@ struct ProjectDispatcher {
         params: [String: Value],
         router: ChannelRouter,
         cache: StateCache,
-        isLogicProRunning: () -> Bool = {
-            ProcessUtils.isLogicProRunning || PermissionChecker.checkAutomationState() == .granted
-        },
+        // Single source of truth — use ProcessUtils.isLogicProRunning everywhere
+        // (NSRunningApplication-based with multi-fallback). Removed prior OR with
+        // PermissionChecker.checkAutomationState() == .granted because permission
+        // grant ≠ Logic actually running, and the OR caused state inconsistency
+        // vs `system.health` and `transport.toggle_cycle` which use ProcessUtils only.
+        isLogicProRunning: () -> Bool = { ProcessUtils.isLogicProRunning },
         executeLifecycleScript: (String) async -> LifecycleExecution = { script in
             await executeAppleScript(script)
         },
         sleep: (UInt64) async -> Void = { try? await Task.sleep(nanoseconds: $0) }
     ) async -> CallTool.Result {
-        let confirmed = params["confirmed"]?.boolValue ?? false
+        let confirmed = boolParam(params, "confirmed", default: false)
 
         // Audit log for L1+ commands
         if DestructivePolicy.needsAuditLog(for: command) {
@@ -41,7 +44,7 @@ struct ProjectDispatcher {
             return toolTextResult(result)
 
         case "open":
-            let path = params["path"]?.stringValue ?? ""
+            let path = stringParam(params, "path")
             guard !path.isEmpty else {
                 return toolTextResult("open requires 'path' param", isError: true)
             }
@@ -62,7 +65,7 @@ struct ProjectDispatcher {
             return toolTextResult(result)
 
         case "save_as":
-            let path = params["path"]?.stringValue ?? ""
+            let path = stringParam(params, "path")
             guard !path.isEmpty else {
                 return toolTextResult("save_as requires 'path' param", isError: true)
             }
@@ -94,6 +97,13 @@ struct ProjectDispatcher {
 
         case "is_running":
             return toolTextResult(isLogicProRunning() ? "true" : "false")
+
+        case "get_regions":
+            // Read-only arrange-area inspection. Necessary for programmatic
+            // verification of record_sequence region placement — without this
+            // the only feedback loop was visual screenshots.
+            let result = await router.route(operation: "region.get_regions")
+            return toolTextResult(result)
 
         case "launch":
             if isLogicProRunning() {
@@ -128,7 +138,7 @@ struct ProjectDispatcher {
 
         default:
             return toolTextResult(
-                "Unknown project command: \(command). Available: new, open, save, save_as, close, bounce, is_running, launch, quit",
+                "Unknown project command: \(command). Available: new, open, save, save_as, close, bounce, is_running, launch, quit, get_regions",
                 isError: true
             )
         }
@@ -183,6 +193,8 @@ struct ProjectDispatcher {
         process.executableURL = executableURL
         process.arguments = ["-e", script]
         process.standardError = stderr
+        // Don't hold a second Pipe for stdout — osascript output isn't read here.
+        process.standardOutput = FileHandle.nullDevice
 
         do {
             try process.run()
@@ -206,6 +218,10 @@ struct ProjectDispatcher {
 
         if process.isRunning {
             process.terminate()
+            // Reap zombie so the stderr Pipe's file descriptors are released
+            // promptly — same class of FD leak that killed the server under
+            // sustained set_tempo stress (diagnosed via BrokenPipeError).
+            process.waitUntilExit()
             return LifecycleExecution(
                 executionError: nil,
                 timedOut: true,
@@ -216,6 +232,10 @@ struct ProjectDispatcher {
 
         let stderrOutput = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // Release Pipe FDs explicitly — delayed deinit was a leak vector under
+        // sustained stress (same root cause as sprint 51 MCP server crash).
+        try? stderr.fileHandleForReading.close()
+        try? stderr.fileHandleForWriting.close()
         return LifecycleExecution(
             executionError: nil,
             timedOut: false,

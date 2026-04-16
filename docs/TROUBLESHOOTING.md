@@ -79,6 +79,41 @@ Automation (Logic Pro): NOT GRANTED
 
 ---
 
+## Library (Sound Pack Enumeration — v2.2+)
+
+### `scan_library` returns "Library panel not found"
+
+**Cause:** Library panel isn't visible in Logic Pro.
+
+Fix: Open a project, click any track, press ⌘L. Re-run `scan_library`. The Library must show a left column of categories (Bass, Orchestral, etc.).
+
+### `set_instrument` silently loads instrument onto the wrong track
+
+**Cause:** Track header isn't clickable because the track is scrolled off-screen.
+
+Fix: Scroll the tracklist in Logic so the target track is visible. The MCP now emits `"Track not visible; scroll tracklist"` instead of clicking blindly.
+
+### `set_instrument` fails with "Event-post permission required"
+
+**Cause:** macOS 10.15+ requires **Post-Event access**, a capability granted alongside Accessibility. `CGPreflightPostEventAccess()` returned false.
+
+Fix:
+1. System Settings → Privacy & Security → Accessibility
+2. Remove LogicProMCP, re-add it; macOS will prompt for event-post on first CGEvent.post.
+3. Verify: `logic_system { command: "health" }` — expect `"post_event_access": true` under `permissions`.
+
+### `resolve_path` returns `"No cached library scan; call scan_library first"`
+
+**Cause:** `resolve_path` is cache-backed (read-only, zero AX clicks). No cache yet.
+
+Fix: Run `scan_library` once. The in-memory cache persists until the MCP process restarts.
+
+### Scan counts look low (e.g. Orchestral: 2)
+
+**Cause:** Reflects what your Sound Library has **installed** — not a scanner bug. Logic Pro 12's Library is a flat 2-level browser; the scanner captures 100% of visible presets. Install more via Logic Pro → Sound Library → Download All Available Sounds.
+
+---
+
 ## MCU / Mixer
 
 ### `mixer.set_volume` returns "All channels exhausted … MCU feedback not detected"
@@ -283,6 +318,26 @@ grep -iE "error|warn|fail" /tmp/mcp-debug.log
 ```bash
 LOG_LEVEL=DEBUG python3 scripts/live-e2e-test.py 2>/tmp/mcp-session.log
 ```
+
+---
+
+## Logic Pro crashes during UI automation
+
+**Observed:** `EXC_BAD_ACCESS at 0x2d0` during rapid AppleScript UI scripting of Logic Pro 12.0.1 (build 6590, macOS 26.3).
+
+**Cause:** Logic Pro's file-import dialog has a race condition under rapid keystroke/menu automation. Firing `⌘⇧G → path → Return → Return` in sub-second succession triggers a null-pointer deref inside Logic Pro.
+
+**Workaround:** **Do not automate Logic Pro's Import Audio File dialog.** The MCP server does not expose an `audio.import` operation for this reason — it cannot be done safely through UI scripting.
+
+**Instead:**
+1. Use the MCP server for what it reliably handles: transport, track create/rename, tempo, MCU mixer, MIDI I/O.
+2. For audio file imports, open the stems folder in Finder (`open -R /path/to/folder`) and drag files into Logic Pro manually. Logic handles native drag-drop robustly.
+3. See `scripts/analysis-to-logic.py` for the reference pattern: it does tempo + track setup via MCP and opens Finder for the user to drag.
+
+**If Logic Pro crashed:**
+- Crash dumps are in `~/Library/Logs/DiagnosticReports/Logic Pro-*.ips`
+- Reopen Logic; the project chooser appears
+- Any uncommitted work prior to the crash is lost unless Autosave captured it (`Preferences → General → Autosave`)
 
 ---
 

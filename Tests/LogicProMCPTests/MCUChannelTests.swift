@@ -172,6 +172,9 @@ import Testing
         operation: "track.set_arm",
         params: ["index": "4", "enabled": "true"]
     )
+    // track.select ignores the enabled flag by design — it's not a toggle,
+    // so the channel always emits on: true (making the track selected).
+    // The explicit "enabled:false" here verifies the override is applied.
     let select = await channel.execute(
         operation: "track.select",
         params: ["index": "5", "enabled": "false"]
@@ -191,7 +194,7 @@ import Testing
         MCUProtocol.encodeFader(track: 8, value: 0.75),
         MCUProtocol.encodeButton(.solo, strip: 3, on: true),
         MCUProtocol.encodeButton(.recArm, strip: 4, on: true),
-        MCUProtocol.encodeButton(.select, strip: 5, on: false),
+        MCUProtocol.encodeButton(.select, strip: 5, on: true),
     ])
 }
 

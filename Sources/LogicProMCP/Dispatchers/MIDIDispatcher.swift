@@ -4,7 +4,7 @@ import MCP
 struct MIDIDispatcher {
     static let tool = commandTool(
         name: "logic_midi",
-        description: "MIDI operations in Logic Pro. Commands: send_note, send_chord, send_cc, send_program_change, send_pitch_bend, send_aftertouch, send_sysex, create_virtual_port, step_input, mmc_play, mmc_stop, mmc_record, mmc_locate. Params: send_note/send_chord -> MIDI note payloads; send_cc/program_change/pitch_bend/aftertouch -> controller payloads; send_sysex -> { bytes: [Int] } or { data: String }; mmc_locate -> { bar: Int } or { time: \"HH:MM:SS:FF\" }; create_virtual_port -> { name: String }.",
+        description: "MIDI operations in Logic Pro. Commands: send_note, send_chord, send_cc, send_program_change, send_pitch_bend, send_aftertouch, send_sysex, play_sequence, create_virtual_port, step_input, mmc_play, mmc_stop, mmc_record, mmc_locate. Params: send_note/send_chord -> MIDI note payloads; send_cc/program_change/pitch_bend/aftertouch -> controller payloads; send_sysex -> { bytes: [Int] } or { data: String }; play_sequence -> { notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\" } (≤256 events, tight server-side timing); mmc_locate -> { bar: Int } or { time: \"HH:MM:SS:FF\" }; create_virtual_port -> { name: String }.",
         commandDescription: "MIDI command to execute"
     )
 
@@ -29,6 +29,13 @@ struct MIDIDispatcher {
                 "velocity": String(intParam(params, "velocity", default: 100)),
                 "channel": String(intParam(params, "channel", default: 1)),
                 "duration_ms": String(intParam(params, "duration_ms", default: 500)),
+            ])
+
+        case "play_sequence":
+            // Tight-rhythm sequencer. `notes` is a raw string of
+            // "pitch,offsetMs,durMs[,vel[,ch]]" events separated by ';'.
+            return await routedTextResult(router, operation: "midi.play_sequence", params: [
+                "notes": stringParam(params, "notes"),
             ])
 
         case "send_cc":
@@ -57,9 +64,18 @@ struct MIDIDispatcher {
             ])
 
         case "send_sysex":
-            let data = params["bytes"]?.arrayValue.map {
-                $0.compactMap(\.intValue).map { String(format: "%02X", $0) }.joined(separator: " ")
-            } ?? stringParam(params, "data")
+            // Accept three input shapes so callers can use whichever is ergonomic:
+            //   bytes: [0xF0, 0x7E, ..., 0xF7]           (array of ints)
+            //   bytes: "F0 7E 7F 06 01 F7"               (hex string, space-sep)
+            //   data:  "F0 7E 7F 06 01 F7"               (hex string alias)
+            let data: String
+            if let arr = params["bytes"]?.arrayValue {
+                data = arr.compactMap(\.intValue).map { String(format: "%02X", $0) }.joined(separator: " ")
+            } else if let s = params["bytes"]?.stringValue, !s.isEmpty {
+                data = s
+            } else {
+                data = stringParam(params, "data")
+            }
             return await routedTextResult(router, operation: "midi.send_sysex", params: ["data": data])
 
         case "create_virtual_port":
@@ -77,7 +93,14 @@ struct MIDIDispatcher {
             return await routedTextResult(router, operation: "mmc.record_strobe")
 
         case "mmc_locate":
-            if let bar = params["bar"]?.intValue {
+            // Prefer `bar` (int) → expand to bar.beat.sub.tick, else SMPTE `time`.
+            // intParam handles int/double/string coercion, so a stringified bar
+            // ("5") is accepted too.
+            if params["bar"] != nil {
+                let bar = intParam(params, "bar", default: 1)
+                guard (1...9999).contains(bar) else {
+                    return toolTextResult("mmc_locate 'bar' must be in 1..9999 (got \(bar))", isError: true)
+                }
                 return await routedTextResult(router, operation: "transport.goto_position", params: [
                     "position": "\(bar).1.1.1",
                 ])

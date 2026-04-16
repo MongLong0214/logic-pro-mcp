@@ -133,3 +133,18 @@ struct ProjectInfo: Sendable, Codable {
     var filePath: String?
     var lastUpdated: Date = .distantPast
 }
+
+/// A Logic arrange-area region (MIDI or audio) as exposed by AX.
+///
+/// `startBar` and `endBar` are 1-based bar numbers parsed from Logic's
+/// AXHelp text ("리전은 N 마디 에서 시작하여 M 마디 에서 끝납니다." / English
+/// equivalent). `trackIndex` is the 0-based track lane matched by the
+/// region's vertical position to each track header's Y coordinate.
+struct RegionInfo: Sendable, Codable {
+    var name: String
+    var trackIndex: Int
+    var startBar: Int
+    var endBar: Int
+    var kind: String  // "midi" | "audio" | "unknown"
+    var rawHelp: String?  // raw AXHelp text — preserved for debugging parser misses
+}

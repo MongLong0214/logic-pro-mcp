@@ -137,20 +137,27 @@ actor FailingStartChannel: Channel {
     #expect(cgOps.count == 1)
 }
 
-@Test func testRouterSetTempoGoesToKeyCmd() async {
+@Test func testRouterSetTempoRoutesOnlyToAccessibility() async {
+    // Post-hardening: transport.set_tempo now routes AX-only. MIDIKeyCommands
+    // and CGEvent fallbacks were removed because they can't convey the tempo
+    // value (CC fire / key press ignores the numeric param).
     let router = ChannelRouter()
     let mcu = MockChannel(id: .mcu)
     let keyCmd = MockChannel(id: .midiKeyCommands)
+    let ax = MockChannel(id: .accessibility)
     await router.register(mcu)
     await router.register(keyCmd)
+    await router.register(ax)
 
     let result = await router.route(operation: "transport.set_tempo")
     #expect(result.isSuccess)
 
     let mcuOps = await mcu.executedOps
     let keyCmdOps = await keyCmd.executedOps
-    #expect(mcuOps.count == 0)    // MCU has no native tempo set
-    #expect(keyCmdOps.count == 1) // KeyCmd primary for set_tempo
+    let axOps = await ax.executedOps
+    #expect(mcuOps.count == 0)
+    #expect(keyCmdOps.count == 0)
+    #expect(axOps.count == 1)
 }
 
 @Test func testRouterMixerNoFallback() async {

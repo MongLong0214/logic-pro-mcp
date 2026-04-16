@@ -154,6 +154,34 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     #expect(!e2eText(r).isEmpty)
 }
 
+@Test func testE2ETracksSetInstrumentRejectsMissingSelector() async {
+    let h = await makeE2EHandlers()
+    let r = await e2eCall(h, tool: "logic_tracks", command: "set_instrument", params: ["index": .int(0)])
+    #expect(r.isError == true)
+}
+
+@Test func testE2ETracksResolvePathRequiresPath() async {
+    let h = await makeE2EHandlers()
+    let r = await e2eCall(h, tool: "logic_tracks", command: "resolve_path")
+    #expect(r.isError == true)
+    #expect(e2eText(r).contains("Missing 'path'"))
+}
+
+@Test func testE2ETracksLibraryCommandsDispatch() async {
+    let h = await makeE2EHandlers()
+    let listResult = await e2eCall(h, tool: "logic_tracks", command: "list_library")
+    let scanResult = await e2eCall(h, tool: "logic_tracks", command: "scan_library")
+    let pluginResult = await e2eCall(
+        h,
+        tool: "logic_tracks",
+        command: "scan_plugin_presets",
+        params: ["submenuOpenDelayMs": .string("300")]
+    )
+    #expect(!e2eText(listResult).isEmpty)
+    #expect(!e2eText(scanResult).isEmpty)
+    #expect(!e2eText(pluginResult).isEmpty)
+}
+
 @Test func testE2ETracksUnknownCommandFails() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_tracks", command: "fly_to_moon")
@@ -424,6 +452,8 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     #expect(json?["mcu"] != nil)
     #expect(json?["cache"] != nil)
     #expect(json?["permissions"] != nil)
+    let permissions = json?["permissions"] as? [String: Any]
+    #expect(permissions?["post_event_access"] != nil)
     let process = json?["process"] as? [String: Any]
     #expect(process?["memory_mb"] != nil)
     #expect(process?["cpu_percent"] != nil)
@@ -450,20 +480,23 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 @Test func testE2ESystemPermissionsDispatches() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_system", command: "permissions")
-    #expect(!e2eText(r).isEmpty)
+    let text = e2eText(r)
+    #expect(text.contains("Accessibility:"))
+    #expect(text.contains("Automation (Logic Pro):"))
 }
 
 @Test func testE2ESystemRefreshDispatches() async {
     let h = await makeE2EHandlers()
-    let r = await e2eCall(h, tool: "logic_system", command: "refresh")
-    #expect(!e2eText(r).isEmpty)
+    let r = await e2eCall(h, tool: "logic_system", command: "refresh_cache")
+    #expect(r.isError == false)
+    #expect(e2eText(r).contains("State refresh"))
 }
 
-@Test func testE2ESystemCacheStateDispatches() async {
+@Test func testE2ESystemCacheStateIsNotAPublicCommand() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_system", command: "cache_state")
-    let text = e2eText(r)
-    #expect(!text.isEmpty)
+    #expect(r.isError == true)
+    #expect(e2eText(r).contains("Unknown system command"))
 }
 
 @Test func testE2ESystemUnknownCommandFails() async {

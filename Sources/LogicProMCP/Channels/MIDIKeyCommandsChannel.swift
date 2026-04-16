@@ -69,7 +69,12 @@ actor MIDIKeyCommandsChannel: Channel {
         "project.bounce":               62,
 
         // Transport extras (CC 70-73)
-        "transport.set_tempo":          70,
+        //
+        // NOTE: "transport.set_tempo" is intentionally NOT mapped here. Logic's
+        // CC-based key-command fallback cannot convey the tempo value, so firing
+        // CC 70 would silently do nothing useful (Logic just triggers whatever
+        // the user bound to CC 70, ignoring the BPM parameter). set_tempo must
+        // go through the Accessibility channel which writes the actual value.
         "transport.toggle_cycle":       72,
         "transport.capture_recording":  73,
 

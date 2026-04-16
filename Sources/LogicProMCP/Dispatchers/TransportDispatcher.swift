@@ -52,9 +52,16 @@ struct TransportDispatcher {
             return toolTextResult(result)
 
         case "set_tempo":
-            let tempo = params["tempo"]?.doubleValue
-                ?? params["bpm"]?.doubleValue
-                ?? 120.0
+            let tempo = doubleParam(params, "tempo", "bpm", default: 120.0)
+            // Logic Pro's tempo range is 5..990 BPM; the schema documents 20..999.
+            // Accept a slightly-wider 5..999 to match Logic's actual behavior,
+            // reject anything clearly absurd so a typo doesn't silently pass.
+            guard (5.0...999.0).contains(tempo) else {
+                return toolTextResult(
+                    "set_tempo 'tempo' must be in 5..999 (got \(tempo))",
+                    isError: true
+                )
+            }
             let result = await router.route(
                 operation: "transport.set_tempo",
                 params: ["bpm": String(tempo)]
@@ -62,16 +69,31 @@ struct TransportDispatcher {
             return toolTextResult(result)
 
         case "goto_position":
-            if let bar = params["bar"]?.intValue {
+            // intParam coerces int/double/string so `{"bar":"5"}` works too.
+            if params["bar"] != nil {
+                let bar = intParam(params, "bar", default: 1)
+                guard (1...9999).contains(bar) else {
+                    return toolTextResult(
+                        "goto_position 'bar' must be in 1..9999 (got \(bar))",
+                        isError: true
+                    )
+                }
                 let result = await router.route(
                     operation: "transport.goto_position",
                     params: ["position": "\(bar).1.1.1"]
                 )
                 return toolTextResult(result)
             }
-            let time = params["time"]?.stringValue
-                ?? params["position"]?.stringValue
-                ?? "1.1.1.1"
+            let time = stringParam(params, "time", "position", default: "1.1.1.1")
+            // Validate position format before routing. Accept:
+            //   Bar/beat: "N.N.N.N" with bar 1..9999, beat 1..16, sub 1..16, tick 1..999
+            //   SMPTE:    "HH:MM:SS:FF" with HH 0..23, MM/SS 0..59, FF 0..99
+            guard TransportDispatcher.isValidPositionString(time) else {
+                return toolTextResult(
+                    "goto_position 'position' must be bar.beat.sub.tick (e.g. 1.1.1.1) or HH:MM:SS:FF (got '\(time)')",
+                    isError: true
+                )
+            }
             let result = await router.route(
                 operation: "transport.goto_position",
                 params: ["position": time]
@@ -79,8 +101,22 @@ struct TransportDispatcher {
             return toolTextResult(result)
 
         case "set_cycle_range":
-            let start = params["start"]?.intValue ?? 1
-            let end = params["end"]?.intValue ?? 5
+            let start = intParam(params, "start", default: 1)
+            let end = intParam(params, "end", default: 5)
+            // Bounds: same window as goto_position.bar (1..9999).
+            // Enforce start <= end so a swapped-argument typo surfaces early.
+            guard (1...9999).contains(start), (1...9999).contains(end) else {
+                return toolTextResult(
+                    "set_cycle_range 'start' and 'end' must be in 1..9999 (got \(start)..\(end))",
+                    isError: true
+                )
+            }
+            guard start <= end else {
+                return toolTextResult(
+                    "set_cycle_range 'start' (\(start)) must be <= 'end' (\(end))",
+                    isError: true
+                )
+            }
             let result = await router.route(
                 operation: "transport.set_cycle_range",
                 params: ["start": "\(start).1.1.1", "end": "\(end).1.1.1"]
@@ -93,5 +129,39 @@ struct TransportDispatcher {
                 isError: true
             )
         }
+    }
+
+    /// Accept "bar.beat.sub.tick" (each positive) or "HH:MM:SS:FF" (with
+    /// each field within its canonical range). Anything else — including
+    /// empty string and malformed tokens like "99:99:99:99" — is rejected.
+    static func isValidPositionString(_ s: String) -> Bool {
+        let trimmed = s.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return false }
+
+        // Bar/beat format.
+        let dots = trimmed.split(separator: ".", omittingEmptySubsequences: false)
+        if dots.count == 4 {
+            guard let bar = Int(dots[0]), (1...9999).contains(bar),
+                  let beat = Int(dots[1]), (1...16).contains(beat),
+                  let sub = Int(dots[2]), (1...16).contains(sub),
+                  let tick = Int(dots[3]), (1...999).contains(tick) else {
+                return false
+            }
+            return true
+        }
+
+        // SMPTE format.
+        let colons = trimmed.split(separator: ":", omittingEmptySubsequences: false)
+        if colons.count == 4 {
+            guard let h = Int(colons[0]), (0...23).contains(h),
+                  let m = Int(colons[1]), (0...59).contains(m),
+                  let sec = Int(colons[2]), (0...59).contains(sec),
+                  let f = Int(colons[3]), (0...99).contains(f) else {
+                return false
+            }
+            return true
+        }
+
+        return false
     }
 }

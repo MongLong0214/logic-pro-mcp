@@ -52,17 +52,17 @@ Prefer resources over repeated tool calls — they are cheap and safe to poll at
 
 | Command | Params | Returns | Channel |
 |---------|--------|---------|---------|
-| `play` | — | text | MCU → CoreMIDI → CGEvent |
-| `stop` | — | text | MCU → CoreMIDI → CGEvent → AppleScript |
-| `record` | — | text | MCU → CoreMIDI → CGEvent → AppleScript |
+| `play` | — | text | Accessibility → MCU → CoreMIDI → CGEvent |
+| `stop` | — | text | Accessibility → MCU → CoreMIDI → CGEvent → AppleScript |
+| `record` | — | text | Accessibility → MCU → CoreMIDI → CGEvent → AppleScript |
 | `pause` | — | text | CoreMIDI → CGEvent |
 | `rewind` | — | text | MCU → CoreMIDI → CGEvent |
 | `fast_forward` | — | text | MCU → CoreMIDI → CGEvent |
-| `toggle_cycle` | — | text | MCU → MIDIKeyCommands → CGEvent |
-| `toggle_metronome` | — | text | MIDIKeyCommands → CGEvent |
-| `toggle_count_in` | — | text | MIDIKeyCommands → CGEvent |
+| `toggle_cycle` | — | text | Accessibility → MCU → MIDIKeyCommands → CGEvent |
+| `toggle_metronome` | — | text | Accessibility → MIDIKeyCommands → CGEvent |
+| `toggle_count_in` | — | text | Accessibility → MIDIKeyCommands → CGEvent |
 | `set_tempo` | `{ tempo: number }` (20–300) | text | Accessibility → MIDIKeyCommands |
-| `goto_position` | `{ bar: int }` or `{ position: "B.B.S.S" }` | text | MCU → CoreMIDI → CGEvent |
+| `goto_position` | `{ bar: int }` or `{ position: "B.B.S.S" }` | text | Accessibility → MCU → CoreMIDI → CGEvent |
 | `set_cycle_range` | `{ start: int, end: int }` | text | Accessibility |
 | `capture_recording` | — | text | MIDIKeyCommands → CGEvent |
 
@@ -103,7 +103,7 @@ Prefer resources over repeated tool calls — they are cheap and safe to poll at
 
 | Command | Params | Returns | Channel |
 |---------|--------|---------|---------|
-| `select` | `{ index: int }` | text | MCU → AX → CGEvent |
+| `select` | `{ index: int }` | text | Accessibility → MCU |
 | `create_audio` | — | text | AX → MIDIKeyCommands → CGEvent |
 | `create_instrument` | — | text | AX → MIDIKeyCommands → CGEvent |
 | `create_drummer` | — | text | AX → MIDIKeyCommands → CGEvent |
@@ -115,6 +115,11 @@ Prefer resources over repeated tool calls — they are cheap and safe to poll at
 | `solo` | `{ index: int, enabled?: bool }` | text | MCU → AX → CGEvent |
 | `arm` | `{ index: int, enabled?: bool }` | text | MCU → AX → CGEvent |
 | `set_automation` | `{ index: int, mode: "off"\|"read"\|"touch"\|"latch"\|"write" }` | text | MCU |
+| `set_instrument` | `{ index: int, path?: string }` or `{ index: int, category: string, preset: string }` | text | Accessibility |
+| `list_library` | — | text | Accessibility |
+| `scan_library` | — | text | Accessibility |
+| `resolve_path` | `{ path: string }` | text | Accessibility |
+| `scan_plugin_presets` | `{ submenuOpenDelayMs?: int }` | text | Accessibility |
 | `set_color` | — | error | Not exposed in the production MCP contract |
 
 ### Reading tracks
@@ -146,9 +151,14 @@ Prefer resources over repeated tool calls — they are cheap and safe to poll at
 {"command": "mute", "params": {"index": 3, "enabled": true}}
 {"command": "rename", "params": {"index": 0, "name": "Lead Vox"}}
 {"command": "set_automation", "params": {"index": 1, "mode": "touch"}}
+{"command": "scan_library"}
+{"command": "resolve_path", "params": {"path": "Bass/Sub Bass"}}
+{"command": "set_instrument", "params": {"index": 0, "path": "Bass/Sub Bass"}}
 ```
 
 **Input validation:** `rename` truncates names to 255 chars. Unicode (including emoji, Korean, Japanese) is fully supported.
+
+**Library preconditions:** `list_library`, `scan_library`, and `set_instrument` require the Library panel to be visible in Logic Pro. `resolve_path` is cache-backed and requires a prior successful `scan_library`.
 
 ---
 
@@ -406,11 +416,12 @@ Returned by both `logic_system health` (tool) and `logic://system/health` (resou
   },
   permissions: {
     accessibility: boolean,
-    automation: string,                // "granted" | "not_granted" | "not_verifiable"
-    automation_granted: boolean,
+    automation: boolean,
+    automation_granted: boolean | null,
     accessibility_status: string,
     automation_status: string,
-    automation_verifiable: boolean
+    automation_verifiable: boolean,
+    post_event_access: boolean
   },
   process: {
     memory_mb: number,
@@ -419,6 +430,8 @@ Returned by both `logic_system health` (tool) and `logic://system/health` (resou
   }
 }
 ```
+
+`logic_system permissions` returns a human-readable summary string. For machine-readable permission state including `post_event_access`, use `logic_system health` or `logic://system/health`.
 
 ---
 

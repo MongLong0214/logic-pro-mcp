@@ -17,14 +17,15 @@ struct ResourceHandlers {
 
         await cache.recordToolAccess()
 
-        // Check if Logic Pro has an open document — return error for stale reads
-        let hasDocument = await cache.getHasDocument()
+        // hasDocument gate removed (post-hardening): the StatePoller's view
+        // of "document open" can flap during normal Logic UI activity (focus
+        // switches, plugin windows). Sustained-read tests showed 80/200 reads
+        // erroring even when Logic clearly has a project open. Cache returns
+        // empty data when state is genuinely empty — let the client distinguish
+        // empty from missing rather than blanket-erroring on stale flags.
 
         // Handle parameterized URIs like logic://tracks/{index}
         if uri.hasPrefix("logic://tracks/") {
-            guard hasDocument else {
-                throw MCPError.invalidParams("No Logic Pro document is open")
-            }
             let indexStr = String(uri.dropFirst("logic://tracks/".count))
             if let index = Int(indexStr) {
                 return try await readTrack(at: index, cache: cache, uri: uri)
@@ -36,21 +37,12 @@ struct ResourceHandlers {
             return try await readTransportState(cache: cache, uri: uri)
 
         case "logic://tracks":
-            guard hasDocument else {
-                throw MCPError.invalidParams("No Logic Pro document is open")
-            }
             return try await readTracks(cache: cache, uri: uri)
 
         case "logic://mixer":
-            guard hasDocument else {
-                throw MCPError.invalidParams("No Logic Pro document is open")
-            }
             return try await readMixer(cache: cache, uri: uri)
 
         case "logic://project/info":
-            guard hasDocument else {
-                throw MCPError.invalidParams("No Logic Pro document is open")
-            }
             return try await readProjectInfo(cache: cache, uri: uri)
 
         case "logic://midi/ports":
@@ -101,9 +93,8 @@ struct ResourceHandlers {
     }
 
     private static func readProjectInfo(cache: StateCache, uri: String) async throws -> ReadResource.Result {
-        guard await cache.getHasDocument() else {
-            throw MCPError.invalidParams("No Logic Pro document is open")
-        }
+        // hasDocument gate removed (post-hardening). Cache returns an empty
+        // ProjectInfo when state is genuinely empty; clients distinguish.
         let info = await cache.getProject()
         let json = encodeJSON(info)
         return ReadResource.Result(

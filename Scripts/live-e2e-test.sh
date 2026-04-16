@@ -136,6 +136,11 @@ send_and_check \
     "channels"
 
 send_and_check \
+    "system.health exposes post_event_access" \
+    "$(call_tool logic_system health)" \
+    "post_event_access"
+
+send_and_check \
     "system.permissions shows granted" \
     "$(call_tool logic_system permissions)" \
     "[Gg]ranted"
@@ -177,6 +182,21 @@ send_and_check \
     "track.get_selected returns selected track or error" \
     "$(call_tool logic_tracks get_selected)" \
     "result"
+
+send_and_check \
+    "track.resolve_path without path errors" \
+    "$(call_tool logic_tracks resolve_path)" \
+    "error|isError.*true|Missing 'path'"
+
+send_and_check \
+    "track.set_instrument without selector errors" \
+    "$(call_tool logic_tracks set_instrument '{"index":"0"}')" \
+    "error|isError.*true|Missing path"
+
+send_and_check \
+    "track.scan_plugin_presets returns content or guidance" \
+    "$(call_tool logic_tracks scan_plugin_presets '{"submenuOpenDelayMs":"300"}')" \
+    "result|error|isError"
 
 # ─── §5: Mixer ───
 echo ""

@@ -242,14 +242,14 @@ import Testing
 
 @Test func testMIDIPacketWordCountCappedInConfig() {
     // Verify ServerConfig has the polling interval
-    #expect(ServerConfig.statePollingIntervalNs == 5_000_000_000)
+    #expect(ServerConfig.statePollingIntervalNs == 3_000_000_000)
 }
 
 // MARK: - Architecture: ServerConfig Centralization
 
 @Test func testServerConfigHasPollingInterval() {
     #expect(ServerConfig.statePollingIntervalNs > 0)
-    #expect(ServerConfig.statePollingIntervalNs == 5_000_000_000)
+    #expect(ServerConfig.statePollingIntervalNs == 3_000_000_000)
 }
 
 @Test func testServerConfigHasAllRequiredFields() {

@@ -16,15 +16,29 @@ struct MixerDispatcher {
     ) async -> CallTool.Result {
         switch command {
         case "set_volume":
+            let volume = doubleParam(params, "value", "volume")
+            guard (0.0...1.0).contains(volume) else {
+                return toolTextResult(
+                    "set_volume 'volume' must be in 0.0..1.0 (got \(volume))",
+                    isError: true
+                )
+            }
             return await routedTextResult(router, operation: "mixer.set_volume", params: [
                 "index": String(intParam(params, "track", "index")),
-                "volume": String(doubleParam(params, "value", "volume")),
+                "volume": String(volume),
             ])
 
         case "set_pan":
+            let pan = doubleParam(params, "value", "pan")
+            guard (-1.0...1.0).contains(pan) else {
+                return toolTextResult(
+                    "set_pan 'value' must be in -1.0..1.0 (got \(pan))",
+                    isError: true
+                )
+            }
             return await routedTextResult(router, operation: "mixer.set_pan", params: [
                 "index": String(intParam(params, "track", "index")),
-                "pan": String(doubleParam(params, "value", "pan")),
+                "pan": String(pan),
             ])
 
         case "set_send":
@@ -40,8 +54,15 @@ struct MixerDispatcher {
             return toolTextResult("set_input is not exposed in the production MCP contract", isError: true)
 
         case "set_master_volume":
+            let volume = doubleParam(params, "value", "volume")
+            guard (0.0...1.0).contains(volume) else {
+                return toolTextResult(
+                    "set_master_volume 'value' must be in 0.0..1.0 (got \(volume))",
+                    isError: true
+                )
+            }
             return await routedTextResult(router, operation: "mixer.set_master_volume", params: [
-                "volume": String(doubleParam(params, "value", "volume")),
+                "volume": String(volume),
             ])
 
         case "toggle_eq":

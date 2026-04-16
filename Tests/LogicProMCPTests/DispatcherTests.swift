@@ -130,9 +130,12 @@ private actor FailingExecuteChannel: Channel {
 }
 
 @Test func testTransportDispatcherSetTempoGotoPositionAndCycleRange() async {
+    // Post-hardening: transport.set_tempo routes ONLY to Accessibility.
+    // MIDIKeyCommands / CGEvent fallbacks removed because they can't convey
+    // the tempo value (CC press/keypress ignores param), masking real errors.
     let tempoRouter = ChannelRouter()
-    let keyCmd = MockChannel(id: .midiKeyCommands)
-    await tempoRouter.register(keyCmd)
+    let tempoAX = MockChannel(id: .accessibility)
+    await tempoRouter.register(tempoAX)
     let cache = StateCache()
 
     let tempoResult = await TransportDispatcher.handle(
@@ -143,7 +146,7 @@ private actor FailingExecuteChannel: Channel {
     )
 
     #expect(!tempoResult.isError!)
-    let tempoOps = await keyCmd.executedOps
+    let tempoOps = await tempoAX.executedOps
     expectExecutedOps(tempoOps, equals: [("transport.set_tempo", ["bpm": "128.5"])])
 
     let gotoRouter = ChannelRouter()
@@ -174,12 +177,16 @@ private actor FailingExecuteChannel: Channel {
     #expect(!gotoBarResult.isError!)
     #expect(!gotoTimeResult.isError!)
     #expect(!cycleResult.isError!)
+    // AX is now primary for transport.goto_position (AX goes through the bar slider).
+    // MCU receives no goto_position calls when AX succeeds first.
     let gotoOps = await mcu.executedOps
-    #expect(gotoOps.count == 2)
-    expectExecutedOp(gotoOps[0], equals: ("transport.goto_position", ["position": "9.1.1.1"]))
-    expectExecutedOp(gotoOps[1], equals: ("transport.goto_position", ["position": "00:00:10:12"]))
+    #expect(gotoOps.isEmpty)
     let axOps = await ax.executedOps
-    expectExecutedOps(axOps, equals: [("transport.set_cycle_range", ["start": "4.1.1.1", "end": "12.1.1.1"])])
+    expectExecutedOps(axOps, equals: [
+        ("transport.goto_position", ["position": "9.1.1.1"]),
+        ("transport.goto_position", ["position": "00:00:10:12"]),
+        ("transport.set_cycle_range", ["start": "4.1.1.1", "end": "12.1.1.1"]),
+    ])
 }
 
 @Test func testTransportDispatcherGotoPositionDefaultsToStart() async {
@@ -430,6 +437,75 @@ private actor FailingExecuteChannel: Channel {
     #expect(!result.isError!)
 }
 
+@Test func testTrackDispatcherLibraryCommandsAndPluginScanRouteCorrectly() async {
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility)
+    await router.register(ax)
+    let cache = StateCache()
+
+    let pathResult = await TrackDispatcher.handle(
+        command: "set_instrument",
+        params: ["index": .string("2"), "path": .string("Bass/Sub Bass")],
+        router: router,
+        cache: cache
+    )
+    let legacyResult = await TrackDispatcher.handle(
+        command: "set_instrument",
+        params: ["index": .int(1), "category": .string("Bass"), "preset": .string("Sub Bass")],
+        router: router,
+        cache: cache
+    )
+    let resolveResult = await TrackDispatcher.handle(
+        command: "resolve_path",
+        params: ["path": .string("Bass/Sub Bass")],
+        router: router,
+        cache: cache
+    )
+    let listResult = await TrackDispatcher.handle(
+        command: "list_library",
+        params: [:],
+        router: router,
+        cache: cache
+    )
+    let scanResult = await TrackDispatcher.handle(
+        command: "scan_library",
+        params: [:],
+        router: router,
+        cache: cache
+    )
+    let pluginResult = await TrackDispatcher.handle(
+        command: "scan_plugin_presets",
+        params: ["submenuOpenDelayMs": .string("400")],
+        router: router,
+        cache: cache
+    )
+    let missingPathResult = await TrackDispatcher.handle(
+        command: "resolve_path",
+        params: [:],
+        router: router,
+        cache: cache
+    )
+
+    #expect(!pathResult.isError!)
+    #expect(!legacyResult.isError!)
+    #expect(!resolveResult.isError!)
+    #expect(!listResult.isError!)
+    #expect(!scanResult.isError!)
+    #expect(!pluginResult.isError!)
+    #expect(missingPathResult.isError == true)
+    #expect(dispatcherText(missingPathResult).contains("Missing 'path'"))
+
+    let ops = await ax.executedOps
+    expectExecutedOps(ops, equals: [
+        ("track.set_instrument", ["index": "2", "path": "Bass/Sub Bass"]),
+        ("track.set_instrument", ["index": "1", "category": "Bass", "preset": "Sub Bass"]),
+        ("library.resolve_path", ["path": "Bass/Sub Bass"]),
+        ("library.list", [:]),
+        ("library.scan_all", [:]),
+        ("plugin.scan_presets", ["submenuOpenDelayMs": "400"]),
+    ])
+}
+
 @Test func testTrackDispatcherSelectByIndexAndName() async {
     let indexRouter = ChannelRouter()
     let mcu = MockChannel(id: .mcu)
@@ -543,16 +619,18 @@ private actor FailingExecuteChannel: Channel {
 
     let mcuOps = await mcu.executedOps
     let axOps = await ax.executedOps
-    expectExecutedOps(mcuOps, equals: [
-        ("track.set_solo", ["index": "5", "enabled": "true"]),
-        ("track.set_arm", ["index": "5", "enabled": "false"]),
-    ])
+    // Post-fix: track.set_solo / track.set_arm route to Accessibility first
+    // (idempotent, reads current AX checkbox state) and only fall back to MCU
+    // if AX fails. When AX succeeds, MCU is never called.
+    expectExecutedOps(mcuOps, equals: [])
     expectExecutedOps(axOps, equals: [
         ("track.create_audio", [:]),
         ("track.create_instrument", [:]),
         ("track.create_drummer", [:]),
         ("track.create_external_midi", [:]),
         ("track.rename", ["index": "5", "name": "Pad Bus"]),
+        ("track.set_solo", ["index": "5", "enabled": "true"]),
+        ("track.set_arm", ["index": "5", "enabled": "false"]),
     ])
 }
 
@@ -1438,6 +1516,10 @@ private actor FailingExecuteChannel: Channel {
     #expect(tool.name == "logic_tracks")
     #expect(description.contains("set_automation"))
     #expect(description.contains("create_external_midi"))
+    #expect(description.contains("set_instrument"))
+    #expect(description.contains("scan_library"))
+    #expect(description.contains("resolve_path"))
+    #expect(description.contains("scan_plugin_presets"))
     _ = tool.inputSchema
 }
 

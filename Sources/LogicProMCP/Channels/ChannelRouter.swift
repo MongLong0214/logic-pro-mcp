@@ -25,20 +25,24 @@ actor ChannelRouter {
     /// V2 routing table: MCU primary for mixer/transport/track state, MIDIKeyCommands for editing.
     /// PRD §4.3 + §4.3.1 contract changes.
     static let v2RoutingTable: [String: [ChannelID]] = [
-        // Transport — MCU primary, CoreMIDI + CGEvent fallback
-        "transport.play":             [.mcu, .coreMIDI, .cgEvent],
-        "transport.stop":             [.mcu, .coreMIDI, .cgEvent, .appleScript],
-        "transport.record":           [.mcu, .coreMIDI, .cgEvent, .appleScript],
+        // Transport — AX control-bar click primary (works without MCU / MIDI Learn),
+        // MCU / CoreMIDI / CGEvent / AppleScript as fallbacks.
+        "transport.play":             [.accessibility, .mcu, .coreMIDI, .cgEvent],
+        "transport.stop":             [.accessibility, .mcu, .coreMIDI, .cgEvent, .appleScript],
+        "transport.record":           [.accessibility, .mcu, .coreMIDI, .cgEvent, .appleScript],
         "transport.pause":            [.coreMIDI, .cgEvent],
         "transport.rewind":           [.mcu, .coreMIDI, .cgEvent],
         "transport.fast_forward":     [.mcu, .coreMIDI, .cgEvent],
-        "transport.toggle_cycle":     [.mcu, .midiKeyCommands, .cgEvent],
-        "transport.toggle_metronome": [.midiKeyCommands, .cgEvent],
-        "transport.set_tempo":        [.accessibility, .midiKeyCommands, .cgEvent],
+        "transport.toggle_cycle":     [.accessibility, .mcu, .midiKeyCommands, .cgEvent],
+        "transport.toggle_metronome": [.accessibility, .midiKeyCommands, .cgEvent],
+        // AX only — MIDIKeyCommands / CGEvent can't convey the tempo value
+        // (MCU set_tempo CC fires blindly, no shortcut actually sets value).
+        // Router fallback just obscures the real AX error message.
+        "transport.set_tempo":        [.accessibility],
         "transport.get_state":        [.accessibility],
-        "transport.goto_position":    [.mcu, .coreMIDI, .cgEvent],
+        "transport.goto_position":    [.accessibility, .mcu, .coreMIDI, .cgEvent],
         "transport.set_cycle_range":  [.accessibility],
-        "transport.toggle_count_in":  [.midiKeyCommands, .cgEvent],
+        "transport.toggle_count_in":  [.accessibility, .midiKeyCommands, .cgEvent],
         "transport.capture_recording":[.midiKeyCommands, .cgEvent],
 
         // Track state reading
@@ -46,20 +50,33 @@ actor ChannelRouter {
         "track.get_selected":         [.accessibility],
 
         // Track mutation — MCU for mute/solo/arm/select, KeyCmd for creation
-        "track.select":               [.mcu, .accessibility, .cgEvent],
+        "track.select":               [.accessibility, .mcu],
         "track.create_audio":         [.accessibility, .midiKeyCommands, .cgEvent],
         "track.create_instrument":    [.accessibility, .midiKeyCommands, .cgEvent],
         "track.create_drummer":       [.accessibility, .midiKeyCommands, .cgEvent],
         "track.create_external_midi": [.accessibility, .midiKeyCommands, .cgEvent],
-        "track.delete":               [.midiKeyCommands, .cgEvent],
+        // AX first: clicks "Track > 트랙 삭제" menu item directly. CGEvent
+        // fallback uses Cmd+Delete which actually deletes regions (not tracks)
+        // in Logic 12 — leaving it as last-resort only for environments where
+        // the menu path AX query fails.
+        "track.delete":               [.accessibility, .midiKeyCommands, .cgEvent],
         "track.rename":               [.accessibility],
-        "track.set_mute":             [.mcu, .accessibility, .cgEvent],
-        "track.set_solo":             [.mcu, .accessibility, .cgEvent],
-        "track.set_arm":              [.mcu, .accessibility, .cgEvent],
+        // AX first: reads current checkbox state and only presses when it
+        // differs from desired — idempotent. MCU fallback is last-resort because
+        // its buttons are press-only (release is ignored by Logic), so
+        // `enabled:false` on MCU becomes a silent no-op, and repeated `enabled:true`
+        // toggles instead of setting. (Same bug class as track.select.)
+        "track.set_mute":             [.accessibility, .mcu, .cgEvent],
+        "track.set_solo":             [.accessibility, .mcu, .cgEvent],
+        "track.set_arm":              [.accessibility, .mcu, .cgEvent],
         "track.duplicate":            [.midiKeyCommands, .cgEvent],
         "track.set_color":            [.accessibility],
         "track.set_automation":       [.mcu],  // §4.3.1 new command
         "track.create_stack":         [.midiKeyCommands, .cgEvent],
+        "track.set_instrument":       [.accessibility],  // Library panel via AX + CGEvent
+        "library.list":               [.accessibility],
+        "library.scan_all":           [.accessibility],
+        "library.resolve_path":       [.accessibility],
 
         // Mixer — MCU primary, NO fallback (PRD §4.3)
         "mixer.get_state":            [.mcu, .accessibility],
@@ -79,6 +96,7 @@ actor ChannelRouter {
         // MIDI — CoreMIDI only
         "midi.send_note":             [.coreMIDI],
         "midi.send_chord":            [.coreMIDI],
+        "midi.play_sequence":         [.coreMIDI],
         "midi.send_cc":               [.coreMIDI],
         "midi.send_program_change":   [.coreMIDI],
         "midi.send_pitch_bend":       [.coreMIDI],
@@ -160,6 +178,7 @@ actor ChannelRouter {
         "plugin.bypass":              [.mcu, .accessibility],
         "plugin.remove":              [.accessibility],
         "plugin.set_param":           [.scripter],  // deterministic plugin parameter path
+        "plugin.scan_presets":        [.accessibility],  // F2 — empirical T0 verdict MIXED (CGEvent popup + AXPress menu)
 
         // Automation
         "automation.get_mode":        [.accessibility],
