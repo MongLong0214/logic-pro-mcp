@@ -311,6 +311,10 @@ actor AccessibilityChannel: Channel {
         case "mixer.reset_strip":
             return .error("Strip reset not yet implemented via AX")
 
+        // MARK: - MIDI file import (AX fallback — menu navigation)
+        case "midi.import_file":
+            return .error("MIDI file import via AX menu not yet implemented — requires OQ-2 probe")
+
         // MARK: - Navigation
         case "nav.get_markers":
             return runtime.markers()

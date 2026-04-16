@@ -107,6 +107,9 @@ actor ChannelRouter {
         "midi.create_virtual_port":   [.coreMIDI],
         "midi.step_input":            [.coreMIDI],  // §4.3.1 new command
 
+        // MIDI file import — AppleScript primary (Launch Services), AX fallback
+        "midi.import_file":           [.appleScript, .accessibility],
+
         // MMC
         "mmc.play":                   [.coreMIDI],
         "mmc.stop":                   [.coreMIDI],
