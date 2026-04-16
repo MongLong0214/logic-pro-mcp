@@ -721,6 +721,44 @@ private actor FailingExecuteChannel: Channel {
     #expect(dispatcherText(result).contains("Unknown track command"))
 }
 
+// MARK: - record_sequence error chain
+
+@Test func testRecordSequenceHasDocumentGuard() async {
+    let cache = StateCache()
+    await cache.updateDocumentState(false)
+
+    let result = await TrackDispatcher.handle(
+        command: "record_sequence",
+        params: ["index": .int(0), "notes": .string("60,0,480")],
+        router: ChannelRouter(),
+        cache: cache
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("No project open"))
+}
+
+@Test func testRecordSequenceFailsOnSelectError() async {
+    let router = ChannelRouter()
+    let ax = FailingExecuteChannel(id: .accessibility, message: "AX select fail")
+    let mcu = FailingExecuteChannel(id: .mcu, message: "MCU fail")
+    let cg = FailingExecuteChannel(id: .cgEvent, message: "CG fail")
+    await router.register(ax)
+    await router.register(mcu)
+    await router.register(cg)
+    let cache = StateCache()
+
+    let result = await TrackDispatcher.handle(
+        command: "record_sequence",
+        params: ["index": .int(0), "notes": .string("60,0,480")],
+        router: router,
+        cache: cache
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("select"))
+}
+
 // MARK: - arm_only error propagation
 
 private actor SelectiveFailChannel: Channel {

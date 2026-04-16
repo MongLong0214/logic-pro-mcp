@@ -129,16 +129,9 @@ struct TrackDispatcher {
             return toolTextResult(result)
 
         case "record_sequence":
-            // One-shot composition helper:
-            //   1. Select the target track
-            //   2. Disarm every other track + arm this one
-            //   3. Goto bar 1 (or caller-provided bar)
-            //   4. Start recording
-            //   5. Play MIDI sequence with tight server-side timing
-            //   6. Stop
-            // Covers the entire "record one bar on one track" user story in a
-            // single call — the recurring source of bugs was doing these steps
-            // individually and racing/duplicating.
+            guard await cache.getHasDocument() else {
+                return toolTextResult("No project open", isError: true)
+            }
             let index = intParam(params, "index", "track", default: 0)
             let bar = intParam(params, "bar", default: 1)
             let notes = stringParam(params, "notes")
@@ -148,7 +141,7 @@ struct TrackDispatcher {
                     isError: true
                 )
             }
-            // Step 1 + 2: select + arm_only
+            // Disarm other tracks
             let tracks = await cache.getTracks()
             for t in tracks where t.id != index && t.isArmed {
                 _ = await router.route(
@@ -156,29 +149,42 @@ struct TrackDispatcher {
                     params: ["index": String(t.id), "enabled": "false"]
                 )
             }
-            _ = await router.route(
+            // Select target track
+            let selectResult = await router.route(
                 operation: "track.select",
                 params: ["index": String(index)]
             )
-            _ = await router.route(
+            guard selectResult.isSuccess else {
+                return toolTextResult("record_sequence failed at select: \(selectResult.message)", isError: true)
+            }
+            // Arm target track
+            let armResult = await router.route(
                 operation: "track.set_arm",
                 params: ["index": String(index), "enabled": "true"]
             )
-            // Step 3: goto bar
-            _ = await router.route(
+            guard armResult.isSuccess else {
+                return toolTextResult("record_sequence failed at arm: \(armResult.message)", isError: true)
+            }
+            // Goto bar
+            let gotoResult = await router.route(
                 operation: "transport.goto_position",
                 params: ["position": "\(bar).1.1.1"]
             )
-            // Step 4: start record
-            _ = await router.route(operation: "transport.record")
-            // Tiny settle so Logic is actually in record state before MIDI flows.
+            guard gotoResult.isSuccess else {
+                return toolTextResult("record_sequence failed at goto_position: \(gotoResult.message)", isError: true)
+            }
+            // Start recording
+            let recordResult = await router.route(operation: "transport.record")
+            guard recordResult.isSuccess else {
+                return toolTextResult("record_sequence failed at record: \(recordResult.message)", isError: true)
+            }
             try? await Task.sleep(nanoseconds: 200_000_000)
-            // Step 5: play sequence
+            // Play sequence
             let playResult = await router.route(
                 operation: "midi.play_sequence",
                 params: ["notes": notes]
             )
-            // Step 6: stop
+            // Stop
             _ = await router.route(operation: "transport.stop")
             return toolTextResult(.success(
                 "{\"recorded_to_track\":\(index),\"bar\":\(bar),\"play_result\":\"\(playResult.message.replacingOccurrences(of: "\"", with: "\\\""))\"}"
