@@ -111,17 +111,6 @@ struct MCUDisplayState: Sendable {
     var lowerRow: String = String(repeating: " ", count: 56)
 }
 
-/// Plugin parameter state.
-struct PluginState: Sendable, Codable {
-    var name: String = ""
-    var parameters: [PluginParam] = []
-
-    struct PluginParam: Sendable, Codable {
-        var name: String
-        var value: Double
-    }
-}
-
 /// Project-level info.
 struct ProjectInfo: Sendable, Codable {
     var name: String = ""

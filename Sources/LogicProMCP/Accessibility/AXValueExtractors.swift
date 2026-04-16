@@ -46,17 +46,6 @@ enum AXValueExtractors {
         return nil
     }
 
-    /// Extract checkbox state (a variant of button state, but checks kAXValueAttribute specifically).
-    static func extractCheckboxState(_ element: AXUIElement, runtime: AXHelpers.Runtime = .production) -> Bool? {
-        guard let value: AnyObject = AXHelpers.getAttribute(element, kAXValueAttribute, runtime: runtime) else {
-            return nil
-        }
-        if let number = value as? NSNumber {
-            return number.intValue != 0
-        }
-        return nil
-    }
-
     /// Extract the selected state of an element.
     static func extractSelectedState(_ element: AXUIElement, runtime: AXHelpers.Runtime = .production) -> Bool? {
         guard let value: AnyObject = AXHelpers.getAttribute(element, kAXSelectedAttribute, runtime: runtime) else {

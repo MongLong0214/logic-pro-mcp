@@ -18,7 +18,6 @@ struct ServerConfig: Sendable {
 
     // MARK: - Timeouts
     static let appleScriptTimeout: TimeInterval = 5.0
-    static let channelHealthCheckTimeout: TimeInterval = 3.0
 
     // MARK: - Logic Pro
     static let logicProBundleID = "com.apple.logic10"

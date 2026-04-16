@@ -6,7 +6,6 @@ import Testing
     let builder = FakeAXRuntimeBuilder()
     let slider = builder.element(1)
     let text = builder.element(2)
-    let checkbox = builder.element(3)
     let selected = builder.element(4)
     let stringButton = builder.element(5)
 
@@ -14,7 +13,6 @@ import Testing
     builder.setAttribute(slider, kAXMinValueAttribute as String, -1.0)
     builder.setAttribute(slider, kAXMaxValueAttribute as String, 1.0)
     builder.setAttribute(text, kAXValueAttribute as String, "128.5 BPM")
-    builder.setAttribute(checkbox, kAXValueAttribute as String, 1)
     builder.setAttribute(selected, kAXSelectedAttribute as String, true)
     builder.setAttribute(stringButton, kAXValueAttribute as String, "true")
 
@@ -23,7 +21,6 @@ import Testing
     #expect(AXValueExtractors.extractSliderValue(slider, runtime: runtime) == 0.75)
     #expect(AXValueExtractors.extractTextValue(text, runtime: runtime) == "128.5 BPM")
     #expect(AXValueExtractors.extractButtonState(stringButton, runtime: runtime) == true)
-    #expect(AXValueExtractors.extractCheckboxState(checkbox, runtime: runtime) == true)
     #expect(AXValueExtractors.extractSelectedState(selected, runtime: runtime) == true)
     #expect(AXValueExtractors.extractSliderRange(slider, runtime: runtime)?.min == -1.0)
     #expect(AXValueExtractors.extractSliderRange(slider, runtime: runtime)?.max == 1.0)
@@ -130,14 +127,12 @@ import Testing
     let sliderInvalid = builder.element(11)
     let titledText = builder.element(12)
     let zeroButton = builder.element(13)
-    let checkboxInvalid = builder.element(14)
     let selectedMissing = builder.element(15)
 
     builder.setAttribute(sliderString, kAXValueAttribute as String, "0.25")
     builder.setAttribute(sliderInvalid, kAXValueAttribute as String, "not-a-double")
     builder.setAttribute(titledText, kAXTitleAttribute as String, "Fallback Title")
     builder.setAttribute(zeroButton, kAXValueAttribute as String, "0")
-    builder.setAttribute(checkboxInvalid, kAXValueAttribute as String, "true")
 
     let runtime = builder.makeAXRuntime()
 
@@ -145,7 +140,6 @@ import Testing
     #expect(AXValueExtractors.extractSliderValue(sliderInvalid, runtime: runtime) == nil)
     #expect(AXValueExtractors.extractTextValue(titledText, runtime: runtime) == "Fallback Title")
     #expect(AXValueExtractors.extractButtonState(zeroButton, runtime: runtime) == false)
-    #expect(AXValueExtractors.extractCheckboxState(checkboxInvalid, runtime: runtime) == nil)
     #expect(AXValueExtractors.extractSelectedState(selectedMissing, runtime: runtime) == nil)
     #expect(AXValueExtractors.extractSliderRange(sliderInvalid, runtime: runtime) == nil)
 }
