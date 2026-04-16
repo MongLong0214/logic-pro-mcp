@@ -187,7 +187,7 @@ actor StatePoller {
         guard case .success(let json) = result else { return }
         guard let data = json.data(using: .utf8) else { return }
         do {
-            let markers = try JSONDecoder().decode([MarkerState].self, from: data)
+            let markers = try Self.iso8601Decoder.decode([MarkerState].self, from: data)
             await cache.updateMarkers(markers)
         } catch {
             Log.debug("Marker poll failed: \(error)", subsystem: "poller")

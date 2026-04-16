@@ -442,7 +442,7 @@ enum AXLogicProElements {
 
     private static func looksLikeBarPosition(_ s: String) -> Bool {
         let parts = s.split(separator: ".")
-        guard parts.count >= 2, parts.count <= 4 else { return false }
+        guard parts.count >= 1, parts.count <= 4 else { return false }
         return parts.allSatisfy { $0.allSatisfy(\.isNumber) }
     }
 
