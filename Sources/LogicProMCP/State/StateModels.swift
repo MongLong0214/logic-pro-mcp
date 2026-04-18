@@ -81,7 +81,7 @@ struct RegionState: Sendable, Codable, Identifiable {
 }
 
 /// Marker info.
-struct MarkerState: Sendable, Codable, Identifiable {
+struct MarkerState: Sendable, Codable, Identifiable, Equatable {
     let id: Int
     var name: String
     var position: String

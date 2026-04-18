@@ -283,19 +283,7 @@ actor CoreMIDIChannel: Channel {
             // jittery at ±5 ms but far tighter than round-tripping 20+ MCP
             // send_note calls per bar from a client.
             // Example: "60,0,400;64,500,400;67,1000,400" = C-E-G arpeggio.
-            let seq = params["notes"] ?? ""
-            let events: [(note: UInt8, offsetMs: Int, durMs: Int, vel: UInt8, ch: UInt8)] = seq
-                .split(separator: ";")
-                .compactMap { raw in
-                    let parts = raw.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-                    guard parts.count >= 3,
-                          let n = Int(parts[0]), (0...127).contains(n),
-                          let o = Int(parts[1]), o >= 0,
-                          let d = Int(parts[2]), d > 0 && d <= 30_000 else { return nil }
-                    let v = parts.count >= 4 ? (Int(parts[3]).flatMap { (0...127).contains($0) ? $0 : nil } ?? 100) : 100
-                    let c = parts.count >= 5 ? (Int(parts[4]).flatMap { (0...16).contains($0) ? $0 : nil } ?? 0) : 0
-                    return (UInt8(n), o, d, UInt8(v), UInt8(c))
-                }
+            let events = NoteSequenceParser.parse(params["notes"] ?? "")
             guard !events.isEmpty else {
                 return .error("play_sequence 'notes' must be 'note,offset,dur[,vel[,ch]];...'")
             }
@@ -309,18 +297,16 @@ actor CoreMIDIChannel: Channel {
                 if targetNs > nowNs {
                     try? await Task.sleep(nanoseconds: targetNs - nowNs)
                 }
-                await engine.sendNoteOn(channel: event.ch, note: event.note, velocity: event.vel)
-                // Schedule note-off without blocking — detached task.
-                let note = event.note
-                let ch = event.ch
-                let durNs = UInt64(event.durMs) * 1_000_000
+                await engine.sendNoteOn(channel: event.channel, note: event.pitch, velocity: event.velocity)
+                let pitch = event.pitch
+                let ch = event.channel
+                let durNs = UInt64(event.durationMs) * 1_000_000
                 Task.detached { [engine] in
                     try? await Task.sleep(nanoseconds: durNs)
-                    await engine.sendNoteOff(channel: ch, note: note, velocity: 0)
+                    await engine.sendNoteOff(channel: ch, note: pitch, velocity: 0)
                 }
             }
-            // Wait for last note-off before returning (so caller knows it's done).
-            if let lastEnd = events.map({ $0.offsetMs + $0.durMs }).max() {
+            if let lastEnd = events.map({ $0.offsetMs + $0.durationMs }).max() {
                 let endTargetNs = startNs + UInt64(lastEnd) * 1_000_000
                 let nowNs = DispatchTime.now().uptimeNanoseconds
                 if endTargetNs > nowNs {

@@ -292,11 +292,10 @@ struct TrackDispatcher {
             )
         }
 
-        // Give Logic time to register the new track in AX, then refresh.
+        // 500ms AX settle: track enumeration updates lag import by ~300-400ms empirically.
         try? await Task.sleep(nanoseconds: 500_000_000)
         let tracksAfter = await cache.getTracks().count
         let trackConfirmed = tracksAfter > tracksBefore
-        // Fallback when AX cache hasn't refreshed: last known valid index, -1 if none.
         let createdTrack = trackConfirmed ? tracksAfter - 1 : max(-1, tracksBefore - 1)
 
         return toolTextResult(.success(
@@ -305,25 +304,19 @@ struct TrackDispatcher {
     }
 
     private static func parseNotesToSMFEvents(notes: String, tempo: Double) -> [SMFWriter.NoteEvent] {
-        var events: [SMFWriter.NoteEvent] = []
-        let segments = notes.split(separator: ";")
-        for seg in segments {
-            let parts = seg.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-            guard parts.count >= 3,
-                  let pitch = Int(parts[0]), (0...127).contains(pitch),
-                  let offsetMs = Int(parts[1]), offsetMs >= 0,
-                  let durMs = Int(parts[2]), durMs > 0 else { continue }
-            let vel = parts.count >= 4 ? (Int(parts[3]).flatMap { (0...127).contains($0) ? $0 : nil } ?? 100) : 100
-            let ch = parts.count >= 5 ? (Int(parts[4]).flatMap { (0...15).contains($0) ? $0 : nil } ?? 0) : 0
-            let ticks = SMFWriter.msToTicks(offsetMs: offsetMs, durationMs: durMs, tempo: tempo)
-            events.append(SMFWriter.NoteEvent(
-                pitch: UInt8(pitch),
+        NoteSequenceParser.parse(notes).map { note in
+            let ticks = SMFWriter.msToTicks(
+                offsetMs: note.offsetMs,
+                durationMs: note.durationMs,
+                tempo: tempo
+            )
+            return SMFWriter.NoteEvent(
+                pitch: note.pitch,
                 offsetTicks: ticks.offsetTicks,
                 durationTicks: ticks.durationTicks,
-                velocity: UInt8(vel),
-                channel: UInt8(ch)
-            ))
+                velocity: note.velocity,
+                channel: note.channel
+            )
         }
-        return events
     }
 }

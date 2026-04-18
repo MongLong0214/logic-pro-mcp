@@ -374,6 +374,11 @@ enum AXLogicProElements {
 
     // MARK: - Markers
 
+    /// Defensive upper bound on AX marker enumeration. Logic projects in the
+    /// wild rarely exceed a few dozen markers; this cap keeps the AX traversal
+    /// cost predictable even for pathological 10k-marker compositions.
+    private static let markerLimit = 512
+
     /// Enumerate markers visible in the arrangement area's marker ruler.
     /// Logic Pro 12 renders the marker ruler as a row of AXStaticText elements
     /// (or AXGroup children) whose title/description contains the marker name.
@@ -403,7 +408,8 @@ enum AXLogicProElements {
             of: ruler, role: kAXStaticTextRole, maxDepth: 4, runtime: runtime.ax
         )
         var markers: [MarkerState] = []
-        for (index, text) in texts.enumerated() {
+        markers.reserveCapacity(min(texts.count, markerLimit))
+        for (index, text) in texts.prefix(markerLimit).enumerated() {
             let name = AXHelpers.getTitle(text, runtime: runtime.ax)
                 ?? AXHelpers.getDescription(text, runtime: runtime.ax)
                 ?? axValueAsName(text, runtime: runtime.ax)

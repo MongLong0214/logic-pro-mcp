@@ -121,6 +121,7 @@ actor StateCache {
     }
 
     func updateMarkers(_ newMarkers: [MarkerState]) {
+        guard markers != newMarkers else { return }
         markers = newMarkers
     }
 
