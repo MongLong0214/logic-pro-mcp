@@ -262,6 +262,12 @@ struct TrackDispatcher {
             try? FileManager.default.removeItem(atPath: path)
         }
 
+        // Logic's MIDI File import strips leading empty delta before the first
+        // channel event (region gets placed at bar 1 regardless of SMF offset).
+        // SMFWriter counters this by emitting a padding CC#110 @ tick 0 when
+        // bar > 1, so the first note lands at the requested bar inside a
+        // region that spans bar 1 → bar+length. The region is cosmetically
+        // longer than the notes, but note timing is exact with zero drift.
         do {
             let data = try SMFWriter.generate(
                 events: events,

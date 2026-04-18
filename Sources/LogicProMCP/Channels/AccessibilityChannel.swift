@@ -335,6 +335,10 @@ actor AccessibilityChannel: Channel {
         // MARK: - Regions
         case "region.get_regions":
             return AccessibilityChannel.defaultGetRegions(runtime: runtime.logicRuntime)
+        case "region.move_to_playhead":
+            return await AccessibilityChannel.defaultMoveSelectedRegionToPlayhead()
+        case "region.select_last":
+            return await AccessibilityChannel.defaultSelectLastRegion()
         case "region.select", "region.loop", "region.set_name", "region.move", "region.resize":
             return .error("Region operations not yet implemented via AX")
 
@@ -1561,22 +1565,21 @@ actor AccessibilityChannel: Channel {
 
     /// Set the playhead to a specific bar using Logic Pro 12's 마디 slider in
     /// the control bar. Accepts `{"bar": Int}` or `{"position": "B.B.S.S"}`.
+    /// Note: slider clamps to project length; bars beyond the current project
+    /// length silently stop at the end. For record_sequence's bar placement,
+    /// SMFWriter embeds the bar offset in the MIDI file instead of relying
+    /// on playhead positioning.
     private static func gotoPositionViaBarSlider(
         params: [String: String],
         runtime: AXLogicProElements.Runtime = .production
     ) -> ChannelResult {
-        // Prefer explicit bar int
         var targetBar: Int? = nil
         if let barStr = params["bar"], let b = Int(barStr) {
             targetBar = b
         } else if let pos = params["position"] {
-            // AX channel handles bar / B.B.S.S only. Timecode (HH:MM:SS:FF or
-            // HH:MM:SS) cannot be set via the bar-slider; defer to next channel
-            // (MCU mmc_locate handles SMPTE).
             if pos.contains(":") {
                 return .error("AX gotoPositionViaBarSlider cannot handle timecode (use MCU mmc_locate)")
             }
-            // Parse "B.B.S.S" → take first component
             let parts = pos.split(separator: ".")
             if let first = parts.first, let b = Int(first) {
                 targetBar = b
@@ -1595,14 +1598,11 @@ actor AccessibilityChannel: Channel {
         if !setOK {
             return .error("Failed to set 마디 slider")
         }
-        // Also reset 비트 to 1 so playhead lands exactly on bar.beat 1
         if let beatSlider = AXLogicProElements.findControlBarBeatSlider(runtime: runtime) {
             _ = AXHelpers.setAttribute(
                 beatSlider, kAXValueAttribute, NSNumber(value: 1), runtime: runtime.ax
             )
         }
-        // Confirm the slider change — Logic's transport doesn't commit until
-        // the slider control receives an AXConfirm action.
         _ = AXHelpers.performAction(slider, kAXConfirmAction, runtime: runtime.ax)
         return .success("{\"position\":\"\(bar).1.1.1\"}")
     }
@@ -1917,6 +1917,108 @@ actor AccessibilityChannel: Channel {
             return .success("{\"imported\":\"\(escapedPath)\",\"method\":\"ax_menu_import\"}")
         case .error(let msg):
             return .error("midi.import_file osascript failed: \(msg)")
+        }
+    }
+
+    // MARK: - Region repositioning
+
+    /// Move the currently selected region to the playhead position via the
+    /// `편집 → 이동 → 재생헤드로` menu (Edit → Move → To Playhead).
+    /// Assumes a region is already selected; otherwise the menu item is a no-op.
+    static func defaultMoveSelectedRegionToPlayhead() async -> ChannelResult {
+        let script = """
+        tell application "Logic Pro" to activate
+        delay 0.1
+        tell application "System Events"
+            tell process "Logic Pro"
+                try
+                    click menu item "재생헤드로" of menu 1 of menu item "이동" of menu 1 of menu bar item "편집" of menu bar 1
+                on error
+                    try
+                        click menu item "To Playhead" of menu 1 of menu item "Move" of menu 1 of menu bar item "Edit" of menu bar 1
+                    on error errMsg
+                        return "MENU_ERROR: " & errMsg
+                    end try
+                end try
+            end tell
+        end tell
+        return "OK"
+        """
+        let result = await AppleScriptChannel.executeAppleScript(script)
+        switch result {
+        case .success(let output):
+            if output.hasPrefix("MENU_ERROR") {
+                return .error("region.move_to_playhead: \(output)")
+            }
+            return .success("{\"moved\":true}")
+        case .error(let msg):
+            return .error("region.move_to_playhead failed: \(msg)")
+        }
+    }
+
+    /// Select the most recently created (right-most / largest trackIndex)
+    /// region in the arrange area by locating it via AX element position.
+    /// Newly imported regions are usually already selected by Logic, but this
+    /// provides a fallback when selection state is lost between operations.
+    static func defaultSelectLastRegion() async -> ChannelResult {
+        let script = """
+        tell application "Logic Pro" to activate
+        delay 0.1
+        tell application "System Events"
+            tell process "Logic Pro"
+                set mainWin to first window
+                set allItems to entire contents of mainWin
+                set bestY to 0
+                set bestX to 0
+                set target to missing value
+                repeat with anItem in allItems
+                    try
+                        if role of anItem is "AXLayoutItem" then
+                            set s to size of anItem
+                            set w to item 1 of s
+                            set h to item 2 of s
+                            -- Region heuristic: 20 < width < 2000, 20 < height < 200
+                            if w > 20 and w < 2000 and h > 20 and h < 200 then
+                                set p to position of anItem
+                                set x to item 1 of p
+                                set y to item 2 of p
+                                if y > bestY or (y = bestY and x > bestX) then
+                                    set bestY to y
+                                    set bestX to x
+                                    set target to anItem
+                                end if
+                            end if
+                        end if
+                    end try
+                end repeat
+                if target is missing value then
+                    return "NO_REGION"
+                end if
+                -- Use AXPress / AXShowMenu may open contextual menu; instead set AXSelected
+                try
+                    set selected of target to true
+                    return "SELECTED"
+                on error
+                    -- Fallback: click at center
+                    set p to position of target
+                    set s to size of target
+                    set cx to (item 1 of p) + ((item 1 of s) / 2)
+                    set cy to (item 2 of p) + ((item 2 of s) / 2)
+                    click at {cx, cy}
+                    return "CLICKED"
+                end try
+            end tell
+        end tell
+        """
+        let result = await AppleScriptChannel.executeAppleScript(script)
+        switch result {
+        case .success(let output):
+            if output.contains("NO_REGION") {
+                return .error("region.select_last: no region found in arrange area")
+            }
+            return .success("{\"selected\":true,\"method\":\"\(output)\"}")
+        case .error(let msg):
+            return .error("region.select_last failed: \(msg)")
         }
     }
 

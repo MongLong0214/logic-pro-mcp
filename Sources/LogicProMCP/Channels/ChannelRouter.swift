@@ -171,6 +171,8 @@ actor ChannelRouter {
         // Regions
         "region.get_regions":         [.accessibility],
         "region.select":              [.accessibility],
+        "region.select_last":         [.accessibility],
+        "region.move_to_playhead":    [.accessibility],
         "region.loop":                [.accessibility, .cgEvent],
         "region.set_name":            [.accessibility],
         "region.move":                [.accessibility],

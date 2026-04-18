@@ -34,6 +34,19 @@ struct SMFWriter {
         track.append(tempoMetaEvent(bpm: tempo))
         track.append(timeSignatureMetaEvent(numerator: timeSignature.numerator, denominator: timeSignature.denominator))
 
+        // Logic Pro's MIDI File import silently STRIPS leading empty delta
+        // before the first channel event — meaning a SMF where note-on is at
+        // tick 17280 gets placed at bar 1 of a new region regardless of the
+        // intended bar offset. Workaround: emit a harmless channel event at
+        // tick 0 (CC#110 value 0 on channel 0, an undefined/unused MIDI CC
+        // that has no audible or UI side effects on any standard instrument)
+        // so Logic preserves the full tick timeline. The region will span
+        // from bar 1 through the last note, with the caller's notes landing
+        // precisely at their encoded tick positions inside the region.
+        if barOffsetTicks > 0 {
+            track.append(contentsOf: [0x00, 0xB0, 0x6E, 0x00])
+        }
+
         let midiEvents = buildMIDIEvents(events: events, barOffset: barOffsetTicks)
         var lastTick = 0
         for event in midiEvents {

@@ -65,6 +65,40 @@ import Foundation
     #expect(noteOnG, "Note-on G4 not found")
 }
 
+@Test func testSMFWriterEmitsPaddingCCWhenBarOffsetIsNonZero() throws {
+    // Logic Pro strips leading empty delta before the first MIDI channel event,
+    // so SMFWriter emits a padding CC#110 val 0 at tick 0 for bar > 1.
+    let events = [SMFWriter.NoteEvent(pitch: 60, offsetTicks: 0, durationTicks: 480, velocity: 100, channel: 0)]
+    let dataBar5 = try SMFWriter.generate(events: events, bar: 5, tempo: 120, timeSignature: (4, 4))
+    let bytes = [UInt8](dataBar5)
+    // Padding: 00 B0 6E 00
+    let paddingPattern: [UInt8] = [0x00, 0xB0, 0x6E, 0x00]
+    var foundPadding = false
+    for i in 0...(bytes.count - paddingPattern.count) {
+        if Array(bytes[i..<(i + paddingPattern.count)]) == paddingPattern {
+            foundPadding = true
+            break
+        }
+    }
+    #expect(foundPadding, "Expected padding CC#110 at tick 0 when bar > 1")
+}
+
+@Test func testSMFWriterNoPaddingWhenBarIsOne() throws {
+    // Bar 1 means no offset — no padding needed, avoid region size inflation.
+    let events = [SMFWriter.NoteEvent(pitch: 60, offsetTicks: 0, durationTicks: 480, velocity: 100, channel: 0)]
+    let data = try SMFWriter.generate(events: events, bar: 1, tempo: 120, timeSignature: (4, 4))
+    let bytes = [UInt8](data)
+    let paddingPattern: [UInt8] = [0xB0, 0x6E, 0x00]
+    var foundPadding = false
+    for i in 0...(bytes.count - paddingPattern.count) {
+        if Array(bytes[i..<(i + paddingPattern.count)]) == paddingPattern {
+            foundPadding = true
+            break
+        }
+    }
+    #expect(!foundPadding, "Bar 1 should not emit padding CC")
+}
+
 @Test func testSMFWriterBarOffset() throws {
     // Bar 5, 4/4, 480 tpq → offset = (5-1) * 4 * 480 = 7680 ticks
     let events = [SMFWriter.NoteEvent(pitch: 60, offsetTicks: 0, durationTicks: 480, velocity: 100, channel: 0)]
