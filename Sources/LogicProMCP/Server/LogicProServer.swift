@@ -286,6 +286,7 @@ actor LogicProServer {
     }
 
     func start() async throws {
+        SMFWriter.cleanupOrphanFiles()
         let plan = runtimePlan()
         try await plan.run()
     }

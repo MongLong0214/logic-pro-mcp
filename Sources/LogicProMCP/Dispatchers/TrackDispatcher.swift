@@ -129,66 +129,7 @@ struct TrackDispatcher {
             return toolTextResult(result)
 
         case "record_sequence":
-            guard await cache.getHasDocument() else {
-                return toolTextResult("No project open", isError: true)
-            }
-            let index = intParam(params, "index", "track", default: 0)
-            let bar = intParam(params, "bar", default: 1)
-            let notes = stringParam(params, "notes")
-            guard !notes.isEmpty else {
-                return toolTextResult(
-                    "record_sequence requires 'notes' (semicolon-separated 'pitch,offsetMs,durMs[,vel[,ch]]')",
-                    isError: true
-                )
-            }
-            // Disarm other tracks
-            let tracks = await cache.getTracks()
-            for t in tracks where t.id != index && t.isArmed {
-                _ = await router.route(
-                    operation: "track.set_arm",
-                    params: ["index": String(t.id), "enabled": "false"]
-                )
-            }
-            // Select target track
-            let selectResult = await router.route(
-                operation: "track.select",
-                params: ["index": String(index)]
-            )
-            guard selectResult.isSuccess else {
-                return toolTextResult("record_sequence failed at select: \(selectResult.message)", isError: true)
-            }
-            // Arm target track
-            let armResult = await router.route(
-                operation: "track.set_arm",
-                params: ["index": String(index), "enabled": "true"]
-            )
-            guard armResult.isSuccess else {
-                return toolTextResult("record_sequence failed at arm: \(armResult.message)", isError: true)
-            }
-            // Goto bar
-            let gotoResult = await router.route(
-                operation: "transport.goto_position",
-                params: ["position": "\(bar).1.1.1"]
-            )
-            guard gotoResult.isSuccess else {
-                return toolTextResult("record_sequence failed at goto_position: \(gotoResult.message)", isError: true)
-            }
-            // Start recording
-            let recordResult = await router.route(operation: "transport.record")
-            guard recordResult.isSuccess else {
-                return toolTextResult("record_sequence failed at record: \(recordResult.message)", isError: true)
-            }
-            try? await Task.sleep(nanoseconds: 200_000_000)
-            // Play sequence
-            let playResult = await router.route(
-                operation: "midi.play_sequence",
-                params: ["notes": notes]
-            )
-            // Stop
-            _ = await router.route(operation: "transport.stop")
-            return toolTextResult(.success(
-                "{\"recorded_to_track\":\(index),\"bar\":\(bar),\"play_result\":\"\(playResult.message.replacingOccurrences(of: "\"", with: "\\\""))\"}"
-            ))
+            return await handleRecordSequenceSMF(params: params, router: router, cache: cache)
 
         case "arm_only":
             let index = intParam(params, "index", "track", default: 0)
@@ -279,5 +220,102 @@ struct TrackDispatcher {
                 isError: true
             )
         }
+    }
+
+    // MARK: - record_sequence SMF-import implementation
+
+    /// Generate a Standard MIDI File from the notes spec, write to /tmp/LogicProMCP/,
+    /// then import into the current project via AX menu navigation. Logic always
+    /// creates a NEW MIDI track for the imported content (verified OQ-3).
+    static func handleRecordSequenceSMF(
+        params: [String: MCP.Value],
+        router: ChannelRouter,
+        cache: StateCache
+    ) async -> CallTool.Result {
+        guard await cache.getHasDocument() else {
+            return toolTextResult("record_sequence: No project open", isError: true)
+        }
+        let bar = intParam(params, "bar", default: 1)
+        let notes = stringParam(params, "notes")
+        guard !notes.isEmpty else {
+            return toolTextResult(
+                "record_sequence requires 'notes' (semicolon-separated 'pitch,offsetMs,durMs[,vel[,ch]]')",
+                isError: true
+            )
+        }
+
+        let project = await cache.getProject()
+        let cacheTempo = project.tempo > 0 ? project.tempo : 120.0
+        let tempo = doubleParam(params, "tempo", default: cacheTempo)
+        let events = parseNotesToSMFEvents(notes: notes, tempo: tempo)
+        guard !events.isEmpty else {
+            return toolTextResult(
+                "record_sequence: could not parse any valid notes from '\(notes)'",
+                isError: true
+            )
+        }
+
+        let tempDir = "/tmp/LogicProMCP"
+        try? FileManager.default.createDirectory(atPath: tempDir, withIntermediateDirectories: true)
+        let path = "\(tempDir)/\(UUID().uuidString).mid"
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+        }
+
+        do {
+            let data = try SMFWriter.generate(
+                events: events,
+                bar: bar,
+                tempo: tempo,
+                timeSignature: (4, 4)
+            )
+            try data.write(to: URL(fileURLWithPath: path))
+        } catch {
+            return toolTextResult("record_sequence: SMF generation failed: \(error)", isError: true)
+        }
+
+        let tracksBefore = await cache.getTracks().count
+        let importResult = await router.route(
+            operation: "midi.import_file",
+            params: ["path": path]
+        )
+        guard importResult.isSuccess else {
+            return toolTextResult(
+                "record_sequence failed at midi.import_file: \(importResult.message)",
+                isError: true
+            )
+        }
+
+        // Give Logic time to register the new track in AX, then refresh.
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        let tracksAfter = await cache.getTracks().count
+        let createdTrack = tracksAfter > tracksBefore ? tracksAfter - 1 : tracksBefore
+
+        return toolTextResult(.success(
+            "{\"recorded_to_track\":\(createdTrack),\"created_track\":\(createdTrack),\"bar\":\(bar),\"note_count\":\(events.count),\"method\":\"smf_import\"}"
+        ))
+    }
+
+    private static func parseNotesToSMFEvents(notes: String, tempo: Double) -> [SMFWriter.NoteEvent] {
+        var events: [SMFWriter.NoteEvent] = []
+        let segments = notes.split(separator: ";")
+        for seg in segments {
+            let parts = seg.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            guard parts.count >= 3,
+                  let pitch = Int(parts[0]), (0...127).contains(pitch),
+                  let offsetMs = Int(parts[1]), offsetMs >= 0,
+                  let durMs = Int(parts[2]), durMs > 0 else { continue }
+            let vel = parts.count >= 4 ? (Int(parts[3]).flatMap { (0...127).contains($0) ? $0 : nil } ?? 100) : 100
+            let ch = parts.count >= 5 ? (Int(parts[4]).flatMap { (0...15).contains($0) ? $0 : nil } ?? 0) : 0
+            let ticks = SMFWriter.msToTicks(offsetMs: offsetMs, durationMs: durMs, tempo: tempo)
+            events.append(SMFWriter.NoteEvent(
+                pitch: UInt8(pitch),
+                offsetTicks: ticks.offsetTicks,
+                durationTicks: ticks.durationTicks,
+                velocity: UInt8(vel),
+                channel: UInt8(ch)
+            ))
+        }
+        return events
     }
 }

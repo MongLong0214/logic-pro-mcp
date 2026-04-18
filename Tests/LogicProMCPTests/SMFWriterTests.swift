@@ -146,6 +146,31 @@ import Foundation
     #expect(noteOnCount == 3, "Expected 3 note-on events for chord")
 }
 
+@Test func testSMFWriterCleanupDeletesOldFiles() throws {
+    let tempDir = NSTemporaryDirectory() + "SMFWriter-cleanup-\(UUID().uuidString)"
+    try FileManager.default.createDirectory(atPath: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(atPath: tempDir) }
+
+    let oldFile = "\(tempDir)/old.mid"
+    let recentFile = "\(tempDir)/recent.mid"
+    FileManager.default.createFile(atPath: oldFile, contents: Data([0, 1, 2]))
+    FileManager.default.createFile(atPath: recentFile, contents: Data([0, 1, 2]))
+
+    // Backdate oldFile by 10 minutes
+    let oldDate = Date().addingTimeInterval(-600)
+    try FileManager.default.setAttributes([.modificationDate: oldDate], ofItemAtPath: oldFile)
+
+    SMFWriter.cleanupOrphanFiles(in: tempDir, olderThan: 300)
+
+    #expect(!FileManager.default.fileExists(atPath: oldFile), "old file should be deleted")
+    #expect(FileManager.default.fileExists(atPath: recentFile), "recent file should be preserved")
+}
+
+@Test func testSMFWriterCleanupHandlesMissingDir() {
+    // No error should be thrown — this is a safe no-op.
+    SMFWriter.cleanupOrphanFiles(in: "/tmp/does-not-exist-\(UUID().uuidString)")
+}
+
 // MARK: - Helpers
 
 private func findPattern(_ pattern: [UInt8], in bytes: [UInt8]) -> Bool {

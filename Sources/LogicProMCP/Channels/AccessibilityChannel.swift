@@ -38,6 +38,7 @@ actor AccessibilityChannel: Channel {
         let setMixerValue: @Sendable ([String: String], MixerTarget) -> ChannelResult
         let projectInfo: @Sendable () -> ChannelResult
         let markers: @Sendable () -> ChannelResult
+        let importMIDIFile: @Sendable (String) async -> ChannelResult
         let logicRuntime: AXLogicProElements.Runtime
 
         init(
@@ -58,6 +59,7 @@ actor AccessibilityChannel: Channel {
             setMixerValue: @escaping @Sendable ([String: String], MixerTarget) -> ChannelResult,
             projectInfo: @escaping @Sendable () -> ChannelResult,
             markers: @escaping @Sendable () -> ChannelResult = { .success("[]") },
+            importMIDIFile: @escaping @Sendable (String) async -> ChannelResult = { _ in .error("importMIDIFile not wired") },
             logicRuntime: AXLogicProElements.Runtime = .production
         ) {
             self.isTrusted = isTrusted
@@ -77,6 +79,7 @@ actor AccessibilityChannel: Channel {
             self.setMixerValue = setMixerValue
             self.projectInfo = projectInfo
             self.markers = markers
+            self.importMIDIFile = importMIDIFile
             self.logicRuntime = logicRuntime
         }
 
@@ -106,6 +109,7 @@ actor AccessibilityChannel: Channel {
                 setMixerValue: { AccessibilityChannel.defaultSetMixerValue(params: $0, target: $1, runtime: logicRuntime) },
                 projectInfo: { AccessibilityChannel.defaultGetProjectInfo(runtime: logicRuntime) },
                 markers: { AccessibilityChannel.defaultGetMarkers(runtime: logicRuntime) },
+                importMIDIFile: { await AccessibilityChannel.defaultImportMIDIFile(path: $0, runtime: logicRuntime) },
                 logicRuntime: logicRuntime
             )
         }
@@ -311,9 +315,12 @@ actor AccessibilityChannel: Channel {
         case "mixer.reset_strip":
             return .error("Strip reset not yet implemented via AX")
 
-        // MARK: - MIDI file import (AX fallback — menu navigation)
+        // MARK: - MIDI file import (AX menu navigation)
         case "midi.import_file":
-            return .error("MIDI file import via AX menu not yet implemented — requires OQ-2 probe")
+            guard let path = params["path"] else {
+                return .error("midi.import_file requires 'path'")
+            }
+            return await runtime.importMIDIFile(path)
 
         // MARK: - Navigation
         case "nav.get_markers":
@@ -1827,6 +1834,90 @@ actor AccessibilityChannel: Channel {
         info.name = title
         info.lastUpdated = Date()
         return encodeResult(info)
+    }
+
+    // MARK: - MIDI file import
+
+    /// Import a .mid file via Logic Pro's File → Import → MIDI File menu.
+    /// Always creates a new MIDI track (Logic Pro's built-in behavior, OQ-3 confirmed).
+    /// Uses osascript to coordinate the menu click, path-entry keystroke, and dialog dismissals.
+    static func defaultImportMIDIFile(
+        path: String,
+        runtime: AXLogicProElements.Runtime = .production
+    ) async -> ChannelResult {
+        guard FileManager.default.fileExists(atPath: path) else {
+            return .error("midi.import_file file not found: \(path)")
+        }
+        // Escape path for osascript string literal (double-quote safe).
+        let escapedPath = path.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        // Strip leading slash since "/" keystroke already triggers the path-entry sheet.
+        let typedPath = escapedPath.hasPrefix("/") ? String(escapedPath.dropFirst()) : escapedPath
+        let script = """
+        on importMIDI()
+            tell application "Logic Pro" to activate
+            delay 0.3
+            tell application "System Events"
+                tell process "Logic Pro"
+                    try
+                        click menu item "MIDI 파일…" of menu 1 of menu item "가져오기" of menu 1 of menu bar item "파일" of menu bar 1
+                    on error
+                        try
+                            click menu item "MIDI File…" of menu 1 of menu item "Import" of menu 1 of menu bar item "File" of menu bar 1
+                        on error errMsg
+                            return "MENU_ERROR: " & errMsg
+                        end try
+                    end try
+                end tell
+                delay 1.5
+                keystroke "/"
+                delay 0.5
+                keystroke "\(typedPath)"
+                delay 0.3
+                keystroke return
+                delay 1.5
+                tell process "Logic Pro"
+                    try
+                        set importDlg to first window whose name is "가져오기"
+                        click button "가져오기" of UI element 1 of importDlg
+                    on error
+                        try
+                            set importDlg to first window whose name is "Import"
+                            click button "Import" of UI element 1 of importDlg
+                        on error errMsg
+                            return "IMPORT_BTN_ERROR: " & errMsg
+                        end try
+                    end try
+                end tell
+                delay 2.0
+                -- Dismiss tempo dialog if it appears
+                tell process "Logic Pro"
+                    try
+                        set tempoDlg to first window whose subrole is "AXDialog"
+                        try
+                            click button "아니요" of tempoDlg
+                        on error
+                            try
+                                click button "No" of tempoDlg
+                            end try
+                        end try
+                    end try
+                end tell
+            end tell
+            return "OK"
+        end importMIDI
+        return importMIDI()
+        """
+        let result = await AppleScriptChannel.executeAppleScript(script)
+        switch result {
+        case .success(let output):
+            if output.hasPrefix("MENU_ERROR") || output.hasPrefix("IMPORT_BTN_ERROR") {
+                return .error("midi.import_file: \(output)")
+            }
+            return .success("{\"imported\":\"\(escapedPath)\",\"method\":\"ax_menu_import\"}")
+        case .error(let msg):
+            return .error("midi.import_file osascript failed: \(msg)")
+        }
     }
 
     // MARK: - Markers

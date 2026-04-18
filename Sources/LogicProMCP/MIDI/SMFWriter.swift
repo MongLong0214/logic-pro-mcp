@@ -53,6 +53,26 @@ struct SMFWriter {
         return data
     }
 
+    /// Sweep /tmp/LogicProMCP/ for orphan .mid files older than `olderThan` seconds
+    /// (default 5 min). Safe no-op when the directory doesn't exist. Errors are
+    /// swallowed so server startup never blocks on cleanup failure.
+    static func cleanupOrphanFiles(
+        in dir: String = "/tmp/LogicProMCP",
+        olderThan: TimeInterval = 300
+    ) {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: dir) else { return }
+        guard let entries = try? fm.contentsOfDirectory(atPath: dir) else { return }
+        let cutoff = Date().addingTimeInterval(-olderThan)
+        for name in entries where name.hasSuffix(".mid") {
+            let full = "\(dir)/\(name)"
+            guard let attrs = try? fm.attributesOfItem(atPath: full),
+                  let mtime = attrs[.modificationDate] as? Date,
+                  mtime < cutoff else { continue }
+            try? fm.removeItem(atPath: full)
+        }
+    }
+
     static func msToTicks(
         offsetMs: Int,
         durationMs: Int,

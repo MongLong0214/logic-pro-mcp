@@ -1,6 +1,6 @@
 # PRD: record_sequence SMF-Import Redesign
 
-**Version**: 0.3
+**Version**: 0.4
 **Author**: Claude (orchestrator) + Isaac (north star)
 **Date**: 2026-04-17
 **Status**: Draft
@@ -139,35 +139,30 @@ The SMF binary format:
 
 ### 4.3 New Channel Handler: midi.import_file
 
-This is a **new channel capability**, not just a routing table entry. Implementation required in both channels:
+Live probe (OQ-1) confirmed that `NSWorkspace.open` on a `.mid` file creates a NEW Logic project — so **AppleScript path is not viable**. AX menu navigation is the ONLY path.
 
-**AppleScriptChannel (primary):**
+**AccessibilityChannel (sole path):**
 ```swift
 case "midi.import_file":
     guard let path = params["path"] else {
         return .error("midi.import_file requires 'path'")
     }
-    // Use NSWorkspace.open (Launch Services) — same injection-safe path as project.open
-    return AppleScriptSafety.openFile(at: path)
-    // Post-import: verify the current project name hasn't changed
-    // (if it changed, AppleScript opened a new project instead of importing)
+    return runtime.importMIDIFile(path)
 ```
 
-**AccessibilityChannel (fallback):**
-```swift
-case "midi.import_file":
-    guard let path = params["path"] else {
-        return .error("midi.import_file requires 'path'")
-    }
-    // 1. Navigate menu: File → Import → MIDI File... (KR: 파일 → 가져오기 → MIDI 파일...)
-    // 2. In open panel: Cmd+Shift+G → type path → Enter
-    // 3. Select file → Enter/Import
-    return importMIDIFileViaMenu(path: path, runtime: runtime.logicRuntime)
-```
+The implementation flow (verified on Logic Pro 12 KR locale):
+1. Click menu item `파일 → 가져오기 → MIDI 파일…` (or `File → Import → MIDI File…` on EN)
+2. Wait for `가져오기` (Import) dialog window to appear
+3. Send `/` keystroke — macOS NSOpenPanel opens a path-entry sheet
+4. Type the file path (without leading `/` since `/` already triggered the sheet)
+5. Press Enter — sheet closes, file is selected
+6. Click `가져오기` button in the dialog's splitter group
+7. A tempo-import dialog may appear (`또한 템포 정보를 가져오겠습니까?`) — dismiss with `아니요` button
+8. Verify a new MIDI track was created by comparing region count before/after
 
-**Routing table addition:**
+**Routing table:**
 ```swift
-"midi.import_file": [.appleScript, .accessibility],
+"midi.import_file": [.accessibility],  // AppleScript path abandoned per OQ-1 probe
 ```
 
 ### 4.4 arm_only Fix
@@ -186,15 +181,15 @@ New response (backward-compatible):
 
 ### 4.5 API Design
 
-**Modified tool command** (same name, enhanced params):
+**Semantics change** (OQ-3 probe): Logic Pro's MIDI import always creates a NEW MIDI track. The `index` parameter is retained for API backward compatibility but no longer refers to the destination track; the actual output track is returned in `created_track`.
 
 | Command | Params | Returns | Channel |
 |---------|--------|---------|---------|
-| `record_sequence` | `{ index: Int, bar?: Int, notes: String, tempo?: Double }` | `{ recorded_to_track: Int, bar: Int, note_count: Int, method: "smf_import" }` | Internal (SMFWriter + midi.import_file) |
+| `record_sequence` | `{ index?: Int, bar?: Int, notes: String, tempo?: Double }` | `{ recorded_to_track: Int (=created_track), created_track: Int, bar: Int, note_count: Int, method: "smf_import" }` | Internal (SMFWriter + midi.import_file) |
 
 Notes format unchanged: `"pitch,offsetMs,durMs[,vel[,ch]];..."`
 
-Response field `recorded_to_track` kept for backward compatibility (renamed from internal to match existing schema).
+Response includes both `recorded_to_track` (legacy, = created_track) and explicit `created_track` for forward-looking callers.
 
 ### 4.6 Key Technical Decisions
 
@@ -318,6 +313,6 @@ Git revert of the commit. The old real-time path is preserved in git history.
 
 ## 12. Open Questions
 
-- [ ] OQ-1: Does `NSWorkspace.open` with a .mid file import into current Logic Pro project or create new? **BLOCKING** — must probe before implementation. Determines whether AppleScript primary path is viable.
-- [ ] OQ-2: What is the exact AX menu path for File → Import → MIDI File in Logic Pro 12 (KR locale)? → Probe during implementation.
-- [ ] OQ-3: Should the note spec format change (ms-based → tick-based)? → Keep ms-based for LLM ergonomics; convert internally.
+- [x] OQ-1: Does `NSWorkspace.open` with a .mid file import into current project or create new? → **Resolved 2026-04-18 via live probe: creates NEW project** (project title changes from "무제 N" → "무제 N+1"). AppleScript primary path ABANDONED.
+- [x] OQ-2: What is the exact AX menu path for File → Import → MIDI File in Logic Pro 12 (KR locale)? → **Resolved 2026-04-18: `파일 → 가져오기 → MIDI 파일…`**. Full flow verified: menu click → `/` key opens path sheet → type path → Enter → click `가져오기` button in splitter group → dismiss tempo dialog with `아니요` button.
+- [x] OQ-3: Does Logic import into the selected track? → **Resolved 2026-04-18: NO**. Import always creates a new MIDI track regardless of track selection. This changes record_sequence semantics: `index` parameter is now interpreted as "source track for settings reference" (or ignored); actual output lands on a newly-created track whose index is returned as `created_track`.

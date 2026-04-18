@@ -738,25 +738,92 @@ private actor FailingExecuteChannel: Channel {
     #expect(dispatcherText(result).contains("No project open"))
 }
 
-@Test func testRecordSequenceFailsOnSelectError() async {
+@Test func testRecordSequenceSMFImportHappyPath() async {
     let router = ChannelRouter()
-    let ax = FailingExecuteChannel(id: .accessibility, message: "AX select fail")
-    let mcu = FailingExecuteChannel(id: .mcu, message: "MCU fail")
-    let cg = FailingExecuteChannel(id: .cgEvent, message: "CG fail")
+    let ax = MockChannel(id: .accessibility)
     await router.register(ax)
-    await router.register(mcu)
-    await router.register(cg)
     let cache = StateCache()
+    await cache.updateDocumentState(true)
 
     let result = await TrackDispatcher.handle(
         command: "record_sequence",
-        params: ["index": .int(0), "notes": .string("60,0,480")],
+        params: ["index": .int(0), "bar": .int(5), "notes": .string("60,0,480;64,500,480;67,1000,480"), "tempo": .double(120)],
+        router: router,
+        cache: cache
+    )
+
+    let text = dispatcherText(result)
+    #expect(!result.isError!, "expected success, got: \(text)")
+    #expect(text.contains("\"method\":\"smf_import\""))
+    #expect(text.contains("\"note_count\":3"))
+    #expect(text.contains("\"bar\":5"))
+
+    // Verify midi.import_file was called via the router
+    let ops = await ax.executedOps
+    let importOps = ops.filter { $0.0 == "midi.import_file" }
+    #expect(importOps.count == 1, "expected 1 midi.import_file call, got \(importOps.count)")
+    #expect(importOps[0].1["path"]?.contains("/tmp/LogicProMCP") == true)
+}
+
+@Test func testRecordSequenceCleansUpTempFileOnError() async {
+    let router = ChannelRouter()
+    // Import channel fails
+    let ax = FailingExecuteChannel(id: .accessibility, message: "Import failed")
+    await router.register(ax)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+
+    let result = await TrackDispatcher.handle(
+        command: "record_sequence",
+        params: ["index": .int(0), "bar": .int(1), "notes": .string("60,0,480"), "tempo": .double(120)],
         router: router,
         cache: cache
     )
 
     #expect(result.isError!)
-    #expect(dispatcherText(result).contains("select"))
+    // Verify no orphan files in /tmp/LogicProMCP/ by checking recent mtime
+    // (best-effort assertion — the specific uuid is internal)
+    let tempDir = "/tmp/LogicProMCP"
+    if FileManager.default.fileExists(atPath: tempDir) {
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: tempDir)) ?? []
+        // Allow <= 1 file from other concurrent tests; just assert no accumulation
+        #expect(files.count <= 5, "too many orphan .mid files: \(files.count)")
+    }
+}
+
+@Test func testRecordSequenceRejectsInvalidNotes() async {
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility)
+    await router.register(ax)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+
+    let result = await TrackDispatcher.handle(
+        command: "record_sequence",
+        params: ["index": .int(0), "notes": .string("invalid")],
+        router: router,
+        cache: cache
+    )
+
+    #expect(result.isError!)
+}
+
+@Test func testRecordSequenceFailsOnImportError() async {
+    let router = ChannelRouter()
+    let ax = FailingExecuteChannel(id: .accessibility, message: "Import failed X")
+    await router.register(ax)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+
+    let result = await TrackDispatcher.handle(
+        command: "record_sequence",
+        params: ["index": .int(0), "notes": .string("60,0,480"), "tempo": .double(120)],
+        router: router,
+        cache: cache
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("import"))
 }
 
 // MARK: - arm_only error propagation

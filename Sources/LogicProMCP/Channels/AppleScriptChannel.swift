@@ -93,18 +93,6 @@ actor AppleScriptChannel: Channel {
         case "transport.play", "transport.pause":
             return .error("Unsupported AppleScript operation: \(operation)")
 
-        case "midi.import_file":
-            guard let path = params["path"] else {
-                return .error("midi.import_file requires 'path'")
-            }
-            guard FileManager.default.fileExists(atPath: path) else {
-                return .error("midi.import_file file not found: \(path)")
-            }
-            guard runtime.openFile(path) else {
-                return .error("Failed to open MIDI file via Launch Services: \(path)")
-            }
-            return .success("{\"imported\":\"\(path)\"}")
-
         default:
             return .error("Unsupported AppleScript operation: \(operation)")
         }
