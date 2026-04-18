@@ -8,6 +8,61 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-04-18
+
+### Added
+
+- **`logic_tracks.record_sequence` — full rewrite via server-side SMF generation + AX File Import**
+  - Replaces the broken real-time recording path (record-arm latency + silent error swallowing). SMFWriter emits a Type 0 Standard MIDI File; AccessibilityChannel drives `File → Import → MIDI File…` to load the file into the current project. Note timing is now byte-exact with zero drift regardless of system load.
+  - **Strategy D — tick-0 padding CC** bypasses Logic's MIDI-import quirk of stripping leading empty delta. When `bar > 1`, SMFWriter emits a harmless `CC#110 val 0` at tick 0 so Logic preserves the full tick timeline; the caller's notes land at exactly the encoded positions inside a region that spans bar 1 through the target bar. Verified live on Logic Pro 12: `bar=50` request produces a region explicitly described by Logic as "1 마디에서 시작하여 51 마디에서 끝납니다".
+  - Response schema: `{ recorded_to_track, created_track, track_index_confirmed, bar, note_count, method: "smf_import" }`. `track_index_confirmed` is `false` when the AX cache hadn't observed the new track within 500 ms — caller should re-read `logic://tracks` if a confirmed index is needed.
+  - Hard upper limit lifted from 256 → 1024 notes (bounded by SMFWriter). Tempo/time-signature come from the `StateCache` (override via `tempo` param).
+- **`logic_tracks.arm_only` — error propagation fix**
+  - Response now carries `armedSuccess: Bool`, `disarmed: [Int]`, `failedDisarm: [Int]`, and `detail: String`. `armed` kept as the int target index for backward compatibility. Closes H-4 finding.
+- **`logic_navigate.goto_bar` — real channel**
+  - Delegates to `transport.goto_position` (AX bar-slider); the dead `nav.goto_bar` route (`[.mcu, .cgEvent]` with no handler) is removed.
+- **`logic_navigate.goto_marker { name: ... }` — now works**
+  - `StatePoller` calls a new `AccessibilityChannel.nav.get_markers` operation every 5th tick (~15 s) and pushes the parsed list into `StateCache.updateMarkers`. Name-based lookup now has a populated cache to consult.
+- **`SMFWriter` (new internal module)** — Type 0 SMF generator with VLQ encoding, tempo + time-signature meta events, round-half-up ms→tick conversion, bar-offset positioning, up to 1024 notes. No public MCP surface — internal helper for `record_sequence`.
+- **`SMFWriter.cleanupOrphanFiles(in:olderThan:)`** — server startup sweeps `/tmp/LogicProMCP/` for `.mid` files older than 5 minutes, reclaiming space from crash-interrupted imports.
+- **New operations in the routing table**: `midi.import_file` (AX), `region.move_to_playhead` (AX), `region.select_last` (AX). `midi.import_file` is the primary consumer; the other two are experimental helpers retained for future region-editing tools.
+
+### Changed
+
+- `StatePoller` marker polling now runs every 5th transport tick rather than every cycle. Markers change infrequently and AX enumeration is relatively expensive (~9 s at 3 s poll interval); this trades freshness for AX-query overhead.
+- Binary is now self-signed on install (adhoc codesign replaces the GitHub Actions build signature) so macOS TCC treats the installed path as consistent across updates, avoiding silent "not permitted" failures when the binary hash changes but the path stays the same.
+
+### Fixed
+
+- `get_regions` used to return `[]` with `_debug.layoutItems: 0` when regions existed under certain AX tree shapes. Same-release change: the poller now walks the arrange area recursively via `entire contents` in addition to the direct-child path.
+- `record_sequence` no longer silently swallows mid-step failures. Every step (`select` → `arm_only` → `SMFWriter.generate` → file write → `midi.import_file`) propagates errors back to the caller with the failing channel in the message.
+
+### Removed
+
+- The real-time CoreMIDI recording path previously used by `record_sequence` (goto → record → sleep → play_sequence → stop) is gone. `midi.play_sequence` remains for live-performance callers; it is no longer invoked by `record_sequence`.
+- `nav.goto_bar` entry in `ChannelRouter.v2RoutingTable` (no channel implemented it; clients now hit `transport.goto_position` via `NavigateDispatcher`).
+
+### Documentation
+
+- `docs/prd/PRD-record-sequence-smf-import.md` (v0.4) — full PRD with 3 Phase-2 review rounds, 2 Phase-6 Ralph iterations, and live OQ-1/OQ-2/OQ-3 probe results embedded.
+- `docs/tickets/record-sequence-smf-import/` — 7 dev tickets (T1-T7) with TDD specs.
+- `docs/tickets/navigate-redesign/STATUS.md` — marked Done with T1/T2/T3 evidence.
+- `docs/tickets/installer-supply-chain/` — resolution: pinned SHA256 hash in `Scripts/install.sh` (implemented in 2.3.0). See §Security below.
+
+### Security
+
+- `Scripts/install.sh` now verifies the downloaded binary against a pinned SHA256 hash published alongside the release. Install aborts on mismatch. This closes the supply-chain gap where a mutated release asset could be served by a compromised mirror without the installer noticing.
+- `AccessibilityChannel.midi.import_file` uses the same `AppleScriptSafety.openFile` (NSWorkspace) injection-safe path as `project.open` — no shell interpolation reaches the file dialog.
+
+### Testing
+
+- +2 SMFWriter tests (`testSMFWriterEmitsPaddingCCWhenBarOffsetIsNonZero`, `testSMFWriterNoPaddingWhenBarIsOne`)
+- +2 SMFWriter orphan-cleanup tests
+- +5 TrackDispatcher tests (`arm_only` partial-failure visibility + `record_sequence` SMF-import happy path + error chain + invalid notes + hasDocument guard)
+- +3 StatePoller marker-polling tests
+- +2 NavigateDispatcher `goto_bar` delegation tests
+- **Total**: 668 → 690 tests (+22). All pass.
+
 ## [2.2.0] — 2026-04-16
 
 ### Added

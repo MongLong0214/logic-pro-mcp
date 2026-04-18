@@ -122,8 +122,8 @@ Clients can detect stale snapshots without cross-referencing `logic://system/hea
 | `mute` | `{ index: int, enabled?: bool }` | text | MCU → AX → CGEvent |
 | `solo` | `{ index: int, enabled?: bool }` | text | MCU → AX → CGEvent |
 | `arm` | `{ index: int, enabled?: bool }` | text | MCU → AX → CGEvent |
-| `arm_only` | `{ index: int }` | text | composite (disarm-all + arm target) — ⚠️ MCU unregistered ⇒ disarm best-effort |
-| `record_sequence` | `{ index: int, bar?: int, notes: "pitch,offsetMs,durMs[,vel[,ch]];..." }` | text | composite (select + arm_only + record + play + stop) — ⚠️ **known: uncompensated record-arm latency + silent mid-step failures** |
+| `arm_only` | `{ index: int }` | text | composite (disarm-all + arm target) — response includes `armedSuccess`, `failedDisarm` for partial-failure visibility |
+| `record_sequence` | `{ bar?: int, notes: "pitch,offsetMs,durMs[,vel[,ch]];...", tempo?: float }` | JSON | **v2.3 rewrite**: server-side SMF generation + `File → Import → MIDI File…` — byte-exact timing, zero drift |
 | `set_automation` | `{ index: int, mode: "off"\|"read"\|"touch"\|"latch"\|"write" }` | text | MCU |
 | `set_instrument` | `{ index: int, path?: string }` or `{ index: int, category: string, preset: string }` | text | Accessibility |
 | `list_library` | — | text | Accessibility |
@@ -168,12 +168,32 @@ Clients can detect stale snapshots without cross-referencing `logic://system/hea
 
 **Input validation:** `rename` truncates names to 255 chars. Unicode (including emoji, Korean, Japanese) is fully supported.
 
-**`record_sequence` known limitations (as of v2.2):**
-1. Record-arm latency is variable (50–300 ms) and uncompensated — notes land at `bar + latency`, not `bar`. Multi-track sync is similarly drift-prone.
-2. The composite pipeline `goto → record → sleep → play → stop` discards intermediate channel errors, so an arm or transport failure can surface as a success response.
-3. In MCU-unregistered environments, `arm_only`'s per-track disarm step is best-effort and may leave multiple tracks armed, causing MIDI duplication.
+**`record_sequence` behavior (v2.3+)**:
 
-For reliable recording today, prefer live `send_chord` / `send_note` over `record_sequence`. The full fix is tracked in the internal `record_sequence sync bug` memory entry and will ship as a Level 2 redesign (likely server-side SMF generation + AX import).
+The old real-time `goto → record → sleep → play_sequence → stop` pipeline is gone. `record_sequence` now:
+
+1. Parses the `notes` spec into internal `NoteEvent` structs.
+2. Generates a Type 0 Standard MIDI File with `SMFWriter` — tempo and time-signature meta events + byte-exact note positions computed from `ms` offsets via round-half-up tick conversion.
+3. Writes to `/tmp/LogicProMCP/{uuid}.mid` (cleaned up via `defer` on return and via server-startup sweep for crash recovery).
+4. Routes `midi.import_file` → `AccessibilityChannel` which drives `파일 → 가져오기 → MIDI 파일…` via AppleScript, dismissing the "템포 가져오기" sub-dialog with "아니요" so the project's tempo is authoritative.
+5. Returns `{ recorded_to_track, created_track, track_index_confirmed, bar, note_count, method: "smf_import" }`.
+
+**Strategy D — tick-0 padding CC**: Logic Pro's MIDI File import strips leading empty delta before the first MIDI channel event, which would silently place every imported region at bar 1 regardless of the caller's `bar` parameter. SMFWriter counters this by emitting `CC#110 value 0` on channel 0 at tick 0 whenever `bar > 1`. Logic preserves the full tick timeline because a MIDI channel event now exists at tick 0. The resulting region spans bar 1 through the target bar; the caller's notes land at exactly the encoded positions inside the region. Verified on Logic Pro 12 — `bar=50` request produces a region described by Logic as "1 마디에서 시작하여 51 마디에서 끝납니다" with the note at the trailing edge.
+
+**Response caveats**:
+- `track_index_confirmed: false` means the 500 ms AX-cache settle window didn't catch the new track's creation. The `created_track` value is a best-effort fallback (last known valid index); re-read `logic://tracks` for a confirmed index if needed.
+- The region's start is always bar 1 (cosmetic trade-off of the padding strategy). If you need the region itself trimmed, the caller can run `편집 → 이동 → 재생헤드로` on the selected region after positioning the playhead.
+
+**`arm_only` response schema (v2.3+)**:
+```json
+{
+  "armed": 2,                    // target track index (backward compat, always int)
+  "armedSuccess": true,          // whether the final arm command succeeded
+  "disarmed": [0, 1, 3],         // indices that were successfully disarmed
+  "failedDisarm": [],            // indices where disarm failed (visible vs. silent)
+  "detail": "..."                // channel detail message
+}
+```
 
 **Library preconditions:** `list_library`, `scan_library`, and `set_instrument` require the Library panel to be visible in Logic Pro. `resolve_path` is cache-backed and requires a prior successful `scan_library`.
 

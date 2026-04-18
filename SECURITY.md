@@ -129,6 +129,29 @@ spctl --assess --type execute --verbose /usr/local/bin/LogicProMCP
 shasum -a 256 /usr/local/bin/LogicProMCP
 ```
 
+### Supply-chain hardening (v2.3.0+)
+
+`Scripts/install.sh` enforces **pinned SHA256** verification by default:
+
+1. Downloads the binary from `releases/download/$VERSION/LogicProMCP`
+2. Fetches `SHA256SUMS.txt` from the same release
+3. Recomputes SHA256 of the downloaded binary
+4. **Aborts on mismatch** before writing anything to the install path
+5. Additionally verifies `codesign --verify --strict` and `spctl --assess --type execute`
+6. Pins the expected `TeamIdentifier` against `RELEASE-METADATA.json`
+
+**Known residual risk**: A compromised GitHub release can tamper with the binary, SHA256SUMS.txt, and RELEASE-METADATA.json in lockstep (see `docs/tickets/installer-supply-chain/STATUS.md`). Mitigate with **out-of-band verification**:
+
+```bash
+# Override with a hash obtained from a trusted second channel
+# (Homebrew tap, maintainer's signed commit, corporate vault):
+LOGIC_PRO_MCP_SHA256="<known-good-hash>" \
+LOGIC_PRO_MCP_TEAM_ID="<expected-team-id>" \
+bash Scripts/install.sh
+```
+
+For the strongest guarantee, enterprise deployments should pin the hash in a configuration management system (Jamf profile, Ansible vault, MDM), not trust the GitHub-hosted `SHA256SUMS.txt` as the root of trust.
+
 ---
 
 ## Security Audit History

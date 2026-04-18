@@ -139,7 +139,11 @@ list_library, scan_library, resolve_path
 ```json
 {"command": "mute", "params": {"index": 3, "enabled": true}}
 {"command": "arm_only", "params": {"index": 2}}
-{"command": "record_sequence", "params": {"index": 2, "countIn": true}}
+// Generate a MIDI file server-side and import it into a new track.
+// Notes are laid down with BYTE-EXACT timing at the requested bar position.
+// The imported region always spans bar 1 through the target bar (Logic Pro's
+// MIDI File import quirk); notes land at the correct bar INSIDE the region.
+{"command": "record_sequence", "params": {"bar": 5, "notes": "60,0,480;64,500,480;67,1000,480", "tempo": 120}}
 {"command": "set_automation", "params": {"index": 1, "mode": "touch"}}
 
 // Library enumeration + instrument loading (v2.2+)
