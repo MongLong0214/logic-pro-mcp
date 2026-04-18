@@ -289,10 +289,12 @@ struct TrackDispatcher {
         // Give Logic time to register the new track in AX, then refresh.
         try? await Task.sleep(nanoseconds: 500_000_000)
         let tracksAfter = await cache.getTracks().count
-        let createdTrack = tracksAfter > tracksBefore ? tracksAfter - 1 : tracksBefore
+        let trackConfirmed = tracksAfter > tracksBefore
+        // Fallback when AX cache hasn't refreshed: last known valid index, -1 if none.
+        let createdTrack = trackConfirmed ? tracksAfter - 1 : max(-1, tracksBefore - 1)
 
         return toolTextResult(.success(
-            "{\"recorded_to_track\":\(createdTrack),\"created_track\":\(createdTrack),\"bar\":\(bar),\"note_count\":\(events.count),\"method\":\"smf_import\"}"
+            "{\"recorded_to_track\":\(createdTrack),\"created_track\":\(createdTrack),\"track_index_confirmed\":\(trackConfirmed),\"bar\":\(bar),\"note_count\":\(events.count),\"method\":\"smf_import\"}"
         ))
     }
 
