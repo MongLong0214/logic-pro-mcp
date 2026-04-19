@@ -18,10 +18,9 @@ class LogicProMcp < Formula
 
   def install
     bin.install "LogicProMCP"
-    # The caveats reference these helper assets; ship them alongside the
-    # binary so users never need to re-clone the repo to follow the setup
-    # instructions below.
-    pkgshare.install "docs/MCU-SETUP.md"
+    # Helper assets shipped with the binary so users can complete Logic Pro
+    # integration without re-cloning the repo.
+    pkgshare.install "docs/SETUP.md"
     pkgshare.install "Scripts/install-keycmds.sh"
     pkgshare.install "Scripts/uninstall-keycmds.sh"
     pkgshare.install "Scripts/keycmd-preset.plist"
@@ -32,30 +31,16 @@ class LogicProMcp < Formula
     <<~EOS
       Logic Pro MCP Server is installed at #{bin}/LogicProMCP.
 
-      To register with Claude Code:
+      Register with Claude Code:
         claude mcp add --scope user logic-pro -- LogicProMCP
-
-      To register with Claude Desktop, add to
-        ~/Library/Application Support/Claude/claude_desktop_config.json:
-
-        {
-          "mcpServers": {
-            "logic-pro": {
-              "command": "#{bin}/LogicProMCP",
-              "args": []
-            }
-          }
-        }
 
       Check macOS permissions:
         LogicProMCP --check-permissions
 
-      Additional setup for full functionality:
-        • MCU Control Surface — see #{pkgshare}/MCU-SETUP.md
-        • MIDI Key Commands — run #{pkgshare}/install-keycmds.sh
-        • Scripter MIDI FX — load #{pkgshare}/LogicProMCP-Scripter.js in Logic Pro
+      Complete Logic Pro integration (MCU, Key Commands, Scripter):
+        open #{pkgshare}/SETUP.md
 
-      After manual validation, approve the manual-validation channels:
+      Approve manual-validation channels after Logic Pro setup:
         LogicProMCP --approve-channel MIDIKeyCommands
         LogicProMCP --approve-channel Scripter
     EOS

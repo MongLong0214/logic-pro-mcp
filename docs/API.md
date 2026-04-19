@@ -201,7 +201,7 @@ The old real-time `goto → record → sleep → play_sequence → stop` pipelin
 
 ## logic_mixer
 
-⚠️ **All mixer write operations require MCU registration.** See [MCU-SETUP.md](MCU-SETUP.md). Writes have **no fallback**.
+⚠️ **All mixer write operations require MCU registration.** See [SETUP.md §3](SETUP.md#3-register-mcu-control-surface-mandatory-for-mixer-control). Writes have **no fallback**.
 
 ### Commands (write only)
 
@@ -489,7 +489,7 @@ Common messages:
 | `All channels exhausted for {op}. Last error: ...` | Fallback chain exhausted — see `detail` for final error |
 | `Invalid path: must be absolute and end in .logicx` | Path validation failed |
 | `Confirmation required` | Destructive op without `confirmed: true` |
-| `MCU feedback not detected. Register 'LogicProMCP-MCU-Internal' in Logic Pro > Control Surfaces > Setup` | MCU handshake incomplete — see [MCU-SETUP.md](MCU-SETUP.md) |
+| `MCU feedback not detected. Register 'LogicProMCP-MCU-Internal' in Logic Pro > Control Surfaces > Setup` | MCU handshake incomplete — see [SETUP.md §3](SETUP.md#3-register-mcu-control-surface-mandatory-for-mixer-control) |
 
 Resource errors throw `MCPError.invalidParams`:
 - `Unknown resource URI: {uri}`

@@ -90,7 +90,7 @@ jobs:
           # Formula/logic-pro-mcp.rb's install block.
           tar czf LogicProMCP-macOS-universal.tar.gz \
             LogicProMCP \
-            docs/MCU-SETUP.md \
+            docs/SETUP.md \
             Scripts/install-keycmds.sh \
             Scripts/uninstall-keycmds.sh \
             Scripts/keycmd-preset.plist \

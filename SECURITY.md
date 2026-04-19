@@ -108,7 +108,7 @@ The one `nonisolated(unsafe)` variable (`pidProcessListCache` in `ProcessUtils`)
 
 ## Deployment security
 
-Release binaries are:
+Release binaries currently ship in **ADHOC mode** (see §Release types below). When Apple Developer Program membership is available, releases will be:
 
 1. Built on `macos-15` runners via GitHub Actions
 2. Codesigned with a Developer ID Application certificate
@@ -117,7 +117,9 @@ Release binaries are:
 5. Verified with `spctl` post-signing
 6. Checksummed (SHA256) and published with `RELEASE-METADATA.json`
 
-See `.github/workflows/release.yml` and `docs/release/RELEASE-RUNBOOK.md`.
+Until then, ADHOC releases provide SHA256 + codesign verification while skipping Gatekeeper assessment.
+
+See `.github/workflows/release.yml` and `docs/MAINTAINERS.md`.
 
 ### Installation verification
 
@@ -137,10 +139,28 @@ shasum -a 256 /usr/local/bin/LogicProMCP
 2. Fetches `SHA256SUMS.txt` from the same release
 3. Recomputes SHA256 of the downloaded binary
 4. **Aborts on mismatch** before writing anything to the install path
-5. Additionally verifies `codesign --verify --strict` and `spctl --assess --type execute`
+5. Additionally verifies `codesign --verify --strict` and `spctl --assess --type execute` — UNLESS this is an **ADHOC release**, in which case `spctl` is skipped (see below).
 6. Pins the expected `TeamIdentifier` against `RELEASE-METADATA.json`
 
-**Known residual risk**: A compromised GitHub release can tamper with the binary, SHA256SUMS.txt, and RELEASE-METADATA.json in lockstep (see `docs/tickets/installer-supply-chain/STATUS.md`). Mitigate with **out-of-band verification**:
+### Release types
+
+Two release modes exist depending on whether Apple Developer Program membership is available for the build:
+
+| Mode | TeamID | codesign | spctl / Gatekeeper | SHA256 | Quarantine xattr |
+|------|--------|----------|-------------------|--------|------------------|
+| **Notarized** (future) | Developer ID | strict check | assess required | pinned | not applied (stapled) |
+| **ADHOC** (current) | `ADHOC` literal | strict check | skipped | pinned | stripped by installer |
+
+ADHOC releases are signed with an ephemeral adhoc identity (`codesign --sign -`). They cannot pass Gatekeeper assessment because they are not notarized by Apple. The installer recognises `LOGIC_PRO_MCP_TEAM_ID=ADHOC` (or `team_id` in `RELEASE-METADATA.json`) and:
+
+- Skips `spctl --assess`
+- Still runs `codesign --verify --strict` (detects tampering post-signing)
+- Still enforces SHA256 pin (detects tampering in transit)
+- Strips `com.apple.quarantine` from the installed binary so it runs on first launch
+
+**Trust model for ADHOC**: root of trust is the SHA256 hash published in `SHA256SUMS.txt` in the same GitHub release. A compromise of the release asset would change the hash and the installer would abort. Enterprise operators can supply a hash out-of-band via `LOGIC_PRO_MCP_SHA256=...`.
+
+**Known residual risk**: A compromised GitHub release can tamper with the binary, SHA256SUMS.txt, and RELEASE-METADATA.json in lockstep (see `docs/MAINTAINERS.md §Release Process`). Mitigate with **out-of-band verification**:
 
 ```bash
 # Override with a hash obtained from a trusted second channel

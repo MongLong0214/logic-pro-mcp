@@ -26,6 +26,12 @@ verify_signature() {
         return 1
     fi
 
+    # ADHOC releases (no Apple Developer Program membership) skip TeamID check —
+    # they are pinned only by SHA256 manifest in the same release.
+    if [ "$EXPECTED_TEAM_ID" = "ADHOC" ]; then
+        return 0
+    fi
+
     if [ -n "$EXPECTED_TEAM_ID" ]; then
         local actual_team_id
         actual_team_id=$(codesign -dv --verbose=4 "$binary_path" 2>&1 | awk -F= '/^TeamIdentifier=/{print $2}')
@@ -41,6 +47,14 @@ verify_signature() {
 verify_gatekeeper() {
     local binary_path="$1"
 
+    # ADHOC releases are not notarized; Gatekeeper will reject. Skip the
+    # assessment for this release type — SHA256 + codesign --verify still
+    # guarantee the binary wasn't tampered with in transit.
+    if [ "$EXPECTED_TEAM_ID" = "ADHOC" ]; then
+        echo "  Skipping Gatekeeper assessment (ADHOC release)."
+        return 0
+    fi
+
     if ! command -v spctl >/dev/null 2>&1; then
         echo "  Error: spctl not available for Gatekeeper assessment."
         return 1
@@ -50,6 +64,17 @@ verify_gatekeeper() {
     if ! spctl --assess --type execute "$binary_path" >/dev/null 2>&1; then
         echo "  Error: Gatekeeper assessment failed. Binary is not notarized/stapled for this machine."
         return 1
+    fi
+}
+
+strip_quarantine() {
+    # macOS quarantine attribute from GitHub download blocks execution on first
+    # run ("cannot be opened because the developer cannot be verified") even
+    # when SHA256 + codesign verify cleanly. Removing it only for the adhoc
+    # case keeps notarized releases on the strict path.
+    local binary_path="$1"
+    if [ "$EXPECTED_TEAM_ID" = "ADHOC" ]; then
+        xattr -d com.apple.quarantine "$binary_path" 2>/dev/null || true
     fi
 }
 
@@ -107,6 +132,7 @@ if curl -fsSL "$DOWNLOAD_URL" -o "$TMP" 2>/dev/null; then
     fi
     verify_signature "$TMP"
     verify_gatekeeper "$TMP"
+    strip_quarantine "$TMP"
     chmod +x "$TMP"
     echo "  Installing to $INSTALL_DIR/$BINARY..."
     if [ "$SKIP_SUDO" = "1" ] || [ -w "$(dirname "$INSTALL_DIR")" ] || [ -w "$INSTALL_DIR" ]; then

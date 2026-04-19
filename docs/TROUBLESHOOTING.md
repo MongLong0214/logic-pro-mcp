@@ -2,7 +2,7 @@
 
 Diagnostic recipes for common issues, listed by symptom. Each entry gives the likely cause and a concrete fix.
 
-For MCU-specific problems, see [MCU-SETUP.md](MCU-SETUP.md).
+For MCU-specific problems, see [SETUP.md §3](SETUP.md#3-register-mcu-control-surface-mandatory-for-mixer-control).
 
 ---
 
@@ -120,7 +120,7 @@ Fix: Run `scan_library` once. The in-memory cache persists until the MCP process
 
 **Cause:** MCU control surface not registered in Logic Pro, or handshake failed.
 
-**Fix:** See [MCU-SETUP.md](MCU-SETUP.md) — register `LogicProMCP-MCU-Internal` in **Control Surfaces → Setup**.
+**Fix:** See [SETUP.md §3](SETUP.md#3-register-mcu-control-surface-mandatory-for-mixer-control) — register `LogicProMCP-MCU-Internal` in **Control Surfaces → Setup**.
 
 Mixer operations have **no fallback** — MCU registration is mandatory.
 
