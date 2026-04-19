@@ -161,8 +161,11 @@ struct SystemDispatcher {
             let permissions = PermissionChecker.check()
             let process = ProcessUtils.currentProcessMetrics()
             let lastFeedbackAge = mcu.lastFeedbackAt.map { Date().timeIntervalSince($0) }
-            let logicProPID = ProcessUtils.logicProPID()
-            let logicProRunning = logicProPID != nil || (report[.appleScript]?.available ?? false)
+            // Single source of truth shared with `project.is_running` so the
+            // two signals can never disagree. AppleScript availability is
+            // already surfaced separately in the `channels` array; mixing it
+            // into the running-state bit made the two truths drift.
+            let logicProRunning = ProcessUtils.isLogicProRunning
             let logicProHasWindow = ProcessUtils.hasVisibleWindow()
             let logicProHasDocument = await cache.getHasDocument()
             let health = HealthResponse(
@@ -243,8 +246,8 @@ struct SystemDispatcher {
                   toggle_cycle      -> {} — Toggle cycle/loop mode
                   toggle_metronome  -> {} — Toggle metronome
                   toggle_count_in   -> {} — Toggle count-in
-                  set_tempo         -> { tempo: Float } — Set BPM (20-999)
-                  goto_position     -> { bar: Int } or { time: "HH:MM:SS:FF" }
+                  set_tempo         -> { tempo: Float } — Set BPM (5-999)
+                  goto_position     -> { bar: Int (1..9999) } or { position: String } — bar.beat.sub.tick or HH:MM:SS:FF SMPTE
                   set_cycle_range   -> { start: Int, end: Int } — Bar numbers
 
                 Read state via resource: logic://transport/state
@@ -379,7 +382,7 @@ struct SystemDispatcher {
 
         default:
             return """
-                Logic Pro MCP — 8 dispatcher tools + 6 resources + 1 template
+                Logic Pro MCP — 8 dispatcher tools + 9 resources + 3 templates
 
                 Tools (actions):
                   logic_transport  — Transport control (play, stop, record, tempo...)
@@ -392,15 +395,20 @@ struct SystemDispatcher {
                   logic_system     — Diagnostics + help
 
                 Resources (reads — zero tool cost):
-                  logic://transport/state  — Transport state
-                  logic://tracks           — All tracks
-                  logic://mixer            — Mixer state
-                  logic://project/info     — Project info
-                  logic://midi/ports       — MIDI ports
-                  logic://system/health    — System health
+                  logic://system/health         — System health
+                  logic://transport/state       — Transport state
+                  logic://tracks                — All tracks
+                  logic://mixer                 — Mixer state
+                  logic://markers               — All project markers
+                  logic://project/info          — Project info
+                  logic://midi/ports            — MIDI ports
+                  logic://mcu/state             — MCU control-surface state (hidden in list when disconnected)
+                  logic://library/inventory     — Cached Library tree JSON
 
                 Resource templates:
-                  logic://tracks/{index}   — Single track detail
+                  logic://tracks/{index}          — Single track detail
+                  logic://tracks/{index}/regions  — Regions on a single track
+                  logic://mixer/{strip}           — Single channel strip
 
                 Use: logic_system(command: "help", params: {category: "transport"})
                 for detailed command docs per category.

@@ -3,7 +3,7 @@ class LogicProMcp < Formula
   homepage "https://github.com/MongLong0214/logic-pro-mcp"
   # Single source of truth is Sources/LogicProMCP/Server/ServerConfig.swift
   # (ServerConfig.serverVersion). Bump both together.
-  version "2.4.0"
+  version "3.0.0"
   license "MIT"
 
   # Universal binary (arm64 + x86_64). The release workflow publishes both
@@ -11,7 +11,7 @@ class LogicProMcp < Formula
   # aliases of the same fat binary. This formula targets the universal
   # tarball so both architectures work from one URL.
   #
-  # NOTE: sha256 below is the v2.4.0 adhoc-signed tarball shipped on GitHub.
+  # NOTE: sha256 below is the v3.0.0 adhoc-signed tarball shipped on GitHub.
   #       Update every release from the published SHA256SUMS.txt.
   on_macos do
     url "https://github.com/MongLong0214/logic-pro-mcp/releases/download/v#{version}/LogicProMCP-macOS-universal.tar.gz"

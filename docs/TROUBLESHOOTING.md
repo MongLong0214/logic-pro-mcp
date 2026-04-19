@@ -35,7 +35,7 @@ head -40 /tmp/mcp-stderr.txt
 Look for lines like:
 - `MIDIPortManager started` — CoreMIDI initialized
 - `Accessibility channel started` — AX ready
-- `Starting logic-pro-mcp v2.0.0 — 8 tools, 6 resources, 7 channels` — composition complete
+- `Starting logic-pro-mcp v3.0.0 — 8 tools, 9 resources, 7 channels` — composition complete
 
 If you see `AccessibilityError.notTrusted`, grant Accessibility permission.
 

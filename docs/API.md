@@ -1,6 +1,6 @@
 # API Reference
 
-Complete schema for Logic Pro MCP server. The server exposes **8 tools**, **6 resources**, and **1 resource template** over MCP JSON-RPC (stdio transport).
+Complete schema for Logic Pro MCP server. The server exposes **8 tools**, **9 resources**, and **3 resource templates** over MCP JSON-RPC (stdio transport). `logic://mcu/state` is filtered out of `resources/list` when the MCU control surface is disconnected.
 
 **Design principle:** Tools perform write/action operations. **Reads are exposed exclusively through resources** — use `resources/read` for state queries, not tool calls.
 
@@ -30,15 +30,22 @@ All tool invocations use:
 
 ## Resource Catalog (Read-only)
 
+**9 static resources + 3 templates.** `logic://mcu/state` is filtered from `resources/list` when the MCU control surface is disconnected, but direct `resources/read` still works for bookmarked clients.
+
 | URI | Content | Source |
 |-----|---------|--------|
+| `logic://system/health` | Health JSON (same schema as `logic_system health`) | Composed on read |
 | `logic://transport/state` | `{ state: TransportState, has_document, transport_age_sec }` JSON (v2.2+ wrapper; see below) | Cache (MCU feedback + AX poll) |
 | `logic://tracks` | `TrackState[]` JSON | Cache (MCU + AX) |
-| `logic://tracks/{index}` | Single `TrackState` JSON | Cache — template |
 | `logic://mixer` | `{ mcu_connected, registered, strips }` | Cache |
+| `logic://markers` | `MarkerState[]` JSON | Cache (AX poll, every 5 cycles) |
 | `logic://project/info` | `ProjectInfo` JSON | Cache (3s AX poll) |
 | `logic://midi/ports` | `{ sources, destinations }` | CoreMIDI live query |
-| `logic://system/health` | Health JSON (same schema as `logic_system health`) | Composed on read |
+| `logic://mcu/state` | `{ connection, display }` — MCU handshake + LCD state | Cache |
+| `logic://library/inventory` | Cached Library tree JSON (empty placeholder if not yet scanned) | File (resolved via `LOGIC_PRO_MCP_LIBRARY_INVENTORY` env, `Resources/library-inventory.json`, or `~/Library/Application Support/LogicProMCP/`) |
+| `logic://tracks/{index}` | Single `TrackState` JSON | Cache — template |
+| `logic://tracks/{index}/regions` | `RegionState[]` JSON filtered by `trackIndex` | Cache — template |
+| `logic://mixer/{strip}` | Single `ChannelStripState` JSON | Cache — template |
 
 All resources return `contents: [{ uri, text, mimeType: "application/json" }]`.
 
@@ -61,8 +68,8 @@ Prefer resources over repeated tool calls — they are cheap and safe to poll at
 | `toggle_cycle` | — | text | Accessibility → MCU → MIDIKeyCommands → CGEvent |
 | `toggle_metronome` | — | text | Accessibility → MIDIKeyCommands → CGEvent |
 | `toggle_count_in` | — | text | Accessibility → MIDIKeyCommands → CGEvent |
-| `set_tempo` | `{ tempo: number }` (20–300) | text | Accessibility → MIDIKeyCommands |
-| `goto_position` | `{ bar: int }` or `{ position: "B.B.S.S" }` | text | Accessibility (dialog, auto-extends project, ~800ms) → MCU → CoreMIDI → CGEvent |
+| `set_tempo` | `{ tempo: number }` (5–999, matches Logic's actual accepted range) | text | Accessibility → MIDIKeyCommands |
+| `goto_position` | `{ bar: int }` (1..9999) or `{ position: string }` — `"B.B.S.S"` or `"HH:MM:SS:FF"` SMPTE | text | Accessibility (dialog, auto-extends project, ~800ms) → MCU → CoreMIDI → CGEvent |
 | `set_cycle_range` | `{ start: int, end: int }` | text | Accessibility |
 | `capture_recording` | — | text | MIDIKeyCommands → CGEvent |
 
@@ -111,7 +118,7 @@ Clients can detect stale snapshots without cross-referencing `logic://system/hea
 
 | Command | Params | Returns | Channel |
 |---------|--------|---------|---------|
-| `select` | `{ index: int }` | text | Accessibility → MCU |
+| `select` | `{ index: int }` (preferred) or `{ name: string }` — name uses **case-insensitive substring match, first hit wins** (implemented via `localizedCaseInsensitiveContains`) | text | Accessibility → MCU |
 | `create_audio` | — | text | AX → MIDIKeyCommands → CGEvent |
 | `create_instrument` | — | text | AX → MIDIKeyCommands → CGEvent |
 | `create_drummer` | — | text | AX → MIDIKeyCommands → CGEvent |
@@ -132,7 +139,7 @@ Clients can detect stale snapshots without cross-referencing `logic://system/hea
 | `scan_plugin_presets` | `{ submenuOpenDelayMs?: int }` | text | Accessibility |
 | `set_color` | — | error | Not exposed in the production MCP contract |
 
-> **All mutating commands** (select, rename, mute, solo, arm, arm_only, delete, duplicate, set_automation, set_instrument) **reject requests without an explicit `index`** to prevent accidental track-0 mutations from malformed callers. Non-numeric values (e.g. `{"index":"abc"}`) are also rejected. The default `0` behaviour was removed in v2.4.0.
+> **All mutating commands** (rename, mute, solo, arm, arm_only, delete, duplicate, set_automation, set_instrument) **reject requests without an explicit `index`** to prevent accidental track-0 mutations from malformed callers. Non-numeric values (e.g. `{"index":"abc"}`) are also rejected. The default `0` behaviour was removed in v3.0.0. `select` is the one exception: if `index` is absent, it falls back to `{ name }` matching; a supplied-but-invalid `index` still fails closed.
 
 ### Reading tracks
 
@@ -192,9 +199,9 @@ The old real-time `goto → record → sleep → play_sequence → stop` pipelin
 
 **Response caveats**:
 - The region's start is always bar 1 (cosmetic trade-off of the padding strategy). If you need the region itself trimmed, the caller can run `편집 → 이동 → 재생헤드로` on the selected region after positioning the playhead.
-- `created_track` is always the 0-based index of the newly-created track (Logic always creates a new MIDI track per import). The v2.3.0 `track_index_confirmed` fallback was removed in v2.4.0 — the command now polls the AX cache for up to 2 seconds and returns an error if the new track never appears, so the field would always be `true` in a success response and was redundant.
+- `created_track` is always the 0-based index of the newly-created track (Logic always creates a new MIDI track per import). The v2.3.0 `track_index_confirmed` fallback was removed in v3.0.0 — the command now polls the AX cache for up to 2 seconds and returns an error if the new track never appears, so the field would always be `true` in a success response and was redundant.
 
-**`arm_only` behavior (v2.4.0+)**:
+**`arm_only` behavior (v3.0.0+)**:
 
 On full success (target arm succeeded and every disarm succeeded), returns a JSON payload:
 

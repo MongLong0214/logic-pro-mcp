@@ -241,13 +241,22 @@ actor LogicProServer {
                 }
             },
             listResources: { _ in
-                ListResources.Result(resources: ResourceProvider.resources, nextCursor: nil)
+                // Filter MCU-only resources when the control surface is offline
+                // so the LLM doesn't discover probes that would return empty.
+                let connected = await cache.getMCUConnection().isConnected
+                return ListResources.Result(
+                    resources: ResourceProvider.resources(mcuConnected: connected),
+                    nextCursor: nil
+                )
             },
             readResource: { params in
                 try await ResourceHandlers.read(uri: params.uri, cache: cache, router: router)
             },
             listResourceTemplates: { _ in
-                ListResourceTemplates.Result(templates: ResourceProvider.templates)
+                let connected = await cache.getMCUConnection().isConnected
+                return ListResourceTemplates.Result(
+                    templates: ResourceProvider.templates(mcuConnected: connected)
+                )
             }
         )
     }

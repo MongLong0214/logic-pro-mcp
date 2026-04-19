@@ -121,6 +121,27 @@ Until then, ADHOC releases provide SHA256 + codesign verification while skipping
 
 See `.github/workflows/release.yml` and `docs/MAINTAINERS.md`.
 
+### Installer trust model
+
+Three supported install paths, in descending order of trust:
+
+| Path | What signs the script | What signs the binary | Recommended for |
+|------|----------------------|----------------------|-----------------|
+| **Homebrew tap** | Homebrew's own signature chain over the formula | Formula pins both URL + SHA256 | Production |
+| **Download-inspect-run** | You inspect the script locally before executing it | `LOGIC_PRO_MCP_SHA256` + TeamID env overrides | Security-sensitive deployments |
+| **`bash <(curl ...)` one-liner** | ⚠️ No signature — script is fetched fresh on every run | `LOGIC_PRO_MCP_SHA256` + TeamID env overrides | Casual/single-user installs |
+
+The env-var overrides (`LOGIC_PRO_MCP_SHA256`, `LOGIC_PRO_MCP_TEAM_ID`) protect the **downloaded binary** against tampering of the GitHub release surface. They do **not** cover the installer script itself when piped through `bash`. If the installer script in the repo is compromised, `bash <(curl ...)` will execute the compromised script before any pin check runs.
+
+For hardened installs, prefer Homebrew (Option A in README) or the download-inspect-run pattern:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.0.0/Scripts/install.sh -o install.sh
+# inspect install.sh
+shasum -a 256 install.sh    # cross-check against a trusted second channel
+LOGIC_PRO_MCP_SHA256=<hex> LOGIC_PRO_MCP_TEAM_ID=ADHOC bash install.sh
+```
+
 ### Installation verification
 
 Users can verify the signature:

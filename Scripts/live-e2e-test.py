@@ -212,11 +212,15 @@ def main():
 
     r = list_resources(client)
     resources = r.get("result", {}).get("resources", []) if r else []
-    T("resources/list returns 6 resources", r, lambda r: len(resources) == 6)
+    # v3.0.0 exposes 9 static resources. logic://mcu/state is filtered from the
+    # list when the MCU control surface is disconnected, so the expected count
+    # is 8 (disconnected) or 9 (connected).
+    resource_count = len(resources)
+    T("resources/list returns 8 or 9 resources", r, lambda r: resource_count in (8, 9))
 
     r = list_resource_templates(client)
     templates = r.get("result", {}).get("resourceTemplates", []) if r else []
-    T("resources/templates/list returns 1 template", r, lambda r: len(templates) == 1)
+    T("resources/templates/list returns 3 templates", r, lambda r: len(templates) == 3)
 
     # ═══════════════════════════════════════════════════════════════
     # §2 System Diagnostics (15 tests)
@@ -396,25 +400,25 @@ def main():
     r = call_tool(client, "logic_tracks", "select")
     T("track.select without index returns error", r, lambda _: is_error(r))
 
-    # v2.4.0+: all mutating commands reject missing/non-numeric index — old
+    # v3.0.0+: all mutating commands reject missing/non-numeric index — old
     # silent default-to-zero was dropped as a correctness hazard.
     r = call_tool(client, "logic_tracks", "mute")
     T(
-        "track.mute without index rejects with explicit error (v2.4)",
+        "track.mute without index rejects with explicit error (v3.0.0)",
         r,
         lambda _: is_error(r) and "explicit 'index'" in tool_text(r),
     )
 
     r = call_tool(client, "logic_tracks", "rename", {"name": "No Index"})
     T(
-        "track.rename without index rejects with explicit error (v2.4)",
+        "track.rename without index rejects with explicit error (v3.0.0)",
         r,
         lambda _: is_error(r) and "explicit 'index'" in tool_text(r),
     )
 
     r = call_tool(client, "logic_tracks", "select", {"index": "abc"})
     T(
-        "track.select with non-numeric index rejects (v2.4)",
+        "track.select with non-numeric index rejects (v3.0.0)",
         r,
         lambda _: is_error(r) and "non-negative integer" in tool_text(r),
     )
@@ -462,7 +466,7 @@ def main():
 
     r = call_tool(client, "logic_tracks", "set_instrument", {"index": 0})
     T(
-        "track.set_instrument without selector returns explicit error (v2.4)",
+        "track.set_instrument without selector returns explicit error (v3.0.0)",
         r,
         lambda _: is_error(r) and (
             "requires 'path' or both 'category' + 'preset'" in tool_text(r)
@@ -693,12 +697,17 @@ def main():
     section("§11 Resource Read")
 
     resources_to_test = [
+        "logic://system/health",
         "logic://transport/state",
         "logic://tracks",
         "logic://mixer",
-        "logic://midi/ports",
-        "logic://system/health",
+        "logic://markers",
         "logic://project/info",
+        "logic://midi/ports",
+        "logic://library/inventory",
+        # mcu/state is read-testable even when filtered from list (direct reads
+        # bypass the connection gate so clients bookmarking the URI still work).
+        "logic://mcu/state",
     ]
     for uri in resources_to_test:
         r = read_resource(client, uri)

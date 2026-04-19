@@ -24,11 +24,25 @@ struct ResourceHandlers {
         // empty data when state is genuinely empty — let the client distinguish
         // empty from missing rather than blanket-erroring on stale flags.
 
-        // Handle parameterized URIs like logic://tracks/{index}
+        // Handle parameterized URIs like logic://tracks/{index}/regions and logic://tracks/{index}
         if uri.hasPrefix("logic://tracks/") {
-            let indexStr = String(uri.dropFirst("logic://tracks/".count))
-            if let index = Int(indexStr) {
+            let remainder = String(uri.dropFirst("logic://tracks/".count))
+            if remainder.hasSuffix("/regions") {
+                let indexStr = String(remainder.dropLast("/regions".count))
+                if let index = Int(indexStr) {
+                    return try await readTrackRegions(at: index, cache: cache, uri: uri)
+                }
+            }
+            if let index = Int(remainder) {
                 return try await readTrack(at: index, cache: cache, uri: uri)
+            }
+        }
+
+        // logic://mixer/{strip} — individual channel strip by index.
+        if uri.hasPrefix("logic://mixer/") {
+            let indexStr = String(uri.dropFirst("logic://mixer/".count))
+            if let index = Int(indexStr) {
+                return try await readMixerStrip(at: index, cache: cache, uri: uri)
             }
         }
 
@@ -42,11 +56,21 @@ struct ResourceHandlers {
         case "logic://mixer":
             return try await readMixer(cache: cache, uri: uri)
 
+        case "logic://markers":
+            return try await readMarkers(cache: cache, uri: uri)
+
         case "logic://project/info":
             return try await readProjectInfo(cache: cache, uri: uri)
 
         case "logic://midi/ports":
             return try await readMIDIPorts(router: router, uri: uri)
+
+        case "logic://mcu/state":
+            return try await readMCUState(cache: cache, uri: uri)
+
+        case "logic://library/inventory":
+            return try await readLibraryInventory(uri: uri)
+
         default:
             throw MCPError.invalidParams("Unknown resource URI: \(uri)")
         }
@@ -126,6 +150,164 @@ struct ResourceHandlers {
         }
         return ReadResource.Result(
             contents: [.text(payload, uri: uri, mimeType: "application/json")]
+        )
+    }
+
+    private static func readTrackRegions(at index: Int, cache: StateCache, uri: String) async throws -> ReadResource.Result {
+        let regions = await cache.getRegions().filter { $0.trackIndex == index }
+        let json = encodeJSON(regions)
+        return ReadResource.Result(
+            contents: [.text(json, uri: uri, mimeType: "application/json")]
+        )
+    }
+
+    private static func readMixerStrip(at index: Int, cache: StateCache, uri: String) async throws -> ReadResource.Result {
+        if let strip = await cache.getChannelStrip(at: index) {
+            let json = encodeJSON(strip)
+            return ReadResource.Result(
+                contents: [.text(json, uri: uri, mimeType: "application/json")]
+            )
+        }
+        throw MCPError.invalidParams("No channel strip at index \(index)")
+    }
+
+    private static func readMarkers(cache: StateCache, uri: String) async throws -> ReadResource.Result {
+        let markers = await cache.getMarkers()
+        let json = encodeJSON(markers)
+        return ReadResource.Result(
+            contents: [.text(json, uri: uri, mimeType: "application/json")]
+        )
+    }
+
+    /// Wire-format DTO for `logic://mcu/state`. MCU LCD bytes can carry raw
+    /// control characters straight from hardware SysEx decode; routing the
+    /// payload through `JSONEncoder` guarantees RFC 8259-valid escaping for
+    /// `\n`, `\r`, `\t`, and U+0000-U+001F — which the previous hand-rolled
+    /// emitter missed and which could have produced unparseable JSON.
+    private struct MCUStateDTO: Encodable {
+        struct Connection: Encodable {
+            let isConnected: Bool
+            let registeredAsDevice: Bool
+            let portName: String
+            let lastFeedbackAt: Date?
+        }
+        struct Display: Encodable {
+            let upperRow: String
+            let lowerRow: String
+        }
+        let connection: Connection
+        let display: Display
+    }
+
+    private static func readMCUState(cache: StateCache, uri: String) async throws -> ReadResource.Result {
+        let conn = await cache.getMCUConnection()
+        let display = await cache.getMCUDisplay()
+        let dto = MCUStateDTO(
+            connection: .init(
+                isConnected: conn.isConnected,
+                registeredAsDevice: conn.registeredAsDevice,
+                portName: conn.portName,
+                lastFeedbackAt: conn.lastFeedbackAt
+            ),
+            display: .init(upperRow: display.upperRow, lowerRow: display.lowerRow)
+        )
+        let json = encodeJSON(dto, compact: true)
+        return ReadResource.Result(
+            contents: [.text(json, uri: uri, mimeType: "application/json")]
+        )
+    }
+
+    /// Max bytes we will read from the library-inventory cache file. A real
+    /// scan is typically <1 MiB; this cap exists so a maliciously-large file
+    /// (e.g. via a hostile `LOGIC_PRO_MCP_LIBRARY_INVENTORY` symlink target)
+    /// can't OOM the server.
+    private static let libraryInventoryMaxBytes: Int = 64 * 1024 * 1024  // 64 MiB
+
+    /// Resolve the library-inventory cache file. Checks (in order):
+    /// 1. `LOGIC_PRO_MCP_LIBRARY_INVENTORY` env override (absolute path; symlinks resolved + validated)
+    /// 2. `<CWD>/Resources/library-inventory.json` — dev/CLI launches from repo root
+    /// 3. `~/Library/Application Support/LogicProMCP/library-inventory.json` — daemon/launchd launches where CWD=/
+    private static func libraryInventoryCandidatePaths() -> [String] {
+        var paths: [String] = []
+        if let override = ProcessInfo.processInfo.environment["LOGIC_PRO_MCP_LIBRARY_INVENTORY"],
+           !override.isEmpty {
+            paths.append(override)
+        }
+        paths.append("Resources/library-inventory.json")
+        if let appSupport = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first {
+            paths.append(
+                appSupport.appendingPathComponent("LogicProMCP/library-inventory.json").path
+            )
+        }
+        return paths
+    }
+
+    /// Validate that the candidate path is safe to read as the library cache.
+    /// Returns the resolved absolute path on success, or nil on rejection.
+    /// Mitigations against a hostile `LOGIC_PRO_MCP_LIBRARY_INVENTORY` symlink
+    /// target (e.g. an attacker with daemon env-var access pointing us at a
+    /// sensitive file):
+    /// - Must end in `.json` after symlink resolution (so `/etc/passwd` and
+    ///   binary secrets won't be served raw)
+    /// - Must be a regular file (not a directory)
+    /// - Must be smaller than `libraryInventoryMaxBytes`
+    /// Always logs the resolved path on reject so operators can audit.
+    private static func validateLibraryInventoryPath(_ rawPath: String) -> String? {
+        let resolved = URL(fileURLWithPath: rawPath).resolvingSymlinksInPath().path
+        guard resolved.hasSuffix(".json") else {
+            Log.warn(
+                "library-inventory path rejected (must end in .json): raw=\(rawPath), resolved=\(resolved)",
+                subsystem: Log.Subsystem.library
+            )
+            return nil
+        }
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: resolved, isDirectory: &isDir), !isDir.boolValue else {
+            return nil
+        }
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: resolved),
+           let size = attrs[.size] as? Int, size > libraryInventoryMaxBytes {
+            Log.warn(
+                "library-inventory file exceeds \(libraryInventoryMaxBytes) bytes — refusing to load (raw=\(rawPath), resolved=\(resolved), size=\(size))",
+                subsystem: Log.Subsystem.library
+            )
+            return nil
+        }
+        return resolved
+    }
+
+    private static func readLibraryInventory(uri: String) async throws -> ReadResource.Result {
+        let candidates = libraryInventoryCandidatePaths()
+        for path in candidates {
+            guard let resolved = validateLibraryInventoryPath(path) else { continue }
+            guard let data = FileManager.default.contents(atPath: resolved) else { continue }
+            // Parse before serving: we advertise this resource as
+            // `application/json`, so corrupt or attacker-shaped bytes must
+            // not reach the MCP client under that mimetype. On parse
+            // failure we fall through to the next candidate and log.
+            guard (try? JSONSerialization.jsonObject(with: data, options: [])) != nil,
+                  let s = String(data: data, encoding: .utf8) else {
+                Log.warn(
+                    "library-inventory file is not valid JSON, skipping: \(resolved)",
+                    subsystem: Log.Subsystem.library
+                )
+                continue
+            }
+            return ReadResource.Result(
+                contents: [.text(s, uri: uri, mimeType: "application/json")]
+            )
+        }
+        // No cache found at any candidate — warn loudly so daemon deployments
+        // where CWD=/ don't silently return an empty placeholder forever.
+        Log.warn(
+            "library-inventory cache missing at candidate paths: \(candidates.joined(separator: ", ")). Run logic_library scan, or set LOGIC_PRO_MCP_LIBRARY_INVENTORY to an absolute path.",
+            subsystem: Log.Subsystem.library
+        )
+        let json = #"{"cached":false,"note":"Run logic_library scan to populate (or set LOGIC_PRO_MCP_LIBRARY_INVENTORY env var)"}"#
+        return ReadResource.Result(
+            contents: [.text(json, uri: uri, mimeType: "application/json")]
         )
     }
 

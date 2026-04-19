@@ -8,7 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-## [2.4.0] — 2026-04-19
+## [3.0.0] — 2026-04-19
+
+> Renumbered from 2.4.0 to 3.0.0 to honor SemVer — the changes below break
+> the track-mutation and `record_sequence` contracts, which is a major bump.
+> The v2.4.0 tag was a pre-release and should be considered yanked in favor
+> of v3.0.0.
 
 ### Breaking Changes
 
@@ -17,6 +22,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **`record_sequence` no longer returns `track_index_confirmed`**. The dispatcher now polls the AX cache for up to 2 seconds and returns `isError: true` if the new track never appears — the fallback value (`false` + last-known-index) was a silent correctness hazard. On success, `created_track` is always the real new track index.
 - **`record_sequence` hard-fails when `transport.goto_position bar=1` fails**. Logic Pro anchors imported regions at the playhead; a failed pre-reset would silently place notes at the wrong bar. The step is now a blocking precondition.
 - **`set_instrument` requires `path` OR both `category` + `preset`**. Empty calls (only `index`) are rejected instead of silently dispatching with no instrument target.
+- **`goto_position` canonicalises the position key**. Only `{ bar }` or `{ position }` are accepted — the undocumented `time` alias was removed so the API contract, tool description, and runtime now all agree on a single key. Both `B.B.S.S` and `HH:MM:SS:FF` formats remain supported.
+- **`logic_system.health.logic_pro_running` now uses the same source of truth as `logic_project.is_running`**. Previously `health` OR-ed an AppleScript availability flag into the bit, which could disagree with `is_running`'s PID-based check. AppleScript status remains surfaced separately in the `channels` array.
 
 ### Added
 
@@ -28,11 +35,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Fixed
 
 - `docs/API.md` now matches runtime behavior: `arm_only` error paths, `record_sequence` success schema (no `track_index_confirmed`), `set_automation` full mode enum (incl. `trim`), `set_instrument` required-field semantics.
-- `Scripts/live-e2e-test.py` updated to reflect v2.4 contract: rejects-without-index assertions, new `set_instrument` error messages, softer environment gates.
+- `Scripts/live-e2e-test.py` updated to reflect v3.0.0 contract: rejects-without-index assertions, new `set_instrument` error messages, softer environment gates.
 
 ### Security
 
 - Release workflow dependencies pinned to commit SHA (supply-chain hardening).
+- **Release tag trigger narrowed to strict SemVer** (`v[0-9]+.[0-9]+.[0-9]+` with optional pre-release suffix). Arbitrary `v*` tags no longer unlock signing secrets in GitHub Actions.
+- **Installer warns when provenance is fetched from the same release surface.** `Scripts/install.sh` now prints a hardening recommendation when `LOGIC_PRO_MCP_SHA256` / `LOGIC_PRO_MCP_TEAM_ID` aren't passed out-of-band.
+- **Installer trust model documented.** `README.md` now leads with Homebrew as the hardened path and marks `bash <(curl ...)` as a convenience path that does **not** protect the installer script itself. `SECURITY.md §Installer trust model` lays out three trust tiers.
+- **`logic://mcu/state` uses `JSONEncoder`** instead of a hand-rolled escaper, so MCU LCD bytes and port names carrying control characters (`\n`/`\r`/`\t`/U+0000-U+001F) now produce valid JSON instead of breaking parsers.
+- **`JSONHelper` shared encoders are lock-gated** — concurrent MCP tool handlers can't race on `JSONEncoder` internal state.
+- **`Logger` rate-limit map has a 1024-entry cap** with expired-window sweep + oldest-eviction, preventing a long-running daemon from inflating memory via user-controlled log strings.
+- **`logic://library/inventory` resolves through three candidate paths** (`LOGIC_PRO_MCP_LIBRARY_INVENTORY` env override → repo-relative → `~/Library/Application Support/LogicProMCP/`) and emits a `Log.warn` on miss, so daemon launches where CWD=`/` no longer silently report an empty library.
+
+### Fixed — drift from prior review
+
+- `docs/API.md` header now advertises **9 resources + 3 templates** (was 6 + 1).
+- `docs/API.md` `select` entry now documents the actual matching semantics (`localizedCaseInsensitiveContains`, not case-sensitive-first-match).
+- `logic_system.help` default section matches the new resource/template counts.
+- `Scripts/live-e2e-test.py` resource-list assertions updated to the v3.0.0 surface (9 resources, 3 templates, MCU filtered when disconnected).
+- `manifest.json` and `docs/{MAINTAINERS,SETUP}.md` now advertise the universal binary consistently with `Formula/logic-pro-mcp.rb` and `release.yml` (no more arm64-vs-universal drift).
+
+### Fixed — round 5 (final hardening pass)
+
+- **`release.yml` tag trigger is now valid glob, not regex.** Previous pattern used `[0-9]+` which GitHub Actions treats as literal `+` (not repetition), so the `v3.0.0` tag would not have triggered the workflow and the notarized/signed release path would have been unreachable. Replaced with `v[0-9]*.[0-9]*.[0-9]*` (+ pre-release variant) and added a step-level strict-SemVer regex guard that fails the workflow before any secret-using step.
+- **Installer is fail-closed by default.** `Scripts/install.sh` now refuses to run unless `LOGIC_PRO_MCP_SHA256` + `LOGIC_PRO_MCP_TEAM_ID` are both supplied. Opting into the same-origin (provenance fetched from the same release as the binary) path requires an explicit `LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1`. The CI `validate-install` job now resolves pins from the freshly-published `SHA256SUMS.txt` and `RELEASE-METADATA.json`, so it exercises the hardened path end-to-end.
+- **`README.md` and `docs/SETUP.md` lead with Homebrew.** The one-line `bash <(curl ...)` path is demoted to "download-inspect-run" with explicit `LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN` opt-in guidance.
+- **Testing claims match fresh evidence.** README no longer says "700+ tests all passing, Live E2E verified"; it reports the actual `swift test` count (759) and clarifies that live E2E assertions are split between environment-independent (pass cleanly) and Logic-Pro-gated (require a live session).
+- **`logic://library/inventory` now validates JSON before serving.** `ResourceHandlers.readLibraryInventory` parses the file with `JSONSerialization` and falls through to the next candidate on malformed input, so a corrupt or attacker-shaped cache file can't be returned under the `application/json` mimetype.
+- **Public contract surfaces converged.** `docs/API.md` Resource Catalog lists all 9 resources + 3 templates, `set_tempo` range (5–999) matches runtime in API.md, tool description, and `logic_system help`. `docs/TROUBLESHOOTING.md` startup-banner example reflects v3.0.0 counts. `README.md` documentation table lists "9 resources, 3 templates" instead of the stale "6 resources".
+
+### Fixed — round 4 (production-readiness pass)
+
+- **ISO 8601 fractional-second precision is preserved across the wire.** Shared `JSONEncoder`/`JSONDecoder` now use a custom date strategy matching `Logger`'s `[.withInternetDateTime, .withFractionalSeconds]` formatter, so `logic://mcu/state.connection.lastFeedbackAt` and every other `Date` field stay aligned with the log timestamp format. Previously `JSONEncoder.iso8601` silently truncated sub-second precision.
+- **`LOGIC_PRO_MCP_LIBRARY_INVENTORY` env override now resists symlink abuse.** `validateLibraryInventoryPath` resolves symlinks, refuses anything that isn't a regular `.json` file ≤ 64 MiB, and logs the resolved path on rejection. Removes the "hostile daemon-env var points MCP at `/etc/passwd`" class of attacks.
+- **`goto_position` now fails closed on unknown param keys.** Previously a caller sending the legacy `{ "time": "…" }` alias would silently seek to `"1.1.1.1"`; now the dispatcher returns an explicit error naming the removed key and the allowed set (`bar`, `position`).
+- **`encodeJSON` fallback path uses a full JSON escape helper** (`jsonStringEscape`) covering `"`, `\`, `\b`, `\f`, `\n`, `\r`, `\t`, and U+0000-U+001F. Previous escaping missed control characters, which would have produced invalid JSON if a future Foundation error message carried them.
+- **`StatePoller.Runtime` gains an injectable `sleep` closure.** Tests can now drive the poll loop at 1 µs cadence instead of waiting out the production 3 s interval. The two lifecycle tests (`testStatePollerStartStopLifecycle` and `testLogicProServerStartCoversDefaultPortAndPollerLifecyclePaths`) used to take ~2 000 s each and were excluded from CI; with the injectable sleep + `.fastTest` runtime (which also short-circuits `hasVisibleWindow` to avoid live AX calls) they now complete in ≤ 20 ms each and are included in the default test run.
+- `docs/MAINTAINERS.md` now documents the runtime env matrix (`LOG_LEVEL`, `LOG_FORMAT`, `LOGIC_PRO_MCP_LIBRARY_INVENTORY`, installer pins) and the post-tag Homebrew `sha256` sync step.
 
 ### Migration from v2.3.x
 

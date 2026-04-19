@@ -163,7 +163,9 @@ private actor FailingExecuteChannel: Channel {
     )
     let gotoTimeResult = await TransportDispatcher.handle(
         command: "goto_position",
-        params: ["time": .string("00:00:10:12")],
+        // v3.0.0 removed the `time` alias — callers now use the canonical `position` key
+        // for both B.B.S.S and SMPTE HH:MM:SS:FF formats.
+        params: ["position": .string("00:00:10:12")],
         router: gotoRouter,
         cache: cache
     )

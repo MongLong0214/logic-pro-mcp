@@ -25,15 +25,23 @@ private let serverResourceText = sharedResourceText
         "logic_project",
         "logic_system",
     ])
+    // MCU disconnected by default in a fresh LogicProServer, so the list
+    // excludes `logic://mcu/state`.
     #expect(resources.resources.map(\.uri) == [
+        "logic://system/health",
         "logic://transport/state",
         "logic://tracks",
         "logic://mixer",
+        "logic://markers",
         "logic://project/info",
         "logic://midi/ports",
-        "logic://system/health",
+        "logic://library/inventory",
     ])
-    #expect(templates.templates.map(\.uriTemplate) == ["logic://tracks/{index}"])
+    #expect(templates.templates.map(\.uriTemplate) == [
+        "logic://tracks/{index}",
+        "logic://tracks/{index}/regions",
+        "logic://mixer/{strip}",
+    ])
 }
 
 @Test func testLogicProServerHandlersDispatchToolNamesWithoutStartingServer() async {
@@ -207,13 +215,20 @@ private let serverResourceText = sharedResourceText
 }
 
 @Test func testLogicProServerStartCoversDefaultPortAndPollerLifecyclePaths() async throws {
+    // Override startPoller/stopPoller to no-ops — the production path spawns a
+    // real StatePoller against AccessibilityChannel which, in a test without
+    // Logic Pro running, makes the task never complete. We're exercising the
+    // handler wire-up here, not the live poller path (which has its own
+    // `testStatePollerStartStopLifecycle` coverage with the fast-test runtime).
     let recorder = ServerStartRecorder()
     let overrides = LogicProServerRuntimeOverrides(
         startChannels: {
             await recorder.record("startChannels")
             return .init(started: [.mcu, .coreMIDI], failures: [:], degraded: [:])
         },
-        serve: { await recorder.record("serve") }
+        startPoller: { await recorder.record("startPoller") },
+        serve: { await recorder.record("serve") },
+        stopPoller: { await recorder.record("stopPoller") }
     )
     let server = LogicProServer(runtimeOverrides: overrides)
 
@@ -221,9 +236,26 @@ private let serverResourceText = sharedResourceText
 
     let handlers = await server.makeHandlers()
     let resources = await handlers.listResources(ListResources.Parameters())
-    #expect(resources.resources.count == 6)
+    // MCU is disconnected in a fresh cache, so `logic://mcu/state` is filtered
+    // out. Non-MCU resources (markers, library/inventory, …) remain visible.
+    let uris = Set(resources.resources.map(\.uri))
+    #expect(uris == [
+        "logic://system/health",
+        "logic://transport/state",
+        "logic://tracks",
+        "logic://mixer",
+        "logic://markers",
+        "logic://project/info",
+        "logic://midi/ports",
+        "logic://library/inventory",
+    ])
+    // server.start() runs serve() to completion then tears poller/channels/ports
+    // down in reverse order. With serve recorded as a no-op, the tail section
+    // executes immediately so stopPoller is captured too.
     #expect(await recorder.snapshot() == [
         "startChannels",
+        "startPoller",
         "serve",
+        "stopPoller",
     ])
 }

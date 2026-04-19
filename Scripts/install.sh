@@ -5,7 +5,7 @@ REPO="MongLong0214/logic-pro-mcp"
 BINARY="LogicProMCP"
 INSTALL_DIR="${LOGIC_PRO_MCP_INSTALL_DIR:-/usr/local/bin}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${LOGIC_PRO_MCP_VERSION:-v2.4.0}"
+VERSION="${LOGIC_PRO_MCP_VERSION:-v3.0.0}"
 SHA256="${LOGIC_PRO_MCP_SHA256:-}"
 EXPECTED_TEAM_ID="${LOGIC_PRO_MCP_TEAM_ID:-}"
 REGISTER_CLAUDE="${LOGIC_PRO_MCP_REGISTER_CLAUDE:-1}"
@@ -91,7 +91,7 @@ fi
 
 if [ "$VERSION" = "latest" ]; then
     echo "  Error: mutable 'latest' installs are not allowed in enterprise mode."
-    echo "    Set LOGIC_PRO_MCP_VERSION to a pinned tag, e.g. v2.4.0."
+    echo "    Set LOGIC_PRO_MCP_VERSION to a pinned tag, e.g. v3.0.0."
     exit 1
 fi
 
@@ -100,7 +100,40 @@ DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/$BINARY"
 SHA_URL="https://github.com/$REPO/releases/download/$VERSION/SHA256SUMS.txt"
 METADATA_URL="https://github.com/$REPO/releases/download/$VERSION/RELEASE-METADATA.json"
 
+# Fail-closed provenance policy:
+#
+# By default the installer REQUIRES both LOGIC_PRO_MCP_SHA256 and
+# LOGIC_PRO_MCP_TEAM_ID to be supplied out-of-band. Without them we'd be
+# pulling binary + SHA + signer metadata from the same GitHub release surface,
+# which means an attacker who can modify the release can replace all three in
+# lockstep and the "pin" check becomes a rubber stamp.
+#
+# Operators who knowingly accept that same-origin trust model (e.g. Homebrew
+# tap users, or one-off local installs) can opt in explicitly by setting
+# LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1. In that mode the missing values are
+# fetched from the release and the installer prints a loud warning.
+if [ -z "$SHA256" ] || [ -z "$EXPECTED_TEAM_ID" ]; then
+    if [ "${LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN:-0}" != "1" ]; then
+        echo "  Error: installer refuses to run with missing provenance pins."
+        echo ""
+        echo "  For a hardened install, set BOTH:"
+        echo "    LOGIC_PRO_MCP_SHA256=<hex-from-SHA256SUMS.txt>"
+        echo "    LOGIC_PRO_MCP_TEAM_ID=<ADHOC|10-char-Team-ID>"
+        echo ""
+        echo "  To explicitly accept same-origin provenance (fetch SHA + Team ID"
+        echo "  from the same GitHub release as the binary) set:"
+        echo "    LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1"
+        echo ""
+        echo "  See SECURITY.md §Installer trust model for the trust tiers."
+        exit 1
+    fi
+    echo "  ⚠  LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1 — fetching missing provenance"
+    echo "     from the same GitHub release surface as the binary."
+fi
+
+REMOTE_PROVENANCE_USED=0
 if [ -z "$SHA256" ]; then
+    REMOTE_PROVENANCE_USED=1
     echo "  Fetching release SHA256 manifest..."
     SHA256=$(curl -fsSL "$SHA_URL" | awk '$2 == "LogicProMCP" {print $1}')
     if [ -z "$SHA256" ]; then
@@ -110,6 +143,7 @@ if [ -z "$SHA256" ]; then
 fi
 
 if [ -z "$EXPECTED_TEAM_ID" ]; then
+    REMOTE_PROVENANCE_USED=1
     echo "  Fetching release metadata..."
     EXPECTED_TEAM_ID=$(curl -fsSL "$METADATA_URL" | awk -F'"' '/"team_id"[[:space:]]*:/ {print $4; exit}')
     if [ -z "$EXPECTED_TEAM_ID" ]; then
@@ -117,6 +151,14 @@ if [ -z "$EXPECTED_TEAM_ID" ]; then
         echo "    Expected signed release metadata at: $METADATA_URL"
         exit 1
     fi
+fi
+
+if [ "$REMOTE_PROVENANCE_USED" = "1" ]; then
+    echo ""
+    echo "  ⚠  Provenance values were fetched from the same GitHub release surface."
+    echo "     For hardened installs, set both env vars out-of-band."
+    echo "     See SECURITY.md §Installer trust model."
+    echo ""
 fi
 
 TMP=$(mktemp)

@@ -637,20 +637,30 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     #expect(Set(snapshot.toolNames) == expected)
 }
 
-@Test func testE2EServerCatalogHas6Resources() async {
+@Test func testE2EServerCatalogAdvertisesAllResources() async {
     let snapshot = await LogicProServer().compositionSnapshot()
-    #expect(snapshot.resourceURIs.count == 6)
-    #expect(snapshot.resourceURIs.contains("logic://transport/state"))
-    #expect(snapshot.resourceURIs.contains("logic://tracks"))
-    #expect(snapshot.resourceURIs.contains("logic://mixer"))
-    #expect(snapshot.resourceURIs.contains("logic://project/info"))
-    #expect(snapshot.resourceURIs.contains("logic://midi/ports"))
-    #expect(snapshot.resourceURIs.contains("logic://system/health"))
+    #expect(snapshot.resourceURIs.count == 9)
+    let uris = Set(snapshot.resourceURIs)
+    #expect(uris == [
+        "logic://system/health",
+        "logic://transport/state",
+        "logic://tracks",
+        "logic://mixer",
+        "logic://markers",
+        "logic://project/info",
+        "logic://midi/ports",
+        "logic://mcu/state",
+        "logic://library/inventory",
+    ])
 }
 
-@Test func testE2EServerCatalogHas1Template() async {
+@Test func testE2EServerCatalogAdvertisesAllTemplates() async {
     let snapshot = await LogicProServer().compositionSnapshot()
-    #expect(snapshot.templateURIs == ["logic://tracks/{index}"])
+    #expect(Set(snapshot.templateURIs) == [
+        "logic://tracks/{index}",
+        "logic://tracks/{index}/regions",
+        "logic://mixer/{strip}",
+    ])
 }
 
 @Test func testE2EServerCatalogHas7Channels() async {

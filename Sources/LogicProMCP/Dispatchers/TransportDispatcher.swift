@@ -4,7 +4,7 @@ import MCP
 struct TransportDispatcher {
     static let tool = Tool(
         name: "logic_transport",
-        description: "Control Logic Pro transport. Commands: play, stop, record, pause, rewind, fast_forward, toggle_cycle, toggle_metronome, set_tempo, goto_position, set_cycle_range, toggle_count_in. Params: set_tempo -> { tempo: Float } (20.0-999.0); goto_position -> { bar: Int } or { time: \"HH:MM:SS:FF\" }; set_cycle_range -> { start: Int, end: Int }; others -> {}.",
+        description: "Control Logic Pro transport. Commands: play, stop, record, pause, rewind, fast_forward, toggle_cycle, toggle_metronome, set_tempo, goto_position, set_cycle_range, toggle_count_in. Params: set_tempo -> { tempo: Float } (5.0-999.0); goto_position -> { bar: Int (1..9999) } or { position: String } where String is bar.beat.sub.tick (e.g. \"9.1.1.1\") or HH:MM:SS:FF SMPTE (e.g. \"00:00:08:12\"); set_cycle_range -> { start: Int, end: Int }; others -> {}.",
         inputSchema: commandParamsToolSchema(commandDescription: "Transport command to execute")
     )
 
@@ -69,6 +69,19 @@ struct TransportDispatcher {
             return toolTextResult(result)
 
         case "goto_position":
+            // Reject unknown keys before falling back to defaults. Prior to
+            // v3.0.0 a legacy `time` alias was silently accepted; callers that
+            // never updated their schema would silently seek to bar 1. Now the
+            // tool fails closed and surfaces exactly which key was wrong.
+            let allowedKeys: Set<String> = ["bar", "position"]
+            let unknownKeys = params.keys.filter { !allowedKeys.contains($0) }
+            if !unknownKeys.isEmpty {
+                let sorted = unknownKeys.sorted().joined(separator: ", ")
+                return toolTextResult(
+                    "goto_position got unknown param(s): \(sorted). Allowed: bar, position. The legacy 'time' alias was removed in v3.0.0.",
+                    isError: true
+                )
+            }
             // intParam coerces int/double/string so `{"bar":"5"}` works too.
             if params["bar"] != nil {
                 let bar = intParam(params, "bar", default: 1)
@@ -84,7 +97,7 @@ struct TransportDispatcher {
                 )
                 return toolTextResult(result)
             }
-            let time = stringParam(params, "time", "position", default: "1.1.1.1")
+            let time = stringParam(params, "position", default: "1.1.1.1")
             // Validate position format before routing. Accept:
             //   Bar/beat: "N.N.N.N" with bar 1..9999, beat 1..16, sub 1..16, tick 1..999
             //   SMPTE:    "HH:MM:SS:FF" with HH 0..23, MM/SS 0..59, FF 0..99

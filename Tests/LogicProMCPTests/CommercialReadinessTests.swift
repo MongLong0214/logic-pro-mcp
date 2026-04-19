@@ -290,7 +290,15 @@ private let toolText = sharedToolText
 }
 
 @Test func testStatePollerStartStopLifecycle() async {
-    let poller = StatePoller(axChannel: AccessibilityChannel(), cache: StateCache())
+    // Use the fast-test runtime so the polling loop doesn't wait 3s per cycle.
+    // With `.fastTest`, the sleep is 1µs and hasVisibleWindow always returns
+    // true — the test exercises the start/stop state machine without dragging
+    // in live AX queries or the production interval.
+    let poller = StatePoller(
+        axChannel: AccessibilityChannel(),
+        cache: StateCache(),
+        runtime: .fastTest
+    )
     await poller.start()
     #expect(await poller.isRunning == true)
     await poller.stop()

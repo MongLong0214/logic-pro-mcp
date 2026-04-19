@@ -9,9 +9,39 @@ import Foundation
 actor StatePoller {
     struct Runtime: Sendable {
         let hasVisibleWindow: @Sendable () -> Bool
+        /// Inter-poll sleep. Injectable so tests can drive the loop at
+        /// microsecond cadence instead of waiting out the production 3s
+        /// interval — the original reason both lifecycle tests took
+        /// ~2000 seconds to run.
+        let sleep: @Sendable (UInt64) async throws -> Void
+
+        /// Source-compatible init: if `sleep` isn't supplied, use
+        /// `Task.sleep(nanoseconds:)` so existing callers (mostly tests that
+        /// only override `hasVisibleWindow`) keep compiling without change.
+        init(
+            hasVisibleWindow: @Sendable @escaping () -> Bool,
+            sleep: @Sendable @escaping (UInt64) async throws -> Void = { ns in
+                try await Task.sleep(nanoseconds: ns)
+            }
+        ) {
+            self.hasVisibleWindow = hasVisibleWindow
+            self.sleep = sleep
+        }
 
         static let production = Runtime(
             hasVisibleWindow: { ProcessUtils.hasVisibleWindow() }
+        )
+
+        /// Test-friendly runtime for lifecycle-only coverage. Short-circuits
+        /// the poll cycle by reporting no visible window — the real
+        /// `AccessibilityChannel.execute(...)` calls hang in a CLI test
+        /// without a running NSRunLoop, so tests that only verify start/stop
+        /// state-machine behavior use this runtime to skip AX entirely.
+        /// Combined with a 1 µs `sleep`, the loop cycles at microsecond
+        /// cadence while touching no AX surface.
+        static let fastTest = Runtime(
+            hasVisibleWindow: { false },
+            sleep: { _ in try await Task.sleep(nanoseconds: 1_000) }  // 1 µs
         )
     }
 
@@ -67,7 +97,10 @@ actor StatePoller {
             await pollOnce(axChannel: axChannel, cache: cache)
 
             do {
-                try await Task.sleep(nanoseconds: intervalNs)
+                // Route through runtime.sleep so tests can drive this loop at
+                // sub-millisecond cadence. CancellationError breaks the loop
+                // identically to the direct Task.sleep path.
+                try await runtime.sleep(intervalNs)
             } catch {
                 break
             }

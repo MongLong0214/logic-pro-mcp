@@ -2,7 +2,15 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    # GitHub Actions tag filters are GLOB, not regex — `+` is matched literally
+    # rather than as a repetition operator. Use `[0-9]*` (digit followed by any
+    # chars) instead of `[0-9]+`. The step-level regex guard below is the
+    # authoritative semver enforcement; the glob here just keeps obviously
+    # non-release tags (e.g. `vdraft`, `milestone-3`) from reaching the
+    # secrets-using steps.
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+      - 'v[0-9]*.[0-9]*.[0-9]*-*'
 
 permissions:
   contents: write
@@ -12,6 +20,18 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Enforce strict SemVer tag
+        # Belt-and-suspenders check: the `on.push.tags` glob above keeps the
+        # worst-case tags out, but glob can't encode "digits-only before the
+        # dots". This regex is the authoritative guard and fails the workflow
+        # before any secret-using step runs.
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::tag '$tag' is not strict SemVer (vMAJOR.MINOR.PATCH[-prerelease])"
+            exit 1
+          fi
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app
@@ -135,6 +155,21 @@ jobs:
           LOGIC_PRO_MCP_KEYCMD_AUTO_RESTORE: "1"
         run: |
           mkdir -p "$LOGIC_PRO_MCP_INSTALL_DIR"
+
+          # Resolve provenance pins from the just-published release so we're
+          # exercising the fail-closed hardened path, not the opt-in
+          # same-origin fallback. This simulates what a downstream consumer
+          # following README.md §Quick Start Option B would do.
+          VERSION="${{ github.ref_name }}"
+          BASE="https://github.com/${{ github.repository }}/releases/download/$VERSION"
+          LOGIC_PRO_MCP_SHA256=$(curl -fsSL "$BASE/SHA256SUMS.txt" \
+              | awk '$2 == "LogicProMCP" {print $1}')
+          LOGIC_PRO_MCP_TEAM_ID=$(curl -fsSL "$BASE/RELEASE-METADATA.json" \
+              | awk -F'"' '/"team_id"[[:space:]]*:/ {print $4; exit}')
+          export LOGIC_PRO_MCP_SHA256 LOGIC_PRO_MCP_TEAM_ID
+          echo "Using LOGIC_PRO_MCP_SHA256=$LOGIC_PRO_MCP_SHA256"
+          echo "Using LOGIC_PRO_MCP_TEAM_ID=$LOGIC_PRO_MCP_TEAM_ID"
+
           bash Scripts/install.sh | tee install.log
           test -x "$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP"
           bash Scripts/uninstall.sh | tee uninstall.log

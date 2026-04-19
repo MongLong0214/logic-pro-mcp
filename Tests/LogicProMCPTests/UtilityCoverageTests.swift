@@ -1,3 +1,4 @@
+import Foundation
 import MCP
 import Testing
 @testable import LogicProMCP
@@ -8,7 +9,12 @@ private struct FailingJSONValue: Encodable {
 
 @Test func testEncodeJSONReturnsFallbackWhenEncodingFails() {
     let json = encodeJSON(FailingJSONValue())
-    #expect(json == "{\"error\": \"Failed to encode response\"}")
+    // Fallback payload is now self-describing: names the failing type and
+    // preserves the underlying error message for debugging.
+    #expect(json.contains("\"error\""))
+    #expect(json.contains("FailingJSONValue"))
+    // Still valid JSON so MCP clients can parse it as a structured error.
+    #expect((try? JSONSerialization.jsonObject(with: Data(json.utf8))) != nil)
 }
 
 @Test func testDispatcherSupportHelpersUseFallbackValues() {

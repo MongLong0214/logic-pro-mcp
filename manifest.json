@@ -1,8 +1,8 @@
 {
   "name": "logic-pro-mcp",
   "display_name": "Logic Pro MCP Server",
-  "description": "Bidirectional, stateful control of Logic Pro from AI assistants. 8 tools + 6 resources + 1 template across 7 native macOS channels (MCU, MIDI Key Commands, CoreMIDI, Scripter, Accessibility, CGEvent, AppleScript). v2.4: strict explicit-index semantics, fail-closed error contracts, and SMF-based record_sequence with zero timing drift.",
-  "version": "2.4.0",
+  "description": "Bidirectional, stateful control of Logic Pro from AI assistants. 8 tools + 9 resources + 3 templates across 7 native macOS channels (MCU, MIDI Key Commands, CoreMIDI, Scripter, Accessibility, CGEvent, AppleScript). v3.0.0: strict explicit-index semantics, fail-closed error contracts, and SMF-based record_sequence with zero timing drift.",
+  "version": "3.0.0",
   "author": "Isaac (MongLong0214)",
   "license": "MIT",
   "homepage": "https://github.com/MongLong0214/logic-pro-mcp",
@@ -15,7 +15,7 @@
     "macos": {
       "command": "LogicProMCP",
       "args": [],
-      "download_url": "https://github.com/MongLong0214/logic-pro-mcp/releases/download/v2.4.0/LogicProMCP",
+      "download_url": "https://github.com/MongLong0214/logic-pro-mcp/releases/download/v3.0.0/LogicProMCP",
       "install_path": "/usr/local/bin/LogicProMCP"
     }
   },
@@ -34,14 +34,19 @@
     "logic_system"
   ],
   "resources": [
+    "logic://system/health",
     "logic://transport/state",
     "logic://tracks",
     "logic://mixer",
+    "logic://markers",
     "logic://project/info",
     "logic://midi/ports",
-    "logic://system/health"
+    "logic://mcu/state",
+    "logic://library/inventory"
   ],
   "resource_templates": [
-    "logic://tracks/{index}"
+    "logic://tracks/{index}",
+    "logic://tracks/{index}/regions",
+    "logic://mixer/{strip}"
   ]
 }
