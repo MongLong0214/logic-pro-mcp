@@ -763,6 +763,15 @@ private actor FailingExecuteChannel: Channel {
     let importOps = ops.filter { $0.0 == "midi.import_file" }
     #expect(importOps.count == 1, "expected 1 midi.import_file call, got \(importOps.count)")
     #expect(importOps[0].1["path"]?.contains("/tmp/LogicProMCP") == true)
+
+    // Verify playhead is forced to bar 1 before import (otherwise Logic places
+    // the region at whatever bar the playhead was at, defeating bar positioning).
+    let gotoOps = ops.filter { $0.0 == "transport.goto_position" && $0.1["bar"] == "1" }
+    #expect(gotoOps.count == 1, "expected transport.goto_position with bar=1 before import")
+    let gotoIndex = ops.firstIndex { $0.0 == "transport.goto_position" } ?? -1
+    let importIndex = ops.firstIndex { $0.0 == "midi.import_file" } ?? -1
+    #expect(gotoIndex >= 0 && importIndex >= 0 && gotoIndex < importIndex,
+            "goto_position must be routed BEFORE midi.import_file")
 }
 
 @Test func testRecordSequenceCleansUpTempFileOnError() async {

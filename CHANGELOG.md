@@ -8,6 +8,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [2.3.1] — 2026-04-19
+
+### Fixed
+
+- **`record_sequence` now places regions at the requested bar reliably.** Live verification revealed that Logic Pro's MIDI File Import anchors the imported region to the current playhead position — a bar=1 request on a session whose playhead had drifted to bar 129 produced a region at bar 129. The fix forces the playhead to bar 1 before every import via the `탐색 → 이동 → 위치…` dialog (auto-extends project length; slider path was silently clamping). Strategy D padding CC continues to position notes within the region at the requested bar.
+- **`transport.goto_position` no longer silently clamps to project length.** Previous implementation used the 마디 slider whose value is clipped to the active project's end bar. A `goto_position bar=50` on an 8-bar project stopped at bar 8 with a success response. The new implementation uses the dialog (which auto-extends the project) as the primary path and falls back to slider only when the dialog is disabled (empty project).
+- **Dialog-keystroke race eliminated.** The previous `delay 0.5` assumed the Go-to-Position dialog would render within 500 ms. On slow machines the Cmd+A keystroke reached the arrange area instead, silently triggering "Select All Regions." The dialog-ready state is now polled with a 3-second timeout.
+
+### Security
+
+- `midi.import_file` now restricts its `path` parameter to `/tmp/LogicProMCP/*.mid`. The only legitimate producer is `TrackDispatcher.record_sequence` (UUID-generated temp paths); external MCP callers cannot point the AX file dialog at arbitrary filesystem locations.
+
+### Testing
+
+- `testRecordSequenceSMFImportHappyPath` now asserts that `transport.goto_position` with `bar=1` is routed BEFORE `midi.import_file`. Catches silent regression of the v2.3.1 bar-positioning invariant.
+
+### Documentation
+
+- `docs/API.md`: documented the dialog-path latency for `transport.goto_position` (~800 ms), and marked `recorded_to_track` as a legacy alias for `created_track`.
+- `ChannelRouter.swift`: inline comment on `region.select_last` / `region.move_to_playhead` clarifying they are reserved for a future region-editor tool (record_sequence does not use them).
+
 ## [2.3.0] — 2026-04-18
 
 ### Added

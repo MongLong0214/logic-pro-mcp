@@ -320,6 +320,15 @@ actor AccessibilityChannel: Channel {
             guard let path = params["path"] else {
                 return .error("midi.import_file requires 'path'")
             }
+            // Restrict to the SMFWriter-managed temp dir. Raw MCP callers
+            // cannot point the AX open-panel keystroke at arbitrary files
+            // on the user's filesystem — the only legitimate producer of
+            // this operation is TrackDispatcher.record_sequence.
+            guard path.hasPrefix("/tmp/LogicProMCP/"),
+                  path.hasSuffix(".mid"),
+                  !path.contains("..") else {
+                return .error("midi.import_file path must be /tmp/LogicProMCP/*.mid")
+            }
             return await runtime.importMIDIFile(path)
 
         // MARK: - Navigation
@@ -1618,6 +1627,9 @@ actor AccessibilityChannel: Channel {
     /// regions exist yet, in which case this returns an error and callers
     /// should try the slider fallback.
     private static func gotoPositionViaDialog(bar: Int) async -> ChannelResult {
+        // Poll for the dialog's presence instead of relying on a fixed delay.
+        // Without this guard, a slow machine (>500ms to render the dialog) would
+        // send Cmd+A to the arrange area, selecting all regions unexpectedly.
         let script = """
         tell application "Logic Pro" to activate
         delay 0.2
@@ -1636,8 +1648,28 @@ actor AccessibilityChannel: Channel {
                     return "MENU_DISABLED"
                 end if
                 click mi
+                -- Wait up to 3s for the dialog window to appear before typing,
+                -- otherwise keystrokes would go to the arrange area and click
+                -- Cmd+A there — silently "Select All Regions".
+                set dialogReady to false
+                repeat 30 times
+                    delay 0.1
+                    try
+                        set _ to first window whose name is "위치로 이동"
+                        set dialogReady to true
+                        exit repeat
+                    end try
+                    try
+                        set _ to first window whose name is "Go to Position"
+                        set dialogReady to true
+                        exit repeat
+                    end try
+                end repeat
+                if not dialogReady then
+                    return "DIALOG_NOT_READY"
+                end if
             end tell
-            delay 0.5
+            delay 0.1
             keystroke "a" using command down
             delay 0.1
             keystroke "\(bar)"
@@ -1655,6 +1687,9 @@ actor AccessibilityChannel: Channel {
             }
             if output.hasPrefix("MENU_NOT_FOUND") {
                 return .error("goto-position menu not found: \(output)")
+            }
+            if output.contains("DIALOG_NOT_READY") {
+                return .error("goto-position dialog did not appear within timeout")
             }
             return .success("{\"position\":\"\(bar).1.1.1\",\"method\":\"dialog\"}")
         case .error(let msg):

@@ -3,7 +3,7 @@ class LogicProMcp < Formula
   homepage "https://github.com/MongLong0214/logic-pro-mcp"
   # Single source of truth is Sources/LogicProMCP/Server/ServerConfig.swift
   # (ServerConfig.serverVersion). Bump both together.
-  version "2.3.0"
+  version "2.3.1"
   license "MIT"
 
   # Apple Silicon + Intel unified binary via swift build -c release (macOS universal)

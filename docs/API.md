@@ -62,7 +62,7 @@ Prefer resources over repeated tool calls — they are cheap and safe to poll at
 | `toggle_metronome` | — | text | Accessibility → MIDIKeyCommands → CGEvent |
 | `toggle_count_in` | — | text | Accessibility → MIDIKeyCommands → CGEvent |
 | `set_tempo` | `{ tempo: number }` (20–300) | text | Accessibility → MIDIKeyCommands |
-| `goto_position` | `{ bar: int }` or `{ position: "B.B.S.S" }` | text | Accessibility → MCU → CoreMIDI → CGEvent |
+| `goto_position` | `{ bar: int }` or `{ position: "B.B.S.S" }` | text | Accessibility (dialog, auto-extends project, ~800ms) → MCU → CoreMIDI → CGEvent |
 | `set_cycle_range` | `{ start: int, end: int }` | text | Accessibility |
 | `capture_recording` | — | text | MIDIKeyCommands → CGEvent |
 
@@ -176,7 +176,7 @@ The old real-time `goto → record → sleep → play_sequence → stop` pipelin
 2. Generates a Type 0 Standard MIDI File with `SMFWriter` — tempo and time-signature meta events + byte-exact note positions computed from `ms` offsets via round-half-up tick conversion.
 3. Writes to `/tmp/LogicProMCP/{uuid}.mid` (cleaned up via `defer` on return and via server-startup sweep for crash recovery).
 4. Routes `midi.import_file` → `AccessibilityChannel` which drives `파일 → 가져오기 → MIDI 파일…` via AppleScript, dismissing the "템포 가져오기" sub-dialog with "아니요" so the project's tempo is authoritative.
-5. Returns `{ recorded_to_track, created_track, track_index_confirmed, bar, note_count, method: "smf_import" }`.
+5. Returns `{ recorded_to_track, created_track, track_index_confirmed, bar, note_count, method: "smf_import" }`. `recorded_to_track` is a legacy alias for `created_track`; new clients should prefer `created_track`.
 
 **Strategy D — tick-0 padding CC**: Logic Pro's MIDI File import strips leading empty delta before the first MIDI channel event, which would silently place every imported region at bar 1 regardless of the caller's `bar` parameter. SMFWriter counters this by emitting `CC#110 value 0` on channel 0 at tick 0 whenever `bar > 1`. Logic preserves the full tick timeline because a MIDI channel event now exists at tick 0. The resulting region spans bar 1 through the target bar; the caller's notes land at exactly the encoded positions inside the region. Verified on Logic Pro 12 — `bar=50` request produces a region described by Logic as "1 마디에서 시작하여 51 마디에서 끝납니다" with the note at the trailing edge.
 

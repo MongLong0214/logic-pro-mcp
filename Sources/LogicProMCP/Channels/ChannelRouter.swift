@@ -171,6 +171,10 @@ actor ChannelRouter {
         // Regions
         "region.get_regions":         [.accessibility],
         "region.select":              [.accessibility],
+        // Reserved for a future region-editor tool that picks up the freshly
+        // imported region and aligns it to the playhead. Currently unused by
+        // any dispatcher (record_sequence handles positioning via SMFWriter
+        // + transport.goto_position bar=1 before import).
         "region.select_last":         [.accessibility],
         "region.move_to_playhead":    [.accessibility],
         "region.loop":                [.accessibility, .cgEvent],
