@@ -170,7 +170,7 @@ actor AccessibilityChannel: Channel {
             return runtime.setCycleRange(params)
 
         case "transport.goto_position":
-            return AccessibilityChannel.gotoPositionViaBarSlider(
+            return await AccessibilityChannel.gotoPositionViaBarSlider(
                 params: params, runtime: runtime.logicRuntime
             )
 
@@ -1563,22 +1563,22 @@ actor AccessibilityChannel: Channel {
 
     // MARK: - Control-bar playhead position helper
 
-    /// Set the playhead to a specific bar using Logic Pro 12's 마디 slider in
-    /// the control bar. Accepts `{"bar": Int}` or `{"position": "B.B.S.S"}`.
-    /// Note: slider clamps to project length; bars beyond the current project
-    /// length silently stop at the end. For record_sequence's bar placement,
-    /// SMFWriter embeds the bar offset in the MIDI file instead of relying
-    /// on playhead positioning.
+    /// Set the playhead to a specific bar. Two paths:
+    /// 1) `탐색 → 이동 → 위치…` dialog (precise, auto-extends project, requires
+    ///    at least one region in arrange — menu item is disabled on empty project)
+    /// 2) Control-bar 마디 slider (clamps to project length; silently stops at
+    ///    end when requested bar exceeds length)
+    /// Accepts `{"bar": Int}` or `{"position": "B.B.S.S"}`.
     private static func gotoPositionViaBarSlider(
         params: [String: String],
         runtime: AXLogicProElements.Runtime = .production
-    ) -> ChannelResult {
+    ) async -> ChannelResult {
         var targetBar: Int? = nil
         if let barStr = params["bar"], let b = Int(barStr) {
             targetBar = b
         } else if let pos = params["position"] {
             if pos.contains(":") {
-                return .error("AX gotoPositionViaBarSlider cannot handle timecode (use MCU mmc_locate)")
+                return .error("AX gotoPosition cannot handle timecode (use MCU mmc_locate)")
             }
             let parts = pos.split(separator: ".")
             if let first = parts.first, let b = Int(first) {
@@ -1589,8 +1589,13 @@ actor AccessibilityChannel: Channel {
             return .error("goto_position requires 'bar' (Int 1..9999) or 'position' (B.B.S.S)")
         }
 
+        // Try dialog first — the only way to reach bars beyond project length.
+        let dialogResult = await gotoPositionViaDialog(bar: bar)
+        if case .success = dialogResult { return dialogResult }
+
+        // Fallback to slider (works when dialog is disabled — e.g., empty project).
         guard let slider = AXLogicProElements.findControlBarBarSlider(runtime: runtime) else {
-            return .error("마디 slider not found in control bar")
+            return .error("Neither goto-position dialog nor 마디 slider available")
         }
         let setOK = AXHelpers.setAttribute(
             slider, kAXValueAttribute, NSNumber(value: bar), runtime: runtime.ax
@@ -1604,7 +1609,57 @@ actor AccessibilityChannel: Channel {
             )
         }
         _ = AXHelpers.performAction(slider, kAXConfirmAction, runtime: runtime.ax)
-        return .success("{\"position\":\"\(bar).1.1.1\"}")
+        return .success("{\"position\":\"\(bar).1.1.1\",\"method\":\"slider\"}")
+    }
+
+    /// Move the playhead to `bar` via Logic Pro 12's `탐색 → 이동 → 위치…`
+    /// (Navigate → Go To → Position) dialog. Reliable because the dialog auto-
+    /// extends project length; however the menu item is disabled when no
+    /// regions exist yet, in which case this returns an error and callers
+    /// should try the slider fallback.
+    private static func gotoPositionViaDialog(bar: Int) async -> ChannelResult {
+        let script = """
+        tell application "Logic Pro" to activate
+        delay 0.2
+        tell application "System Events"
+            tell process "Logic Pro"
+                try
+                    set mi to menu item "위치…" of menu 1 of menu item "이동" of menu 1 of menu bar item "탐색" of menu bar 1
+                on error errMsg
+                    try
+                        set mi to menu item "Position…" of menu 1 of menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1
+                    on error errMsg2
+                        return "MENU_NOT_FOUND: " & errMsg2
+                    end try
+                end try
+                if not (enabled of mi) then
+                    return "MENU_DISABLED"
+                end if
+                click mi
+            end tell
+            delay 0.5
+            keystroke "a" using command down
+            delay 0.1
+            keystroke "\(bar)"
+            delay 0.1
+            keystroke return
+            delay 0.2
+        end tell
+        return "OK"
+        """
+        let result = await AppleScriptChannel.executeAppleScript(script)
+        switch result {
+        case .success(let output):
+            if output.contains("MENU_DISABLED") {
+                return .error("goto-position dialog disabled (project has no regions yet)")
+            }
+            if output.hasPrefix("MENU_NOT_FOUND") {
+                return .error("goto-position menu not found: \(output)")
+            }
+            return .success("{\"position\":\"\(bar).1.1.1\",\"method\":\"dialog\"}")
+        case .error(let msg):
+            return .error("goto-position dialog failed: \(msg)")
+        }
     }
 
     // MARK: - Control-bar checkbox helpers (Logic Pro 12 transport)

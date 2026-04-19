@@ -280,6 +280,20 @@ struct TrackDispatcher {
             return toolTextResult("record_sequence: SMF generation failed: \(error)", isError: true)
         }
 
+        // Logic Pro's MIDI File Import anchors the imported region to the
+        // CURRENT playhead position. Strategy D's padding CC encodes the
+        // bar offset inside the SMF (relative to tick 0), so we must put
+        // the playhead at bar 1 before import — then the caller's notes
+        // land at exactly the requested bar inside the region.
+        // The dialog-based goto ignores project-length clamping and extends
+        // the project as needed. Best-effort: if it fails (empty project,
+        // dialog disabled), the playhead is already at bar 1 by default so
+        // the fresh-project case still works.
+        _ = await router.route(
+            operation: "transport.goto_position",
+            params: ["bar": "1"]
+        )
+
         let tracksBefore = await cache.getTracks().count
         let importResult = await router.route(
             operation: "midi.import_file",
