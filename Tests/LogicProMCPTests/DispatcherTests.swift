@@ -709,6 +709,129 @@ private actor FailingExecuteChannel: Channel {
     #expect(await keyCmd.executedOps.isEmpty)
 }
 
+// MARK: - Explicit-index hardening (v2.4.0+)
+// Every mutating track command must reject requests missing `index` — the
+// old behavior silently defaulted to track 0, corrupting the wrong track on
+// malformed calls.
+
+@Test func testTrackDispatcherDeleteRequiresExplicitIndex() async {
+    let router = ChannelRouter()
+    let keyCmd = MockChannel(id: .midiKeyCommands)
+    await router.register(keyCmd)
+
+    let result = await TrackDispatcher.handle(
+        command: "delete",
+        params: [:],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("explicit 'index'"))
+    #expect(await keyCmd.executedOps.isEmpty)
+}
+
+@Test func testTrackDispatcherDuplicateRequiresExplicitIndex() async {
+    let router = ChannelRouter()
+    let keyCmd = MockChannel(id: .midiKeyCommands)
+    await router.register(keyCmd)
+
+    let result = await TrackDispatcher.handle(
+        command: "duplicate",
+        params: [:],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("explicit 'index'"))
+    #expect(await keyCmd.executedOps.isEmpty)
+}
+
+@Test func testTrackDispatcherMuteRequiresExplicitIndex() async {
+    let router = ChannelRouter()
+    let mcu = MockChannel(id: .mcu)
+    await router.register(mcu)
+
+    let result = await TrackDispatcher.handle(
+        command: "mute",
+        params: ["enabled": .bool(true)],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("explicit 'index'"))
+    #expect(await mcu.executedOps.isEmpty)
+}
+
+@Test func testTrackDispatcherRenameRequiresExplicitIndex() async {
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility)
+    await router.register(ax)
+
+    let result = await TrackDispatcher.handle(
+        command: "rename",
+        params: ["name": .string("New Name")],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("explicit 'index'"))
+    #expect(await ax.executedOps.isEmpty)
+}
+
+@Test func testTrackDispatcherSetAutomationRequiresExplicitIndex() async {
+    let router = ChannelRouter()
+    let mcu = MockChannel(id: .mcu)
+    await router.register(mcu)
+
+    let result = await TrackDispatcher.handle(
+        command: "set_automation",
+        params: ["mode": .string("touch")],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("explicit 'index'"))
+    #expect(await mcu.executedOps.isEmpty)
+}
+
+@Test func testTrackDispatcherSetInstrumentRequiresExplicitIndex() async {
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility)
+    await router.register(ax)
+
+    let result = await TrackDispatcher.handle(
+        command: "set_instrument",
+        params: ["path": .string("Bass/Retro Crunch")],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("explicit 'index'"))
+    #expect(await ax.executedOps.isEmpty)
+}
+
+@Test func testTrackDispatcherSetInstrumentRequiresPathOrCategoryAndPreset() async {
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility)
+    await router.register(ax)
+
+    let result = await TrackDispatcher.handle(
+        command: "set_instrument",
+        params: ["index": .int(0)],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("path") || dispatcherText(result).contains("preset"))
+}
+
 @Test func testTrackDispatcherUnknownFails() async {
     let result = await TrackDispatcher.handle(
         command: "explode_stack",
@@ -738,16 +861,48 @@ private actor FailingExecuteChannel: Channel {
     #expect(dispatcherText(result).contains("No project open"))
 }
 
+/// Mock channel that simulates Logic creating a new MIDI track on import —
+/// appends a TrackState to the cache when midi.import_file is routed, so
+/// record_sequence's track-confirmation polling returns success.
+private actor TrackInsertingMockChannel: Channel {
+    nonisolated let id: ChannelID
+    let cache: StateCache
+    var executedOps: [(String, [String: String])] = []
+
+    init(id: ChannelID, cache: StateCache) {
+        self.id = id
+        self.cache = cache
+    }
+
+    func start() async throws {}
+    func stop() async {}
+    func healthCheck() async -> ChannelHealth { .healthy(detail: "insert mock") }
+
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        executedOps.append((operation, params))
+        if operation == "midi.import_file" {
+            let tracks = await cache.getTracks()
+            let newTrack = TrackState(
+                id: tracks.count,
+                name: "MIDI Region",
+                type: .softwareInstrument
+            )
+            await cache.updateTracks(tracks + [newTrack])
+        }
+        return .success("Mock: \(operation)")
+    }
+}
+
 @Test func testRecordSequenceSMFImportHappyPath() async {
     let router = ChannelRouter()
-    let ax = MockChannel(id: .accessibility)
-    await router.register(ax)
     let cache = StateCache()
     await cache.updateDocumentState(true)
+    let ax = TrackInsertingMockChannel(id: .accessibility, cache: cache)
+    await router.register(ax)
 
     let result = await TrackDispatcher.handle(
         command: "record_sequence",
-        params: ["index": .int(0), "bar": .int(5), "notes": .string("60,0,480;64,500,480;67,1000,480"), "tempo": .double(120)],
+        params: ["bar": .int(5), "notes": .string("60,0,480;64,500,480;67,1000,480"), "tempo": .double(120)],
         router: router,
         cache: cache
     )
@@ -757,21 +912,63 @@ private actor FailingExecuteChannel: Channel {
     #expect(text.contains("\"method\":\"smf_import\""))
     #expect(text.contains("\"note_count\":3"))
     #expect(text.contains("\"bar\":5"))
+    #expect(text.contains("\"created_track\":0"))
 
-    // Verify midi.import_file was called via the router
+    // Verify routing sequence.
     let ops = await ax.executedOps
     let importOps = ops.filter { $0.0 == "midi.import_file" }
     #expect(importOps.count == 1, "expected 1 midi.import_file call, got \(importOps.count)")
     #expect(importOps[0].1["path"]?.contains("/tmp/LogicProMCP") == true)
 
-    // Verify playhead is forced to bar 1 before import (otherwise Logic places
-    // the region at whatever bar the playhead was at, defeating bar positioning).
+    // Playhead must be reset to bar 1 BEFORE import (otherwise Logic anchors
+    // the region at the current playhead, defeating bar positioning).
     let gotoOps = ops.filter { $0.0 == "transport.goto_position" && $0.1["bar"] == "1" }
     #expect(gotoOps.count == 1, "expected transport.goto_position with bar=1 before import")
     let gotoIndex = ops.firstIndex { $0.0 == "transport.goto_position" } ?? -1
     let importIndex = ops.firstIndex { $0.0 == "midi.import_file" } ?? -1
     #expect(gotoIndex >= 0 && importIndex >= 0 && gotoIndex < importIndex,
             "goto_position must be routed BEFORE midi.import_file")
+}
+
+@Test func testRecordSequenceFailsOnGotoPositionError() async {
+    // If pre-import playhead reset fails, the import would land at the wrong
+    // bar. Treat goto failure as a hard stop.
+    let router = ChannelRouter()
+    let ax = FailingExecuteChannel(id: .accessibility, message: "goto clamped")
+    await router.register(ax)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+
+    let result = await TrackDispatcher.handle(
+        command: "record_sequence",
+        params: ["bar": .int(5), "notes": .string("60,0,480"), "tempo": .double(120)],
+        router: router,
+        cache: cache
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("playhead"))
+}
+
+@Test func testRecordSequenceFailsWhenTrackDoesNotAppear() async {
+    // If the AX cache never sees the new track within the polling window,
+    // the import may have silently misbehaved — returning a fabricated
+    // created_track index would lie to the caller.
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility)  // returns success without touching cache
+    await router.register(ax)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+
+    let result = await TrackDispatcher.handle(
+        command: "record_sequence",
+        params: ["bar": .int(1), "notes": .string("60,0,480"), "tempo": .double(120)],
+        router: router,
+        cache: cache
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("never appeared"))
 }
 
 @Test func testRecordSequenceCleansUpTempFileOnError() async {
@@ -863,9 +1060,11 @@ private actor SelectiveFailChannel: Channel {
     }
 }
 
-@Test func testArmOnlyReportsPartialDisarmFailure() async {
+@Test func testArmOnlyReportsPartialDisarmFailureAsError() async {
+    // All channels fail for track.set_arm → both disarm of track 0 AND arm of
+    // track 1 fail. The dispatcher must surface this as an error, not a
+    // structured success payload that buries the failure in `failedDisarm`.
     let router = ChannelRouter()
-    // All channels fail for track.set_arm → disarm should report failures
     let ax = FailingExecuteChannel(id: .accessibility, message: "AX fail")
     let mcu = FailingExecuteChannel(id: .mcu, message: "MCU fail")
     let cg = FailingExecuteChannel(id: .cgEvent, message: "CG fail")
@@ -885,9 +1084,25 @@ private actor SelectiveFailChannel: Channel {
         cache: cache
     )
 
-    let text = dispatcherText(result)
-    #expect(text.contains("failedDisarm"))
-    #expect(text.contains("armedSuccess"))
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("arm_only failed"))
+}
+
+@Test func testArmOnlyRequiresExplicitIndex() async {
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility)
+    await router.register(ax)
+    let cache = StateCache()
+
+    let result = await TrackDispatcher.handle(
+        command: "arm_only",
+        params: [:],
+        router: router,
+        cache: cache
+    )
+
+    #expect(result.isError!)
+    #expect(dispatcherText(result).contains("explicit 'index'"))
 }
 
 @Test func testArmOnlySuccessPathReportsArmedSuccess() async {

@@ -396,11 +396,31 @@ def main():
     r = call_tool(client, "logic_tracks", "select")
     T("track.select without index returns error", r, lambda _: is_error(r))
 
+    # v2.4.0+: all mutating commands reject missing/non-numeric index — old
+    # silent default-to-zero was dropped as a correctness hazard.
     r = call_tool(client, "logic_tracks", "mute")
-    T("track.mute without index responds (default 0)", r, lambda _: len(tool_text(r)) > 0)
+    T(
+        "track.mute without index rejects with explicit error (v2.4)",
+        r,
+        lambda _: is_error(r) and "explicit 'index'" in tool_text(r),
+    )
+
+    r = call_tool(client, "logic_tracks", "rename", {"name": "No Index"})
+    T(
+        "track.rename without index rejects with explicit error (v2.4)",
+        r,
+        lambda _: is_error(r) and "explicit 'index'" in tool_text(r),
+    )
+
+    r = call_tool(client, "logic_tracks", "select", {"index": "abc"})
+    T(
+        "track.select with non-numeric index rejects (v2.4)",
+        r,
+        lambda _: is_error(r) and "non-negative integer" in tool_text(r),
+    )
 
     r = call_tool(client, "logic_tracks", "rename", {"index": 0, "name": ""})
-    T("track.rename with empty name dispatches", r, lambda _: len(tool_text(r)) > 0)
+    T("track.rename with empty name rejects", r, lambda _: is_error(r))
 
     r = call_tool(client, "logic_tracks", "list_library")
     list_library_text = tool_text(r)
@@ -442,10 +462,11 @@ def main():
 
     r = call_tool(client, "logic_tracks", "set_instrument", {"index": 0})
     T(
-        "track.set_instrument without selector returns explicit error",
+        "track.set_instrument without selector returns explicit error (v2.4)",
         r,
         lambda _: is_error(r) and (
-            "Missing path or (category+preset)" in tool_text(r)
+            "requires 'path' or both 'category' + 'preset'" in tool_text(r)
+            or "Missing path or (category+preset)" in tool_text(r)
             or "Accessibility not trusted" in tool_text(r)
             or "Event-post permission required" in tool_text(r)
             or "No document open" in tool_text(r)

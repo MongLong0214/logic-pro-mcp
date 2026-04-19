@@ -12,8 +12,8 @@
   <a href="https://developer.apple.com/macos/"><img src="https://img.shields.io/badge/macOS-14+-000000.svg?style=flat-square&logo=apple" /></a>
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-0.10-blue.svg?style=flat-square" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
-  <img src="https://img.shields.io/badge/tests-690_passing-brightgreen.svg?style=flat-square" />
-  <img src="https://img.shields.io/badge/version-2.3.1-blue.svg?style=flat-square" />
+  <img src="https://img.shields.io/badge/tests-700_passing-brightgreen.svg?style=flat-square" />
+  <img src="https://img.shields.io/badge/version-2.4.0-blue.svg?style=flat-square" />
 </p>
 
 ---
@@ -65,9 +65,9 @@ This server takes a different approach: **combine seven complementary channels**
 **Prerequisites**: macOS 14+, Logic Pro 12.0.1+, Apple Silicon.
 
 ```bash
-LOGIC_PRO_MCP_SHA256=0ee51d21196ed8ca13091f8d73076288d698e1916d3b5aced179beaaaf0f7c8a \
+LOGIC_PRO_MCP_SHA256=4fff89401379774eec1660af853abb7f5b1df8e4480acaef5a8a5568f184f95e \
 LOGIC_PRO_MCP_TEAM_ID=ADHOC \
-bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v2.3.1/Scripts/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v2.4.0/Scripts/install.sh)
 ```
 
 This installs the binary, verifies its SHA256, registers with Claude Code, and installs the Key Commands preset. It does **not** configure the MCU control surface or Scripter insert — see the [Setup Guide](docs/SETUP.md) for those two manual steps (~5 minutes).
@@ -127,7 +127,7 @@ See [Architecture](docs/ARCHITECTURE.md) for deeper details on channel prioritie
 
 ## Status
 
-**v2.3.1** (2026-04-19) — Production-ready, adhoc-signed pre-release.
+**v2.4.0** (2026-04-19) — Production-ready, adhoc-signed pre-release.
 
 Notarized (Apple-signed) release requires Apple Developer Program membership ($99/year). Until that's set up, the installer operates in ADHOC mode: SHA256 pin + `codesign --verify` still protect against tampering, but macOS Gatekeeper assessment is skipped and the installer strips the quarantine attribute so the binary runs without warnings.
 
@@ -135,13 +135,13 @@ See [SECURITY.md §Release types](SECURITY.md#release-types) for the trust model
 
 ### Testing
 
-- **690 unit + integration tests**, all passing
+- **700+ unit + integration tests**, all passing
 - **Live E2E verified** on Logic Pro 12.0.1 / macOS 26.3
 - Three independent production-readiness reviews (code quality, security, architecture) converged to PROCEED
 
 ### Known limitations
 
-- **Intel (x86_64)** builds are not shipped in the v2.3.1 release artifact. Intel users should build from source.
+- **Intel (x86_64)** builds are not shipped in the v2.4.0 release artifact. Intel users should build from source.
 - **`transport.set_tempo`** currently requires the Logic tempo display to be accessible via AX; it returns an error if the control bar layout hides the BPM field. Workaround: set tempo manually in Logic once before calling MCP tempo operations.
 - **MIDI File import cosmetics**: `record_sequence` regions start at bar 1 and extend to the target bar (padding CC technique). Note timing inside the region is exact; the leading padding is inaudible. If you need a tight region, trim after import via Logic's **Edit → Trim** menu.
 

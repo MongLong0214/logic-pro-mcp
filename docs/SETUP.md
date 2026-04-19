@@ -16,9 +16,9 @@ Complete installation, Logic Pro integration, and verification. Should take ~10 
 ### Option A — One-line installer (recommended)
 
 ```bash
-LOGIC_PRO_MCP_SHA256=0ee51d21196ed8ca13091f8d73076288d698e1916d3b5aced179beaaaf0f7c8a \
+LOGIC_PRO_MCP_SHA256=4fff89401379774eec1660af853abb7f5b1df8e4480acaef5a8a5568f184f95e \
 LOGIC_PRO_MCP_TEAM_ID=ADHOC \
-bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v2.3.1/Scripts/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v2.4.0/Scripts/install.sh)
 ```
 
 The installer:

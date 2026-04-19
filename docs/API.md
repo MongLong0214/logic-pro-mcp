@@ -122,15 +122,17 @@ Clients can detect stale snapshots without cross-referencing `logic://system/hea
 | `mute` | `{ index: int, enabled?: bool }` | text | MCU → AX → CGEvent |
 | `solo` | `{ index: int, enabled?: bool }` | text | MCU → AX → CGEvent |
 | `arm` | `{ index: int, enabled?: bool }` | text | MCU → AX → CGEvent |
-| `arm_only` | `{ index: int }` | text | composite (disarm-all + arm target) — response includes `armedSuccess`, `failedDisarm` for partial-failure visibility |
-| `record_sequence` | `{ bar?: int, notes: "pitch,offsetMs,durMs[,vel[,ch]];...", tempo?: float }` | JSON | **v2.3 rewrite**: server-side SMF generation + `File → Import → MIDI File…` — byte-exact timing, zero drift |
-| `set_automation` | `{ index: int, mode: "off"\|"read"\|"touch"\|"latch"\|"write" }` | text | MCU |
-| `set_instrument` | `{ index: int, path?: string }` or `{ index: int, category: string, preset: string }` | text | Accessibility |
+| `arm_only` | `{ index: int }` | text on full success; **error** when target arm fails or any disarm fails | composite (disarm-all + arm target) |
+| `record_sequence` | `{ bar?: int, notes: "pitch,offsetMs,durMs[,vel[,ch]];...", tempo?: float }` | JSON on success; **error** when goto fails OR new track never appears within 2s | **v2.3 rewrite**: SMF generation + AX `File → Import → MIDI File…` — byte-exact timing |
+| `set_automation` | `{ index: int, mode: "off"\|"read"\|"touch"\|"latch"\|"trim"\|"write" }` | text | MCU |
+| `set_instrument` | `{ index: int, path: string }` OR `{ index: int, category: string, preset: string }` — at least one path OR (category + preset) is required | text | Accessibility |
 | `list_library` | — | text | Accessibility |
 | `scan_library` | — | text | Accessibility |
 | `resolve_path` | `{ path: string }` | text | Accessibility |
 | `scan_plugin_presets` | `{ submenuOpenDelayMs?: int }` | text | Accessibility |
 | `set_color` | — | error | Not exposed in the production MCP contract |
+
+> **All mutating commands** (select, rename, mute, solo, arm, arm_only, delete, duplicate, set_automation, set_instrument) **reject requests without an explicit `index`** to prevent accidental track-0 mutations from malformed callers. Non-numeric values (e.g. `{"index":"abc"}`) are also rejected. The default `0` behaviour was removed in v2.4.0.
 
 ### Reading tracks
 
@@ -176,24 +178,37 @@ The old real-time `goto → record → sleep → play_sequence → stop` pipelin
 2. Generates a Type 0 Standard MIDI File with `SMFWriter` — tempo and time-signature meta events + byte-exact note positions computed from `ms` offsets via round-half-up tick conversion.
 3. Writes to `/tmp/LogicProMCP/{uuid}.mid` (cleaned up via `defer` on return and via server-startup sweep for crash recovery).
 4. Routes `midi.import_file` → `AccessibilityChannel` which drives `파일 → 가져오기 → MIDI 파일…` via AppleScript, dismissing the "템포 가져오기" sub-dialog with "아니요" so the project's tempo is authoritative.
-5. Returns `{ recorded_to_track, created_track, track_index_confirmed, bar, note_count, method: "smf_import" }`. `recorded_to_track` is a legacy alias for `created_track`; new clients should prefer `created_track`.
+5. Polls the AX cache (100ms × 20 = 2s budget) until a new track appears. Returns `{ recorded_to_track, created_track, bar, note_count, method: "smf_import" }`. If the new track never appears within the polling window, the command returns an error instead of lying about `created_track`. `recorded_to_track` is a legacy alias for `created_track`; new clients should prefer `created_track`.
+
+**Error conditions for `record_sequence`**:
+
+- `hasDocument` is false (no project open)
+- `notes` is empty, or no valid events parsed
+- Playhead reset (`transport.goto_position` with `bar=1`) fails — treated as a hard precondition because Logic's MIDI File Import anchors the region at playhead; without the reset, notes would land at the wrong bar
+- `midi.import_file` fails
+- No new track is observed in the AX cache within 2 seconds of import
 
 **Strategy D — tick-0 padding CC**: Logic Pro's MIDI File import strips leading empty delta before the first MIDI channel event, which would silently place every imported region at bar 1 regardless of the caller's `bar` parameter. SMFWriter counters this by emitting `CC#110 value 0` on channel 0 at tick 0 whenever `bar > 1`. Logic preserves the full tick timeline because a MIDI channel event now exists at tick 0. The resulting region spans bar 1 through the target bar; the caller's notes land at exactly the encoded positions inside the region. Verified on Logic Pro 12 — `bar=50` request produces a region described by Logic as "1 마디에서 시작하여 51 마디에서 끝납니다" with the note at the trailing edge.
 
 **Response caveats**:
-- `track_index_confirmed: false` means the 500 ms AX-cache settle window didn't catch the new track's creation. The `created_track` value is a best-effort fallback (last known valid index); re-read `logic://tracks` for a confirmed index if needed.
 - The region's start is always bar 1 (cosmetic trade-off of the padding strategy). If you need the region itself trimmed, the caller can run `편집 → 이동 → 재생헤드로` on the selected region after positioning the playhead.
+- `created_track` is always the 0-based index of the newly-created track (Logic always creates a new MIDI track per import). The v2.3.0 `track_index_confirmed` fallback was removed in v2.4.0 — the command now polls the AX cache for up to 2 seconds and returns an error if the new track never appears, so the field would always be `true` in a success response and was redundant.
 
-**`arm_only` response schema (v2.3+)**:
+**`arm_only` behavior (v2.4.0+)**:
+
+On full success (target arm succeeded and every disarm succeeded), returns a JSON payload:
+
 ```json
 {
-  "armed": 2,                    // target track index (backward compat, always int)
-  "armedSuccess": true,          // whether the final arm command succeeded
-  "disarmed": [0, 1, 3],         // indices that were successfully disarmed
-  "failedDisarm": [],            // indices where disarm failed (visible vs. silent)
-  "detail": "..."                // channel detail message
+  "armed": 2,              // target track index
+  "armedSuccess": true,    // always true in success-payload responses
+  "disarmed": [0, 1, 3],   // indices that were successfully disarmed
+  "failedDisarm": [],      // always empty in success-payload responses
+  "detail": "..."          // channel detail message
 }
 ```
+
+If the primary arm fails, or if any disarm fails, the command returns `isError: true` with a message listing which disarms failed. The structured payload is reserved for complete success — partial failures are no longer silently buried in a "success" envelope.
 
 **Library preconditions:** `list_library`, `scan_library`, and `set_instrument` require the Library panel to be visible in Logic Pro. `resolve_path` is cache-backed and requires a prior successful `scan_library`.
 
@@ -330,7 +345,7 @@ All commands route through `MIDIKeyCommands → CGEvent`.
 
 | Command | Params | Returns | Channel |
 |---------|--------|---------|---------|
-| `goto_bar` | `{ bar: int }` | text | Delegates to `transport.goto_position` (Accessibility bar-slider) |
+| `goto_bar` | `{ bar: int }` | text | Delegates to `transport.goto_position` — dialog primary (auto-extends project, ~800ms), slider fallback |
 | `goto_marker` | `{ name: string }` or `{ index: int }` | text | By name: cache lookup → MIDIKeyCommands; by index: MIDIKeyCommands → CGEvent |
 | `create_marker` | `{ name?: string }` | text | MIDIKeyCommands → CGEvent |
 | `delete_marker` | `{ index: int }` | text | MIDIKeyCommands → CGEvent |

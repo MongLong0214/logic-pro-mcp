@@ -13,6 +13,22 @@ func intParam(_ params: [String: Value], _ keys: String..., default defaultValue
     return defaultValue
 }
 
+/// Like `intParam` but returns `nil` when none of the keys are present.
+/// Use for required parameters where a silent default is dangerous — e.g.
+/// `index` on mutating track commands where falling through to track 0
+/// would edit the wrong track on a malformed caller request.
+func intParamOrNil(_ params: [String: Value], _ keys: String...) -> Int? {
+    for key in keys {
+        if let value = params[key]?.intValue {
+            return value
+        }
+        if let s = params[key]?.stringValue, let value = Int(s) {
+            return value
+        }
+    }
+    return nil
+}
+
 func doubleParam(_ params: [String: Value], _ keys: String..., default defaultValue: Double = 0) -> Double {
     for key in keys {
         // JSON integers decode as Value.int — Value.doubleValue returns nil for those.

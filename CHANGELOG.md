@@ -8,6 +8,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-04-19
+
+### Breaking Changes
+
+- **All mutating `logic_tracks` commands now require explicit `index`**. Previously `index` defaulted to `0` when missing, which silently mutated track 0 on malformed caller requests. Commands affected: `select`, `delete`, `duplicate`, `rename`, `mute`, `solo`, `arm`, `arm_only`, `set_automation`, `set_instrument`. Requests missing or with non-numeric `index` now return `isError: true`.
+- **`arm_only` no longer buries failures in a success payload**. If the primary arm fails, or if any disarm fails, the command returns `isError: true` with detail. The structured JSON payload (`{armed, armedSuccess, disarmed, failedDisarm, detail}`) is reserved for complete success.
+- **`record_sequence` no longer returns `track_index_confirmed`**. The dispatcher now polls the AX cache for up to 2 seconds and returns `isError: true` if the new track never appears — the fallback value (`false` + last-known-index) was a silent correctness hazard. On success, `created_track` is always the real new track index.
+- **`record_sequence` hard-fails when `transport.goto_position bar=1` fails**. Logic Pro anchors imported regions at the playhead; a failed pre-reset would silently place notes at the wrong bar. The step is now a blocking precondition.
+- **`set_instrument` requires `path` OR both `category` + `preset`**. Empty calls (only `index`) are rejected instead of silently dispatching with no instrument target.
+
+### Added
+
+- **`select` now fail-closes on malformed `index`**. A request like `{"index":"abc"}` is rejected with a clear error instead of silently selecting track 0.
+- **Explicit-index regression tests** for every mutating command (8 new tests in `DispatcherTests.swift`).
+- **Universal + arm64 release tarballs**. The release workflow now publishes both `LogicProMCP-macOS-universal.tar.gz` and `LogicProMCP-macOS-arm64.tar.gz` (same fat binary, two names) so existing Homebrew taps and arm64-only users both resolve cleanly.
+- **GitHub Actions pin to commit SHA**. `actions/checkout` and `softprops/action-gh-release` are now pinned to immutable commit hashes instead of mutable tags, closing a supply-chain gap in the release workflow.
+
+### Fixed
+
+- `docs/API.md` now matches runtime behavior: `arm_only` error paths, `record_sequence` success schema (no `track_index_confirmed`), `set_automation` full mode enum (incl. `trim`), `set_instrument` required-field semantics.
+- `Scripts/live-e2e-test.py` updated to reflect v2.4 contract: rejects-without-index assertions, new `set_instrument` error messages, softer environment gates.
+
+### Security
+
+- Release workflow dependencies pinned to commit SHA (supply-chain hardening).
+
+### Migration from v2.3.x
+
+Replace every mutating `logic_tracks.*` call with an explicit `index`:
+
+```diff
+- logic_tracks rename { "name": "Lead Vox" }
++ logic_tracks rename { "index": 0, "name": "Lead Vox" }
+
+- logic_tracks mute { "enabled": true }
++ logic_tracks mute { "index": 3, "enabled": true }
+```
+
+For `arm_only` and `record_sequence`, check `isError` before parsing the JSON payload. Previous `armedSuccess: false` / `track_index_confirmed: false` responses are now returned as structured errors.
+
 ## [2.3.1] — 2026-04-19
 
 ### Fixed

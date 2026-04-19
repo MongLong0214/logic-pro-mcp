@@ -39,7 +39,7 @@ Revoke whenever the preset is removed, the Scripter instance is removed, or the 
 ```bash
 swift build -c release
 codesign --force --sign - .build/release/LogicProMCP
-VERSION=v2.3.1
+VERSION=v2.4.0
 shasum -a 256 .build/release/LogicProMCP | awk '{print $1"  LogicProMCP"}' > SHA256SUMS.txt
 echo '{"version":"'$VERSION'","team_id":"ADHOC","signing":"adhoc"}' > RELEASE-METADATA.json
 
@@ -66,8 +66,8 @@ Preconditions — GitHub Actions secrets configured:
 Release:
 
 ```bash
-git tag v2.3.1
-git push origin v2.3.1
+git tag v2.4.0
+git push origin v2.4.0
 ```
 
 `.github/workflows/release.yml` builds a universal binary, signs, notarizes, staples, and publishes to a GitHub release with full signature validation in a downstream install job.

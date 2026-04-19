@@ -264,10 +264,12 @@ struct SystemDispatcher {
                   mute              -> { index: Int, enabled: Bool }
                   solo              -> { index: Int, enabled: Bool }
                   arm               -> { index: Int, enabled: Bool } — idempotent (reads checkbox state)
-                  arm_only          -> { index: Int } — disarms others, arms target
-                  record_sequence   -> { index: Int, bar?: Int, notes: "pitch,offsetMs,durMs[,vel[,ch]];..." } — one-shot
-                  set_automation    -> { index: Int, mode: String } (read/write/touch/latch/trim)
-                  set_instrument    -> { index: Int, path?: String } or { index: Int, category: String, preset: String }
+                  arm_only          -> { index: Int } — disarms others, arms target; returns error on partial disarm failure
+                  record_sequence   -> { bar?: Int, notes: "pitch,offsetMs,durMs[,vel[,ch]];...", tempo?: Float }
+                                       v2.3 SMF-import: generates a MIDI file, forces playhead to bar 1, imports via AX menu.
+                                       Creates a new track per call. Response includes { created_track, recorded_to_track }.
+                  set_automation    -> { index: Int, mode: String } (read/write/touch/latch/trim/off)
+                  set_instrument    -> { index: Int, path: String } OR { index: Int, category: String, preset: String }
                   list_library      -> {} — Read currently visible Library columns
                   scan_library      -> {} — Full recursive Library scan
                   resolve_path      -> { path: String } — Cache-backed Library lookup

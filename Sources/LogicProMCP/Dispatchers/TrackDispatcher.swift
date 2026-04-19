@@ -4,7 +4,7 @@ import MCP
 struct TrackDispatcher {
     static let tool = Tool(
         name: "logic_tracks",
-        description: "Track actions in Logic Pro. Commands: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets. Params: select -> { index: Int } or { name: String }; rename -> { index: Int, name: String }; mute/solo/arm -> { index: Int, enabled: Bool }; arm_only -> { index: Int } (disarms others, arms target — fixes multi-armed duplicate-record bug); record_sequence -> { index: Int, bar?: Int, notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\" } (one-shot select+arm_only+record+play+stop); create_* -> {}; delete/duplicate -> { index: Int }; set_automation -> { index: Int, mode: String }; set_instrument -> { index: Int, path?: String } or { index: Int, category: String, preset: String } — path mode preferred; scan_library -> {}; resolve_path -> { path: String } cache-backed read-only; scan_plugin_presets -> { submenuOpenDelayMs?: Int }.",
+        description: "Track actions in Logic Pro. Commands: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets. Params: select -> { index: Int } or { name: String }; rename/mute/solo/arm/arm_only/set_automation/set_instrument ALL require explicit { index: Int (≥0) }; mute/solo/arm -> also { enabled: Bool }; arm_only disarms all others + arms target, returns error on partial disarm failure; record_sequence -> { bar?: Int (default 1), notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\", tempo?: Float } v2.3 SMF-import path: generates a Standard MIDI File server-side, forces playhead to bar 1, imports via AX menu — byte-exact timing, creates a new track each call; create_* -> {}; delete/duplicate -> { index: Int }; set_automation -> { mode: read|write|touch|latch|trim|off }; set_instrument -> { path: String } or { category: String, preset: String } — path mode preferred; scan_library -> {}; resolve_path -> { path: String } cache-backed read-only; scan_plugin_presets -> { submenuOpenDelayMs?: Int }.",
         inputSchema: commandParamsToolSchema(commandDescription: "Track command to execute")
     )
 
@@ -16,9 +16,17 @@ struct TrackDispatcher {
     ) async -> CallTool.Result {
         switch command {
         case "select":
-            // Prefer index (accepts int/double/string via intParam), else match by name.
+            // Prefer index (accepts int/double/string), else match by name. If
+            // `index` is supplied but not a valid non-negative integer, fail
+            // closed — silently falling back to track 0 on a malformed
+            // request would corrupt the wrong track.
             if params["index"] != nil || params["track"] != nil {
-                let index = intParam(params, "index", "track", default: 0)
+                guard let index = intParamOrNil(params, "index", "track") else {
+                    return toolTextResult(
+                        "select 'index' must be a non-negative integer (non-numeric or missing value rejected)",
+                        isError: true
+                    )
+                }
                 guard index >= 0 else {
                     return toolTextResult(
                         "select 'index' must be ≥ 0 (got \(index)) — Logic doesn't have negative track indices",
@@ -62,35 +70,37 @@ struct TrackDispatcher {
             return toolTextResult(result)
 
         case "delete":
-            if params["index"] != nil || params["track"] != nil {
-                let index = intParam(params, "index", "track", default: 0)
-                let result = await router.route(
-                    operation: "track.select",
-                    params: ["index": String(index)]
-                )
-                guard result.isSuccess else {
-                    return toolTextResult(result.message, isError: true)
-                }
+            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
+                return toolTextResult("delete requires explicit 'index' (Int ≥ 0)", isError: true)
+            }
+            let selectResult = await router.route(
+                operation: "track.select",
+                params: ["index": String(index)]
+            )
+            guard selectResult.isSuccess else {
+                return toolTextResult(selectResult.message, isError: true)
             }
             let result = await router.route(operation: "track.delete")
             return toolTextResult(result)
 
         case "duplicate":
-            if params["index"] != nil || params["track"] != nil {
-                let index = intParam(params, "index", "track", default: 0)
-                let selectResult = await router.route(
-                    operation: "track.select",
-                    params: ["index": String(index)]
-                )
-                guard selectResult.isSuccess else {
-                    return toolTextResult(selectResult.message, isError: true)
-                }
+            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
+                return toolTextResult("duplicate requires explicit 'index' (Int ≥ 0)", isError: true)
+            }
+            let selectResult = await router.route(
+                operation: "track.select",
+                params: ["index": String(index)]
+            )
+            guard selectResult.isSuccess else {
+                return toolTextResult(selectResult.message, isError: true)
             }
             let result = await router.route(operation: "track.duplicate")
             return toolTextResult(result)
 
         case "rename":
-            let index = intParam(params, "index", "track", default: 0)
+            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
+                return toolTextResult("rename requires explicit 'index' (Int ≥ 0)", isError: true)
+            }
             let name = stringParam(params, "name")
             guard !name.isEmpty else {
                 return toolTextResult("rename requires 'name' parameter", isError: true)
@@ -102,7 +112,9 @@ struct TrackDispatcher {
             return toolTextResult(result)
 
         case "mute":
-            let index = intParam(params, "index", "track", default: 0)
+            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
+                return toolTextResult("mute requires explicit 'index' (Int ≥ 0)", isError: true)
+            }
             let enabled = boolParam(params, "enabled", default: true)
             let result = await router.route(
                 operation: "track.set_mute",
@@ -111,7 +123,9 @@ struct TrackDispatcher {
             return toolTextResult(result)
 
         case "solo":
-            let index = intParam(params, "index", "track", default: 0)
+            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
+                return toolTextResult("solo requires explicit 'index' (Int ≥ 0)", isError: true)
+            }
             let enabled = boolParam(params, "enabled", default: true)
             let result = await router.route(
                 operation: "track.set_solo",
@@ -120,7 +134,9 @@ struct TrackDispatcher {
             return toolTextResult(result)
 
         case "arm":
-            let index = intParam(params, "index", "track", default: 0)
+            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
+                return toolTextResult("arm requires explicit 'index' (Int ≥ 0)", isError: true)
+            }
             let enabled = boolParam(params, "enabled", default: true)
             let result = await router.route(
                 operation: "track.set_arm",
@@ -132,7 +148,9 @@ struct TrackDispatcher {
             return await handleRecordSequenceSMF(params: params, router: router, cache: cache)
 
         case "arm_only":
-            let index = intParam(params, "index", "track", default: 0)
+            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
+                return toolTextResult("arm_only requires explicit 'index' (Int ≥ 0)", isError: true)
+            }
             let tracks = await cache.getTracks()
             var disarmed: [Int] = []
             var failedDisarm: [Int] = []
@@ -147,16 +165,35 @@ struct TrackDispatcher {
                 operation: "track.set_arm",
                 params: ["index": String(index), "enabled": "true"]
             )
+            // If the primary arm action failed, return an explicit error instead
+            // of a structured success payload. Partial-disarm visibility still
+            // available in the error detail.
             let detail = armResult.message.replacingOccurrences(of: "\"", with: "\\\"")
+            guard armResult.isSuccess else {
+                return toolTextResult(
+                    "arm_only failed: target arm rejected — \(armResult.message); disarmed=\(disarmed) failedDisarm=\(failedDisarm)",
+                    isError: true
+                )
+            }
+            // Report partial disarm failures explicitly — the target arm
+            // succeeded, but some other tracks may still be armed.
+            if !failedDisarm.isEmpty {
+                return toolTextResult(
+                    "arm_only partial: target \(index) armed, but these tracks failed to disarm: \(failedDisarm) (disarmed: \(disarmed))",
+                    isError: true
+                )
+            }
             return toolTextResult(.success(
-                "{\"armed\":\(index),\"armedSuccess\":\(armResult.isSuccess),\"disarmed\":\(disarmed),\"failedDisarm\":\(failedDisarm),\"detail\":\"\(detail)\"}"
+                "{\"armed\":\(index),\"armedSuccess\":true,\"disarmed\":\(disarmed),\"failedDisarm\":[],\"detail\":\"\(detail)\"}"
             ))
 
         case "set_color":
             return toolTextResult("set_color is not exposed in the production MCP contract", isError: true)
 
         case "set_automation":
-            let index = intParam(params, "index", "track", default: 0)
+            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
+                return toolTextResult("set_automation requires explicit 'index' (Int ≥ 0)", isError: true)
+            }
             let mode = stringParam(params, "mode", default: "read")
             let validModes = ["read", "write", "touch", "latch", "trim", "off"]
             guard validModes.contains(mode) else {
@@ -172,10 +209,18 @@ struct TrackDispatcher {
             return toolTextResult(result)
 
         case "set_instrument":
-            let index = intParam(params, "index", default: 0)
+            guard let index = intParamOrNil(params, "index"), index >= 0 else {
+                return toolTextResult("set_instrument requires explicit 'index' (Int ≥ 0)", isError: true)
+            }
             let category = stringParam(params, "category")
             let preset = stringParam(params, "preset")
             let path = stringParam(params, "path")
+            guard !path.isEmpty || (!category.isEmpty && !preset.isEmpty) else {
+                return toolTextResult(
+                    "set_instrument requires 'path' or both 'category' + 'preset'",
+                    isError: true
+                )
+            }
             var routeParams: [String: String] = ["index": String(index)]
             if !path.isEmpty { routeParams["path"] = path }
             if !category.isEmpty { routeParams["category"] = category }
@@ -281,18 +326,25 @@ struct TrackDispatcher {
         }
 
         // Logic Pro's MIDI File Import anchors the imported region to the
-        // CURRENT playhead position. Strategy D's padding CC encodes the
-        // bar offset inside the SMF (relative to tick 0), so we must put
-        // the playhead at bar 1 before import — then the caller's notes
-        // land at exactly the requested bar inside the region.
-        // The dialog-based goto ignores project-length clamping and extends
-        // the project as needed. Best-effort: if it fails (empty project,
-        // dialog disabled), the playhead is already at bar 1 by default so
-        // the fresh-project case still works.
-        _ = await router.route(
+        // CURRENT playhead position. SMF Strategy D encodes the bar offset
+        // inside the file (relative to tick 0), so the playhead must be at
+        // bar 1 before import — otherwise notes land at playhead + offset,
+        // not at the requested bar. A silent failure here would produce a
+        // success response with content at the wrong position, so the goto
+        // is a hard precondition: hasDocument is already true (guarded
+        // above), so the goto-dialog is enabled on any non-empty project,
+        // and on an empty project the playhead is already at bar 1 and the
+        // slider fallback succeeds trivially.
+        let gotoResult = await router.route(
             operation: "transport.goto_position",
             params: ["bar": "1"]
         )
+        guard gotoResult.isSuccess else {
+            return toolTextResult(
+                "record_sequence failed to reset playhead to bar 1 (required for accurate import): \(gotoResult.message)",
+                isError: true
+            )
+        }
 
         let tracksBefore = await cache.getTracks().count
         let importResult = await router.route(
@@ -306,14 +358,28 @@ struct TrackDispatcher {
             )
         }
 
-        // 500ms AX settle: track enumeration updates lag import by ~300-400ms empirically.
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        let tracksAfter = await cache.getTracks().count
-        let trackConfirmed = tracksAfter > tracksBefore
-        let createdTrack = trackConfirmed ? tracksAfter - 1 : max(-1, tracksBefore - 1)
+        // Poll for the new track to appear (AX cache lag averages ~300-400ms;
+        // we wait up to 2s with 100ms granularity so slower machines still
+        // succeed while fast imports return quickly). If the cache never sees
+        // the new track within the window, treat this as a verification
+        // failure — the import may have silently misbehaved, and returning
+        // success with a fabricated track index would lie to the caller.
+        var tracksAfter = tracksBefore
+        for _ in 0..<20 {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            tracksAfter = await cache.getTracks().count
+            if tracksAfter > tracksBefore { break }
+        }
+        guard tracksAfter > tracksBefore else {
+            return toolTextResult(
+                "record_sequence: new track never appeared in Logic (tracks before: \(tracksBefore), after: \(tracksAfter) over 2s). Import may have failed silently; check Logic Pro UI and retry.",
+                isError: true
+            )
+        }
 
+        let createdTrack = tracksAfter - 1
         return toolTextResult(.success(
-            "{\"recorded_to_track\":\(createdTrack),\"created_track\":\(createdTrack),\"track_index_confirmed\":\(trackConfirmed),\"bar\":\(bar),\"note_count\":\(events.count),\"method\":\"smf_import\"}"
+            "{\"recorded_to_track\":\(createdTrack),\"created_track\":\(createdTrack),\"bar\":\(bar),\"note_count\":\(events.count),\"method\":\"smf_import\"}"
         ))
     }
 
