@@ -3,7 +3,7 @@ class LogicProMcp < Formula
   homepage "https://github.com/MongLong0214/logic-pro-mcp"
   # Single source of truth is Sources/LogicProMCP/Server/ServerConfig.swift
   # (ServerConfig.serverVersion). Bump both together.
-  version "3.0.1"
+  version "3.0.2"
   license "MIT"
 
   # arm64-native binary. Intel Macs run under Rosetta 2 — functional but

@@ -447,41 +447,73 @@ actor AccessibilityChannel: Channel {
         runtime: AXLogicProElements.Runtime = .production,
         runFallback: @escaping @Sendable (String) -> Bool = runTempoFallbackScript
     ) -> ChannelResult {
-        // TransportDispatcher passes the value under "bpm"; legacy callers may
-        // still send "tempo". Accept either to avoid silent contract drift.
-        guard let tempoStr = params["bpm"] ?? params["tempo"], let _ = Double(tempoStr) else {
+        guard let tempoStr = params["bpm"] ?? params["tempo"], let tempoValue = Double(tempoStr) else {
             return .error("Missing or invalid 'tempo'/'bpm' parameter")
         }
-        // Try AX text field first
-        if let transport = AXLogicProElements.getTransportBar(runtime: runtime) {
-            let texts = AXHelpers.findAllDescendants(
-                of: transport,
-                role: kAXTextFieldRole,
-                maxDepth: 4,
-                runtime: runtime.ax
+        guard tempoValue >= 5.0 && tempoValue <= 990.0 else {
+            return .error("tempo \(tempoStr) out of slider range (5.0 .. 990.0)")
+        }
+
+        // v3.0.2: Logic Pro 12 exposes the control-bar tempo as an AXSlider (role
+        // "AXSlider", description "템포" / "Tempo") rather than a text field.
+        // AXValue assignment only nudges by +1 and AXIncrement jumps by +10, so
+        // neither gives exact target values. The slider's own help text says
+        // "double-click to enter a new value" — so we synthesise a real mouse
+        // double-click at its centre, type the digits, and press Return.
+        if let slider = AXLogicProElements.findTempoSlider(runtime: runtime) {
+            // Position/size may be unavailable in fake AX trees (tests). In that
+            // case fall back to direct AXValue assignment + confirm — the real
+            // Logic Pro slider ignores this, but fakes treat it as truth.
+            guard let position = AXHelpers.getPosition(slider, runtime: runtime.ax),
+                  let size = AXHelpers.getSize(slider, runtime: runtime.ax) else {
+                AXHelpers.setAttribute(slider, kAXValueAttribute, tempoStr as CFTypeRef, runtime: runtime.ax)
+                _ = AXHelpers.performAction(slider, kAXConfirmAction, runtime: runtime.ax)
+                return .success("{\"tempo\":\(tempoStr),\"via\":\"slider-direct\"}")
+            }
+            let center = CGPoint(
+                x: position.x + size.width / 2,
+                y: position.y + size.height / 2
             )
-            for field in texts {
-                let desc = AXHelpers.getDescription(field, runtime: runtime.ax)?.lowercased() ?? ""
-                if desc.contains("tempo") || desc.contains("bpm") {
-                    AXHelpers.setAttribute(field, kAXValueAttribute, tempoStr as CFTypeRef, runtime: runtime.ax)
-                    AXHelpers.performAction(field, kAXConfirmAction, runtime: runtime.ax)
-                    return .success("{\"tempo\":\(tempoStr),\"via\":\"ax\"}")
+            AXMouseHelper.doubleClick(at: center)
+            // Give Logic's UI thread a beat to render the inline text field
+            // over the slider before typing. 120 ms is empirically reliable.
+            Thread.sleep(forTimeInterval: 0.12)
+            AXMouseHelper.typeNumericString(tempoStr)
+            Thread.sleep(forTimeInterval: 0.05)
+            AXMouseHelper.pressReturn()
+            // Allow Logic to commit the value and update AXValue.
+            Thread.sleep(forTimeInterval: 0.15)
+
+            // Verify the slider actually took the new value. Within a 1.0 BPM
+            // tolerance to absorb Logic's internal rounding (e.g. 128.5 → 128).
+            if let finalValue = AXHelpers.getValue(slider, runtime: runtime.ax) as? Double,
+               abs(finalValue - tempoValue) < 1.0 {
+                return .success("{\"tempo\":\(tempoStr),\"via\":\"slider\",\"actual\":\(finalValue)}")
+            }
+
+            // Fallback: if the typed-entry path didn't stick (e.g. a modal popup
+            // stole focus), dismiss any stuck overlay with Escape and try
+            // AXIncrement / AXDecrement for a coarse 10-BPM-resolution fit.
+            AXMouseHelper.pressEscape()
+            Thread.sleep(forTimeInterval: 0.05)
+            let current = (AXHelpers.getValue(slider, runtime: runtime.ax) as? Double) ?? 0
+            let delta = tempoValue - current
+            let stepsInt = Int((abs(delta) / 10.0).rounded())
+            if stepsInt > 0 {
+                let action = delta > 0 ? kAXIncrementAction : kAXDecrementAction
+                for _ in 0..<stepsInt {
+                    _ = AXHelpers.performAction(slider, action, runtime: runtime.ax)
                 }
             }
+            if let afterIncrement = AXHelpers.getValue(slider, runtime: runtime.ax) as? Double {
+                return .success("{\"tempo\":\(tempoStr),\"via\":\"slider-increment\",\"actual\":\(afterIncrement),\"note\":\"fell back to 10 BPM step — typed entry didn't commit\"}")
+            }
         }
-        // Fallback: AppleScript Tap-Tempo via Logic key command — at minimum locates
-        // the tempo display element via System Events and types the value.
-        // Logic Pro 12.0.1 transport bar exposes an AXButton whose AXDescription
-        // contains the tempo number. Open Tempo entry via menu "탐색 → 템포…" if available.
-        // osascript fallback was disabled — it opened a modal Tempo dialog that
-        // grabs Logic's UI thread, and sustained calls killed the MCP server
-        // via pipe/FD exhaustion (BrokenPipeError at §K in the matrix test).
-        // If AX tempo field is unreachable, just return a clear error — users
-        // can set tempo manually in Logic's transport bar.
-        _ = runFallback // retain parameter for test injection compatibility
+
+        _ = runFallback // retain param for test-injection compatibility
         return .error(
-            "set_tempo: Logic's transport bar doesn't expose a tempo text field via AX in this build. " +
-            "Set tempo manually in Logic's control bar (double-click the BPM display)."
+            "set_tempo: could not locate the tempo slider in Logic's control bar. " +
+            "Ensure Logic Pro is frontmost with an open project."
         )
     }
 

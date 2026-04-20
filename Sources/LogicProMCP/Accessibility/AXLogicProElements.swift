@@ -131,6 +131,36 @@ enum AXLogicProElements {
         return nil
     }
 
+    /// Find the 템포 / Tempo slider in Logic's control bar. Double-clicking
+    /// this slider opens an inline numeric-entry overlay (see
+    /// AXMouseHelper.doubleClick for the exact interaction).
+    ///
+    /// Search order:
+    ///   1. `getControlBar()` subtree (production path — AXGroup "컨트롤 막대")
+    ///   2. `getTransportBar()` subtree (fallback — AXToolbar or "Transport" group)
+    ///   3. Main window's entire slider descendants (last-resort, also covers
+    ///      test doubles that build a minimal AX tree without the wrapper groups)
+    static func findTempoSlider(runtime: Runtime = .production) -> AXUIElement? {
+        let searchRoots: [AXUIElement] = [
+            getControlBar(runtime: runtime),
+            getTransportBar(runtime: runtime),
+            mainWindow(runtime: runtime),
+        ].compactMap { $0 }
+
+        for root in searchRoots {
+            let sliders = AXHelpers.findAllDescendants(
+                of: root, role: kAXSliderRole, maxDepth: 8, runtime: runtime.ax
+            )
+            for s in sliders {
+                let desc = (AXHelpers.getDescription(s, runtime: runtime.ax) ?? "").lowercased()
+                if desc == "템포" || desc == "tempo" || desc == "bpm" {
+                    return s
+                }
+            }
+        }
+        return nil
+    }
+
     /// Find the 비트 (beat) slider in the control bar (optional — for sub-bar positioning).
     static func findControlBarBeatSlider(runtime: Runtime = .production) -> AXUIElement? {
         guard let controlBar = getControlBar(runtime: runtime) else { return nil }

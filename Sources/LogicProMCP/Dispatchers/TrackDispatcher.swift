@@ -378,8 +378,30 @@ struct TrackDispatcher {
         }
 
         let createdTrack = tracksAfter - 1
+
+        // v3.0.2: Auto-load a Software Instrument on the imported track so the
+        // region is audible on playback. SMF import sometimes leaves the new
+        // track without a software-instrument plugin (shows up as silent MIDI),
+        // which defeats the whole "generate music then play it" workflow. The
+        // caller can override the preset via `instrument_path` — otherwise we
+        // default to `Synthesizer/Bass`, a safe audible built-in.
+        let instrumentPath = stringParam(params, "instrument_path", "instrument",
+                                         default: "Synthesizer/Bass")
+        let selectResult = await router.route(
+            operation: "track.select",
+            params: ["index": "\(createdTrack)"]
+        )
+        var instrumentStatus = "skipped"
+        if selectResult.isSuccess {
+            let setResult = await router.route(
+                operation: "track.set_instrument",
+                params: ["index": "\(createdTrack)", "path": instrumentPath]
+            )
+            instrumentStatus = setResult.isSuccess ? "loaded:\(instrumentPath)" : "failed:\(setResult.message)"
+        }
+
         return toolTextResult(.success(
-            "{\"recorded_to_track\":\(createdTrack),\"created_track\":\(createdTrack),\"bar\":\(bar),\"note_count\":\(events.count),\"method\":\"smf_import\"}"
+            "{\"recorded_to_track\":\(createdTrack),\"created_track\":\(createdTrack),\"bar\":\(bar),\"note_count\":\(events.count),\"method\":\"smf_import\",\"instrument\":\"\(instrumentStatus)\"}"
         ))
     }
 

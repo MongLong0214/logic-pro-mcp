@@ -8,6 +8,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [3.0.2] — 2026-04-20
+
+Live-use hotfix targeting two E2E pain points found while actually generating music in Logic Pro 12.0.1 at the v3.0.1 MCP surface.
+
+### Fixed
+
+- **`transport.set_tempo` now works end-to-end without manual intervention.** Logic Pro 12 exposes the control-bar tempo as an **AXSlider** (role "AXSlider", description "템포" / "Tempo") — not a text field. Direct AXValue assignment only nudges by +1 and AXIncrement jumps by +10, so neither gives an exact value. The slider's help text reveals the real path: **double-click opens an inline numeric entry**. v3.0.2 synthesises a native `CGEvent` double-click at the slider centre, types the target BPM via `CGEventKeyboard`, and presses Return. Verified on live Logic Pro 12.0.1 (120 → 140, exact). Falls back to `AXIncrement` (10-BPM granularity) if the typed entry doesn't commit within the verification window.
+
+- **`record_sequence` regions are audible on playback.** The SMF-import path created a new MIDI track but sometimes without a Software Instrument plugin loaded, yielding silent regions. v3.0.2 post-processes the imported track: selects it and auto-calls `track.set_instrument` with a safe default (`Synthesizer/Bass`). Callers can override via a new `instrument_path` parameter. Response now includes an `instrument` field reporting the load outcome.
+
+### Added
+
+- `Sources/LogicProMCP/Accessibility/AXMouseHelper.swift` — native CGEvent-based double-click, numeric typing, Return/Escape. No osascript spawning (avoids the FD-leak path that disabled the v2.x tempo fallback). Re-used for any future "double-click-to-edit" slider surfaces.
+- `AXLogicProElements.findTempoSlider` — locates the tempo slider through three fallback roots (control bar → transport bar → main window) so it works both with production AX trees and the test-double AX trees used in unit tests.
+- `logic_tracks.record_sequence` accepts an optional `instrument_path: String` (also `instrument`) to choose the post-import Software Instrument preset.
+
+### Still manual in v3.0.2 (follow-up)
+
+- `transport.set_cycle_range` — cycle locators aren't standard sliders in the control bar; their UI lives in the ruler/timeline and needs a different discovery path.
+- Full Sound Library download — `Logic Pro → Sound Library…` opens a modal with its own "Select All / Install" controls; driving it end-to-end requires a multi-step dialog script.
+- Deep Library tree scan — current scan enumerates only 1 level (category → preset). Sub-preset navigation works via `set_instrument { path: "Synthesizer/Bass/Analog Monster" }` if the caller already knows the path.
+
 ## [3.0.1] — 2026-04-20
 
 Release-path and docs-honesty hotfix on top of v3.0.0. **No runtime behavior changes** — same 8 tools, 9 resources, 3 templates. Upgrade is a docs + CI + packaging refresh.
