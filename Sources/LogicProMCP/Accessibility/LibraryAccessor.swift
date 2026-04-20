@@ -39,7 +39,8 @@ public struct LibraryNode: Codable, Sendable, Equatable {
 
 /// Injectable probe abstraction for `enumerateTree`.
 ///
-/// Real production: wraps live AX reads + CGEvent clicks (in T4's channel code).
+/// Real production: wraps live AX reads + AX-native selection (AXSelectedChildren
+/// + AXPress), fall-through CGEvent only if parent AXList lookup fails.
 /// Tests: inject scripted tree responses for deterministic coverage.
 public struct TreeProbe: Sendable {
     /// Return the ordered child names at the given tree path, OR nil on probe timeout.
@@ -598,9 +599,11 @@ enum LibraryAccessor {
         )
     }
 
-    /// Select a category by name. Injects a real mouse click at the
-    /// category's screen position. Returns true if the element was found
-    /// and the click was dispatched.
+    /// Select a category by name. v3.0.3+: AX-native path — sets the parent
+    /// AXList's `AXSelectedChildren` to the target static-text element (which
+    /// auto-scrolls it into view and highlights the row) and fires AXPress to
+    /// commit the column expand. No CGEvent, no coordinates. Returns true if
+    /// the element was found and both AX operations were dispatched.
     @discardableResult
     static func selectCategory(
         named name: String,
