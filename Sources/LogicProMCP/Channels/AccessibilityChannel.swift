@@ -720,11 +720,15 @@ actor AccessibilityChannel: Channel {
         guard let indexStr = params["index"], let index = Int(indexStr) else {
             return .error("Missing or invalid 'index' parameter")
         }
-        guard let header = AXLogicProElements.findTrackHeader(at: index, runtime: runtime) else {
+        guard AXLogicProElements.findTrackHeader(at: index, runtime: runtime) != nil else {
             return .error("Track at index \(index) not found")
         }
-        guard AXHelpers.performAction(header, kAXPressAction, runtime: runtime.ax) else {
-            return .error("Failed to select track \(index)")
+        // v3.0.3+ — activate Logic so any coord-click fallback can land, then
+        // go through the AX-native selection ladder.
+        _ = ProcessUtils.Runtime.production.activateLogicPro()
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        guard AXLogicProElements.selectTrackViaAX(at: index, runtime: runtime) else {
+            return .error("Failed to select track \(index) via AX or coord click")
         }
 
         let verification = await verifyTrackSelection(index: index, runtime: runtime)
@@ -1274,21 +1278,39 @@ actor AccessibilityChannel: Channel {
         guard let pluginWin = PluginInspector.findFocusedPluginWindowAX(in: appRoot) else {
             return .error("No plugin window with Setting dropdown found. Open an instrument plugin window first.")
         }
-        // 3. Locate Setting popup + its center point
+        // 3. Locate Setting popup
         guard let popup = PluginInspector.findSettingPopupAX(in: pluginWin) else {
             return .error("Setting popup not found in plugin window")
         }
-        guard let center = PluginInspector.centerPoint(of: popup) else {
-            return .error("Setting popup has no readable position/size")
+        // 4. Open the menu — AX-first ladder. AXShowMenu is the canonical popup
+        //    action per NSAccessibility; AXPress sometimes works on Logic's
+        //    custom popups; CGEvent click is the last-resort fallback.
+        //    T0 verdict (v0.6) said raw AXPress was unreliable — we re-test here
+        //    and only fall through to CGEvent if both AX actions fail to surface
+        //    the AXMenu within the settle window.
+        var menu: AXUIElement?
+        let axOpenActions = [kAXShowMenuAction, kAXPressAction]
+        for action in axOpenActions {
+            if AXHelpers.performAction(popup, action, runtime: runtime.ax) {
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                if let found = PluginInspector.findOpenSettingMenuAX(in: appRoot) {
+                    menu = found
+                    break
+                }
+            }
         }
-        // 4. CGEvent click to open menu (T0 verdict — popup AXPress unreliable)
-        guard LibraryAccessor.productionMouseClick(at: center) else {
-            return .error("CGEvent click on Setting popup failed (Post-Event permission?)")
+        if menu == nil {
+            guard let center = PluginInspector.centerPoint(of: popup) else {
+                return .error("Setting popup has no readable position/size; AXShowMenu/AXPress also failed")
+            }
+            guard LibraryAccessor.productionMouseClick(at: center) else {
+                return .error("AXShowMenu/AXPress failed and CGEvent click on Setting popup also failed (Post-Event permission?)")
+            }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            menu = PluginInspector.findOpenSettingMenuAX(in: appRoot)
         }
-        // 5. Wait for menu to appear, then locate it
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        guard let menu = PluginInspector.findOpenSettingMenuAX(in: appRoot) else {
-            return .error("Setting menu did not appear after click (or already dismissed)")
+        guard let menu = menu else {
+            return .error("Setting menu did not appear after AXShowMenu/AXPress/CGEvent (or already dismissed)")
         }
         // 6. Build live probe + walk
         let probe = PluginInspector.liveMenuProbe(rootMenu: menu, settleMs: settleMs)
@@ -1541,48 +1563,23 @@ actor AccessibilityChannel: Channel {
         let category = resolvedCategory
         let preset = resolvedPreset
 
-        // Select the target track first — Library loads the instrument onto
-        // whichever track is currently focused. AXPressAction on track headers
-        // is unreliable in Logic Pro 12; inject a real CGEvent mouse click at
-        // the header's screen position (same pattern proven for Library).
+        // v3.0.3+ — select target track via the Apple-public AX-first
+        // selection ladder (AXPress → AXSelected → child AXPress → coord
+        // click fallback). Logic must be frontmost for the last step to
+        // register, so activate first regardless of which step ends up
+        // committing.
+        _ = ProcessUtils.Runtime.production.activateLogicPro()
+        try? await Task.sleep(nanoseconds: 150_000_000)   // window raise settle
+
         if let indexStr = params["index"], let index = Int(indexStr) {
-            guard let header = AXLogicProElements.findTrackHeader(at: index, runtime: runtime) else {
+            guard AXLogicProElements.findTrackHeader(at: index, runtime: runtime) != nil else {
                 return .error("Track at index \(index) not found")
             }
-            var posValue: AnyObject?
-            var sizeValue: AnyObject?
-            _ = AXUIElementCopyAttributeValue(header, kAXPositionAttribute as CFString, &posValue)
-            _ = AXUIElementCopyAttributeValue(header, kAXSizeAttribute as CFString, &sizeValue)
-            if let posRaw = posValue, let sizeRaw = sizeValue,
-               CFGetTypeID(posRaw) == AXValueGetTypeID(),
-               CFGetTypeID(sizeRaw) == AXValueGetTypeID() {
-                var p = CGPoint.zero
-                var s = CGSize.zero
-                AXValueGetValue((posRaw as! AXValue), .cgPoint, &p)
-                AXValueGetValue((sizeRaw as! AXValue), .cgSize, &s)
-                // T6: viewport visibility check (AC-3.2 / E13)
-                if let vp = AccessibilityChannel.trackViewport(runtime: runtime) {
-                    let headerY = p.y + s.height / 2
-                    if headerY < vp.minY || headerY > vp.maxY {
-                        return .error("Track not visible; scroll tracklist to bring track \(index) into view")
-                    }
-                }
-                // E10b: preflight Post-Event capability before any CGEvent mutation
-                if !CGPreflightPostEventAccess() {
-                    return .error("Event-post permission required (Accessibility → Input Monitoring). Grant in System Settings.")
-                }
-                // Click near the left edge of the header (name area), not center,
-                // to avoid hitting record/mute/solo buttons on wider headers.
-                let clickPoint = CGPoint(x: p.x + min(60, s.width / 4), y: p.y + s.height / 2)
-                let clicked = LibraryAccessor.productionMouseClick(at: clickPoint)
-                guard clicked else {
-                    return .error("Failed to click track header at index \(index)")
-                }
-                try? await Task.sleep(nanoseconds: 350_000_000)
-            } else {
-                _ = AXHelpers.performAction(header, kAXPressAction, runtime: runtime.ax)
-                try? await Task.sleep(nanoseconds: 400_000_000)
+            if !CGPreflightPostEventAccess() {
+                return .error("Event-post permission required (Accessibility → Input Monitoring). Grant in System Settings.")
             }
+            _ = AXLogicProElements.selectTrackViaAX(at: index, runtime: runtime)
+            try? await Task.sleep(nanoseconds: 300_000_000)   // Library rebind to new track
         }
 
         // Select the category (injects CGEvent mouse click)

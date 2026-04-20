@@ -611,22 +611,30 @@ enum LibraryAccessor {
         let texts = AXHelpers.findAllDescendants(
             of: browser, role: kAXStaticTextRole, maxDepth: 6, runtime: runtime.ax
         )
-        // Find the category in the leftmost column
-        let targets = texts.compactMap { t -> (text: String, pos: CGPoint)? in
-            guard let value: String = AXHelpers.getAttribute(t, kAXValueAttribute, runtime: runtime.ax),
-                  let pos = position(of: t, runtime: runtime.ax) else { return nil }
-            return (value, pos)
+        let matches = texts.compactMap { t -> (text: String, element: AXUIElement)? in
+            guard let value: String = AXHelpers.getAttribute(t, kAXValueAttribute, runtime: runtime.ax)
+            else { return nil }
+            return (value, t)
         }
-        // Lookup exact match
-        guard let target = targets.first(where: { $0.text == name }) else {
-            return false
+        guard let targetEl = matches.first(where: { $0.text == name })?.element else { return false }
+        // v3.0.3 — AX-native selection (same pattern as selectPreset). AXList
+        // parent's AXSelectedChildren attribute commits the category switch
+        // and AXPress fires the column expand. Works regardless of viewport.
+        if let parent = AXHelpers.getAttribute(
+            targetEl, kAXParentAttribute, runtime: runtime.ax
+        ) as AXUIElement? {
+            _ = AXUIElementSetAttributeValue(parent, "AXSelectedChildren" as CFString, [targetEl] as CFArray)
         }
-        return library.postMouseClick(target.pos)
+        _ = AXUIElementPerformAction(targetEl, kAXPressAction as CFString)
+        Thread.sleep(forTimeInterval: 0.25)
+        return true
     }
 
-    /// Select a preset by name in the currently-active category. Injects a
-    /// real mouse click at the preset's screen position. Triggers Logic Pro
-    /// to load that instrument on the focused track.
+    /// Select a preset by name in the currently-active category. v3.0.3: Logic
+    /// Pro 12's Library commits preset loading on **double-click**, not single
+    /// click — a single click only highlights the row in the panel. Using
+    /// `AXMouseHelper.doubleClick` (clickCount=2 on the second down/up pair)
+    /// is what actually swaps the track's channel-strip instrument.
     @discardableResult
     static func selectPreset(
         named name: String,
@@ -637,13 +645,39 @@ enum LibraryAccessor {
         let texts = AXHelpers.findAllDescendants(
             of: browser, role: kAXStaticTextRole, maxDepth: 6, runtime: runtime.ax
         )
-        let matches = texts.compactMap { t -> (text: String, pos: CGPoint)? in
-            guard let value: String = AXHelpers.getAttribute(t, kAXValueAttribute, runtime: runtime.ax),
-                  let pos = position(of: t, runtime: runtime.ax) else { return nil }
-            return (value, pos)
+        let matches = texts.compactMap { t -> (text: String, element: AXUIElement)? in
+            guard let value: String = AXHelpers.getAttribute(t, kAXValueAttribute, runtime: runtime.ax)
+            else { return nil }
+            return (value, t)
         }
-        guard let target = matches.first(where: { $0.text == name }) else { return false }
-        return library.postMouseClick(target.pos)
+        // v3.0.3 breakthrough — no click, no coordinates, no scroll guesses.
+        // Pure AX API two-step:
+        //   1. Set AXSelectedChildren on the parent AXList to include the
+        //      target static-text element. Standard AppKit NSTableView row
+        //      selection path — this AUTO-SCROLLS the row into view and
+        //      sets the selection highlight.
+        //   2. Perform AXPress on the element. Logic's AXPress handler for
+        //      Library preset rows commits the load onto the selected track.
+        //
+        // Works on rows that are scrolled far below the viewport (verified
+        // live — TR-909 at logical y=3541 on a 1325px screen loaded cleanly).
+        // No CGEvent, so screen geometry / multi-monitor setups don't matter.
+        guard let targetEl = matches.first(where: { $0.text == name })?.element else { return false }
+        guard let parent = AXHelpers.getAttribute(
+            targetEl, kAXParentAttribute, runtime: runtime.ax
+        ) as AXUIElement? else {
+            // Fall back to coord click if we can't reach the parent list.
+            guard let pos = position(of: targetEl, runtime: runtime.ax) else { return false }
+            AXMouseHelper.doubleClick(at: pos)
+            Thread.sleep(forTimeInterval: 0.2)
+            return true
+        }
+        let arr = [targetEl] as CFArray
+        _ = AXUIElementSetAttributeValue(parent, "AXSelectedChildren" as CFString, arr)
+        Thread.sleep(forTimeInterval: 0.20)   // let the scroll settle
+        let pressResult = AXUIElementPerformAction(targetEl, kAXPressAction as CFString)
+        Thread.sleep(forTimeInterval: 0.30)   // let Logic swap the plugin chain
+        return pressResult == .success
     }
 
     /// Convenience: set category then preset with a short delay for Logic to

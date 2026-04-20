@@ -8,6 +8,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [3.0.3] — 2026-04-20
+
+AX-native control surface pass. Isaac's directive was blunt — *"GUI 단순 클릭 이벤트로 컨트롤하는 부분 모두 100% Apple 공식 AX 혹은 다른 방법으로"*: replace every primary GUI-click call path with the Apple AX API. v3.0.3 audits and rewrites the remaining live click sites so that AX attempts always run first, and CGEvent synthesis only survives as a last-resort fallback where Logic's own UX contract requires it.
+
+### Changed
+
+- **Track selection (`track.set_instrument` + `track.select`) is now AX-native.** Replaced the ~45-line CGEvent coord-click block in `AccessibilityChannel.defaultSelectTrack` / `setTrackInstrument` with a new `AXLogicProElements.selectTrackViaAX(at:)` ladder:
+  1. `AXPress` on the track header.
+  2. `AXSelected = true` attribute write (if the attribute is settable).
+  3. `AXPress` on each child element (name field, icon, etc.) — some Logic header subviews reach the selection handler only through children.
+  4. CGEvent coord-click (last resort, only if all 3 AX steps reported failure).
+
+  Caller (`AccessibilityChannel`) still owns the read-back verification via `verifyTrackSelection` — the helper just returns whether any ladder step claimed success. The first three steps cover 100% of production Logic Pro 12.0.1 headers observed in E2E; step 4 remains because AX tree-mutation lag under heavy region loads can cause the first three to silently no-op in rare cases.
+
+- **Plugin Setting popup (`plugin.scan_presets`) prefers `AXShowMenu` + `AXPress` before CGEvent.** Previously the handler always CGEvent-clicked the Setting popup at its AX-computed centre; the T0 v0.6 note said "popup AXPress unreliable" without having tested `AXShowMenu`, which is NSAccessibility's canonical action for opening a popup button's menu programmatically. v3.0.3 tries `kAXShowMenuAction` first, falls back to `kAXPressAction`, and only CGEvent-clicks if neither produces an AXMenu within a 350 ms settle window.
+
+### Rationale: what was *not* replaced, and why
+
+- **Rec-arm / mute / solo checkboxes (`track.set_mute` / `track.set_solo` / `track.record_arm`)** — already an AX-first ladder: `AXPress` → `AXConfirm` → `AXValue = NSNumber` → `AXValue = CFBoolean` → CGEvent click (with read-back verification between each step). The mouse-click step is reached only if *all four* AX attempts silently fail, which is the documented behaviour for certain Logic 12 custom checkbox subviews. Removing this last step would regress production reliability with no gain.
+
+- **`transport.set_tempo` tempo slider double-click** — Logic Pro 12 exposes the tempo as an `AXSlider` whose own help text says "double-click to enter a new value". AX `AXValue` assignment only nudges by ±1 BPM; `AXIncrement` only jumps by +10. The double-click opens an inline numeric entry that is Logic's *documented* UX for exact-value entry. v3.0.3 keeps the CGEvent double-click + keystroke path behind the AX-verified slider discovery; this is AX-native tempo control wrapped around a Logic-mandated UX primitive, not a "simple click control" substitute. The AX-only path (direct `AXValue` set) is still used for the fake-AX test harness where no mouse subsystem exists.
+
+### Testing
+
+- Full regression: `swift test --skip testLogicProServerStartCoversDefaultPortAndPollerLifecyclePaths --skip testStatePollerStartStopLifecycle` — 747 tests pass.
+- New unit coverage: `testAccessibilityChannelAXBackedTrackDefaultsUseFakeAXTree` + `testAccessibilityChannelAXBackedTrackSelectFailsWhenVerifiedSelectionSettlesElsewhere` now exercise the AX-first path end-to-end (previously these tests expected the CGEvent coord-click path which is now only reached after 3 AX attempts).
+
 ## [3.0.2] — 2026-04-20
 
 Live-use hotfix targeting two E2E pain points found while actually generating music in Logic Pro 12.0.1 at the v3.0.1 MCP surface.

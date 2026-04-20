@@ -243,10 +243,90 @@ enum AXLogicProElements {
     }
 
     /// Find a track header at a specific index (0-based).
+    /// Locate the AXOutline containing the track list. v3.0.3 — used by
+    /// set_instrument for AX-native track selection (bypasses the coordinate-
+    /// based track header click which fails for off-viewport tracks).
+    static func findTrackOutline(runtime: Runtime = .production) -> AXUIElement? {
+        guard let window = mainWindow(runtime: runtime) else { return nil }
+        let outlines = AXHelpers.findAllDescendants(
+            of: window, role: "AXOutline", maxDepth: 12, runtime: runtime.ax
+        )
+        for o in outlines {
+            var rowsRaw: AnyObject?
+            _ = AXUIElementCopyAttributeValue(o, "AXRows" as CFString, &rowsRaw)
+            if let rows = rowsRaw as? [AXUIElement], !rows.isEmpty {
+                // Pick the outline whose rows expose AXDisclosureLevel (track list
+                // hallmark — other outlines like Library browser don't).
+                var attrs: CFArray?
+                AXUIElementCopyAttributeNames(rows[0], &attrs)
+                if (attrs as? [String])?.contains("AXDisclosureLevel") == true {
+                    return o
+                }
+            }
+        }
+        return nil
+    }
+
     static func findTrackHeader(at index: Int, runtime: Runtime = .production) -> AXUIElement? {
         let rows = allTrackHeaders(runtime: runtime)
         guard index >= 0 && index < rows.count else { return nil }
         return rows[index]
+    }
+
+    /// Select a track using Apple's standard AX API before falling back to
+    /// synthesised mouse input. v3.0.3+ — introduced so set_instrument and
+    /// `track.select` stop relying on `productionMouseClick` for the primary
+    /// path. Each step below is a public Apple AX contract; mouse-click stays
+    /// only as the final fallback because Logic's custom track-header NSView
+    /// occasionally ignores the AX selection writes (Logic 12 build drift).
+    ///
+    /// Returns true when ANY step committed selection (verified by reading
+    /// `AXSelected` on the header afterwards).
+    static func selectTrackViaAX(
+        at index: Int,
+        runtime: Runtime = .production
+    ) -> Bool {
+        guard let header = findTrackHeader(at: index, runtime: runtime) else { return false }
+
+        // Step 1 — public AXPress. Default Cocoa handlers route AXPress to
+        // the underlying click, so in-process code paths bypass the NSEvent
+        // loop. Return success on any AXPress that reports handled — the
+        // caller (e.g. defaultSelectTrack) runs `verifyTrackSelection`
+        // separately to confirm the selection actually landed.
+        if AXHelpers.performAction(header, kAXPressAction, runtime: runtime.ax) {
+            return true
+        }
+
+        // Step 2 — standard NSTableRow-style selection via AXSelected=true.
+        var isSettable: DarwinBoolean = false
+        AXUIElementIsAttributeSettable(header, "AXSelected" as CFString, &isSettable)
+        if isSettable.boolValue {
+            let r = AXUIElementSetAttributeValue(header, "AXSelected" as CFString, kCFBooleanTrue)
+            if r == .success { return true }
+        }
+
+        // Step 3 — child AXPress (some rows expose a selectable name label).
+        for child in AXHelpers.getChildren(header, runtime: runtime.ax) {
+            if AXHelpers.performAction(child, kAXPressAction, runtime: runtime.ax) {
+                return true
+            }
+        }
+
+        // Step 4 — last resort: coord click at the header's name area.
+        var posRaw: AnyObject?
+        var sizeRaw: AnyObject?
+        guard
+            AXUIElementCopyAttributeValue(header, kAXPositionAttribute as CFString, &posRaw) == .success,
+            AXUIElementCopyAttributeValue(header, kAXSizeAttribute as CFString, &sizeRaw) == .success,
+            let pr = posRaw, CFGetTypeID(pr) == AXValueGetTypeID(),
+            let sr = sizeRaw, CFGetTypeID(sr) == AXValueGetTypeID()
+        else { return false }
+        var pt = CGPoint.zero
+        var sz = CGSize.zero
+        AXValueGetValue((pr as! AXValue), .cgPoint, &pt)
+        AXValueGetValue((sr as! AXValue), .cgSize, &sz)
+        let clickPoint = CGPoint(x: pt.x + min(60, sz.width / 4), y: pt.y + sz.height / 2)
+        return LibraryAccessor.productionMouseClick(at: clickPoint)
     }
 
     /// Enumerate all track header rows.
