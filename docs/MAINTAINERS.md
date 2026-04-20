@@ -8,7 +8,7 @@ Operator and maintainer reference. End users do not need to read this — start 
 |------|-----------|
 | macOS | 14+ (Sonoma, Sequoia) |
 | Logic Pro | 12.0.1+ |
-| Architectures | Universal binary — `arm64` + `x86_64` in one fat artifact |
+| Architectures | `arm64` native (via local ADHOC). Universal `arm64`+`x86_64` requires full Xcode + CI `--arch arm64 --arch x86_64`. Intel via Rosetta |
 | MCP clients | Claude Code, Claude Desktop |
 
 ## Manual-validation Channels
@@ -39,7 +39,7 @@ Revoke whenever the preset is removed, the Scripter instance is removed, or the 
 ```bash
 swift build -c release
 codesign --force --sign - .build/release/LogicProMCP
-VERSION=v3.0.0
+VERSION=v3.0.1
 shasum -a 256 .build/release/LogicProMCP | awk '{print $1"  LogicProMCP"}' > SHA256SUMS.txt
 echo '{"version":"'$VERSION'","team_id":"ADHOC","signing":"adhoc"}' > RELEASE-METADATA.json
 
@@ -66,8 +66,8 @@ Preconditions — GitHub Actions secrets configured:
 Release:
 
 ```bash
-git tag v3.0.0
-git push origin v3.0.0
+git tag v3.0.1
+git push origin v3.0.1
 ```
 
 `.github/workflows/release.yml` builds a universal binary, signs, notarizes, staples, and publishes to a GitHub release with full signature validation in a downstream install job.
@@ -77,7 +77,7 @@ git push origin v3.0.0
 After the GitHub release is published, the Homebrew formula still points at the **old** tarball SHA256. Update it:
 
 ```bash
-VERSION=v3.0.0
+VERSION=v3.0.1
 curl -fsSL "https://github.com/MongLong0214/logic-pro-mcp/releases/download/$VERSION/SHA256SUMS.txt" \
     | awk '$2 == "LogicProMCP-macOS-universal.tar.gz" {print $1}'
 # copy the hex into Formula/logic-pro-mcp.rb `sha256 "…"`

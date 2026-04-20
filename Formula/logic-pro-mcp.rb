@@ -3,15 +3,18 @@ class LogicProMcp < Formula
   homepage "https://github.com/MongLong0214/logic-pro-mcp"
   # Single source of truth is Sources/LogicProMCP/Server/ServerConfig.swift
   # (ServerConfig.serverVersion). Bump both together.
-  version "3.0.0"
+  version "3.0.1"
   license "MIT"
 
-  # Universal binary (arm64 + x86_64). The release workflow publishes both
-  # LogicProMCP-macOS-universal.tar.gz and LogicProMCP-macOS-arm64.tar.gz as
-  # aliases of the same fat binary. This formula targets the universal
-  # tarball so both architectures work from one URL.
+  # arm64-native binary. Intel Macs run under Rosetta 2 — functional but
+  # slower + with minor CoreMIDI / AX timing differences. The release workflow
+  # with full Xcode + `swift build --arch arm64 --arch x86_64` would emit a
+  # true universal binary; ADHOC local releases ship arm64 only. The tarball
+  # is published under both `-arm64` and `-universal` names for backward
+  # compatibility with taps that hardcoded the older URL — the bytes are
+  # identical.
   #
-  # NOTE: sha256 below is the v3.0.0 adhoc-signed tarball shipped on GitHub.
+  # NOTE: sha256 below is the v3.0.1 adhoc-signed tarball shipped on GitHub.
   #       Update every release from the published SHA256SUMS.txt.
   on_macos do
     url "https://github.com/MongLong0214/logic-pro-mcp/releases/download/v#{version}/LogicProMCP-macOS-universal.tar.gz"

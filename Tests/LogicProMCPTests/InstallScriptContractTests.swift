@@ -45,18 +45,26 @@ private func scriptContents(_ relativePath: String) throws -> String {
     #expect(script.contains("--approve-channel Scripter"))
 }
 
-@Test func testReleaseWorkflowFailsWithoutSigningSecretsAndPublishesMetadata() throws {
+@Test func testReleaseWorkflowDualModesAndPublishesMetadata() throws {
     let workflow = try scriptContents(".github/workflows/release.yml")
 
-    #expect(workflow.contains("Validate release signing configuration"))
-    #expect(workflow.contains("is required for a release build"))
+    // v3.0.1: dual-mode release (notarized if secrets present, else adhoc).
+    // ADHOC mode lets the CI pipeline succeed end-to-end even without an
+    // Apple Developer Program subscription, so validate-install runs on
+    // every tag push instead of being blocked by missing secrets.
+    #expect(workflow.contains("Detect release mode"))
+    #expect(workflow.contains("mode=notarized"))
+    #expect(workflow.contains("mode=adhoc"))
+    #expect(workflow.contains("Validate notarization secrets"))
+    #expect(workflow.contains("is required for a notarized release build"))
+    #expect(workflow.contains("Codesign binary (Developer ID)"))
+    #expect(workflow.contains("Codesign binary (ADHOC)"))
+    #expect(workflow.contains("codesign --force --sign - LogicProMCP"))
     #expect(workflow.contains("RELEASE-METADATA.json"))
     #expect(workflow.contains("validate-install"))
     #expect(workflow.contains("macos-15"))
     #expect(workflow.contains("macos-13"))
     #expect(workflow.contains("LOGIC_PRO_MCP_INSTALL_DIR"))
-    #expect(!workflow.contains("if: ${{ secrets.MACOS_CERT_BASE64 != ''"))
-    #expect(!workflow.contains("if: ${{ secrets.APPLE_NOTARY_APPLE_ID != ''"))
 }
 
 @Test func testUninstallScriptRemovesClaudeRegistrationAndKeepsManualScripterReminder() throws {

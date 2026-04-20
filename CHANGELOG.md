@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [3.0.1] — 2026-04-20
+
+Release-path and docs-honesty hotfix on top of v3.0.0. **No runtime behavior changes** — same 8 tools, 9 resources, 3 templates. Upgrade is a docs + CI + packaging refresh.
+
+### Fixed
+
+- **Architecture claims match reality.** Locally-built ADHOC releases are `arm64`-native (produced by `swift build -c release` without Xcode); Intel Macs run the binary under Rosetta 2. The v3.0.0 release asset named `…-universal.tar.gz` was bit-identical to `…-arm64.tar.gz` — technically arm64 masquerading as universal. v3.0.1 keeps both tarball names for Homebrew-tap backward compatibility but `manifest.json`, `README.md`, `docs/SETUP.md`, `docs/MAINTAINERS.md`, and `Formula/logic-pro-mcp.rb` now all state `arm64` native + Intel via Rosetta. CI with full Xcode still produces a genuine fat binary.
+- **`release.yml` is dual-mode (notarized + ADHOC).** Previously the workflow hard-required `MACOS_CERT_BASE64` and 6 other Apple-Developer secrets, so every tag push failed visibly (red X on every release since v2.3.0). v3.0.1 detects secret presence at runtime: notarized path when present, ADHOC (`codesign --sign -`) when absent. Both paths publish `RELEASE-METADATA.json` with correct `signing` field (`notarized`|`adhoc`). CI `validate-install` matrix now runs end-to-end on every release.
+- **README test-count unified.** Badge, body paragraph, and release notes now consistently cite **760 passing** (was drifting between 700 badge / 759 body / 760 notes).
+- **Migration guidance expanded.** CHANGELOG §Migration now includes before/after examples for `set_instrument` (empty-call rejection) and `goto_position` (`time` alias removed).
+
+### Added
+
+- `Scripts/release.sh` — one-command ADHOC release that (1) builds + adhoc-codesigns the binary, (2) computes SHAs, (3) patches `Formula/logic-pro-mcp.rb` + commits Formula sync, (4) creates tag, (5) creates GitHub release with artifacts — in the right order. Prevents the v3.0.0 issue where the Formula SHA commit landed on `main` *after* the tag, leaving the tag with a stale sha256.
+- `docs/MAINTAINERS.md` now documents both release modes, the `Scripts/release.sh` wrapper, and the post-tag Homebrew SHA-sync step more clearly.
+
+### Security
+
+- No security changes in v3.0.1. The round-4/5 hardening (fail-closed installer, symlink validation, JSON validation, rate-limit cap, ISO 8601 alignment, Logger/JSON thread-safety) remains in place from v3.0.0.
+
 ## [3.0.0] — 2026-04-19
 
 > Renumbered from 2.4.0 to 3.0.0 to honor SemVer — the changes below break
@@ -87,6 +107,29 @@ Replace every mutating `logic_tracks.*` call with an explicit `index`:
 ```
 
 For `arm_only` and `record_sequence`, check `isError` before parsing the JSON payload. Previous `armedSuccess: false` / `track_index_confirmed: false` responses are now returned as structured errors.
+
+#### `set_instrument` now requires a selector
+
+```diff
+- logic_tracks set_instrument { "index": 0 }
++ logic_tracks set_instrument { "index": 0, "path": "Electronic Drums/Roland TR-909" }
+# or
++ logic_tracks set_instrument { "index": 0, "category": "Synthesizer", "preset": "Vintage Mono" }
+```
+
+#### `goto_position` renames `time` → `position`
+
+```diff
+- logic_transport goto_position { "time": "00:00:10:12" }
++ logic_transport goto_position { "position": "00:00:10:12" }
+
+- logic_transport goto_position { "time": "9.1.1.1" }
++ logic_transport goto_position { "position": "9.1.1.1" }
+# or
++ logic_transport goto_position { "bar": 9 }
+```
+
+Sending `{ "time": ... }` in v3.0.0+ returns an explicit error naming the removed key.
 
 ## [2.3.1] — 2026-04-19
 

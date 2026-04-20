@@ -36,7 +36,21 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app
 
-      - name: Validate release signing configuration
+      - name: Detect release mode
+        id: mode
+        env:
+          MACOS_CERT_BASE64: ${{ secrets.MACOS_CERT_BASE64 }}
+        run: |
+          if [ -n "$MACOS_CERT_BASE64" ]; then
+            echo "mode=notarized" >> "$GITHUB_OUTPUT"
+            echo "Release mode: NOTARIZED (Developer ID + notarization)"
+          else
+            echo "mode=adhoc" >> "$GITHUB_OUTPUT"
+            echo "Release mode: ADHOC (codesign --sign -; no notarization)"
+          fi
+
+      - name: Validate notarization secrets
+        if: steps.mode.outputs.mode == 'notarized'
         env:
           MACOS_CERT_BASE64: ${{ secrets.MACOS_CERT_BASE64 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
@@ -57,7 +71,7 @@ jobs:
           )
           for name in "${required[@]}"; do
             if [ -z "${!name}" ]; then
-              echo "::error::$name is required for a release build"
+              echo "::error::$name is required for a notarized release build"
               exit 1
             fi
           done
@@ -68,7 +82,8 @@ jobs:
           cp .build/apple/Products/Release/LogicProMCP LogicProMCP
           chmod +x LogicProMCP
 
-      - name: Codesign binary
+      - name: Codesign binary (Developer ID)
+        if: steps.mode.outputs.mode == 'notarized'
         env:
           MACOS_CERT_BASE64: ${{ secrets.MACOS_CERT_BASE64 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
@@ -86,7 +101,13 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           codesign --force --options runtime --timestamp --sign "$MACOS_SIGNING_IDENTITY" LogicProMCP
 
+      - name: Codesign binary (ADHOC)
+        if: steps.mode.outputs.mode == 'adhoc'
+        run: |
+          codesign --force --sign - LogicProMCP
+
       - name: Notarize binary
+        if: steps.mode.outputs.mode == 'notarized'
         env:
           APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
           APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
@@ -95,19 +116,31 @@ jobs:
           xcrun notarytool submit LogicProMCP --apple-id "$APPLE_NOTARY_APPLE_ID" --team-id "$APPLE_NOTARY_TEAM_ID" --password "$APPLE_NOTARY_APP_PASSWORD" --wait
           xcrun stapler staple LogicProMCP
 
-      - name: Verify signed artifact
+      - name: Verify notarized artifact
+        if: steps.mode.outputs.mode == 'notarized'
         run: |
           codesign --verify --strict --verbose=2 LogicProMCP
           spctl --assess --type execute LogicProMCP
 
+      - name: Verify adhoc artifact
+        if: steps.mode.outputs.mode == 'adhoc'
+        run: |
+          codesign --verify --strict --verbose=2 LogicProMCP
+
       - name: Package
         env:
+          RELEASE_MODE: ${{ steps.mode.outputs.mode }}
           APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
         run: |
-          printf '{\n  "version": "%s",\n  "team_id": "%s"\n}\n' "$GITHUB_REF_NAME" "$APPLE_NOTARY_TEAM_ID" > RELEASE-METADATA.json
-          # Homebrew formula's pkgshare.install references these files
-          # relative to the tarball root. Keep this list in sync with
-          # Formula/logic-pro-mcp.rb's install block.
+          if [ "$RELEASE_MODE" = "notarized" ]; then
+            TEAM_ID="$APPLE_NOTARY_TEAM_ID"
+            SIGNING="notarized"
+          else
+            TEAM_ID="ADHOC"
+            SIGNING="adhoc"
+          fi
+          printf '{"version":"%s","team_id":"%s","signing":"%s"}\n' \
+            "$GITHUB_REF_NAME" "$TEAM_ID" "$SIGNING" > RELEASE-METADATA.json
           # Universal tarball (arm64 + x86_64 from --arch arm64 --arch x86_64 build)
           tar czf LogicProMCP-macOS-universal.tar.gz \
             LogicProMCP \
@@ -116,8 +149,8 @@ jobs:
             Scripts/uninstall-keycmds.sh \
             Scripts/keycmd-preset.plist \
             Scripts/LogicProMCP-Scripter.js
-          # Apple Silicon alias — same binary (it's a universal fat), different name
-          # matching the Formula URL to avoid 404 on current Homebrew tap users.
+          # arm64 alias — same binary (fat-universal), different name for
+          # backward-compat with taps hardcoded to the older URL.
           cp LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz
           shasum -a 256 LogicProMCP-macOS-universal.tar.gz > SHA256SUMS.txt
           shasum -a 256 LogicProMCP-macOS-arm64.tar.gz >> SHA256SUMS.txt

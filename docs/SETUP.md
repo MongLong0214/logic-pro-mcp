@@ -6,7 +6,7 @@ Complete installation, Logic Pro integration, and verification. Should take ~10 
 
 - macOS 14+ (Sonoma, Sequoia)
 - Logic Pro 12.0.1+
-- Apple Silicon (arm64) **or** Intel (x86_64) — the release ships a universal binary
+- Apple Silicon (arm64) native; Intel (x86_64) supported via Rosetta 2 (install from source with `swift build` for a native Intel build)
 - Claude Code or Claude Desktop
 
 ---
@@ -27,7 +27,7 @@ Homebrew pins both the release tarball URL and its SHA256 in the formula, and Ho
 The installer is **fail-closed by default**: it refuses to run without explicit SHA256 + Team ID pins. Inspect the script first, verify the hash from the release's `SHA256SUMS.txt`, then execute:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.0.0/Scripts/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.0.1/Scripts/install.sh -o install.sh
 # inspect install.sh, then:
 LOGIC_PRO_MCP_SHA256=<hex from release SHA256SUMS.txt> \
 LOGIC_PRO_MCP_TEAM_ID=ADHOC \
@@ -38,7 +38,7 @@ If you knowingly accept same-origin provenance (hash + Team ID fetched from the 
 
 ```bash
 LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1 \
-bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.0.0/Scripts/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.0.1/Scripts/install.sh)
 ```
 
 See [SECURITY.md §Installer trust model](../SECURITY.md#installer-trust-model) for the threat model.
