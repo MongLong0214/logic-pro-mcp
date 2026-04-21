@@ -173,6 +173,48 @@ struct LibraryAccessorResolvePathTests {
         let recorded = await recorder.calls
         #expect(recorded == ["Cat", "Preset"])
     }
+
+    // v3.0.4 — 3-segment N-column path (Isaac's actual live bug repro).
+    // Pre-3.0.4 setTrackInstrument dropped middle segments; this test locks
+    // the fix at the selectByPath level (which is what the production
+    // setTrackInstrument now delegates to via LibraryAccessor.selectPath).
+    @Test func testSelectByPath_ThreeSegment_Synthesizer_Bass_AcidEtchedBass() async throws {
+        let recorder = ClickRecorder()
+        let runtime = makeSelectByPathRuntime(recorder: recorder)
+        let ok = await LibraryAccessor.selectByPath(
+            "Synthesizer/Bass/Acid Etched Bass", settleDelayMs: 0, runtime: runtime
+        )
+        #expect(ok)
+        let recorded = await recorder.calls
+        #expect(recorded == ["Synthesizer", "Bass", "Acid Etched Bass"],
+                "v3.0.4 must click every segment in order — not parts[0]+parts[last]")
+    }
+
+    // v3.0.4 — 4-segment path (defence-in-depth: confirms the walker isn't
+    // hardcoded to exactly 3 levels).
+    @Test func testSelectByPath_FourSegment_DeepPath() async throws {
+        let recorder = ClickRecorder()
+        let runtime = makeSelectByPathRuntime(recorder: recorder)
+        let ok = await LibraryAccessor.selectByPath(
+            "Orchestral/Strings/Violins/Warm Legato", settleDelayMs: 0, runtime: runtime
+        )
+        #expect(ok)
+        let recorded = await recorder.calls
+        #expect(recorded == ["Orchestral", "Strings", "Violins", "Warm Legato"])
+    }
+
+    // v3.0.4 — middle-segment failure aborts, confirming no silent skip.
+    @Test func testSelectByPath_ThreeSegment_MissingMiddle_Aborts() async throws {
+        let recorder = ClickRecorder()
+        let runtime = makeSelectByPathRuntime(recorder: recorder, missingAfter: 1)
+        let ok = await LibraryAccessor.selectByPath(
+            "Synthesizer/MissingSubfolder/Whatever", settleDelayMs: 0, runtime: runtime
+        )
+        #expect(!ok, "missing intermediate segment must fail fast")
+        let recorded = await recorder.calls
+        #expect(recorded.count <= 2,
+                "should abort before clicking the final segment when middle is missing")
+    }
 }
 
 // MARK: - Test helpers

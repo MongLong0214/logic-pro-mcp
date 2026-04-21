@@ -700,6 +700,54 @@ enum LibraryAccessor {
         return selectPreset(named: preset, runtime: runtime, library: library)
     }
 
+    /// v3.0.4 — N-segment live navigation through the 2-column sliding Library
+    /// Panel. Logic's Library is a "finder column" view: clicking a subfolder
+    /// in column 2 slides the view (column 1 becomes the subfolder, column 2
+    /// shows its direct children). Clicking a leaf preset loads it without
+    /// sliding. The actual AX primitive is identical for every segment — find
+    /// the AXStaticText by name in the currently-visible browser, set the
+    /// parent AXList's `AXSelectedChildren`, fire AXPress. Logic handles the
+    /// slide automatically.
+    ///
+    /// Returns true if every segment's click dispatched successfully. Returns
+    /// false on the first segment whose name isn't found in the currently-
+    /// visible Library browser.
+    @discardableResult
+    static func selectPath(
+        segments: [String],
+        settleDelay: TimeInterval = 0.35,
+        runtime: AXLogicProElements.Runtime = .production,
+        library: Runtime = .production
+    ) -> Bool {
+        guard !segments.isEmpty else { return false }
+        for (idx, seg) in segments.enumerated() {
+            // First segment: may require selectCategory semantics if the panel
+            // is currently showing a subcategory view rather than top level.
+            // In practice `selectCategory` and `selectPreset` do the same
+            // AXSelectedChildren+AXPress thing on whatever is currently
+            // visible, so either works for "click this name in the current
+            // browser". We deliberately use `selectPreset` for all but the
+            // first segment because `selectPreset`'s coord-click fallback
+            // (when the parent AXList isn't reachable) is what actually
+            // handles edge cases in deep viewports.
+            let ok: Bool
+            if idx == 0 {
+                ok = selectCategory(named: seg, runtime: runtime, library: library)
+            } else {
+                ok = selectPreset(named: seg, runtime: runtime, library: library)
+            }
+            if !ok { return false }
+            // Allow Logic to slide the column / update visible children.
+            // selectCategory/selectPreset already sleep internally; this is
+            // an additional settle to let column-2 AX tree rebuild before
+            // the next segment's name lookup runs.
+            if idx < segments.count - 1 {
+                Thread.sleep(forTimeInterval: settleDelay)
+            }
+        }
+        return true
+    }
+
     // MARK: - Private helpers
 
     /// Fast precondition check for callers that want to avoid starting a full

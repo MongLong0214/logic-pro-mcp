@@ -301,6 +301,42 @@ struct LibraryAccessorEnumerateTreeTests {
         #expect(root == nil, "external mutation should abort scan")
     }
 
+    // v3.0.4 — 3-level tree mirroring Isaac's Library Panel empirical findings:
+    // Synthesizer holds subfolders (Bass, Lead), each holding real leaves.
+    // Electronic Drums has leaves at depth 2. A correct enumerateTree must
+    // return 4 actual leaves, not 2 subfolder markers as pre-3.0.4 did.
+    @Test func testEnumerateTree_3Level_SynthBass_ElectronicDrums() async throws {
+        var map: [String: [String]?] = [:]
+        map[""] = ["Synthesizer", "Electronic Drums"]
+        map["Synthesizer"] = ["Bass", "Lead"]
+        map["Synthesizer/Bass"] = ["Acid Etched Bass", "Dark Drone Bass"]
+        map["Synthesizer/Lead"] = ["Hard Metal Lead"]
+        map["Synthesizer/Bass/Acid Etched Bass"] = []
+        map["Synthesizer/Bass/Dark Drone Bass"] = []
+        map["Synthesizer/Lead/Hard Metal Lead"] = []
+        map["Electronic Drums"] = ["Roland TR-909"]
+        map["Electronic Drums/Roland TR-909"] = []
+        let tree = MockTree(map: map, leaves: [
+            "Synthesizer/Bass/Acid Etched Bass",
+            "Synthesizer/Bass/Dark Drone Bass",
+            "Synthesizer/Lead/Hard Metal Lead",
+            "Electronic Drums/Roland TR-909"
+        ], visitedIdentity: [:])
+        let rec = ProbeRecorder()
+        let probe = makeProbe(tree: tree, recorder: rec)
+        let root = await LibraryAccessor.enumerateTree(maxDepth: 12, settleDelayMs: 0, probe: probe)
+        #expect(root != nil)
+        // 4 real leaves (not the 2 subfolders we'd see at depth 2 truncation)
+        #expect(root!.leafCount == 4,
+                "deep Library walk must surface every .patch leaf, not stop at folders")
+        // Folders: synthetic root + Synthesizer + Bass + Lead + Electronic Drums = 5
+        #expect(root!.folderCount == 5)
+        // presetsByCategory flattens every leaf under its top-level category
+        let synthLeaves = Set(root!.presetsByCategory["Synthesizer"] ?? [])
+        #expect(synthLeaves == Set(["Acid Etched Bass", "Dark Drone Bass", "Hard Metal Lead"]))
+        #expect(root!.presetsByCategory["Electronic Drums"] == ["Roland TR-909"])
+    }
+
     // 16 — panel closed exact error text (via wrapper return)
     @Test func testEnumerateTree_PanelClosed_ExactErrorText() async throws {
         // The error text is surfaced by AccessibilityChannel T4, not enumerateTree itself.

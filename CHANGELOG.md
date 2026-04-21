@@ -8,6 +8,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [3.0.4] — 2026-04-21
+
+N-column Library Panel navigation. Pre-3.0.4 `track.set_instrument` took `parts[0]` + `parts[last]` of the supplied path and dropped every middle segment, so a live call with `Synthesizer/Bass/Acid Etched Bass` would call `selectCategory("Synthesizer")` then `selectPreset("Acid Etched Bass")` — but by that point column 2 held Synthesizer's 14 *subfolders* (Arpeggiated, Bass, Lead, Pad, …), not its presets, so the second call always failed with "Preset not found". The fix walks every segment in order through a single AX primitive (`AXSelectedChildren` + `AXPress`), which is what Logic's 2-column sliding Library Panel actually needs: clicking a subfolder in column 2 slides the view so column 1 becomes the subfolder and column 2 shows its direct children, and clicking a leaf preset commits it without sliding.
+
+### Added
+
+- **`LibraryAccessor.selectPath(segments:settleDelay:runtime:library:)`** — N-segment walker for the Library Panel. Clicks each segment via the existing AX-native selection pair (`AXSelectedChildren` on the parent `AXList` + `AXPress` on the target `AXStaticText`), waiting for Logic's column-slide to settle between clicks. 2-segment calls behave identically to the previous `setInstrument(category:preset:)` path; 3+ segment calls unlock the deeper subfolders that Logic exposes (top-level Synthesizer, Electronic Drums, etc.).
+
+### Changed
+
+- **`track.set_instrument`** delegates to `LibraryAccessor.selectPath` instead of the hardcoded `selectCategory + selectPreset` pair. Paths with 2 segments (`Bass/Sub Bass`) keep working exactly as before; paths with 3+ segments now resolve correctly. Error message updated to reference the new N-segment contract: "Invalid 'path': must have at least 2 segments (e.g. 'Bass/Sub Bass' or 'Synthesizer/Bass/Acid Etched Bass')".
+
+### Not changed (and why)
+
+- **`scan_library` deep walk** — `buildLiveTreeProbe` still returns `[]` at depth 2+. The algorithm in `enumerateTree` already supports arbitrary depth (proven by `testEnumerateTree_Deep6Level` and the new `testEnumerateTree_3Level_SynthBass_ElectronicDrums`), but the production probe cannot safely descend by "click and observe": clicking a preset-leaf in Logic's Library actually *loads* it onto the focused track, which would mutate the user's project during an enumeration scan. A non-destructive deep scan requires a folder-vs-leaf discriminator read from the AX tree *before* clicking (the disclosure-triangle indicator Isaac observed in column 2). Implementing that safely needs a dedicated offline probe session against Logic's AX exposure, which is deferred to a follow-up release. For now `scan_library` continues to return the flat 2-level view (top-level categories + direct presets, ~345 leaves) — the undercount is honest: the tool reports only what it can read without side effects. Users who know a deeper path can still call `track.set_instrument` with the full path; only the bulk enumeration path is limited.
+
+### Testing
+
+- New: `testSelectByPath_ThreeSegment_Synthesizer_Bass_AcidEtchedBass` (locks Isaac's exact live-bug path at the selectByPath layer)
+- New: `testSelectByPath_FourSegment_DeepPath` (confirms arbitrary depth)
+- New: `testSelectByPath_ThreeSegment_MissingMiddle_Aborts` (fail-fast on missing intermediate)
+- New: `testEnumerateTree_3Level_SynthBass_ElectronicDrums` (locks the 4-leaf expectation for the 3-level fake tree)
+- Full regression: `swift test --skip testLogicProServerStartCoversDefaultPortAndPollerLifecyclePaths --skip testStatePollerStartStopLifecycle` passes.
+
 ## [3.0.3] — 2026-04-20
 
 AX-native control surface pass. Isaac's directive was blunt — *"GUI 단순 클릭 이벤트로 컨트롤하는 부분 모두 100% Apple 공식 AX 혹은 다른 방법으로"*: replace every primary GUI-click call path with the Apple AX API. v3.0.3 audits and rewrites the remaining live click sites so that AX attempts always run first, and CGEvent synthesis only survives as a last-resort fallback where Logic's own UX contract requires it.

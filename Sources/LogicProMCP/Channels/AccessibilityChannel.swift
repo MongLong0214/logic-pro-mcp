@@ -1396,6 +1396,20 @@ actor AccessibilityChannel: Channel {
 
     /// Build a live TreeProbe for the current flat 2-level Logic Library:
     /// depth 0 → categories; depth 1 → click category + read presets; depth 2+ → leaf.
+    ///
+    /// v3.0.4 NOTE: The 14× undercount of `scan_library` (345 leaves vs 4,891
+    /// disk `.patch` files) is caused by the `return []` at depth 2+ in this
+    /// probe. A correct deep scan requires a non-destructive
+    /// folder-vs-leaf discriminator BEFORE clicking, because clicking a
+    /// preset-leaf in Logic's Library actually loads it onto the focused
+    /// track — you cannot "probe by clicking" without mutating the user's
+    /// project. The discriminator exists in the AX tree (column-2 items
+    /// have an `AXDisclosureTriangle` sibling or an `AXChildren` attribute
+    /// for subfolders; leaves have neither) but live-characterising Logic's
+    /// exact AX exposure safely requires an offline probe session which was
+    /// not available for v3.0.4. The `setTrackInstrument` fix below (N-segment
+    /// `selectPath`) is unaffected — it only runs when the user explicitly
+    /// supplies all segments, making the preset-load side effect intentional.
     private static func buildLiveTreeProbe(runtime: AXLogicProElements.Runtime) -> TreeProbe {
         let logicPID = NSWorkspace.shared.runningApplications.first(where: {
             $0.bundleIdentifier == "com.apple.logic10"
@@ -1540,28 +1554,30 @@ actor AccessibilityChannel: Channel {
         let catParam = params["category"].flatMap { $0.isEmpty ? nil : $0 }
         let presetParam = params["preset"].flatMap { $0.isEmpty ? nil : $0 }
 
-        let resolvedCategory: String
-        let resolvedPreset: String
+        // v3.0.4 — N-segment navigation. Logic's Library is a 2-column sliding
+        // "finder column" view: top-level Bass has 4 presets, top-level
+        // Synthesizer has 14 subfolders (Arpeggiated, Bass, Lead, Pad, …) and
+        // each of those subfolders holds the actual preset leaves. Pre-3.0.4
+        // logic took `parts[0]` + `parts[last]` which dropped all middle
+        // segments — so `Synthesizer/Bass/Acid Etched Bass` resolved to
+        // category=Synthesizer, preset=Acid Etched Bass, and failed because
+        // column 2 at that point only held Synthesizer's subfolders.
+        let pathSegments: [String]
         let resolvedPath: String
         if let p = pathParam {
             guard let parts = LibraryAccessor.parsePath(p), parts.count >= 2 else {
-                return .error("Invalid 'path': must have at least category and preset segments")
+                return .error("Invalid 'path': must have at least 2 segments (e.g. 'Bass/Sub Bass' or 'Synthesizer/Bass/Acid Etched Bass')")
             }
-            // PRD AC-2.8: path must resolve to a leaf, not a folder. For production
-            // flat Library (depth 2) a 2-segment path is inherently a leaf.
-            // Deeper paths require cache check (T7); here we accept 2+ segments.
-            resolvedCategory = parts[0]
-            resolvedPreset = parts[parts.count - 1]
+            pathSegments = parts
             resolvedPath = p
         } else if let c = catParam, let pr = presetParam {
-            resolvedCategory = c
-            resolvedPreset = pr
+            pathSegments = [c, pr]
             resolvedPath = "\(c)/\(pr)"
         } else {
             return .error("Missing path or (category+preset) for track.set_instrument")
         }
-        let category = resolvedCategory
-        let preset = resolvedPreset
+        let category = pathSegments[0]
+        let preset = pathSegments[pathSegments.count - 1]
 
         // v3.0.3+ — select target track via the Apple-public AX-first
         // selection ladder (AXPress → AXSelected → child AXPress → coord
@@ -1582,15 +1598,13 @@ actor AccessibilityChannel: Channel {
             try? await Task.sleep(nanoseconds: 300_000_000)   // Library rebind to new track
         }
 
-        // Select the category (injects CGEvent mouse click)
-        guard LibraryAccessor.selectCategory(named: category, runtime: runtime) else {
-            return .error("Category not found in Library: \(category)")
-        }
-        try? await Task.sleep(nanoseconds: 600_000_000)
-
-        // Select the preset (injects CGEvent mouse click)
-        guard LibraryAccessor.selectPreset(named: preset, runtime: runtime) else {
-            return .error("Preset not found in category '\(category)': \(preset)")
+        // v3.0.4 — walk every segment in order. For 2-segment paths this
+        // behaves exactly like the prior selectCategory + selectPreset pair.
+        // For 3+ segment paths (Synthesizer/Bass/Acid Etched Bass), each
+        // intermediate segment slides the Library view so the next segment's
+        // column-2 lookup resolves against the correct subfolder.
+        guard LibraryAccessor.selectPath(segments: pathSegments, runtime: runtime) else {
+            return .error("Library path not fully resolvable: \(resolvedPath)")
         }
         try? await Task.sleep(nanoseconds: 800_000_000) // let Logic load the instrument
 
