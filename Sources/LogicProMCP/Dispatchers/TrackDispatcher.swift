@@ -418,15 +418,16 @@ struct TrackDispatcher {
         //      Brooklyn Borough drum kit, while the new MIDI-imported track
         //      kept its default `Studio Grand` piano.
         //
-        // Until the track.set_instrument selection path gets a real fix, the
-        // only safe thing to do is NOT CALL IT internally. `record_sequence`
-        // now always returns `"instrument":"not-attempted"`. `instrument_path`
-        // is accepted for backwards-compat wire format but reported back as
-        // `"ignored:<path> (v3.0.8: internal auto-load removed; call
-        // set_instrument explicitly AFTER manually selecting the intended
-        // track — and note that set_instrument itself loses the index param
-        // to the currently-selected track for fresh SMF-created tracks,
-        // tracked as a known limitation)"`.
+        // v3.0.9 note — the `selectTrackViaAX` primitive itself is now fixed
+        // (switched to AXSelectedChildren on the parent "Tracks header" group,
+        // which is what Library preset selection already used). Callers of
+        // `track.set_instrument { index: N }` now consistently target track N.
+        // The record_sequence internal auto-load is STILL removed, however:
+        // bundling two separate live Logic ops inside one dispatcher call
+        // creates ordering dependencies that are hard to reason about, and
+        // Isaac's policy on this ("decouple") stands. Callers who want a
+        // specific patch after `record_sequence` should call `track.select`
+        // + `track.set_instrument` explicitly on the returned track index.
         let instrumentPath = stringParam(params, "instrument_path", "instrument")
         let instrumentStatus: String
         if instrumentPath.isEmpty {

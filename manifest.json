@@ -2,7 +2,7 @@
   "name": "logic-pro-mcp",
   "display_name": "Logic Pro MCP Server",
   "description": "Bidirectional, stateful control of Logic Pro from AI assistants. 8 tools + 9 resources + 3 templates across 7 native macOS channels (MCU, MIDI Key Commands, CoreMIDI, Scripter, Accessibility, CGEvent, AppleScript). v3.0.1: arm64-native binary (Intel via Rosetta); hardened installer (fail-closed pinning); CI-friendly ADHOC release path.",
-  "version": "3.0.8",
+  "version": "3.0.9",
   "author": "Isaac (MongLong0214)",
   "license": "MIT",
   "homepage": "https://github.com/MongLong0214/logic-pro-mcp",
@@ -15,7 +15,7 @@
     "macos": {
       "command": "LogicProMCP",
       "args": [],
-      "download_url": "https://github.com/MongLong0214/logic-pro-mcp/releases/download/v3.0.8/LogicProMCP",
+      "download_url": "https://github.com/MongLong0214/logic-pro-mcp/releases/download/v3.0.9/LogicProMCP",
       "install_path": "/usr/local/bin/LogicProMCP"
     }
   },

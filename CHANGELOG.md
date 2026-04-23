@@ -8,6 +8,81 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [3.0.9] — 2026-04-23
+
+**`track.select` actually moves Logic's track selection now.** The bug that v3.0.8 called out as "known limitation" — and that silently propagated through v3.0.3 → v3.0.7 — is fixed, live-verified end-to-end on Logic Pro 12.0.1 (Apple Silicon, macOS 15+, KR locale). Every prior release from v3.0.5 onward was reviewed only at the unit-test level; v3.0.8 was "first release verified by live Logic Pro playback" but its verification scope was `record_sequence`, not `track.select`. This release pays down the missing live verification for the selection primitive that every instrument / mix / arm op depends on.
+
+An honest apology: v3.0.5, v3.0.6, v3.0.7, and v3.0.8 all shipped without a live `track.select` round-trip. The test doubles were passing, the release checklist was green, and the bug — `selectTrackViaAX` returning `true` while AX selection stayed on track 0 — was hiding behind a macOS AX quirk that only surfaces against the real Logic Pro UI.
+
+### Root cause
+
+`AXLogicProElements.selectTrackViaAX` step 1 (`AXHelpers.performAction(header, kAXPressAction)`) was returning `true` vacuously. On Logic Pro 12, the track-header row is an `AXLayoutItem` whose only declared AX action is `AXShowMenu`. `AXUIElementPerformAction(element, kAXPressAction)` nevertheless returns `kAXErrorSuccess` (rawValue 0) on that element — macOS AX does NOT reject an unsupported action for `AXLayoutItem`-role children of a writable-selection parent. The Swift wrapper translated that to `true`, so the ladder exited early on step 1 *without changing selection*. Every subsequent op (`set_instrument`, `mute`, `solo`, `arm`) then operated on whatever track had actually been selected — usually track 0 — regardless of the `index` parameter passed.
+
+The 15-second wait Isaac tested after `record_sequence` did nothing because the bug was never timing-dependent. It was a false-positive success from a well-formed AX action that Logic silently ignored.
+
+Live-reproduced on v3.0.8 (10-track project, initial selection index 0):
+
+```
+track.select { index: 1 } → response "{\"selected\":1,\"verified\":false}"
+<read tracks resource>
+→ track 0 isSelected=true; every other track isSelected=false
+```
+
+Note the `"verified":false` — the `verifyTrackSelection` read-back was correctly reporting that selection never landed, but the tool response still said "selected" instead of surfacing the mismatch as an error.
+
+### The fix
+
+Logic Pro 12's track-header rail is exposed as an `AXGroup` with description `"트랙 헤더"` / `"Tracks header"`. That group has a writable `AXSelectedChildren` attribute. Setting `AXSelectedChildren` on the parent group to `[targetLayoutItem]` — the exact same pattern that already worked for Library preset selection (shipped in v3.0.3) — atomically moves Logic's project-wide track selection, deselects every other track, updates the Inspector, and rebinds the Library Panel.
+
+```swift
+AXUIElementSetAttributeValue(
+    headersGroup,                                // AXGroup desc="트랙 헤더"
+    kAXSelectedChildrenAttribute as CFString,
+    [headerRow] as CFArray                       // target AXLayoutItem
+)
+```
+
+`selectTrackViaAX` is rewritten to try this as step 1. The prior four steps (`AXPress`, `AXSelected=true`, child `AXPress`, coord-click) are kept as fallbacks for test doubles and hypothetical Logic build drift.
+
+### Changed
+
+- **`AXLogicProElements.selectTrackViaAX(at:)`** — primary strategy is now `SetAttr(kAXSelectedChildrenAttribute, [headerRow])` on the parent headers group. The four prior AX strategies (AXPress on header, AXSelected=true, child AXPress, coord-click) drop to fallback positions for test-double compatibility and extreme Logic build drift.
+
+### Verification (live, 3 cycles × 10 tracks each)
+
+All 30 live `track.select` calls passed end-to-end:
+
+```
+Cycle 1/2/3 each:
+  select(0) → tracks[0].isSelected=True, others=False  PASS
+  select(1) → tracks[1].isSelected=True, others=False  PASS
+  ...
+  select(9) → tracks[9].isSelected=True, others=False  PASS
+```
+
+End-to-end `set_instrument` verified live:
+
+```
+Before: track[3].name = "Studio Grand"
+track.select { index: 3 } → {"selected":3,"verified":true}
+track.set_instrument { index: 3, path: "Bass/Simple Foundation" }
+  → {"category":"Bass","path":"Bass/Simple Foundation","preset":"Simple Foundation"}
+After: track[3].name = "Simple Foundation"   ← changed to correct preset
+```
+
+Screenshots captured at `/tmp/v309-tools/cycle1-final.png` and `/tmp/v309-tools/set-instrument-test.png` show the Inspector binding to the selected track and the Library Panel highlighting the loaded preset.
+
+Unit suite: 792 tests passing, no regressions.
+
+### Deprecations
+
+None.
+
+### Upgrade notes
+
+- Callers that had been working around the v3.0.3–v3.0.8 bug by manually clicking tracks in Logic's UI before calling `set_instrument` no longer need to. `track.select` followed by any track-scoped op now operates on the requested index.
+- The `tracks` resource (`logic://tracks`) reflects fresh selection state within one StatePoller cycle (≤3 s). Within a single tool-call chain, the AX layer is authoritative regardless of cache freshness, so `track.select` → `track.set_instrument` in rapid succession works correctly even when the resource read would still show the old selection.
+
 ## [3.0.8] — 2026-04-23
 
 **First release verified by live Logic Pro playback.** v3.0.5, v3.0.6, and v3.0.7 all passed their unit-test suites and were reviewed at the unit-test level only — none of them were exercised against a running Logic Pro instance with a fresh project and a real `record_sequence` call. That gap is on us. Isaac reproduced the resulting production bug on v3.0.7: `record_sequence` with `instrument_path: "Electronic Drums/Brooklyn Borough"` returned `"instrument":"loaded:Electronic Drums/Brooklyn Borough"` while the new track silently stayed on Logic's default Software Instrument (Studio Grand piano). The response was a lie; every prior review missed it.

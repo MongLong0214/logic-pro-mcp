@@ -274,30 +274,46 @@ enum AXLogicProElements {
     }
 
     /// Select a track using Apple's standard AX API before falling back to
-    /// synthesised mouse input. v3.0.3+ — introduced so set_instrument and
-    /// `track.select` stop relying on `productionMouseClick` for the primary
-    /// path. Each step below is a public Apple AX contract; mouse-click stays
-    /// only as the final fallback because Logic's custom track-header NSView
-    /// occasionally ignores the AX selection writes (Logic 12 build drift).
+    /// synthesised mouse input. v3.0.9 breakthrough — Logic Pro 12 exposes the
+    /// track-header rail as an `AXGroup` whose `AXSelectedChildren` attribute
+    /// IS the project's authoritative track-selection input. This mirrors the
+    /// AX pattern that already works for Library preset selection (v3.0.3):
+    /// `SetAttr(parent, AXSelectedChildren, [targetChild])`.
     ///
-    /// Returns true when ANY step committed selection (verified by reading
-    /// `AXSelected` on the header afterwards).
+    /// Prior versions (v3.0.3–v3.0.8) tried `AXPress` on the track header as
+    /// step 1; `AXUIElementPerformAction` returned `.success` vacuously even
+    /// though the header's only declared action is `AXShowMenu`, so the ladder
+    /// exited early with a FALSE POSITIVE and selection never moved. That
+    /// cascaded into `set_instrument` always loading onto whatever track was
+    /// actually selected (usually index 0) regardless of the `index` param.
+    ///
+    /// The fix is a single AX write to the parent group. Fallbacks are kept
+    /// for test doubles that expose the track-header structure without a
+    /// writable `AXSelectedChildren` (and for extreme Logic build drift).
+    ///
+    /// Returns true when the set succeeded OR a fallback committed the
+    /// selection (verified by the caller's `verifyTrackSelection`).
     static func selectTrackViaAX(
         at index: Int,
         runtime: Runtime = .production
     ) -> Bool {
         guard let header = findTrackHeader(at: index, runtime: runtime) else { return false }
 
-        // Step 1 — public AXPress. Default Cocoa handlers route AXPress to
-        // the underlying click, so in-process code paths bypass the NSEvent
-        // loop. Return success on any AXPress that reports handled — the
-        // caller (e.g. defaultSelectTrack) runs `verifyTrackSelection`
-        // separately to confirm the selection actually landed.
-        if AXHelpers.performAction(header, kAXPressAction, runtime: runtime.ax) {
-            return true
+        // Step 1 (v3.0.9 primary path) — AXSelectedChildren on parent group.
+        // This is the one mechanism that ACTUALLY moves Logic's track selection
+        // (live-verified: 10/10 indices on a 10-track project). Every other AX
+        // action on the track header is a no-op for selection purposes.
+        if let headersGroup = getTrackHeaders(runtime: runtime) {
+            let arr = [header] as CFArray
+            let r = AXUIElementSetAttributeValue(
+                headersGroup,
+                kAXSelectedChildrenAttribute as CFString,
+                arr
+            )
+            if r == .success { return true }
         }
 
-        // Step 2 — standard NSTableRow-style selection via AXSelected=true.
+        // Step 2 — NSTableRow-style AXSelected=true (test-double path).
         var isSettable: DarwinBoolean = false
         AXUIElementIsAttributeSettable(header, "AXSelected" as CFString, &isSettable)
         if isSettable.boolValue {
@@ -305,14 +321,19 @@ enum AXLogicProElements {
             if r == .success { return true }
         }
 
-        // Step 3 — child AXPress (some rows expose a selectable name label).
+        // Step 3 — AXPress on the header itself (test doubles that expose it).
+        if AXHelpers.performAction(header, kAXPressAction, runtime: runtime.ax) {
+            return true
+        }
+
+        // Step 4 — child AXPress (some rows expose a selectable name label).
         for child in AXHelpers.getChildren(header, runtime: runtime.ax) {
             if AXHelpers.performAction(child, kAXPressAction, runtime: runtime.ax) {
                 return true
             }
         }
 
-        // Step 4 — last resort: coord click at the header's name area.
+        // Step 5 — last resort: coord click at the header's name area.
         var posRaw: AnyObject?
         var sizeRaw: AnyObject?
         guard
