@@ -518,6 +518,45 @@ private actor FailingExecuteChannel: Channel {
     ])
 }
 
+@Test func testTrackDispatcherScanLibraryForwardsModeParam() async {
+    // v3.0.7 regression: dispatcher dropped `mode` on the floor, making
+    // {mode:"disk"} fall back to default AX behavior. Lock the forward path.
+    let router = ChannelRouter()
+    let ax = MockChannel(id: .accessibility)
+    await router.register(ax)
+    let cache = StateCache()
+
+    let diskResult = await TrackDispatcher.handle(
+        command: "scan_library",
+        params: ["mode": .string("disk")],
+        router: router,
+        cache: cache
+    )
+    let bothResult = await TrackDispatcher.handle(
+        command: "scan_library",
+        params: ["mode": .string("both")],
+        router: router,
+        cache: cache
+    )
+    let defaultResult = await TrackDispatcher.handle(
+        command: "scan_library",
+        params: [:],
+        router: router,
+        cache: cache
+    )
+
+    #expect(!diskResult.isError!)
+    #expect(!bothResult.isError!)
+    #expect(!defaultResult.isError!)
+
+    let ops = await ax.executedOps
+    expectExecutedOps(ops, equals: [
+        ("library.scan_all", ["mode": "disk"]),
+        ("library.scan_all", ["mode": "both"]),
+        ("library.scan_all", [:]),
+    ])
+}
+
 @Test func testTrackDispatcherSelectByIndexAndName() async {
     let indexRouter = ChannelRouter()
     let mcu = MockChannel(id: .mcu)

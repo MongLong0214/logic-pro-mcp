@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [3.0.7] — 2026-04-23
+
+Hotfix: `scan_library` dispatcher dropped the `mode` param on the floor.
+
+### Fixed
+
+- **`TrackDispatcher.swift:249` scan_library forwards `mode` param.** v3.0.6 added mode routing (`ax`|`disk`|`both`) in `AccessibilityChannel.library.scan_all` handler, but the track dispatcher called `router.route(operation: "library.scan_all")` with no params — so `{mode: "disk"}` from MCP clients never reached the handler and always fell back to default AX. Now forwards the mode string when provided. Tool description updated to document the mode parameter. New regression test `testTrackDispatcherScanLibraryForwardsModeParam` locks the forward path for disk/both/default.
+
 ## [3.0.6] — 2026-04-21
 
 Guardian round-1 (v3.0.5) blocker follow-up. v3.0.5 shipped the disk scan but three P0 regressions surfaced in review: (1) emitted disk paths did not match the Library Panel's flattened taxonomy, so `selectPath` failed at segment 0 on the majority of patches; (2) the default `mode` silently flipped from AX to disk, poisoning the actor's `lastScan` cache (and therefore every `resolve_path` / `set_instrument` follow-up) with Panel-invalid paths; (3) the on-disk `library-inventory.json` canonical file was silently overwritten with the disk-shape inventory with no version tag, so downstream consumers had no way to detect the format shift. v3.0.6 fixes all three: adds a disk→Panel taxonomy mapper, reverts the default mode to `ax`, and tags + separates the inventory files by source.
