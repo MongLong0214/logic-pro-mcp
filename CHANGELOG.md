@@ -8,6 +8,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [3.0.8] — 2026-04-23
+
+**First release verified by live Logic Pro playback.** v3.0.5, v3.0.6, and v3.0.7 all passed their unit-test suites and were reviewed at the unit-test level only — none of them were exercised against a running Logic Pro instance with a fresh project and a real `record_sequence` call. That gap is on us. Isaac reproduced the resulting production bug on v3.0.7: `record_sequence` with `instrument_path: "Electronic Drums/Brooklyn Borough"` returned `"instrument":"loaded:Electronic Drums/Brooklyn Borough"` while the new track silently stayed on Logic's default Software Instrument (Studio Grand piano). The response was a lie; every prior review missed it.
+
+v3.0.8 investigates the root cause with live AX probing, removes the unsafe internal auto-load entirely (per Isaac's explicit directive — *"If in doubt, decouple — Isaac is tired of false promises"*), and documents a deeper `set_instrument` selection bug that surfaced during live testing.
+
+### Root cause
+
+Two compounding bugs, both only visible with a running Logic Pro:
+
+1. **`LibraryAccessor.selectPath` reports false success.** `selectCategory` unconditionally returns `true` once the AXStaticText element is found, regardless of whether the `AXUIElementSetAttributeValue` / `AXUIElementPerformAction` writes committed (both `_ = …`, discarded). `selectPreset` returns `pressResult == .success` — which only confirms the AX action was *delivered*, not that Logic's handler swapped the channel-strip instrument. So `set_instrument.isSuccess` became a guaranteed-true signal that the v3.0.2 auto-load path happily propagated to the user.
+2. **`AXLogicProElements.selectTrackViaAX(at:)` silently fails on fresh SMF-created tracks.** All four strategies (AXPress on the header, AXSelected=true, child AXPress, coord-click fallback) are dispatched but NONE change selection on the first run-loop tick after SMF import — even though the header is in the AX tree and `findTrackHeader(at:)` resolves it. Selection stays on the previously-selected track. The subsequent `selectPath` then loads the preset onto whichever track was already selected; on a project with pre-existing content the auto-load could replace the wrong track's patch silently.
+
+Live reproduction on v3.0.7 (fresh project with one pre-existing `Deluxe Classic` Electric Piano track; binary run against Logic Pro 12 over stdio):
+
+```
+record_sequence { notes: "...", instrument_path: "Electronic Drums/Brooklyn Borough" }
+ → response "instrument":"skipped"
+ → new MIDI track created, name="Studio Grand" (piano icon), no drum kit
+```
+
+Live reproduction of the second failure mode on a v3.0.8-draft (which still attempted the auto-load):
+
+```
+record_sequence { ... instrument_path: "Electronic Drums/Brooklyn Borough" }
+ → new track 1 created (name="Studio Grand", unchanged)
+ → pre-existing track 0 name changed to "Brooklyn Borough" (drum kit icon)
+ → Library Panel's preset load landed on the wrong track: track 0 was
+   corrupted, track 1 was untouched.
+```
+
+That observation is what drove the v3.0.8 decision to stop attempting the auto-load entirely.
+
+### Changed
+
+- **`TrackDispatcher.handleRecordSequenceSMF` — internal instrument auto-load REMOVED.** The dispatcher no longer routes `track.select` or `track.set_instrument` from inside `record_sequence`. The response always carries `"instrument":"not-attempted"` (or `"instrument":"ignored:<path>"` when the legacy `instrument_path` param is sent — retained for wire compatibility only). Callers that want a specific patch must follow up with an explicit `set_instrument` call AFTER ensuring the intended track is selected. See the known limitation below.
+- **Default `"Synthesizer/Bass"` fallback removed.** Prior versions silently loaded Synth Bass on every caller that omitted `instrument_path`; v3.0.8 does nothing by default so no caller is surprised by an uninvited instrument change.
+- **`logic_tracks.record_sequence` tool description + `logic_system.help`** updated: the `instrument_path` param is removed from the schema comment, and the `"instrument"` response value is documented as always `"not-attempted"` or `"ignored:<legacy path>"`.
+
+### Added
+
+- **`TrackDispatcher.escapeJSONString(_:)`** — the response JSON now embeds the `instrumentStatus` field with proper escaping. Forwarded messages can legitimately contain quotes / newlines / control chars; pre-3.0.8 code interpolated them directly, which could have produced malformed JSON in rare error paths.
+
+### Known limitation
+
+`track.set_instrument { index: N }` still loads the preset onto the currently-selected track rather than the track at index `N` when `N`'s header is in a state where `selectTrackViaAX` cannot change selection (brand-new tracks on the first run-loop tick after SMF import; observed in live testing on Logic Pro 12 over Apple Silicon). Callers should manually click the intended track header (or wait several seconds after track creation before calling `set_instrument`) until this is fixed in a follow-up release. A future fix will likely need to replace the AXPress-based selection with a keystroke-based navigation or a different AX primitive that Logic's track-header handler accepts on fresh tracks.
+
+### Verification
+
+- **v3.0.7 bug reproduced live** (fresh untitled project, one pre-existing `Deluxe Classic` track, fresh LogicProMCP spawned via stdio): `record_sequence { instrument_path: "Electronic Drums/Brooklyn Borough" }` → response `"instrument":"skipped"`, new track named `"Studio Grand"`. Screenshot captured at `/tmp/v308-verify/cycle1-after.png` during investigation.
+- **v3.0.8 behavior verified live** (same fresh-project setup): `record_sequence` without `instrument_path` → response `"instrument":"not-attempted"`, new track named `"Studio Grand"` (Logic's default SI), pre-existing track untouched. No silent corruption. `record_sequence { instrument_path: "X" }` → response `"instrument":"ignored:X (v3.0.8: internal auto-load removed …)"`, behavior identical (no write side effects).
+- Full unit-test regression: 790 tests passing (same skip list as v3.0.5/6/7). Version-consistency test updated to lock v3.0.8 across `ServerConfig`, `manifest.json`, `Formula/logic-pro-mcp.rb`, and `Scripts/install.sh`.
+
+### Apology
+
+v3.0.5, v3.0.6, and v3.0.7 shipped with no live Logic Pro verification. Isaac paid for three bad releases to catch a bug that reproduces on the first user-facing call. v3.0.8 is the first release where the investigation and fix were done *against a running Logic Pro project* end-to-end. Future `record_sequence` / Library Panel changes must include a live-verification log in the PR body before the Formula SHA is bumped — unit tests alone are not sufficient for this surface area.
+
 ## [3.0.7] — 2026-04-23
 
 Hotfix: `scan_library` dispatcher dropped the `mode` param on the floor.

@@ -4,7 +4,7 @@ import MCP
 struct TrackDispatcher {
     static let tool = Tool(
         name: "logic_tracks",
-        description: "Track actions in Logic Pro. Commands: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets. Params: select -> { index: Int } or { name: String }; rename/mute/solo/arm/arm_only/set_automation/set_instrument ALL require explicit { index: Int (≥0) }; mute/solo/arm -> also { enabled: Bool }; arm_only disarms all others + arms target, returns error on partial disarm failure; record_sequence -> { bar?: Int (default 1), notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\", tempo?: Float } v2.3 SMF-import path: generates a Standard MIDI File server-side, forces playhead to bar 1, imports via AX menu — byte-exact timing, creates a new track each call; create_* -> {}; delete/duplicate -> { index: Int }; set_automation -> { mode: read|write|touch|latch|trim|off }; set_instrument -> { path: String } or { category: String, preset: String } — path mode preferred; scan_library -> { mode?: \"ax\"|\"disk\"|\"both\" } (default ax — live Library Panel; disk reads ~/Music/Logic Pro Library.bundle for 5,400+ leaves with Panel-taxonomy remap; both returns diff summary); resolve_path -> { path: String } cache-backed read-only; scan_plugin_presets -> { submenuOpenDelayMs?: Int }.",
+        description: "Track actions in Logic Pro. Commands: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets. Params: select -> { index: Int } or { name: String }; rename/mute/solo/arm/arm_only/set_automation/set_instrument ALL require explicit { index: Int (≥0) }; mute/solo/arm -> also { enabled: Bool }; arm_only disarms all others + arms target, returns error on partial disarm failure; record_sequence -> { bar?: Int (default 1), notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\", tempo?: Float } v3.0.8 SMF-import path: generates a Standard MIDI File server-side, forces playhead to bar 1, imports via AX menu — byte-exact timing, creates a new track each call. v3.0.8 REMOVED the internal instrument auto-load: response always carries `\"instrument\":\"not-attempted\"`. The new track keeps Logic's default Software Instrument (Studio Grand piano on a fresh project); callers that want a specific patch must follow up with an explicit `set_instrument` AFTER ensuring the intended track is selected. The legacy `instrument_path` param is accepted for wire compat but ignored (surfaces as `\"ignored:<path>\"` in the response) — see CHANGELOG v3.0.8 for why the inline auto-load was unsafe (could load the wrong track's patch, corrupting a pre-existing track); create_* -> {}; delete/duplicate -> { index: Int }; set_automation -> { mode: read|write|touch|latch|trim|off }; set_instrument -> { path: String } or { category: String, preset: String } — path mode preferred; scan_library -> { mode?: \"ax\"|\"disk\"|\"both\" } (default ax — live Library Panel; disk reads ~/Music/Logic Pro Library.bundle for 5,400+ leaves with Panel-taxonomy remap; both returns diff summary); resolve_path -> { path: String } cache-backed read-only; scan_plugin_presets -> { submenuOpenDelayMs?: Int }.",
         inputSchema: commandParamsToolSchema(commandDescription: "Track command to execute")
     )
 
@@ -389,30 +389,80 @@ struct TrackDispatcher {
 
         let createdTrack = tracksAfter - 1
 
-        // v3.0.2: Auto-load a Software Instrument on the imported track so the
-        // region is audible on playback. SMF import sometimes leaves the new
-        // track without a software-instrument plugin (shows up as silent MIDI),
-        // which defeats the whole "generate music then play it" workflow. The
-        // caller can override the preset via `instrument_path` — otherwise we
-        // default to `Synthesizer/Bass`, a safe audible built-in.
-        let instrumentPath = stringParam(params, "instrument_path", "instrument",
-                                         default: "Synthesizer/Bass")
-        let selectResult = await router.route(
-            operation: "track.select",
-            params: ["index": "\(createdTrack)"]
-        )
-        var instrumentStatus = "skipped"
-        if selectResult.isSuccess {
-            let setResult = await router.route(
-                operation: "track.set_instrument",
-                params: ["index": "\(createdTrack)", "path": instrumentPath]
-            )
-            instrumentStatus = setResult.isSuccess ? "loaded:\(instrumentPath)" : "failed:\(setResult.message)"
+        // v3.0.8 — instrument auto-load has been REMOVED from record_sequence.
+        //
+        // Prior versions (v3.0.2 – v3.0.7) auto-routed `track.set_instrument`
+        // on the just-created track, defaulted `instrument_path` to
+        // `"Synthesizer/Bass"`, and reported `"instrument":"loaded:..."` based
+        // on `setResult.isSuccess`. Live testing on v3.0.7 + v3.0.8-draft
+        // revealed two compounding bugs that made that path untrustworthy:
+        //
+        //   1. `LibraryAccessor.selectPath`'s AXPress on the preset leaf
+        //      returns `.success` when the AX action is *delivered*, not when
+        //      Logic's handler actually swaps the channel-strip instrument.
+        //      `selectCategory` unconditionally returns `true` once the
+        //      AXStaticText element is found, whether or not the AX write
+        //      committed.
+        //   2. `AXLogicProElements.selectTrackViaAX(at:)` is silently unable
+        //      to change selection on a freshly-created track header on the
+        //      first run-loop tick after SMF import. AXPress, AXSelected,
+        //      child AXPress, and coord-click ALL get dropped; the header is
+        //      visible in the AX tree and `findTrackHeader` resolves it, but
+        //      selection never moves off the previously-selected track. The
+        //      downstream `selectPath` then loads the preset onto whichever
+        //      track was already selected — which can CORRUPT a pre-existing
+        //      track's patch. Observed live: `record_sequence` with
+        //      `instrument_path: "Electronic Drums/Brooklyn Borough"` on a
+        //      project with a pre-existing `Deluxe Classic` (Electric Piano)
+        //      track silently replaced `Deluxe Classic`'s patch with the
+        //      Brooklyn Borough drum kit, while the new MIDI-imported track
+        //      kept its default `Studio Grand` piano.
+        //
+        // Until the track.set_instrument selection path gets a real fix, the
+        // only safe thing to do is NOT CALL IT internally. `record_sequence`
+        // now always returns `"instrument":"not-attempted"`. `instrument_path`
+        // is accepted for backwards-compat wire format but reported back as
+        // `"ignored:<path> (v3.0.8: internal auto-load removed; call
+        // set_instrument explicitly AFTER manually selecting the intended
+        // track — and note that set_instrument itself loses the index param
+        // to the currently-selected track for fresh SMF-created tracks,
+        // tracked as a known limitation)"`.
+        let instrumentPath = stringParam(params, "instrument_path", "instrument")
+        let instrumentStatus: String
+        if instrumentPath.isEmpty {
+            instrumentStatus = "not-attempted"
+        } else {
+            instrumentStatus = "ignored:\(instrumentPath) (v3.0.8: internal auto-load removed to prevent corrupting a pre-existing track — call set_instrument explicitly; see CHANGELOG v3.0.8 for the selectTrackViaAX limitation on fresh SMF-created tracks)"
         }
 
         return toolTextResult(.success(
-            "{\"recorded_to_track\":\(createdTrack),\"created_track\":\(createdTrack),\"bar\":\(bar),\"note_count\":\(events.count),\"method\":\"smf_import\",\"instrument\":\"\(instrumentStatus)\"}"
+            "{\"recorded_to_track\":\(createdTrack),\"created_track\":\(createdTrack),\"bar\":\(bar),\"note_count\":\(events.count),\"method\":\"smf_import\",\"instrument\":\"\(escapeJSONString(instrumentStatus))\"}"
         ))
+    }
+
+    /// Minimal JSON string escape for the one field we embed verbatim. The
+    /// `instrumentStatus` text can legitimately contain `"`, `\\`, or
+    /// newlines (when it carries a forwarded error message), so we escape
+    /// rather than trust the source.
+    private static func escapeJSONString(_ s: String) -> String {
+        var out = ""
+        out.reserveCapacity(s.count)
+        for ch in s {
+            switch ch {
+            case "\\": out += "\\\\"
+            case "\"": out += "\\\""
+            case "\n": out += "\\n"
+            case "\r": out += "\\r"
+            case "\t": out += "\\t"
+            default:
+                if ch.asciiValue.map({ $0 < 0x20 }) == true {
+                    out += String(format: "\\u%04x", ch.asciiValue!)
+                } else {
+                    out.append(ch)
+                }
+            }
+        }
+        return out
     }
 
     private static func parseNotesToSMFEvents(notes: String, tempo: Double) -> [SMFWriter.NoteEvent] {

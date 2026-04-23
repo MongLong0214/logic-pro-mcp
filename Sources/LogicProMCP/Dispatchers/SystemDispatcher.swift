@@ -269,8 +269,12 @@ struct SystemDispatcher {
                   arm               -> { index: Int, enabled: Bool } — idempotent (reads checkbox state)
                   arm_only          -> { index: Int } — disarms others, arms target; returns error on partial disarm failure
                   record_sequence   -> { bar?: Int, notes: "pitch,offsetMs,durMs[,vel[,ch]];...", tempo?: Float }
-                                       v2.3 SMF-import: generates a MIDI file, forces playhead to bar 1, imports via AX menu.
-                                       Creates a new track per call. Response includes { created_track, recorded_to_track }.
+                                       v3.0.8 SMF-import: generates a MIDI file, forces playhead to bar 1, imports via AX menu.
+                                       Creates a new track per call with Logic's default Software Instrument.
+                                       Response: { created_track, recorded_to_track, instrument }. `instrument` is always
+                                       `"not-attempted"` (or `"ignored:<legacy instrument_path>"` for clients still sending the
+                                       removed param). Callers that want a specific patch call set_instrument separately — see
+                                       CHANGELOG v3.0.8 for the selectTrackViaAX limitation on fresh SMF-created tracks.
                   set_automation    -> { index: Int, mode: String } (read/write/touch/latch/trim/off)
                   set_instrument    -> { index: Int, path: String } OR { index: Int, category: String, preset: String }
                   list_library      -> {} — Read currently visible Library columns
