@@ -8,6 +8,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [3.0.6] — 2026-04-21
+
+Guardian round-1 (v3.0.5) blocker follow-up. v3.0.5 shipped the disk scan but three P0 regressions surfaced in review: (1) emitted disk paths did not match the Library Panel's flattened taxonomy, so `selectPath` failed at segment 0 on the majority of patches; (2) the default `mode` silently flipped from AX to disk, poisoning the actor's `lastScan` cache (and therefore every `resolve_path` / `set_instrument` follow-up) with Panel-invalid paths; (3) the on-disk `library-inventory.json` canonical file was silently overwritten with the disk-shape inventory with no version tag, so downstream consumers had no way to detect the format shift. v3.0.6 fixes all three: adds a disk→Panel taxonomy mapper, reverts the default mode to `ax`, and tags + separates the inventory files by source.
+
+### Added
+
+- **`LibraryDiskScanner.mapDiskPathToPanel([String]) -> [String]?`** — pure longest-prefix mapper that rewrites disk segments into Panel segments. Flattens the three `Drums & Percussion/*` sub-folders and all five `Keyboard/*` sub-folders into Panel top-level categories (`Acoustic Drums`, `Electronic Drums`, `Percussion`, `Acoustic Piano`, `Clavinet`, `Electric Piano`, `Mellotron`, `Organ`). Maps `z_Legacy/Orchestral` and `Strings` to the Panel's `Orchestral`. Renames intermediate disk folders (currently `z01 Kit Pieces` → `Kit Pieces`). Returns `nil` for unmapped paths (e.g. `z_Legacy/World/...`) so the scanner can drop patches that have no Panel route. Cross-referenced against the committed v3.0.4 AX Panel inventory.
+- **`AccessibilityChannel.ScanMode` / `parseScanMode(_:) -> ScanMode`** — pure, testable dispatch for the `library.scan_all` `mode` parameter. Unknown values, empty strings, and nil all return `.ax` (not `.disk`) so a v3.0.5-style silent default flip cannot recur.
+- **`library-inventory-disk.json`** — dedicated output file for disk-sourced inventories. Disk scans no longer overwrite `library-inventory.json` (which remains the AX-canonical snapshot).
+- **`source` field on written inventory JSON** — every persisted inventory now carries a top-level `"source": "ax" | "disk"` marker. Downstream consumers that need to branch on scan-shape can do so without inspecting paths.
+- **Depth cap (12) + symlink visited-set** in `LibraryDiskScanner` — mirrors `LibraryAccessor.enumerateTree`; a symlink cycle can no longer drive runaway recursion.
+- **1 MiB size warning** — `writeInventoryJSON` logs a `Log.warn` when the encoded inventory exceeds 1 MiB so a future pagination decision is signalled, not silent.
+- **`Tests/LogicProMCPTests/ScanLibraryModeRoutingTests.swift`** — locks down the mode dispatch: default / empty / explicit / mixed-case / unknown / regression-against-v3.0.5.
+- **`LibraryDiskScanner` unit tests for every mapping case** — one test per `diskToPanel` entry, identity-passthrough for `Bass`/`Guitar`/`Mallet`/`Synthesizer`, unmapped-drops, `z01` rename, empty input, symlink cycle. Plus an integration assertion that every category emitted by a real-machine scan exists in the v3.0.4 Panel snapshot's `categories` array.
+
+### Changed
+
+- **`library.scan_all` default reverted from `disk` to `ax`** — v3.0.5 users who explicitly passed `{"mode": "disk"}` are unaffected. Callers that did not pass a mode get the v3.0.4 AX behavior (legacy, Panel-authoritative but undercounting) back. Use `{"mode": "disk"}` to opt in to the Panel-taxonomy-mapped disk scan, `{"mode": "both"}` for the diff summary.
+- **`LibraryDiskScanner.scan()` output** — every emitted path is now Panel-navigable. Top-level `root.children` names match the Panel's 13 categories (subset of), not the disk's 7 folders. Existing v3.0.5 tests have been updated to reflect the Panel-rooted contract.
+
+### Fixed
+
+- **P0-1 — taxonomy mismatch** — disk scan no longer emits `selectPath`-invalid paths. A disk-shape path like `Drums & Percussion/Electronic Drums/Roland TR-909.patch` now surfaces as the Panel path `Electronic Drums/Roland TR-909`, which is what the Library Panel's column-1 list actually contains.
+- **P0-2 — silent default-mode flip** — `lastScan` is no longer written in disk-shape for callers that did not request it. `resolve_path` and `set_instrument` for no-mode callers behave identically to v3.0.4.
+- **P0-3 — inventory JSON overwrite + missing source tag** — disk scans write to `library-inventory-disk.json`, not the canonical AX file. Both files now carry `"source"`.
+
+### Testing
+
+- `LibraryDiskScannerTests`: 30 tests (was 8) — 15 new mapper/scan unit cases, Panel-inventory cross-check integration, symlink-cycle guard.
+- `ScanLibraryModeRoutingTests`: 8 new tests — the complete mode-routing matrix + v3.0.5 regression guard.
+- Full suite: 789 tests pass (skips: `testLogicProServerStartCoversDefaultPortAndPollerLifecyclePaths`, `testStatePollerStartStopLifecycle`).
+
 ## [3.0.5] — 2026-04-23
 
 Filesystem-backed library enumeration. v3.0.4's `scan_library` still returned only 345 leaves (7% of the on-disk reality) because its live AX probe was deliberately bounded: clicking a preset-looking element in Logic's Library Panel *loads* that preset onto the focused track, and the probe had no non-destructive folder-vs-leaf discriminator for column 2+. v3.0.5 side-steps the problem entirely — instead of probing the Library Panel it enumerates `~/Music/Logic Pro Library.bundle/Patches/Instrument/` on disk, where every `.patch` is a directory and the filesystem hierarchy is exactly the path Logic's Library Panel navigates. On a full factory install this surfaces 5,000+ leaves (vs the prior 345) with no AX interaction, no panel mutation, and no dependency on whether the Library is even open. Paired with v3.0.4's N-segment `selectPath`, every patch on disk is now both enumerable AND loadable.

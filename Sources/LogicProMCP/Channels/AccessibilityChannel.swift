@@ -20,6 +20,25 @@ actor AccessibilityChannel: Channel {
         case pan
     }
 
+    /// v3.0.6 — testable scan-mode dispatch. Centralizes the
+    /// "params["mode"] → which scanner" decision so router tests can
+    /// assert it without actually running an AX probe or disk walk.
+    enum ScanMode: String {
+        case ax
+        case disk
+        case both
+    }
+
+    /// Parse the `mode` param for `library.scan_all`. Unknown values
+    /// (including nil, empty, typos like "AX") fall through to `.ax` —
+    /// the legacy-compatible default. v3.0.5 briefly defaulted to `.disk`
+    /// which poisoned the on-disk inventory with Panel-invalid paths;
+    /// v3.0.6 reverts that.
+    static func parseScanMode(_ raw: String?) -> ScanMode {
+        guard let raw = raw?.lowercased(), !raw.isEmpty else { return .ax }
+        return ScanMode(rawValue: raw) ?? .ax
+    }
+
     struct Runtime: @unchecked Sendable {
         let isTrusted: @Sendable () -> Bool
         let isLogicProRunning: @Sendable () -> Bool
@@ -204,20 +223,16 @@ actor AccessibilityChannel: Channel {
             }
             scanInProgress = true
             defer { scanInProgress = false }
-            // v3.0.5 — "mode" selects between disk (default), ax (legacy),
-            // or both (diff report). Disk mode enumerates the factory Library
-            // bundle on disk; ax mode uses the legacy AX probe which can only
-            // safely reach the first two Library Panel columns. Unknown mode
-            // values fall through to "disk" to keep older clients working
-            // without a schema contract change.
-            let mode = (params["mode"] ?? "disk").lowercased()
-            switch mode {
-            case "ax":
-                return await self.runLiveScan(runtime: runtime.logicRuntime)
-            case "both":
-                return await self.runBothScan(runtime: runtime.logicRuntime)
-            default:
+            // v3.0.6 — "mode" selects between ax (default, legacy behavior
+            // preserved from v3.0.4), disk (filesystem-backed, Panel-taxonomy
+            // mapped), or both (diff report).
+            switch Self.parseScanMode(params["mode"]) {
+            case .disk:
                 return await self.runDiskScan(runtime: runtime.logicRuntime)
+            case .both:
+                return await self.runBothScan(runtime: runtime.logicRuntime)
+            case .ax:
+                return await self.runLiveScan(runtime: runtime.logicRuntime)
             }
         case "library.resolve_path":
             return AccessibilityChannel.resolveLibraryPath(
@@ -1249,7 +1264,7 @@ actor AccessibilityChannel: Channel {
                 try? await Task.sleep(nanoseconds: 150_000_000)
                 return LibraryAccessor.selectPreset(named: p, runtime: runtime)
             },
-            writeJSON: { root in Self.writeInventoryJSON(root) },
+            writeJSON: { root in Self.writeInventoryJSON(root, source: "ax") },
             onComplete: { root in await channel.setLastScan(root) },
             settleDelayMs: 150
         )
@@ -1292,7 +1307,7 @@ actor AccessibilityChannel: Channel {
                 subsystem: "ax"
             )
             self.lastScan = root
-            _ = Self.writeInventoryJSON(root)
+            _ = Self.writeInventoryJSON(root, source: "disk")
             return Self.encodeLibraryRoot(root)
         } catch {
             Log.warn(
@@ -1318,7 +1333,7 @@ actor AccessibilityChannel: Channel {
             return .error("Disk scan failed: \(error); fall back to mode=ax")
         }
         self.lastScan = diskRoot
-        _ = Self.writeInventoryJSON(diskRoot)
+        _ = Self.writeInventoryJSON(diskRoot, source: "disk")
 
         // Best-effort AX scan. If the panel is closed we still emit a diff
         // structure with ax={available:false, leafCount:0, ...} so clients
@@ -1559,18 +1574,58 @@ actor AccessibilityChannel: Channel {
         )
     }
 
-    private static func writeInventoryJSON(_ root: LibraryRoot) -> Bool {
+    /// v3.0.6 — size threshold that triggers a warn-level log on encode. We
+    /// do not truncate or paginate (would break schema); just surface the
+    /// signal so the next maintenance window can decide whether to chunk.
+    private static let inventoryWarnBytes = 1_048_576   // 1 MiB
+
+    /// Tag the encoded JSON with a `source` marker so downstream consumers
+    /// can tell whether the file came from an AX scan (Panel-authoritative,
+    /// may undercount) or a disk scan (full coverage, Panel-taxonomy mapped).
+    /// The v3.0.5 bug was that the disk-mode path silently overwrote the
+    /// AX-canonical file with no version tag. v3.0.6 also writes disk scans
+    /// to a distinct file (`library-inventory-disk.json`) so the AX snapshot
+    /// remains untouched unless explicitly refreshed by an AX scan.
+    ///
+    /// - Parameters:
+    ///   - root: the LibraryRoot payload.
+    ///   - source: either `"ax"` or `"disk"`. Controls both the embedded
+    ///     `"source"` field and the destination filename.
+    /// - Returns: true iff the file was written successfully.
+    private static func writeInventoryJSON(_ root: LibraryRoot, source: String = "ax") -> Bool {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(root) else { return false }
+        guard var rootData = try? encoder.encode(root) else { return false }
+
+        // Inject a top-level `"source"` field by rewriting the outermost
+        // `{` to `{ "source": "...",`. Cheaper than reflecting the whole
+        // LibraryRoot into a dictionary, and avoids perturbing the Codable
+        // contract used by clients that deserialize LibraryRoot directly
+        // from a `scan_all` MCP response.
+        let injection = "\n  \"source\" : \"\(source)\",".data(using: .utf8) ?? Data()
+        // Find the first `{` byte and splice after it.
+        if let firstBraceIdx = rootData.firstIndex(of: UInt8(ascii: "{")) {
+            rootData.insert(contentsOf: injection, at: rootData.index(after: firstBraceIdx))
+        }
+
+        if rootData.count > inventoryWarnBytes {
+            Log.warn(
+                "Library inventory JSON is \(rootData.count) bytes (>1MiB); consider paginating library.scan_all in a future release",
+                subsystem: "library"
+            )
+        }
+
         let fm = FileManager.default
         let resDir = fm.currentDirectoryPath + "/Resources"
         if !fm.fileExists(atPath: resDir) {
             try? fm.createDirectory(atPath: resDir, withIntermediateDirectories: true)
         }
-        let path = resDir + "/library-inventory.json"
+        // Disk scans go to a distinct file so an AX snapshot survives a
+        // disk scan. AX scans own the canonical filename.
+        let filename = source == "disk" ? "library-inventory-disk.json" : "library-inventory.json"
+        let path = resDir + "/" + filename
         do {
-            try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+            try rootData.write(to: URL(fileURLWithPath: path), options: .atomic)
             return true
         } catch {
             Log.warn("Library inventory write failed: \(error)", subsystem: "library")

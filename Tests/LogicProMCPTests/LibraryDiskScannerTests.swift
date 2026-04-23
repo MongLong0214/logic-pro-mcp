@@ -32,7 +32,7 @@ struct LibraryDiskScannerTests {
         return (bundle, tmp)
     }
 
-    @Test("scan returns a LibraryRoot with the three fixture leaves and correct depth")
+    @Test("scan returns a LibraryRoot with Panel-mapped top-levels (v3.0.6)")
     func scanSmallFixtureProducesExpectedTree() throws {
         let (bundle, tmp) = try makeFixture(tree: [
             "Synthesizer/Bass/Acid Etched Bass.patch",
@@ -44,10 +44,15 @@ struct LibraryDiskScannerTests {
         let root = try LibraryDiskScanner.scan(bundleURL: bundle)
 
         #expect(root.leafCount == 3)
-        // Categories are sorted: "Drums & Percussion" before "Synthesizer".
-        #expect(root.categories == ["Drums & Percussion", "Synthesizer"])
-        // Folder count: (library-root) + 2 top categories + 2 subfolders = 5.
-        #expect(root.folderCount == 5)
+        // v3.0.6: disk `Drums & Percussion/Electronic Drums/...` collapses
+        // to Panel top-level `Electronic Drums`. Alphabetical sort →
+        // Electronic Drums, Synthesizer.
+        #expect(root.categories == ["Electronic Drums", "Synthesizer"])
+        // Folder count: (library-root) + 2 top categories (Electronic Drums,
+        // Synthesizer) + 1 nested subfolder (Synthesizer/Bass) = 4.
+        // (Drums & Percussion/Electronic Drums is flattened — no nested
+        // subfolder under Electronic Drums.)
+        #expect(root.folderCount == 4)
         // Node count = folders + leaves.
         #expect(root.nodeCount == root.folderCount + root.leafCount)
         #expect(root.selectionRestored == false)
@@ -149,7 +154,7 @@ struct LibraryDiskScannerTests {
         #expect(root.folderCount >= 1)
     }
 
-    @Test("non-.patch subfolders under a category still recurse as folders, not leaves")
+    @Test("non-.patch subfolders under a Panel category still recurse as folders, not leaves")
     func deepFolderHierarchyPreservesKind() throws {
         let (bundle, tmp) = try makeFixture(tree: [
             "Drums & Percussion/Electronic Drums/Analog/TR-808.patch",
@@ -160,14 +165,17 @@ struct LibraryDiskScannerTests {
 
         let root = try LibraryDiskScanner.scan(bundleURL: bundle)
         #expect(root.leafCount == 3)
-        // Electronic Drums and its two children (Analog/Digital) are all
-        // folders, not leaves, because they lack the `.patch` suffix.
-        let drums = try #require(root.root.children.first { $0.name == "Drums & Percussion" })
-        let electronic = try #require(drums.children.first { $0.name == "Electronic Drums" })
+        // v3.0.6: disk `Drums & Percussion/Electronic Drums` collapses to
+        // Panel `Electronic Drums`. Its disk-children Analog/Digital remain
+        // folders (no .patch suffix) and retain their kind + sub-leaves.
+        let electronic = try #require(root.root.children.first { $0.name == "Electronic Drums" })
         let analog = try #require(electronic.children.first { $0.name == "Analog" })
         #expect(analog.kind == .folder)
         #expect(analog.children.count == 2)
         #expect(analog.children.allSatisfy { $0.kind == .leaf })
+        // Leaf path is Panel-rooted, not disk-rooted.
+        let tr808 = try #require(analog.children.first { $0.name == "TR-808" })
+        #expect(tr808.path == "Electronic Drums/Analog/TR-808")
     }
 
     /// Integration smoke test: only runs if the live Logic bundle is present
@@ -187,5 +195,265 @@ struct LibraryDiskScannerTests {
             root.leafCount >= 1000,
             "Local factory library scanned \(root.leafCount) leaves — still stuck in the AX-undercount regime"
         )
+    }
+
+    // MARK: - v3.0.6 Panel-taxonomy mapping tests
+
+    @Test("mapDiskPathToPanel: Drums & Percussion/Acoustic Drums → Acoustic Drums")
+    func mapperFlattensDrumsAcoustic() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Drums & Percussion", "Acoustic Drums", "SoCal"]
+        )
+        #expect(mapped == ["Acoustic Drums", "SoCal"])
+    }
+
+    @Test("mapDiskPathToPanel: Drums & Percussion/Electronic Drums → Electronic Drums")
+    func mapperFlattensDrumsElectronic() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Drums & Percussion", "Electronic Drums", "Roland TR-909"]
+        )
+        #expect(mapped == ["Electronic Drums", "Roland TR-909"])
+    }
+
+    @Test("mapDiskPathToPanel: Drums & Percussion/Percussion → Percussion")
+    func mapperFlattensPercussion() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Drums & Percussion", "Percussion", "Conga Ensemble"]
+        )
+        #expect(mapped == ["Percussion", "Conga Ensemble"])
+    }
+
+    @Test("mapDiskPathToPanel: Keyboard/Acoustic Piano → Acoustic Piano")
+    func mapperFlattensAcousticPiano() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Keyboard", "Acoustic Piano", "Concert Grand"]
+        )
+        #expect(mapped == ["Acoustic Piano", "Concert Grand"])
+    }
+
+    @Test("mapDiskPathToPanel: Keyboard/Clavinet → Clavinet")
+    func mapperFlattensClavinet() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Keyboard", "Clavinet", "Bright Clav"]
+        )
+        #expect(mapped == ["Clavinet", "Bright Clav"])
+    }
+
+    @Test("mapDiskPathToPanel: Keyboard/Electric Piano → Electric Piano")
+    func mapperFlattensElectricPiano() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Keyboard", "Electric Piano", "Rhodes"]
+        )
+        #expect(mapped == ["Electric Piano", "Rhodes"])
+    }
+
+    @Test("mapDiskPathToPanel: Keyboard/Mellotron → Mellotron")
+    func mapperFlattensMellotron() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Keyboard", "Mellotron", "Strings"]
+        )
+        #expect(mapped == ["Mellotron", "Strings"])
+    }
+
+    @Test("mapDiskPathToPanel: Keyboard/Organ → Organ")
+    func mapperFlattensOrgan() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Keyboard", "Organ", "B3 Gospel"]
+        )
+        #expect(mapped == ["Organ", "B3 Gospel"])
+    }
+
+    @Test("mapDiskPathToPanel: z_Legacy/Orchestral → Orchestral")
+    func mapperFlattensOrchestral() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["z_Legacy", "Orchestral", "Film Strings"]
+        )
+        #expect(mapped == ["Orchestral", "Film Strings"])
+    }
+
+    @Test("mapDiskPathToPanel: Strings → Orchestral")
+    func mapperRoutesStringsToOrchestral() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Strings", "Solo Cello"]
+        )
+        #expect(mapped == ["Orchestral", "Solo Cello"])
+    }
+
+    @Test("mapDiskPathToPanel: Bass identity passthrough")
+    func mapperIdentityBass() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Bass", "Upright", "Sub Bass"]
+        )
+        #expect(mapped == ["Bass", "Upright", "Sub Bass"])
+    }
+
+    @Test("mapDiskPathToPanel: Guitar identity passthrough")
+    func mapperIdentityGuitar() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Guitar", "Clean", "Jazz"]
+        )
+        #expect(mapped == ["Guitar", "Clean", "Jazz"])
+    }
+
+    @Test("mapDiskPathToPanel: Mallet identity passthrough")
+    func mapperIdentityMallet() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(["Mallet", "Vibraphone"])
+        #expect(mapped == ["Mallet", "Vibraphone"])
+    }
+
+    @Test("mapDiskPathToPanel: Synthesizer identity passthrough")
+    func mapperIdentitySynthesizer() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Synthesizer", "Bass", "Acid Etched Bass"]
+        )
+        #expect(mapped == ["Synthesizer", "Bass", "Acid Etched Bass"])
+    }
+
+    @Test("mapDiskPathToPanel: unmapped top-level returns nil (dropped)")
+    func mapperRejectsUnmapped() {
+        // z_Legacy without /Orchestral has no Panel route.
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["z_Legacy", "World", "Gamelan"]
+        )
+        #expect(mapped == nil)
+    }
+
+    @Test("mapDiskPathToPanel: z01 Kit Pieces → Kit Pieces (intermediate rename)")
+    func mapperRenamesZ01KitPieces() {
+        // Raw disk `Drums & Percussion/Acoustic Drums/z01 Kit Pieces/Kick.patch`
+        // stripped of .patch → segments ["Drums & Percussion", "Acoustic Drums",
+        // "z01 Kit Pieces", "Kick"]. Mapper flattens first two → Acoustic Drums,
+        // then renames "z01 Kit Pieces" → "Kit Pieces" in the tail.
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Drums & Percussion", "Acoustic Drums", "z01 Kit Pieces", "Kick"]
+        )
+        #expect(mapped == ["Acoustic Drums", "Kit Pieces", "Kick"])
+    }
+
+    @Test("mapDiskPathToPanel: empty input returns empty array")
+    func mapperHandlesEmpty() {
+        #expect(LibraryDiskScanner.mapDiskPathToPanel([]) == [])
+    }
+
+    @Test("scan drops unmapped top-levels (e.g. z_Legacy/World)")
+    func scanDropsUnmappedCategories() throws {
+        let (bundle, tmp) = try makeFixture(tree: [
+            "Bass/Sub Bass.patch",
+            "z_Legacy/World/Gamelan.patch",    // should be dropped
+            "z_Legacy/Orchestral/Film Strings.patch",  // should land under Orchestral
+        ])
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let root = try LibraryDiskScanner.scan(bundleURL: bundle)
+        #expect(root.categories.sorted() == ["Bass", "Orchestral"])
+        #expect(root.leafCount == 2)
+        let orchestral = try #require(root.root.children.first { $0.name == "Orchestral" })
+        #expect(orchestral.children.map(\.name) == ["Film Strings"])
+    }
+
+    @Test("scan flattens Drums & Percussion + Keyboard into Panel-visible top-levels")
+    func scanRedistributesDrumsAndKeyboard() throws {
+        let (bundle, tmp) = try makeFixture(tree: [
+            "Drums & Percussion/Acoustic Drums/SoCal.patch",
+            "Drums & Percussion/Electronic Drums/Roland TR-909.patch",
+            "Drums & Percussion/Percussion/Conga.patch",
+            "Keyboard/Acoustic Piano/Concert Grand.patch",
+            "Keyboard/Organ/B3.patch",
+        ])
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let root = try LibraryDiskScanner.scan(bundleURL: bundle)
+        #expect(root.categories.sorted() == [
+            "Acoustic Drums", "Acoustic Piano", "Electronic Drums", "Organ", "Percussion",
+        ])
+        #expect(root.leafCount == 5)
+    }
+
+    @Test("scan renames z01 intermediate folders to their Panel equivalents")
+    func scanRenamesZ01Folders() throws {
+        let (bundle, tmp) = try makeFixture(tree: [
+            "Drums & Percussion/Acoustic Drums/z01 Kit Pieces/Kick.patch",
+        ])
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let root = try LibraryDiskScanner.scan(bundleURL: bundle)
+        let acoustic = try #require(root.root.children.first { $0.name == "Acoustic Drums" })
+        let kitPieces = try #require(acoustic.children.first { $0.name == "Kit Pieces" })
+        #expect(kitPieces.kind == .folder)
+        #expect(kitPieces.path == "Acoustic Drums/Kit Pieces")
+        let kick = try #require(kitPieces.children.first)
+        #expect(kick.name == "Kick")
+        #expect(kick.path == "Acoustic Drums/Kit Pieces/Kick")
+    }
+
+    /// v3.0.6 contract assertion: every emitted top-level category must exist
+    /// in the v3.0.4 AX Panel snapshot's `categories` array. This is the
+    /// "mapping bug detector" — if a new disk taxonomy slips through without
+    /// a `diskToPanel` entry, this test starts failing.
+    @Test("scan result: every emitted category exists in Resources/library-inventory.json Panel snapshot")
+    func everyEmittedCategoryExistsInPanelInventory() throws {
+        let home = URL(fileURLWithPath: NSHomeDirectory())
+        let bundleURL = home.appendingPathComponent(LibraryDiskScanner.defaultBundleRelativePath)
+        guard FileManager.default.fileExists(atPath: bundleURL.path) else {
+            // Expected in CI; skip silently.
+            return
+        }
+
+        // Load Panel snapshot from committed resource. Scan-result
+        // categories must be a subset.
+        let panelCategories = try loadPanelCategoriesFromResource()
+        guard !panelCategories.isEmpty else {
+            // Fixture missing — skip rather than misreport.
+            return
+        }
+
+        let root = try LibraryDiskScanner.scan()
+        for cat in root.categories {
+            #expect(
+                panelCategories.contains(cat),
+                "Disk scan emitted `\(cat)` which is not in the v3.0.4 AX Panel snapshot (\(panelCategories.sorted()))"
+            )
+        }
+    }
+
+    private func loadPanelCategoriesFromResource() throws -> Set<String> {
+        // Tests run from the package root by default; try a couple of
+        // candidate paths so either a raw `swift test` invocation or one
+        // launched from a subdirectory still resolves the resource.
+        let fm = FileManager.default
+        let candidates = [
+            fm.currentDirectoryPath + "/Resources/library-inventory.json",
+            fm.currentDirectoryPath + "/../Resources/library-inventory.json",
+        ]
+        for path in candidates where fm.fileExists(atPath: path) {
+            let data = try Data(contentsOf: URL(fileURLWithPath: path))
+            if let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let cats = obj["categories"] as? [String] {
+                return Set(cats)
+            }
+        }
+        return []
+    }
+
+    @Test("scan handles symlink cycles via visited-set guard (no runaway recursion)")
+    func scanHandlesSymlinkCycle() throws {
+        let fm = FileManager.default
+        let (bundle, tmp) = try makeFixture(tree: [
+            "Bass/Sub Bass.patch",
+        ])
+        defer { try? fm.removeItem(at: tmp) }
+
+        // Symlink Bass → itself via a child link. Pre-visited guard must
+        // bail on the second entry rather than looping until stack blows.
+        let loopLink = bundle.appendingPathComponent("Bass/loop")
+        try fm.createSymbolicLink(
+            at: loopLink,
+            withDestinationURL: bundle.appendingPathComponent("Bass")
+        )
+
+        // Must return a LibraryRoot without throwing or hanging.
+        let root = try LibraryDiskScanner.scan(bundleURL: bundle)
+        #expect(root.leafCount == 1)
+        #expect(root.categories == ["Bass"])
     }
 }
