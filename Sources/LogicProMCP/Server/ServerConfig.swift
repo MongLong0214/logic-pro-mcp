@@ -5,7 +5,7 @@ import Foundation
 struct ServerConfig: Sendable {
     // MARK: - Server Identity
     static let serverName = "logic-pro-mcp"
-    static let serverVersion = "3.0.4"
+    static let serverVersion = "3.0.5"
 
     // MARK: - MIDI
     // NOTE: source name uses *-Internal suffix for consistency with KeyCmd/Scripter/MCU

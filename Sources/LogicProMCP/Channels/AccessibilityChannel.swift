@@ -204,7 +204,21 @@ actor AccessibilityChannel: Channel {
             }
             scanInProgress = true
             defer { scanInProgress = false }
-            return await self.runLiveScan(runtime: runtime.logicRuntime)
+            // v3.0.5 — "mode" selects between disk (default), ax (legacy),
+            // or both (diff report). Disk mode enumerates the factory Library
+            // bundle on disk; ax mode uses the legacy AX probe which can only
+            // safely reach the first two Library Panel columns. Unknown mode
+            // values fall through to "disk" to keep older clients working
+            // without a schema contract change.
+            let mode = (params["mode"] ?? "disk").lowercased()
+            switch mode {
+            case "ax":
+                return await self.runLiveScan(runtime: runtime.logicRuntime)
+            case "both":
+                return await self.runBothScan(runtime: runtime.logicRuntime)
+            default:
+                return await self.runDiskScan(runtime: runtime.logicRuntime)
+            }
         case "library.resolve_path":
             return AccessibilityChannel.resolveLibraryPath(
                 params: params, lastScan: lastScan
@@ -1259,6 +1273,93 @@ actor AccessibilityChannel: Channel {
         self.lastScan = root
     }
 
+    // MARK: - v3.0.5 disk-backed scan
+
+    /// v3.0.5 — filesystem-backed `library.scan_all`. Enumerates
+    /// `~/Music/Logic Pro Library.bundle/Patches/Instrument/` and produces a
+    /// schema-identical `LibraryRoot` to the AX scan, but with full depth.
+    /// Falls back to the legacy AX scan if the bundle is missing or unreadable
+    /// (custom installs, Jam-Pack-only users, permission errors). Populates
+    /// `lastScan` so `library.resolve_path` works against the disk tree.
+    private func runDiskScan(runtime: AXLogicProElements.Runtime) async -> ChannelResult {
+        let t0 = Date()
+        Log.info("scan_all: entering runDiskScan (mode=disk)", subsystem: "ax")
+        do {
+            let root = try LibraryDiskScanner.scan()
+            let durationMs = Int(Date().timeIntervalSince(t0) * 1000)
+            Log.info(
+                "scan_all: disk scan ok — \(root.leafCount) leaves, \(root.folderCount) folders in \(durationMs)ms",
+                subsystem: "ax"
+            )
+            self.lastScan = root
+            _ = Self.writeInventoryJSON(root)
+            return Self.encodeLibraryRoot(root)
+        } catch {
+            Log.warn(
+                "scan_all: disk scan failed (\(error)); falling back to AX scan",
+                subsystem: "ax"
+            )
+            return await self.runLiveScan(runtime: runtime)
+        }
+    }
+
+    /// v3.0.5 — run both disk and AX scans, return a diff summary. Useful
+    /// for verifying coverage parity and catching schema drift between
+    /// Logic's disk layout and its Library Panel exposure. The AX scan is
+    /// kicked off after the disk scan because the AX scan both takes longer
+    /// and requires the Library Panel to be open — if the panel is closed
+    /// the disk result still ships and the AX block degrades to a zero-leaf
+    /// stub with `axAvailable:false`.
+    private func runBothScan(runtime: AXLogicProElements.Runtime) async -> ChannelResult {
+        let diskRoot: LibraryRoot
+        do {
+            diskRoot = try LibraryDiskScanner.scan()
+        } catch {
+            return .error("Disk scan failed: \(error); fall back to mode=ax")
+        }
+        self.lastScan = diskRoot
+        _ = Self.writeInventoryJSON(diskRoot)
+
+        // Best-effort AX scan. If the panel is closed we still emit a diff
+        // structure with ax={available:false, leafCount:0, ...} so clients
+        // can detect the degraded case without parsing an error string.
+        var axLeafCount = 0
+        var axNodeCount = 0
+        var axAvailable = false
+        if LibraryAccessor.isLibraryPanelOpen(runtime: runtime) {
+            let probe = Self.buildLiveTreeProbe(runtime: runtime)
+            if let axRoot = await LibraryAccessor.enumerateTree(
+                maxDepth: 12, settleDelayMs: 150, probe: probe
+            ) {
+                axLeafCount = axRoot.leafCount
+                axNodeCount = axRoot.nodeCount
+                axAvailable = true
+            }
+        }
+
+        let onlyOnDisk = max(0, diskRoot.leafCount - axLeafCount)
+        let summary = """
+        {"mode":"both","disk":{"leafCount":\(diskRoot.leafCount),"folderCount":\(diskRoot.folderCount),"nodeCount":\(diskRoot.nodeCount)},"ax":{"available":\(axAvailable),"leafCount":\(axLeafCount),"nodeCount":\(axNodeCount)},"diff":{"onlyOnDisk":\(onlyOnDisk)}}
+        """
+        return .success(summary)
+    }
+
+    /// Shared JSON encoder path used by disk / ax scan success branches so
+    /// both modes emit identical formatting (sorted keys, no pretty-print).
+    private static func encodeLibraryRoot(_ root: LibraryRoot) -> ChannelResult {
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(root)
+            guard let s = String(data: data, encoding: .utf8) else {
+                return .error("Failed to encode library inventory JSON")
+            }
+            return .success(s)
+        } catch {
+            return .error("JSON encode failed: \(error)")
+        }
+    }
+
     // MARK: - F2 plugin.scan_presets minimal handler (T0 verdict MIXED)
 
     /// Production `plugin.scan_presets` path — relies on currently-focused plugin
@@ -1397,7 +1498,7 @@ actor AccessibilityChannel: Channel {
     /// Build a live TreeProbe for the current flat 2-level Logic Library:
     /// depth 0 → categories; depth 1 → click category + read presets; depth 2+ → leaf.
     ///
-    /// v3.0.4 NOTE: The 14× undercount of `scan_library` (345 leaves vs 4,891
+    /// v3.0.4 NOTE: The 14× undercount of `scan_library` (345 leaves vs 4,891+
     /// disk `.patch` files) is caused by the `return []` at depth 2+ in this
     /// probe. A correct deep scan requires a non-destructive
     /// folder-vs-leaf discriminator BEFORE clicking, because clicking a
@@ -1407,9 +1508,13 @@ actor AccessibilityChannel: Channel {
     /// have an `AXDisclosureTriangle` sibling or an `AXChildren` attribute
     /// for subfolders; leaves have neither) but live-characterising Logic's
     /// exact AX exposure safely requires an offline probe session which was
-    /// not available for v3.0.4. The `setTrackInstrument` fix below (N-segment
-    /// `selectPath`) is unaffected — it only runs when the user explicitly
-    /// supplies all segments, making the preset-load side effect intentional.
+    /// not available for v3.0.4.
+    ///
+    /// v3.0.5 RESOLUTION: This AX probe is no longer the default path —
+    /// `library.scan_all` defaults to `{mode:"disk"}` which enumerates the
+    /// factory Library bundle on disk (no click, no mutation, full coverage).
+    /// This AX probe is preserved for `{mode:"ax"}` (legacy clients and diff
+    /// mode) and still carries its 2-level limitation.
     private static func buildLiveTreeProbe(runtime: AXLogicProElements.Runtime) -> TreeProbe {
         let logicPID = NSWorkspace.shared.runningApplications.first(where: {
             $0.bundleIdentifier == "com.apple.logic10"

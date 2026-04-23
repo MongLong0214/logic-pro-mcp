@@ -13,7 +13,7 @@
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-0.10-blue.svg?style=flat-square" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
   <img src="https://img.shields.io/badge/tests-760_passing-brightgreen.svg?style=flat-square" />
-  <img src="https://img.shields.io/badge/version-3.0.4-blue.svg?style=flat-square" />
+  <img src="https://img.shields.io/badge/version-3.0.5-blue.svg?style=flat-square" />
 </p>
 
 ---
@@ -78,7 +78,7 @@ The Homebrew formula pins both the release tarball URL and its SHA256; Homebrew 
 The installer is **fail-closed**: it refuses to run without explicit `LOGIC_PRO_MCP_SHA256` + `LOGIC_PRO_MCP_TEAM_ID` env pins. Inspect the script first, then execute with the pins copied from the release's `SHA256SUMS.txt`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.0.4/Scripts/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.0.5/Scripts/install.sh -o install.sh
 # inspect install.sh, then:
 LOGIC_PRO_MCP_SHA256=<paste from release SHA256SUMS.txt> \
 LOGIC_PRO_MCP_TEAM_ID=ADHOC \
@@ -89,7 +89,7 @@ If you knowingly accept same-origin provenance (hash + Team ID fetched from the 
 
 ```bash
 LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1 \
-bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.0.4/Scripts/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.0.5/Scripts/install.sh)
 ```
 
 See [SECURITY.md §Installer trust model](SECURITY.md#installer-trust-model) for the trust tiers and threat model.
@@ -151,7 +151,7 @@ See [Architecture](docs/ARCHITECTURE.md) for deeper details on channel prioritie
 
 ## Status
 
-**v3.0.4** (2026-04-21) — Production-ready, adhoc-signed pre-release. N-column Library Panel navigation — `track.set_instrument` now walks every path segment so deep paths like `Synthesizer/Bass/Acid Etched Bass` resolve correctly (pre-3.0.4 dropped middle segments).
+**v3.0.5** (2026-04-23) — Production-ready, adhoc-signed pre-release. Filesystem-backed Library enumeration — `scan_library` now returns every `.patch` in `~/Music/Logic Pro Library.bundle/Patches/Instrument/` (5,000+ leaves on a full factory install) instead of the 345-leaf AX Library Panel snapshot. Paired with v3.0.4's N-segment `selectPath`, every patch on disk is now addressable via `track.set_instrument`.
 
 Notarized (Apple-signed) release requires Apple Developer Program membership ($99/year). Until that's set up, the installer operates in ADHOC mode: SHA256 pin + `codesign --verify` still protect against tampering, but macOS Gatekeeper assessment is skipped and the installer strips the quarantine attribute so the binary runs without warnings.
 
@@ -159,11 +159,12 @@ See [SECURITY.md §Release types](SECURITY.md#release-types) for the trust model
 
 ### Testing
 
-- **747 unit + integration tests passing** on the v3.0.4 branch (`swift test --skip testLogicProServerStartCoversDefaultPortAndPollerLifecyclePaths --skip testStatePollerStartStopLifecycle` — 2 timer-driven lifecycle tests are deterministic-only under load-bearing CI, not product code)
+- **759 unit + integration tests passing** on the v3.0.5 branch (`swift test --skip testLogicProServerStartCoversDefaultPortAndPollerLifecyclePaths --skip testStatePollerStartStopLifecycle` — 2 timer-driven lifecycle tests are deterministic-only under load-bearing CI, not product code)
 - **Live E2E** (`Scripts/live-e2e-test.py`): the ~200 environment-independent assertions pass; ~45 tests require a running Logic Pro 12 session with the MCU control surface registered and fail otherwise (documented as environment-gated, not regression)
 - Multiple independent production-readiness reviews (code quality, security, architecture) converged to PROCEED after the v3.0.2 hardening passes
 - **v3.0.3+ AX-native control surface**: primary GUI touchpoints (track selection, plugin Setting popup) prefer Apple AX actions (AXPress, AXShowMenu, AXSelectedChildren) with CGEvent only as a last-resort fallback — reduces fragility under Logic UI updates
 - **v3.0.4 N-column Library navigation**: `track.set_instrument` delegates to the new `LibraryAccessor.selectPath` which clicks every segment in order; the 2-segment legacy caller path still works unchanged.
+- **v3.0.5 filesystem-backed `scan_library`**: `LibraryDiskScanner` enumerates the Logic factory bundle on disk (no AX, no Library Panel clicks) and produces a schema-identical `LibraryRoot` with full coverage. Default mode is `disk`; legacy AX scan is available via `{mode:"ax"}`; a diff report is available via `{mode:"both"}`.
 
 ### Known limitations
 

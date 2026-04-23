@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [3.0.5] — 2026-04-23
+
+Filesystem-backed library enumeration. v3.0.4's `scan_library` still returned only 345 leaves (7% of the on-disk reality) because its live AX probe was deliberately bounded: clicking a preset-looking element in Logic's Library Panel *loads* that preset onto the focused track, and the probe had no non-destructive folder-vs-leaf discriminator for column 2+. v3.0.5 side-steps the problem entirely — instead of probing the Library Panel it enumerates `~/Music/Logic Pro Library.bundle/Patches/Instrument/` on disk, where every `.patch` is a directory and the filesystem hierarchy is exactly the path Logic's Library Panel navigates. On a full factory install this surfaces 5,000+ leaves (vs the prior 345) with no AX interaction, no panel mutation, and no dependency on whether the Library is even open. Paired with v3.0.4's N-segment `selectPath`, every patch on disk is now both enumerable AND loadable.
+
+### Added
+
+- **`LibraryDiskScanner.scan(homeDirectory:fileManager:)` / `scan(bundleURL:fileManager:start:)`** — pure filesystem enumerator. Recursively walks the Patches/Instrument bundle, emits a `LibraryRoot` schema-identical to the AX scan (same fields, same `LibraryNode` recursive shape, same `presetsByCategory` flat index). Strips `.patch` from display names so clients see "Acid Etched Bass", not "Acid Etched Bass.patch" — matching the Library Panel display and the segment format required by `selectPath`. Skips dotfiles, tolerates unreadable subfolders (graceful-empty folder node), and throws `ScanError.bundleNotFound` only if the top-level bundle is missing.
+- **`library.scan_all` mode parameter** — `{"mode": "disk"}` (new default), `{"mode": "ax"}` (legacy AX probe, unchanged), `{"mode": "both"}` (runs both and returns a diff summary with leaf/node counts and on-disk-only count). Unknown mode values fall through to `"disk"` so older clients cannot accidentally enable the legacy path by sending a stale param.
+
+### Changed
+
+- **`library.scan_all` default behavior** — previously only ran the AX probe (345 leaves on a full factory install). Now defaults to the disk scan. Clients that relied on the legacy 345-leaf output can opt in with `{"mode": "ax"}`, but the JSON schema is unchanged so most callers transparently get the wider coverage.
+- **`library.resolve_path`** — now resolves against whichever tree was most recently produced (disk or AX), via the same `lastScan` actor state. Deep paths like `Synthesizer/Bass/Acid Etched Bass` now resolve after a disk scan; before v3.0.5 they returned "not found" because the 2-level AX scan never surfaced them.
+
+### Fixed
+
+- **14× `scan_library` undercount** — closes the v3.0.4 known limitation. 345 leaves → 5,000+ leaves on a full factory install; no AX mutation of the user's project.
+
+### Testing
+
+- New: `LibraryDiskScannerTests` — 8 tests covering happy path, leaf suffix stripping, `presetsByCategory` flattening, hidden-file skip, missing-bundle throw, empty-bundle graceful-empty, 4-level hierarchies, and a local-machine integration smoke test (only runs if the factory bundle is present, expects ≥1000 leaves).
+- Full regression: 759 tests passing under `swift test --skip testLogicProServerStartCoversDefaultPortAndPollerLifecyclePaths --skip testStatePollerStartStopLifecycle`.
+
 ## [3.0.4] — 2026-04-21
 
 N-column Library Panel navigation. Pre-3.0.4 `track.set_instrument` took `parts[0]` + `parts[last]` of the supplied path and dropped every middle segment, so a live call with `Synthesizer/Bass/Acid Etched Bass` would call `selectCategory("Synthesizer")` then `selectPreset("Acid Etched Bass")` — but by that point column 2 held Synthesizer's 14 *subfolders* (Arpeggiated, Bass, Lead, Pad, …), not its presets, so the second call always failed with "Preset not found". The fix walks every segment in order through a single AX primitive (`AXSelectedChildren` + `AXPress`), which is what Logic's 2-column sliding Library Panel actually needs: clicking a subfolder in column 2 slides the view so column 1 becomes the subfolder and column 2 shows its direct children, and clicking a leaf preset commits it without sliding.
