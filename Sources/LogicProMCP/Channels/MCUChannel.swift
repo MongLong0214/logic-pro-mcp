@@ -18,6 +18,17 @@ actor MCUChannel: Channel {
     private var bankingQueue: [CheckedContinuation<Void, Never>] = []
     private var isBanking: Bool = false
 
+    // v3.1.0 (T4) — configurable echo-timeout for fader/V-Pot read-back.
+    // MCU feedback timing varies by project load + Logic build; 500ms is
+    // the empirical default. Override via `MCU_ECHO_TIMEOUT_MS` (250/500/1000).
+    static var echoTimeoutMs: Int {
+        if let s = ProcessInfo.processInfo.environment["MCU_ECHO_TIMEOUT_MS"],
+           let n = Int(s), [250, 500, 1000].contains(n) {
+            return n
+        }
+        return 500
+    }
+
     // Note: verify-after-write was simplified to avoid actor deadlock.
     // Instead of blocking on feedback, we rely on MCUFeedbackParser updating
     // StateCache asynchronously. Callers check StateCache after a short delay if needed.
@@ -26,6 +37,60 @@ actor MCUChannel: Channel {
         self.transport = transport
         self.cache = cache
         self.feedbackParser = MCUFeedbackParser(cache: cache)
+    }
+
+    /// v3.1.0 (T4) — poll StateCache for a matching fader echo. The MCU
+    /// feedback parser writes to `cache.channelStrips[strip].volume` as
+    /// pitch-bend events arrive. We poll every 25ms and accept the value if
+    /// it lands within `tolerance` of `target` before `timeoutMs` elapses.
+    /// The 14-bit MCU resolution tolerance is 2/16383 (±2 LSB) as the default.
+    ///
+    /// v3.1.0 (Ralph-2 / C1) — `requireFreshAfter`, when non-nil, requires
+    /// the echo's write-timestamp (`cache.getFaderUpdatedAt(strip:)`) to be
+    /// strictly newer than that deadline. This prevents a stale cache value
+    /// left over from a previous confirmed `set_volume 0.5` from
+    /// false-positively acknowledging a later `set_volume 0.5` against a
+    /// disconnected transport.
+    ///
+    /// Returns the observed volume if a matching, fresh echo arrived, or nil
+    /// on timeout / stale-only.
+    func pollFaderEcho(
+        strip: Int,
+        target: Double,
+        timeoutMs: Int,
+        tolerance: Double = 2.0 / 16383.0,
+        requireFreshAfter: Date? = nil
+    ) async -> Double? {
+        let pollIntervalNs: UInt64 = 25_000_000
+        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+        while Date() < deadline {
+            if let observed = await cache.getChannelStrip(at: strip)?.volume,
+               abs(observed - target) <= tolerance {
+                if let sendAt = requireFreshAfter {
+                    // Fresh only if the parser wrote a post-send timestamp.
+                    if let writtenAt = await cache.getFaderUpdatedAt(strip: strip),
+                       writtenAt > sendAt {
+                        return observed
+                    }
+                    // Value matches but it's stale — keep polling until
+                    // either a new echo arrives or the deadline elapses.
+                } else {
+                    return observed
+                }
+            }
+            try? await Task.sleep(nanoseconds: pollIntervalNs)
+        }
+        // Deadline hit. Report the most-recent fresh observation (or nil if
+        // nothing fresh arrived). When freshness isn't required, fall back
+        // to the raw cached value for backward compat.
+        if let sendAt = requireFreshAfter {
+            if let writtenAt = await cache.getFaderUpdatedAt(strip: strip),
+               writtenAt > sendAt {
+                return await cache.getChannelStrip(at: strip)?.volume
+            }
+            return nil
+        }
+        return await cache.getChannelStrip(at: strip)?.volume
     }
 
     func start() async throws {
@@ -141,11 +206,36 @@ actor MCUChannel: Channel {
     private func executeSetVolume(_ params: [String: String]) async -> ChannelResult {
         let track = Int(params["index"] ?? "0") ?? 0
         let value = Double(params["volume"] ?? "0") ?? 0.0
+        let timeoutMs = Self.echoTimeoutMs
 
         return await withBanking(targetTrack: track) { strip in
+            // v3.1.0 (Ralph-2 / C1) — stamp the send moment *before* the
+            // write so pollFaderEcho can reject stale cache values that
+            // pre-date this call. Without the stamp, an identical-value
+            // re-send (set_volume 0.5 twice in a row) could return State A
+            // on the stale echo from the first call even when the transport
+            // is disconnected.
+            let sendAt = Date()
             let bytes = MCUProtocol.encodeFader(track: strip, value: value)
             await self.sendCommand(bytes)
-            return .success("Volume set to \(value) on track \(track)")
+            // Poll the feedback parser's echo write into StateCache. Confirmed
+            // fresh echo → State A. Timeout / stale-only → State B
+            // `echo_timeout_<ms>ms`.
+            let observed = await self.pollFaderEcho(
+                strip: track, target: value, timeoutMs: timeoutMs,
+                requireFreshAfter: sendAt
+            )
+            let extras: [String: Any] = [
+                "requested": value,
+                "observed": observed ?? NSNull(),
+                "track": track
+            ]
+            if let observed, abs(observed - value) <= 2.0 / 16383.0 {
+                return .success(HonestContract.encodeStateA(extras: extras))
+            }
+            return .success(HonestContract.encodeStateB(
+                reason: .echoTimeout(ms: timeoutMs), extras: extras
+            ))
         }
     }
 
@@ -158,15 +248,48 @@ actor MCUChannel: Channel {
             let direction: MCUProtocol.VPotDirection = value >= 0 ? .clockwise : .counterClockwise
             let bytes = MCUProtocol.encodeVPot(strip: strip, direction: direction, speed: speed)
             await self.transport.send(bytes)
-            return .success("Pan set to \(value) on track \(track)")
+            // v3.1.0 (T4) — V-Pot feedback is relative (CW/CCW nudges) and
+            // Logic echoes position as a different event (CC 0x30+strip LED
+            // ring, not pitch-bend). Until that parser is plumbed through
+            // to StateCache, treat every pan write as `readback_unavailable`
+            // so the contract stays honest.
+            let extras: [String: Any] = [
+                "requested": value,
+                "observed": NSNull(),
+                "track": track
+            ]
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable, extras: extras
+            ))
         }
     }
 
     private func executeSetMasterVolume(_ params: [String: String]) async -> ChannelResult {
         let value = Double(params["volume"] ?? "0") ?? 0.0
+        let timeoutMs = Self.echoTimeoutMs
+        // v3.1.0 (Ralph-2 / C1) — same send-time freshness check as per-strip
+        // set_volume so a cached master value can't mascarade as a fresh
+        // echo on a re-send with the same target.
+        let sendAt = Date()
         let bytes = MCUProtocol.encodeFader(track: 8, value: value)
         await transport.send(bytes)
-        return .success("Master volume set to \(value)")
+        // Master fader echoes on strip index 8 (channel 8 of the pitch-bend
+        // stream, per MCU spec).
+        let observed = await pollFaderEcho(
+            strip: 8, target: value, timeoutMs: timeoutMs,
+            requireFreshAfter: sendAt
+        )
+        let extras: [String: Any] = [
+            "requested": value,
+            "observed": observed ?? NSNull(),
+            "track": "master"
+        ]
+        if let observed, abs(observed - value) <= 2.0 / 16383.0 {
+            return .success(HonestContract.encodeStateA(extras: extras))
+        }
+        return .success(HonestContract.encodeStateB(
+            reason: .echoTimeout(ms: timeoutMs), extras: extras
+        ))
     }
 
     private func sendTransport(_ command: MCUProtocol.TransportCommand) async -> ChannelResult {

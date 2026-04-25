@@ -643,8 +643,21 @@ private func makeAXBackedAccessibilityChannel(
 
     let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app)
     let selectResult = await channel.execute(operation: "track.select", params: ["index": "1"])
-    #expect(!selectResult.isSuccess)
-    #expect(selectResult.message.contains("did not settle on index 1"))
+    // v3.1.0 (Ralph-2 / P2-2) — Honest Contract: mismatch-after-retry is
+    // State B with `readback_mismatch`, not `retry_exhausted`. The envelope
+    // stays success:true so clients branch on `verified`; `readback_mismatch`
+    // tells the caller that a different index was observed (vs.
+    // `retry_exhausted` which would mean read-back metadata never appeared).
+    // `observed` carries the index Logic actually committed.
+    #expect(selectResult.isSuccess)
+    let obj = try! JSONSerialization.jsonObject(
+        with: Data(selectResult.message.utf8), options: []
+    ) as! [String: Any]
+    #expect(obj["success"] as? Bool == true)
+    #expect(obj["verified"] as? Bool == false)
+    #expect(obj["reason"] as? String == "readback_mismatch")
+    #expect(obj["requested"] as? Int == 1)
+    #expect(obj["observed"] as? Int == 0)
 }
 
 @Test func testAccessibilityChannelAXBackedTrackErrorPaths() async {

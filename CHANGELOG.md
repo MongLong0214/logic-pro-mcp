@@ -8,6 +8,86 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [3.1.0] — 2026-04-24
+
+**Honest Contract.** Every mutating operation now returns one of three explicit states so that an LLM caller can distinguish *confirmed* writes from *unconfirmable* writes from *failed* writes without heuristically parsing free-form text. This closes the class of bug the Guardian v3.0.9 audit flagged as systemic: multiple ops returned `"success:true"` while the underlying AX write was never read back, so a mismatch between Logic's internal state and the reported state could silently propagate to callers. See [docs/HONEST-CONTRACT.md](docs/HONEST-CONTRACT.md) for the full wire contract and [docs/prd/PRD-v310-honest-contract.md](docs/prd/PRD-v310-honest-contract.md) for the motivation + design.
+
+### Wire-level contract (new)
+
+Every mutating op now returns one of:
+
+```jsonc
+// State A — confirmed
+{"success": true, "verified": true,  "requested": "...", "observed": "..."}
+
+// State B — uncertain (write landed, read-back couldn't confirm)
+{"success": true, "verified": false, "reason": "echo_timeout_500ms" | "readback_unavailable" | "readback_mismatch" | "retry_exhausted", "requested": "...", "observed": null | "..."}
+
+// State C — hard failure (write itself failed)
+{"success": false, "error": "ax_write_failed" | "element_not_found" | "permission_denied" | "logic_not_running" | "invalid_params" | "readback_mismatch", "axCode": -25212, "hint": "..."}
+```
+
+Both enums (`reason`, `error`) are stable — callers can `switch` on them.
+
+### Fixed
+
+- **P0 — `track.set_instrument` now reads back the loaded patch.** `AccessibilityChannel.setTrackInstrument` (line 1766-1773 in v3.0.9) wrapped `selectPath`'s return code as success with zero post-write verification; `LibraryAccessor.selectCategory` threw away both `AXUIElementSetAttributeValue` and `AXUIElementPerformAction` return codes (`_ = …`), so a user whose Library Panel failed to advance a segment still received `"success":true` and a never-loaded patch. v3.1.0 threads AX error codes through `selectCategory` / `selectPreset` and then reads the actual selection off the Panel via `Inventory.currentPreset`; matches return State A, mismatches return State B `readback_mismatch`, hard AX failures return State C `ax_write_failed`.
+- **P1 — `track.select` no longer returns "success but unverified".** `selectTrackViaAX` now reads `AXSelectedChildren` back with a 6× 100ms retry budget to absorb SMF-fresh-track lag, then returns State A on match, State B `readback_mismatch` when the read-back returns a different index, State B `retry_exhausted` when metadata never surfaces across the retry budget, or State C on AX write error. The bare `verified:false` success path from v3.0.9 is gone.
+- **P1 — `mixer.set_volume` / `mixer.set_master_volume` now verify the MCU fader echo.** MCU pitch-bend writes to Logic were previously fire-and-forget; Logic's response (the 0xE0-stream fader position echo) was parsed into `StateCache` but nobody consulted it before reporting success. v3.1.0 adds `MCUChannel.pollFaderEcho` which polls `StateCache.channelStrips[strip].volume` at 25ms intervals for up to 500ms (override via `MCU_ECHO_TIMEOUT_MS=250|500|1000`). Match within ±2 LSB (14-bit MCU resolution, tolerance `2/16383`) → State A; timeout → State B `echo_timeout_500ms`. Each call now stamps its send time and requires the echo's write-timestamp to be strictly newer, so an identical-value re-send cannot be confirmed by a stale cache value from the prior call.
+- **P1 — `mixer.set_pan` is now honestly uncertain.** V-Pot feedback is a relative CW/CCW nudge stream plus a CC LED-ring position, not the same event shape as the fader echo and not yet plumbed through to `StateCache`. v3.1.0 writes the V-Pot bytes and returns State B `readback_unavailable` — a forced honest answer rather than the prior silent claim of success.
+- **P1 — `transport.set_cycle_range` AX path now includes `verified`.** The osascript fallback already returned `verified` but the AX primary path did not, producing schema drift between the two. v3.1.0 aligns both to the same 3-state shape.
+- **P1 — `scan_library {mode:"disk"}` no longer poisons cross-op state.** The v3.0.6 cache split that separated `lastDiskScan` from `lastScan` is preserved, but v3.1.0 additionally tags resolved entries with `source` (`"panel"` | `"disk-only"` | `"both"`) and sets `loadable:false` for disk-only entries that the Panel taxonomy mapper can't route — so the downstream `track.set_instrument` caller never gets a green-light on a patch path that `selectPath` cannot actually navigate.
+- **P2 — State resources now expose `cache_age_sec` + `fetched_at`.** `logic://tracks`, `logic://library/inventory`, `logic://mixer/strips`, and the other state resources wrap their payload in `{cache_age_sec, fetched_at (ISO8601), data}`. A caller that needs freshness can now assert on age instead of guessing.
+
+### Added
+
+- `Sources/LogicProMCP/Utilities/HonestContract.swift` — single source of truth for 3-state JSON encoding (`encodeStateA` / `encodeStateB` / `encodeStateC`) + the two stable-rawValue enums (`UncertainReason`, `FailureError`). All new mutating ops go through this module.
+- `docs/HONEST-CONTRACT.md` — client-facing guide to the 3-state contract, recommended retry patterns, and the "what not to do" list for server contributors.
+- `docs/prd/PRD-v310-honest-contract.md` — PRD recording the design + risk analysis that drove this release.
+- `MCU_ECHO_TIMEOUT_MS` environment variable — 250 / 500 / 1000ms override for the MCU fader echo poll window. Useful for slow projects / slow Logic builds where the default 500ms is too tight.
+- New test suites: `HonestContractTests.swift`, `HonestContractOpTests.swift`, `MCUChannelEchoTests.swift`, `ResourceCacheAgeTests.swift`, `ScanLibraryCacheSplitTests.swift` — 24 new test cases covering all three states per op + the cache-split + the resource `cache_age_sec` field.
+
+### Changed
+
+- `README.md` §Status withdrawn the "every patch on disk is addressable via `track.set_instrument`" wording. The factual reality is more nuanced: the disk→Panel taxonomy mapper routes a large majority of disk patches to a Panel-navigable path, but the unmapped tail (currently `z_Legacy/World/*`, some exotic legacy Orchestral variants) is dropped by the mapper and therefore not loadable via AX — the honest answer is now reflected in the scan output (`source:"disk-only"`, `loadable:false`) and documented in the status section.
+- Test suite total: 790 → **821** (31 new tests, all passing, no skips changed). Includes Ralph-2 regression guards for MCU stale-cache false-positives (testSetVolumeStaleCacheDoesNotReturnStateA / testSetMasterVolumeStaleCacheDoesNotReturnStateA) and the `mode:both` → panel-loadable resolve_path regression (testResolvePathAfterBothScanReturnsPanelLoadableForPanelPaths).
+- `track.select` State B taxonomy refined (Ralph-2 / P2-2): a read-back that returns a different index now reports `reason:"readback_mismatch"` instead of `reason:"retry_exhausted"`. `retry_exhausted` is now reserved for `selectionMetadataUnavailable` (read-back metadata never surfaces across the retry budget). Clients switching on `reason` can now distinguish accept-and-diverge (mismatch) from back-off-and-refetch (exhausted).
+- `scan_library {mode:"both"}` now seeds `lastPanelScan` from its inline AX scan so subsequent `resolve_path` queries correctly classify Panel-loadable paths with `loadable:true` (Ralph-2 / C3). Previously these were misreported as `loadable:false`.
+- `track.set_instrument` / `transport.set_cycle_range` State C responses now route through `.error(...)` so the MCP envelope's `isError:true` is set, matching `track.select`'s State C shape (Ralph-2 / M-1).
+
+### Compatibility
+
+- **Mutating tool responses — additive.** v3.0.9 clients that don't read `verified` / `reason` fields still parse v3.1.0 mutating-op responses correctly. The legacy `success` field remains the first-line signal and has the same true/false meaning for hard failures. Clients that *do* want the confirmation signal should start reading `verified`; `verified:true` is the strict "I saw Logic accept this" claim and `verified:false` is the explicit "I sent it but can't confirm" claim the server previously couldn't distinguish.
+- **BREAKING — resource envelope schema.** Two read-only resources now wrap their payload in a new top-level object so the `cache_age_sec` + `fetched_at` honesty metadata can be attached without polluting the payload shape. v3.0.9 clients that indexed into the bare payload must migrate to read the new `.data` / `.root` fields.
+
+  | Resource / tool | v3.0.9 payload | v3.1.0 payload |
+  |-----------------|----------------|----------------|
+  | `logic://tracks` | `[{ "id": 0, ... }, ...]` | `{ "cache_age_sec": 12, "fetched_at": "...", "data": [{ "id": 0, ... }, ...] }` |
+  | `logic://library/inventory` | `{ "categories": [...], "root": {...}, ... }` | `{ "cache_age_sec": 3600, "fetched_at": "...", "data": <legacy object> }` |
+  | `logic_tracks.scan_library` result | `{ "categories": [...], "root": {...}, ... }` | `{ "source": "panel"\|"disk"\|"both", "root": <legacy object> }` |
+
+  **Migration**: clients should read `.data` (state resources) or `.root` (scan_library) to reach the legacy shape. Example:
+
+  ```diff
+  - const tracks = await readResource("logic://tracks");
+  - const firstTrackId = tracks[0].id;
+  + const envelope = await readResource("logic://tracks");
+  + const firstTrackId = envelope.data[0].id;
+  ```
+
+  Previous CHANGELOG wording ("additive, not breaking") was inaccurate and is corrected here; the envelope wrap is a genuine breaking change at the resource layer even though mutating-op responses remain additive. See `docs/HONEST-CONTRACT.md §State resource` for the full contract.
+
+### Verification
+
+- **Build**: `swift build` clean on macOS 15 / Apple Silicon.
+- **Tests**: 821 / 821 passing (same skip list as v3.0.9: 2 timer-driven lifecycle tests).
+- **Live Logic Pro**: (to be filled in during T10 release step — v3.1.0 does not ship before 3+ live verification cycles across `set_instrument`, `track.select`, `mixer.set_volume`, `set_cycle_range`).
+
+### Known limitations
+
+- `mixer.set_pan` returns `verified:false` on every call until the V-Pot → StateCache plumbing lands (tracked as a follow-up). The operation still sends the correct bytes; only the verification signal is degraded.
+- The MCU fader echo poll relies on Logic's Mackie Control Universal feedback being active. In a fresh project where the MCU control surface isn't registered yet, `mixer.set_volume` will always fall through to State B `echo_timeout_500ms` — this is the correct honest answer (the bytes went out, Logic didn't echo) but callers need to complete the MCU setup from `docs/SETUP.md` before the `verified:true` path is reachable.
+
 ## [3.0.9] — 2026-04-23
 
 **`track.select` actually moves Logic's track selection now.** The bug that v3.0.8 called out as "known limitation" — and that silently propagated through v3.0.3 → v3.0.7 — is fixed, live-verified end-to-end on Logic Pro 12.0.1 (Apple Silicon, macOS 15+, KR locale). Every prior release from v3.0.5 onward was reviewed only at the unit-test level; v3.0.8 was "first release verified by live Logic Pro playback" but its verification scope was `record_sequence`, not `track.select`. This release pays down the missing live verification for the selection primitive that every instrument / mix / arm op depends on.

@@ -237,6 +237,47 @@ struct LibraryAccessorEdgeCaseTests {
         // Probe-level: not applicable. Smoke test passes.
         #expect(Bool(true))
     }
+
+    // v3.1.0 (Ralph-2 / P1-2) — column-aware selection readback.
+    //
+    // Guardian review flagged that `detectSelectedText(elements:)` previously
+    // ignored its `elements` argument and returned the deepest/last selected
+    // text from a full browser walk. That meant both the category-column and
+    // preset-column invocations in `enumerate()` silently collapsed to the
+    // preset value, corrupting `Inventory.currentCategory`.
+    //
+    // The fix: `readSelectedTextInColumn(..columnMinX:columnMaxX:..)` now
+    // filters selected children by AXPosition.x. Full end-to-end verification
+    // requires a live AX tree; at unit level we cover the reachable API
+    // surface: the new helper exists, the column-agnostic variant still
+    // returns nil on empty browsers, and the "empty column bucket" edge case
+    // collapses to nil rather than leaking a selection from another column.
+    @Test func testP1_2_ReadSelectedTextInColumnSignatureExists() async throws {
+        // Compile-time check that the new helper is exported and takes the
+        // column range parameters the P1-2 fix introduced.
+        let builder = FakeAXRuntimeBuilder()
+        let browser = builder.element(9001)
+        let runtime = builder.makeAXRuntime()
+        let out = LibraryAccessor.readSelectedTextInColumn(
+            in: browser, columnMinX: 0, columnMaxX: 100, runtime: runtime
+        )
+        // Fake browser has no AXList descendants → nil, not a stale
+        // preset-column leak.
+        #expect(out == nil)
+    }
+
+    @Test func testP1_2_ReadSelectedPresetNameStillColumnAgnostic() async throws {
+        let builder = FakeAXRuntimeBuilder()
+        let browser = builder.element(9002)
+        let runtime = builder.makeAXRuntime()
+        let out = LibraryAccessor.readSelectedPresetName(
+            in: browser, runtime: runtime
+        )
+        // Column-agnostic variant (used by `readBackLibraryPreset` /
+        // `track.set_instrument`) still returns nil when no AXList exposes
+        // selection. Contract: nil → readback_unavailable.
+        #expect(out == nil)
+    }
 }
 
 private actor AsyncCounter {

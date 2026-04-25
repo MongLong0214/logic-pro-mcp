@@ -11,7 +11,17 @@ actor AccessibilityChannel: Channel {
 
     // T4: actor state for scanLibraryAll orchestration
     private var scanInProgress: Bool = false
+    // v3.1.0 (T6) — split the single `lastScan` into three source-keyed caches
+    // so a `mode:disk` call no longer poisons the panel-only view that
+    // `library.resolve_path` needs for Load-via-Library (panel-only paths
+    // never load from disk-only entries). `lastScan` remains populated with
+    // whichever cache was last written so legacy call sites that ask for
+    // "any recent scan" still work; new code reads the source-specific cache.
     private var lastScan: LibraryRoot? = nil
+    private var lastPanelScan: LibraryRoot? = nil
+    private var lastDiskScan: LibraryRoot? = nil
+    private var lastBothScan: LibraryRoot? = nil
+    private var lastScanSource: String? = nil
     private var lastRoutedCategory: String? = nil
     private var lastRoutedPreset: String? = nil
 
@@ -235,8 +245,17 @@ actor AccessibilityChannel: Channel {
                 return await self.runLiveScan(runtime: runtime.logicRuntime)
             }
         case "library.resolve_path":
+            // v3.1.0 (T6) — panel-only lookups prefer the panel cache because
+            // only panel entries are loadable via `selectPath`. Disk-only
+            // entries are returned with `source:"disk-only"` + `loadable:false`
+            // and a warning, which lets the client avoid calling
+            // `set_instrument` against a path that will fail deterministically.
             return AccessibilityChannel.resolveLibraryPath(
-                params: params, lastScan: lastScan
+                params: params,
+                lastPanelScan: lastPanelScan,
+                lastDiskScan: lastDiskScan,
+                lastScan: lastScan,
+                lastScanSource: lastScanSource
             )
         case "plugin.scan_presets":
             // F2 minimal scan handler — relies on currently-focused plugin window.
@@ -593,7 +612,7 @@ actor AccessibilityChannel: Channel {
         return task.terminationStatus == 0
     }
 
-    private static func defaultSetCycleRange(
+    static func defaultSetCycleRange(
         params: [String: String],
         runtime: AXLogicProElements.Runtime = .production,
         runFallback: @escaping @Sendable (String, String) -> Bool = runCycleRangeFallbackScript
@@ -630,11 +649,59 @@ actor AccessibilityChannel: Channel {
                 }
             }
             if let s = startField, let e = endField {
-                AXHelpers.setAttribute(s, kAXValueAttribute, startPos as CFTypeRef, runtime: runtime.ax)
+                let sSet = AXHelpers.setAttribute(
+                    s, kAXValueAttribute, startPos as CFTypeRef, runtime: runtime.ax
+                )
                 AXHelpers.performAction(s, kAXConfirmAction, runtime: runtime.ax)
-                AXHelpers.setAttribute(e, kAXValueAttribute, endPos as CFTypeRef, runtime: runtime.ax)
+                let eSet = AXHelpers.setAttribute(
+                    e, kAXValueAttribute, endPos as CFTypeRef, runtime: runtime.ax
+                )
                 AXHelpers.performAction(e, kAXConfirmAction, runtime: runtime.ax)
-                return .success("{\"start\":\"\(startPos)\",\"end\":\"\(endPos)\",\"via\":\"ax\"}")
+
+                // v3.1.0 (T5) — read back the two cycle locator fields and
+                // build a 3-state Honest Contract envelope. Schema now
+                // matches the osascript fallback: both paths emit
+                // `{start, end, via, verified, requested, observed}`.
+                let extras: [String: Any] = [
+                    "start": startPos,
+                    "end": endPos,
+                    "via": "ax",
+                    "requested": ["start": startPos, "end": endPos]
+                ]
+                if !sSet || !eSet {
+                    // v3.1.0 (Ralph-2 / M-1) — State C must route through
+                    // `.error(...)` so the MCP envelope's isError:true is
+                    // set. The prior `.success(...)` wrapping produced an
+                    // inconsistent signal vs. `track.select`'s State C.
+                    return .error(HonestContract.encodeStateC(
+                        error: .axWriteFailed,
+                        hint: "setAttribute on cycle locator failed",
+                        extras: extras
+                    ))
+                }
+                let startReadBack: String? = AXHelpers.getAttribute(
+                    s, kAXValueAttribute, runtime: runtime.ax
+                )
+                let endReadBack: String? = AXHelpers.getAttribute(
+                    e, kAXValueAttribute, runtime: runtime.ax
+                )
+                let observed: [String: Any] = [
+                    "start": startReadBack as Any? ?? NSNull(),
+                    "end": endReadBack as Any? ?? NSNull()
+                ]
+                var merged = extras
+                merged["observed"] = observed
+                if startReadBack == nil || endReadBack == nil {
+                    return .success(HonestContract.encodeStateB(
+                        reason: .readbackUnavailable, extras: merged
+                    ))
+                }
+                if startReadBack == startPos && endReadBack == endPos {
+                    return .success(HonestContract.encodeStateA(extras: merged))
+                }
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackMismatch, extras: merged
+                ))
             }
         }
 
@@ -645,7 +712,19 @@ actor AccessibilityChannel: Channel {
         // because Logic's cycle locator state isn't readable via the cached
         // transport snapshot (cycle bar positions aren't in the state schema).
         if runFallback(startPos, endPos) {
-            return .success("{\"start\":\"\(startPos)\",\"end\":\"\(endPos)\",\"via\":\"osascript\",\"verified\":false}")
+            // v3.1.0 (T5) — osascript path stays unverified (no read-back).
+            // Re-encode via HonestContract so the envelope matches the AX
+            // path: `verified:false + reason:"readback_unavailable"`.
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: [
+                    "start": startPos,
+                    "end": endPos,
+                    "via": "osascript",
+                    "requested": ["start": startPos, "end": endPos],
+                    "observed": NSNull()
+                ]
+            ))
         }
         return .error(
             "set_cycle_range: Logic's cycle locators aren't exposed as AX text fields in this build (tried ko/en locales). " +
@@ -750,29 +829,71 @@ actor AccessibilityChannel: Channel {
             return .error("Missing or invalid 'index' parameter")
         }
         guard AXLogicProElements.findTrackHeader(at: index, runtime: runtime) != nil else {
-            return .error("Track at index \(index) not found")
+            // v3.1.0 (T3) — missing track is a hard failure; no retry will
+            // help. Keep legacy error-string path for ChannelResult.error so
+            // existing callers that look at .isSuccess still see a failure,
+            // but encode the structured envelope.
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "Track at index \(index) not found",
+                extras: ["requested": index]
+            ))
         }
         // v3.0.3+ — activate Logic so any coord-click fallback can land, then
         // go through the AX-native selection ladder.
         _ = ProcessUtils.Runtime.production.activateLogicPro()
         try? await Task.sleep(nanoseconds: 150_000_000)
         guard AXLogicProElements.selectTrackViaAX(at: index, runtime: runtime) else {
-            return .error("Failed to select track \(index) via AX or coord click")
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "Failed to select track \(index) via AX or coord click",
+                extras: ["requested": index]
+            ))
         }
 
+        // v3.1.0 (T3) — verifyTrackSelection already retries 6× at 100ms
+        // intervals internally (see TrackSelectionVerification). We surface
+        // the outcome as a 3-state Honest Contract response rather than the
+        // legacy free-form text. Existing `verified:true/false` JSON path
+        // stays valid because the new envelope still contains those keys.
         let verification = await verifyTrackSelection(index: index, runtime: runtime)
+        let base: [String: Any] = ["requested": index, "selected": index]
         switch verification {
         case .verified:
-            return .success("{\"selected\":\(index),\"verified\":true}")
+            return .success(HonestContract.encodeStateA(extras: base.merging([
+                "observed": index
+            ]) { _, new in new }))
         case .selectionMetadataUnavailable:
-            return .success("{\"selected\":\(index),\"verified\":false}")
+            // Ralph-2 / W1 (guardian iter2) — retry budget exhausted: the
+            // read-back metadata never surfaced across 6×100ms attempts.
+            // Docs (README, CHANGELOG, HONEST-CONTRACT.md, PRD) consistently
+            // promise `retry_exhausted` for this case; emitting
+            // `readback_unavailable` here would make the enum an orphan.
+            return .success(HonestContract.encodeStateB(
+                reason: .retryExhausted,
+                extras: base.merging(["observed": NSNull()]) { _, new in new }
+            ))
         case .mismatch(let selectedIndex):
-            if let selectedIndex {
-                return .error("Track selection did not settle on index \(index); current selected index is \(selectedIndex)")
-            }
-            return .error("Track selection did not settle on index \(index)")
+            // v3.1.0 (Ralph-2 / P2-2) — read-back succeeded but returned a
+            // different index. That's the textbook `readback_mismatch` case
+            // per docs/HONEST-CONTRACT.md §3 (State B taxonomy).
+            // `retry_exhausted` stays reserved for
+            // `.selectionMetadataUnavailable` — read-back metadata never
+            // appeared across the retry budget. Clients switching on
+            // `reason` can now pick accept-and-diverge (mismatch) vs.
+            // back-off-and-refetch (retry_exhausted) correctly.
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackMismatch,
+                extras: base.merging([
+                    "observed": selectedIndex as Any? ?? NSNull()
+                ]) { _, new in new }
+            ))
         case .trackDisappeared:
-            return .error("Track at index \(index) disappeared during selection verification")
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "Track at index \(index) disappeared during selection verification",
+                extras: base
+            ))
         }
     }
 
@@ -1265,27 +1386,38 @@ actor AccessibilityChannel: Channel {
                 return LibraryAccessor.selectPreset(named: p, runtime: runtime)
             },
             writeJSON: { root in Self.writeInventoryJSON(root, source: "ax") },
-            onComplete: { root in await channel.setLastScan(root) },
+            onComplete: { root in await channel.setLastScan(root, source: "panel") },
             settleDelayMs: 150
         )
         guard let r = result else {
             return .error("Library panel not found. Open Library (⌘L) in Logic Pro.")
         }
-        do {
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(r.root)
-            guard let s = String(data: data, encoding: .utf8) else {
-                return .error("Failed to encode library inventory JSON")
-            }
-            return .success(s)
-        } catch {
-            return .error("JSON encode failed: \(error)")
-        }
+        // v3.1.0 (T6) — AX scan response now includes `source:"panel"` so
+        // clients can distinguish it from disk/both responses and route
+        // `resolve_path` queries against the correct cache.
+        return Self.encodeLibraryRoot(r.root, sourceTag: "panel")
     }
 
-    private func setLastScan(_ root: LibraryRoot) {
+    /// Test-only seam for T6 cache-split coverage. Production call sites go
+    /// through `runLiveScan` / `runDiskScan` / `runBothScan`. Internal so
+    /// the `@testable import` surface sees it, external does not.
+    func seedLastScanForTest(_ root: LibraryRoot, source: String) {
+        setLastScan(root, source: source)
+    }
+
+    private func setLastScan(_ root: LibraryRoot, source: String) {
         self.lastScan = root
+        self.lastScanSource = source
+        switch source {
+        case "panel":
+            self.lastPanelScan = root
+        case "disk":
+            self.lastDiskScan = root
+        case "both":
+            self.lastBothScan = root
+        default:
+            break
+        }
     }
 
     // MARK: - v3.0.5 disk-backed scan
@@ -1306,9 +1438,9 @@ actor AccessibilityChannel: Channel {
                 "scan_all: disk scan ok — \(root.leafCount) leaves, \(root.folderCount) folders in \(durationMs)ms",
                 subsystem: "ax"
             )
-            self.lastScan = root
+            self.setLastScan(root, source: "disk")
             _ = Self.writeInventoryJSON(root, source: "disk")
-            return Self.encodeLibraryRoot(root)
+            return Self.encodeLibraryRoot(root, sourceTag: "disk")
         } catch {
             Log.warn(
                 "scan_all: disk scan failed (\(error)); falling back to AX scan",
@@ -1332,7 +1464,7 @@ actor AccessibilityChannel: Channel {
         } catch {
             return .error("Disk scan failed: \(error); fall back to mode=ax")
         }
-        self.lastScan = diskRoot
+        self.setLastScan(diskRoot, source: "both")
         _ = Self.writeInventoryJSON(diskRoot, source: "disk")
 
         // Best-effort AX scan. If the panel is closed we still emit a diff
@@ -1349,6 +1481,15 @@ actor AccessibilityChannel: Channel {
                 axLeafCount = axRoot.leafCount
                 axNodeCount = axRoot.nodeCount
                 axAvailable = true
+                // v3.1.0 (Ralph-2 / C3) — mode=both did not previously expose
+                // its AX scan to `resolve_path`. The disk tree was stored as
+                // `lastBothScan` + `lastScan`, but `lastPanelScan` stayed nil,
+                // so resolve_path hit the legacy fallback and labelled every
+                // match `loadable:false` regardless of Panel presence. We
+                // now seed `lastPanelScan` from the inline AX scan too so
+                // Panel-loadable paths are correctly classified after
+                // `scan_library {mode:"both"}`.
+                self.lastPanelScan = axRoot
             }
         }
 
@@ -1361,7 +1502,12 @@ actor AccessibilityChannel: Channel {
 
     /// Shared JSON encoder path used by disk / ax scan success branches so
     /// both modes emit identical formatting (sorted keys, no pretty-print).
-    private static func encodeLibraryRoot(_ root: LibraryRoot) -> ChannelResult {
+    /// v3.1.0 (T6) — callers pass a `sourceTag` (panel|disk|both) that gets
+    /// merged into the response envelope so clients can tell which scanner
+    /// produced the tree without needing `scan_library` params echoed back.
+    private static func encodeLibraryRoot(
+        _ root: LibraryRoot, sourceTag: String = "panel"
+    ) -> ChannelResult {
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
@@ -1369,7 +1515,12 @@ actor AccessibilityChannel: Channel {
             guard let s = String(data: data, encoding: .utf8) else {
                 return .error("Failed to encode library inventory JSON")
             }
-            return .success(s)
+            // Wrap the raw LibraryRoot JSON in an envelope that names the
+            // source scanner. Additive: legacy consumers that parsed the
+            // raw root now must read `.root`, but the field is present
+            // regardless of source so the schema is stable.
+            let wrapped = "{\"source\":\"\(sourceTag)\",\"root\":\(s)}"
+            return .success(wrapped)
         } catch {
             return .error("JSON encode failed: \(error)")
         }
@@ -1658,6 +1809,14 @@ actor AccessibilityChannel: Channel {
         let matchedPath: String?
         let children: [String]?
         let reason: String?
+        // v3.1.0 (T6) — when the match comes from the disk scan but not the
+        // panel scan, `source` is `"disk-only"` and `loadable` is false so
+        // clients know not to attempt `set_instrument` on this path.
+        // When the match exists in the panel scan (or we only have a panel
+        // scan), `source` is `"panel"` and `loadable` is true.
+        let source: String?
+        let loadable: Bool?
+        let warning: String?
     }
 
     private struct SetInstrumentResponse: Encodable {
@@ -1666,30 +1825,82 @@ actor AccessibilityChannel: Channel {
         let path: String
     }
 
+    /// v3.1.0 (T2) — read back the Library Panel's currently-selected preset
+    /// and compare against the just-requested leaf. Used by `setTrackInstrument`
+    /// to produce an Honest Contract 3-state response. Returns the observed
+    /// preset name (or nil when the panel doesn't expose a current-selection
+    /// attribute, which we treat as `readback_unavailable`).
+    static func readBackLibraryPreset(
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> String? {
+        let inv = LibraryAccessor.enumerate(runtime: runtime)
+        return inv?.currentPreset
+    }
+
     private static func resolveLibraryPath(
         params: [String: String],
-        lastScan: LibraryRoot?
+        lastPanelScan: LibraryRoot?,
+        lastDiskScan: LibraryRoot?,
+        lastScan: LibraryRoot?,
+        lastScanSource: String?
     ) -> ChannelResult {
         guard let path = params["path"], !path.isEmpty else {
             return .error("Missing 'path' parameter for library.resolve_path")
         }
+        // v3.1.0 (T6) — resolution ladder:
+        //  1. If panel cache has the path, return source:"panel", loadable:true
+        //  2. Else if disk cache has it, return source:"disk-only",
+        //     loadable:false + warning (can't be loaded via AX Library Panel)
+        //  3. Else fall back to the legacy `lastScan` (whatever was written
+        //     most recently) so callers that only ran one scan still work.
+        //  4. Else return exists:false.
+        // Panel cache: take the hit only if the path exists there. A
+        // `PathResolution(exists:false)` means the segment wasn't found in
+        // the panel tree — fall through to the disk cache before declaring
+        // the entry unloadable.
+        if let root = lastPanelScan,
+           let res = LibraryAccessor.resolvePath(path, in: root), res.exists {
+            return encodeOrError(ResolvePathResponse(
+                exists: true, kind: res.kind?.rawValue,
+                matchedPath: res.matchedPath, children: res.children,
+                reason: nil, source: "panel", loadable: true, warning: nil
+            ))
+        }
+        if let root = lastDiskScan,
+           let res = LibraryAccessor.resolvePath(path, in: root), res.exists {
+            return encodeOrError(ResolvePathResponse(
+                exists: true, kind: res.kind?.rawValue,
+                matchedPath: res.matchedPath, children: res.children,
+                reason: nil, source: "disk-only", loadable: false,
+                warning: "Path exists on disk but isn't exposed via Logic's Library Panel. set_instrument will fail for this entry; run scan_library without mode=disk to see Panel-loadable paths."
+            ))
+        }
+        // Legacy fallback — use whatever cache was last populated.
         guard let root = lastScan else {
             return encodeOrError(ResolvePathResponse(
                 exists: false, kind: nil, matchedPath: nil, children: nil,
-                reason: "No cached library scan; call scan_library first"
+                reason: "No cached library scan; call scan_library first",
+                source: nil, loadable: nil, warning: nil
             ))
         }
         guard let res = LibraryAccessor.resolvePath(path, in: root) else {
             return encodeOrError(ResolvePathResponse(
-                exists: false, kind: nil, matchedPath: nil, children: nil, reason: nil
+                exists: false, kind: nil, matchedPath: nil, children: nil,
+                reason: nil, source: lastScanSource, loadable: nil, warning: nil
             ))
         }
+        // If lastScanSource is "disk" or "both" and we didn't find the path
+        // in lastPanelScan above, treat as disk-only.
+        let isPanelLoadable = lastScanSource == "panel"
         return encodeOrError(ResolvePathResponse(
             exists: res.exists,
             kind: res.kind?.rawValue,
             matchedPath: res.matchedPath,
             children: res.children,
-            reason: nil
+            reason: nil,
+            source: lastScanSource,
+            loadable: isPanelLoadable ? res.exists : false,
+            warning: isPanelLoadable ? nil : "Path resolved from \(lastScanSource ?? "unknown") cache; may not be loadable via Library Panel."
         ))
     }
 
@@ -1764,12 +1975,52 @@ actor AccessibilityChannel: Channel {
         // intermediate segment slides the Library view so the next segment's
         // column-2 lookup resolves against the correct subfolder.
         guard LibraryAccessor.selectPath(segments: pathSegments, runtime: runtime) else {
-            return .error("Library path not fully resolvable: \(resolvedPath)")
+            // v3.1.0 (T2) — `selectPath` returns false when any segment's AX
+            // write failed OR the segment's AXStaticText was not found in the
+            // currently-visible browser. Both are hard failures — the patch
+            // never loaded.
+            //
+            // v3.1.0 (Ralph-2 / M-1) — State C returns via `.error(...)` to
+            // match `track.select`'s State C envelope. Previously this was
+            // `.success(...)` which masked isError:false on the MCP wire and
+            // broke clients switching on envelope-level error state.
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "Library path not fully resolvable: \(resolvedPath)",
+                extras: [
+                    "requested": resolvedPath,
+                    "category": category,
+                    "preset": preset,
+                    "path": resolvedPath
+                ]
+            ))
         }
         try? await Task.sleep(nanoseconds: 800_000_000) // let Logic load the instrument
 
-        return encodeOrError(SetInstrumentResponse(
-            category: category, preset: preset, path: resolvedPath
+        // v3.1.0 (T2) — Honest Contract read-back. The Library Panel's
+        // AXList reports the currently-selected preset via its
+        // `AXSelectedChildren` attribute. When present and matching, we
+        // return State A (verified:true). When present but different, State
+        // B with `readback_mismatch`. When not exposed at all (Logic build
+        // dependent), State B with `readback_unavailable`.
+        let observed = AccessibilityChannel.readBackLibraryPreset(runtime: runtime)
+        let base: [String: Any] = [
+            "requested": preset,
+            "observed": observed ?? NSNull(),
+            "category": category,
+            "preset": preset,
+            "path": resolvedPath
+        ]
+        if let observed {
+            if observed == preset {
+                return .success(HonestContract.encodeStateA(extras: base))
+            }
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackMismatch, extras: base
+            ))
+        }
+        return .success(HonestContract.encodeStateB(
+            reason: .readbackUnavailable, extras: base
         ))
     }
 

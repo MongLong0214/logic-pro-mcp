@@ -4,6 +4,47 @@ import MCP
 /// Handles MCP resource read requests for logic:// URIs.
 struct ResourceHandlers {
 
+    /// v3.1.0 (T7) — produce ISO8601 + cache_age_sec fields that every state
+    /// resource wraps its payload in. `fetchedAt` is the cache's own clock;
+    /// `cache_age_sec` is recomputed at read time so clients see the true
+    /// age at the moment the resource is requested. Passing nil / distantPast
+    /// collapses to `cache_age_sec: null` so clients can distinguish "never
+    /// populated" from "populated X seconds ago".
+    static func cacheEnvelope(fetchedAt: Date?) -> (ageSec: Any, fetchedAtISO: Any) {
+        guard let fetchedAt, fetchedAt > .distantPast else {
+            return (NSNull(), NSNull())
+        }
+        let age = Date().timeIntervalSince(fetchedAt)
+        let iso = ISO8601DateFormatter.cacheFormatter.string(from: fetchedAt)
+        return (age, iso)
+    }
+
+    /// Wrap an already-encoded JSON body (e.g. `[{...}]` or `{...}`) in the
+    /// T7 cache envelope. Returns `{"cache_age_sec":…,"fetched_at":…,"data":<body>}`.
+    static func wrapWithCacheEnvelope(bodyJSON: String, fetchedAt: Date?) -> String {
+        let (age, iso) = cacheEnvelope(fetchedAt: fetchedAt)
+        let agePart: String = {
+            if let a = age as? Double { return "\(a)" }
+            return "null"
+        }()
+        let isoPart: String = {
+            if let s = iso as? String { return "\"\(s)\"" }
+            return "null"
+        }()
+        return "{\"cache_age_sec\":\(agePart),\"fetched_at\":\(isoPart),\"data\":\(bodyJSON)}"
+    }
+}
+
+extension ISO8601DateFormatter {
+    nonisolated(unsafe) static let cacheFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+}
+
+extension ResourceHandlers {
+
     /// Handle a ReadResource request by URI.
     static func read(
         uri: String,
@@ -98,7 +139,13 @@ struct ResourceHandlers {
 
     private static func readTracks(cache: StateCache, uri: String) async throws -> ReadResource.Result {
         let tracks = await cache.getTracks()
-        let json = encodeJSON(tracks)
+        let fetchedAt = await cache.getTracksFetchedAt()
+        let body = encodeJSON(tracks)
+        // v3.1.0 (T7) — cache envelope. Legacy consumers that decoded the
+        // plain array must now read `.data`. The envelope is additive at the
+        // resource URI level (not at the tool response level), so
+        // mutating-op clients are unaffected.
+        let json = wrapWithCacheEnvelope(bodyJSON: body, fetchedAt: fetchedAt)
         return ReadResource.Result(
             contents: [.text(json, uri: uri, mimeType: "application/json")]
         )
@@ -117,9 +164,13 @@ struct ResourceHandlers {
     private static func readMixer(cache: StateCache, uri: String) async throws -> ReadResource.Result {
         let strips = await cache.getChannelStrips()
         let conn = await cache.getMCUConnection()
+        let fetchedAt = await cache.getMixerFetchedAt()
         let stripsJSON = encodeJSON(strips)
+        let (age, iso) = cacheEnvelope(fetchedAt: fetchedAt)
+        let agePart = (age as? Double).map { "\($0)" } ?? "null"
+        let isoPart = (iso as? String).map { "\"\($0)\"" } ?? "null"
         let json = """
-            {"mcu_connected":\(conn.isConnected),"registered":\(conn.registeredAsDevice),"strips":\(stripsJSON)}
+            {"cache_age_sec":\(agePart),"fetched_at":\(isoPart),"mcu_connected":\(conn.isConnected),"registered":\(conn.registeredAsDevice),"strips":\(stripsJSON)}
             """
         return ReadResource.Result(
             contents: [.text(json, uri: uri, mimeType: "application/json")]
@@ -295,8 +346,15 @@ struct ResourceHandlers {
                 )
                 continue
             }
+            // v3.1.0 (T7) — wrap with cache envelope based on file mtime.
+            // Clients can now detect stale inventories (e.g. before the first
+            // `scan_library` of a new Logic install) without parsing the
+            // inventory payload itself.
+            let attrs = try? FileManager.default.attributesOfItem(atPath: resolved)
+            let mtime = attrs?[.modificationDate] as? Date
+            let json = wrapWithCacheEnvelope(bodyJSON: s, fetchedAt: mtime)
             return ReadResource.Result(
-                contents: [.text(s, uri: uri, mimeType: "application/json")]
+                contents: [.text(json, uri: uri, mimeType: "application/json")]
             )
         }
         // No cache found at any candidate — warn loudly so daemon deployments

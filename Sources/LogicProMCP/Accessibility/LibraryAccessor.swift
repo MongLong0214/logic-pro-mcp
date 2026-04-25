@@ -623,14 +623,24 @@ enum LibraryAccessor {
         // v3.0.3 — AX-native selection (same pattern as selectPreset). AXList
         // parent's AXSelectedChildren attribute commits the category switch
         // and AXPress fires the column expand. Works regardless of viewport.
+        // v3.1.0 (T2) — previously we discarded both AX return codes and
+        // unconditionally returned true, which made `set_instrument` report
+        // success even when the category click never committed. Now we
+        // require at least one of (parent AXSelectedChildren set, target
+        // AXPress) to return `.success`. That matches what actually moves
+        // Logic's Library column.
+        var selectedChildrenOK = false
         if let parent = AXHelpers.getAttribute(
             targetEl, kAXParentAttribute, runtime: runtime.ax
         ) as AXUIElement? {
-            _ = AXUIElementSetAttributeValue(parent, "AXSelectedChildren" as CFString, [targetEl] as CFArray)
+            let r = AXUIElementSetAttributeValue(
+                parent, "AXSelectedChildren" as CFString, [targetEl] as CFArray
+            )
+            selectedChildrenOK = (r == .success)
         }
-        _ = AXUIElementPerformAction(targetEl, kAXPressAction as CFString)
+        let pressOK = AXUIElementPerformAction(targetEl, kAXPressAction as CFString) == .success
         Thread.sleep(forTimeInterval: 0.25)
-        return true
+        return selectedChildrenOK || pressOK
     }
 
     /// Select a preset by name in the currently-active category. v3.0.3: Logic
@@ -818,16 +828,124 @@ enum LibraryAccessor {
     }
 
     /// Try to detect which item in a column is currently selected/highlighted.
-    /// Logic Pro's Library uses visual highlighting that is not exposed via
-    /// standard AX attributes on AXStaticText; as a fallback we return nil.
+    ///
+    /// v3.1.0 (T2) — `selectPreset` commits selection by setting
+    /// `AXSelectedChildren` on the parent AXList, so we can read it back
+    /// from any AXList descendant of the browser and extract the contained
+    /// AXStaticText's value. Returns nil when no AXList exposes a readable
+    /// `AXSelectedChildren` — Honest Contract callers treat nil as
+    /// `readback_unavailable`.
+    ///
+    /// v3.1.0 (Ralph-2 / P1-2) — now honours the `elements` column bucket.
+    /// Previously this delegate ignored its input and returned the "last"
+    /// selected text found during a full browser walk, which deterministically
+    /// collapsed to the preset column value for BOTH the category and preset
+    /// call sites in `enumerate()`. The result was that `Inventory.currentCategory`
+    /// silently held the preset name, poisoning `presetsByCategory` dict keys
+    /// and misreporting the current category via `logic://library/inventory`.
+    /// We now compute the column's x-range from the passed items and only
+    /// accept selected children whose AXPosition.x falls inside that range.
     private static func detectSelectedText(
         elements: [(text: String, position: CGPoint)],
         browser: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> String? {
-        // Logic Pro does not expose selection on AXStaticText. Return nil so
-        // callers know the info isn't available.
+        // Empty column → no selection can belong to it.
+        guard !elements.isEmpty else { return nil }
+        let xs = elements.map(\.position.x)
+        // Use the bucket that `enumerate()` already snapped to (20px grid,
+        // 30px neighbourhood). Extend a half-bucket each side so a selected
+        // child sitting mid-column is included.
+        let minX = (xs.min() ?? 0) - 10
+        let maxX = (xs.max() ?? 0) + 10
+        return readSelectedTextInColumn(
+            in: browser, columnMinX: minX, columnMaxX: maxX, runtime: runtime
+        )
+    }
+
+    /// Walk every AXList descendant's `AXSelectedChildren`, return the value
+    /// of the first selected child whose `AXPosition.x` falls inside
+    /// `[columnMinX, columnMaxX]`. Returns nil when no selection in that
+    /// column is readable (contract's `readback_unavailable` signal).
+    static func readSelectedTextInColumn(
+        in browser: AXUIElement,
+        columnMinX: CGFloat,
+        columnMaxX: CGFloat,
+        runtime: AXHelpers.Runtime
+    ) -> String? {
+        let lists = AXHelpers.findAllDescendants(
+            of: browser, role: kAXListRole, maxDepth: 6, runtime: runtime
+        )
+        for list in lists {
+            var selectedRaw: AnyObject?
+            let r = AXUIElementCopyAttributeValue(
+                list, kAXSelectedChildrenAttribute as CFString, &selectedRaw
+            )
+            guard r == .success, let arr = selectedRaw as? [AXUIElement], !arr.isEmpty else {
+                continue
+            }
+            for child in arr {
+                guard let value: String = AXHelpers.getAttribute(
+                    child, kAXValueAttribute, runtime: runtime
+                ), !value.isEmpty else { continue }
+                guard let pos = position(of: child, runtime: runtime) else { continue }
+                if pos.x >= columnMinX && pos.x <= columnMaxX {
+                    return value
+                }
+            }
+        }
         return nil
+    }
+
+    /// Read the currently-selected preset name from the Library browser by
+    /// walking every AXList descendant, asking for its `AXSelectedChildren`,
+    /// and pulling the AXValue off the first selected child. Returns nil when
+    /// nothing exposes a readable selection attribute (which is the contract's
+    /// `readback_unavailable` signal).
+    ///
+    /// v3.1.0 (Ralph-2 / P1-2) — the implementation still walks the whole
+    /// browser (no column filter — this is the deliberately column-agnostic
+    /// variant used by `readBackLibraryPreset`/`track.set_instrument`, which
+    /// only cares about the deepest/last selected column, i.e. the preset).
+    static func readSelectedPresetName(
+        in browser: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> String? {
+        let lists = AXHelpers.findAllDescendants(
+            of: browser, role: kAXListRole, maxDepth: 6, runtime: runtime
+        )
+        var lastText: String? = nil
+        var lastX: CGFloat = -CGFloat.greatestFiniteMagnitude
+        for list in lists {
+            var selectedRaw: AnyObject?
+            let r = AXUIElementCopyAttributeValue(
+                list, kAXSelectedChildrenAttribute as CFString, &selectedRaw
+            )
+            guard r == .success, let arr = selectedRaw as? [AXUIElement], !arr.isEmpty else {
+                continue
+            }
+            for child in arr {
+                if let value: String = AXHelpers.getAttribute(
+                    child, kAXValueAttribute, runtime: runtime
+                ), !value.isEmpty {
+                    // Library has 2 columns (category, preset); the preset
+                    // column comes after the category column left-to-right.
+                    // Prefer the rightmost selected child so the return value
+                    // lands on the preset whenever both columns have a
+                    // selection active. Falls back to last-seen if positions
+                    // are not readable.
+                    if let pos = position(of: child, runtime: runtime) {
+                        if pos.x >= lastX {
+                            lastX = pos.x
+                            lastText = value
+                        }
+                    } else if lastText == nil {
+                        lastText = value
+                    }
+                }
+            }
+        }
+        return lastText
     }
 
     /// Inject a single left-button mouse click at the given screen point.

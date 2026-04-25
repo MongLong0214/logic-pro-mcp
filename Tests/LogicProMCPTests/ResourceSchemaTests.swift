@@ -56,7 +56,11 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     let router = ChannelRouter()
 
     let result = try! await ResourceHandlers.read(uri: "logic://tracks", cache: cache, router: router)
-    let json = try! sharedParseJSON(resourceText(result)) as! [[String: Any]]
+    // v3.1.0 (T7) — tracks resource is wrapped in cache envelope.
+    let envelope = try! sharedParseJSON(resourceText(result)) as! [String: Any]
+    let json = envelope["data"] as! [[String: Any]]
+    #expect(envelope.keys.contains("cache_age_sec"))
+    #expect(envelope.keys.contains("fetched_at"))
     #expect(json.count == 1)
     #expect(json[0]["automationMode"] as? String == "touch")
 }
@@ -68,7 +72,8 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     await cache.updateTracks([track])
 
     let result = try! await ResourceHandlers.read(uri: "logic://tracks", cache: cache, router: ChannelRouter())
-    let json = try! sharedParseJSON(resourceText(result)) as! [[String: Any]]
+    let envelope = try! sharedParseJSON(resourceText(result)) as! [String: Any]
+    let json = envelope["data"] as! [[String: Any]]
     #expect(json.count == 1)
     #expect(json[0]["automationMode"] as? String == "trim")
 }

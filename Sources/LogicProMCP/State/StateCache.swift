@@ -19,6 +19,23 @@ actor StateCache {
     /// Timestamp of last tool call — drives adaptive poll intervals.
     private(set) var lastToolAccess: Date = .distantPast
 
+    /// v3.1.0 (T7) — per-section "last fetched" timestamps so state resources
+    /// can report an honest `cache_age_sec` / `fetched_at` to clients rather
+    /// than silently serving stale data. All fields default to `.distantPast`
+    /// so the envelope is `null` until the poller first writes.
+    private(set) var tracksFetchedAt: Date = .distantPast
+    private(set) var mixerFetchedAt: Date = .distantPast
+    private(set) var projectFetchedAt: Date = .distantPast
+    private(set) var markersFetchedAt: Date = .distantPast
+    private(set) var regionsFetchedAt: Date = .distantPast
+
+    /// v3.1.0 (Ralph-2 / C1 fix) — per-strip fader-echo write timestamp.
+    /// Updated whenever `updateFader` ingests an MCU pitch-bend echo (or any
+    /// other volume write). `MCUChannel.pollFaderEcho` compares this against
+    /// its send-time stamp so a stale cache value from a previous `set_volume`
+    /// cannot masquerade as a fresh echo and produce a false `verified:true`.
+    private var faderUpdatedAt: [Int: Date] = [:]
+
     // MARK: - Read access (tools call these)
 
     func getTransport() -> TransportState { transport }
@@ -93,7 +110,14 @@ actor StateCache {
 
     func updateTracks(_ newTracks: [TrackState]) {
         tracks = newTracks
+        tracksFetchedAt = Date()
     }
+
+    func getTracksFetchedAt() -> Date { tracksFetchedAt }
+    func getMixerFetchedAt() -> Date { mixerFetchedAt }
+    func getProjectFetchedAt() -> Date { projectFetchedAt }
+    func getMarkersFetchedAt() -> Date { markersFetchedAt }
+    func getRegionsFetchedAt() -> Date { regionsFetchedAt }
 
     func updateTrack(at index: Int, mutator: (inout TrackState) -> Void) {
         ensureTrackExists(at: index)
@@ -114,19 +138,23 @@ actor StateCache {
 
     func updateChannelStrips(_ strips: [ChannelStripState]) {
         channelStrips = strips
+        mixerFetchedAt = Date()
     }
 
     func updateRegions(_ newRegions: [RegionState]) {
         regions = newRegions
+        regionsFetchedAt = Date()
     }
 
     func updateMarkers(_ newMarkers: [MarkerState]) {
         guard markers != newMarkers else { return }
         markers = newMarkers
+        markersFetchedAt = Date()
     }
 
     func updateProject(_ info: ProjectInfo) {
         project = info
+        projectFetchedAt = Date()
     }
 
     // MARK: - MCU Feedback Write
@@ -135,6 +163,17 @@ actor StateCache {
         ensureChannelStripExists(at: strip)
         guard channelStrips.indices.contains(strip) else { return }
         channelStrips[strip].volume = volume
+        // v3.1.0 (Ralph-2 / C1) — stamp the write time so pollFaderEcho can
+        // tell a fresh echo from a stale cache hit left over from a prior
+        // identical-value set_volume call.
+        faderUpdatedAt[strip] = Date()
+    }
+
+    /// v3.1.0 (Ralph-2 / C1) — last time an MCU echo (or any other caller)
+    /// wrote a volume into this strip. Returns nil when no write has been
+    /// observed on this strip this session.
+    func getFaderUpdatedAt(strip: Int) -> Date? {
+        faderUpdatedAt[strip]
     }
 
     func updateMCUConnection(_ state: MCUConnectionState) {

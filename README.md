@@ -151,7 +151,20 @@ See [Architecture](docs/ARCHITECTURE.md) for deeper details on channel prioritie
 
 ## Status
 
-**v3.0.5** (2026-04-23) — Production-ready, adhoc-signed pre-release. Filesystem-backed Library enumeration — `scan_library` now returns every `.patch` in `~/Music/Logic Pro Library.bundle/Patches/Instrument/` (5,000+ leaves on a full factory install) instead of the 345-leaf AX Library Panel snapshot. Paired with v3.0.4's N-segment `selectPath`, every patch on disk is now addressable via `track.set_instrument`.
+**v3.1.0** (2026-04-24) — Honest Contract release. Every mutating operation now returns one of three explicit states (`verified:true` / `verified:false` with `reason` / `success:false` with `error`) so callers can tell confirmed writes from uncertain ones without parsing free-form text. See [docs/HONEST-CONTRACT.md](docs/HONEST-CONTRACT.md) for the wire contract.
+
+**What changed from v3.0.9**
+- `track.set_instrument` now reads back the loaded patch name and reports `verified:true` only when it matches the request; mismatches return `verified:false` with `reason:"readback_mismatch"`.
+- `track.select` reads back `AXSelectedChildren` with a 6× retry (100ms each, 600ms budget). A read-back that returns a different index returns `verified:false` with `reason:"readback_mismatch"`; a read-back that never surfaces across the retry budget returns `verified:false` with `reason:"retry_exhausted"`. Neither path silently claims a bare success.
+- `mixer.set_volume` / `mixer.set_master_volume` now poll the MCU fader echo into `StateCache` for 500ms (override via `MCU_ECHO_TIMEOUT_MS=250|500|1000`) and return `verified:true` only when a freshly-written echo matches within ±2 LSB (14-bit resolution, tolerance `2/16383`). The freshness stamp prevents an identical-value re-send from being confirmed by a stale cache value left over from the prior call.
+- `mixer.set_pan` returns `verified:false` with `reason:"readback_unavailable"` — V-Pot feedback is relative and not yet plumbed through to `StateCache`; the honest answer beats a silent lie.
+- `transport.set_cycle_range` (AX path) now returns the `verified` field that the osascript fallback already had.
+- `scan_library {mode:"disk"}` no longer poisons the `lastScan` cache that `resolve_path` / `set_instrument` consult; disk-only entries are annotated and do not claim `loadable:true`.
+- State resources (`logic://tracks`, `logic://library/inventory`, …) expose `cache_age_sec` + `fetched_at` so clients can detect staleness.
+
+**Compatibility**: mutating-op responses are additive (new `verified` / `reason` / `observed` fields). **Breaking** at the resource layer: `logic://tracks` and `logic://library/inventory` now wrap their payload in `{cache_age_sec, fetched_at, data: …}`, and `logic_tracks.scan_library` wraps its result in `{source, root: …}`. v3.0.9 clients that parsed those payloads directly must read `.data` / `.root` to reach the legacy shape. See CHANGELOG §Compatibility for the full migration diff.
+
+`scan_library` continues to enumerate `~/Music/Logic Pro Library.bundle/Patches/Instrument/` (5,000+ leaves on a full factory install). The v3.0.5 wording that "every patch on disk is addressable via `track.set_instrument`" is withdrawn — paths that the Panel-taxonomy mapper cannot route are now surfaced honestly instead of silently pretending to load.
 
 Notarized (Apple-signed) release requires Apple Developer Program membership ($99/year). Until that's set up, the installer operates in ADHOC mode: SHA256 pin + `codesign --verify` still protect against tampering, but macOS Gatekeeper assessment is skipped and the installer strips the quarantine attribute so the binary runs without warnings.
 
@@ -159,7 +172,7 @@ See [SECURITY.md §Release types](SECURITY.md#release-types) for the trust model
 
 ### Testing
 
-- **759 unit + integration tests passing** on the v3.0.5 branch (`swift test --skip testLogicProServerStartCoversDefaultPortAndPollerLifecyclePaths --skip testStatePollerStartStopLifecycle` — 2 timer-driven lifecycle tests are deterministic-only under load-bearing CI, not product code)
+- **821 unit + integration tests passing** on the v3.1.0 branch (`swift test --skip testLogicProServerStartCoversDefaultPortAndPollerLifecyclePaths --skip testStatePollerStartStopLifecycle` — 2 timer-driven lifecycle tests are deterministic-only under load-bearing CI, not product code)
 - **Live E2E** (`Scripts/live-e2e-test.py`): the ~200 environment-independent assertions pass; ~45 tests require a running Logic Pro 12 session with the MCU control surface registered and fail otherwise (documented as environment-gated, not regression)
 - Multiple independent production-readiness reviews (code quality, security, architecture) converged to PROCEED after the v3.0.2 hardening passes
 - **v3.0.3+ AX-native control surface**: primary GUI touchpoints (track selection, plugin Setting popup) prefer Apple AX actions (AXPress, AXShowMenu, AXSelectedChildren) with CGEvent only as a last-resort fallback — reduces fragility under Logic UI updates

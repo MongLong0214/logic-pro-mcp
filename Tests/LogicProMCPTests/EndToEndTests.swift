@@ -568,8 +568,14 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     let h = await makeE2EHandlers()
     let r = try await h.readResource(.init(uri: "logic://tracks"))
     let text = e2eResourceText(r)
-    let arr = e2eJSONArray(text)
-    #expect(arr != nil)
+    // v3.1.0 (T7) — tracks resource is now wrapped in a cache envelope.
+    // Schema: `{cache_age_sec, fetched_at, data: [...]}`. Clients that
+    // previously decoded as `[TrackState]` now read `.data`.
+    let json = e2eJSON(text)
+    #expect(json != nil, "tracks resource must be a JSON object envelope")
+    #expect(json?.keys.contains("cache_age_sec") == true)
+    #expect(json?.keys.contains("fetched_at") == true)
+    #expect(json?["data"] as? [Any] != nil, "data field must be a JSON array of tracks")
 }
 
 @Test func testE2EResourceMixerContainsMCUStatus() async throws {
