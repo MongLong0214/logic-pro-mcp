@@ -556,11 +556,16 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     let text = e2eResourceText(r)
     let json = e2eJSON(text)
     #expect(json != nil)
-    // Wrapped shape: { "state": TransportState, "has_document": Bool, "transport_age_sec": Double }
-    #expect(json?["state"] != nil)
-    #expect(json?["has_document"] != nil)
-    #expect(json?["transport_age_sec"] != nil)
-    let state = json?["state"] as? [String: Any]
+    // v3.1.1 (T-9) — transport state now uses the unified envelope:
+    // { cache_age_sec, fetched_at, data: { state, has_document } }.
+    // Legacy `transport_age_sec` is replaced by `cache_age_sec` at the top.
+    #expect(json?.keys.contains("cache_age_sec") == true)
+    #expect(json?.keys.contains("fetched_at") == true)
+    let data = json?["data"] as? [String: Any]
+    #expect(data != nil, "data field must carry the inner state object")
+    #expect(data?["state"] != nil)
+    #expect(data?["has_document"] != nil)
+    let state = data?["state"] as? [String: Any]
     #expect(state?["tempo"] != nil)
 }
 

@@ -314,8 +314,8 @@ private func makeAXBackedAccessibilityChannel(
     // it changes with Logic's actual slider min/max ranges.
     let tempoResult = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "132.0"])
     #expect(tempoResult.isSuccess)
-    #expect(!tempoResult.message.contains("could not locate"))
-    #expect(tempoResult.message.contains("\"tempo\":132.0"))
+    #expect(!tempoResult.message.contains("element_not_found"))
+    #expect(tempoResult.message.contains("\"requested\":132"))
 
     let cycleMissing = await channel.execute(operation: "transport.set_cycle_range", params: [:])
     #expect(!cycleMissing.isSuccess)
@@ -354,15 +354,18 @@ private func makeAXBackedAccessibilityChannel(
 
     let missingButton = await missingTransportChannel.execute(operation: "transport.toggle_metronome", params: [:])
     #expect(!missingButton.isSuccess)
-    #expect(missingButton.message.contains("Cannot find transport button"))
+    #expect(missingButton.message.contains("\"error\":\"element_not_found\""))
+    #expect(missingButton.message.contains("transport button 'Metronome' not located"))
 
     let invalidTempo = await missingTransportChannel.execute(operation: "transport.set_tempo", params: [:])
     #expect(!invalidTempo.isSuccess)
-    #expect(invalidTempo.message.contains("Missing or invalid 'tempo'"))
+    #expect(invalidTempo.message.contains("\"error\":\"invalid_params\""))
+    #expect(invalidTempo.message.contains("requires 'tempo' or 'bpm'"))
 
     let missingTempoField = await missingTransportChannel.execute(operation: "transport.set_tempo", params: ["tempo": "126"])
     #expect(!missingTempoField.isSuccess)
-    #expect(missingTempoField.message.contains("could not locate the tempo slider"))
+    #expect(missingTempoField.message.contains("\"error\":\"element_not_found\""))
+    #expect(missingTempoField.message.contains("tempo slider not located"))
 
     let metronome = builder.element(153)
     builder.setChildren(transport, [metronome])
@@ -379,7 +382,8 @@ private func makeAXBackedAccessibilityChannel(
     let failingChannel = makeAXBackedAccessibilityChannel(builder: builder, app: app, logicRuntime: failingRuntime)
     let pressFailure = await failingChannel.execute(operation: "transport.toggle_metronome", params: [:])
     #expect(!pressFailure.isSuccess)
-    #expect(pressFailure.message.contains("Failed to press transport button"))
+    #expect(pressFailure.message.contains("\"error\":\"ax_write_failed\""))
+    #expect(pressFailure.message.contains("AXPress failed on transport button 'Metronome'"))
 }
 
 @Test func testAccessibilityChannelAXBackedTempoFallbackCanBeInjected() async {
@@ -403,7 +407,8 @@ private func makeAXBackedAccessibilityChannel(
     // Post-hardening: osascript fallback removed (was causing FD leaks under
     // sustained calls, killing MCP server). AX tempo field absent → clear error.
     #expect(!result.isSuccess)
-    #expect(result.message.contains("could not locate the tempo slider"))
+    #expect(result.message.contains("\"error\":\"element_not_found\""))
+    #expect(result.message.contains("tempo slider not located"))
 }
 
 @Test func testAccessibilityChannelAXBackedTempoReturnsErrorWhenAXFieldMissing() async {
@@ -424,7 +429,8 @@ private func makeAXBackedAccessibilityChannel(
 
     let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "126"])
     #expect(!result.isSuccess)
-    #expect(result.message.contains("could not locate the tempo slider"))
+    #expect(result.message.contains("\"error\":\"element_not_found\""))
+    #expect(result.message.contains("tempo slider not located"))
 }
 
 @Test func testAccessibilityChannelCreateInstrumentVerifiesTrackCountIncrease() async {
@@ -502,7 +508,9 @@ private func makeAXBackedAccessibilityChannel(
     let result = await channel.execute(operation: "track.create_instrument", params: [:])
 
     #expect(!result.isSuccess)
-    #expect(result.message.contains("Track creation did not increase visible track count"))
+    #expect(result.message.contains("\"error\":\"ax_write_failed\""))
+    #expect(result.message.contains("track count did not increase"))
+    #expect(result.message.contains("\"observed_delta\":0"))
 }
 
 @Test func testAccessibilityChannelAXBackedTrackDefaultsUseFakeAXTree() async throws {
@@ -707,11 +715,13 @@ private func makeAXBackedAccessibilityChannel(
 
     let missingRenameField = await channel.execute(operation: "track.rename", params: ["index": "0", "name": "Lead"])
     #expect(!missingRenameField.isSuccess)
-    #expect(missingRenameField.message.contains("Cannot find name field"))
+    #expect(missingRenameField.message.contains("\"error\":\"element_not_found\""))
+    #expect(missingRenameField.message.contains("name field for track 0 not located"))
 
     let missingRenameParams = await channel.execute(operation: "track.rename", params: ["index": "0"])
     #expect(!missingRenameParams.isSuccess)
-    #expect(missingRenameParams.message.contains("Missing 'index' or 'name'"))
+    #expect(missingRenameParams.message.contains("\"error\":\"invalid_params\""))
+    #expect(missingRenameParams.message.contains("track.rename requires 'index'"))
 
     let failingRuntime = builder.makeLogicRuntime(
         appElement: app,
@@ -829,7 +839,8 @@ private func makeAXBackedAccessibilityChannel(
 
     let missingPan = await channel.execute(operation: "mixer.set_pan", params: ["index": "0", "value": "-0.2"])
     #expect(!missingPan.isSuccess)
-    #expect(missingPan.message.contains("Cannot find pan control"))
+    #expect(missingPan.message.contains("\"error\":\"element_not_found\""))
+    #expect(missingPan.message.contains("could not find pan control"))
 
     let projectBuilder = FakeAXRuntimeBuilder()
     let projectApp = projectBuilder.element(330)

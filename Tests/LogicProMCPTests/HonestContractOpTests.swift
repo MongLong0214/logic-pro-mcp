@@ -172,3 +172,64 @@ private func decodeJSON(_ s: String) -> [String: Any] {
     #expect(obj["reason"] as? String == "readback_unavailable")
     #expect(obj["via"] as? String == "osascript")
 }
+
+// MARK: - T-3 (v3.1.1): track.rename — HC envelope
+
+@Test func testTrackRenameMissingParamsReturnsStateCInvalidParams() async {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(800)
+    let runtime = AccessibilityChannel.Runtime.axBacked(
+        isTrusted: { true },
+        isLogicProRunning: { true },
+        logicRuntime: builder.makeLogicRuntime(appElement: app)
+    )
+    let channel = AccessibilityChannel(runtime: runtime)
+
+    let result = await channel.execute(operation: "track.rename", params: ["index": "0"])
+    #expect(!result.isSuccess)
+    let obj = decodeJSON(result.message)
+    #expect(obj["success"] as? Bool == false)
+    #expect(obj["error"] as? String == "invalid_params")
+    #expect(obj["hint"] != nil)
+}
+
+@Test func testTrackRenameMissingHeaderReturnsStateCElementNotFound() async {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(810)
+    let window = builder.element(811)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [])
+    let runtime = AccessibilityChannel.Runtime.axBacked(
+        isTrusted: { true },
+        isLogicProRunning: { true },
+        logicRuntime: builder.makeLogicRuntime(appElement: app)
+    )
+    let channel = AccessibilityChannel(runtime: runtime)
+
+    let result = await channel.execute(operation: "track.rename", params: ["index": "0", "name": "Lead"])
+    #expect(!result.isSuccess)
+    let obj = decodeJSON(result.message)
+    #expect(obj["error"] as? String == "element_not_found")
+    #expect(obj["track"] as? Int == 0)
+    #expect(obj["requested"] as? String == "Lead")
+}
+
+// MARK: - T-3 (v3.1.1): track.set_mute/solo/arm — HC envelope
+
+@Test func testTrackSetMuteMissingHeaderReturnsErrorMessage() async {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(820)
+    let window = builder.element(821)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [])
+    let runtime = AccessibilityChannel.Runtime.axBacked(
+        isTrusted: { true },
+        isLogicProRunning: { true },
+        logicRuntime: builder.makeLogicRuntime(appElement: app)
+    )
+    let channel = AccessibilityChannel(runtime: runtime)
+
+    let result = await channel.execute(operation: "track.set_mute", params: ["index": "0", "enabled": "true"])
+    #expect(!result.isSuccess)
+    #expect(result.message.contains("Cannot find Mute button"))
+}

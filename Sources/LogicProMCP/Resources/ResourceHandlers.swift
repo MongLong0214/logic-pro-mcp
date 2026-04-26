@@ -122,16 +122,18 @@ extension ResourceHandlers {
     private static func readTransportState(cache: StateCache, uri: String) async throws -> ReadResource.Result {
         let state = await cache.getTransport()
         let hasDocument = await cache.getHasDocument()
-        let ageSeconds = Date().timeIntervalSince(state.lastUpdated)
-        // Inline the struct's fields into a larger object so clients can
-        // detect "no project open" / "stale snapshot" without having to
-        // cross-reference logic://system/health. `transport_age_sec` grows
-        // without bound after clearProjectState because lastUpdated
-        // defaults to .distantPast.
+        // v3.1.1 (T-9) — unified `{cache_age_sec, fetched_at, data}` envelope.
+        // `data` carries the prior shape (`state` / `has_document`) so existing
+        // clients that already navigated through the wrapper (`tracks`,
+        // `inventory`) can apply the same indexing here. Legacy callers
+        // reading top-level `transport_age_sec` must migrate to
+        // `cache_age_sec`. CHANGELOG v3.1.1 documents this as a breaking
+        // resource-envelope change scoped to one resource.
         let inner = encodeJSON(state)
-        let json = """
-            {"state":\(inner),"has_document":\(hasDocument),"transport_age_sec":\(ageSeconds)}
+        let body = """
+            {"state":\(inner),"has_document":\(hasDocument)}
             """
+        let json = wrapWithCacheEnvelope(bodyJSON: body, fetchedAt: state.lastUpdated)
         return ReadResource.Result(
             contents: [.text(json, uri: uri, mimeType: "application/json")]
         )

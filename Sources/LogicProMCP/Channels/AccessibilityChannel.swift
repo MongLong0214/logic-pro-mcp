@@ -333,13 +333,7 @@ actor AccessibilityChannel: Channel {
             )
 
         case "track.delete":
-            // Logic 12 has no default keyboard shortcut for "Delete Track" —
-            // CGEvent fallback was wrong (Cmd+Delete deletes regions, not the
-            // track). Click the Track menu item directly.
-            return AccessibilityChannel.clickTrackMenu(
-                "트랙 삭제",
-                menuName: "트랙",
-                englishMenuName: "Track",
+            return await AccessibilityChannel.defaultDeleteTrack(
                 runtime: runtime.logicRuntime
             )
 
@@ -482,12 +476,23 @@ actor AccessibilityChannel: Channel {
         }
         // Legacy fallback: search by role=Button with title/description.
         guard let button = AXLogicProElements.findTransportButton(named: name, runtime: runtime) else {
-            return .error("Cannot find transport button: \(name)")
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "transport button '\(name)' not located in control bar",
+                extras: ["button": name]
+            ))
         }
         guard AXHelpers.performAction(button, kAXPressAction, runtime: runtime.ax) else {
-            return .error("Failed to press transport button: \(name)")
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "AXPress failed on transport button '\(name)'",
+                extras: ["button": name]
+            ))
         }
-        return .success("{\"toggled\":\"\(name)\"}")
+        return .success(HonestContract.encodeStateB(
+            reason: .readbackUnavailable,
+            extras: ["button": name, "via": "legacy-axpress"]
+        ))
     }
 
     private static func defaultSetTempo(
@@ -496,52 +501,49 @@ actor AccessibilityChannel: Channel {
         runFallback: @escaping @Sendable (String) -> Bool = runTempoFallbackScript
     ) -> ChannelResult {
         guard let tempoStr = params["bpm"] ?? params["tempo"], let tempoValue = Double(tempoStr) else {
-            return .error("Missing or invalid 'tempo'/'bpm' parameter")
+            return .error(HonestContract.encodeStateC(
+                error: .invalidParams,
+                hint: "transport.set_tempo requires 'tempo' or 'bpm' (Double)"
+            ))
         }
         guard tempoValue >= 5.0 && tempoValue <= 990.0 else {
-            return .error("tempo \(tempoStr) out of slider range (5.0 .. 990.0)")
+            return .error(HonestContract.encodeStateC(
+                error: .invalidParams,
+                hint: "tempo \(tempoStr) out of slider range (5.0 .. 990.0)",
+                extras: ["requested": tempoValue]
+            ))
         }
 
-        // v3.0.2: Logic Pro 12 exposes the control-bar tempo as an AXSlider (role
-        // "AXSlider", description "템포" / "Tempo") rather than a text field.
-        // AXValue assignment only nudges by +1 and AXIncrement jumps by +10, so
-        // neither gives exact target values. The slider's own help text says
-        // "double-click to enter a new value" — so we synthesise a real mouse
-        // double-click at its centre, type the digits, and press Return.
+        let baseExtras: [String: Any] = ["requested": tempoValue]
+
         if let slider = AXLogicProElements.findTempoSlider(runtime: runtime) {
-            // Position/size may be unavailable in fake AX trees (tests). In that
-            // case fall back to direct AXValue assignment + confirm — the real
-            // Logic Pro slider ignores this, but fakes treat it as truth.
             guard let position = AXHelpers.getPosition(slider, runtime: runtime.ax),
                   let size = AXHelpers.getSize(slider, runtime: runtime.ax) else {
                 AXHelpers.setAttribute(slider, kAXValueAttribute, tempoStr as CFTypeRef, runtime: runtime.ax)
                 _ = AXHelpers.performAction(slider, kAXConfirmAction, runtime: runtime.ax)
-                return .success("{\"tempo\":\(tempoStr),\"via\":\"slider-direct\"}")
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: baseExtras.merging(["via": "slider-direct"]) { _, new in new }
+                ))
             }
             let center = CGPoint(
                 x: position.x + size.width / 2,
                 y: position.y + size.height / 2
             )
             AXMouseHelper.doubleClick(at: center)
-            // Give Logic's UI thread a beat to render the inline text field
-            // over the slider before typing. 120 ms is empirically reliable.
             Thread.sleep(forTimeInterval: 0.12)
             AXMouseHelper.typeNumericString(tempoStr)
             Thread.sleep(forTimeInterval: 0.05)
             AXMouseHelper.pressReturn()
-            // Allow Logic to commit the value and update AXValue.
             Thread.sleep(forTimeInterval: 0.15)
 
-            // Verify the slider actually took the new value. Within a 1.0 BPM
-            // tolerance to absorb Logic's internal rounding (e.g. 128.5 → 128).
             if let finalValue = AXHelpers.getValue(slider, runtime: runtime.ax) as? Double,
                abs(finalValue - tempoValue) < 1.0 {
-                return .success("{\"tempo\":\(tempoStr),\"via\":\"slider\",\"actual\":\(finalValue)}")
+                return .success(HonestContract.encodeStateA(
+                    extras: baseExtras.merging(["observed": finalValue, "via": "slider"]) { _, new in new }
+                ))
             }
 
-            // Fallback: if the typed-entry path didn't stick (e.g. a modal popup
-            // stole focus), dismiss any stuck overlay with Escape and try
-            // AXIncrement / AXDecrement for a coarse 10-BPM-resolution fit.
             AXMouseHelper.pressEscape()
             Thread.sleep(forTimeInterval: 0.05)
             let current = (AXHelpers.getValue(slider, runtime: runtime.ax) as? Double) ?? 0
@@ -554,15 +556,24 @@ actor AccessibilityChannel: Channel {
                 }
             }
             if let afterIncrement = AXHelpers.getValue(slider, runtime: runtime.ax) as? Double {
-                return .success("{\"tempo\":\(tempoStr),\"via\":\"slider-increment\",\"actual\":\(afterIncrement),\"note\":\"fell back to 10 BPM step — typed entry didn't commit\"}")
+                let extras = baseExtras.merging([
+                    "observed": afterIncrement,
+                    "via": "slider-increment",
+                    "note": "fell back to 10 BPM step — typed entry didn't commit"
+                ]) { _, new in new }
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackMismatch,
+                    extras: extras
+                ))
             }
         }
 
-        _ = runFallback // retain param for test-injection compatibility
-        return .error(
-            "set_tempo: could not locate the tempo slider in Logic's control bar. " +
-            "Ensure Logic Pro is frontmost with an open project."
-        )
+        _ = runFallback
+        return .error(HonestContract.encodeStateC(
+            error: .elementNotFound,
+            hint: "tempo slider not located in Logic control bar; ensure Logic Pro is frontmost with an open project",
+            extras: baseExtras
+        ))
     }
 
     private static func runTempoFallbackScript(tempo: String) -> Bool {
@@ -926,8 +937,17 @@ actor AccessibilityChannel: Channel {
             if let raw = AXHelpers.getValue(button, runtime: runtime.ax) as? NSNumber { return raw.boolValue }
             return nil
         }()
+        let baseExtras: [String: Any] = [
+            "track": index,
+            "button": buttonName,
+            "requested": desired
+        ]
+
         if let cur = current, cur == desired {
-            return .success("{\"track\":\(index),\"\(buttonName)\":\(desired),\"action\":\"no-op\"}")
+            return .success(HonestContract.encodeStateA(extras: baseExtras.merging([
+                "observed": desired,
+                "action": "no-op"
+            ]) { _, new in new }))
         }
 
         func readCurrent() -> Bool? {
@@ -942,7 +962,9 @@ actor AccessibilityChannel: Channel {
         // Escalating strategy: each step verified by read-back. Stops on success.
         // Logic Pro's custom AX checkboxes differ in what triggers them — some
         // respond to AXPress, some only to direct value writes, some need a
-        // real mouse click at the button's screen position.
+        // real mouse click at the button's screen position. The mouse-click
+        // last-resort fallback is intentional (see CHANGELOG v3.1.1 §retain-policy)
+        // — checkbox AX responds inconsistently across Logic 12 minor versions.
         let strategies: [(String, () -> Void)] = [
             ("press", { _ = AXHelpers.performAction(button, kAXPressAction, runtime: runtime.ax) }),
             ("confirm", { _ = AXHelpers.performAction(button, kAXConfirmAction, runtime: runtime.ax) }),
@@ -960,15 +982,19 @@ actor AccessibilityChannel: Channel {
         ]
         for (name, action) in strategies {
             action()
-            // Logic Pro updates AX tree asynchronously after a click — a 50 ms
-            // settle is enough on Apple Silicon for the rec-arm checkbox to
-            // repaint and reflect the new value via AXValue.
             usleep(50_000)
             if let after = readCurrent(), after == desired {
-                return .success("{\"track\":\(index),\"\(buttonName)\":\(desired),\"action\":\"\(name)\"}")
+                return .success(HonestContract.encodeStateA(extras: baseExtras.merging([
+                    "observed": desired,
+                    "action": name
+                ]) { _, new in new }))
             }
         }
-        return .error("Failed to set \(buttonName)=\(desired) on track \(index) — tried press/confirm/value/click, read-back never matched")
+        return .error(HonestContract.encodeStateC(
+            error: .axWriteFailed,
+            hint: "tried press/confirm/value-nsnumber/value-cfbool/mouse-click; read-back never matched on track \(index) \(buttonName)=\(desired)",
+            extras: baseExtras
+        ))
     }
 
     /// Simulate a real user mouse-click at the screen center of an AX element.
@@ -1002,17 +1028,41 @@ actor AccessibilityChannel: Channel {
     ) -> ChannelResult {
         guard let indexStr = params["index"], let index = Int(indexStr),
               let name = params["name"] else {
-            return .error("Missing 'index' or 'name' parameter")
+            return .error(HonestContract.encodeStateC(
+                error: .invalidParams,
+                hint: "track.rename requires 'index' (Int) and 'name' (String)"
+            ))
         }
         let truncatedName = String(name.prefix(255))
         guard let field = AXLogicProElements.findTrackNameField(trackIndex: index, runtime: runtime) else {
-            return .error("Cannot find name field for track \(index)")
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "name field for track \(index) not located",
+                extras: ["track": index, "requested": truncatedName]
+            ))
         }
-        // Double-click to enter edit mode, then set value
         AXHelpers.performAction(field, kAXPressAction, runtime: runtime.ax)
         AXHelpers.setAttribute(field, kAXValueAttribute, truncatedName as CFTypeRef, runtime: runtime.ax)
         AXHelpers.performAction(field, kAXConfirmAction, runtime: runtime.ax)
-        return .success("{\"track\":\(index),\"name\":\"\(AppleScriptChannel.escapeJSON(truncatedName))\"}")
+        usleep(50_000)
+
+        let baseExtras: [String: Any] = ["track": index, "requested": truncatedName]
+        let observed = AXHelpers.getValue(field, runtime: runtime.ax) as? String
+        guard let observed else {
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: baseExtras.merging(["observed": NSNull()]) { _, new in new }
+            ))
+        }
+        if observed == truncatedName {
+            return .success(HonestContract.encodeStateA(
+                extras: baseExtras.merging(["observed": observed]) { _, new in new }
+            ))
+        }
+        return .success(HonestContract.encodeStateB(
+            reason: .readbackMismatch,
+            extras: baseExtras.merging(["observed": observed]) { _, new in new }
+        ))
     }
 
     private enum TrackSelectionVerification {
@@ -1148,17 +1198,24 @@ actor AccessibilityChannel: Channel {
         for _ in 0..<25 {
             try? await Task.sleep(nanoseconds: 200_000_000) // 200ms
             if FileManager.default.fileExists(atPath: path) {
-                return .success("{\"saved_as\":\"\(AppleScriptChannel.escapeJSON(path))\"}")
+                return .success(HonestContract.encodeStateA(
+                    extras: ["requested": path, "observed": path, "via": "save-dialog"]
+                ))
             }
         }
 
-        // File might be saved with .logicx extension appended
         let pathWithExt = path.hasSuffix(".logicx") ? path : path + ".logicx"
         if FileManager.default.fileExists(atPath: pathWithExt) {
-            return .success("{\"saved_as\":\"\(AppleScriptChannel.escapeJSON(pathWithExt))\"}")
+            return .success(HonestContract.encodeStateA(
+                extras: ["requested": path, "observed": pathWithExt, "via": "save-dialog-with-ext"]
+            ))
         }
 
-        return .error("Save As completed but file not found at: \(path)")
+        return .error(HonestContract.encodeStateC(
+            error: .axWriteFailed,
+            hint: "Save As dialog completed but no file appeared at requested path within 5s",
+            extras: ["requested": path]
+        ))
     }
 
     private static func clickMenuItem(
@@ -1240,13 +1297,21 @@ actor AccessibilityChannel: Channel {
     ) async -> ChannelResult {
         var lastObservedCount = beforeCount
 
+        let extras: [String: Any] = [
+            "menu_clicked": title,
+            "track_count_before": beforeCount,
+            "requested_delta": 1
+        ]
+
         for attempt in 0..<4 {
             let currentCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
             lastObservedCount = currentCount
             if currentCount > beforeCount {
-                return .success(
-                    "{\"menu_clicked\":\"\(AppleScriptChannel.escapeJSON(title))\",\"verified\":true,\"track_count_before\":\(beforeCount),\"track_count_after\":\(currentCount)}"
-                )
+                let merged = extras.merging([
+                    "track_count_after": currentCount,
+                    "observed_delta": currentCount - beforeCount
+                ]) { _, new in new }
+                return .success(HonestContract.encodeStateA(extras: merged))
             }
 
             if attempt < 3 {
@@ -1254,9 +1319,65 @@ actor AccessibilityChannel: Channel {
             }
         }
 
-        return .error(
-            "Track creation did not increase visible track count after menu click '\(title)' (before: \(beforeCount), after: \(lastObservedCount))"
-        )
+        let merged = extras.merging([
+            "track_count_after": lastObservedCount,
+            "observed_delta": lastObservedCount - beforeCount
+        ]) { _, new in new }
+        return .error(HonestContract.encodeStateC(
+            error: .axWriteFailed,
+            hint: "track count did not increase after '\(title)' click within 4×1s budget",
+            extras: merged
+        ))
+    }
+
+    /// Delete the currently-selected track via the `트랙 → 트랙 삭제` menu and
+    /// verify the track count decremented by 1 within a 4×1s budget. Returns
+    /// State A on confirmed delta, State B `retry_exhausted` if AX poll never
+    /// catches the decrement, State C if the menu click itself fails.
+    static func defaultDeleteTrack(
+        runtime: AXLogicProElements.Runtime = .production
+    ) async -> ChannelResult {
+        let beforeCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
+        let click = clickTrackMenu("트랙 삭제", menuName: "트랙", englishMenuName: "Track", runtime: runtime)
+        guard click.isSuccess else {
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "Track > 트랙 삭제 menu item not found / not pressable",
+                extras: ["track_count_before": beforeCount]
+            ))
+        }
+
+        let extras: [String: Any] = [
+            "menu_clicked": "트랙 삭제",
+            "track_count_before": beforeCount,
+            "requested_delta": -1
+        ]
+
+        var lastObservedCount = beforeCount
+        for attempt in 0..<4 {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            let currentCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
+            lastObservedCount = currentCount
+            if currentCount < beforeCount {
+                let merged = extras.merging([
+                    "track_count_after": currentCount,
+                    "observed_delta": currentCount - beforeCount
+                ]) { _, new in new }
+                return .success(HonestContract.encodeStateA(extras: merged))
+            }
+            if attempt < 3 {
+                try? await Task.sleep(nanoseconds: 750_000_000)
+            }
+        }
+
+        let merged = extras.merging([
+            "track_count_after": lastObservedCount,
+            "observed_delta": lastObservedCount - beforeCount
+        ]) { _, new in new }
+        return .success(HonestContract.encodeStateB(
+            reason: .retryExhausted,
+            extras: merged
+        ))
     }
 
     private static func clickTrackMenu(
@@ -2049,22 +2170,33 @@ actor AccessibilityChannel: Channel {
             }
         }
         guard let bar = targetBar, (1...9999).contains(bar) else {
-            return .error("goto_position requires 'bar' (Int 1..9999) or 'position' (B.B.S.S)")
+            return .error(HonestContract.encodeStateC(
+                error: .invalidParams,
+                hint: "goto_position requires 'bar' (Int 1..9999) or 'position' (B.B.S.S)"
+            ))
         }
 
-        // Try dialog first — the only way to reach bars beyond project length.
+        let baseExtras: [String: Any] = ["requested": "\(bar).1.1.1"]
+
         let dialogResult = await gotoPositionViaDialog(bar: bar)
         if case .success = dialogResult { return dialogResult }
 
-        // Fallback to slider (works when dialog is disabled — e.g., empty project).
         guard let slider = AXLogicProElements.findControlBarBarSlider(runtime: runtime) else {
-            return .error("Neither goto-position dialog nor 마디 slider available")
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "Neither goto-position dialog nor 마디 slider available",
+                extras: baseExtras
+            ))
         }
         let setOK = AXHelpers.setAttribute(
             slider, kAXValueAttribute, NSNumber(value: bar), runtime: runtime.ax
         )
         if !setOK {
-            return .error("Failed to set 마디 slider")
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "Failed to set 마디 slider value",
+                extras: baseExtras
+            ))
         }
         if let beatSlider = AXLogicProElements.findControlBarBeatSlider(runtime: runtime) {
             _ = AXHelpers.setAttribute(
@@ -2072,7 +2204,20 @@ actor AccessibilityChannel: Channel {
             )
         }
         _ = AXHelpers.performAction(slider, kAXConfirmAction, runtime: runtime.ax)
-        return .success("{\"position\":\"\(bar).1.1.1\",\"method\":\"slider\"}")
+
+        let observedBar = (AXHelpers.getValue(slider, runtime: runtime.ax) as? NSNumber)?.intValue
+        let observedPos = observedBar.map { "\($0).1.1.1" }
+        let extras = baseExtras.merging([
+            "observed": observedPos ?? NSNull(),
+            "via": "slider"
+        ]) { _, new in new }
+        if let observedBar, observedBar == bar {
+            return .success(HonestContract.encodeStateA(extras: extras))
+        }
+        if observedBar != nil {
+            return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
+        }
+        return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
     }
 
     /// Move the playhead to `bar` via Logic Pro 12's `탐색 → 이동 → 위치…`
@@ -2145,7 +2290,14 @@ actor AccessibilityChannel: Channel {
             if output.contains("DIALOG_NOT_READY") {
                 return .error("goto-position dialog did not appear within timeout")
             }
-            return .success("{\"position\":\"\(bar).1.1.1\",\"method\":\"dialog\"}")
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: [
+                    "requested": "\(bar).1.1.1",
+                    "via": "dialog",
+                    "note": "AppleScript dialog OK confirms keystroke send; resulting playhead not read back"
+                ]
+            ))
         case .error(let msg):
             return .error("goto-position dialog failed: \(msg)")
         }
@@ -2220,15 +2372,29 @@ actor AccessibilityChannel: Channel {
             element = AXLogicProElements.findPanKnob(trackIndex: index, runtime: runtime)
         }
         guard let slider = element else {
-            return .error("Cannot find \(target) control for track \(index)")
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "AC-fallback could not find \(label) control for track \(index)",
+                extras: ["track": index, "control": label, "requested": value]
+            ))
         }
         AXHelpers.setAttribute(slider, kAXValueAttribute, NSNumber(value: value), runtime: runtime.ax)
-        // Read-back verification — same honesty principle as set_tempo.
         let readBack: Double? = AXValueExtractors.extractSliderValue(slider, runtime: runtime.ax)
+        let baseExtras: [String: Any] = [
+            "track": index,
+            "control": label,
+            "requested": value,
+            "via": "ac-fallback"
+        ]
         if let actual = readBack, abs(actual - value) < 0.01 {
-            return .success("{\"\(label)\":\(value),\"track\":\(index),\"verified\":true}")
+            return .success(HonestContract.encodeStateA(
+                extras: baseExtras.merging(["observed": actual]) { _, new in new }
+            ))
         }
-        return .success("{\"\(label)\":\(value),\"track\":\(index),\"verified\":false,\"actual\":\(readBack ?? -1)}")
+        return .success(HonestContract.encodeStateB(
+            reason: .readbackMismatch,
+            extras: baseExtras.merging(["observed": readBack ?? NSNull()]) { _, new in new }
+        ))
     }
 
     // MARK: - Regions
@@ -2390,12 +2556,15 @@ actor AccessibilityChannel: Channel {
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ChannelResult {
         guard FileManager.default.fileExists(atPath: path) else {
-            return .error("midi.import_file file not found: \(path)")
+            return .error(HonestContract.encodeStateC(
+                error: .invalidParams,
+                hint: "midi.import_file: file not found",
+                extras: ["requested": path]
+            ))
         }
-        // Escape path for osascript string literal (double-quote safe).
+        let beforeCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
         let escapedPath = path.replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
-        // Strip leading slash since "/" keystroke already triggers the path-entry sheet.
         let typedPath = escapedPath.hasPrefix("/") ? String(escapedPath.dropFirst()) : escapedPath
         let script = """
         on importMIDI()
@@ -2456,11 +2625,37 @@ actor AccessibilityChannel: Channel {
         switch result {
         case .success(let output):
             if output.hasPrefix("MENU_ERROR") || output.hasPrefix("IMPORT_BTN_ERROR") {
-                return .error("midi.import_file: \(output)")
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: "midi.import_file menu/button click failed: \(output)",
+                    extras: ["requested": path, "track_count_before": beforeCount]
+                ))
             }
-            return .success("{\"imported\":\"\(escapedPath)\",\"method\":\"ax_menu_import\"}")
+            // Read-back via track count delta. Logic always creates a new track
+            // for MIDI import (OQ-3 confirmed). Allow a short settle window
+            // for the AX tree to reflect the new track header.
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            let afterCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
+            let extras: [String: Any] = [
+                "requested": path,
+                "track_count_before": beforeCount,
+                "track_count_after": afterCount,
+                "observed_delta": afterCount - beforeCount,
+                "via": "ax_menu_import"
+            ]
+            if afterCount > beforeCount {
+                return .success(HonestContract.encodeStateA(extras: extras))
+            }
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackMismatch,
+                extras: extras
+            ))
         case .error(let msg):
-            return .error("midi.import_file osascript failed: \(msg)")
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "midi.import_file osascript failed: \(msg)",
+                extras: ["requested": path, "track_count_before": beforeCount]
+            ))
         }
     }
 
@@ -2492,11 +2687,25 @@ actor AccessibilityChannel: Channel {
         switch result {
         case .success(let output):
             if output.hasPrefix("MENU_ERROR") {
-                return .error("region.move_to_playhead: \(output)")
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: "region.move_to_playhead menu click failed: \(output)"
+                ))
             }
-            return .success("{\"moved\":true}")
+            // No deterministic AX read-back for region position diff — would
+            // require capturing the selected region's startBar before/after
+            // through the regions resource (which is StatePoller-cached and
+            // races with this mutation per v3.1.1 §4.1 race policy). State B
+            // honest until v3.1.2 region-state pre/post snapshot via direct AX.
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: ["via": "applescript_menu", "note": "region position not read back"]
+            ))
         case .error(let msg):
-            return .error("region.move_to_playhead failed: \(msg)")
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "region.move_to_playhead failed: \(msg)"
+            ))
         }
     }
 
@@ -2558,11 +2767,27 @@ actor AccessibilityChannel: Channel {
         switch result {
         case .success(let output):
             if output.contains("NO_REGION") {
-                return .error("region.select_last: no region found in arrange area")
+                return .error(HonestContract.encodeStateC(
+                    error: .elementNotFound,
+                    hint: "region.select_last: no region found in arrange area"
+                ))
             }
-            return .success("{\"selected\":true,\"method\":\"\(output)\"}")
+            // The AppleScript already attempted `set selected of target to true`
+            // (returns SELECTED) or fell back to a click (returns CLICKED). The
+            // `set selected` path is itself an AX read-then-write — the
+            // SELECTED sentinel implies the AX setter accepted the value, but
+            // we did not poll AXSelected back. State B until v3.1.2 adds a
+            // direct AXSelected re-read.
+            let method = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: ["via": method.isEmpty ? "applescript" : method]
+            ))
         case .error(let msg):
-            return .error("region.select_last failed: \(msg)")
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "region.select_last failed: \(msg)"
+            ))
         }
     }
 

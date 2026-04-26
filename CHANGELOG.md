@@ -8,6 +8,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [3.1.1] — 2026-04-26
+
+**Honest Contract Extension.** v3.1.0 introduced the 3-state contract (State A confirmed / State B uncertain w/ reason / State C failed w/ error) for 4 ops. Guardian's v3.1.0 production-readiness review identified 22 mutating `.success("…")` ad-hoc shapes still in `AccessibilityChannel.swift` plus the `transport/state` resource lacking the cache envelope. v3.1.1 closes those gaps for the AX-channel ops; MCU-routed `track.set_automation` and the V-Pot pan State-A enabler are deferred to v3.1.2 (PRD §2.1 group F + G).
+
+### Promoted to 3-state contract (v3.1.1)
+
+| Op | Channel | Read-back source |
+|----|---------|------------------|
+| `track.rename` | AX | `AXValue` of name field after setAttribute |
+| `track.set_mute` / `set_solo` / `set_arm` | AX | inline `AXValue` of toggle button (already retry-laddered) |
+| `track.create_audio` / `create_instrument` / `create_drummer` / `create_external_midi` | AX | `allTrackHeaders.count` delta within 4×1s |
+| `track.delete` | AX | `allTrackHeaders.count` decrement within 4×750ms |
+| `transport.set_tempo` | AX | inline `AXValue` of tempo slider (≤1.0 BPM tolerance) |
+| `transport.toggle_*` (legacy fallback) | AX | State B `readback_unavailable` (transport buttons are action triggers) |
+| `transport.goto_position` (slider) | AX | `AXValue` of bar slider after setAttribute |
+| `transport.goto_position` (dialog) | AppleScript | State B `readback_unavailable` (no playhead echo) |
+| `region.move_to_playhead` | AppleScript | State B `readback_unavailable` (region position diff deferred) |
+| `region.select_last` | AppleScript | State B `readback_unavailable` (AXSelected re-read deferred) |
+| `midi.import_file` | AppleScript | track count delta + 500ms settle |
+| `project.save_as` | AX dialog | `FileManager.fileExists` (already substantively honest; envelope only) |
+| Mixer AC fallback (`defaultSetMixerValue`) | AX | inline slider `AXValue` (≤0.01 tolerance) — fixes v3.1.0 P1-A drift |
+
+### Resource envelope unification
+
+- `logic://transport/state` now carries `{cache_age_sec, fetched_at, data: {state, has_document}}` matching `tracks` / `library/inventory`. Legacy top-level `transport_age_sec` is replaced by `cache_age_sec`. **Breaking** for clients indexing the bare top-level `state` / `has_document` / `transport_age_sec` keys.
+
+### Out-of-scope (deferred to v3.1.2+)
+
+- `track.duplicate` (MIDIKeyCommands path, separate channel migration)
+- `track.set_automation` (MCU button LED feedback, separate channel)
+- `mixer.set_pan` State A (V-Pot LED-ring CC 0x30..0x37 decoder + `StateCache.panUpdatedAt` plumbing — PRD §4.2)
+- `track.set_color` (no current AX implementation, separate feature)
+- `transport.pause` (no Logic op)
+- Region position pre/post diff via direct AX (not StateCache) read-back
+
+### Verification
+
+- **Build**: `swift build -c release` clean.
+- **Tests**: 821 → **824** passing (3 new HC contract tests for `track.rename` and `track.set_mute` error envelopes).
+- **Code review**: orchestrator-fallback BOOMER-6 (codex CLI hung twice, `~/.claude/CLAUDE.md` §2 fallback applied) identified 3 follow-up notes incorporated into PRD-v311 v0.2; strategist iter1 REVISE addressed in same.
+- **Live verification**: deferred to user-driven session via `python3 /tmp/v310-live-verify.py` after MCP restart. No live cycles run automatically (per v3.0.9 CHANGELOG discipline, future live runs gated to Isaac's session).
+
+### Known limitations
+
+- 5 CGEvent residual call sites retained intentionally (rec-arm 5-step ladder fallback, productionMouseClick for Library Panel, sendReturnKey for new-track dialog). Documented as "intentional ladder fallback" — replacement requires AX-direct alternative search (v3.1.2 backlog).
+- BOOMER-6+ via Codex CLI gpt-5.5 xhigh hung repeatedly on long prompts in this session — orchestrator-fallback critique applied per `~/.claude/CLAUDE.md` §2. Future runs should split critique into smaller prompts or use `model_reasoning_effort="medium"`.
+
 ## [3.1.0] — 2026-04-24
 
 **Honest Contract.** Every mutating operation now returns one of three explicit states so that an LLM caller can distinguish *confirmed* writes from *unconfirmable* writes from *failed* writes without heuristically parsing free-form text. This closes the class of bug the Guardian v3.0.9 audit flagged as systemic: multiple ops returned `"success:true"` while the underlying AX write was never read back, so a mismatch between Logic's internal state and the reported state could silently propagate to callers. See [docs/HONEST-CONTRACT.md](docs/HONEST-CONTRACT.md) for the full wire contract and [docs/prd/PRD-v310-honest-contract.md](docs/prd/PRD-v310-honest-contract.md) for the motivation + design.
