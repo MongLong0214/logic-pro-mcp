@@ -28,11 +28,11 @@ class LogicProMcp < Formula
     bin.install "LogicProMCP"
     # Helper assets shipped with the binary so users can complete Logic Pro
     # integration without re-cloning the repo.
-    pkgshare.install "docs/SETUP.md"
-    pkgshare.install "Scripts/install-keycmds.sh"
-    pkgshare.install "Scripts/uninstall-keycmds.sh"
-    pkgshare.install "Scripts/keycmd-preset.plist"
-    pkgshare.install "Scripts/LogicProMCP-Scripter.js"
+    pkgshare.install "SETUP.md"
+    pkgshare.install "install-keycmds.sh"
+    pkgshare.install "uninstall-keycmds.sh"
+    pkgshare.install "keycmd-preset.plist"
+    pkgshare.install "LogicProMCP-Scripter.js"
   end
 
   def caveats
