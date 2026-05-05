@@ -34,7 +34,9 @@ jobs:
           fi
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+        # Xcode 16.4 (Swift 6.2) — required by swift-sdk 0.11.0+ short-form
+        # withThrowingTaskGroup syntax. Keep in sync with .github/workflows/ci.yml.
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app
 
       - name: Detect release mode
         id: mode

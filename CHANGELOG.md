@@ -8,6 +8,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+**Read-path resilience: AppleScript-primary for project model + CI hotfix.** v3.1.4's resource surface for `logic://tracks` / `logic://markers` / `logic://project/info` was AX-scrape-only and depended on whichever Logic UI panel happened to be focused — opening the Mixer made `tracks` go empty, focusing the Tracks area returned Track Inspector field labels in place of real tracks, the marker ruler scrape returned `[]` on Logic 12.2 entirely, and `project/info` left `tempo` / `timeSignature` / `trackCount` at struct defaults regardless of the open project. Logic Pro's AppleScript dictionary exposes these directly on `front document`; v3.1.5 adopts AppleScript as the primary read path with the existing AX scrape preserved as fallback.
+
+### Issue fixes
+
+- **#3 — `logic://tracks` panel-dependent (thomas-doesburg).** `track.get_tracks` now reads from `tell front document → tracks` first. Returns the project's actual tracks (`name`, `mute`, `solo`, `record enabled`, `selected`) regardless of which Logic panel is focused. AX scrape (`runtime.tracks`) is retained as fallback when the AppleScript path fails (no Logic running, TCC denied, dictionary parse miss); test fixtures get a nil-returning closure by default so pre-v3.1.5 stubs keep working unchanged.
+
+- **#4 — `logic://project/info` defaults stuck (thomas-doesburg).** `project.get_info` now reads `tempo`, `time signature`, and `count of tracks` from the front document via AppleScript and falls back to cached transport tempo / track count when the dictionary doesn't expose a property. The previous AX path filled only `name` (window title) and left every other field at the struct default — `120 BPM / 4/4 / 0 tracks` regardless of the actual project.
+
+- **#5 — `logic://markers` always empty (thomas-doesburg).** `nav.get_markers` now enumerates `markers of front document` directly. The prior AX scrape required the marker ruler to carry an identifier / description containing "marker" / "마커"; Logic 12.2 no longer surfaces that tag and the AX path returned `[]` even on projects with named markers. Position is converted from AppleScript's beat-based real to the standard `bar.beat.div.tick` string under a 4/4 assumption (caller-side richer formatting can refine later).
+
+### Infrastructure
+
+- **CI runner pinned to Xcode 16.4 (Swift 6.2).** `swift-sdk 0.11.0+` adopts the short-form `withThrowingTaskGroup { group in }` syntax that requires Swift 6.2's contextual inference. The previous Xcode 16.2 / Swift 6.0 pin in `.github/workflows/{ci,release}.yml` rejected that syntax, breaking every push to `main` since 2026-04-26. Both workflows now select `/Applications/Xcode_16.4.app`.
+
+- **`AppleScriptChannel.escapeJSON` hardening.** Pre-v3.1.5 only escaped the common whitespace trio (`\n`, `\r`, `\t`) and let any other U+0000–U+001F byte through unescaped, producing JSON that `JSONSerialization` rejected when an AppleScript output legitimately contained other control bytes. The new helpers above use ASCII US (U+001F) / RS (U+001E) as in-band delimiters; the escape helper now emits `\u00XX` for every control byte per RFC 8259.
+
+### Verification
+
+- **Build**: `swift build -c release` clean on Xcode 16.4.
+- **Tests**: 897 → **917** passing (+20: 16 AppleScript reads + 4 escape helper / parse helper). The two `record_sequence` tests that depend on `AXLogicProElements.allTrackHeaders().count == 0` will fail on dev machines where Logic Pro is running (AX scrape returns non-zero) but pass on the macos-15 CI runner where Logic isn't installed — pre-existing environmental contract, not affected by these changes.
+- **Live verification**: deferred to a user-driven session against `tktd_SoulCrevasse.logicx`. Expect `logic://tracks` to return real tracks regardless of focused panel; `logic://markers` to populate with named markers; `logic://project/info` to report the actual `tempo` / `timeSignature` / `trackCount` for the open project.
+
+## [Unreleased]
+
 ## [3.1.4] — 2026-05-04
 
 **Resilience hardening: AX occlusion recovery + library inventory path allowlist + flaky-test elimination.** v3.1.3's regression suite under parallel execution exposed a single timing-flake in the new V-Pot pollPanEcho test, plus two latent backlog items the v3.1.2 audit flagged but didn't ship: StatePoller silent-failure when plugin floating windows steal AX focus, and the `LOGIC_PRO_MCP_LIBRARY_INVENTORY` env override allowing arbitrary `.json` reads outside Logic-relevant directories.

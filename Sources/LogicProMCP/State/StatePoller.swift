@@ -208,7 +208,15 @@ actor StatePoller {
     }()
 
     private func pollProjectInfo(axChannel: AccessibilityChannel, cache: StateCache) async -> Bool {
-        let result = await axChannel.execute(operation: "project.get_info", params: [:])
+        // v3.1.5 (Issue #4) — pass cached transport tempo and track count
+        // as a defensive fallback for older Logic builds whose AppleScript
+        // dictionary may not expose `tempo` / `time signature` reliably.
+        let transport = await cache.getTransport()
+        let trackCount = await cache.getTracks().count
+        let result = await axChannel.execute(operation: "project.get_info", params: [
+            "cached_tempo": String(transport.tempo),
+            "cached_track_count": String(trackCount),
+        ])
         guard case .success(let json) = result else { return false }
         guard let data = json.data(using: .utf8) else { return false }
         do {

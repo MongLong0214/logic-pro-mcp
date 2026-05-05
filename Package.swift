@@ -8,7 +8,10 @@ let package = Package(
         .executable(name: "LogicProMCP", targets: ["LogicProMCP"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", from: "0.10.0"),
+        // swift-sdk 0.11.0+ adopts the short-form
+        // `withThrowingTaskGroup { group in }` syntax (Swift 6.2 inference).
+        // CI requires Xcode 16.4+ (Swift 6.2) — see .github/workflows/ci.yml.
+        .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", from: "0.11.0"),
         .package(url: "https://github.com/swiftlang/swift-testing.git", from: "0.12.0"),
     ],
     targets: [

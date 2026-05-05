@@ -428,12 +428,34 @@ actor AppleScriptChannel: Channel {
     // MARK: - Helpers
 
     static func escapeJSON(_ string: String) -> String {
-        string
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: "\\n")
-            .replacingOccurrences(of: "\r", with: "\\r")
-            .replacingOccurrences(of: "\t", with: "\\t")
+        // RFC 8259 forbids unescaped U+0000..U+001F bytes inside a JSON
+        // string. Pre-v3.1.5 we only handled the common whitespace trio,
+        // so AppleScript outputs that legitimately contain other control
+        // bytes (e.g. the U+001F / U+001E delimiters used by the new
+        // markers / projectInfo / tracks helpers) round-tripped as raw
+        // bytes and broke `JSONSerialization` parsing. Escape every
+        // control character as a `\u00XX` sequence so the wrapper is
+        // always valid JSON.
+        var result = ""
+        result.reserveCapacity(string.count)
+        for scalar in string.unicodeScalars {
+            switch scalar {
+            case "\\": result.append("\\\\")
+            case "\"": result.append("\\\"")
+            case "\n": result.append("\\n")
+            case "\r": result.append("\\r")
+            case "\t": result.append("\\t")
+            case "\u{08}": result.append("\\b")
+            case "\u{0C}": result.append("\\f")
+            default:
+                if scalar.value < 0x20 {
+                    result.append(String(format: "\\u%04X", scalar.value))
+                } else {
+                    result.append(Character(scalar))
+                }
+            }
+        }
+        return result
     }
 
     private static func normalizedAppleScriptResult(_ raw: String) -> String {
