@@ -39,7 +39,16 @@ jobs:
         # an injectable static so test-side swap can cover the production
         # wiring deterministically. The TOTAL line is still emitted to
         # the summary so the trend is visible over time.
+        #
+        # `set +e` and trailing `exit 0` are deliberate — `swift test`
+        # under `--enable-code-coverage --no-parallel` occasionally
+        # surfaces transient failures (e.g. the StatePoller occlusion
+        # tests' shared-clock timing under coverage instrumentation) that
+        # don't reproduce in the prior `Run tests` step. We don't want
+        # those to block the workflow when the gate is already off.
+        if: always()
         run: |
+          set +e
           swift test --enable-code-coverage --no-parallel
           find Sources/LogicProMCP -name '*.swift' | sort > /tmp/logicpro_sources.txt
           xargs xcrun llvm-cov report \
@@ -53,4 +62,4 @@ jobs:
             grep -E "^TOTAL" coverage-report.txt || echo "TOTAL line not found in report"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          # Always exit 0 — gate re-armed in v3.1.7 (see workflow comment).
+          exit 0
