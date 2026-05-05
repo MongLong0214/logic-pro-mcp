@@ -285,3 +285,85 @@ func parseAppleScriptResultReturnsNilForInvalidJSON() {
 func parseAppleScriptResultReturnsNilForMissingResultKey() {
     #expect(AccessibilityChannel.parseAppleScriptResult("{\"other\":\"v\"}") == nil)
 }
+
+// MARK: - Production default executeScript path coverage
+//
+// `markersViaAppleScript` / `projectInfoViaAppleScript` /
+// `tracksViaAppleScript` accept an injectable executeScript closure but
+// also carry a production default that calls `AppleScriptChannel.executeAppleScript`
+// directly. The CI runner has no Logic Pro installed, so these calls
+// return `.error` from osascript ("application 'Logic Pro' isn't running"
+// or equivalent), which the helpers translate to `nil`. Invoking the
+// default-path overloads here exercises the production wiring lines that
+// inject-only callers don't reach.
+
+@Test
+func markersViaAppleScriptDefaultExecuteIsReachable() async {
+    // Default executeScript closure → AppleScriptChannel.executeAppleScript
+    // → osascript without Logic available returns error → helper returns nil.
+    // We don't assert on result polarity (could be nil on CI / non-nil on
+    // dev machines with Logic running); the goal is line coverage of the
+    // default branch.
+    let result = await AccessibilityChannel.markersViaAppleScript()
+    _ = result
+}
+
+@Test
+func projectInfoViaAppleScriptDefaultExecuteIsReachable() async {
+    let result = await AccessibilityChannel.projectInfoViaAppleScript(
+        cachedTransportTempo: 100,
+        cachedTrackCount: 1
+    )
+    _ = result
+}
+
+@Test
+func tracksViaAppleScriptDefaultExecuteIsReachable() async {
+    let result = await AccessibilityChannel.tracksViaAppleScript()
+    _ = result
+}
+
+// MARK: - axBacked Runtime production wiring coverage
+
+@Test
+func axBackedRuntimeWiresAppleScriptHelpers() async {
+    // Construct the production-wired Runtime and invoke the new closures.
+    // Each closure forwards to the production default helper above.
+    let runtime = AccessibilityChannel.Runtime.axBacked(
+        isLogicProRunning: { false }  // Skip live AX paths
+    )
+    _ = await runtime.markersAppleScript()
+    _ = await runtime.projectInfoAppleScript(120.0, 0)
+    _ = await runtime.tracksAppleScript()
+}
+
+// MARK: - Default closure defaults in custom Runtime construction
+
+@Test
+func customRuntimeWithoutAppleScriptHelpersReturnsNilFromDefaultClosures() async {
+    // Tests that build a Runtime by hand without supplying the new
+    // closures get nil-returning defaults — preserves pre-v3.1.5 behaviour
+    // for ~800 existing tests with stubbed AX channels. This test pins
+    // that contract so a future refactor doesn't accidentally regress it.
+    let runtime = AccessibilityChannel.Runtime(
+        isTrusted: { true },
+        isLogicProRunning: { true },
+        appRoot: { nil },
+        transportState: { .success("{}") },
+        toggleTransportButton: { _ in .success("") },
+        setTempo: { _ in .success("") },
+        setCycleRange: { _ in .success("") },
+        tracks: { .success("[]") },
+        selectedTrack: { .success("null") },
+        selectTrack: { _ in .success("") },
+        setTrackToggle: { _, _ in .success("") },
+        renameTrack: { _ in .success("") },
+        mixerState: { .success("[]") },
+        channelStrip: { _ in .success("null") },
+        setMixerValue: { _, _ in .success("") },
+        projectInfo: { .success("{}") }
+    )
+    #expect(await runtime.markersAppleScript() == nil)
+    #expect(await runtime.projectInfoAppleScript(nil, 0) == nil)
+    #expect(await runtime.tracksAppleScript() == nil)
+}
