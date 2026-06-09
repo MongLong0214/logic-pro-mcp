@@ -1,263 +1,118 @@
 # PRD: Verified Stock Plugin Intelligence (Issue #14)
 
-**Status**: Draft v0.1 restart
+**Status**: Approved for implementation
 **Date**: 2026-06-09
-**Owner**: Isaac / Logic Pro MCP
-**Implementation status**: Not started
+**Owner**: Logic Pro MCP
 **Related issue**: https://github.com/MongLong0214/logic-pro-mcp/issues/14
-
-> Restart note: previous implementation commit `8ea264c` is invalidated. It combined #14 and #15 in one shallow implementation and must not be used as implementation evidence. This PRD starts from `main` commit `c626fca` and defines the acceptance contract before any new code.
+**Supersedes**: invalidated combined implementation `8ea264c`
 
 ## 1. Problem
 
-Logic Pro MCP can already expose some mixer state and can perform guarded stock plugin insertion in narrow verified paths, but MCP clients still do not have a truthful intelligence layer for Logic's built-in plugins.
+MCP clients need a trustworthy way to discover Logic Pro stock plugins without prompt-memory guesses. Today they cannot reliably know which stock plugin IDs exist, which names are observed versus inferred, which insert paths are safe hints, or which parameters are actually controllable/readback-capable.
 
-Today a client must guess:
-
-- the exact stock plugin identity and menu path;
-- whether a plugin exists on the local Logic install;
-- whether a plugin name was actually observed or merely assumed;
-- which slots are occupied;
-- which parameters are known, controllable, or readback-capable;
-- whether a suggested plugin chain is safe to apply.
-
-That turns an AI client's "plugin recommendation" into prompt-memory and guesswork. The product needs a verified, provenance-backed plugin intelligence surface that is strict about what it knows and explicit about what it does not know.
+The server must expose a provenance-backed, read-only stock plugin intelligence layer before any broader plugin insertion or parameter automation claims.
 
 ## 2. Goals
 
-- Define a stable stock plugin intelligence schema before implementation.
-- Build a catalog/census path that records source, timestamp, Logic version, locale, and verification method for every entry.
-- Expose read-only MCP discovery surfaces for search and detail retrieval.
-- Distinguish verified, observed, inferred, unavailable, and readback-mismatch states at the wire level.
-- Keep all write-side behavior behind existing fail-closed gates.
-- Enable future plugin insertion and parameter work without requiring clients to hallucinate plugin names or paths.
+- Provide a stable stock plugin catalog schema with explicit truth labels.
+- Enforce provenance rules so `verified` is never returned without evidence.
+- Expose read-only MCP resources for catalog list, detail, search, census, and capabilities.
+- Preserve existing mixer/plugin write safety gates.
+- Document client trust boundaries and limitations.
 
 ## 3. Non-Goals
 
-- No third-party Audio Unit catalog in this PRD.
+- No third-party Audio Unit discovery.
+- No silent plugin insertion or write-side broadening.
 - No universal parameter automation claim.
-- No silent plugin insertion.
-- No automatic chain application without explicit user target, slot, and confirmation gates.
-- No "verified" label for static hand-written entries.
-- No release claim until deterministic tests and targeted live Logic evidence exist.
+- No verified parameter metadata unless exact readback evidence exists.
+- No release claim based on superseded commit `8ea264c`.
 
-## 4. Users And Use Cases
+## 4. Truth Model
 
-### U1. AI client plugin discovery
+Truth labels are part of the public wire contract:
 
-An MCP client asks for safe stock plugin options for a task, such as gain staging, EQ cleanup, dynamics, metering, MIDI effects, or instruments.
+- `verified`: confirmed by current-machine evidence with source, method, timestamp, and Logic version when available.
+- `observed`: seen in live/local observation but not fully validated.
+- `manifested`: present in local metadata without live readback.
+- `inferred`: known/static Logic behavior, not verified on this machine.
+- `unavailable`: expected plugin checked and absent.
+- `readback_mismatch`: expected and observed values differ.
 
-The client receives plugin candidates with provenance, category, confidence, supported surfaces, and limitations.
+## 5. Schema
 
-### U2. Safe insertion planner
+Every catalog response includes:
 
-An MCP client wants to propose a stock plugin insertion plan before making any mutation.
+- `schema_version`
+- `generated_at`
+- `logic_version`
+- `locale`
+- `catalog_source`
+- `validation`
+- `entries`
 
-The client can read slot state, allowed plugin identities, slot compatibility, and required confirmation level before calling any write tool.
+Every plugin entry includes:
 
-### U3. Parameter-aware future control
+- `id`
+- `display_name`
+- `type`
+- `category`
+- `availability_state`
+- `provenance`
+- `insert_paths`
+- `slot_support`
+- `known_presets`
+- `parameters`
+- `safe_write_capabilities`
+- `limitations`
 
-An MCP client wants to know whether a stock plugin parameter is currently known by schema, live-observed by AX, write-only through Scripter, or not supported.
+Every parameter entry includes its own truth label and provenance. A parameter cannot be `verified` unless both write and readback method evidence are present. Presets are represented by `known_presets` and must remain empty unless preset names are backed by provenance.
 
-The client receives explicit capability states instead of inventing parameter contracts.
+## 6. MCP Resources
 
-## 5. Product Contract
-
-### 5.1 Truth Labels
-
-Every plugin entry and parameter entry must carry one of these states:
-
-| State | Meaning | Required evidence |
-|-------|---------|-------------------|
-| `verified` | Confirmed on the current machine through live Logic or local installation census and validated against schema | source, observed_at, Logic version, method |
-| `observed` | Seen in a live AX/menu/resource scan, but not fully validated for all fields | source, observed_at, method |
-| `manifested` | Found in local application/plugin metadata without live Logic readback | source path or manifest reference |
-| `inferred` | Derived from known Logic behavior, not verified on this machine | inference reason, no verified claim |
-| `unavailable` | Expected plugin was not found on the current system | checked_at, method |
-| `readback_mismatch` | Requested/expected plugin or parameter did not match live readback | expected, observed, method |
-
-### 5.2 Required Entry Fields
-
-Each stock plugin catalog entry must include:
-
-- `id`: stable internal identifier, e.g. `logic.stock.effect.gain`;
-- `display_name`: user-facing Logic name;
-- `type`: `effect`, `instrument`, `midi_effect`, `utility`, or `metering`;
-- `category`: Logic browser/category group;
-- `availability_state`: one of the truth labels above;
-- `provenance`: source, method, observed timestamp, Logic version, locale, machine-safe source path where applicable;
-- `insert_paths`: safe insert path hints with truth labels per path;
-- `slot_support`: audio, instrument, MIDI FX, aux, stereo/mono constraints where known;
-- `parameters`: optional parameter metadata, each with its own truth label;
-- `safe_write_capabilities`: `none`, `insert_only`, `parameter_write_unverified`, `parameter_write_readback`, or future values;
-- `limitations`: explicit string list for client-visible uncertainty.
-
-### 5.3 Parameter Metadata Minimum
-
-Parameter metadata is allowed only when each field is separately labelled:
-
-- `id`;
-- `display_name`;
-- `unit`;
-- `value_range`;
-- `default_value`;
-- `write_method`;
-- `readback_method`;
-- `availability_state`;
-- `provenance`.
-
-No parameter may be marked `verified` unless the exact parameter identity and readback path are verified.
-
-## 6. MCP Surface
-
-Initial surfaces are read-only resources or tools. Final naming can change during design review, but the wire contract must preserve the fields above.
-
-### 6.1 Resource Candidates
+Read-only resources:
 
 - `logic://stock-plugins`
 - `logic://stock-plugins/{id}`
-- `logic://stock-plugins/search?query=...`
+- `logic://stock-plugins/search?query=<text>`
 - `logic://stock-plugins/census`
 - `logic://stock-plugins/capabilities`
 
-### 6.2 Response Requirements
+No resource in this PRD may mutate Logic state.
 
-Responses must:
+## 7. Implementation Tickets
 
-- be machine-parseable JSON;
-- include `schema_version`;
-- include `generated_at`;
-- include `logic_version` when available;
-- include `catalog_source`;
-- include per-entry truth labels;
-- never coerce missing evidence into `verified`;
-- return empty lists with diagnostic metadata instead of fake entries.
+Canonical ticket board: `docs/tickets/issue14-verified-stock-plugin-intelligence/STATUS.md`
 
-## 7. Implementation Phases
-
-### Phase 0: PRD Approval Gate
-
-- Review this PRD against issue #14.
-- Decide final resource/tool names.
-- Decide whether #14 remains read-only until #15 consumes it.
-- No code before this PRD is accepted.
-
-### Phase 1: Schema And Validation Tests
-
-TDD first. Tests must fail before implementation for:
-
-- required fields;
-- duplicate IDs;
-- invalid truth label transitions;
-- missing provenance on `verified`;
-- parameters marked verified without readback evidence;
-- backwards-compatible JSON decoding.
-
-### Phase 2: Census Sources
-
-Implement at least two source lanes where feasible:
-
-- local install/metadata census;
-- live Logic/AX/menu observation.
-
-The catalog must be able to say "not verified yet" instead of filling gaps.
-
-### Phase 3: Read-Only MCP Surfaces
-
-Expose the catalog through read-only MCP surfaces. No mutation behavior belongs in this phase.
-
-### Phase 4: Integration With Existing Insert Gates
-
-Only after read-only surfaces are validated:
-
-- connect catalog identity to the existing guarded stock plugin insert path;
-- reject non-catalog or non-verified plugin IDs by default;
-- keep destructive policy and confirmation requirements intact.
-
-### Phase 5: Live Verification
-
-Targeted live Logic verification must cover:
-
-- catalog census on the current Logic version;
-- at least one verified safe stock plugin identity;
-- at least one unavailable or inferred entry path;
-- a guarded insert/readback path only if Phase 4 is in scope.
+- `I14-T1`: schema models and truth-label validator.
+- `I14-T2`: deterministic catalog seed with current-machine census overlay.
+- `I14-T3`: read-only MCP resource handlers and resource registration.
+- `I14-T4`: integration tests for list/detail/search/census/capabilities.
+- `I14-T5`: docs and verification evidence.
 
 ## 8. Acceptance Criteria
 
-- [ ] PRD is approved before implementation.
-- [ ] Ticket board exists and maps every requirement to TDD work.
-- [ ] Unit tests fail first for schema, provenance, duplicate IDs, truth labels, and parameter evidence.
-- [ ] No entry can be marked `verified` without source, method, timestamp, and Logic version when available.
-- [ ] Read-only MCP discovery surfaces expose truth labels and limitations.
-- [ ] Existing mixer and plugin safety gates remain fail-closed.
-- [ ] The implementation does not change write-side behavior unless a later ticket explicitly covers it.
-- [ ] Targeted live Logic verification records at least one verified stock plugin path.
-- [ ] Documentation explains what clients may trust and what they must not hallucinate.
-- [ ] Verification evidence includes `swift test --no-parallel`, `swift build -c release`, `python3 -m py_compile Scripts/live-e2e-test.py`, and targeted live evidence where applicable.
+- PRD and ticket board exist before implementation.
+- Unit tests cover required fields, duplicate IDs, provenance, truth labels, and parameter evidence.
+- No `verified` plugin or parameter can be emitted without required provenance.
+- Discovery responses distinguish `verified`, `observed`, `manifested`, `inferred`, `unavailable`, and `readback_mismatch`.
+- Existing mixer/plugin safety gates remain fail-closed.
+- Read-only MCP resources expose list, detail, search, census, and capabilities.
+- Docs/API and troubleshooting docs describe examples and limitations.
+- Verification includes `swift test --no-parallel`, `swift build -c release`, `python3 -m py_compile Scripts/live-e2e-test.py`, and targeted live evidence when a live Logic session is available.
 
-## 9. Testing Strategy
+## 9. Test Plan
 
-### Deterministic Tests
+- Schema validator tests for duplicates, required provenance, and invalid parameter verification.
+- Catalog tests for stable IDs, search, detail lookup, and unavailable entries.
+- Resource tests for registered URIs/templates and read-only response shape.
+- E2E tests through server resource reads.
+- Live smoke test records Logic version, locale, catalog states, and at least one observed/verified stock plugin identity when possible.
 
-- schema validation;
-- fixture decoding;
-- duplicate and alias handling;
-- provenance rules;
-- truth label transitions;
-- MCP resource response shape;
-- backwards compatibility for existing resources.
+## 10. ADR
 
-### Integration Tests
-
-- resource provider registration;
-- search/detail query behavior;
-- no mutation path from discovery calls;
-- catalog identity validation for future insert integration.
-
-### Live Tests
-
-Live tests must be explicit and scoped:
-
-- Logic version captured;
-- locale captured;
-- AX permission state captured;
-- project/session state captured;
-- before/after plugin slot readback captured for any mutation path.
-
-## 10. Safety And Security
-
-- All discovery calls are read-only.
-- Any future insert path remains Level 2 destructive policy with explicit confirmation.
-- No third-party plugin filesystem scan beyond this PRD's scope.
-- No private project content should be serialized into catalog evidence.
-- Live test evidence should record plugin identities and slot states, not user musical content.
-
-## 11. Risks
-
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Logic locale changes plugin display names | Wrong identity mapping | Stable IDs plus provenance and locale field |
-| AX menu structure differs by Logic version | False availability | Versioned census and `observed` vs `verified` labels |
-| Static catalog drifts | Hallucinated trust | Reject `verified` without live/local source |
-| Parameter names are not readable | False parameter support | Mark parameter support unavailable until readback exists |
-| Discovery surface becomes a write shortcut | Safety regression | Read-only Phase 3, explicit Phase 4 gate |
-
-## 12. Open Questions
-
-- Should the first shipped catalog include only plugins verified on the current machine, or also `inferred` stock Logic entries?
-- What is the canonical stable ID format for AU/component-backed Logic plugins?
-- Should plugin insertion accept display names, stable IDs only, or both with strict disambiguation?
-- Should parameter metadata be deferred entirely until a separate #16-style parameter PRD?
-
-## 13. Definition Of Done
-
-Issue #14 is done only when:
-
-- implementation maps directly to this PRD and ticket board;
-- deterministic tests pass;
-- build passes;
-- docs are updated;
-- targeted live evidence exists;
-- GitHub issue evidence is current and does not cite superseded commit `8ea264c`;
-- no #15 workflow recipe depends on unverified plugin catalog claims.
+**Decision**: ship #14 as read-only catalog intelligence with strict truth labels and a local-census overlay.
+**Drivers**: prevent hallucinated plugin claims, preserve safety gates, provide useful client discovery now.
+**Alternatives considered**: hard-coded static list only, live AX-only scanner, write-enabled insert planner.
+**Why chosen**: static-only cannot claim verification; live-only is brittle and unavailable in CI; write-enabled scope belongs behind a later explicit gate.
+**Consequences**: first release is conservative and may label many entries `inferred` or `unavailable`; clients get honest metadata instead of false confidence.

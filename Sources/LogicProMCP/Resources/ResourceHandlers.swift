@@ -103,6 +103,35 @@ extension ResourceHandlers {
 
         await cache.recordToolAccess()
 
+        if uri == "logic://stock-plugins" {
+            return readStockPlugins(uri: uri)
+        }
+        if uri == "logic://stock-plugins/census" {
+            return readStockPluginCensus(uri: uri)
+        }
+        if uri == "logic://stock-plugins/capabilities" {
+            return readStockPluginCapabilities(uri: uri)
+        }
+        if uri.hasPrefix("logic://stock-plugins/search") {
+            return readStockPluginSearch(uri: uri)
+        }
+        if uri.hasPrefix("logic://stock-plugins/") {
+            return try readStockPluginDetail(uri: uri)
+        }
+
+        if uri == "logic://workflow-skills" {
+            return readWorkflowSkills(uri: uri)
+        }
+        if uri == "logic://workflow-skills/schema" {
+            return readWorkflowSkillSchema(uri: uri)
+        }
+        if uri.hasPrefix("logic://workflow-skills/search") {
+            return readWorkflowSkillSearch(uri: uri)
+        }
+        if uri.hasPrefix("logic://workflow-skills/") {
+            return try readWorkflowSkillDetail(uri: uri)
+        }
+
         // hasDocument gate removed (post-hardening): the StatePoller's view
         // of "document open" can flap during normal Logic UI activity (focus
         // switches, plugin windows). Sustained-read tests showed 80/200 reads
@@ -180,6 +209,129 @@ extension ResourceHandlers {
         return ReadResource.Result(
             contents: [.text(json, uri: uri, mimeType: "application/json")]
         )
+    }
+
+    private static func readStockPlugins(uri: String) -> ReadResource.Result {
+        let json = encodeJSON(StockPluginCatalog.defaultSnapshot(), compact: true)
+        return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])
+    }
+
+    private static func readStockPluginDetail(uri: String) throws -> ReadResource.Result {
+        let id = String(uri.dropFirst("logic://stock-plugins/".count)).removingPercentEncoding ?? ""
+        let snapshot = StockPluginCatalog.defaultSnapshot()
+        guard let entry = StockPluginCatalog.entry(id: id, snapshot: snapshot) else {
+            throw MCPError.invalidParams("Unknown stock plugin id: \(id)")
+        }
+        let json = encodeJSONObject([
+            "schema_version": snapshot.schemaVersion,
+            "generated_at": snapshot.generatedAt,
+            "logic_version": snapshot.logicVersion ?? NSNull(),
+            "catalog_source": snapshot.catalogSource,
+            "entry": jsonObject(entry),
+            "validation": jsonObject(snapshot.validation),
+        ])
+        return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])
+    }
+
+    private static func readStockPluginSearch(uri: String) -> ReadResource.Result {
+        let snapshot = StockPluginCatalog.defaultSnapshot()
+        let query = queryValue(from: uri) ?? ""
+        let entries = StockPluginCatalog.search(query: query, snapshot: snapshot).map(jsonObject)
+        let json = encodeJSONObject([
+            "schema_version": snapshot.schemaVersion,
+            "generated_at": snapshot.generatedAt,
+            "logic_version": snapshot.logicVersion ?? NSNull(),
+            "catalog_source": snapshot.catalogSource,
+            "query": query,
+            "entries": entries,
+            "result_count": entries.count,
+            "validation": jsonObject(snapshot.validation),
+        ])
+        return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])
+    }
+
+    private static func readStockPluginCensus(uri: String) -> ReadResource.Result {
+        let snapshot = StockPluginCatalog.defaultSnapshot()
+        let counts = Dictionary(grouping: snapshot.entries, by: { $0.availabilityState.rawValue })
+            .mapValues(\.count)
+        let json = encodeJSONObject([
+            "schema_version": snapshot.schemaVersion,
+            "generated_at": snapshot.generatedAt,
+            "logic_version": snapshot.logicVersion ?? NSNull(),
+            "locale": snapshot.locale,
+            "catalog_source": snapshot.catalogSource,
+            "plugin_count": snapshot.pluginCount,
+            "entries_by_state": counts,
+            "validation": jsonObject(snapshot.validation),
+        ])
+        return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])
+    }
+
+    private static func readStockPluginCapabilities(uri: String) -> ReadResource.Result {
+        let json = encodeJSONObject(StockPluginCatalog.capabilities())
+        return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])
+    }
+
+    private static func readWorkflowSkills(uri: String) -> ReadResource.Result {
+        let json = encodeJSON(WorkflowSkillCatalog.defaultSnapshot(), compact: true)
+        return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])
+    }
+
+    private static func readWorkflowSkillDetail(uri: String) throws -> ReadResource.Result {
+        let id = String(uri.dropFirst("logic://workflow-skills/".count)).removingPercentEncoding ?? ""
+        let snapshot = WorkflowSkillCatalog.defaultSnapshot()
+        guard let workflow = WorkflowSkillCatalog.workflow(id: id, snapshot: snapshot) else {
+            throw MCPError.invalidParams("Unknown workflow skill id: \(id)")
+        }
+        let json = encodeJSONObject([
+            "schema_version": snapshot.schemaVersion,
+            "generated_at": snapshot.generatedAt,
+            "workflow": jsonObject(workflow),
+            "validation": jsonObject(snapshot.validation),
+        ])
+        return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])
+    }
+
+    private static func readWorkflowSkillSearch(uri: String) -> ReadResource.Result {
+        let snapshot = WorkflowSkillCatalog.defaultSnapshot()
+        let query = queryValue(from: uri) ?? ""
+        let workflows = WorkflowSkillCatalog.search(query: query, snapshot: snapshot).map(jsonObject)
+        let json = encodeJSONObject([
+            "schema_version": snapshot.schemaVersion,
+            "generated_at": snapshot.generatedAt,
+            "query": query,
+            "workflows": workflows,
+            "result_count": workflows.count,
+            "validation": jsonObject(snapshot.validation),
+        ])
+        return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])
+    }
+
+    private static func readWorkflowSkillSchema(uri: String) -> ReadResource.Result {
+        let json = encodeJSONObject(WorkflowSkillCatalog.schema())
+        return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])
+    }
+
+    private static func queryValue(from uri: String) -> String? {
+        URLComponents(string: uri)?
+            .queryItems?
+            .first { $0.name == "query" }?
+            .value?
+            .removingPercentEncoding
+    }
+
+    private static func jsonObject<T: Encodable>(_ value: T) -> Any {
+        let text = encodeJSON(value, compact: true)
+        return (try? JSONSerialization.jsonObject(with: Data(text.utf8))) ?? [:]
+    }
+
+    private static func encodeJSONObject(_ object: Any) -> String {
+        guard JSONSerialization.isValidJSONObject(object),
+              let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else {
+            return #"{"error":"resource JSON encoding failed"}"#
+        }
+        return text
     }
 
     /// v3.1.8 (Issue #7) — tier-merged track list read.

@@ -692,7 +692,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// MARK: - §10 Resource Read Chain (8 tests)
+// MARK: - §10 Resource Read Chain (10 tests)
 // ═══════════════════════════════════════════════════════════════════════
 
 @Test func testE2EResourceTransportStateIsValidJSON() async throws {
@@ -745,6 +745,36 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     let _ = try JSONSerialization.jsonObject(with: Data(text.utf8))
 }
 
+@Test func testE2EResourceStockPluginsExposeTruthLabels() async throws {
+    let h = await makeE2EHandlers()
+    let list = try await h.readResource(.init(uri: "logic://stock-plugins"))
+    let detail = try await h.readResource(.init(uri: "logic://stock-plugins/logic.stock.effect.gain"))
+    let search = try await h.readResource(.init(uri: "logic://stock-plugins/search?query=gain"))
+
+    let listJSON = e2eJSON(e2eResourceText(list))
+    let detailJSON = e2eJSON(e2eResourceText(detail))
+    let searchJSON = e2eJSON(e2eResourceText(search))
+    #expect(listJSON?["schema_version"] as? Int == 1)
+    #expect((listJSON?["validation"] as? [String: Any])?["is_valid"] as? Bool == true)
+    #expect((detailJSON?["entry"] as? [String: Any])?["availability_state"] != nil)
+    #expect((searchJSON?["entries"] as? [[String: Any]])?.isEmpty == false)
+}
+
+@Test func testE2EResourceWorkflowSkillsExposeValidatedPack() async throws {
+    let h = await makeE2EHandlers()
+    let list = try await h.readResource(.init(uri: "logic://workflow-skills"))
+    let detail = try await h.readResource(.init(uri: "logic://workflow-skills/logic.workflow.plugins.stock_chain_plan"))
+    let schema = try await h.readResource(.init(uri: "logic://workflow-skills/schema"))
+
+    let listJSON = e2eJSON(e2eResourceText(list))
+    let detailJSON = e2eJSON(e2eResourceText(detail))
+    let schemaJSON = e2eJSON(e2eResourceText(schema))
+    #expect(listJSON?["workflow_count"] as? Int ?? 0 >= 6)
+    #expect((listJSON?["validation"] as? [String: Any])?["is_valid"] as? Bool == true)
+    #expect((detailJSON?["workflow"] as? [String: Any])?["mutation_kind"] as? String == "read_only")
+    #expect((schemaJSON?["evidence_levels"] as? [String])?.contains("live_verified") == true)
+}
+
 @Test func testE2EResourceHealthMatchesToolHealth() async throws {
     let h = await makeE2EHandlers()
     let resourceResult = try await h.readResource(.init(uri: "logic://system/health"))
@@ -795,7 +825,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 
 @Test func testE2EServerCatalogAdvertisesAllResources() async {
     let snapshot = await LogicProServer().compositionSnapshot()
-    #expect(snapshot.resourceURIs.count == 9)
+    #expect(snapshot.resourceURIs.count == 14)
     let uris = Set(snapshot.resourceURIs)
     #expect(uris == [
         "logic://system/health",
@@ -807,6 +837,11 @@ typealias ServerStartRecorder = SharedServerStartRecorder
         "logic://midi/ports",
         "logic://mcu/state",
         "logic://library/inventory",
+        "logic://stock-plugins",
+        "logic://stock-plugins/census",
+        "logic://stock-plugins/capabilities",
+        "logic://workflow-skills",
+        "logic://workflow-skills/schema",
     ])
 }
 
@@ -816,6 +851,10 @@ typealias ServerStartRecorder = SharedServerStartRecorder
         "logic://tracks/{index}",
         "logic://tracks/{index}/regions",
         "logic://mixer/{strip}",
+        "logic://stock-plugins/{id}",
+        "logic://stock-plugins/search?query={query}",
+        "logic://workflow-skills/{id}",
+        "logic://workflow-skills/search?query={query}",
     ])
 }
 
