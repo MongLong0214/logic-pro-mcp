@@ -63,7 +63,7 @@ Legend — `↕` bidirectional, `↑` read, `↓` write.
 | **Routing** | `ChannelRouter` — priority chain selection, fallback, health checks | `actor` | Actor |
 | **Channels** | 7 communication channels, each wrapping one macOS API | `actor` | Actor per channel |
 | **State** | `StateCache` (store) + `StatePoller` (3s AX refresh) | `actor` | Actor |
-| **Resources** | `ResourceHandlers` — URI routing, read-only state/catalog JSON serialization | `struct` | Pure |
+| **Resources** | `ResourceHandlers` — URI routing, read-only state/catalog/workflow JSON serialization | `struct` | Pure |
 | **Utilities** | `AppleScriptSafety`, `DestructivePolicy`, `PermissionChecker`, `Logger` | mixed | Pure / `enum` |
 
 ---

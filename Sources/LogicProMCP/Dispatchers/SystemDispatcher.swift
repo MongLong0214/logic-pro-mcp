@@ -411,6 +411,8 @@ struct SystemDispatcher {
                   logic://stock-plugins         — Stock plugin intelligence catalog
                   logic://stock-plugins/census  — Stock plugin census metadata
                   logic://stock-plugins/capabilities — Stock plugin catalog capabilities
+                  logic://workflow-skills       — Validated workflow skills pack
+                  logic://workflow-skills/schema — Workflow skill schema
 
                 Resource templates:
                   logic://tracks/{index}          — Single track detail
@@ -418,6 +420,8 @@ struct SystemDispatcher {
                   logic://mixer/{strip}           — Single channel strip
                   logic://stock-plugins/{id}      — Stock plugin detail
                   logic://stock-plugins/search?query={query} — Stock plugin search
+                  logic://workflow-skills/{id}    — Workflow skill detail
+                  logic://workflow-skills/search?query={query} — Workflow skill search
 
                 Use: logic_system(command: "help", params: {category: "transport"})
                 for detailed command docs per category.

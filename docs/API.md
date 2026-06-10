@@ -1,6 +1,6 @@
 # API Reference
 
-Complete schema for Logic Pro MCP server. The server exposes **8 tools**, **12 resources**, and **5 resource templates** over MCP JSON-RPC (stdio transport). `logic://mcu/state` is filtered out of `resources/list` when the MCU control surface is disconnected.
+Complete schema for Logic Pro MCP server. The server exposes **8 tools**, **14 resources**, and **7 resource templates** over MCP JSON-RPC (stdio transport). `logic://mcu/state` is filtered out of `resources/list` when the MCU control surface is disconnected.
 
 **Design principle:** Tools perform write/action operations. **Reads are exposed exclusively through resources** — use `resources/read` for state queries, not tool calls.
 
@@ -30,7 +30,7 @@ All tool invocations use:
 
 ## Resource Catalog (Read-only)
 
-**12 static resources + 5 templates.** `logic://mcu/state` is filtered from `resources/list` when the MCU control surface is disconnected, but direct `resources/read` still works for bookmarked clients.
+**14 static resources + 7 templates.** `logic://mcu/state` is filtered from `resources/list` when the MCU control surface is disconnected, but direct `resources/read` still works for bookmarked clients.
 
 | URI | Content | Source |
 |-----|---------|--------|
@@ -46,11 +46,15 @@ All tool invocations use:
 | `logic://stock-plugins` | `{ schema_version, generated_at, logic_version, catalog_source, validation, entries[] }` — conservative Logic stock plugin catalog with per-entry truth labels | Static catalog + local Logic app census |
 | `logic://stock-plugins/census` | Catalog census metadata, state counts, validation state | Static catalog + local Logic app census |
 | `logic://stock-plugins/capabilities` | Truth labels, safe write capability labels, and read-only catalog contract | Static |
+| `logic://workflow-skills` | `{ schema_version, workflow_count, validation, workflows[] }` — validated workflow skill pack | Static validated pack |
+| `logic://workflow-skills/schema` | Workflow schema fields, evidence levels, mutation kinds, and resource names | Static |
 | `logic://tracks/{index}` | Single `TrackState` JSON | Cache — template |
 | `logic://tracks/{index}/regions` | `RegionState[]` JSON filtered by `trackIndex` | Cache — template |
 | `logic://mixer/{strip}` | `{ cache_age_sec, fetched_at, data_source, strip: ChannelStripState }` | Cache — template |
 | `logic://stock-plugins/{id}` | Single stock plugin catalog entry by stable ID | Static catalog + local Logic app census — template |
 | `logic://stock-plugins/search?query={query}` | Search stock plugin catalog entries | Static catalog + local Logic app census — template |
+| `logic://workflow-skills/{id}` | Single workflow skill by stable ID | Static validated pack — template |
+| `logic://workflow-skills/search?query={query}` | Search workflow skills | Static validated pack — template |
 
 All resources return `contents: [{ uri, text, mimeType: "application/json" }]`.
 
@@ -76,6 +80,20 @@ The production census can only produce `inferred` and `manifested` (see `product
 `known_presets` stays empty unless preset names have provenance. For `manifested` entries it lists factory preset filenames harvested from the probed settings folder (capped at `preset_name_cap`, currently 12; the full set remains on disk at the provenance `source_path`).
 
 Clients should prefer stable `id` values and treat `display_name` as user-facing text, not identity. Insert paths are menu hints unless their own state says otherwise. Parameter metadata remains conservative: no parameter is `verified` unless a readback path is evidenced. Entries with `safe_write_capabilities: "insert_only"` (Gain, Compressor, Channel EQ) match the `logic_mixer insert_plugin` allowlist; everything else is discovery-only.
+
+### Workflow Skills
+
+`logic://workflow-skills` is also read-only. It returns workflow recipes that tell clients which resources/tools to call, which state checks must pass, when confirmation is required, and which response fields prove success. Reading a workflow never executes it.
+
+The pack is linted against the **real server surface** — no hand-maintained allowlists:
+
+- Tool references must name registered MCP tools, and every mutating step must carry an exact public `command` that exists in the per-tool command census (the census itself is pinned to the dispatcher sources by test).
+- Resource references must be servable by this build (exact static URI, a registered template, or a concrete instantiation of one) or be covered by the workflow's declared `depends_on` external dependencies.
+- `mutation_kind` must agree with step mutability in both directions; mutating steps must be covered by a declared confirmation (level `L1`/`L2` only, matching command); `live_verified` workflows must reference their evidence file.
+
+Each served workflow carries computed honesty fields: `dependencies_resolved` says whether every referenced resource is servable by **this** running build, and `unresolved_resources` lists the gaps. The stock-plugin workflows (`logic.workflow.plugins.stock_chain_plan`, `logic.workflow.plugins.stock_insert_gain_live_verified`) declare the #14 stock catalog via `depends_on`; until #14 is merged into the running build they are served with `dependencies_resolved: false`, and clients must not execute them against a server that cannot serve their resources.
+
+Mutating workflows are not marked `production_ready` unless they have matching `live_verified` evidence. `logic.workflow.plugins.stock_insert_gain_live_verified` is the guarded L2 Gain insert recipe backed by the existing Logic Pro 12.2 live evidence file and still requires current-session confirmation/readback.
 
 ---
 

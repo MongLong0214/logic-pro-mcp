@@ -40,6 +40,8 @@ private let serverResourceText = sharedResourceText
         "logic://stock-plugins",
         "logic://stock-plugins/census",
         "logic://stock-plugins/capabilities",
+        "logic://workflow-skills",
+        "logic://workflow-skills/schema",
     ]
     #expect(expectedNonMCUResources.isSubset(of: resourceURIs))
     #expect(!resourceURIs.contains("logic://mcu/state"))
@@ -50,6 +52,8 @@ private let serverResourceText = sharedResourceText
         "logic://mixer/{strip}",
         "logic://stock-plugins/{id}",
         "logic://stock-plugins/search?query={query}",
+        "logic://workflow-skills/{id}",
+        "logic://workflow-skills/search?query={query}",
     ]
     #expect(expectedTemplates.isSubset(of: templateURIs))
 }
@@ -261,6 +265,8 @@ private let serverResourceText = sharedResourceText
         "logic://stock-plugins",
         "logic://stock-plugins/census",
         "logic://stock-plugins/capabilities",
+        "logic://workflow-skills",
+        "logic://workflow-skills/schema",
     ]
     #expect(expectedNonMCUResources.isSubset(of: uris))
     #expect(!uris.contains("logic://mcu/state"))

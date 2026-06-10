@@ -35,7 +35,7 @@ head -40 /tmp/mcp-stderr.txt
 Look for lines like:
 - `MIDIPortManager started` — CoreMIDI initialized
 - `Accessibility channel started` — AX ready
-- `Starting logic-pro-mcp v3.4.6 — 8 tools, 12 resources, 7 channels` — composition complete
+- `Starting logic-pro-mcp v3.4.6 — 8 tools, 14 resources, 7 channels` — composition complete
 
 If you see `AccessibilityError.notTrusted`, grant Accessibility permission.
 
@@ -46,6 +46,12 @@ If you see `AccessibilityError.notTrusted`, grant Accessibility permission.
 **Cause:** the catalog is intentionally fail-closed. Static Logic stock knowledge and local app metadata are useful discovery signals, but they are not live plugin readback.
 
 **Fix:** clients should branch on `availability_state`. Treat `verified` as the only current-machine proof label; treat `inferred`/`manifested` as planning hints that still need user confirmation and write-side verification.
+
+### Workflow skill refuses to call a tool automatically
+
+**Cause:** `logic://workflow-skills` is a read-only recipe surface. It describes safe steps and verification fields; it never executes the recipe.
+
+**Fix:** have the MCP client read the workflow, perform listed `state_checks`, request explicit user confirmation for mutating steps, then call the named tools itself.
 
 ---
 

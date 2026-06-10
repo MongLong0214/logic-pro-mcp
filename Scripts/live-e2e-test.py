@@ -461,6 +461,8 @@ def main():
         "logic://stock-plugins",
         "logic://stock-plugins/census",
         "logic://stock-plugins/capabilities",
+        "logic://workflow-skills",
+        "logic://workflow-skills/schema",
     }
     T("resources/list includes required resources", r, lambda r: required_resource_uris.issubset(resource_uris))
 
@@ -473,6 +475,8 @@ def main():
         "logic://mixer/{strip}",
         "logic://stock-plugins/{id}",
         "logic://stock-plugins/search?query={query}",
+        "logic://workflow-skills/{id}",
+        "logic://workflow-skills/search?query={query}",
     }
     T("resources/templates/list includes required templates", r, lambda r: required_template_uris.issubset(template_uris))
 
@@ -1035,6 +1039,10 @@ def main():
         "logic://stock-plugins/capabilities",
         "logic://stock-plugins/logic.stock.effect.gain",
         "logic://stock-plugins/search?query=gain",
+        "logic://workflow-skills",
+        "logic://workflow-skills/schema",
+        "logic://workflow-skills/logic.workflow.plugins.stock_chain_plan",
+        "logic://workflow-skills/search?query=plugin",
         # mcu/state is read-testable even when filtered from list (direct reads
         # bypass the connection gate so clients bookmarking the URI still work).
         "logic://mcu/state",
@@ -1067,6 +1075,14 @@ def main():
       lambda _: bool(stock_catalog and stock_catalog.get("validation", {}).get("is_valid") is True))
     T("stock plugin catalog exposes truth labels", r,
       lambda _: any("availability_state" in e for e in stock_catalog.get("entries", [])) if stock_catalog else False)
+
+    r = read_resource(client, "logic://workflow-skills")
+    workflow_pack = safe_json(resource_text(r))
+    T("workflow skills pack validates", r,
+      lambda _: bool(workflow_pack and workflow_pack.get("validation", {}).get("is_valid") is True))
+    T("workflow skills include stock plugin planning workflow", r,
+      lambda _: any(w.get("id") == "logic.workflow.plugins.stock_chain_plan"
+                    for w in workflow_pack.get("workflows", [])) if workflow_pack else False)
 
     # Transport resource should have tempo
     r = read_resource(client, "logic://transport/state")

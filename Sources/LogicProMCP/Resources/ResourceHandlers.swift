@@ -107,6 +107,10 @@ extension ResourceHandlers {
             return try readStockPluginResource(uri: uri)
         }
 
+        if uri == "logic://workflow-skills" || uri.hasPrefix("logic://workflow-skills/") || uri.hasPrefix("logic://workflow-skills?") {
+            return try readWorkflowSkillResource(uri: uri)
+        }
+
         // hasDocument gate removed (post-hardening): the StatePoller's view
         // of "document open" can flap during normal Logic UI activity (focus
         // switches, plugin windows). Sustained-read tests showed 80/200 reads
@@ -291,6 +295,92 @@ extension ResourceHandlers {
 
     private static func readStockPluginCapabilities(uri: String) -> ReadResource.Result {
         let json = encodeJSONObject(StockPluginCatalog.capabilities())
+        return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])
+    }
+
+    /// Workflow skill routing. Parsed with `URLComponents` so path and query
+    /// are matched exactly: unknown subpaths, nested segments, and stray query
+    /// parameters fail closed instead of silently degrading to a search or a
+    /// detail lookup.
+    private static func readWorkflowSkillResource(uri: String) throws -> ReadResource.Result {
+        guard let components = URLComponents(string: uri),
+              components.scheme == "logic",
+              components.host == "workflow-skills" else {
+            throw MCPError.invalidParams("Malformed workflow skill resource URI: \(uri)")
+        }
+        let segments = components.path.split(separator: "/").map(String.init)
+        // Reject doubled or trailing slashes ("//schema", "schema/") — the
+        // canonical reconstruction must reproduce the raw path exactly.
+        let canonicalPath = segments.isEmpty ? "" : "/" + segments.joined(separator: "/")
+        guard components.path == canonicalPath else {
+            throw MCPError.invalidParams("Malformed workflow skill resource path: \(components.path)")
+        }
+        let queryItems = components.queryItems ?? []
+        let unknownParams = queryItems.map(\.name).filter { $0 != "query" }
+
+        if segments.isEmpty {
+            guard queryItems.isEmpty else {
+                throw MCPError.invalidParams("logic://workflow-skills does not accept query parameters")
+            }
+            return readWorkflowSkills(uri: uri)
+        }
+        guard segments.count == 1 else {
+            throw MCPError.invalidParams("Unknown workflow skill resource path: \(components.path)")
+        }
+        let segment = segments[0]
+
+        if segment == "search" {
+            guard unknownParams.isEmpty else {
+                throw MCPError.invalidParams("Unsupported search parameters: \(unknownParams.joined(separator: ", "))")
+            }
+            let queries = queryItems.filter { $0.name == "query" }
+            guard queries.count <= 1 else {
+                throw MCPError.invalidParams("logic://workflow-skills/search accepts at most one query parameter")
+            }
+            return readWorkflowSkillSearch(uri: uri, query: queries.first?.value ?? "")
+        }
+        guard queryItems.isEmpty else {
+            throw MCPError.invalidParams("logic://workflow-skills/\(segment) does not accept query parameters")
+        }
+        if segment == "schema" { return readWorkflowSkillSchema(uri: uri) }
+        return try readWorkflowSkillDetail(uri: uri, id: segment)
+    }
+
+    private static func readWorkflowSkills(uri: String) -> ReadResource.Result {
+        let json = encodeJSON(WorkflowSkillCatalog.defaultSnapshot(), compact: true)
+        return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])
+    }
+
+    private static func readWorkflowSkillDetail(uri: String, id: String) throws -> ReadResource.Result {
+        let snapshot = WorkflowSkillCatalog.defaultSnapshot()
+        guard let workflow = WorkflowSkillCatalog.workflow(id: id, snapshot: snapshot) else {
+            throw MCPError.invalidParams("Unknown workflow skill id: \(id)")
+        }
+        let json = encodeJSONObject([
+            "schema_version": snapshot.schemaVersion,
+            "generated_at": snapshot.generatedAt,
+            "workflow": jsonObject(workflow),
+            "validation": jsonObject(snapshot.validation),
+        ])
+        return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])
+    }
+
+    private static func readWorkflowSkillSearch(uri: String, query: String) -> ReadResource.Result {
+        let snapshot = WorkflowSkillCatalog.defaultSnapshot()
+        let workflows = WorkflowSkillCatalog.search(query: query, snapshot: snapshot).map(jsonObject)
+        let json = encodeJSONObject([
+            "schema_version": snapshot.schemaVersion,
+            "generated_at": snapshot.generatedAt,
+            "query": query,
+            "workflows": workflows,
+            "result_count": workflows.count,
+            "validation": jsonObject(snapshot.validation),
+        ])
+        return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])
+    }
+
+    private static func readWorkflowSkillSchema(uri: String) -> ReadResource.Result {
+        let json = encodeJSONObject(WorkflowSkillCatalog.schema())
         return ReadResource.Result(contents: [.text(json, uri: uri, mimeType: "application/json")])
     }
 

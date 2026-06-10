@@ -140,10 +140,10 @@ struct LibraryAccessorHelpersTests {
         #expect(elapsed < 2.0, "pure traversal should be < 2s, got \(elapsed)")
     }
 
-    // ---- T8 #20 Linear scaling proof (50/100/200 ratio ≤ 2.5×) ----
+    // ---- T8 #20 Linear scaling proof (probe calls grow 1 + 2n) ----
 
     @Test func testEnumerateTree_Perf_ScalesLinearly_NotQuadratic() async throws {
-        func time(folderCount n: Int) async -> TimeInterval {
+        func probeCalls(folderCount n: Int) async -> (Int, LibraryRoot?) {
             var build: [String: [String]?] = [:]
             var cats: [String] = []
             for i in 0..<n {
@@ -152,25 +152,24 @@ struct LibraryAccessorHelpersTests {
             }
             build[""] = cats
             let m = build
+            let calls = CallRecorder()
             let probe = TreeProbe(
-                childrenAt: { p in m[p.joined(separator: "/")] ?? nil },
+                childrenAt: { p in await calls.rec(); return m[p.joined(separator: "/")] ?? nil },
                 focusOK: { true }, mutationSinceLastCheck: { false },
                 sleep: { _ in }, visitedHash: { $0.joined(separator: "/").hashValue }
             )
-            let start = Date()
-            _ = await LibraryAccessor.enumerateTree(maxDepth: 12, settleDelayMs: 0, probe: probe)
-            return Date().timeIntervalSince(start)
+            let root = await LibraryAccessor.enumerateTree(maxDepth: 12, settleDelayMs: 0, probe: probe)
+            return (await calls.n, root)
         }
-        let t50 = await time(folderCount: 50)
-        let t100 = await time(folderCount: 100)
-        let t200 = await time(folderCount: 200)
-        // Ratio t100/t50 and t200/t100 should each be ≤ 2.5× (allow noise).
-        // If either is > 2.5 there's a super-linear bug.
-        if t50 > 0.001 {  // skip if too fast to measure
-            #expect(t100 / t50 < 2.5, "t100/t50=\(t100/t50)")
-        }
-        if t100 > 0.001 {
-            #expect(t200 / t100 < 2.5, "t200/t100=\(t200/t100)")
+        let samples = [
+            (n: 50, result: await probeCalls(folderCount: 50)),
+            (n: 100, result: await probeCalls(folderCount: 100)),
+            (n: 200, result: await probeCalls(folderCount: 200)),
+        ]
+        for sample in samples {
+            #expect(sample.result.0 == 1 + (sample.n * 2))
+            #expect(sample.result.1?.leafCount == sample.n)
+            #expect(sample.result.1?.folderCount == sample.n + 1)
         }
     }
 

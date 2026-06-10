@@ -760,6 +760,21 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     #expect((searchJSON?["entries"] as? [[String: Any]])?.isEmpty == false)
 }
 
+@Test func testE2EResourceWorkflowSkillsExposeValidatedPack() async throws {
+    let h = await makeE2EHandlers()
+    let list = try await h.readResource(.init(uri: "logic://workflow-skills"))
+    let detail = try await h.readResource(.init(uri: "logic://workflow-skills/logic.workflow.plugins.stock_chain_plan"))
+    let schema = try await h.readResource(.init(uri: "logic://workflow-skills/schema"))
+
+    let listJSON = e2eJSON(e2eResourceText(list))
+    let detailJSON = e2eJSON(e2eResourceText(detail))
+    let schemaJSON = e2eJSON(e2eResourceText(schema))
+    #expect(listJSON?["workflow_count"] as? Int ?? 0 >= 6)
+    #expect((listJSON?["validation"] as? [String: Any])?["is_valid"] as? Bool == true)
+    #expect((detailJSON?["workflow"] as? [String: Any])?["mutation_kind"] as? String == "read_only")
+    #expect((schemaJSON?["evidence_levels"] as? [String])?.contains("live_verified") == true)
+}
+
 @Test func testE2EResourceHealthMatchesToolHealth() async throws {
     let h = await makeE2EHandlers()
     let resourceResult = try await h.readResource(.init(uri: "logic://system/health"))
@@ -810,7 +825,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 
 @Test func testE2EServerCatalogAdvertisesAllResources() async {
     let snapshot = await LogicProServer().compositionSnapshot()
-    #expect(snapshot.resourceURIs.count >= 12)
+    #expect(snapshot.resourceURIs.count >= 14)
     let uris = Set(snapshot.resourceURIs)
     let expectedResources: Set<String> = [
         "logic://system/health",
@@ -825,6 +840,8 @@ typealias ServerStartRecorder = SharedServerStartRecorder
         "logic://stock-plugins",
         "logic://stock-plugins/census",
         "logic://stock-plugins/capabilities",
+        "logic://workflow-skills",
+        "logic://workflow-skills/schema",
     ]
     #expect(expectedResources.isSubset(of: uris))
 }
@@ -837,6 +854,8 @@ typealias ServerStartRecorder = SharedServerStartRecorder
         "logic://mixer/{strip}",
         "logic://stock-plugins/{id}",
         "logic://stock-plugins/search?query={query}",
+        "logic://workflow-skills/{id}",
+        "logic://workflow-skills/search?query={query}",
     ]
     #expect(expectedTemplates.isSubset(of: Set(snapshot.templateURIs)))
 }

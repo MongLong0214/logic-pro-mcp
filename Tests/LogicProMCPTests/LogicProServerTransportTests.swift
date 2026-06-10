@@ -398,6 +398,8 @@ private func waitForFeedbackEvents(
         "logic://stock-plugins",
         "logic://stock-plugins/census",
         "logic://stock-plugins/capabilities",
+        "logic://workflow-skills",
+        "logic://workflow-skills/schema",
     ]
     #expect(expectedResources.isSubset(of: Set(snapshot.resourceURIs)))
     let expectedTemplates: Set<String> = [
@@ -406,6 +408,8 @@ private func waitForFeedbackEvents(
         "logic://mixer/{strip}",
         "logic://stock-plugins/{id}",
         "logic://stock-plugins/search?query={query}",
+        "logic://workflow-skills/{id}",
+        "logic://workflow-skills/search?query={query}",
     ]
     #expect(expectedTemplates.isSubset(of: Set(snapshot.templateURIs)))
     #expect(snapshot.startupBanner == "Starting logic-pro-mcp v3.4.6 — 8 tools, \(snapshot.resourceURIs.count) resources, 4 channels")

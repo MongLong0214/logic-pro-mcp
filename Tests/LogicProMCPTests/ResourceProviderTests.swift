@@ -20,7 +20,7 @@ struct ResourceProviderTests {
         #expect(uris.count == Set(uris).count, "Duplicate template URI: \(uris)")
     }
 
-    @Test("new resources are registered: markers, mcu/state, library/inventory, stock plugins")
+    @Test("new resources are registered: markers, mcu/state, library/inventory, stock plugins, workflow skills")
     func newResourcesRegistered() {
         let uris = Set(ResourceProvider.resources.map(\.uri))
         #expect(uris.contains("logic://markers"))
@@ -29,6 +29,8 @@ struct ResourceProviderTests {
         #expect(uris.contains("logic://stock-plugins"))
         #expect(uris.contains("logic://stock-plugins/census"))
         #expect(uris.contains("logic://stock-plugins/capabilities"))
+        #expect(uris.contains("logic://workflow-skills"))
+        #expect(uris.contains("logic://workflow-skills/schema"))
     }
 
     @Test("new templates are registered: regions per track, mixer per strip, catalog/search detail")
@@ -38,6 +40,8 @@ struct ResourceProviderTests {
         #expect(uris.contains("logic://mixer/{strip}"))
         #expect(uris.contains("logic://stock-plugins/{id}"))
         #expect(uris.contains("logic://stock-plugins/search?query={query}"))
+        #expect(uris.contains("logic://workflow-skills/{id}"))
+        #expect(uris.contains("logic://workflow-skills/search?query={query}"))
     }
 
     @Test("every static resource URI maps to a handler")
