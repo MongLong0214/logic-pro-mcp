@@ -25,7 +25,7 @@ Logic Pro MCP Server is a Swift 6 actor-based system that multiplexes **7 native
        │                  │                   │                    │
 ┌──────▼────────┐  ┌──────▼────────┐  ┌───────▼────────┐  ┌────────▼──────┐
 │  Dispatchers  │  │ ResourceHandlers │ │   StateCache   │  │  StatePoller  │
-│ (8 tools)     │  │  (6 + template) │ │   (actor)      │  │ (3s AX poll)  │
+│ (8 tools)     │  │ (14 + 7 templ.) │ │   (actor)      │  │ (3s AX poll)  │
 └──────┬────────┘  └──────┬────────┘  └───────▲────────┘  └────────┬──────┘
        │                  │                   │                    │
        │                  │                   │                    │
@@ -63,7 +63,7 @@ Legend — `↕` bidirectional, `↑` read, `↓` write.
 | **Routing** | `ChannelRouter` — priority chain selection, fallback, health checks | `actor` | Actor |
 | **Channels** | 7 communication channels, each wrapping one macOS API | `actor` | Actor per channel |
 | **State** | `StateCache` (store) + `StatePoller` (3s AX refresh) | `actor` | Actor |
-| **Resources** | `ResourceHandlers` — URI routing, JSON serialization | `struct` | Pure |
+| **Resources** | `ResourceHandlers` — URI routing, read-only state/catalog JSON serialization | `struct` | Pure |
 | **Utilities** | `AppleScriptSafety`, `DestructivePolicy`, `PermissionChecker`, `Logger` | mixed | Pure / `enum` |
 
 ---

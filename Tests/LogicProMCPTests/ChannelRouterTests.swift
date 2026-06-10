@@ -307,6 +307,54 @@ actor TerminalStateCChannel: Channel {
     #expect(mcuOps.count == 1)
 }
 
+@Test func testTransportToggleAXButtonMissFallsThroughToKeyCmd() async {
+    let router = ChannelRouter()
+    let ax = TerminalStateCChannel(
+        id: .accessibility,
+        envelope: HonestContract.encodeStateC(
+            error: .elementNotFound,
+            hint: "transport button 'Metronome' not located in control bar",
+            extras: ["button": "Metronome"]
+        )
+    )
+    let keyCmd = MockChannel(id: .midiKeyCommands)
+    await router.register(ax)
+    await router.register(keyCmd)
+
+    let result = await router.route(operation: "transport.toggle_metronome")
+
+    #expect(result.isSuccess, "transport toggle should fall through when AX control-bar lookup misses")
+    let keyCmdOps = await keyCmd.executedOps
+    #expect(keyCmdOps.count == 1)
+    #expect(keyCmdOps[0].0 == "transport.toggle_metronome")
+}
+
+@Test func testTransportToggleCyclePrefersKeyCmdBeforeMCUAfterAXButtonMiss() async {
+    let router = ChannelRouter()
+    let ax = TerminalStateCChannel(
+        id: .accessibility,
+        envelope: HonestContract.encodeStateC(
+            error: .elementNotFound,
+            hint: "transport button 'Cycle' not located in control bar",
+            extras: ["button": "Cycle"]
+        )
+    )
+    let keyCmd = MockChannel(id: .midiKeyCommands)
+    let mcu = MockChannel(id: .mcu)
+    await router.register(ax)
+    await router.register(keyCmd)
+    await router.register(mcu)
+
+    let result = await router.route(operation: "transport.toggle_cycle")
+
+    #expect(result.isSuccess, "cycle toggle should use learned key command before MCU readback-unavailable success")
+    let keyCmdOps = await keyCmd.executedOps
+    let mcuOps = await mcu.executedOps
+    #expect(keyCmdOps.count == 1)
+    #expect(keyCmdOps[0].0 == "transport.toggle_cycle")
+    #expect(mcuOps.isEmpty)
+}
+
 @Test func testRouterStartAllReportsChannelFailures() async {
     let router = ChannelRouter()
     await router.register(MockChannel(id: .coreMIDI))

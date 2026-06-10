@@ -110,6 +110,27 @@ struct ResourceProvider {
             mimeType: "application/json",
             annotations: annotations(priority: 0.4)
         ),
+        Resource(
+            name: "Stock Plugin Intelligence",
+            uri: "logic://stock-plugins",
+            description: "Read-only Logic stock plugin catalog with truth labels, provenance, and limitations",
+            mimeType: "application/json",
+            annotations: annotations(priority: 0.45)
+        ),
+        Resource(
+            name: "Stock Plugin Census",
+            uri: "logic://stock-plugins/census",
+            description: "Current-machine stock plugin catalog census metadata and validation state",
+            mimeType: "application/json",
+            annotations: annotations(priority: 0.35)
+        ),
+        Resource(
+            name: "Stock Plugin Capabilities",
+            uri: "logic://stock-plugins/capabilities",
+            description: "Stock plugin catalog schema capabilities, truth labels, and read-only contract",
+            mimeType: "application/json",
+            annotations: annotations(priority: 0.35)
+        ),
     ]
 
     private static let baseTemplates: [Resource.Template] = [
@@ -129,6 +150,18 @@ struct ResourceProvider {
             uriTemplate: "logic://mixer/{strip}",
             name: "Channel Strip Detail",
             description: "Single channel strip by index (volume, pan, plugin chain)",
+            mimeType: "application/json"
+        ),
+        Resource.Template(
+            uriTemplate: "logic://stock-plugins/{id}",
+            name: "Stock Plugin Detail",
+            description: "Single stock plugin catalog entry by stable ID",
+            mimeType: "application/json"
+        ),
+        Resource.Template(
+            uriTemplate: "logic://stock-plugins/search?query={query}",
+            name: "Stock Plugin Search",
+            description: "Search stock plugin catalog entries by query",
             mimeType: "application/json"
         ),
     ]

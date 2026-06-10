@@ -95,6 +95,17 @@ import Testing
     #expect(HonestContract.terminalErrorCodes.contains("readback_unavailable"))
 }
 
+@Test func testStateCErrorCodeExtraction() {
+    let terminal = HonestContract.encodeStateC(error: .elementNotFound)
+    let nonTerminal = HonestContract.encodeStateC(error: .axWriteFailed)
+    let uncertain = HonestContract.encodeStateB(reason: .readbackUnavailable)
+
+    #expect(HonestContract.stateCErrorCode(terminal) == "element_not_found")
+    #expect(HonestContract.stateCErrorCode(nonTerminal) == "ax_write_failed")
+    #expect(HonestContract.stateCErrorCode(uncertain) == nil)
+    #expect(HonestContract.stateCErrorCode("not json") == nil)
+}
+
 @Test func testJSONIsSortedKeyDeterministic() {
     let a = HonestContract.jsonString(["b": 1, "a": 2])
     let b = HonestContract.jsonString(["a": 2, "b": 1])

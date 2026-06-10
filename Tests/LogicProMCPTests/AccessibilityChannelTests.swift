@@ -444,6 +444,7 @@ private func makeAXBackedAccessibilityChannel(
     #expect(!pressFailure.isSuccess)
     #expect(pressFailure.message.contains("\"error\":\"ax_write_failed\""))
     #expect(pressFailure.message.contains("AXPress failed on transport button 'Metronome'"))
+    #expect(!HonestContract.isTerminalStateC(pressFailure.message))
 }
 
 @Test func testAccessibilityChannelAXBackedTempoFallbackCanBeInjected() async {

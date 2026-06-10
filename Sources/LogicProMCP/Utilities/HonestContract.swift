@@ -166,18 +166,24 @@ enum HonestContract {
     /// suppress fallback when the primary channel has already reported an
     /// error the next channel cannot improve on.
     static func isTerminalStateC(_ message: String) -> Bool {
-        guard message.hasPrefix("{") else { return false }
+        guard let errorCode = stateCErrorCode(message) else { return false }
+        return terminalErrorCodes.contains(errorCode)
+    }
+
+    /// Returns the stable State C error code for a valid Honest Contract
+    /// failure envelope, or nil for free-form text / State A / State B.
+    static func stateCErrorCode(_ message: String) -> String? {
+        guard message.hasPrefix("{") else { return nil }
         guard let data = message.data(using: .utf8),
               let raw = try? JSONSerialization.jsonObject(with: data),
               let obj = raw as? [String: Any] else {
-            return false
+            return nil
         }
         // State A / B both carry `success:true`; only State C is `false`.
         guard let success = obj["success"] as? Bool, success == false else {
-            return false
+            return nil
         }
-        guard let errorCode = obj["error"] as? String else { return false }
-        return terminalErrorCodes.contains(errorCode)
+        return obj["error"] as? String
     }
 
     // MARK: - JSON serialization

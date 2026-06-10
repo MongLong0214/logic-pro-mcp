@@ -22,6 +22,12 @@ actor ChannelRouter {
 
     private var channels: [ChannelID: any Channel] = [:]
 
+    private static let transportToggleOpsAllowingAXElementFallback: Set<String> = [
+        "transport.toggle_cycle",
+        "transport.toggle_metronome",
+        "transport.toggle_count_in",
+    ]
+
     /// V2 routing table: MCU primary for mixer/transport/track state, MIDIKeyCommands for editing.
     /// PRD §4.3 + §4.3.1 contract changes.
     static let v2RoutingTable: [String: [ChannelID]] = [
@@ -33,7 +39,7 @@ actor ChannelRouter {
         "transport.pause":            [.coreMIDI, .cgEvent],
         "transport.rewind":           [.mcu, .coreMIDI, .cgEvent],
         "transport.fast_forward":     [.mcu, .coreMIDI, .cgEvent],
-        "transport.toggle_cycle":     [.accessibility, .mcu, .midiKeyCommands, .cgEvent],
+        "transport.toggle_cycle":     [.accessibility, .midiKeyCommands, .cgEvent, .mcu],
         "transport.toggle_metronome": [.accessibility, .midiKeyCommands, .cgEvent],
         // AX only — MIDIKeyCommands / CGEvent can't convey the tempo value
         // (MCU set_tempo CC fires blindly, no shortcut actually sets value).
@@ -375,6 +381,14 @@ actor ChannelRouter {
                 // in that case instead of wrapping it in the generic
                 // "All channels exhausted" message.
                 if HonestContract.isTerminalStateC(msg) {
+                    if Self.shouldContinueAfterTerminalStateC(operation: operation, channelID: channelID, message: msg) {
+                        Log.debug(
+                            "\(operation) terminal State C via \(channelID.rawValue) is recoverable by fallback: \(msg)",
+                            subsystem: "router"
+                        )
+                        lastError = msg
+                        continue
+                    }
                     Log.debug(
                         "\(operation) terminal State C via \(channelID.rawValue), suppressing fallback",
                         subsystem: "router"
@@ -402,6 +416,16 @@ actor ChannelRouter {
                 "last_error": lastError,
             ]
         ))
+    }
+
+    private static func shouldContinueAfterTerminalStateC(
+        operation: String,
+        channelID: ChannelID,
+        message: String
+    ) -> Bool {
+        channelID == .accessibility &&
+            transportToggleOpsAllowingAXElementFallback.contains(operation) &&
+            HonestContract.stateCErrorCode(message) == HonestContract.FailureError.elementNotFound.rawValue
     }
 
     /// Get health status for all registered channels.

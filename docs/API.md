@@ -1,6 +1,6 @@
 # API Reference
 
-Complete schema for Logic Pro MCP server. The server exposes **8 tools**, **9 resources**, and **3 resource templates** over MCP JSON-RPC (stdio transport). `logic://mcu/state` is filtered out of `resources/list` when the MCU control surface is disconnected.
+Complete schema for Logic Pro MCP server. The server exposes **8 tools**, **12 resources**, and **5 resource templates** over MCP JSON-RPC (stdio transport). `logic://mcu/state` is filtered out of `resources/list` when the MCU control surface is disconnected.
 
 **Design principle:** Tools perform write/action operations. **Reads are exposed exclusively through resources** — use `resources/read` for state queries, not tool calls.
 
@@ -30,7 +30,7 @@ All tool invocations use:
 
 ## Resource Catalog (Read-only)
 
-**9 static resources + 3 templates.** `logic://mcu/state` is filtered from `resources/list` when the MCU control surface is disconnected, but direct `resources/read` still works for bookmarked clients.
+**12 static resources + 5 templates.** `logic://mcu/state` is filtered from `resources/list` when the MCU control surface is disconnected, but direct `resources/read` still works for bookmarked clients.
 
 | URI | Content | Source |
 |-----|---------|--------|
@@ -43,13 +43,39 @@ All tool invocations use:
 | `logic://midi/ports` | `{ sources, destinations }` | CoreMIDI live query |
 | `logic://mcu/state` | `{ connection, display }` — MCU handshake + LCD state | Cache |
 | `logic://library/inventory` | Cached Library tree JSON (empty placeholder if not yet scanned) | File (resolved via `LOGIC_PRO_MCP_LIBRARY_INVENTORY` env, `Resources/library-inventory.json`, or `~/Library/Application Support/LogicProMCP/`). All candidates must sit under the path allowlist (`~/Library/Application Support/LogicProMCP/`, `<CWD>/Resources/`, `~/Music/Logic/`); extend via `LOGIC_PRO_MCP_INVENTORY_ALLOWLIST` (colon-separated, additive). |
+| `logic://stock-plugins` | `{ schema_version, generated_at, logic_version, catalog_source, validation, entries[] }` — conservative Logic stock plugin catalog with per-entry truth labels | Static catalog + local Logic app census |
+| `logic://stock-plugins/census` | Catalog census metadata, state counts, validation state | Static catalog + local Logic app census |
+| `logic://stock-plugins/capabilities` | Truth labels, safe write capability labels, and read-only catalog contract | Static |
 | `logic://tracks/{index}` | Single `TrackState` JSON | Cache — template |
 | `logic://tracks/{index}/regions` | `RegionState[]` JSON filtered by `trackIndex` | Cache — template |
 | `logic://mixer/{strip}` | `{ cache_age_sec, fetched_at, data_source, strip: ChannelStripState }` | Cache — template |
+| `logic://stock-plugins/{id}` | Single stock plugin catalog entry by stable ID | Static catalog + local Logic app census — template |
+| `logic://stock-plugins/search?query={query}` | Search stock plugin catalog entries | Static catalog + local Logic app census — template |
 
 All resources return `contents: [{ uri, text, mimeType: "application/json" }]`.
 
 Prefer resources over repeated tool calls — they are cheap and safe to poll at 1 Hz.
+
+### Stock Plugin Intelligence
+
+`logic://stock-plugins` is read-only. It does not insert plugins or broaden existing write gates. The catalog covers the documented Logic stock set (effects, instruments, MIDI FX) under stable ID namespaces `logic.stock.effect.*`, `logic.stock.instrument.*`, and `logic.stock.midi_fx.*`.
+
+Each entry has an `availability_state`:
+
+| State | Trust contract |
+|-------|----------------|
+| `verified` | Live insert/readback evidence on this machine, with source, method, timestamp, and evidence. |
+| `observed` | Seen in a live Logic session (e.g. menu observation) without full readback. |
+| `manifested` | Per-plugin factory metadata was found in the local Logic installation (a `Plug-In Settings/<Display Name>` folder), with the probed `source_path` recorded in provenance. |
+| `inferred` | Documented stock identity only; clients must verify against the live menu before relying on it. |
+| `unavailable` | A live census recorded this plugin as absent. Never produced by static knowledge alone. |
+| `readback_mismatch` | Live readback returned a different identity than expected. |
+
+The production census can only produce `inferred` and `manifested` (see `production_reachable_states` in `logic://stock-plugins/capabilities`); `verified`, `observed`, `unavailable`, and `readback_mismatch` require injected live-census evidence and are never fabricated. Absence of a factory settings folder is deliberately **not** treated as evidence of absence.
+
+`known_presets` stays empty unless preset names have provenance. For `manifested` entries it lists factory preset filenames harvested from the probed settings folder (capped at `preset_name_cap`, currently 12; the full set remains on disk at the provenance `source_path`).
+
+Clients should prefer stable `id` values and treat `display_name` as user-facing text, not identity. Insert paths are menu hints unless their own state says otherwise. Parameter metadata remains conservative: no parameter is `verified` unless a readback path is evidenced. Entries with `safe_write_capabilities: "insert_only"` (Gain, Compressor, Channel EQ) match the `logic_mixer insert_plugin` allowlist; everything else is discovery-only.
 
 ---
 

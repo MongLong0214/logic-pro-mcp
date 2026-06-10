@@ -132,7 +132,7 @@ Read this column-by-column. **"requires keycmd binding?"** is the question that 
 | `project.save (60)`                                                              | `logic_project.save`                           | AppleScript / CGEvent `Cmd+S`               | NO                       |
 | `project.save_as (61)`                                                           | `logic_project.save_as`                        | AppleScript / Accessibility                 | NO                       |
 | **`project.bounce (62)`**                                                        | `logic_project.bounce`                         | _none — cgEvent fallback unmapped_          | **YES**                  |
-| `transport.toggle_cycle (72)`                                                    | `logic_transport.toggle_cycle`                 | Accessibility / MCU / CGEvent `C`           | NO                       |
+| `transport.toggle_cycle (72)`                                                    | `logic_transport.toggle_cycle`                 | Accessibility / KeyCmd / CGEvent `C` / MCU  | NO                       |
 | **`transport.capture_recording (73)`**                                           | `logic_transport.capture_recording` _(none today; orphan)_ | _none — cgEvent fallback unmapped_ | **YES**                  |
 | `transport.toggle_metronome (98)`                                                | `logic_transport.toggle_metronome`             | Accessibility / CGEvent `K`                 | NO                       |
 | `transport.toggle_count_in (99)`                                                 | `logic_transport.toggle_count_in`              | Accessibility                               | NO                       |
