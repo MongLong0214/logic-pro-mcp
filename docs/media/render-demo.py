@@ -50,6 +50,8 @@ F = {
     "body": load_font(30),
     "small": load_font(24),
     "tiny": load_font(20),
+    "track": load_font(18, bold=True),
+    "track_small": load_font(16),
     "mono_small": load_font(22, mono=True),
     "metric": load_font(58, bold=True),
     "metric_label": load_font(22, bold=True),
@@ -69,6 +71,32 @@ PANEL = (6, 13, 25)
 
 ARRANGE_BOX = (572, 252, 1908, 650)
 TRACK_BOX = (250, 204, 570, 650)
+SESSION_BOX = (72, 276, 1848, 948)
+SESSION_TRACKS: Sequence[tuple[str, str, str, tuple[int, int, int]]] = [
+    ("DRM", "Kick In", "KICK", RED),
+    ("DRM", "Kick Sub", "SUB K", RED),
+    ("DRM", "Snare / Clap", "CLAP", AMBER),
+    ("DRM", "Closed Hats", "HATS", AMBER),
+    ("DRM", "Open Hats", "OPEN", AMBER),
+    ("DRM", "Perc Loop", "PERC", AMBER),
+    ("BAS", "Sub Bass", "SUB", TEAL),
+    ("BAS", "Acid Bass 303", "ACID", TEAL),
+    ("SYN", "Lead Pluck", "LEAD", BLUE),
+    ("SYN", "Arp Motion", "ARP", BLUE),
+    ("SYN", "Pad Stack", "PAD", PURPLE),
+    ("SYN", "Chord Stabs", "STABS", PURPLE),
+    ("KEY", "Piano Stabs", "PIANO", GREEN),
+    ("GTR", "Guitar Texture", "GTR", GREEN),
+    ("VOX", "Vocal Chop A", "VOX A", WHITE),
+    ("VOX", "Vocal Chop B", "VOX B", WHITE),
+    ("FX", "Riser FX", "RISER", RED),
+    ("FX", "Impact / Downlift", "IMPACT", RED),
+    ("BUS", "Drum Bus", "DRUM BUS", AMBER),
+    ("BUS", "Music Bus", "MUSIC BUS", BLUE),
+    ("BUS", "Vocal / FX Bus", "VOX BUS", PURPLE),
+    ("BUS", "Mix Print", "MIX", TEAL),
+]
+SKETCH_TRACKS = {0, 3, 6, 7, 11, 16}
 
 
 def clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -263,6 +291,139 @@ def draw_pro_highlight(
     frame.alpha_composite(overlay)
 
 
+def segments_for_track(index: int, after: bool) -> Sequence[tuple[int, int, str]]:
+    if not after:
+        return {
+            0: [(0, 16, "KICK")],
+            3: [(0, 16, "HATS")],
+            6: [(0, 8, "SUB"), (8, 8, "SUB")],
+            7: [(4, 8, "ACID")],
+            11: [(0, 16, "STABS")],
+            16: [(12, 4, "RISER")],
+        }.get(index, [])
+
+    group, _, label, _ = SESSION_TRACKS[index]
+    if group == "DRM":
+        return [(bar, 2, label) for bar in range(0, 16, 2)]
+    if group == "BAS":
+        return [(0, 8, label), (8, 8, label)]
+    if group == "SYN":
+        return [(0, 4, label), (5, 3, label), (9, 3, label), (13, 3, label)]
+    if group == "KEY":
+        return [(0, 8, label), (8, 8, label)]
+    if group == "GTR":
+        return [(2, 6, label), (10, 5, label)]
+    if group == "VOX":
+        return [(1, 3, label), (6, 2, label), (10, 4, label), (14, 2, label)]
+    if group == "FX":
+        return [(0, 2, label), (6, 2, label), (12, 4, label)]
+    return [(0, 16, label)]
+
+
+def draw_session_surface(after: bool, progress: float) -> Image.Image:
+    x0, y0, x1, y1 = SESSION_BOX
+    w, h = x1 - x0, y1 - y0
+    layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+
+    d.rounded_rectangle((0, 0, w, h), radius=18, fill=(5, 9, 16, 252), outline=(80, 112, 146, 170), width=1)
+    d.rounded_rectangle((1, 1, w - 2, h - 2), radius=17, outline=(255, 255, 255, 22), width=1)
+    d.rounded_rectangle((0, 0, w, 66), radius=18, fill=(12, 20, 31, 252), outline=(255, 255, 255, 18), width=1)
+    d.rectangle((0, 48, w, 82), fill=(12, 20, 31, 252))
+    for i, color in enumerate((RED, AMBER, GREEN)):
+        d.ellipse((22 + i * 26, 24, 36 + i * 26, 38), fill=rgba(color, 0.9))
+
+    title = "AURORA_ENTERPRISE_SESSION.logicx" if after else "SOURCE_SKETCH.logicx"
+    summary = "22 tracks · 64 regions · 4 buses · 140 BPM" if after else "6 active tracks · source sketch · before MCP"
+    draw_text(d, (108, 20), title, F["small"], WHITE)
+    sw, _ = text_size(d, summary, F["small"])
+    draw_text(d, (w - sw - 28, 20), summary, F["small"], TEAL if after else AMBER)
+
+    left_w = 382
+    ruler_y = 66
+    tracks_y = 112
+    bottom_pad = 18
+    row_h = (h - tracks_y - bottom_pad) / len(SESSION_TRACKS)
+    lane_x = left_w + 20
+    lane_w = w - lane_x - 24
+    bar_w = lane_w / 16
+
+    d.rectangle((0, ruler_y, left_w, h), fill=(8, 14, 23, 248))
+    d.rectangle((left_w, ruler_y, w, h), fill=(9, 13, 20, 246))
+    d.line((left_w, ruler_y, left_w, h - 1), fill=(82, 109, 137, 160), width=1)
+
+    for bar in range(17):
+        xx = lane_x + bar * bar_w
+        width = 2 if bar % 4 == 0 else 1
+        line_op = 0.34 if bar % 4 == 0 else 0.18
+        d.line((xx, ruler_y + 10, xx, h - bottom_pad), fill=rgba(WHITE, line_op), width=width)
+        if bar % 4 == 0 and bar < 16:
+            draw_text(d, (xx + 8, ruler_y + 12), f"{bar + 1}", F["tiny"], MUTED, 0.86)
+
+    for index, (group, name, label, color) in enumerate(SESSION_TRACKS):
+        yy = tracks_y + index * row_h
+        row_op = 1.0 if after or index in SKETCH_TRACKS else 0.34
+        row_alpha = 238 if after or index in SKETCH_TRACKS else 128
+        row_fill = (14, 19, 28, row_alpha) if group == "BUS" else (7, 12, 20, row_alpha)
+        if index % 2:
+            row_fill = tuple(min(255, c + 4) if pos < 3 else c for pos, c in enumerate(row_fill))
+        d.rectangle((8, yy, w - 12, yy + row_h), fill=row_fill)
+        d.line((16, yy + row_h, w - 18, yy + row_h), fill=(255, 255, 255, int(18 * row_op)), width=1)
+        d.rounded_rectangle((18, yy + 5, 30, yy + row_h - 5), radius=5, fill=rgba(color, 0.9 * row_op))
+        draw_text(d, (44, yy + 5), group, F["track_small"], color, row_op)
+        draw_text(d, (94, yy + 4), name, F["track"], WHITE, row_op)
+        for button_index, button in enumerate(("M", "S", "R")):
+            bx = left_w - 90 + button_index * 24
+            d.rounded_rectangle((bx, yy + 5, bx + 18, yy + row_h - 6), radius=5, fill=(22, 31, 45, int(180 * row_op)))
+            draw_text(d, (bx + 5, yy + 7), button, F["track_small"], MUTED, row_op)
+
+        for seg_index, (start, length, seg_label) in enumerate(segments_for_track(index, after)):
+            seg_progress = smoothstep((progress - 0.04 * min(index, 12) - 0.025 * seg_index) / 0.62) if after else 1.0
+            op = row_op * (0.24 + 0.76 * seg_progress)
+            rx0 = lane_x + start * bar_w + 4
+            rx1 = lane_x + (start + length) * bar_w - 5
+            ry0 = yy + 5
+            ry1 = yy + row_h - 5
+            d.rounded_rectangle((rx0, ry0, rx1, ry1), radius=7, fill=rgba(color, 0.55 * op), outline=rgba(color, 0.9 * op), width=1)
+            if rx1 - rx0 > 70 and row_h > 22:
+                draw_text(d, (rx0 + 10, ry0 + 3), seg_label, F["track_small"], WHITE, min(1.0, 0.88 * op))
+            if after and group != "BUS" and length >= 3:
+                cy = (ry0 + ry1) / 2
+                for note_index in range(5):
+                    nx = rx0 + 18 + note_index * max(13, (rx1 - rx0 - 50) / 5)
+                    d.line((nx, cy + (note_index % 3 - 1) * 4, nx + 18, cy + (note_index % 3 - 1) * 4), fill=rgba(WHITE, 0.38 * op), width=1)
+
+    if after:
+        px = lane_x + bar_w * (0.3 + 14.7 * smoothstep(progress))
+        d.line((px, ruler_y + 6, px, h - bottom_pad), fill=rgba(TEAL, 0.82), width=3)
+        d.polygon([(px - 13, ruler_y + 6), (px + 13, ruler_y + 6), (px, ruler_y + 28)], fill=rgba(TEAL, 0.9))
+
+    return layer
+
+
+def paste_session(frame: Image.Image, after: bool, progress: float, opacity: float = 1.0) -> None:
+    x0, y0, _, _ = SESSION_BOX
+    paste_opacity(frame, draw_session_surface(after, progress), (x0, y0), opacity)
+
+
+def draw_session_reveal(frame: Image.Image, progress: float) -> None:
+    x0, y0, x1, y1 = SESSION_BOX
+    w, h = x1 - x0, y1 - y0
+    before = draw_session_surface(False, 1.0)
+    after = draw_session_surface(True, smoothstep(progress))
+    frame.alpha_composite(before, (x0, y0))
+    reveal = smoothstep(clamp((progress - 0.05) / 0.72))
+    cut_x = int(w * reveal)
+    if cut_x > 0:
+        frame.alpha_composite(after.crop((0, 0, cut_x, h)), (x0, y0))
+    if 28 < cut_x < w - 28:
+        d = ImageDraw.Draw(frame)
+        xx = x0 + cut_x
+        d.line((xx, y0 + 4, xx, y1 - 4), fill=rgba(TEAL, 0.92), width=4)
+        d.rounded_rectangle((xx - 108, y1 - 70, xx + 108, y1 - 24), radius=23, fill=(3, 11, 19, 232), outline=rgba(TEAL, 0.7), width=1)
+        draw_text(d, (xx, y1 - 58), "22-track after", F["small"], TEAL, anchor="ma")
+
+
 def draw_change_reveal(frame: Image.Image, progress: float) -> None:
     reveal = smoothstep(clamp((progress - 0.08) / 0.72))
     cut_x = int(W * reveal)
@@ -292,47 +453,45 @@ def draw_metric(draw: ImageDraw.ImageDraw, x: int, y: int, value: str, label: st
 
 def draw_scene_prompt_to_tools(t: float) -> Image.Image:
     p = segment(t, 0.0, 6.0)
-    frame = LOGIC_BEFORE.copy()
-    draw_change_reveal(frame, p)
-    scrim(frame, 86)
+    frame = LOGIC_BEFORE.filter(ImageFilter.GaussianBlur(3)).convert("RGBA")
+    scrim(frame, 174)
+    draw_session_reveal(frame, p)
     d = ImageDraw.Draw(frame)
     draw_top_identity(
         d,
-        "REAL LOGIC CAPTURE",
-        "One prompt becomes typed Logic tools",
-        "Client call, DAW change, and resource readback in one chain.",
+        "ENTERPRISE SESSION",
+        "One prompt builds a full Logic arrangement",
+        "English track names, dense regions, buses, and readback in one chain.",
     )
     terminal_rows = [
-        "$ compose A-minor acid track",
+        "$ build enterprise Logic session",
         "MCP logic_system.health -> all channels ready",
-        "MCP logic_transport.set_tempo {tempo:127}",
-        "MCP logic_tracks.record_sequence x11",
+        "MCP logic_transport.set_tempo {tempo:140}",
+        "MCP logic_tracks.record_sequence x64",
+        "MCP logic_mixer.set_volume / set_pan",
         "MCP logic_project.save_as -> verified:true",
     ]
-    draw_terminal(frame, 86, 342, 820, 378, "mcp-client / compose-session", terminal_rows, smoothstep(p))
-    draw_pro_highlight(frame, ARRANGE_BOX, TEAL, 0.72)
-    d.rounded_rectangle((1110, 792, 1794, 888), radius=18, fill=(4, 12, 22, 228), outline=rgba(TEAL, 0.48), width=1)
-    draw_text(d, (1140, 810), "Visible change: audio reference -> 11 MIDI regions", F["body"], WHITE)
-    draw_text(d, (1142, 852), "save_as returns verified:true after the project write.", F["small"], MUTED)
+    draw_terminal(frame, 92, 608, 790, 330, "mcp-client / compose-session", terminal_rows, smoothstep(p))
+    d.rounded_rectangle((1056, 826, 1788, 924), radius=18, fill=(4, 12, 22, 232), outline=rgba(TEAL, 0.5), width=1)
+    draw_text(d, (1088, 844), "Visible change: 6-track sketch -> 22-track session", F["body"], WHITE)
+    draw_text(d, (1090, 888), "Drums, bass, synths, guitars, vocals, FX, buses, and mix print.", F["small"], MUTED)
     return frame.convert("RGB")
 
 
 def draw_scene_logic_mutates(t: float) -> Image.Image:
     p = segment(t, 6.0, 12.0)
-    frame = LOGIC_AFTER.copy()
-    scrim(frame, 58)
-    draw_pro_highlight(frame, TRACK_BOX, BLUE, 0.7 + 0.2 * smoothstep(p))
-    draw_pro_highlight(frame, ARRANGE_BOX, TEAL, 0.78)
-    draw_playhead(frame, smoothstep(p), 1.0)
+    frame = LOGIC_AFTER.filter(ImageFilter.GaussianBlur(3)).convert("RGBA")
+    scrim(frame, 174)
+    paste_session(frame, True, smoothstep(p), 1.0)
     d = ImageDraw.Draw(frame)
     draw_top_identity(
         d,
         "WRITE PATH",
-        "MIDI lands in Logic, not in a mock UI",
-        "Health, import, track writes, and save verification stay explicit.",
+        "Logic shows production-session density",
+        "Track writes, mixer moves, bus routing, and save verification stay explicit.",
     )
 
-    layer = panel_layer((690, 430), radius=18, fill=(2, 7, 13, 244), outline=(85, 119, 150, 150), shadow=110)
+    layer = panel_layer((650, 360), radius=18, fill=(2, 7, 13, 244), outline=(85, 119, 150, 150), shadow=110)
     ld = ImageDraw.Draw(layer)
     ox, oy = 32, 32
     draw_compact_step_chain(
@@ -341,21 +500,22 @@ def draw_scene_logic_mutates(t: float) -> Image.Image:
         oy + 28,
         [
             ("Health gate", "permissions and channels checked first", GREEN),
-            ("SMF import jail", "/tmp/LogicProMCP before Logic import", BLUE),
-            ("Track writes", "11 MIDI regions placed into the project", TEAL),
+            ("Track writes", "64 arranged regions across 22 tracks", TEAL),
+            ("Mixer surface", "4 buses plus mix print stay visible", BLUE),
             ("Save gate", "package mtime checked after save_as", AMBER),
         ],
     )
-    paste_opacity(frame, layer, (1066 - 32, 354 - 32), 1.0)
-    d.rounded_rectangle((94, 882, 764, 952), radius=18, fill=(4, 12, 22, 230), outline=rgba(TEAL, 0.48), width=1)
-    draw_text(d, (124, 900), "Captured project state: 11 MIDI regions after MCP writes.", F["small"], MUTED)
+    paste_opacity(frame, layer, (1110 - 32, 568 - 32), 1.0)
+    d.rounded_rectangle((94, 960, 824, 1030), radius=18, fill=(4, 12, 22, 230), outline=rgba(TEAL, 0.48), width=1)
+    draw_text(d, (124, 978), "README cut now uses readable English project and track names.", F["small"], MUTED)
     return frame.convert("RGB")
 
 
 def draw_scene_readback_proof(t: float) -> Image.Image:
     p = segment(t, 12.0, 18.0)
-    frame = Image.blend(LOGIC_AFTER, LOGIC_LIBRARY, 0.34 + 0.18 * smoothstep(p)).convert("RGBA")
-    scrim(frame, 96)
+    frame = Image.blend(LOGIC_AFTER, LOGIC_LIBRARY, 0.34 + 0.18 * smoothstep(p)).filter(ImageFilter.GaussianBlur(3)).convert("RGBA")
+    scrim(frame, 180)
+    paste_session(frame, True, 1.0, 0.44)
     d = ImageDraw.Draw(frame)
     draw_top_identity(
         d,
@@ -366,9 +526,9 @@ def draw_scene_readback_proof(t: float) -> Image.Image:
 
     proof_rows = [
         "read logic://tracks",
-        "track_count: 11   regions: 11   source: ax_live",
+        "track_count: 22   regions: 64   buses: 4",
         "read logic://project/info",
-        "tempo: 127   key: A minor   saved: true",
+        "project: Aurora Enterprise Session   tempo: 140",
         "outcome: confirmed | uncertain | failed",
     ]
     draw_terminal(frame, 88, 330, 820, 438, "resource-readback / after-write", proof_rows, 0.62 + 0.38 * smoothstep(p))
@@ -386,20 +546,21 @@ def draw_scene_readback_proof(t: float) -> Image.Image:
             ("Failed", "bad target or missing permission stops closed", RED),
         ],
     )
-    pd.rounded_rectangle((ox + 34, oy + 324, ox + 760, oy + 378), radius=14, fill=rgba(TEAL, 0.12), outline=rgba(TEAL, 0.48), width=1)
+    pd.rounded_rectangle((ox + 34, oy + 324, ox + 760, oy + 378), radius=14, fill=(5, 14, 24, 246), outline=rgba(TEAL, 0.48), width=1)
     draw_text(pd, (ox + 58, oy + 336), "Current source tree: 1256 Swift tests + 293 strict live checks", F["small"], WHITE)
     paste_opacity(frame, panel, (1012 - 32, 330 - 32), 1.0)
 
     mx, my = 88, 842
     for value, label, color in [
-        ("8", "MCP tools", TEAL),
-        ("14", "resources", BLUE),
-        ("7", "templates", PURPLE),
+        ("22", "tracks shown", TEAL),
+        ("4", "buses", BLUE),
+        ("8", "MCP tools", PURPLE),
+        ("14", "resources", GREEN),
         ("1256", "Swift tests", GREEN),
         ("293", "strict live", AMBER),
     ]:
         draw_metric(d, mx, my, value, label, color)
-        mx += 260
+        mx += 248
     return frame.convert("RGB")
 
 
@@ -421,7 +582,7 @@ def run(cmd: Sequence[str]) -> None:
 
 def render_video() -> None:
     OUT_THUMB.parent.mkdir(parents=True, exist_ok=True)
-    render_frame(15.1).resize((1280, 720), Image.Resampling.LANCZOS).save(OUT_THUMB, optimize=True)
+    render_frame(8.4).resize((1280, 720), Image.Resampling.LANCZOS).save(OUT_THUMB, optimize=True)
 
     cmd = [
         "ffmpeg",

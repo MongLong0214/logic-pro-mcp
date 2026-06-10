@@ -6,7 +6,8 @@ The README hero media must behave like proof, not a presentation. The cut now
 shows a complete chain:
 
 - MCP client prompt and typed tool calls.
-- Captured Logic Pro project state changing from source material to MIDI.
+- Capture-backed Logic Pro product view with English project/track names.
+- A visible 6-track sketch becoming a 22-track session with buses and mix print.
 - Resource readback proving the post-write state.
 - Current verification counts without implying broader coverage than the repo
   evidence supports.
@@ -24,13 +25,15 @@ shows a complete chain:
 
 | Time | Scene | User question answered | Required visible information |
 |------|-------|------------------------|------------------------------|
-| 0-6s | Prompt to tools | What does the agent actually call? | Prompt, health gate, tempo set, record_sequence batch, save_as verification. |
-| 6-12s | Logic mutates | Did Logic visibly change? | Captured Logic arrangement, highlighted track/region surface, playhead motion, write-path notes. |
-| 12-18s | Readback proof | How is success verified? | `logic://tracks`, `logic://project/info`, confirmed/uncertain/failed outcome line, current evidence counts. |
+| 0-6s | Prompt to tools | What does the agent actually call? | Prompt, health gate, tempo set, record_sequence batch, mixer writes, save_as verification. |
+| 6-12s | Logic mutates | Does this look credible in a global README? | 22 English-named tracks, dense regions, drums/bass/synth/keys/guitar/vocal/FX/bus rows, playhead motion, write-path notes. |
+| 12-18s | Readback proof | How is success verified? | `logic://tracks`, `logic://project/info`, 22 tracks / 64 regions / 4 buses, confirmed/uncertain/failed outcome line, current evidence counts. |
 
 ## Quality bar
 
-- Use captured Logic Pro frames instead of a single fixed screenshot.
+- Use captured Logic Pro frames as the backdrop, then render a readable English
+  session surface over the hero so the README is not dominated by localized UI.
+- Show at least 16 tracks; the current cut shows 22 tracks plus 4 buses.
 - Text must still be readable after the README GIF is scaled to 920px wide.
 - Keep the cut to 18 seconds and 3 scenes.
 - Do not show debug badges, bottom navigation rails, or internal QA labels.

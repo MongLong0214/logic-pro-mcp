@@ -19,7 +19,7 @@
 
 <p align="center">
   <a href="docs/media/logic-pro-mcp-demo.mp4">
-    <img src="docs/media/logic-pro-mcp-demo.gif" alt="18 second Logic Pro MCP proof chain showing an MCP client prompt, typed Logic tool calls, captured Logic project changes, resource readback, and verification evidence" width="920" />
+    <img src="docs/media/logic-pro-mcp-demo.gif" alt="18 second Logic Pro MCP proof chain showing an MCP client prompt, typed Logic tool calls, a 22-track English Logic session, resource readback, and verification evidence" width="920" />
   </a>
 </p>
 
