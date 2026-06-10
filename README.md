@@ -19,12 +19,12 @@
 
 <p align="center">
   <a href="docs/media/logic-pro-mcp-demo.mp4">
-    <img src="docs/media/logic-pro-mcp-demo.gif" alt="22 second Logic Pro MCP demo showing an AI agent request, MIDI regions in Logic Pro, and verified readback" width="920" />
+    <img src="docs/media/logic-pro-mcp-demo.gif" alt="34 second Logic Pro MCP product walkthrough showing MCP client setup, agent tool calls, channel routing, live readback resources, and verification evidence" width="920" />
   </a>
 </p>
 
 <p align="center">
-  <a href="docs/media/logic-pro-mcp-demo.mp4">22 sec MP4</a> ·
+  <a href="docs/media/logic-pro-mcp-demo.mp4">34 sec MP4</a> ·
   <a href="docs/media/logic-pro-mcp-thumbnail.png">social thumbnail</a>
 </p>
 
