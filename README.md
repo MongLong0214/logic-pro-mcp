@@ -19,12 +19,12 @@
 
 <p align="center">
   <a href="docs/media/logic-pro-mcp-demo.mp4">
-    <img src="docs/media/logic-pro-mcp-demo.gif" alt="34 second Logic Pro MCP product walkthrough showing MCP client setup, agent tool calls, channel routing, live readback resources, and verification evidence" width="920" />
+    <img src="docs/media/logic-pro-mcp-demo.gif" alt="18 second Logic Pro MCP proof chain showing an MCP client prompt, typed Logic tool calls, captured Logic project changes, resource readback, and verification evidence" width="920" />
   </a>
 </p>
 
 <p align="center">
-  <a href="docs/media/logic-pro-mcp-demo.mp4">34 sec MP4</a> ·
+  <a href="docs/media/logic-pro-mcp-demo.mp4">18 sec MP4</a> ·
   <a href="docs/media/logic-pro-mcp-thumbnail.png">social thumbnail</a>
 </p>
 

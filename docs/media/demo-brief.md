@@ -1,16 +1,15 @@
 # README Demo Brief
 
-## Verdict on the discarded cut
+## Replacement Standard
 
-The previous cut is rejected because it behaves like a mood reel. It shows a
-Logic Pro background and abstract trust language, but it does not answer the
-questions a first-time README visitor needs answered before trying the project:
+The README hero media must behave like proof, not a presentation. The cut now
+shows a complete chain:
 
-- What is this project, in one sentence?
-- How do I connect it to an MCP client?
-- What can an agent actually do inside Logic Pro?
-- Why is this safer than screen macros?
-- What evidence proves the repo is not just a concept demo?
+- MCP client prompt and typed tool calls.
+- Captured Logic Pro project state changing from source material to MIDI.
+- Resource readback proving the post-write state.
+- Current verification counts without implying broader coverage than the repo
+  evidence supports.
 
 ## Audience
 
@@ -25,20 +24,17 @@ questions a first-time README visitor needs answered before trying the project:
 
 | Time | Scene | User question answered | Required visible information |
 |------|-------|------------------------|------------------------------|
-| 0-4s | What it is | Why does this repo exist? | Logic has no first-party agent API; Logic Pro MCP is a typed MCP control plane. |
-| 4-10s | Connect | How do I use it? | Homebrew install, MCP client registration, required macOS permissions. |
-| 10-17s | Control | What does it actually do? | Real tool calls for project creation, MIDI sequence writing, instrument routing, guarded plugin insertion. |
-| 17-23s | Safety | Why not just use macros? | Channel routing, confirmation gates, fail-closed/uncertain outcome handling. |
-| 23-29s | Readback | How can an agent verify results? | `logic://...` resources, live readback examples, confirmed/uncertain/failed outcome line. |
-| 29-34s | Proof | Why should I trust it? | Tool/resource/template counts, Swift tests, strict live checks, stable release line. |
+| 0-6s | Prompt to tools | What does the agent actually call? | Prompt, health gate, tempo set, record_sequence batch, save_as verification. |
+| 6-12s | Logic mutates | Did Logic visibly change? | Captured Logic arrangement, highlighted track/region surface, playhead motion, write-path notes. |
+| 12-18s | Readback proof | How is success verified? | `logic://tracks`, `logic://project/info`, confirmed/uncertain/failed outcome line, current evidence counts. |
 
 ## Quality bar
 
-- No camera pan, zoom, or crop drift; the Logic Pro screenshot must remain a
-  fixed frame.
+- Use captured Logic Pro frames instead of a single fixed screenshot.
 - Text must still be readable after the README GIF is scaled to 920px wide.
-- Every scene must carry concrete product information, not abstract marketing
-  copy.
+- Keep the cut to 18 seconds and 3 scenes.
+- Do not show debug badges, bottom navigation rails, or internal QA labels.
+- Every scene must carry concrete product information, not abstract marketing copy.
 - The video must not claim a capability without a matching README/source-tree
   surface.
 - MP4, GIF, thumbnail, and renderer must be reproducible from

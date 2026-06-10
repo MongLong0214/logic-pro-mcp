@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 """Render the README product walkthrough media.
 
-The previous README video optimized for atmosphere and did not answer the
-buyer's first questions. This renderer treats the GIF/MP4 as a compact product
-walkthrough: what it is, how it connects, what it controls, why it is safer than
-macros, and what proof exists.
-
-The Logic Pro screenshot is a locked still. Only overlays animate so the demo
-cannot introduce camera pan, crop drift, or UI wobble.
+This cut is a compact proof chain, not a slide deck. It uses captured Logic Pro
+frames, a readable MCP-client surface, visible before/after project change, and
+resource readback evidence. It intentionally avoids debug badges, bottom scene
+navigation, tiny copy, and claims that are not grounded in repo artifacts.
 """
 
 from __future__ import annotations
@@ -15,14 +12,15 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parents[2]
-BG_PATH = ROOT / "artifacts/acid-track-composition/logic-after-feeder-finished.png"
+BEFORE_PATH = ROOT / "artifacts/acid-track-composition/logic-before-new-composition.png"
+AFTER_PATH = ROOT / "artifacts/acid-track-composition/logic-after-feeder-finished.png"
+LIBRARY_PATH = ROOT / "artifacts/acid-track-composition/logic-v2-library-current.png"
 OUT_MP4 = ROOT / "docs/media/logic-pro-mcp-demo.mp4"
 OUT_GIF = ROOT / "docs/media/logic-pro-mcp-demo.gif"
 OUT_THUMB = ROOT / "docs/media/logic-pro-mcp-thumbnail.png"
@@ -30,7 +28,7 @@ OUT_THUMB = ROOT / "docs/media/logic-pro-mcp-thumbnail.png"
 W, H = 1920, 1080
 FPS = 24
 GIF_FPS = 12
-DURATION = 34.0
+DURATION = 18.0
 FRAMES = int(FPS * DURATION)
 
 FONT = "/System/Library/Fonts/SFNS.ttf"
@@ -47,14 +45,11 @@ def load_font(size: int, *, bold: bool = False, mono: bool = False) -> ImageFont
 
 F = {
     "eyebrow": load_font(24, bold=True),
-    "brand": load_font(48, bold=True),
     "hero": load_font(66, bold=True),
-    "headline": load_font(54, bold=True),
     "title": load_font(38, bold=True),
     "body": load_font(30),
     "small": load_font(24),
     "tiny": load_font(20),
-    "mono": load_font(25, mono=True),
     "mono_small": load_font(22, mono=True),
     "metric": load_font(58, bold=True),
     "metric_label": load_font(22, bold=True),
@@ -63,7 +58,6 @@ F = {
 WHITE = (248, 251, 255)
 INK = (5, 10, 18)
 MUTED = (196, 207, 222)
-SUBTLE = (143, 158, 178)
 LINE = (84, 112, 142)
 TEAL = (35, 226, 184)
 BLUE = (83, 145, 255)
@@ -75,24 +69,6 @@ PANEL = (6, 13, 25)
 
 ARRANGE_BOX = (572, 252, 1908, 650)
 TRACK_BOX = (250, 204, 570, 650)
-TEMPO_BOX = (884, 63, 1166, 126)
-
-
-@dataclass(frozen=True)
-class Scene:
-    start: float
-    end: float
-    label: str
-
-
-SCENES = [
-    Scene(0.0, 4.2, "What it is"),
-    Scene(4.2, 10.0, "Connect"),
-    Scene(10.0, 16.7, "Control"),
-    Scene(16.7, 23.2, "Safety"),
-    Scene(23.2, 29.0, "Readback"),
-    Scene(29.0, 34.0, "Proof"),
-]
 
 
 def clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -102,10 +78,6 @@ def clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
 def smoothstep(value: float) -> float:
     value = clamp(value)
     return value * value * (3 - 2 * value)
-
-
-def scene_opacity(t: float, start: float, end: float, fade: float = 0.45) -> float:
-    return smoothstep((t - start) / fade) * (1 - smoothstep((t - (end - fade)) / fade))
 
 
 def rgba(color: tuple[int, int, int], opacity: float) -> tuple[int, int, int, int]:
@@ -118,12 +90,8 @@ def with_alpha(color: tuple[int, ...], opacity: float) -> tuple[int, int, int, i
     return (*color, int(255 * clamp(opacity)))
 
 
-def text_bbox(draw: ImageDraw.ImageDraw, text: str, face: ImageFont.FreeTypeFont) -> tuple[int, int, int, int]:
-    return draw.textbbox((0, 0), text, font=face)
-
-
 def text_size(draw: ImageDraw.ImageDraw, text: str, face: ImageFont.FreeTypeFont) -> tuple[int, int]:
-    box = text_bbox(draw, text, face)
+    box = draw.textbbox((0, 0), text, font=face)
     return box[2] - box[0], box[3] - box[1]
 
 
@@ -149,42 +117,6 @@ def draw_text(
             anchor=anchor,
         )
     draw.text(xy, value, font=face, fill=with_alpha(fill, opacity), anchor=anchor)
-
-
-def wrap_text(draw: ImageDraw.ImageDraw, value: str, face: ImageFont.FreeTypeFont, max_width: int) -> list[str]:
-    words = value.split()
-    lines: list[str] = []
-    current = ""
-    for word in words:
-        candidate = word if not current else f"{current} {word}"
-        if text_size(draw, candidate, face)[0] <= max_width:
-            current = candidate
-            continue
-        if current:
-            lines.append(current)
-        current = word
-    if current:
-        lines.append(current)
-    return lines
-
-
-def draw_wrapped(
-    draw: ImageDraw.ImageDraw,
-    xy: tuple[int, int],
-    value: str,
-    face: ImageFont.FreeTypeFont,
-    fill: tuple[int, int, int] = MUTED,
-    opacity: float = 1.0,
-    *,
-    max_width: int,
-    line_gap: int = 12,
-) -> int:
-    x, y = xy
-    line_h = text_size(draw, "Ag", face)[1] + line_gap
-    for line in wrap_text(draw, value, face, max_width):
-        draw_text(draw, (x, y), line, face, fill, opacity)
-        y += line_h
-    return y
 
 
 def paste_opacity(dst: Image.Image, src: Image.Image, xy: tuple[int, int], opacity: float) -> None:
@@ -240,368 +172,243 @@ def pill(
     return w
 
 
-def make_base() -> Image.Image:
-    bg = Image.open(BG_PATH).convert("RGB").resize((W, H), Image.Resampling.LANCZOS).convert("RGBA")
-    base = Image.alpha_composite(bg, Image.new("RGBA", (W, H), (0, 0, 0, 76)))
-
-    gradient = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    px = gradient.load()
-    for y in range(H):
-        top = int(104 * max(0, 1 - y / 260))
-        bottom = int(170 * max(0, (y - 520) / (H - 520)))
-        side = 0
-        alpha = max(top, bottom, side)
-        if alpha:
-            for x in range(W):
-                horizontal = int(58 * max(0, 1 - x / 520))
-                px[x, y] = (0, 0, 0, max(alpha, horizontal))
-
-    vignette = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    vd = ImageDraw.Draw(vignette)
-    for i in range(72):
-        vd.rounded_rectangle((i * 2, i * 2, W - i * 2, H - i * 2), radius=18, outline=(0, 0, 0, int(i * 0.55)), width=2)
-    return Image.alpha_composite(Image.alpha_composite(base, gradient), vignette)
+def load_logic_capture(path: Path) -> Image.Image:
+    return Image.open(path).convert("RGB").resize((W, H), Image.Resampling.LANCZOS).convert("RGBA")
 
 
-BASE = make_base()
+LOGIC_BEFORE = load_logic_capture(BEFORE_PATH)
+LOGIC_AFTER = load_logic_capture(AFTER_PATH)
+LOGIC_LIBRARY = load_logic_capture(LIBRARY_PATH)
 
 
-def draw_locked_background_note(frame: Image.Image, t: float) -> None:
+def segment(t: float, start: float, end: float) -> float:
+    return clamp((t - start) / (end - start))
+
+
+def scrim(frame: Image.Image, opacity: int = 92) -> None:
+    frame.alpha_composite(Image.new("RGBA", (W, H), (0, 0, 0, opacity)))
+
+
+def draw_top_identity(draw: ImageDraw.ImageDraw, eyebrow: str, title: str, subtitle: str) -> None:
+    pill(draw, 72, 58, eyebrow, TEAL, 1.0, fill_dark=True)
+    draw_text(draw, (72, 120), title, F["hero"], WHITE, 1.0, shadow=True)
+    draw_text(draw, (76, 202), subtitle, F["body"], MUTED, 1.0, shadow=True)
+
+
+def terminal_line_color(line: str) -> tuple[int, int, int]:
+    if line.startswith("$") or line.startswith("MCP"):
+        return TEAL
+    if "verified:true" in line or "confirmed" in line or "ready" in line:
+        return GREEN
+    if line.startswith("read") or "logic://" in line:
+        return BLUE
+    if "uncertain" in line or "fail" in line:
+        return AMBER
+    return MUTED
+
+
+def draw_terminal(
+    frame: Image.Image,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    title: str,
+    rows: Sequence[str],
+    progress: float,
+) -> None:
+    layer = panel_layer((w, h), radius=18, fill=(2, 7, 13, 244), outline=(85, 119, 150, 150), shadow=110)
+    d = ImageDraw.Draw(layer)
+    ox, oy = 32, 32
+    d.rounded_rectangle((ox, oy, ox + w, oy + 58), radius=18, fill=(12, 21, 33, 235), outline=(255, 255, 255, 18), width=1)
+    for i, color in enumerate((RED, AMBER, GREEN)):
+        d.ellipse((ox + 22 + i * 26, oy + 22, ox + 36 + i * 26, oy + 36), fill=rgba(color, 0.88))
+    draw_text(d, (ox + 108, oy + 18), title, F["small"], WHITE)
+
+    visible = max(1, min(len(rows), int(progress * (len(rows) + 1.3))))
+    row_y = oy + 88
+    for idx, line in enumerate(rows[:visible]):
+        op = 1.0 if idx < visible - 1 else 0.72 + 0.28 * smoothstep((progress * (len(rows) + 1.3)) % 1)
+        draw_text(d, (ox + 30, row_y), line, F["mono_small"], terminal_line_color(line), op)
+        row_y += 42
+
+    if visible < len(rows):
+        cursor_x = ox + 30
+        cursor_y = row_y + 4
+        if int(progress * 18) % 2 == 0:
+            d.rectangle((cursor_x, cursor_y, cursor_x + 14, cursor_y + 25), fill=rgba(TEAL, 0.78))
+    paste_opacity(frame, layer, (x - 32, y - 32), 1.0)
+
+
+def draw_playhead(frame: Image.Image, progress: float, opacity: float = 1.0) -> None:
     d = ImageDraw.Draw(frame)
-    op = 0.82
-    d.rounded_rectangle((1500, 36, 1844, 86), radius=25, fill=(5, 11, 20, int(210 * op)), outline=(77, 101, 126, int(130 * op)), width=1)
-    d.ellipse((1523, 54, 1541, 72), fill=rgba(TEAL, op))
-    draw_text(d, (1554, 51), "fixed Logic Pro frame", F["small"], WHITE, op)
+    x = int(612 + (2032 - 612) * progress)
+    x = max(612, min(1848, x))
+    d.line((x, 166, x, 746), fill=rgba(WHITE, 0.42 * opacity), width=2)
+    d.line((x + 2, 166, x + 2, 746), fill=rgba(TEAL, 0.88 * opacity), width=3)
+    d.polygon([(x - 12, 164), (x + 16, 164), (x + 2, 190)], fill=rgba(TEAL, 0.92 * opacity))
 
 
-def draw_header(frame: Image.Image, t: float) -> None:
-    d = ImageDraw.Draw(frame)
-    draw_text(d, (66, 42), "Logic Pro MCP", F["brand"], WHITE, 1.0, shadow=True)
-    draw_text(d, (68, 97), "MCP server for agent-controlled Logic Pro sessions", F["small"], MUTED, 1.0)
-    draw_locked_background_note(frame, t)
-
-
-def draw_scene_nav(frame: Image.Image, t: float) -> None:
-    d = ImageDraw.Draw(frame)
-    x0, y = 92, 1006
-    w = 1736
-    d.rounded_rectangle((64, 960, 1856, 1046), radius=14, fill=(5, 12, 23, 222), outline=(78, 102, 131, 112), width=1)
-    d.line((x0, y, x0 + w, y), fill=(89, 117, 150, 150), width=4)
-    progress = clamp(t / DURATION)
-    d.line((x0, y, x0 + w * progress, y), fill=rgba(TEAL, 0.95), width=7)
-    for scene in SCENES:
-        sx = x0 + w * (scene.start / DURATION)
-        active = 0.55 + 0.45 * clamp((t - scene.start) / 0.45) * (1 - 0.5 * clamp((t - scene.end) / 0.45))
-        color = TEAL if scene.start <= t < scene.end else BLUE
-        d.ellipse((sx - 9, y - 9, sx + 9, y + 9), fill=rgba(color, active), outline=rgba(WHITE, 0.2), width=1)
-        draw_text(d, (sx + 18, y - 35), scene.label, F["tiny"], MUTED if scene.start > t else WHITE, active)
-
-
-def draw_callout_rect(frame: Image.Image, box: tuple[int, int, int, int], color: tuple[int, int, int], opacity: float) -> None:
-    if opacity <= 0:
-        return
-    d = ImageDraw.Draw(frame)
+def draw_pro_highlight(
+    frame: Image.Image,
+    box: tuple[int, int, int, int],
+    color: tuple[int, int, int],
+    opacity: float = 1.0,
+) -> None:
+    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(overlay)
     x0, y0, x1, y1 = box
-    for i in range(5):
-        d.rounded_rectangle(
-            (x0 - i * 5, y0 - i * 5, x1 + i * 5, y1 + i * 5),
-            radius=12 + i * 2,
-            outline=rgba(color, opacity * (0.35 - i * 0.05)),
-            width=3,
-        )
-    d.rounded_rectangle((x0, y0, x1, y1), radius=10, outline=rgba(color, 0.85 * opacity), width=3)
+    d.rounded_rectangle((x0, y0, x1, y1), radius=14, fill=rgba(color, 0.06 * opacity), outline=rgba(color, 0.7 * opacity), width=3)
+    d.rounded_rectangle((x0 + 6, y0 + 6, x1 - 6, y1 - 6), radius=10, outline=rgba(WHITE, 0.12 * opacity), width=1)
+    frame.alpha_composite(overlay)
 
 
-def draw_intro(frame: Image.Image, t: float) -> None:
-    op = scene_opacity(t, 0.0, 4.2)
-    if op <= 0:
-        return
+def draw_change_reveal(frame: Image.Image, progress: float) -> None:
+    reveal = smoothstep(clamp((progress - 0.08) / 0.72))
+    cut_x = int(W * reveal)
+    if cut_x > 0:
+        frame.alpha_composite(LOGIC_AFTER.crop((0, 0, cut_x, H)), (0, 0))
+    if 24 < cut_x < W - 24:
+        d = ImageDraw.Draw(frame)
+        d.line((cut_x, 0, cut_x, H), fill=rgba(TEAL, 0.92), width=4)
+        d.rounded_rectangle((cut_x - 86, 904, cut_x + 86, 952), radius=24, fill=(3, 11, 19, 230), outline=rgba(TEAL, 0.65), width=1)
+        draw_text(d, (cut_x, 916), "after MCP", F["small"], TEAL, anchor="ma")
+
+
+def draw_compact_step_chain(draw: ImageDraw.ImageDraw, x: int, y: int, steps: Sequence[tuple[str, str, tuple[int, int, int]]]) -> None:
+    for i, (label, body, color) in enumerate(steps):
+        yy = y + i * 86
+        draw.ellipse((x, yy + 6, x + 28, yy + 34), fill=rgba(color, 0.92))
+        draw_text(draw, (x + 9, yy + 5), str(i + 1), F["tiny"], INK)
+        draw_text(draw, (x + 46, yy), label, F["title"], WHITE)
+        draw_text(draw, (x + 48, yy + 43), body, F["small"], MUTED)
+
+
+def draw_metric(draw: ImageDraw.ImageDraw, x: int, y: int, value: str, label: str, color: tuple[int, int, int]) -> None:
+    draw.rounded_rectangle((x, y, x + 232, y + 132), radius=14, fill=(5, 14, 24, 232), outline=rgba(color, 0.58), width=1)
+    draw_text(draw, (x + 28, y + 22), value, F["metric"], color, 1.0, shadow=True)
+    draw_text(draw, (x + 30, y + 90), label, F["metric_label"], MUTED)
+
+
+def draw_scene_prompt_to_tools(t: float) -> Image.Image:
+    p = segment(t, 0.0, 6.0)
+    frame = LOGIC_BEFORE.copy()
+    draw_change_reveal(frame, p)
+    scrim(frame, 86)
     d = ImageDraw.Draw(frame)
-    x, y, w, h = 92, 222, 846, 520
-    layer = panel_layer((w, h), fill=(4, 10, 19, 238), outline=(76, 112, 146, 136))
+    draw_top_identity(
+        d,
+        "REAL LOGIC CAPTURE",
+        "One prompt becomes typed Logic tools",
+        "Client call, DAW change, and resource readback in one chain.",
+    )
+    terminal_rows = [
+        "$ compose A-minor acid track",
+        "MCP logic_system.health -> all channels ready",
+        "MCP logic_transport.set_tempo {tempo:127}",
+        "MCP logic_tracks.record_sequence x11",
+        "MCP logic_project.save_as -> verified:true",
+    ]
+    draw_terminal(frame, 86, 342, 820, 378, "mcp-client / compose-session", terminal_rows, smoothstep(p))
+    draw_pro_highlight(frame, ARRANGE_BOX, TEAL, 0.72)
+    d.rounded_rectangle((1110, 792, 1794, 888), radius=18, fill=(4, 12, 22, 228), outline=rgba(TEAL, 0.48), width=1)
+    draw_text(d, (1140, 810), "Visible change: audio reference -> 11 MIDI regions", F["body"], WHITE)
+    draw_text(d, (1142, 852), "save_as returns verified:true after the project write.", F["small"], MUTED)
+    return frame.convert("RGB")
+
+
+def draw_scene_logic_mutates(t: float) -> Image.Image:
+    p = segment(t, 6.0, 12.0)
+    frame = LOGIC_AFTER.copy()
+    scrim(frame, 58)
+    draw_pro_highlight(frame, TRACK_BOX, BLUE, 0.7 + 0.2 * smoothstep(p))
+    draw_pro_highlight(frame, ARRANGE_BOX, TEAL, 0.78)
+    draw_playhead(frame, smoothstep(p), 1.0)
+    d = ImageDraw.Draw(frame)
+    draw_top_identity(
+        d,
+        "WRITE PATH",
+        "MIDI lands in Logic, not in a mock UI",
+        "Health, import, track writes, and save verification stay explicit.",
+    )
+
+    layer = panel_layer((690, 430), radius=18, fill=(2, 7, 13, 244), outline=(85, 119, 150, 150), shadow=110)
     ld = ImageDraw.Draw(layer)
     ox, oy = 32, 32
-    pill(ld, ox + 32, oy + 30, "README WALKTHROUGH", TEAL, 1)
-    draw_text(ld, (ox + 32, oy + 95), "What this is", F["headline"], WHITE, 1, shadow=True)
-    next_y = draw_wrapped(
+    draw_compact_step_chain(
         ld,
-        (ox + 34, oy + 178),
-        "Claude, Cursor, or any MCP client gets typed tools for Logic actions and read resources for session state.",
-        F["body"],
-        MUTED,
-        1,
-        max_width=w - 92,
-        line_gap=12,
+        ox + 28,
+        oy + 28,
+        [
+            ("Health gate", "permissions and channels checked first", GREEN),
+            ("SMF import jail", "/tmp/LogicProMCP before Logic import", BLUE),
+            ("Track writes", "11 MIDI regions placed into the project", TEAL),
+            ("Save gate", "package mtime checked after save_as", AMBER),
+        ],
     )
-    bullets = [
-        ("8 write tools", "transport, tracks, mixer, MIDI, project", TEAL),
-        ("14 read resources", "tracks, mixer, project, plugins", BLUE),
-        ("Fail-closed safety", "confirmed, uncertain, failed", AMBER),
-    ]
-    yy = next_y + 32
-    for title, body, color in bullets:
-        ld.ellipse((ox + 36, yy + 7, ox + 52, yy + 23), fill=(*color, 230))
-        draw_text(ld, (ox + 68, yy), title, F["small"], WHITE)
-        draw_text(ld, (ox + 68, yy + 30), body, F["tiny"], SUBTLE)
-        yy += 66
-    paste_opacity(frame, layer, (x - 32, y - 32), op)
-
-    draw_callout_rect(frame, ARRANGE_BOX, TEAL, op * 0.9)
-    d.rounded_rectangle((1144, 212, 1532, 260), radius=24, fill=(5, 12, 23, int(224 * op)), outline=rgba(TEAL, 0.7 * op), width=1)
-    d.ellipse((1170, 228, 1188, 246), fill=rgba(TEAL, op))
-    draw_text(d, (1204, 223), "real Logic Pro project state", F["small"], WHITE, op)
+    paste_opacity(frame, layer, (1066 - 32, 354 - 32), 1.0)
+    d.rounded_rectangle((94, 882, 764, 952), radius=18, fill=(4, 12, 22, 230), outline=rgba(TEAL, 0.48), width=1)
+    draw_text(d, (124, 900), "Captured project state: 11 MIDI regions after MCP writes.", F["small"], MUTED)
+    return frame.convert("RGB")
 
 
-def flow_node(layer: Image.Image, center: tuple[int, int], title: str, subtitle: str, color: tuple[int, int, int]) -> None:
-    d = ImageDraw.Draw(layer)
-    x, y = center
-    d.rounded_rectangle((x - 132, y - 58, x + 132, y + 58), radius=18, fill=(9, 19, 34, 236), outline=rgba(color, 0.72), width=2)
-    d.ellipse((x - 98, y - 20, x - 64, y + 14), fill=rgba(color, 0.95))
-    draw_text(d, (x - 48, y - 27), title, F["small"], WHITE)
-    draw_text(d, (x - 48, y + 7), subtitle, F["tiny"], SUBTLE)
-
-
-def draw_connect(frame: Image.Image, t: float) -> None:
-    op = scene_opacity(t, 4.2, 10.0)
-    if op <= 0:
-        return
+def draw_scene_readback_proof(t: float) -> Image.Image:
+    p = segment(t, 12.0, 18.0)
+    frame = Image.blend(LOGIC_AFTER, LOGIC_LIBRARY, 0.34 + 0.18 * smoothstep(p)).convert("RGBA")
+    scrim(frame, 96)
     d = ImageDraw.Draw(frame)
-    left = panel_layer((720, 610), fill=(4, 10, 19, 240), outline=(78, 111, 145, 134))
-    ld = ImageDraw.Draw(left)
-    ox, oy = 32, 32
-    pill(ld, ox + 30, oy + 28, "1. CONNECT", BLUE)
-    draw_text(ld, (ox + 30, oy + 92), "Two commands, then permissions", F["title"], WHITE, shadow=True)
-    commands = [
-        "brew tap MongLong0214/logic-pro-mcp",
-        "brew install logic-pro-mcp",
-        "claude mcp add --scope user logic-pro --",
-        "  LogicProMCP",
-    ]
-    code_y = oy + 158
-    ld.rounded_rectangle((ox + 28, code_y, ox + 660, code_y + 194), radius=14, fill=(1, 7, 14, 235), outline=(73, 103, 136, 118), width=1)
-    for i, line in enumerate(commands):
-        prefix = "$ " if i < 3 else "  "
-        draw_text(ld, (ox + 52, code_y + 28 + i * 42), f"{prefix}{line}", F["mono_small"], TEAL if i >= 2 else WHITE)
-    checklist_y = code_y + 222
-    draw_text(ld, (ox + 30, checklist_y), "Runtime grants the server checks:", F["small"], MUTED)
-    checks = [("Accessibility", TEAL), ("Automation", BLUE), ("CoreMIDI visibility", AMBER)]
-    for i, (label, color) in enumerate(checks):
-        yy = checklist_y + 48 + i * 44
-        ld.rounded_rectangle((ox + 32, yy, ox + 64, yy + 32), radius=8, fill=rgba(color, 0.92))
-        draw_text(ld, (ox + 41, yy + 4), "OK", F["tiny"], INK)
-        draw_text(ld, (ox + 82, yy + 2), label, F["body"], WHITE)
-    paste_opacity(frame, left, (88 - 32, 210 - 32), op)
-
-    flow = Image.new("RGBA", (900, 400), (0, 0, 0, 0))
-    fd = ImageDraw.Draw(flow)
-    centers = [(170, 190), (450, 190), (730, 190)]
-    for (x0, y0), (x1, y1) in zip(centers, centers[1:]):
-        fd.line((x0 + 140, y0, x1 - 140, y1), fill=rgba(TEAL, 0.78), width=5)
-        fd.polygon([(x1 - 150, y1 - 12), (x1 - 122, y1), (x1 - 150, y1 + 12)], fill=rgba(TEAL, 0.78))
-    flow_node(flow, centers[0], "MCP client", "Claude / Cursor", TEAL)
-    flow_node(flow, centers[1], "Swift server", "stdio MCP", BLUE)
-    flow_node(flow, centers[2], "Logic Pro", "native channels", GREEN)
-    draw_text(fd, (450, 294), "One typed interface hides seven macOS control channels.", F["small"], MUTED, anchor="ma")
-    paste_opacity(frame, flow, (920, 374), op)
-
-
-def draw_control(frame: Image.Image, t: float) -> None:
-    op = scene_opacity(t, 10.0, 16.7)
-    if op <= 0:
-        return
-    d = ImageDraw.Draw(frame)
-    draw_callout_rect(frame, TEMPO_BOX, AMBER, op)
-    draw_callout_rect(frame, TRACK_BOX, BLUE, op)
-    draw_callout_rect(frame, ARRANGE_BOX, TEAL, op)
-    d.rounded_rectangle((1068, 136, 1358, 184), radius=24, fill=(5, 12, 23, int(224 * op)), outline=rgba(AMBER, 0.7 * op), width=1)
-    draw_text(d, (1092, 148), "tempo + project state", F["small"], WHITE, op)
-    d.rounded_rectangle((456, 672, 756, 720), radius=24, fill=(5, 12, 23, int(224 * op)), outline=rgba(BLUE, 0.7 * op), width=1)
-    draw_text(d, (480, 684), "tracks and instruments", F["small"], WHITE, op)
-    d.rounded_rectangle((1320, 672, 1608, 720), radius=24, fill=(5, 12, 23, int(224 * op)), outline=rgba(TEAL, 0.7 * op), width=1)
-    draw_text(d, (1344, 684), "MIDI regions created", F["small"], WHITE, op)
-
-    panel = panel_layer((760, 620), fill=(4, 10, 19, 240), outline=(78, 111, 145, 134))
-    pd = ImageDraw.Draw(panel)
-    ox, oy = 32, 32
-    pill(pd, ox + 28, oy + 28, "2. CONTROL", TEAL)
-    draw_text(pd, (ox + 28, oy + 92), "The agent calls tools, not random clicks", F["title"], WHITE, shadow=True)
-    prompt = '"Make a 4-bar techno loop in A minor at 140 BPM."'
-    draw_wrapped(pd, (ox + 30, oy + 148), prompt, F["body"], MUTED, max_width=680)
-    code_y = oy + 224
-    pd.rounded_rectangle((ox + 28, code_y, ox + 704, code_y + 300), radius=14, fill=(1, 7, 14, 236), outline=(73, 103, 136, 118), width=1)
-    code = [
-        "logic_project.new(...)",
-        "logic_tracks.record_sequence",
-        "  tempo: 140   key: A minor   bars: 4",
-        "logic_tracks.set_instrument -> Studio Grand",
-        "logic_mixer.insert_plugin -> Gain",
-        "  confirmation: true",
-    ]
-    for i, line in enumerate(code):
-        color = TEAL if i in (0, 1, 3, 4) else MUTED
-        draw_text(pd, (ox + 54, code_y + 28 + i * 42), line, F["mono_small"], color)
-    paste_opacity(frame, panel, (92 - 32, 304 - 32), op)
-
-
-def draw_safety_table(draw: ImageDraw.ImageDraw, x: int, y: int, rows: Sequence[tuple[str, str, str, tuple[int, int, int]]]) -> None:
-    col = [x, x + 210, x + 470]
-    draw_text(draw, (col[0], y), "Operation", F["eyebrow"], SUBTLE)
-    draw_text(draw, (col[1], y), "Best channel", F["eyebrow"], SUBTLE)
-    draw_text(draw, (col[2], y), "Guard", F["eyebrow"], SUBTLE)
-    y += 44
-    for operation, channel, guard, color in rows:
-        draw.rounded_rectangle((x - 16, y - 12, x + 700, y + 42), radius=12, fill=(255, 255, 255, 10), outline=(255, 255, 255, 16), width=1)
-        draw_text(draw, (col[0], y), operation, F["small"], WHITE)
-        draw_text(draw, (col[1], y), channel, F["small"], color)
-        draw_text(draw, (col[2], y), guard, F["small"], MUTED)
-        y += 66
-
-
-def draw_safety(frame: Image.Image, t: float) -> None:
-    op = scene_opacity(t, 16.7, 23.2)
-    if op <= 0:
-        return
-    panel = panel_layer((930, 630), fill=(4, 10, 19, 242), outline=(78, 111, 145, 134))
-    d = ImageDraw.Draw(panel)
-    ox, oy = 32, 32
-    pill(d, ox + 30, oy + 28, "3. SAFETY", AMBER)
-    draw_text(d, (ox + 30, oy + 92), "Different operation, different route", F["title"], WHITE, shadow=True)
-    draw_wrapped(
+    draw_top_identity(
         d,
-        (ox + 32, oy + 145),
-        "The server does not pretend one automation channel is reliable for everything. It routes each action to the strongest available macOS surface, then keeps failure explicit.",
-        F["body"],
-        MUTED,
-        max_width=820,
-        line_gap=10,
+        "READBACK PROOF",
+        "Tools mutate. Resources prove.",
+        "Agent clients can inspect Logic state instead of trusting a transcript.",
     )
-    rows = [
-        ("Transport", "CoreMIDI + AX", "live state readback", TEAL),
-        ("MIDI regions", "SMF import", "/tmp import jail", BLUE),
-        ("Mixer/plugin", "MCU + AX", "slot readback", AMBER),
-        ("Project ops", "policy gate", "confirmation required", RED),
-    ]
-    draw_safety_table(d, ox + 42, oy + 256, rows)
-    d.rounded_rectangle((ox + 30, oy + 555, ox + 870, oy + 602), radius=12, fill=rgba(RED, 0.14), outline=rgba(RED, 0.48), width=1)
-    draw_text(d, (ox + 54, oy + 565), "Uncertain writes stay uncertain. They are not reported as success.", F["small"], WHITE)
-    paste_opacity(frame, panel, (92 - 32, 266 - 32), op)
 
-    meter = Image.new("RGBA", (520, 380), (0, 0, 0, 0))
-    md = ImageDraw.Draw(meter)
-    outcomes = [("confirmed", GREEN, 0.92), ("uncertain", AMBER, 0.58), ("failed", RED, 0.34)]
-    for i, (label, color, length) in enumerate(outcomes):
-        yy = 92 + i * 82
-        md.rounded_rectangle((80, yy, 480, yy + 34), radius=17, fill=(7, 15, 28, 232), outline=(84, 112, 142, 120), width=1)
-        md.rounded_rectangle((80, yy, 80 + int(400 * length), yy + 34), radius=17, fill=rgba(color, 0.9))
-        draw_text(md, (80, yy - 34), label, F["small"], WHITE)
-    draw_text(md, (280, 320), "Honest Contract envelope", F["small"], MUTED, anchor="ma")
-    paste_opacity(frame, meter, (1220, 420), op)
-
-
-def draw_readback(frame: Image.Image, t: float) -> None:
-    op = scene_opacity(t, 23.2, 29.0)
-    if op <= 0:
-        return
-    d = ImageDraw.Draw(frame)
-    draw_callout_rect(frame, ARRANGE_BOX, GREEN, op * 0.8)
-    panel = panel_layer((900, 610), fill=(4, 10, 19, 242), outline=(78, 111, 145, 134))
-    pd = ImageDraw.Draw(panel)
-    ox, oy = 32, 32
-    pill(pd, ox + 30, oy + 28, "4. READBACK", GREEN)
-    draw_text(pd, (ox + 30, oy + 92), "Read state before success", F["title"], WHITE, shadow=True)
-    draw_wrapped(
-        pd,
-        (ox + 32, oy + 146),
-        "Tools mutate. Resources read. Agents can inspect the Logic session after the action instead of trusting a prompt transcript.",
-        F["body"],
-        MUTED,
-        max_width=810,
-        line_gap=10,
-    )
-    code_y = oy + 238
-    pd.rounded_rectangle((ox + 30, code_y, ox + 842, code_y + 300), radius=14, fill=(1, 7, 14, 236), outline=(73, 103, 136, 118), width=1)
-    code = [
-        "read logic://transport/state",
-        "tempo: 140   cycle: true   source: ax_poll",
-        "",
-        "read logic://mixer/strip/2",
-        "plugin: Gain   verified: true",
-        "",
+    proof_rows = [
+        "read logic://tracks",
+        "track_count: 11   regions: 11   source: ax_live",
+        "read logic://project/info",
+        "tempo: 127   key: A minor   saved: true",
         "outcome: confirmed | uncertain | failed",
     ]
-    for i, line in enumerate(code):
-        if not line:
-            continue
-        color = TEAL if line.startswith("resources/read") else (GREEN if "outcome" in line else MUTED)
-        draw_text(pd, (ox + 58, code_y + 26 + i * 38), line, F["mono_small"], color)
-    paste_opacity(frame, panel, (92 - 32, 268 - 32), op)
+    draw_terminal(frame, 88, 330, 820, 438, "resource-readback / after-write", proof_rows, 0.62 + 0.38 * smoothstep(p))
 
-    badges = Image.new("RGBA", (650, 230), (0, 0, 0, 0))
-    bd = ImageDraw.Draw(badges)
-    labels = [("logic://tracks", TEAL), ("logic://mixer", BLUE), ("logic://project/info", AMBER), ("logic://stock-plugins", PURPLE), ("logic://workflow-skills", GREEN)]
-    x, y = 24, 30
-    for label, color in labels:
-        width = pill(bd, x, y, label, color, 1, fill_dark=True)
-        x += width + 14
-        if x > 430:
-            x, y = 24, y + 58
-    draw_text(bd, (330, 188), "read surfaces, not extra clicks", F["small"], MUTED, anchor="ma")
-    paste_opacity(frame, badges, (1180, 650), op)
-
-
-def draw_metric_card(draw: ImageDraw.ImageDraw, x: int, y: int, value: str, label: str, color: tuple[int, int, int], opacity: float) -> None:
-    draw.rounded_rectangle((x, y, x + 214, y + 134), radius=16, fill=(8, 18, 32, int(226 * opacity)), outline=rgba(color, 0.65 * opacity), width=1)
-    draw_text(draw, (x + 28, y + 24), value, F["metric"], color, opacity, shadow=True)
-    draw_text(draw, (x + 30, y + 91), label, F["metric_label"], MUTED, opacity)
-
-
-def draw_proof(frame: Image.Image, t: float) -> None:
-    op = scene_opacity(t, 29.0, 34.0)
-    if op <= 0:
-        return
-    d = ImageDraw.Draw(frame)
-    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    ld = ImageDraw.Draw(layer)
-    ld.rectangle((0, 548, W, H), fill=(0, 0, 0, int(148 * op)))
-    pill(ld, 92, 618, "5. PROOF", TEAL, op)
-    draw_text(ld, (92, 680), "Agent-grade DAW control, with evidence attached", F["hero"], WHITE, op, shadow=True)
-    draw_text(
-        ld,
-        (96, 768),
-        "Use it when you want agents to compose, edit, mix, inspect, and stop honestly when Logic cannot be verified.",
-        F["body"],
-        MUTED,
-        op,
+    panel = panel_layer((820, 438), radius=18, fill=(3, 9, 17, 242), outline=(85, 119, 150, 150), shadow=110)
+    pd = ImageDraw.Draw(panel)
+    ox, oy = 32, 32
+    draw_compact_step_chain(
+        pd,
+        ox + 32,
+        oy + 36,
+        [
+            ("Confirmed", "verified writes get explicit provenance", GREEN),
+            ("Uncertain", "ambiguous UI state stays non-success", AMBER),
+            ("Failed", "bad target or missing permission stops closed", RED),
+        ],
     )
-    metrics = [
+    pd.rounded_rectangle((ox + 34, oy + 324, ox + 760, oy + 378), radius=14, fill=rgba(TEAL, 0.12), outline=rgba(TEAL, 0.48), width=1)
+    draw_text(pd, (ox + 58, oy + 336), "Current source tree: 1256 Swift tests + 293 strict live checks", F["small"], WHITE)
+    paste_opacity(frame, panel, (1012 - 32, 330 - 32), 1.0)
+
+    mx, my = 88, 842
+    for value, label, color in [
         ("8", "MCP tools", TEAL),
         ("14", "resources", BLUE),
         ("7", "templates", PURPLE),
         ("1256", "Swift tests", GREEN),
         ("293", "strict live", AMBER),
-    ]
-    mx = 96
-    for value, label, color in metrics:
-        draw_metric_card(ld, mx, 836, value, label, color, op)
-        mx += 236
-    ld.rounded_rectangle((1410, 840, 1814, 966), radius=18, fill=(6, 14, 26, int(232 * op)), outline=rgba(TEAL, 0.58 * op), width=1)
-    draw_text(ld, (1440, 866), "Stable install line", F["small"], SUBTLE, op)
-    draw_text(ld, (1440, 904), "v3.4.6", F["headline"], TEAL, op, shadow=True)
-    draw_text(ld, (1592, 919), "ADHOC universal", F["small"], WHITE, op)
-    frame.alpha_composite(layer)
+    ]:
+        draw_metric(d, mx, my, value, label, color)
+        mx += 260
+    return frame.convert("RGB")
 
 
 def render_frame(t: float) -> Image.Image:
-    frame = BASE.copy()
-    draw_header(frame, t)
-    draw_intro(frame, t)
-    draw_connect(frame, t)
-    draw_control(frame, t)
-    draw_safety(frame, t)
-    draw_readback(frame, t)
-    draw_proof(frame, t)
-    draw_scene_nav(frame, t)
-    return frame.convert("RGB")
+    if t < 6.0:
+        return draw_scene_prompt_to_tools(t)
+    if t < 12.0:
+        return draw_scene_logic_mutates(t)
+    return draw_scene_readback_proof(t)
 
 
 def run(cmd: Sequence[str]) -> None:
@@ -614,7 +421,7 @@ def run(cmd: Sequence[str]) -> None:
 
 def render_video() -> None:
     OUT_THUMB.parent.mkdir(parents=True, exist_ok=True)
-    render_frame(30.4).resize((1280, 720), Image.Resampling.LANCZOS).save(OUT_THUMB, optimize=True)
+    render_frame(15.1).resize((1280, 720), Image.Resampling.LANCZOS).save(OUT_THUMB, optimize=True)
 
     cmd = [
         "ffmpeg",
