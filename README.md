@@ -19,12 +19,12 @@
 
 <p align="center">
   <a href="docs/media/logic-pro-mcp-demo.mp4">
-    <img src="docs/media/logic-pro-mcp-demo.gif" alt="30 second Logic Pro MCP demo showing an AI agent request, MIDI regions in Logic Pro, and verified readback" width="920" />
+    <img src="docs/media/logic-pro-mcp-demo.gif" alt="22 second Logic Pro MCP demo showing an AI agent request, MIDI regions in Logic Pro, and verified readback" width="920" />
   </a>
 </p>
 
 <p align="center">
-  <a href="docs/media/logic-pro-mcp-demo.mp4">30 sec MP4</a> ·
+  <a href="docs/media/logic-pro-mcp-demo.mp4">22 sec MP4</a> ·
   <a href="docs/media/logic-pro-mcp-thumbnail.png">social thumbnail</a>
 </p>
 
@@ -193,34 +193,9 @@ See [SECURITY.md §Installer trust model](SECURITY.md#installer-trust-model) for
 
 ## Architecture at a Glance
 
-```
-┌──────────────────────── MCP clients ────────────────────────┐
-│ Claude Code · Claude Desktop · Cursor · custom MCP agents    │
-└──────────────────────────────┬───────────────────────────────┘
-                               │ stdio JSON-RPC
-┌──────────────────────────────▼───────────────────────────────┐
-│ LogicProMCP Server (Swift)                                   │
-│                                                              │
-│  Tools: actions/write paths                                  │
-│  logic_transport · logic_tracks · logic_mixer · logic_midi   │
-│  logic_edit · logic_navigate · logic_project · logic_system  │
-│                                                              │
-│  Resources: read/state paths                                 │
-│  transport · tracks · mixer · markers · project · ports      │
-│  library inventory · stock plugins · workflow skills         │
-│                                                              │
-│  ChannelRouter: routes 130+ operations to best channel        │
-└──────────────┬──────────────┬──────────────┬────────────────┘
-               │              │              │
-        ┌──────▼─────┐ ┌──────▼─────┐ ┌──────▼────────────────┐
-        │ MCU/CoreMIDI│ │ AX/CGEvent │ │ AppleScript/Scripter  │
-        └──────┬─────┘ └──────┬─────┘ └──────┬────────────────┘
-               └──────────────┴──────────────┘
-                              │
-                       ┌──────▼───────┐
-                       │   Logic Pro  │
-                       └──────────────┘
-```
+<p align="center">
+  <img src="docs/media/logic-pro-mcp-architecture.svg" alt="Logic Pro MCP architecture diagram showing MCP clients, the Swift server, tools, resources, state cache, ChannelRouter, native macOS channels, and Logic Pro" width="920" />
+</p>
 
 See [Architecture](docs/ARCHITECTURE.md) for channel priorities, state flow, cache freshness, and live E2E topology.
 

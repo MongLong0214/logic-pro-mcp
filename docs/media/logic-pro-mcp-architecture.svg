@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Logic Pro MCP architecture at a glance</title>
+  <desc id="desc">MCP clients send JSON-RPC over stdio to the Swift LogicProMCP server. Tools, resources, state cache, and the ChannelRouter connect through seven native macOS control channels to Logic Pro.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#334155" />
+    </marker>
+    <style>
+      .canvas { fill: #f8fafc; }
+      .title { font-family: Arial, Helvetica, sans-serif; font-size: 30px; font-weight: 700; fill: #111827; }
+      .subtitle { font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 500; fill: #475569; }
+      .section-label { font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: 700; fill: #64748b; }
+      .node-title { font-family: Arial, Helvetica, sans-serif; font-size: 19px; font-weight: 700; fill: #0f172a; }
+      .node-title-light { font-family: Arial, Helvetica, sans-serif; font-size: 19px; font-weight: 700; fill: #ffffff; }
+      .node-body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 500; fill: #475569; }
+      .node-body-light { font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 500; fill: #e2e8f0; }
+      .small { font-family: Arial, Helvetica, sans-serif; font-size: 12px; font-weight: 600; fill: #64748b; }
+      .badge { font-family: Arial, Helvetica, sans-serif; font-size: 11px; font-weight: 700; fill: #ffffff; }
+      .box { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; rx: 8; }
+      .box-soft { fill: #f1f5f9; stroke: #cbd5e1; stroke-width: 1.5; rx: 8; }
+      .server { fill: #111827; stroke: #111827; stroke-width: 1.5; rx: 8; }
+      .server-inner { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.2; rx: 8; }
+      .server-inner-tint { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.2; rx: 8; }
+      .logic { fill: #18181b; stroke: #18181b; stroke-width: 1.5; rx: 8; }
+      .line { fill: none; stroke: #334155; stroke-width: 2.2; marker-end: url(#arrow); }
+      .line-soft { fill: none; stroke: #94a3b8; stroke-width: 1.6; marker-end: url(#arrow); }
+      .line-read { fill: none; stroke: #0f766e; stroke-width: 2; marker-end: url(#arrow); }
+      .line-write { fill: none; stroke: #ea580c; stroke-width: 2; marker-end: url(#arrow); }
+      .accent-client { fill: #2563eb; }
+      .accent-write { fill: #ea580c; }
+      .accent-read { fill: #0f766e; }
+      .accent-route { fill: #7c3aed; }
+      .accent-state { fill: #334155; }
+      .accent-logic { fill: #22c55e; }
+    </style>
+  </defs>
+
+  <rect class="canvas" width="1200" height="760" />
+
+  <text x="60" y="58" class="title">Logic Pro MCP Architecture</text>
+  <text x="60" y="84" class="subtitle">One MCP interface, honest readback, and seven native macOS control channels behind the router.</text>
+
+  <text x="60" y="128" class="section-label">CLIENTS</text>
+  <text x="458" y="128" class="section-label">SERVER CORE</text>
+  <text x="60" y="585" class="section-label">CONTROL CHANNELS</text>
+  <text x="902" y="585" class="section-label">TARGET APP</text>
+
+  <rect x="60" y="146" width="250" height="122" class="box" />
+  <rect x="78" y="166" width="56" height="24" rx="6" class="accent-client" />
+  <text x="89" y="182" class="badge">MCP</text>
+  <text x="78" y="213" class="node-title">Agent clients</text>
+  <text x="78" y="235" class="node-body">Claude Code · Desktop · Cursor</text>
+  <text x="78" y="257" class="node-body">custom MCP agents</text>
+
+  <path class="line" d="M310 207 C352 207 364 207 408 207" />
+  <text x="346" y="191" class="small">stdio</text>
+
+  <rect x="408" y="116" width="444" height="390" class="server" />
+  <text x="436" y="154" class="node-title-light">LogicProMCP Server</text>
+  <text x="436" y="178" class="node-body-light">Swift actor core for tools, reads, routing, and lifecycle</text>
+
+  <rect x="436" y="206" width="186" height="106" class="server-inner" />
+  <rect x="454" y="226" width="62" height="22" rx="6" class="accent-write" />
+  <text x="467" y="241" class="badge">WRITE</text>
+  <text x="454" y="274" class="node-title">8 tools</text>
+  <text x="454" y="300" class="node-body">mutating action surface</text>
+
+  <rect x="638" y="206" width="186" height="106" class="server-inner" />
+  <rect x="656" y="226" width="58" height="22" rx="6" class="accent-read" />
+  <text x="671" y="241" class="badge">READ</text>
+  <text x="656" y="274" class="node-title">14 + 7 resources</text>
+  <text x="656" y="300" class="node-body">safe state/catalog reads</text>
+
+  <rect x="436" y="332" width="186" height="106" class="server-inner-tint" />
+  <rect x="454" y="352" width="62" height="22" rx="6" class="accent-state" />
+  <text x="467" y="367" class="badge">STATE</text>
+  <text x="454" y="400" class="node-title">Cache + poller</text>
+  <text x="454" y="426" class="node-body">feedback + 3s AX refresh</text>
+
+  <rect x="638" y="332" width="186" height="106" class="server-inner-tint" />
+  <rect x="656" y="352" width="64" height="22" rx="6" class="accent-route" />
+  <text x="669" y="367" class="badge">ROUTE</text>
+  <text x="656" y="400" class="node-title">ChannelRouter</text>
+  <text x="656" y="426" class="node-body">130+ ops, fail-closed</text>
+
+  <path class="line-write" d="M622 259 C638 259 628 259 638 259" />
+  <path class="line-read" d="M731 312 C731 322 731 322 731 332" />
+  <path class="line-soft" d="M622 385 C638 385 628 385 638 385" />
+
+  <path class="line" d="M630 506 C630 546 630 550 630 574" />
+  <text x="648" y="547" class="small">best available channel</text>
+
+  <rect x="60" y="604" width="238" height="118" class="box" />
+  <rect x="78" y="624" width="56" height="22" rx="6" class="accent-read" />
+  <text x="89" y="639" class="badge">FAST</text>
+  <text x="78" y="672" class="node-title">MCU + CoreMIDI</text>
+  <text x="78" y="694" class="node-body">transport, mixer, notes, ports</text>
+  <text x="78" y="716" class="node-body">bidirectional where available</text>
+
+  <rect x="324" y="604" width="238" height="118" class="box" />
+  <rect x="342" y="624" width="54" height="22" rx="6" class="accent-state" />
+  <text x="353" y="639" class="badge">UI</text>
+  <text x="342" y="672" class="node-title">AX + CGEvent</text>
+  <text x="342" y="694" class="node-body">track metadata, dialogs</text>
+  <text x="342" y="716" class="node-body">last-resort keyboard events</text>
+
+  <rect x="588" y="604" width="238" height="118" class="box" />
+  <rect x="606" y="624" width="72" height="22" rx="6" class="accent-write" />
+  <text x="619" y="639" class="badge">SCRIPT</text>
+  <text x="606" y="672" class="node-title">Script + KeyCmd</text>
+  <text x="606" y="694" class="node-body">AppleScript, Scripter, MIDI CC</text>
+  <text x="606" y="716" class="node-body">project + plugin lanes</text>
+
+  <rect x="852" y="604" width="238" height="118" class="logic" />
+  <rect x="870" y="624" width="52" height="22" rx="6" class="accent-logic" />
+  <text x="881" y="639" class="badge">DAW</text>
+  <text x="870" y="672" class="node-title-light">Logic Pro</text>
+  <text x="870" y="694" class="node-body-light">session, tracks, mixer, regions</text>
+  <text x="870" y="716" class="node-body-light">live readback source</text>
+
+  <path class="line-soft" d="M630 574 C358 574 179 574 179 604" />
+  <path class="line-soft" d="M630 574 C510 574 443 574 443 604" />
+  <path class="line-soft" d="M630 574 C668 574 707 574 707 604" />
+  <path class="line" d="M826 653 C838 653 840 653 852 653" />
+  <path class="line" d="M562 653 C574 653 576 653 588 653" />
+  <path class="line" d="M298 653 C310 653 312 653 324 653" />
+
+  <rect x="892" y="146" width="248" height="140" class="box-soft" />
+  <text x="910" y="178" class="node-title">Honest contract</text>
+  <text x="910" y="205" class="node-body">State A: confirmed</text>
+  <text x="910" y="229" class="node-body">State B: uncertain + reason</text>
+  <text x="910" y="253" class="node-body">State C: hard failure</text>
+  <path class="line-soft" d="M892 216 C868 216 870 216 852 216" />
+
+  <rect x="892" y="318" width="248" height="118" class="box-soft" />
+  <text x="910" y="350" class="node-title">Design rule</text>
+  <text x="910" y="377" class="node-body">Tools mutate.</text>
+  <text x="910" y="401" class="node-body">Resources read.</text>
+  <text x="910" y="425" class="node-body">Unverified writes stay unverified.</text>
+  <path class="line-soft" d="M892 378 C868 378 870 378 852 378" />
+
+  <rect x="60" y="300" width="250" height="142" class="box-soft" />
+  <text x="78" y="332" class="node-title">What agents see</text>
+  <text x="78" y="359" class="node-body">Small write surface</text>
+  <text x="78" y="383" class="node-body">Read-only state/catalogs</text>
+  <text x="78" y="407" class="node-body">Truth-labeled provenance</text>
+  <text x="78" y="431" class="node-body">No hidden autonomy</text>
+  <path class="line-soft" d="M310 371 C350 371 365 371 408 371" />
+</svg>
