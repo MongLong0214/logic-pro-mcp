@@ -23,7 +23,8 @@ class LogicProMcp < Formula
   # NOTE (v3.1.6): no `depends_on xcode:` — this Formula installs the
   # pre-built GitHub release binary; it does not invoke `swift build` or any
   # Apple toolchain. Source builds via `Package.swift` still require Xcode
-  # 15.0+ (Swift 6.0+).
+  # 16.4+ (Swift 6.2) because the resolved swift-sdk dependency requires the
+  # newer compiler inference behavior.
 
   def install
     bin.install "LogicProMCP"

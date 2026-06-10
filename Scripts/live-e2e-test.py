@@ -601,8 +601,14 @@ def main():
     after = wait_for_cycle_change(client, before)
     if before is not None and after is not None:
         T("cycle roundtrip: state changed after toggle", "ok", lambda _: before != after)
+    elif STRICT_LIVE:
+        T(
+            "cycle roundtrip requires open project state",
+            {"before": before, "after": after},
+            lambda _: False,
+        )
     else:
-        T("cycle roundtrip (skipped — no project)", "ok", lambda _: True)
+        S("cycle roundtrip", "no open Logic project state")
     call_tool(client, "logic_transport", "toggle_cycle")  # restore
 
     # Transport commands that route to MCU/CoreMIDI

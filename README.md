@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-6.0+-F05138.svg?style=flat-square" /></a>
+  <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-6.2_source-F05138.svg?style=flat-square" /></a>
   <a href="https://developer.apple.com/macos/"><img src="https://img.shields.io/badge/macOS-14+-000000.svg?style=flat-square&logo=apple" /></a>
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-0.10-blue.svg?style=flat-square" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
@@ -57,7 +57,7 @@ Logic Pro MCP: region imported, instrument routed, readback exposed through reso
 | Read resources | 14 static resources for live state, project metadata, stock plugin intelligence, and workflow skills |
 | Resource templates | 7 templates for track, region, mixer strip, stock plugin, and workflow lookup/search |
 | Control channels | MCU, Accessibility, AppleScript, CoreMIDI, CGEvent, Scripter, MIDI Key Commands |
-| Verification line | Current source tree: `1256` Swift tests + strict Logic Pro 12.2 live E2E `293 passed / 0 skipped / 0 failed` |
+| Verification line | Current source tree: `1256` Swift tests + strict Logic Pro 12.2 live E2E `307 passed / 0 skipped / 0 failed`, backed by [source-integration evidence](docs/live-verify-v3.5.0-pre.md) |
 | Published release | `v3.4.6`, ADHOC universal artifacts, SHA256 metadata, macOS 14/15 install validation |
 
 If this project helps you make music with Claude, Cursor, or any MCP client, star the repo. It helps the project reach more Logic Pro users and maintainers.
@@ -105,7 +105,9 @@ Logic Pro MCP uses a different model. It routes each operation to the strongest 
 
 ## Quick Start
 
-**Prerequisites**: macOS 14+, Logic Pro 12.0.1+, and an MCP client that can launch a stdio server. Published GitHub Actions/Homebrew assets are universal (`arm64` + `x86_64`).
+**Prerequisites**: macOS 14+, Logic Pro 12.0.1+, and an MCP client that can launch a stdio server. Published GitHub Actions/Homebrew assets are universal (`arm64` + `x86_64`) and do not require Xcode.
+
+Source builds require Xcode 16.4+ / Swift 6.2. The package manifest uses Swift tools 6.0 for compatibility, but `Package.resolved` currently resolves `swift-sdk` 0.12.0 and CI selects Xcode 16.4.
 
 The current published stable release is `v3.4.6` (2026-06-09 KST). It ships ADHOC-signed universal artifacts when Apple Developer ID credentials are absent, plus `SHA256SUMS.txt` and `RELEASE-METADATA.json` for pinned installs.
 
@@ -210,6 +212,7 @@ See [Architecture](docs/ARCHITECTURE.md) for channel priorities, state flow, cac
 | [Architecture](docs/ARCHITECTURE.md) | Contributors | Channel design, state flow, testing strategy |
 | [Maintainer Guide](docs/MAINTAINERS.md) | Maintainers | Release, approvals, E2E checklist |
 | [Live Verify v3.4.6](docs/live-verify-v3.4.6.md) | Maintainers, QA | Latest deterministic, coverage, release-build, packaging, and carried Logic Pro 12.2 issue-verification evidence |
+| [Source Integration Verify](docs/live-verify-v3.5.0-pre.md) | Maintainers, QA | Current #14/#15 source integration, live Logic Pro 12.2 E2E, and README media evidence |
 | [Stock Plugin PRD](docs/prd/PRD-verified-stock-plugin-intelligence.md) | Contributors, client authors | Truth-labeled stock plugin intelligence contract |
 | [Workflow Skills PRD](docs/prd/PRD-workflow-skills-pack.md) | Contributors, client authors | Validated workflow-pack contract and evidence levels |
 | [Security Policy](SECURITY.md) | Security reviewers | Threat model, reporting, hardening |
@@ -220,7 +223,7 @@ See [Architecture](docs/ARCHITECTURE.md) for channel priorities, state flow, cac
 
 **Published stable**: `v3.4.6` is available as a GitHub Release and Homebrew install. It is the evidence/packaging alignment release after the Logic Pro 12.2 mixer verification work for Issues #10-#13. Release workflow `27186085967` passed build plus macOS 14/15 install validation; published metadata is `team_id:"ADHOC"`, `signing:"adhoc"`, `architectures:["x86_64","arm64"]`.
 
-**Current source tree**: the repo also carries Issue #14 stock plugin intelligence and Issue #15 workflow skills. That expanded public resource surface is documented here and in [docs/API.md](docs/API.md), but it must ship as the next minor release line (`v3.5.0`) before being described as part of the published stable artifact.
+**Current source tree**: the repo also carries Issue #14 stock plugin intelligence and Issue #15 workflow skills. That expanded public resource surface is documented here and in [docs/API.md](docs/API.md), with current integration evidence in [docs/live-verify-v3.5.0-pre.md](docs/live-verify-v3.5.0-pre.md). It must ship as the next minor release line (`v3.5.0`) before being described as part of the published stable artifact.
 
 ## Verification
 
@@ -230,13 +233,14 @@ See [Architecture](docs/ARCHITECTURE.md) for channel priorities, state flow, cac
 | Full deterministic suite | `swift test --no-parallel` -> `1256` passed, `0` failed |
 | Release build | `swift build -c release` passed |
 | Python E2E syntax | `python3 -m py_compile Scripts/live-e2e-test.py` passed |
-| Strict live Logic Pro 12.2 | `LOGIC_PRO_MCP_STRICT_LIVE=1 Scripts/live-e2e-test.sh` run 3x -> `879` total passed, `0` skipped, `0` failed |
-| Current integrated live pass | #14 + #15 source integration -> `293` passed, `0` skipped, `0` failed |
+| Strict live Logic Pro 12.2 | `LOGIC_PRO_MCP_STRICT_LIVE=1 Scripts/live-e2e-test.sh` run 3x -> `921` total passed, `0` skipped, `0` failed; see [source-integration evidence](docs/live-verify-v3.5.0-pre.md) |
+| Current integrated live pass | #14 + #15 source integration -> `307` passed, `0` skipped, `0` failed; strict mode fails no-project cycle checks instead of counting them as pass |
+| README media evidence | Actual Logic Pro 12.2 capture derivatives regenerate from `docs/media/logic-pro-mcp-demo.mp4`; `docs/media/render-demo.py` contains no synthetic DAW renderer |
 | v3.4.6 release evidence | [docs/live-verify-v3.4.6.md](docs/live-verify-v3.4.6.md) |
 | #14 evidence | [docs/tickets/issue14-verified-stock-plugin-intelligence/VERIFICATION-2026-06-10.md](docs/tickets/issue14-verified-stock-plugin-intelligence/VERIFICATION-2026-06-10.md) |
 | #15 evidence | [docs/tickets/issue15-workflow-skills-pack/VERIFICATION-2026-06-10.md](docs/tickets/issue15-workflow-skills-pack/VERIFICATION-2026-06-10.md) |
 
-Live E2E defaults to the release binary. Protocol/security assertions run on any host; Logic/CoreMIDI-dependent checks skip unless a real Logic Pro session is visible. Strict mode converts those skips to failures and launches the MCP server under a trusted shell/tmux parent so macOS TCC evaluates the same parent context used by live client flows.
+Live E2E defaults to the release binary. Protocol/security assertions run on any host; Logic/CoreMIDI-dependent checks skip unless a real Logic Pro session is visible. Strict mode converts live-gated skips to failures, treats missing project state as a failed cycle roundtrip precondition, and launches the MCP server under a trusted shell/tmux parent so macOS TCC evaluates the same parent context used by live client flows.
 
 ## API Contracts That Matter
 
@@ -266,6 +270,8 @@ Per-release detail lives in [CHANGELOG.md](CHANGELOG.md). Security and installer
 - **Workflow skills**: workflow resources guide clients through checked recipes. They do not execute workflows or bypass existing confirmation gates.
 
 ## Development
+
+Source builds require Xcode 16.4+ / Swift 6.2.
 
 ```bash
 swift test --no-parallel
