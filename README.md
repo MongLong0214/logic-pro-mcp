@@ -19,12 +19,13 @@
 
 <p align="center">
   <a href="docs/media/logic-pro-mcp-demo.mp4">
-    <img src="docs/media/logic-pro-mcp-demo.gif" alt="18 second Logic Pro MCP proof chain showing an MCP client prompt, typed Logic tool calls, a 22-track English Logic session, resource readback, and verification evidence" width="920" />
+    <img src="docs/media/logic-pro-mcp-demo.gif" alt="6 second actual Logic Pro 12.2 screen capture showing live playback, moving playhead, meters, MCP-created MIDI regions, and live track headers" width="920" />
   </a>
 </p>
 
 <p align="center">
-  <a href="docs/media/logic-pro-mcp-demo.mp4">18 sec MP4</a> ·
+  Actual Logic Pro 12.2 capture, cropped from a live playback recording.<br/>
+  <a href="docs/media/logic-pro-mcp-demo.mp4">6 sec MP4</a> ·
   <a href="docs/media/logic-pro-mcp-thumbnail.png">social thumbnail</a>
 </p>
 

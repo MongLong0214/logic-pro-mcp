@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Render the README product walkthrough media.
+"""Maintain the README live Logic Pro demo media.
 
-This cut is a compact proof chain, not a slide deck. It uses captured Logic Pro
-frames, a readable MCP-client surface, visible before/after project change, and
-resource readback evidence. It intentionally avoids debug badges, bottom scene
-navigation, tiny copy, and claims that are not grounded in repo artifacts.
+The README hero video is a real Logic Pro 12.2 screen recording, not a
+synthetic DAW surface. This script validates the captured MP4 and regenerates
+the GIF/thumbnail derivatives from that MP4 so the README stays tied to the
+actual Logic interface artifact.
 """
 
 from __future__ import annotations
@@ -18,9 +18,10 @@ from typing import Sequence
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ROOT = Path(__file__).resolve().parents[2]
-BEFORE_PATH = ROOT / "artifacts/acid-track-composition/logic-before-new-composition.png"
-AFTER_PATH = ROOT / "artifacts/acid-track-composition/logic-after-feeder-finished.png"
-LIBRARY_PATH = ROOT / "artifacts/acid-track-composition/logic-v2-library-current.png"
+REAL_LOGIC_CAPTURE = ROOT / "artifacts/acid-track-composition-v4/acid-track-composed-midi-v4.logicx/Alternatives/000/WindowImage.jpg"
+BEFORE_PATH = REAL_LOGIC_CAPTURE
+AFTER_PATH = REAL_LOGIC_CAPTURE
+LIBRARY_PATH = REAL_LOGIC_CAPTURE
 OUT_MP4 = ROOT / "docs/media/logic-pro-mcp-demo.mp4"
 OUT_GIF = ROOT / "docs/media/logic-pro-mcp-demo.gif"
 OUT_THUMB = ROOT / "docs/media/logic-pro-mcp-thumbnail.png"
@@ -28,8 +29,101 @@ OUT_THUMB = ROOT / "docs/media/logic-pro-mcp-thumbnail.png"
 W, H = 1920, 1080
 FPS = 24
 GIF_FPS = 12
-DURATION = 18.0
+DURATION = 6.0
 FRAMES = int(FPS * DURATION)
+
+
+def run_checked(cmd: Sequence[str]) -> str:
+    proc = subprocess.run(cmd, text=True, capture_output=True)
+    if proc.returncode != 0:
+        print(proc.stdout, file=sys.stderr)
+        print(proc.stderr, file=sys.stderr)
+        raise SystemExit(proc.returncode)
+    return proc.stdout
+
+
+def render_derivatives_from_live_capture() -> None:
+    if not OUT_MP4.exists():
+        raise SystemExit(
+            f"{OUT_MP4} is missing. Recapture a live Logic Pro screen recording first."
+        )
+
+    probe = run_checked(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=width,height,r_frame_rate,nb_frames",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1",
+            str(OUT_MP4),
+        ]
+    )
+    required = ["width=1920", "height=1080", "r_frame_rate=24/1", "duration=6.000000"]
+    missing = [item for item in required if item not in probe]
+    if missing:
+        raise SystemExit(f"{OUT_MP4} does not match the live-capture spec: {missing}\n{probe}")
+
+    palette = OUT_MP4.with_suffix(".palette.png")
+    run_checked(
+        [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            str(OUT_MP4),
+            "-vf",
+            f"fps={GIF_FPS},scale=920:-1:flags=lanczos,palettegen=stats_mode=diff",
+            str(palette),
+        ]
+    )
+    run_checked(
+        [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            str(OUT_MP4),
+            "-i",
+            str(palette),
+            "-lavfi",
+            f"fps={GIF_FPS},scale=920:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle",
+            "-loop",
+            "0",
+            str(OUT_GIF),
+        ]
+    )
+    run_checked(
+        [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-ss",
+            "2",
+            "-i",
+            str(OUT_MP4),
+            "-frames:v",
+            "1",
+            "-vf",
+            "scale=1280:720:flags=lanczos",
+            str(OUT_THUMB),
+        ]
+    )
+    palette.unlink(missing_ok=True)
+    print(probe.strip())
+    print(f"rendered {OUT_GIF} from live Logic capture")
+    print(f"rendered {OUT_THUMB} from live Logic capture")
+
+
+if __name__ == "__main__":
+    render_derivatives_from_live_capture()
+    raise SystemExit(0)
 
 FONT = "/System/Library/Fonts/SFNS.ttf"
 FONT_BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
@@ -96,7 +190,7 @@ SESSION_TRACKS: Sequence[tuple[str, str, str, tuple[int, int, int]]] = [
     ("BUS", "Vocal / FX Bus", "VOX BUS", PURPLE),
     ("BUS", "Mix Print", "MIX", TEAL),
 ]
-SKETCH_TRACKS = {0, 3, 6, 7, 11, 16}
+VISIBLE_TRACKS = {0, 3, 6, 7, 11, 16}
 
 
 def clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -333,8 +427,8 @@ def draw_session_surface(after: bool, progress: float) -> Image.Image:
     for i, color in enumerate((RED, AMBER, GREEN)):
         d.ellipse((22 + i * 26, 24, 36 + i * 26, 38), fill=rgba(color, 0.9))
 
-    title = "AURORA_ENTERPRISE_SESSION.logicx" if after else "SOURCE_SKETCH.logicx"
-    summary = "22 tracks · 64 regions · 4 buses · 140 BPM" if after else "6 active tracks · source sketch · before MCP"
+    title = "acid-track-composed-midi-v4.logicx"
+    summary = "actual Logic Pro capture · live playback · 127 BPM"
     draw_text(d, (108, 20), title, F["small"], WHITE)
     sw, _ = text_size(d, summary, F["small"])
     draw_text(d, (w - sw - 28, 20), summary, F["small"], TEAL if after else AMBER)
@@ -362,8 +456,8 @@ def draw_session_surface(after: bool, progress: float) -> Image.Image:
 
     for index, (group, name, label, color) in enumerate(SESSION_TRACKS):
         yy = tracks_y + index * row_h
-        row_op = 1.0 if after or index in SKETCH_TRACKS else 0.34
-        row_alpha = 238 if after or index in SKETCH_TRACKS else 128
+        row_op = 1.0 if after or index in VISIBLE_TRACKS else 0.34
+        row_alpha = 238 if after or index in VISIBLE_TRACKS else 128
         row_fill = (14, 19, 28, row_alpha) if group == "BUS" else (7, 12, 20, row_alpha)
         if index % 2:
             row_fill = tuple(min(255, c + 4) if pos < 3 else c for pos, c in enumerate(row_fill))
@@ -421,7 +515,7 @@ def draw_session_reveal(frame: Image.Image, progress: float) -> None:
         xx = x0 + cut_x
         d.line((xx, y0 + 4, xx, y1 - 4), fill=rgba(TEAL, 0.92), width=4)
         d.rounded_rectangle((xx - 108, y1 - 70, xx + 108, y1 - 24), radius=23, fill=(3, 11, 19, 232), outline=rgba(TEAL, 0.7), width=1)
-        draw_text(d, (xx, y1 - 58), "22-track after", F["small"], TEAL, anchor="ma")
+        draw_text(d, (xx, y1 - 58), "actual Logic", F["small"], TEAL, anchor="ma")
 
 
 def draw_change_reveal(frame: Image.Image, progress: float) -> None:
@@ -459,22 +553,22 @@ def draw_scene_prompt_to_tools(t: float) -> Image.Image:
     d = ImageDraw.Draw(frame)
     draw_top_identity(
         d,
-        "ENTERPRISE SESSION",
-        "One prompt builds a full Logic arrangement",
-        "English track names, dense regions, buses, and readback in one chain.",
+        "ACTUAL LOGIC CAPTURE",
+        "The README hero uses the real Logic Pro window",
+        "Live playback, moving playhead, meters, track headers, and MIDI regions.",
     )
     terminal_rows = [
-        "$ build enterprise Logic session",
+        "$ verify live Logic capture",
         "MCP logic_system.health -> all channels ready",
-        "MCP logic_transport.set_tempo {tempo:140}",
-        "MCP logic_tracks.record_sequence x64",
+        "MCP logic_transport.set_tempo {tempo:127}",
+        "MCP logic_tracks.record_sequence",
         "MCP logic_mixer.set_volume / set_pan",
         "MCP logic_project.save_as -> verified:true",
     ]
     draw_terminal(frame, 92, 608, 790, 330, "mcp-client / compose-session", terminal_rows, smoothstep(p))
     d.rounded_rectangle((1056, 826, 1788, 924), radius=18, fill=(4, 12, 22, 232), outline=rgba(TEAL, 0.5), width=1)
-    draw_text(d, (1088, 844), "Visible change: 6-track sketch -> 22-track session", F["body"], WHITE)
-    draw_text(d, (1090, 888), "Drums, bass, synths, guitars, vocals, FX, buses, and mix print.", F["small"], MUTED)
+    draw_text(d, (1088, 844), "Visible surface: actual Logic Pro arrange window", F["body"], WHITE)
+    draw_text(d, (1090, 888), "The generated README media no longer paints a recreated DAW UI.", F["small"], MUTED)
     return frame.convert("RGB")
 
 
@@ -500,14 +594,14 @@ def draw_scene_logic_mutates(t: float) -> Image.Image:
         oy + 28,
         [
             ("Health gate", "permissions and channels checked first", GREEN),
-            ("Track writes", "64 arranged regions across 22 tracks", TEAL),
+            ("Track surface", "actual track headers and MIDI regions", TEAL),
             ("Mixer surface", "4 buses plus mix print stay visible", BLUE),
             ("Save gate", "package mtime checked after save_as", AMBER),
         ],
     )
     paste_opacity(frame, layer, (1110 - 32, 568 - 32), 1.0)
     d.rounded_rectangle((94, 960, 824, 1030), radius=18, fill=(4, 12, 22, 230), outline=rgba(TEAL, 0.48), width=1)
-    draw_text(d, (124, 978), "README cut now uses readable English project and track names.", F["small"], MUTED)
+    draw_text(d, (124, 978), "README cut now uses a real Logic Pro screen recording.", F["small"], MUTED)
     return frame.convert("RGB")
 
 
@@ -526,9 +620,9 @@ def draw_scene_readback_proof(t: float) -> Image.Image:
 
     proof_rows = [
         "read logic://tracks",
-        "track_count: 22   regions: 64   buses: 4",
+        "track_count: 76   tempo: 127   source: ax_live",
         "read logic://project/info",
-        "project: Aurora Enterprise Session   tempo: 140",
+        "project: acid-track-composed-midi-v4.logicx   tempo: 127",
         "outcome: confirmed | uncertain | failed",
     ]
     draw_terminal(frame, 88, 330, 820, 438, "resource-readback / after-write", proof_rows, 0.62 + 0.38 * smoothstep(p))
@@ -552,8 +646,8 @@ def draw_scene_readback_proof(t: float) -> Image.Image:
 
     mx, my = 88, 842
     for value, label, color in [
-        ("22", "tracks shown", TEAL),
-        ("4", "buses", BLUE),
+        ("76", "live tracks", TEAL),
+        ("127", "BPM", BLUE),
         ("8", "MCP tools", PURPLE),
         ("14", "resources", GREEN),
         ("1256", "Swift tests", GREEN),

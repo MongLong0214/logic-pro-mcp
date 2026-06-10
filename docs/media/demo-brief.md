@@ -2,15 +2,10 @@
 
 ## Replacement Standard
 
-The README hero media must behave like proof, not a presentation. The cut now
-shows a complete chain:
-
-- MCP client prompt and typed tool calls.
-- Capture-backed Logic Pro product view with English project/track names.
-- A visible 6-track sketch becoming a 22-track session with buses and mix print.
-- Resource readback proving the post-write state.
-- Current verification counts without implying broader coverage than the repo
-  evidence supports.
+The README hero media must show the real product surface. The current cut is a
+cropped screen recording of Logic Pro 12.2 during live playback, with no
+synthetic DAW arrangement, no painted track rows, and no fake project surface.
+The only visible Logic content is the actual Logic window capture.
 
 ## Audience
 
@@ -25,29 +20,25 @@ shows a complete chain:
 
 | Time | Scene | User question answered | Required visible information |
 |------|-------|------------------------|------------------------------|
-| 0-6s | Prompt to tools | What does the agent actually call? | Prompt, health gate, tempo set, record_sequence batch, mixer writes, save_as verification. |
-| 6-12s | Logic mutates | Does this look credible in a global README? | 22 English-named tracks, dense regions, drums/bass/synth/keys/guitar/vocal/FX/bus rows, playhead motion, write-path notes. |
-| 12-18s | Readback proof | How is success verified? | `logic://tracks`, `logic://project/info`, 22 tracks / 64 regions / 4 buses, confirmed/uncertain/failed outcome line, current evidence counts. |
+| 0-6s | Actual Logic playback | Is this the real Logic Pro interface? | Live arrange window, moving playhead, meters, actual track headers, actual MIDI regions, and Logic's own transport UI. |
 
 ## Quality bar
 
-- Use captured Logic Pro frames as the backdrop, then render a readable English
-  session surface over the hero so the README is not dominated by localized UI.
-- Show at least 16 tracks; the current cut shows 22 tracks plus 4 buses.
+- Use actual Logic Pro capture as the hero, not a recreated DAW mockup.
+- Do not render synthetic tracks, fake region rows, fake project names, or fake
+  resource panels over the Logic window.
 - Text must still be readable after the README GIF is scaled to 920px wide.
-- Keep the cut to 18 seconds and 3 scenes.
+- Keep the cut short enough for the README; the current cut is 6 seconds.
 - Do not show debug badges, bottom navigation rails, or internal QA labels.
-- Every scene must carry concrete product information, not abstract marketing copy.
-- The video must not claim a capability without a matching README/source-tree
-  surface.
-- MP4, GIF, thumbnail, and renderer must be reproducible from
-  `docs/media/render-demo.py`.
+- The video must not claim a capability without matching live readback or repo
+  evidence.
+- The MP4 is a live capture artifact. `docs/media/render-demo.py` validates the
+  MP4 and regenerates the GIF/thumbnail derivatives from it.
 
 ## Verification checklist
 
-- `python3 docs/media/render-demo.py` regenerates MP4, GIF, and thumbnail.
+- `python3 docs/media/render-demo.py` validates the MP4 and regenerates GIF and thumbnail.
 - `ffprobe` confirms the MP4 duration, dimensions, frame rate, and frame count.
 - `sips` confirms GIF and thumbnail dimensions.
-- A frame sheet covers the full timeline for visual review.
-- Consecutive sampled frames confirm the background crop is locked.
+- Sampled frames confirm the hero is real Logic UI with playhead and meter movement.
 - README links point to tracked media files.
