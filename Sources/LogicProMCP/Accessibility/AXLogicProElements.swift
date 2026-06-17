@@ -318,12 +318,27 @@ enum AXLogicProElements {
             return area
         }
 
-        // Live Logic 12 commonly exposes the track header rail as AXGroup(desc: "트랙 헤더")
-        // inside the left scroll area rather than as an AXList/AXOutline identifier.
+        // Live Logic 12 commonly exposes the track header rail as an AXGroup
+        // whose description names the headers area, inside the left scroll area
+        // rather than as an AXList/AXOutline identifier.
+        //
+        // Description strings observed in the wild:
+        //   - "Track Headers" — earlier Logic 12 builds (US English)
+        //   - "트랙 헤더"      — Korean
+        //   - "Tracks header"  — Logic 12.2 on macOS 26 (singular "Tracks",
+        //                       lowercase "header"; one-letter-and-word-order
+        //                       drift from the older form)
+        //
+        // We accept anything that lowercases to a "track(s) header(s)" variant
+        // so a future minor pluralization tweak in Logic doesn't break us again.
         let groups = AXHelpers.findAllDescendants(of: window, role: kAXGroupRole, maxDepth: 8, runtime: runtime.ax)
         if let headerGroup = groups.first(where: {
             let desc = (AXHelpers.getDescription($0, runtime: runtime.ax) ?? "").lowercased()
-            return desc == "track headers" || desc == "트랙 헤더"
+            return desc == "track headers"
+                || desc == "track header"
+                || desc == "tracks header"
+                || desc == "tracks headers"
+                || desc == "트랙 헤더"
         }) {
             return headerGroup
         }
