@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security report
+    url: https://github.com/MongLong0214/logic-pro-mcp/security/policy
+    about: Report vulnerabilities privately through the security policy.
+  - name: Setup and troubleshooting docs
+    url: https://github.com/MongLong0214/logic-pro-mcp/blob/main/docs/TROUBLESHOOTING.md
+    about: Check known setup, Logic Pro permission, and readback issues before filing.

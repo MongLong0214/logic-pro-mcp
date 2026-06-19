@@ -1,0 +1,130 @@
+name: Bug report
+description: Report a reproducible product bug, regression, or contract violation.
+title: "Bug: "
+labels: ["bug", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for behavior that is broken, unsafe, unverifiable, or different from the documented contract. Security issues should be reported privately through SECURITY.md, not as public issues.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing open and closed issues for duplicates.
+          required: true
+        - label: This is not a private security report.
+          required: true
+        - label: I separated observed evidence from assumptions.
+          required: true
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impact
+      description: Pick the highest user-visible impact.
+      options:
+        - P0 - data loss, destructive wrong target, or unsafe write
+        - P1 - core workflow blocked or incorrect verified state
+        - P2 - degraded workflow with a usable workaround
+        - P3 - low-risk polish or diagnostics issue
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - transport
+        - tracks
+        - midi
+        - mixer
+        - plugins
+        - edit
+        - navigation
+        - project
+        - resources
+        - accessibility
+        - setup
+        - release/install
+        - demo/live harness
+        - docs
+        - unknown
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include all relevant versions and setup state.
+      placeholder: |
+        - Logic Pro version:
+        - macOS version:
+        - Logic Pro MCP version or commit:
+        - Install method: Homebrew / release asset / source build
+        - MCP client:
+        - Required Logic setup completed: MCU / Accessibility / Automation / Scripter
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest exact sequence that reproduces the problem.
+      placeholder: |
+        1. Start from...
+        2. Call...
+        3. Observe...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened? Include the exact response envelope when possible.
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: State the expected user-visible result and expected Honest Contract state.
+      placeholder: |
+        Expected State A / State B / State C:
+        Expected readback or failure reason:
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Paste command output, logs, screenshots, transcript paths, issue links, or live E2E snippets. Redact secrets.
+      placeholder: |
+        - Command:
+        - Output:
+        - Transcript:
+        - Screenshot/video:
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Define what must be true before this can close.
+      placeholder: |
+        - [ ] Regression test covers the failure.
+        - [ ] The tool/resource returns the correct State A/B/C outcome.
+        - [ ] Live Logic evidence is attached when the behavior depends on Logic UI state.
+        - [ ] Docs are updated if the public contract changed.
+    validations:
+      required: true

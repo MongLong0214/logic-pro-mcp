@@ -1,0 +1,135 @@
+# Canonical GitHub label taxonomy for logic-pro-mcp.
+# Keep default GitHub labels for compatibility, then add structured priority,
+# status, area, and evidence labels for triage and release planning.
+
+- name: bug
+  color: d73a4a
+  description: Something is broken, unsafe, or contradicts the documented contract.
+- name: enhancement
+  color: a2eeef
+  description: New feature, workflow, or product improvement.
+- name: documentation
+  color: 0075ca
+  description: Documentation-only work.
+- name: question
+  color: d876e3
+  description: More information is required before triage can proceed.
+- name: duplicate
+  color: cfd3d7
+  description: Already tracked by another issue or pull request.
+- name: invalid
+  color: e4e669
+  description: Not actionable as filed.
+- name: wontfix
+  color: ffffff
+  description: Intentionally not planned.
+- name: help wanted
+  color: 008672
+  description: Maintainer-approved work where external help is useful.
+- name: good first issue
+  color: 7057ff
+  description: Small, well-scoped issue suitable for new contributors.
+
+- name: epic
+  color: 5319e7
+  description: Cross-cutting parent issue that groups multiple deliverables.
+
+- name: "priority: p0"
+  color: b60205
+  description: Critical safety, destructive wrong-target, data loss, or release-blocking issue.
+- name: "priority: p1"
+  color: d93f0b
+  description: Core workflow blocker or high-risk correctness gap.
+- name: "priority: p2"
+  color: fbca04
+  description: Important improvement with a workaround or limited blast radius.
+- name: "priority: p3"
+  color: c5def5
+  description: Low-risk polish, cleanup, or nice-to-have improvement.
+
+- name: "status: needs triage"
+  color: ededed
+  description: Newly filed and not yet accepted into a work bundle.
+- name: "status: ready"
+  color: 0e8a16
+  description: Scoped enough for implementation.
+- name: "status: in progress"
+  color: 0052cc
+  description: Actively being worked.
+- name: "status: blocked"
+  color: b60205
+  description: Cannot move until a named dependency or external condition changes.
+- name: "status: needs repro"
+  color: fbca04
+  description: Needs a smaller reproduction or live confirmation before implementation.
+- name: "status: needs review"
+  color: 1d76db
+  description: Implementation exists and needs focused maintainer review.
+
+- name: "area: accessibility"
+  color: bfd4f2
+  description: macOS Accessibility tree lookup, AX actions, UI element matching, or localization.
+- name: "area: audio"
+  color: c2e0c6
+  description: Audio output, bounce analysis, media artifacts, or sound verification.
+- name: "area: demo"
+  color: fef2c0
+  description: Public demos, live capture, transcripts, or evidence rendering.
+- name: "area: docs"
+  color: 0075ca
+  description: README, guides, API docs, troubleshooting, or maintainer docs.
+- name: "area: edit"
+  color: fbca04
+  description: Edit commands, selection, quantization, split, undo, or menu-backed actions.
+- name: "area: export"
+  color: 0366d6
+  description: Bounce, stem export, file artifacts, and export verification.
+- name: "area: library"
+  color: 5319e7
+  description: Logic library, stock instruments, patches, or cataloging.
+- name: "area: midi"
+  color: c5def5
+  description: CoreMIDI, MIDI files, note generation, import, sequencing, or ports.
+- name: "area: mixer"
+  color: d4c5f9
+  description: Mixer strips, volume, pan, sends, MCU feedback, or readback.
+- name: "area: navigation"
+  color: bfdadc
+  description: Marker, zoom, view, playhead, or arrangement navigation behavior.
+- name: "area: plugins"
+  color: 5319e7
+  description: Plugin inventory, insert slots, parameters, Scripter, or verified apply-back.
+- name: "area: project"
+  color: e4e669
+  description: Project lifecycle, session state, file identity, save/open/close, or cleanup.
+- name: "area: release"
+  color: 0e8a16
+  description: Release assets, Homebrew formula, install scripts, signing, or CI packaging.
+- name: "area: resources"
+  color: 006b75
+  description: MCP resources, templates, cache envelopes, freshness, or provenance.
+- name: "area: setup"
+  color: f9d0c4
+  description: User setup, permissions, Logic configuration, doctor checks, or adoption flow.
+- name: "area: tracks"
+  color: c2e0c6
+  description: Track creation, selection, naming, arming, types, or track header readback.
+- name: "area: transport"
+  color: fef2c0
+  description: Play, stop, record, tempo, cycle, locator, metronome, or transport resources.
+- name: "area: workflow"
+  color: bfdadc
+  description: Higher-level agent workflows, planning surfaces, or workflow skills.
+
+- name: "evidence: live required"
+  color: e99695
+  description: Closure requires real Logic Pro evidence, not only unit tests.
+- name: "evidence: needs readback"
+  color: fbca04
+  description: The main gap is missing, stale, or mismatched readback.
+- name: "evidence: state b"
+  color: d93f0b
+  description: Currently returns or depends on uncertain-success behavior.
+- name: "evidence: verified"
+  color: 0e8a16
+  description: The issue has attached verification evidence for the current claim.

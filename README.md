@@ -14,6 +14,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
   <img src="https://img.shields.io/badge/tests-1396_passing-brightgreen.svg?style=flat-square" />
   <img src="https://img.shields.io/badge/stable-v3.6.0-blue.svg?style=flat-square" />
+  <a href="https://github.com/MongLong0214/logic-pro-mcp/issues"><img src="https://img.shields.io/github/issues/MongLong0214/logic-pro-mcp?style=flat-square&label=issues" /></a>
+  <a href="https://github.com/MongLong0214/logic-pro-mcp/pulls"><img src="https://img.shields.io/github/issues-pr/MongLong0214/logic-pro-mcp?style=flat-square&label=PRs" /></a>
   <a href="https://github.com/MongLong0214/logic-pro-mcp/stargazers"><img src="https://img.shields.io/github/stars/MongLong0214/logic-pro-mcp?style=flat-square&label=stars" /></a>
 </p>
 

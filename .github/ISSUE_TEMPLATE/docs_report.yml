@@ -1,0 +1,55 @@
+name: Documentation issue
+description: Report missing, stale, confusing, or risky documentation.
+title: "Docs: "
+labels: ["documentation", "area: docs", "status: needs triage"]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I checked the README, docs/API.md, docs/SETUP.md, docs/TROUBLESHOOTING.md, and SECURITY.md where relevant.
+          required: true
+
+  - type: dropdown
+    id: doc_type
+    attributes:
+      label: Documentation type
+      options:
+        - Setup or install
+        - API reference
+        - Troubleshooting
+        - Architecture or maintainer guide
+        - Security or trust model
+        - Release evidence
+        - README or marketing claim
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      placeholder: |
+        What is missing, stale, confusing, or potentially misleading?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_change
+    attributes:
+      label: Proposed change
+      placeholder: |
+        The docs should say...
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence or source of truth
+      placeholder: |
+        Link to release evidence, source file, issue, PR, or live verification note.
+    validations:
+      required: true

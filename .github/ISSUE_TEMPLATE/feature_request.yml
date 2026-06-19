@@ -1,0 +1,110 @@
+name: Feature request
+description: Propose a new user workflow, MCP surface, or product capability.
+title: "Feature: "
+labels: ["enhancement", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for new capabilities. If the current behavior is broken or unverifiable, file a bug instead.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing open and closed issues for related work.
+          required: true
+        - label: I described the user workflow before proposing implementation details.
+          required: true
+
+  - type: dropdown
+    id: value
+    attributes:
+      label: Product value
+      options:
+        - P0 - enables a critical adoption or safety path
+        - P1 - unlocks a high-value Logic Pro workflow
+        - P2 - improves an existing workflow
+        - P3 - nice-to-have polish or convenience
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Primary area
+      options:
+        - setup
+        - workflow
+        - transport
+        - tracks
+        - midi
+        - mixer
+        - plugins
+        - edit/navigation
+        - project/export
+        - resources
+        - library
+        - docs
+        - release/install
+        - demo/live harness
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user job is hard, impossible, risky, or slow today?
+      placeholder: |
+        As a Logic Pro MCP user, I need...
+        Today this fails because...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the desired behavior, public API shape, or workflow outcome.
+      placeholder: |
+        The server should...
+        The client should be able to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: contract
+    attributes:
+      label: Contract and safety notes
+      description: Explain target validation, confirmation, readback, provenance, or fail-closed requirements.
+      placeholder: |
+        - Mutating operation?
+        - Required explicit target?
+        - Readback source:
+        - Failure/uncertain state:
+        - Destructive confirmation:
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Public behavior is documented.
+        - [ ] Unit/integration coverage exists for the new contract.
+        - [ ] Live Logic evidence is attached if the feature writes to Logic.
+        - [ ] Existing clients receive a compatible response shape or a documented breaking change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional but useful for avoiding hidden scope.
+      placeholder: |
+        - Alternative:
+        - Why not:

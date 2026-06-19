@@ -1,0 +1,79 @@
+name: Live QA failure
+description: Capture a failure found during real Logic Pro testing, demo production, or live E2E.
+title: "Live QA: "
+labels: ["bug", "area: demo", "evidence: live required", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when a real Logic Pro session, demo transcript, or strict live E2E run exposes an uncertain or failed behavior. Keep public claims tied to verified evidence.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I checked whether this is already covered by an existing canonical issue.
+          required: true
+        - label: I am not reporting a synthetic renderer artifact as a product bug unless it affected public evidence.
+          required: true
+        - label: I included enough evidence to distinguish State A, State B, and State C.
+          required: true
+
+  - type: textarea
+    id: live_context
+    attributes:
+      label: Live context
+      placeholder: |
+        - Date/time:
+        - Logic Pro version:
+        - Project/session state:
+        - Capture or E2E script:
+        - Transcript/provenance path:
+        - Related media artifact:
+    validations:
+      required: true
+
+  - type: dropdown
+    id: state
+    attributes:
+      label: Observed contract state
+      options:
+        - State B - uncertain success
+        - State C - hard failure
+        - Mismatch between response and live UI/resource
+        - Public evidence boundary problem
+        - Unknown, needs triage
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed evidence
+      description: Include exact response snippets, resource readback, or transcript entries.
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: user_claim_risk
+    attributes:
+      label: User claim risk
+      description: What claim would be unsafe or misleading until this is fixed?
+      placeholder: |
+        Until this is fixed, do not claim...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] The live failure is reproduced or narrowed to a documented unsupported state.
+        - [ ] The server returns State A only with readback evidence.
+        - [ ] Demo/public docs avoid claiming unverified behavior.
+        - [ ] Strict live E2E or a targeted live probe covers the fix when feasible.
+    validations:
+      required: true
