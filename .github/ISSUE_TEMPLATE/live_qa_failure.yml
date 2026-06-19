@@ -1,24 +1,34 @@
 name: Live QA failure
 description: Capture a failure found during real Logic Pro testing, demo production, or live E2E.
 title: "Live QA: "
-labels: ["bug", "area: demo", "evidence: live required", "status: needs triage"]
+labels: ["bug", "area: demo", "status: needs triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Use this when a real Logic Pro session, demo transcript, or strict live E2E run exposes an uncertain or failed behavior. Keep public claims tied to verified evidence.
+        Use this when a real Logic Pro session, demo transcript, or live E2E run exposes uncertain or failed behavior.
 
   - type: checkboxes
     id: preflight
     attributes:
       label: Preflight
       options:
-        - label: I checked whether this is already covered by an existing canonical issue.
+        - label: I checked whether this is already covered by an existing issue.
           required: true
-        - label: I am not reporting a synthetic renderer artifact as a product bug unless it affected public evidence.
+        - label: I separated product behavior from demo/rendering artifacts.
           required: true
-        - label: I included enough evidence to distinguish State A, State B, and State C.
-          required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P0 - unsafe write, data loss, or destructive wrong target
+        - P1 - public claim, core workflow, or verified-state blocker
+        - P2 - important live gap with workaround
+        - P3 - low-risk demo or diagnostic gap
+    validations:
+      required: true
 
   - type: textarea
     id: live_context
@@ -37,7 +47,7 @@ body:
   - type: dropdown
     id: state
     attributes:
-      label: Observed contract state
+      label: Observed outcome
       options:
         - State B - uncertain success
         - State C - hard failure
@@ -51,16 +61,14 @@ body:
     id: observed
     attributes:
       label: Observed evidence
-      description: Include exact response snippets, resource readback, or transcript entries.
-      render: json
+      description: Include exact response snippets, resource readback, transcript entries, or artifact paths.
     validations:
       required: true
 
   - type: textarea
     id: user_claim_risk
     attributes:
-      label: User claim risk
-      description: What claim would be unsafe or misleading until this is fixed?
+      label: Claim boundary
       placeholder: |
         Until this is fixed, do not claim...
     validations:
@@ -69,11 +77,10 @@ body:
   - type: textarea
     id: acceptance
     attributes:
-      label: Acceptance criteria
+      label: Done when
       placeholder: |
-        - [ ] The live failure is reproduced or narrowed to a documented unsupported state.
-        - [ ] The server returns State A only with readback evidence.
-        - [ ] Demo/public docs avoid claiming unverified behavior.
-        - [ ] Strict live E2E or a targeted live probe covers the fix when feasible.
+        - [ ] Failure is reproduced or documented as unsupported.
+        - [ ] State A is returned only with readback evidence.
+        - [ ] Public demo/docs avoid unverified claims.
     validations:
       required: true

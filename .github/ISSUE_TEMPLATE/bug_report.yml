@@ -6,25 +6,22 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this for behavior that is broken, unsafe, unverifiable, or different from the documented contract. Security issues should be reported privately through SECURITY.md, not as public issues.
+        Use this for behavior that is broken, unsafe, unverifiable, or different from the documented contract. Report security issues privately through SECURITY.md.
 
   - type: checkboxes
     id: preflight
     attributes:
       label: Preflight
       options:
-        - label: I searched existing open and closed issues for duplicates.
+        - label: I searched existing issues for duplicates.
           required: true
         - label: This is not a private security report.
           required: true
-        - label: I separated observed evidence from assumptions.
-          required: true
 
   - type: dropdown
-    id: impact
+    id: priority
     attributes:
-      label: Impact
-      description: Pick the highest user-visible impact.
+      label: Priority
       options:
         - P0 - data loss, destructive wrong target, or unsafe write
         - P1 - core workflow blocked or incorrect verified state
@@ -36,21 +33,19 @@ body:
   - type: dropdown
     id: surface
     attributes:
-      label: Affected surface
+      label: Primary area
       options:
+        - logic-ui
         - transport
         - tracks
         - midi
         - mixer
         - plugins
-        - edit
-        - navigation
-        - project
+        - project-export
         - resources
-        - accessibility
-        - setup
-        - release/install
-        - demo/live harness
+        - setup-release
+        - workflow
+        - demo
         - docs
         - unknown
     validations:
@@ -60,7 +55,6 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Include all relevant versions and setup state.
       placeholder: |
         - Logic Pro version:
         - macOS version:
@@ -75,7 +69,6 @@ body:
     id: steps
     attributes:
       label: Reproduction steps
-      description: Provide the smallest exact sequence that reproduces the problem.
       placeholder: |
         1. Start from...
         2. Call...
@@ -87,8 +80,7 @@ body:
     id: actual
     attributes:
       label: Actual behavior
-      description: What happened? Include the exact response envelope when possible.
-      render: json
+      description: What happened? Include the exact response envelope, log, or screenshot when useful.
     validations:
       required: true
 
@@ -96,10 +88,9 @@ body:
     id: expected
     attributes:
       label: Expected behavior
-      description: State the expected user-visible result and expected Honest Contract state.
       placeholder: |
-        Expected State A / State B / State C:
-        Expected readback or failure reason:
+        Expected user-visible result:
+        Expected State A / State B / State C outcome:
     validations:
       required: true
 
@@ -107,7 +98,6 @@ body:
     id: evidence
     attributes:
       label: Evidence
-      description: Paste command output, logs, screenshots, transcript paths, issue links, or live E2E snippets. Redact secrets.
       placeholder: |
         - Command:
         - Output:
@@ -119,12 +109,10 @@ body:
   - type: textarea
     id: acceptance
     attributes:
-      label: Acceptance criteria
-      description: Define what must be true before this can close.
+      label: Done when
       placeholder: |
-        - [ ] Regression test covers the failure.
-        - [ ] The tool/resource returns the correct State A/B/C outcome.
-        - [ ] Live Logic evidence is attached when the behavior depends on Logic UI state.
-        - [ ] Docs are updated if the public contract changed.
+        - [ ] Failure is reproduced or narrowed to an unsupported state.
+        - [ ] Test or live probe covers the fix.
+        - [ ] Public contract/docs are updated if behavior changed.
     validations:
       required: true

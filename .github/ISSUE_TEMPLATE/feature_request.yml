@@ -6,22 +6,20 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this for new capabilities. If the current behavior is broken or unverifiable, file a bug instead.
+        Use this for new capabilities. If current behavior is broken or unverifiable, file a bug.
 
   - type: checkboxes
     id: preflight
     attributes:
       label: Preflight
       options:
-        - label: I searched existing open and closed issues for related work.
-          required: true
-        - label: I described the user workflow before proposing implementation details.
+        - label: I searched existing issues for related work.
           required: true
 
   - type: dropdown
-    id: value
+    id: priority
     attributes:
-      label: Product value
+      label: Priority
       options:
         - P0 - enables a critical adoption or safety path
         - P1 - unlocks a high-value Logic Pro workflow
@@ -35,20 +33,18 @@ body:
     attributes:
       label: Primary area
       options:
-        - setup
-        - workflow
+        - logic-ui
         - transport
         - tracks
         - midi
         - mixer
         - plugins
-        - edit/navigation
-        - project/export
+        - project-export
         - resources
-        - library
+        - setup-release
+        - workflow
+        - demo
         - docs
-        - release/install
-        - demo/live harness
     validations:
       required: true
 
@@ -56,7 +52,6 @@ body:
     id: problem
     attributes:
       label: Problem
-      description: What user job is hard, impossible, risky, or slow today?
       placeholder: |
         As a Logic Pro MCP user, I need...
         Today this fails because...
@@ -66,8 +61,7 @@ body:
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed behavior
-      description: Describe the desired behavior, public API shape, or workflow outcome.
+      label: Proposed outcome
       placeholder: |
         The server should...
         The client should be able to...
@@ -77,8 +71,7 @@ body:
   - type: textarea
     id: contract
     attributes:
-      label: Contract and safety notes
-      description: Explain target validation, confirmation, readback, provenance, or fail-closed requirements.
+      label: Safety and contract notes
       placeholder: |
         - Mutating operation?
         - Required explicit target?
@@ -91,20 +84,10 @@ body:
   - type: textarea
     id: acceptance
     attributes:
-      label: Acceptance criteria
+      label: Done when
       placeholder: |
         - [ ] Public behavior is documented.
-        - [ ] Unit/integration coverage exists for the new contract.
+        - [ ] Tests cover the new contract.
         - [ ] Live Logic evidence is attached if the feature writes to Logic.
-        - [ ] Existing clients receive a compatible response shape or a documented breaking change.
     validations:
       required: true
-
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives considered
-      description: Optional but useful for avoiding hidden scope.
-      placeholder: |
-        - Alternative:
-        - Why not:

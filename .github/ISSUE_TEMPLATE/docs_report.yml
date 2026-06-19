@@ -8,7 +8,7 @@ body:
     attributes:
       label: Preflight
       options:
-        - label: I checked the README, docs/API.md, docs/SETUP.md, docs/TROUBLESHOOTING.md, and SECURITY.md where relevant.
+        - label: I checked the relevant README, docs, changelog, or security policy first.
           required: true
 
   - type: dropdown
@@ -37,19 +37,19 @@ body:
       required: true
 
   - type: textarea
-    id: proposed_change
+    id: source
     attributes:
-      label: Proposed change
+      label: Source of truth
       placeholder: |
-        The docs should say...
+        Link to release evidence, source file, issue, PR, or live verification note.
     validations:
       required: true
 
   - type: textarea
-    id: evidence
+    id: proposed_change
     attributes:
-      label: Evidence or source of truth
+      label: Proposed fix
       placeholder: |
-        Link to release evidence, source file, issue, PR, or live verification note.
+        The docs should say...
     validations:
       required: true

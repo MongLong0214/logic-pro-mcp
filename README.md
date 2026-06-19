@@ -11,12 +11,10 @@
   <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-6.0+-F05138.svg?style=flat-square" /></a>
   <a href="https://developer.apple.com/macos/"><img src="https://img.shields.io/badge/macOS-14+-000000.svg?style=flat-square&logo=apple" /></a>
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-0.10-blue.svg?style=flat-square" /></a>
+  <a href="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml"><img src="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
   <img src="https://img.shields.io/badge/tests-1396_passing-brightgreen.svg?style=flat-square" />
   <img src="https://img.shields.io/badge/stable-v3.6.0-blue.svg?style=flat-square" />
-  <a href="https://github.com/MongLong0214/logic-pro-mcp/issues"><img src="https://img.shields.io/github/issues/MongLong0214/logic-pro-mcp?style=flat-square&label=issues" /></a>
-  <a href="https://github.com/MongLong0214/logic-pro-mcp/pulls"><img src="https://img.shields.io/github/issues-pr/MongLong0214/logic-pro-mcp?style=flat-square&label=PRs" /></a>
-  <a href="https://github.com/MongLong0214/logic-pro-mcp/stargazers"><img src="https://img.shields.io/github/stars/MongLong0214/logic-pro-mcp?style=flat-square&label=stars" /></a>
 </p>
 
 <p align="center">
