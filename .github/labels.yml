@@ -3,6 +3,7 @@
 # Keep labels practical:
 # - Every accepted open issue should have exactly one type, priority, status,
 #   and primary area label.
+# - Status labels describe triage/execution state, not release readiness.
 # - Use issue body, PR notes, and linked evidence for State A/B/C details.
 # - Avoid evidence/status micro-labels unless they change day-to-day execution.
 
@@ -56,7 +57,7 @@
   description: Newly filed and not yet accepted into a work bundle.
 - name: "status: ready"
   color: 0e8a16
-  description: Scoped enough for implementation.
+  description: Triaged and scoped for a focused implementation PR; not done or release-ready.
 - name: "status: in progress"
   color: 0052cc
   description: Actively being worked.
