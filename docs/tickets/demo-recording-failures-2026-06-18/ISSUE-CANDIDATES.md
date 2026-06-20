@@ -4,6 +4,12 @@ Date: 2026-06-18
 Scope: Failures and non-State-A behavior observed while producing the Reddit demo videos and Berlin hard-techno follow-up captures, primarily v7-v27.
 
 Source evidence:
+
+Note: the `docs/media/reddit-dudddee-*` and related capture/render artifacts
+below are historical source names from the QA pass. They are no longer retained
+as tracked repo media after the docs/media cleanup; the GitHub issues preserve
+the actionable findings.
+
 - `docs/media/reddit-dudddee-actual-usage-v7-transcript.json`
 - `docs/media/reddit-dudddee-english-ui-actual-v8-transcript.json`
 - `docs/media/reddit-dudddee-english-ui-actual-v9-transcript.json`

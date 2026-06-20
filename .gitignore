@@ -36,3 +36,9 @@ artifacts/**/Autosave/
 
 # Live-test duplicate created via save_as during live T0/E2E — not shipped
 artifacts/acid-track-composition-v4/acid-track-applyback-test.logicx/
+
+# One-off public demo capture/render attempts are local artifacts. The README
+# hero demo and its verification helpers are explicitly tracked under docs/media.
+docs/media/capture-reddit-*.py
+docs/media/render-reddit-*.py
+docs/media/reddit-dudddee-*
