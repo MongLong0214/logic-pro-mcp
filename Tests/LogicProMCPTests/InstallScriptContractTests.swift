@@ -107,6 +107,11 @@ import Testing
     #expect(workflow.contains("LOGIC_PRO_MCP_SHARE_DIR"))
     #expect(workflow.contains("LogicProMCP-macOS-universal.tar.gz"))
     #expect(workflow.contains("test -f \"$LOGIC_PRO_MCP_SHARE_DIR/logic_ui_jxa.py\""))
+    // The install-validation job MUST install cliclick before running install.sh:
+    // install.sh hard-requires it (require_command "cliclick"), and GitHub's macOS
+    // runners don't ship it, so without this the job fails "required dependency
+    // missing: cliclick" on every tagged release.
+    #expect(workflow.contains("brew install cliclick"))
     #expect(packageScript.contains("RELEASE-METADATA.json"))
     #expect(packageScript.contains("Scripts/logic_bounce.py"))
     #expect(packageScript.contains("Scripts/logic_bounce_ui.py"))
