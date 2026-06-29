@@ -131,6 +131,7 @@ struct Issue108Tests {
         let counter = CallCounter([1, 2]) // before=1, after=2
         let regions = RegionSnapshotBox([.success([]), .success([importedRegion()])])
         let result = await AccessibilityChannel.defaultImportMIDIFile(
+            systemEventsAuthorized: { true },
             path: path,
             executeScript: { _ in .success("OK") },
             trackCount: { counter.next() },
@@ -151,6 +152,7 @@ struct Issue108Tests {
         let counter = CallCounter([1, 2])
         let regions = RegionSnapshotBox([.success([]), .success([])])
         let result = await AccessibilityChannel.defaultImportMIDIFile(
+            systemEventsAuthorized: { true },
             path: path,
             executeScript: { _ in .success("OK") },
             trackCount: { counter.next() },
@@ -171,6 +173,7 @@ struct Issue108Tests {
         let counter = CallCounter([3, 3]) // before==after → no import landed
         let regions = RegionSnapshotBox([.success([]), .success([])])
         let result = await AccessibilityChannel.defaultImportMIDIFile(
+            systemEventsAuthorized: { true },
             path: path,
             executeScript: { _ in .success("OK") },
             trackCount: { counter.next() },
@@ -189,6 +192,7 @@ struct Issue108Tests {
     func importMenuClickError() async {
         let path = tempMIDIFile(); defer { try? FileManager.default.removeItem(atPath: path) }
         let result = await AccessibilityChannel.defaultImportMIDIFile(
+            systemEventsAuthorized: { true },
             path: path,
             executeScript: { _ in .success(#"{"result":"MENU_ERROR: not found"}"#) },
             trackCount: { 1 },
@@ -203,6 +207,7 @@ struct Issue108Tests {
     @Test("import_file rejects a nonexistent file with a typed error")
     func importMissingFile() async {
         let result = await AccessibilityChannel.defaultImportMIDIFile(
+            systemEventsAuthorized: { true },
             path: "/tmp/LogicProMCP/does-not-exist-\(UUID().uuidString).mid",
             executeScript: { _ in .success("OK") },
             trackCount: { 1 },
