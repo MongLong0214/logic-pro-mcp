@@ -7,6 +7,8 @@ private final class PermissionRuntimeHarness: @unchecked Sendable {
     var accessibility = true
     var running = true
     var probeResult = true
+    var systemEventsProbeCalls = 0
+    var systemEventsProbeResult = true
 
     func runtime() -> PermissionChecker.Runtime {
         PermissionChecker.Runtime(
@@ -18,9 +20,38 @@ private final class PermissionRuntimeHarness: @unchecked Sendable {
             runAutomationProbe: {
                 self.probeCalls += 1
                 return self.probeResult
+            },
+            runSystemEventsAutomationProbe: {
+                self.systemEventsProbeCalls += 1
+                return self.systemEventsProbeResult
             }
         )
     }
+}
+
+@Test func testPermissionCheckerSystemEventsAutomationProbeReflectsGrant() {
+    let harness = PermissionRuntimeHarness()
+    harness.systemEventsProbeResult = true
+
+    let state = PermissionChecker.checkSystemEventsAutomationState(runtime: harness.runtime())
+
+    #expect(state == .granted)
+    #expect(PermissionChecker.checkSystemEventsAutomation(runtime: harness.runtime()))
+    #expect(harness.systemEventsProbeCalls == 2)
+}
+
+@Test func testPermissionCheckerSystemEventsAutomationProbeRunsEvenWhenLogicProNotRunning() {
+    // System Events is always running; its probe is NOT gated on Logic Pro
+    // (unlike the Logic Pro automation probe), so a denied System Events target
+    // is reported as not_granted, not not_verifiable.
+    let harness = PermissionRuntimeHarness()
+    harness.running = false
+    harness.systemEventsProbeResult = false
+
+    let state = PermissionChecker.checkSystemEventsAutomationState(runtime: harness.runtime())
+
+    #expect(state == .notGranted)
+    #expect(harness.systemEventsProbeCalls == 1)
 }
 
 @Test func testPermissionCheckerCheckAccessibilityUsesInjectedRuntimeAndPrompt() {

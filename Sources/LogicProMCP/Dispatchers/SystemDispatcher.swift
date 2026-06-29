@@ -59,6 +59,11 @@ struct SystemDispatcher {
             let accessibilityStatus: String
             let automationStatus: String
             let automationVerifiable: Bool
+            // #188: Automation → System Events is a distinct TCC target that the
+            // MIDI import / tempo-dialog paths require; surfacing it stops a green
+            // Logic-Pro automation line from hiding a denied System Events target.
+            let automationSystemEvents: Bool
+            let automationSystemEventsStatus: String
             let postEventAccess: Bool   // T5: CGPreflightPostEventAccess() — required for CGEvent.post
 
             enum CodingKeys: String, CodingKey {
@@ -68,6 +73,8 @@ struct SystemDispatcher {
                 case accessibilityStatus = "accessibility_status"
                 case automationStatus = "automation_status"
                 case automationVerifiable = "automation_verifiable"
+                case automationSystemEvents = "automation_system_events"
+                case automationSystemEventsStatus = "automation_system_events_status"
                 case postEventAccess = "post_event_access"
             }
         }
@@ -200,6 +207,8 @@ struct SystemDispatcher {
                     accessibilityStatus: permissions.accessibilityState.rawValue,
                     automationStatus: permissions.automationState.rawValue,
                     automationVerifiable: permissions.automationVerifiable,
+                    automationSystemEvents: permissions.automationSystemEvents,
+                    automationSystemEventsStatus: permissions.systemEventsAutomationState.rawValue,
                     postEventAccess: CGPreflightPostEventAccess()
                 ),
                 process: .init(

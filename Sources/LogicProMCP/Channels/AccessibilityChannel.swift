@@ -4396,6 +4396,7 @@ actor AccessibilityChannel: Channel {
     /// hint, because such lanes route to a General MIDI device and may bounce
     /// silent — a count delta alone must never be claimed audible-verified.
     static func defaultImportMIDIFile(
+        systemEventsAuthorized: @Sendable () -> Bool = { PermissionChecker.checkSystemEventsAutomation() },
         path: String,
         runtime: AXLogicProElements.Runtime = .production,
         executeScript: @escaping @Sendable (String) async -> ChannelResult = { await AppleScriptChannel.executeAppleScript($0) },
@@ -4409,6 +4410,24 @@ actor AccessibilityChannel: Channel {
                 error: .invalidParams,
                 hint: "midi.import_file: file not found",
                 extras: ["requested": path]
+            ))
+        }
+        // #188: the import below drives `tell application "System Events"`, a
+        // distinct Automation TCC target from Logic Pro. If it is not authorized,
+        // fail closed with a typed permission error BEFORE the mutation instead of
+        // aborting mid-import with a bare Apple Events denial (health/permissions
+        // could otherwise look green on the Logic-Pro automation line alone).
+        guard systemEventsAuthorized() else {
+            return .error(HonestContract.encodeStateC(
+                error: .permissionDenied,
+                hint: "midi.import_file requires Automation access to System Events. Grant it in System Settings > Privacy & Security > Automation → allow your launcher app to control System Events, then retry.",
+                extras: [
+                    "permission": "automation_system_events",
+                    "failure_stage": "preflight_system_events_permission",
+                    "write_attempted": false,
+                    "safe_to_retry": true,
+                    "remediation": "System Settings > Privacy & Security > Automation → allow control of System Events",
+                ]
             ))
         }
         let readTrackCount = trackCount ?? { AXLogicProElements.allTrackHeaders(runtime: runtime).count }

@@ -29,6 +29,13 @@ enum PermissionChecker {
         let checkAccessibility: @Sendable (Bool) -> Bool
         let isLogicProRunning: @Sendable () -> Bool
         let runAutomationProbe: @Sendable () -> Bool
+        // Automation → System Events is a SEPARATE TCC target from Automation →
+        // Logic Pro. Multi-step paths (MIDI import, tempo dialog, project-state
+        // probes) drive `tell application "System Events"`, so a host that has
+        // Logic Pro automation granted can still have System Events denied —
+        // which is exactly the #188 gap where health looked green but
+        // record_sequence failed mid-import with an Apple Events denial.
+        let runSystemEventsAutomationProbe: @Sendable () -> Bool
 
         static let production = Runtime(
             checkAccessibility: { prompt in
@@ -38,6 +45,9 @@ enum PermissionChecker {
             isLogicProRunning: { ProcessUtils.isLogicProRunning },
             runAutomationProbe: {
                 runAutomationProbeViaShell()
+            },
+            runSystemEventsAutomationProbe: {
+                runSystemEventsAutomationProbeViaShell()
             }
         )
     }
@@ -45,20 +55,28 @@ enum PermissionChecker {
     struct PermissionStatus: Sendable {
         let accessibilityState: CheckState
         let automationState: CheckState
+        let systemEventsAutomationState: CheckState
 
-        init(accessibility: Bool, automationLogicPro: Bool) {
+        init(accessibility: Bool, automationLogicPro: Bool, systemEventsAutomation: CheckState = .notVerifiable) {
             self.accessibilityState = accessibility ? .granted : .notGranted
             self.automationState = automationLogicPro ? .granted : .notGranted
+            self.systemEventsAutomationState = systemEventsAutomation
         }
 
-        init(accessibilityState: CheckState, automationState: CheckState) {
+        init(
+            accessibilityState: CheckState,
+            automationState: CheckState,
+            systemEventsAutomationState: CheckState = .notVerifiable
+        ) {
             self.accessibilityState = accessibilityState
             self.automationState = automationState
+            self.systemEventsAutomationState = systemEventsAutomationState
         }
 
         var accessibility: Bool { accessibilityState.isGranted }
         var automationLogicPro: Bool { automationState.isGranted }
         var automationVerifiable: Bool { automationState != .notVerifiable }
+        var automationSystemEvents: Bool { systemEventsAutomationState.isGranted }
 
         var allGranted: Bool { accessibility && automationLogicPro }
 
@@ -71,6 +89,7 @@ enum PermissionChecker {
             case .notVerifiable:
                 lines.append("Automation (Logic Pro): NOT VERIFIABLE (Logic Pro not running)")
             }
+            lines.append("Automation (System Events): \(systemEventsAutomationState.summaryLabel)")
             if accessibilityState == .notGranted {
                 lines.append("  → System Settings > Privacy & Security > Accessibility → add your terminal app")
             }
@@ -81,6 +100,12 @@ enum PermissionChecker {
                 lines.append("  → Launch Logic Pro once, then rerun --check-permissions to verify Automation access")
             case .granted:
                 break
+            }
+            // System Events automation is required by MIDI import / tempo-dialog
+            // paths; surface its own remediation so a green Logic-Pro automation
+            // line never hides a denied System Events target (#188).
+            if systemEventsAutomationState == .notGranted {
+                lines.append("  → System Settings > Privacy & Security > Automation → allow control of System Events")
             }
             return lines.joined(separator: "\n")
         }
@@ -117,6 +142,23 @@ enum PermissionChecker {
         return runtime.runAutomationProbe() ? .granted : .notGranted
     }
 
+    /// Check if Automation permission for System Events is granted. Required by
+    /// the MIDI import / tempo-dialog / project-state paths that drive
+    /// `tell application "System Events"`. System Events is always running, so
+    /// (unlike Logic Pro) the probe is unconditional; a denied or undetermined
+    /// target returns `notGranted`.
+    static func checkSystemEventsAutomation() -> Bool {
+        checkSystemEventsAutomation(runtime: .production)
+    }
+
+    static func checkSystemEventsAutomation(runtime: Runtime) -> Bool {
+        checkSystemEventsAutomationState(runtime: runtime).isGranted
+    }
+
+    static func checkSystemEventsAutomationState(runtime: Runtime = .production) -> CheckState {
+        runtime.runSystemEventsAutomationProbe() ? .granted : .notGranted
+    }
+
     /// Full permission check.
     static func check() -> PermissionStatus {
         check(runtime: .production)
@@ -125,7 +167,8 @@ enum PermissionChecker {
     static func check(runtime: Runtime) -> PermissionStatus {
         PermissionStatus(
             accessibilityState: checkAccessibilityState(runtime: runtime),
-            automationState: checkAutomationState(runtime: runtime)
+            automationState: checkAutomationState(runtime: runtime),
+            systemEventsAutomationState: checkSystemEventsAutomationState(runtime: runtime)
         )
     }
 
@@ -145,5 +188,24 @@ enum PermissionChecker {
 
         let trimmed = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed == ServerConfig.logicProProcessName
+    }
+
+    private static func runSystemEventsAutomationProbeViaShell() -> Bool {
+        // A no-op read against System Events. If the launcher lacks Automation →
+        // System Events, osascript exits non-zero (e.g. errAEEventNotPermitted
+        // -1743) and the probe reports notGranted instead of letting a later
+        // MIDI import fail mid-mutation with the same denial.
+        let script = "tell application \"System Events\" to return name"
+        guard case let .completed(output) = BoundedProcessRunner.run(
+            executable: "/usr/bin/osascript",
+            arguments: ["-e", script],
+            timeout: 1.0,
+            outputLimitBytes: 4 * 1024
+        ), output.exitCode == 0 else {
+            return false
+        }
+
+        let trimmed = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed == "System Events"
     }
 }

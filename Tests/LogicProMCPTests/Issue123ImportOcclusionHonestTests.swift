@@ -98,6 +98,7 @@ func testOccludedSessionFailsClosedWithDialogNotFound(sentinel: String) async th
     let spy = ImportCountSpy(value: 9)
 
     let result = await AccessibilityChannel.defaultImportMIDIFile(
+        systemEventsAuthorized: { true },
         path: fixture.fileURL.path,
         executeScript: { _ in .success(sentinel) },
         trackCount: { spy.read() },
@@ -156,6 +157,7 @@ func testOccludedSessionFailsClosedWithDialogNotFound(sentinel: String) async th
     ])
 
     let result = await AccessibilityChannel.defaultImportMIDIFile(
+        systemEventsAuthorized: { true },
         path: fixture.fileURL.path,
         executeScript: { _ in .success("OK") },
         trackCount: { counter.next() },

@@ -918,6 +918,10 @@ def main():
         permissions = health.get("permissions", {})
         accessibility_ready = permissions.get("accessibility") is True
         automation_ready = permissions.get("automation_granted") is True
+        # #188: System Events automation is a distinct TCC target the MIDI import
+        # path requires. The strict live harness itself drives System Events, so a
+        # green run must report it granted.
+        system_events_ready = permissions.get("automation_system_events") is True
         core_midi = channels_by_name.get("CoreMIDI", {})
         core_midi_ready = core_midi.get("available") is True and core_midi.get("ready") is True
         live_logic_ready = logic_running and accessibility_ready
@@ -931,6 +935,14 @@ def main():
         T_LIVE("health.permissions.accessibility granted", r, lambda _: accessibility_ready, accessibility_ready, "Accessibility is not granted to this binary/session")
         T_LIVE("health.permissions.automation granted", r, lambda _: automation_ready, automation_ready, "Automation is not verifiable/granted without a running Logic session")
         T("health.permissions.post_event_access present", r, lambda _: "post_event_access" in permissions)
+        T("health.permissions.automation_system_events present (#188)", r, lambda _: "automation_system_events" in permissions)
+        T_LIVE(
+            "health.permissions.automation_system_events granted (#188)",
+            r,
+            lambda _: system_events_ready,
+            system_events_ready,
+            "Automation → System Events is required by the MIDI import path",
+        )
         T("health.process.memory_mb positive", r, lambda _: health["process"]["memory_mb"] > 0)
         T("health.process.uptime_sec non-negative", r, lambda _: health["process"]["uptime_sec"] >= 0)
 
@@ -939,6 +951,11 @@ def main():
         "system.permissions mentions accessibility and automation",
         r,
         lambda _: "Accessibility:" in tool_text(r) and "Automation (Logic Pro):" in tool_text(r),
+    )
+    T(
+        "system.permissions mentions System Events automation (#188)",
+        r,
+        lambda _: "Automation (System Events):" in tool_text(r),
     )
 
     r = call_tool(client, "logic_system", "refresh_cache")

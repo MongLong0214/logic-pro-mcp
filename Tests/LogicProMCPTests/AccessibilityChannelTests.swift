@@ -1214,6 +1214,38 @@ private func makeSetInstrumentFixture() -> (
     #expect(result.message.contains("\"control_bar_slider_descriptions\":[\"Bar\"]"))
 }
 
+@Test func testImportMIDIFileFailsClosedWhenSystemEventsAutomationDenied() async throws {
+    // #188: when Automation → System Events is not authorized, the import must
+    // fail closed with a typed permission error BEFORE the mutation — it must
+    // NOT run the import script and abort mid-flight with a bare Apple Events
+    // denial.
+    let tempFile = FileManager.default.temporaryDirectory
+        .appendingPathComponent("LogicProMCP-se-denied-\(UUID().uuidString).mid")
+    try Data([0x4D, 0x54, 0x68, 0x64]).write(to: tempFile)
+    defer { try? FileManager.default.removeItem(at: tempFile) }
+
+    let result = await AccessibilityChannel.defaultImportMIDIFile(
+        systemEventsAuthorized: { false },
+        path: tempFile.path,
+        executeScript: { _ in
+            Issue.record("import script must not run when System Events automation is denied")
+            return .error("should not run")
+        },
+        trackCount: { 1 },
+        regionInfos: { .success([]) },
+        deltaPoll: {}
+    )
+
+    #expect(!result.isSuccess)
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect((obj["success"] as? Bool) == false)
+    #expect(obj["error"] as? String == "permission_denied")
+    #expect(obj["permission"] as? String == "automation_system_events")
+    #expect(obj["failure_stage"] as? String == "preflight_system_events_permission")
+    #expect((obj["write_attempted"] as? Bool) == false)
+    #expect((obj["safe_to_retry"] as? Bool)!)
+}
+
 @Test func testAccessibilityChannelImportMIDIFileReturnsErrorWhenTrackCountDoesNotIncrease() async throws {
     let tempFile = FileManager.default.temporaryDirectory
         .appendingPathComponent("LogicProMCP-import-mismatch-\(UUID().uuidString).mid")
@@ -1221,6 +1253,7 @@ private func makeSetInstrumentFixture() -> (
     defer { try? FileManager.default.removeItem(at: tempFile) }
 
     let result = await AccessibilityChannel.defaultImportMIDIFile(
+        systemEventsAuthorized: { true },
         path: tempFile.path,
         executeScript: { _ in .success("OK") },
         trackCount: { 3 },
@@ -1253,6 +1286,7 @@ private func makeSetInstrumentFixture() -> (
     ])
 
     let result = await AccessibilityChannel.defaultImportMIDIFile(
+        systemEventsAuthorized: { true },
         path: tempFile.path,
         executeScript: { _ in .success("OK") },
         trackCount: { counter.next() },
@@ -1317,6 +1351,7 @@ private func makeSetInstrumentFixture() -> (
     ])
 
     let result = await AccessibilityChannel.defaultImportMIDIFile(
+        systemEventsAuthorized: { true },
         path: tempFile.path,
         executeScript: { _ in .success("OK TEMPO_SEEN") },
         trackCount: { counter.next() },
@@ -1364,6 +1399,7 @@ private func makeSetInstrumentFixture() -> (
     ])
 
     let result = await AccessibilityChannel.defaultImportMIDIFile(
+        systemEventsAuthorized: { true },
         path: tempFile.path,
         executeScript: { _ in .success("OK") },
         trackCount: { counter.next() },
@@ -1396,6 +1432,7 @@ private func makeSetInstrumentFixture() -> (
     let spy = CountSpy()
 
     let result = await AccessibilityChannel.defaultImportMIDIFile(
+        systemEventsAuthorized: { true },
         path: tempFile.path,
         executeScript: { _ in .success(#"{"result":"DIALOG_NOT_FOUND: file-open sheet did not appear"}"#) },
         trackCount: { spy.read() },
@@ -1420,6 +1457,7 @@ private func makeSetInstrumentFixture() -> (
 
 @Test func testAccessibilityChannelImportMIDIFileMissingFileShortCircuits() async throws {
     let result = await AccessibilityChannel.defaultImportMIDIFile(
+        systemEventsAuthorized: { true },
         path: "/tmp/LogicProMCP/does-not-exist-\(UUID().uuidString).mid",
         executeScript: { _ in .success("OK") },
         trackCount: { 0 },

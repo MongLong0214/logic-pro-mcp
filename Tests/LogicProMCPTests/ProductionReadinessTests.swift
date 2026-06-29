@@ -292,10 +292,14 @@ import Testing
     let status = PermissionChecker.check(runtime: .init(
         checkAccessibility: { _ in true },
         isLogicProRunning: { false },
-        runAutomationProbe: { false }
+        runAutomationProbe: { false },
+        runSystemEventsAutomationProbe: { false }
     ))
     #expect(status.accessibility == true)
     #expect(status.automationState == .notVerifiable)
+    // #188: System Events automation is probed unconditionally (System Events is
+    // always running), so a denied probe is reported as not_granted.
+    #expect(status.systemEventsAutomationState == .notGranted)
 }
 
 @Test func testPermissionStatusSummaryFormatsCorrectly() {
