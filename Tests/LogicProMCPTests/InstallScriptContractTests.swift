@@ -162,6 +162,16 @@ import Testing
     )
 }
 
+@Test func testCommunityDiscordLinkIsDiscoverableAcrossDocs() throws {
+    // #178: the official Discord community must be discoverable from every help
+    // entry point — not just the README badge — so users land on real-time
+    // support from setup, troubleshooting, and contributor docs alike.
+    let discord = "https://discord.gg/4M3s79DBzz"
+    for path in ["README.md", "docs/SETUP.md", "docs/TROUBLESHOOTING.md", "CONTRIBUTING.md"] {
+        #expect(try scriptContents(path).contains(discord), "\(path) must link the official Discord (\(discord))")
+    }
+}
+
 @Test func testCoverageWorkflowFailsClosedAndUsesWritableProfilePath() throws {
     let workflow = try scriptContents(".github/workflows/ci.yml")
 

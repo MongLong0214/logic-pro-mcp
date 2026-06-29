@@ -164,3 +164,9 @@ LogicProMCP doctor
 ```
 
 If permissions look wrong after reinstalling, remove stale TCC entries in System Settings and grant them again to the actual launcher app.
+
+## Still stuck?
+
+Join the official Logic Pro MCP Discord for real-time setup help and triage: [https://discord.gg/4M3s79DBzz](https://discord.gg/4M3s79DBzz).
+
+For a reproducible bug, open a [GitHub Issue](https://github.com/MongLong0214/logic-pro-mcp/issues) with `LogicProMCP doctor` output and `LOG_LEVEL=debug` logs — that stays searchable and is the canonical tracker.
