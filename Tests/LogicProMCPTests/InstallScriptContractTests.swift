@@ -278,3 +278,24 @@ import Testing
     #expect(script.contains("Removed operator approvals"))
     #expect(script.contains("APPROVAL_LOCK"))
 }
+
+@Test func testKeyEventHelperSupportsReturnEnterAliasesAndPreflight() throws {
+    // #186: the demo capture harness aborted on `--return` ("Unknown option").
+    // The key-event input primitive must accept a flag-style --return (leading
+    // dashes stripped), alias `enter` -> Return, expose a no-post `--check`
+    // preflight, and fail closed naming the supported keys.
+    let script = try scriptContents("Scripts/logic_key_event.swift")
+
+    #expect(script.contains("\"return\": KeyEventSpec(keyCode: 36"))
+    #expect(script.contains("\"enter\": KeyEventSpec(keyCode: 36"))
+    #expect(script.contains("\"esc\": KeyEventSpec(keyCode: 53"))
+    // A leading `--` is stripped so `--return` resolves to the Return key.
+    #expect(script.contains("while value.hasPrefix(\"-\")"))
+    // Preflight that validates a key without posting a CGEvent.
+    #expect(script.contains("--check"))
+    #expect(script.contains("checkMode"))
+    #expect(script.contains("canonicalNameByKeyCode"))
+    // Fail-closed unknown key names the supported set.
+    #expect(script.contains("unknown_key:"))
+    #expect(script.contains("supportedKeysLine()"))
+}
