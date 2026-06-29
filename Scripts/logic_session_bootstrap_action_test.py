@@ -1049,6 +1049,130 @@ class BootstrapFreshSessionActionTests(unittest.TestCase):
         self.assertTrue(state["track_created"])
         self.assertIn("dismiss_save_dialog:cancel_button", result.actions)
 
+    def test_force_new_save_dialog_escape_fallback_when_cancel_button_unmatched(self):
+        # #187: Logic's Save prompt sometimes exposes buttons with no AX name, so
+        # the Cancel marker match is a no-op and the prompt stays visible. The
+        # bootstrap must fall back to Escape (Cancel-before-Escape) and recover,
+        # rather than dead-ending on save_dialog_dismiss_failed.
+        state = {
+            "closed": False,
+            "created": False,
+            "track_created": False,
+            "blocking_dialog_present": True,
+            "save_dialog_visible": False,
+            "send_return_calls": 0,
+            "cancel_button_clicks": 0,
+            "escape_calls": 0,
+        }
+
+        def make_ui_snapshot():
+            window_names = ["Untitled - Tracks"]
+            if state["save_dialog_visible"]:
+                window_names = ["Save", *window_names]
+            return bootstrap_module.UISnapshot(
+                frontmost_app="Logic Pro",
+                logic_window_names=window_names,
+                logic_menu_items=[
+                    "Apple", "Logic Pro", "File", "Edit", "Track", "Navigate",
+                    "Record", "Mix", "View", "Window", "Help",
+                ],
+                detected_language="en",
+                system_events_error=None,
+                project_picker_visible=False,
+                new_track_dialog_visible=False,
+                blocking_dialog_present=state["blocking_dialog_present"],
+            )
+
+        def call_tool(tool, command, params=None, timeout=None):
+            if tool == "logic_system" and command == "health":
+                return make_tool_response(json.dumps(make_health((not state["closed"]) or state["created"] or state["track_created"])))
+            if tool == "logic_project" and command == "close":
+                if state["blocking_dialog_present"]:
+                    return make_tool_response(
+                        '{"success":false,"error":"unsupported_state","failure_stage":"preflight_blocking_dialog","blocking_dialog_present":true}',
+                        is_error=True,
+                    )
+                state["closed"] = True
+                return make_tool_response('{"success":true,"verified":true}')
+            if tool == "logic_project" and command == "new":
+                state["created"] = True
+                return make_tool_response('{"success":true,"verified":true}')
+            if tool == "logic_system" and command == "refresh_cache":
+                return make_tool_response('{"ok":true}')
+            if tool == "logic_tracks" and command == "create_instrument":
+                state["track_created"] = True
+                return make_tool_response('{"success":true,"verified":true}')
+            return make_tool_response("{}")
+
+        def read_resource(uri):
+            if uri == "logic://project/info":
+                return make_resource_response(json.dumps({
+                    "source": "ax_live",
+                    "data": {
+                        "name": "Untitled - Tracks",
+                        "trackCount": 1 if state["track_created"] else 0,
+                        "source": "ax_live",
+                    },
+                }))
+            if uri == "logic://tracks":
+                return make_resource_response(json.dumps({
+                    "source": "ax_live",
+                    "ax_occluded": False,
+                    "data": (
+                        [{"id": 0, "name": "Track 1", "placeholder": False}]
+                        if state["track_created"] else []
+                    ),
+                }))
+            if uri == "logic://tracks/0/regions":
+                return make_resource_response("[]")
+            return make_resource_response("{}")
+
+        def send_return_key():
+            state["send_return_calls"] += 1
+            state["save_dialog_visible"] = True
+            state["blocking_dialog_present"] = True
+            return True
+
+        def click_save_dialog_cancel_button():
+            # Cancel "succeeds" (a button was pressed) but the prompt does NOT
+            # clear — the real-world missing-value-button no-op.
+            state["cancel_button_clicks"] += 1
+            return True
+
+        def send_escape_key():
+            state["escape_calls"] += 1
+            state["save_dialog_visible"] = False
+            state["blocking_dialog_present"] = False
+            return True
+
+        with (
+            mock.patch("logic_session_bootstrap._send_return_key", side_effect=send_return_key),
+            mock.patch(
+                "logic_session_bootstrap._click_save_dialog_cancel_button",
+                side_effect=click_save_dialog_cancel_button,
+            ),
+            mock.patch("logic_session_bootstrap._send_escape_key", side_effect=send_escape_key),
+        ):
+            result = run_force_new_bootstrap(
+                call_tool=call_tool,
+                document_probe=lambda timeout_sec: (
+                    (True, None)
+                    if (not state["closed"]) and (not state["created"]) and (not state["track_created"])
+                    else (False, None)
+                ),
+                ui_snapshot_factory=make_ui_snapshot,
+                read_resource=read_resource,
+            )
+
+        self.assertTrue(result.ok, result.as_dict())
+        self.assertEqual(state["cancel_button_clicks"], 1)
+        self.assertEqual(state["escape_calls"], 1)
+        self.assertTrue(state["closed"])
+        self.assertTrue(state["track_created"])
+        # Cancel was tried first, then Escape resolved it.
+        self.assertIn("dismiss_save_dialog:cancel_button", result.actions)
+        self.assertIn("dismiss_save_dialog:escape_fallback", result.actions)
+
     def test_force_new_closes_arrange_window_when_document_probe_reports_false(self):
         state = {
             "closed": False,

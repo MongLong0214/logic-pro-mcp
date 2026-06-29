@@ -1120,13 +1120,7 @@ def bootstrap_fresh_logic_session(
                 health=health_local,
                 ui=ui_local,
             )
-        if not _click_save_dialog_cancel_button():
-            return blocked(
-                "save_dialog_cancel_click_failed",
-                "Cancel button press failed while trying to dismiss Logic's Save dialog.",
-                health=health_local,
-                ui=ui_local,
-            )
+        _click_save_dialog_cancel_button()
         actions.append(action_label)
         call_tool("logic_system", "refresh_cache", None, 5.0)
         actions.append("logic_system.refresh_cache")
@@ -1135,10 +1129,27 @@ def bootstrap_fresh_logic_session(
         if latest_health is not None:
             health_local = latest_health
         ui_local = collect_ui_snapshot()
+        # #187: Logic's Save prompt can expose buttons with no AX name, so the
+        # Cancel marker match is a no-op and the prompt stays visible. Fall back
+        # to the Escape key — which cancels the save sheet without saving or
+        # discarding — but ONLY after attempting Cancel (Cancel-before-Escape).
+        if (
+            ui_local.blocking_dialog_present
+            and _contains_marker(ui_local.logic_window_names, SAVE_DIALOG_MARKERS)
+            and _send_escape_key()
+        ):
+            actions.append("dismiss_save_dialog:escape_fallback")
+            call_tool("logic_system", "refresh_cache", None, 5.0)
+            actions.append("logic_system.refresh_cache")
+            time.sleep(config.poll_interval_sec)
+            _, latest_health = fetch_health()
+            if latest_health is not None:
+                health_local = latest_health
+            ui_local = collect_ui_snapshot()
         if ui_local.blocking_dialog_present and _contains_marker(ui_local.logic_window_names, SAVE_DIALOG_MARKERS):
             return blocked(
                 "save_dialog_dismiss_failed",
-                "Logic's Save dialog remained visible after pressing Cancel.",
+                "Logic's Save dialog remained visible after pressing Cancel and Escape.",
                 health=health_local,
                 ui=ui_local,
             )
