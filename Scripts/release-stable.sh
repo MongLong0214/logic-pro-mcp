@@ -91,13 +91,14 @@ if gh release view "$VERSION" --repo "$REPO" >/dev/null 2>&1; then
     exit 1
 fi
 
-run python3 -m py_compile Scripts/live-e2e-test.py Scripts/logic_bounce.py Scripts/logic_bounce_test.py Scripts/logic_bounce_main_test.py Scripts/logic_bounce_support_test.py Scripts/logic_bounce_ui.py Scripts/logic_bounce_ui_test.py Scripts/logic_input_source.py Scripts/logic_session_bootstrap.py Scripts/logic_session_bootstrap_test.py Scripts/logic_session_bootstrap_action_test.py Scripts/logic_ui_jxa.py Scripts/logic_ui_jxa_test.py Scripts/logic_free_tempo_modal.py Scripts/logic_free_tempo_modal_test.py Scripts/logic_controller_learn_mode.py Scripts/logic_controller_learn_mode_test.py
+run python3 -m py_compile Scripts/live-e2e-test.py Scripts/logic_bounce.py Scripts/logic_bounce_test.py Scripts/logic_bounce_main_test.py Scripts/logic_bounce_support_test.py Scripts/logic_bounce_ui.py Scripts/logic_bounce_ui_test.py Scripts/logic_input_source.py Scripts/logic_session_bootstrap.py Scripts/logic_session_bootstrap_test.py Scripts/logic_session_bootstrap_action_test.py Scripts/logic_ui_jxa.py Scripts/logic_ui_jxa_test.py Scripts/logic_free_tempo_modal.py Scripts/logic_free_tempo_modal_test.py Scripts/logic_controller_learn_mode.py Scripts/logic_controller_learn_mode_test.py Scripts/logic_key_event_test.py
 run python3 Scripts/logic_bounce_test.py
 run python3 Scripts/logic_session_bootstrap_test.py
 run python3 Scripts/logic_session_bootstrap_action_test.py
 run python3 Scripts/logic_ui_jxa_test.py
 run python3 Scripts/logic_free_tempo_modal_test.py
 run python3 Scripts/logic_controller_learn_mode_test.py
+run python3 Scripts/logic_key_event_test.py
 run swiftc -typecheck Scripts/logic_key_event.swift
 run swiftc -typecheck Scripts/logic_ui_snapshot.swift
 run swift test --no-parallel

@@ -220,3 +220,7 @@ Unload and remove the launch agent plist, then verify no stale process remains.
 <a id="lifecycle-approvalsremove"></a>
 ### `approvals.remove`
 Delete the manual-validation approval store and its `.lock` sidecar only when you intentionally want to re-approve channels.
+
+## Community
+
+Stuck on setup? Join the official Logic Pro MCP Discord for real-time help: [https://discord.gg/4M3s79DBzz](https://discord.gg/4M3s79DBzz). For reproducible bugs, open a [GitHub Issue](https://github.com/MongLong0214/logic-pro-mcp/issues).

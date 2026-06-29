@@ -1314,6 +1314,18 @@ def main():
         disarm_after_transport = call_tool(client, "logic_tracks", "arm", {"index": 0, "enabled": False})
         disarm_track = wait_for_track_arm(client, 0, False)
 
+        # #190: if a transport op IS refused for a blocking dialog, the refusal
+        # must be IDENTIFIED (dialog role + a safe recovery action), never a bare
+        # blocking_dialog_present. Passes vacuously when no dialog is present.
+        for _label, _env in (("play", play_env), ("play_unchanged", play_unchanged_env), ("stop", final_stop_env)):
+            T(
+                f"transport.{_label} blocking-dialog refusal is identified (#190)",
+                play_resp,
+                lambda _, e=_env: (not isinstance(e, dict))
+                or (e.get("blocking_dialog_present") is not True)
+                or (e.get("recovery_action") is not None and e.get("dialog_role") is not None),
+            )
+
     T_LIVE(
         "fresh transport bootstrap detected",
         fresh_transport_payload,
@@ -1474,7 +1486,7 @@ def main():
     transport_after_128 = safe_get_transport_state(client) if live_logic_ready else None
     T("transport.set_tempo(128) dispatches", r, lambda _: len(set_tempo_128_text) > 0)
     T_LIVE(
-        "transport.set_tempo(128) verifies exact readback or fails closed with landmarks",
+        "transport.set_tempo(128) verifies exact readback or fails closed (never success on mismatch)",
         r,
         lambda _: (
             isinstance(set_tempo_128_json, dict)
@@ -1493,9 +1505,31 @@ def main():
             and set_tempo_128_json.get("success") is False
             and set_tempo_128_json.get("error") in ("element_not_found", "readback_unavailable")
             and has_tempo_landmarks(set_tempo_128_json)
+        ) or (
+            # #189: the slider-increment fallback fails closed (State C) when it
+            # cannot land the requested tempo — it must NEVER report success on a
+            # readback mismatch. Honest evidence: observed tempo + fallback method.
+            isinstance(set_tempo_128_json, dict)
+            and set_tempo_128_json.get("success") is False
+            and set_tempo_128_json.get("error") == "readback_mismatch"
+            and set_tempo_128_json.get("via") == "slider-increment"
+            and approx_equal(set_tempo_128_json.get("requested"), 128.0)
+            and isinstance(set_tempo_128_json.get("observed"), (int, float))
         ),
         live_logic_ready,
         "Logic Pro + Accessibility are required",
+    )
+    # #189 guard: regardless of which path runs, a tempo write must never claim
+    # success while reporting a tempo that differs from the request.
+    T(
+        "transport.set_tempo(128) never reports success on a readback mismatch (#189)",
+        r,
+        lambda _: not (
+            isinstance(set_tempo_128_json, dict)
+            and set_tempo_128_json.get("success") is True
+            and isinstance(set_tempo_128_json.get("observed"), (int, float))
+            and not approx_equal(set_tempo_128_json.get("observed"), 128.0)
+        ),
     )
 
     r = call_tool(client, "logic_transport", "set_tempo", {"tempo": 90.5})

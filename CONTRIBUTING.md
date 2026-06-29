@@ -173,4 +173,6 @@ Do **not** open a public issue for vulnerabilities. See [SECURITY.md](SECURITY.m
 
 ## Questions
 
-Open a GitHub Discussion or Issue with the `question` label.
+For real-time help, coordination, and contributor chat, join the official Logic Pro MCP Discord: [https://discord.gg/4M3s79DBzz](https://discord.gg/4M3s79DBzz).
+
+For anything that should stay searchable, open a GitHub Discussion or Issue with the `question` label.

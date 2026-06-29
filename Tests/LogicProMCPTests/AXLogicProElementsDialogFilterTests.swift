@@ -140,6 +140,49 @@ import Testing
     #expect(AXLogicProElements.dialogPresent(runtime: runtime) == true)
 }
 
+@Test func testBlockingDialogInfoReportsIdentityAndCancelRecovery() {
+    // #190: a blocking dialog must be identified — title, role, owning window,
+    // buttons, and a safe (Cancel-first) recovery action.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let dialog = builder.element(2)
+    let arrange = builder.element(3)
+    let cancelButton = builder.element(4)
+    let saveButton = builder.element(5)
+
+    builder.setAttribute(dialog, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(dialog, kAXTitleAttribute as String, "Save")
+    builder.setChildren(dialog, [cancelButton, saveButton])
+    builder.setAttribute(cancelButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(cancelButton, kAXTitleAttribute as String, "Cancel")
+    builder.setAttribute(saveButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(saveButton, kAXTitleAttribute as String, "Save")
+    builder.setAttribute(arrange, kAXTitleAttribute as String, "Demo - Tracks")
+    builder.setAttribute(app, kAXWindowsAttribute as String, [dialog, arrange])
+    builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    let info = AXLogicProElements.blockingDialogInfo(runtime: runtime)
+
+    let resolved = try! #require(info)
+    #expect(resolved.title == "Save")
+    #expect(resolved.role == (kAXDialogSubrole as String))
+    #expect(resolved.owningWindow == "Demo - Tracks")
+    #expect(resolved.buttonTitles.contains("Cancel"))
+    #expect(resolved.buttonTitles.contains("Save"))
+    #expect(resolved.recoveryAction.contains("Cancel"))
+}
+
+@Test func testBlockingDialogInfoReturnsNilWhenNoDialog() {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(AXLogicProElements.blockingDialogInfo(runtime: runtime) == nil)
+}
+
 @Test func testDialogPresentReturnsFalseWhenNoDialogs() {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(1)
