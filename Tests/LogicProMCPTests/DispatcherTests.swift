@@ -525,6 +525,48 @@ private func liveTransportJSON(
     #expect(executed.isEmpty)
 }
 
+@Test func testBlockingLogicDialogResultEnrichesDiagnosticWithDialogIdentity() throws {
+    // #190: when a blocking dialog is identified, the refusal envelope must carry
+    // its title, role, owning window, buttons, and a safe recovery action — not
+    // just a generic blocking_dialog_present.
+    let info = AXLogicProElements.BlockingDialogInfo(
+        title: "Save",
+        role: "AXDialog",
+        owningWindow: "Demo - Tracks",
+        buttonTitles: ["Cancel", "Save"],
+        recoveryAction: "Press \"Cancel\" to dismiss this dialog, then retry."
+    )
+
+    let result = blockingLogicDialogResult(operation: "transport.play", info: info)
+
+    #expect(result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["error"] as? String == "unsupported_state")
+    #expect(object["operation"] as? String == "transport.play")
+    #expect(object["failure_stage"] as? String == "preflight_blocking_dialog")
+    #expect((object["blocking_dialog_present"] as? Bool)!)
+    #expect(object["dialog_title"] as? String == "Save")
+    #expect(object["dialog_role"] as? String == "AXDialog")
+    #expect(object["owning_window"] as? String == "Demo - Tracks")
+    #expect((object["dialog_buttons"] as? [String])!.contains("Cancel"))
+    #expect(object["recovery_action"] as? String == info.recoveryAction)
+    #expect((object["hint"] as? String)!.contains("Cancel"))
+}
+
+@Test func testBlockingLogicDialogResultWithoutInfoStaysGenericButHonest() throws {
+    // No identifiable dialog (probe returned nil): keep the base fail-closed
+    // envelope without fabricating identity fields.
+    let result = blockingLogicDialogResult(operation: "transport.play", info: nil)
+
+    #expect(result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["error"] as? String == "unsupported_state")
+    #expect((object["blocking_dialog_present"] as? Bool)!)
+    #expect(object["dialog_title"] == nil)
+    #expect(object["dialog_role"] == nil)
+    #expect(object["recovery_action"] == nil)
+}
+
 @Test func testTransportDispatcherToggleMetronomeVerifiesViaTransportStateReadback() async throws {
     let router = ChannelRouter()
     let ax = SequencedTransportReadbackChannel(

@@ -1297,6 +1297,18 @@ def main():
         disarm_after_transport = call_tool(client, "logic_tracks", "arm", {"index": 0, "enabled": False})
         disarm_track = wait_for_track_arm(client, 0, False)
 
+        # #190: if a transport op IS refused for a blocking dialog, the refusal
+        # must be IDENTIFIED (dialog role + a safe recovery action), never a bare
+        # blocking_dialog_present. Passes vacuously when no dialog is present.
+        for _label, _env in (("play", play_env), ("play_unchanged", play_unchanged_env), ("stop", final_stop_env)):
+            T(
+                f"transport.{_label} blocking-dialog refusal is identified (#190)",
+                play_resp,
+                lambda _, e=_env: (not isinstance(e, dict))
+                or (e.get("blocking_dialog_present") is not True)
+                or (e.get("recovery_action") is not None and e.get("dialog_role") is not None),
+            )
+
     T_LIVE(
         "fresh transport bootstrap detected",
         fresh_transport_payload,

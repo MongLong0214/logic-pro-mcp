@@ -156,19 +156,31 @@ func toolTextResultTreatingUnverifiedAsError(_ result: ChannelResult) -> CallToo
     return toolTextResult(result)
 }
 
-func blockingLogicDialogResult(operation: String) -> CallTool.Result {
-    toolTextResult(
-        HonestContract.encodeStateC(
-            error: .unsupportedState,
-            hint: "Refusing \(operation) while a blocking Logic dialog/sheet is present. Dismiss crash, save, bounce, import, or other modal dialogs, then retry.",
-            extras: [
-                "operation": operation,
-                "failure_stage": "preflight_blocking_dialog",
-                "blocking_dialog_present": true,
-                "write_attempted": false,
-                "safe_to_retry": true,
-            ]
-        ),
+func blockingLogicDialogResult(
+    operation: String,
+    info: AXLogicProElements.BlockingDialogInfo? = AXLogicProElements.blockingDialogInfo()
+) -> CallTool.Result {
+    var extras: [String: Any] = [
+        "operation": operation,
+        "failure_stage": "preflight_blocking_dialog",
+        "blocking_dialog_present": true,
+        "write_attempted": false,
+        "safe_to_retry": true,
+    ]
+    var hint = "Refusing \(operation) while a blocking Logic dialog/sheet is present. Dismiss crash, save, bounce, import, or other modal dialogs, then retry."
+    // #190: identify the dialog so the demo/product workflow can recover
+    // deterministically instead of guessing at a generic blocking-dialog refusal.
+    if let info {
+        extras["dialog_title"] = info.title
+        extras["dialog_role"] = info.role
+        extras["owning_window"] = info.owningWindow
+        extras["dialog_buttons"] = info.buttonTitles
+        extras["recovery_action"] = info.recoveryAction
+        let label = info.title.isEmpty ? info.role : info.title
+        hint = "Refusing \(operation): a blocking Logic dialog/sheet is present (\(label)). \(info.recoveryAction)"
+    }
+    return toolTextResult(
+        HonestContract.encodeStateC(error: .unsupportedState, hint: hint, extras: extras),
         isError: true
     )
 }

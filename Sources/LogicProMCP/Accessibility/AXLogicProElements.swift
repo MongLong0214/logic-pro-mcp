@@ -84,6 +84,62 @@ enum AXLogicProElements {
         return windows.contains { isBlockingDialogWindow($0, runtime: runtime.ax) }
     }
 
+    /// Identity of a blocking dialog/sheet, for #190 diagnostics: callers refuse
+    /// mutations while one is present, and an actionable identity (title, role,
+    /// owning window, buttons, recovery action) lets the operator/agent recover
+    /// deterministically instead of guessing at a generic `blocking_dialog_present`.
+    struct BlockingDialogInfo: Sendable, Equatable {
+        let title: String
+        let role: String
+        let owningWindow: String
+        let buttonTitles: [String]
+        let recoveryAction: String
+    }
+
+    static func blockingDialogInfo(runtime: Runtime = .production) -> BlockingDialogInfo? {
+        guard let app = appRoot(runtime: runtime) else { return nil }
+        let windows: [AXUIElement] = AXHelpers.getAttribute(
+            app, kAXWindowsAttribute, runtime: runtime.ax
+        ) ?? []
+        guard let dialog = windows.first(where: { isBlockingDialogWindow($0, runtime: runtime.ax) }) else {
+            return nil
+        }
+        let title = (AXHelpers.getAttribute(dialog, kAXTitleAttribute, runtime: runtime.ax) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let role = (AXHelpers.getAttribute(dialog, kAXSubroleAttribute, runtime: runtime.ax) ?? (kAXDialogSubrole as String))
+        let owningWindow = (mainWindow(runtime: runtime).flatMap {
+            AXHelpers.getTitle($0, runtime: runtime.ax)
+        } ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let buttons = AXHelpers.getChildren(dialog, runtime: runtime.ax)
+            .filter { AXHelpers.getRole($0, runtime: runtime.ax) == (kAXButtonRole as String) }
+            .compactMap { AXHelpers.getTitle($0, runtime: runtime.ax) }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return BlockingDialogInfo(
+            title: title,
+            role: role,
+            owningWindow: owningWindow,
+            buttonTitles: buttons,
+            recoveryAction: blockingDialogRecoveryAction(title: title, buttons: buttons)
+        )
+    }
+
+    /// A safe, non-destructive recovery action for a blocking dialog. Prefers a
+    /// Cancel-style button (which never saves or discards), then Escape; only
+    /// names a different button when no cancel/escape path is exposed.
+    private static func blockingDialogRecoveryAction(title: String, buttons: [String]) -> String {
+        let cancelMarkers = ["cancel", "취소"]
+        if let cancel = buttons.first(where: { name in
+            cancelMarkers.contains { name.lowercased().contains($0) }
+        }) {
+            return "Press \"\(cancel)\" to dismiss this dialog, then retry."
+        }
+        if !title.isEmpty {
+            return "Dismiss the \"\(title)\" dialog (press Escape or its Cancel/close control), then retry."
+        }
+        return "Dismiss the blocking dialog (press Escape), then retry. Check logic_system.health for the current dialog state."
+    }
+
     /// True when `window` carries an AXSubrole indicating a modal dialog/sheet.
     /// Logic 12 commonly tags Bounce/Save/Open/tempo-alert windows with one of:
     ///   AXDialog, AXSystemDialog, AXFloatingWindow (rare).
