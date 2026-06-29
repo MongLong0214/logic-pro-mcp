@@ -179,7 +179,14 @@ actor AccessibilityChannel: Channel {
                         mouseRuntime: controlBarMouseRuntime
                     )
                 },
-                setTempo: { AccessibilityChannel.defaultSetTempo(params: $0, runtime: logicRuntime, runFallback: runTempoFallback) },
+                setTempo: {
+                    AccessibilityChannel.defaultSetTempo(
+                        params: $0,
+                        runtime: logicRuntime,
+                        mouseRuntime: controlBarMouseRuntime,
+                        runFallback: runTempoFallback
+                    )
+                },
                 setCycleRange: { AccessibilityChannel.defaultSetCycleRange(params: $0, runtime: logicRuntime) },
                 tracks: { AccessibilityChannel.defaultGetTracks(runtime: logicRuntime) },
                 selectedTrack: { AccessibilityChannel.defaultGetSelectedTrack(runtime: logicRuntime) },
@@ -733,6 +740,7 @@ actor AccessibilityChannel: Channel {
     private static func defaultSetTempo(
         params: [String: String],
         runtime: AXLogicProElements.Runtime = .production,
+        mouseRuntime: AXMouseHelper.Runtime = .production,
         runFallback: @escaping @Sendable (String) -> Bool = runTempoFallbackScript
     ) -> ChannelResult {
         guard let tempoStr = params["bpm"] ?? params["tempo"], let tempoValue = Double(tempoStr) else {
@@ -765,11 +773,11 @@ actor AccessibilityChannel: Channel {
                 x: position.x + size.width / 2,
                 y: position.y + size.height / 2
             )
-            AXMouseHelper.doubleClick(at: center)
+            AXMouseHelper.doubleClick(at: center, runtime: mouseRuntime)
             Thread.sleep(forTimeInterval: 0.12)
-            AXMouseHelper.typeNumericString(tempoStr)
+            AXMouseHelper.typeNumericString(tempoStr, runtime: mouseRuntime)
             Thread.sleep(forTimeInterval: 0.05)
-            AXMouseHelper.pressReturn()
+            AXMouseHelper.pressReturn(runtime: mouseRuntime)
             Thread.sleep(forTimeInterval: 0.15)
 
             if let finalValue = AXHelpers.getValue(slider, runtime: runtime.ax) as? Double,
@@ -779,7 +787,7 @@ actor AccessibilityChannel: Channel {
                 ))
             }
 
-            AXMouseHelper.pressEscape()
+            AXMouseHelper.pressEscape(runtime: mouseRuntime)
             Thread.sleep(forTimeInterval: 0.05)
             let current = (AXHelpers.getValue(slider, runtime: runtime.ax) as? Double) ?? 0
             let delta = tempoValue - current
@@ -791,14 +799,29 @@ actor AccessibilityChannel: Channel {
                 }
             }
             if let afterIncrement = AXHelpers.getValue(slider, runtime: runtime.ax) as? Double {
-                let extras = baseExtras.merging([
-                    "observed": afterIncrement,
-                    "via": "slider-increment",
-                    "note": "fell back to 10 BPM step — typed entry didn't commit"
-                ]) { _, new in new }
-                return .success(HonestContract.encodeStateB(
-                    reason: .readbackMismatch,
-                    extras: extras
+                // Honest Contract (#189): the slider-increment fallback steps in
+                // 10-BPM granularity, so it only reaches the requested tempo by
+                // coincidence. Report success ONLY when the observed value matches
+                // the request within tolerance; ANY readback mismatch fails closed
+                // with State C — a write path must never report success when the
+                // observed tempo differs from the requested tempo.
+                if abs(afterIncrement - tempoValue) < 1.0 {
+                    return .success(HonestContract.encodeStateA(
+                        extras: baseExtras.merging([
+                            "observed": afterIncrement,
+                            "via": "slider-increment"
+                        ]) { _, new in new }
+                    ))
+                }
+                return .error(HonestContract.encodeStateC(
+                    error: .readbackMismatch,
+                    hint: "tempo write fell back to a 10-BPM increment step that did not land on the requested value (typed entry didn't commit); the slider cannot represent this exact tempo via increment",
+                    extras: baseExtras.merging([
+                        "observed": afterIncrement,
+                        "via": "slider-increment",
+                        "write_attempted": true,
+                        "safe_to_retry": true
+                    ]) { _, new in new }
                 ))
             }
         }

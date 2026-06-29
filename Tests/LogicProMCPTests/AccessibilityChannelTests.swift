@@ -926,18 +926,16 @@ private func makeSetInstrumentFixture() -> (
     #expect(toggleResult.isSuccess)
     #expect(builder.actionCalls.contains { $0.elementID == builder.elementID(cycle) && $0.action == kAXPressAction as String })
 
-    // v3.0.2: set_tempo uses CGEvent double-click + typed entry on the tempo
-    // slider. CGEvent is real mouse input that our fake AX runtime can't
-    // observe, so after the typed entry fails to stick, the implementation
-    // falls back to AXIncrement/AXDecrement with 10-BPM granularity — that
-    // DOES go through the AX runtime and is observable. Verify at least the
-    // slider was located (no "could not locate" error) and the operation
-    // returned success. Pinning the exact fallback payload is brittle because
-    // it changes with Logic's actual slider min/max ranges.
+    // set_tempo locates the tempo AXSlider. In this fixture the slider has no
+    // AX position/size, so defaultSetTempo takes the geometry-free "slider-direct"
+    // branch (blind setAttribute + confirm, readback unavailable) → State B. The
+    // slider-increment mismatch path (#189) is exercised hermetically in
+    // testSetTempoSliderIncrementMismatchFailsClosed below.
     let tempoResult = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "132.0"])
     #expect(tempoResult.isSuccess)
     #expect(!tempoResult.message.contains("element_not_found"))
     #expect(tempoResult.message.contains("\"requested\":132"))
+    #expect(tempoResult.message.contains("\"via\":\"slider-direct\""))
 
     let cycleMissing = await channel.execute(operation: "transport.set_cycle_range", params: [:])
     #expect(!cycleMissing.isSuccess)
@@ -1212,6 +1210,84 @@ private func makeSetInstrumentFixture() -> (
     #expect(result.message.contains("\"track_header_count\":1"))
     #expect(result.message.contains("\"control_bar_found\":true"))
     #expect(result.message.contains("\"control_bar_slider_descriptions\":[\"Bar\"]"))
+}
+
+// MARK: - #189 set_tempo slider-increment fail-closed
+
+/// Build a control-bar tempo slider that HAS AX geometry, so defaultSetTempo
+/// takes the doubleClick/type path (no-op under the fake mouse runtime), the
+/// typed entry "doesn't commit" (value unchanged), and it falls to the
+/// slider-increment fallback — the exact #189 path.
+private func makeTempoSliderFixture(
+    builder: FakeAXRuntimeBuilder,
+    tempoValue: Double
+) -> (app: AXUIElement, slider: AXUIElement) {
+    let app = builder.element(7100)
+    let window = builder.element(7101)
+    let controlBar = builder.element(7102)
+    let tempoSlider = builder.element(7103)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [controlBar])
+    builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
+    builder.setChildren(controlBar, [tempoSlider])
+    builder.setAttribute(tempoSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setAttribute(tempoSlider, kAXDescriptionAttribute as String, "Tempo")
+    builder.setAttribute(tempoSlider, kAXValueAttribute as String, NSNumber(value: tempoValue))
+    var point = CGPoint(x: 40, y: 12)
+    builder.setAttribute(tempoSlider, kAXPositionAttribute as String, AXValueCreate(.cgPoint, &point)!)
+    var size = CGSize(width: 60, height: 18)
+    builder.setAttribute(tempoSlider, kAXSizeAttribute as String, AXValueCreate(.cgSize, &size)!)
+    return (app, tempoSlider)
+}
+
+@Test func testSetTempoSliderIncrementMismatchFailsClosed() async {
+    // #189 regression: when typed entry doesn't commit and the 10-BPM increment
+    // fallback CANNOT land the requested tempo, set_tempo must fail closed with
+    // State C `readback_mismatch` — NEVER report success on a readback mismatch.
+    let builder = FakeAXRuntimeBuilder()
+    let fixture = makeTempoSliderFixture(builder: builder, tempoValue: 120.0)
+    // Default fake performAction is a no-op, so the increment never moves the
+    // slider; observed stays 120 while 96 was requested.
+    let channel = makeAXBackedAccessibilityChannel(builder: builder, app: fixture.app)
+
+    let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "96"])
+
+    #expect(!result.isSuccess)
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect((obj["success"] as? Bool) == false)
+    #expect(obj["error"] as? String == "readback_mismatch")
+    #expect(obj["via"] as? String == "slider-increment")
+    #expect((obj["requested"] as? Double) == 96)
+    #expect((obj["observed"] as? Double) == 120)
+    #expect((obj["safe_to_retry"] as? Bool)!)
+    // The bug was a State B success envelope; assert it is gone.
+    #expect(obj["reason"] == nil)
+}
+
+@Test func testSetTempoSliderIncrementExactLandingIsStateA() async {
+    // The slider-increment fallback reports success ONLY when the observed value
+    // matches the request within tolerance. A nudge-responsive runtime moves the
+    // slider +10 per increment, so requesting 130 from 120 lands exactly → State A.
+    let builder = FakeAXRuntimeBuilder()
+    let fixture = makeTempoSliderFixture(builder: builder, tempoValue: 120.0)
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: fixture.app,
+        logicRuntime: nudgeResponsiveLogicRuntime(builder, app: fixture.app)
+    )
+
+    let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "130"])
+
+    #expect(result.isSuccess)
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect((obj["success"] as? Bool)!)
+    #expect((obj["verified"] as? Bool)!)
+    #expect(obj["via"] as? String == "slider-increment")
+    #expect((obj["requested"] as? Double) == 130)
+    #expect((obj["observed"] as? Double) == 130)
+    #expect(obj["error"] == nil)
 }
 
 @Test func testAccessibilityChannelImportMIDIFileReturnsErrorWhenTrackCountDoesNotIncrease() async throws {
