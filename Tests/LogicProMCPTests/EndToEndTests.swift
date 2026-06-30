@@ -866,18 +866,29 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     }
 }
 
-@Test func testE2EResourceTrackIndexWithNoTracksThrows() async throws {
+@Test func testE2EResourceTrackIndexWithNoTracksReturnsTypedOutOfRange() async throws {
+    // #200: an indexed-template read on empty/out-of-range project state must
+    // return a typed, classifiable body (State C index_out_of_range with the
+    // requested index + available count), NOT a raw JSON-RPC -32602 the client
+    // can only treat as a protocol error.
     let h = await makeE2EHandlers()
-    await #expect(throws: MCPError.self) {
-        try await h.readResource(.init(uri: "logic://tracks/0"))
-    }
+    let result = try await h.readResource(.init(uri: "logic://tracks/0"))
+    let obj = sharedJSONObject(sharedResourceText(result))
+    #expect((obj?["success"] as? Bool)! == false)
+    #expect(obj?["error"] as? String == "index_out_of_range")
+    #expect(obj?["requested_index"] as? Int == 0)
+    #expect(obj?["available_count"] as? Int == 0)
 }
 
-@Test func testE2EResourceTrackIndexNegativeThrows() async throws {
+@Test func testE2EResourceTrackIndexNegativeReturnsTypedOutOfRange() async throws {
+    // A malformed negative index is out of range too — still a typed body, never
+    // a raw -32602, so the indexed-template surface is internally consistent.
     let h = await makeE2EHandlers()
-    await #expect(throws: MCPError.self) {
-        try await h.readResource(.init(uri: "logic://tracks/-1"))
-    }
+    let result = try await h.readResource(.init(uri: "logic://tracks/-1"))
+    let obj = sharedJSONObject(sharedResourceText(result))
+    #expect((obj?["success"] as? Bool)! == false)
+    #expect(obj?["error"] as? String == "index_out_of_range")
+    #expect(obj?["requested_index"] as? Int == -1)
 }
 
 // ═══════════════════════════════════════════════════════════════════════

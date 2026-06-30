@@ -826,6 +826,37 @@ extension ResourceHandlers {
         )
     }
 
+    /// #200: an out-of-range / empty-state indexed-template read returns a typed,
+    /// classifiable resource body (State C `index_out_of_range`) instead of a raw
+    /// JSON-RPC `-32602`. `availableIndices` is the EXACT set of valid indices for
+    /// the collection — `0..<count` for the positionally-indexed track list, but
+    /// the actual `trackIndex` values for the mixer (whose strips are keyed by
+    /// `trackIndex`, NOT array position, so a strip set can be non-contiguous,
+    /// e.g. {0, 2, 4}). The hint therefore never asserts a contiguous `0..<N`
+    /// range (which would mislead a client past a gap); it points at the parent
+    /// collection and the body carries `available_indices` as the machine truth.
+    static func indexOutOfRangeResult(
+        uri: String,
+        requestedIndex: Int,
+        availableIndices: [Int],
+        collection: String
+    ) -> ReadResource.Result {
+        let body = HonestContract.encodeStateC(
+            error: .indexOutOfRange,
+            hint: "No \(collection) at index \(requestedIndex); \(availableIndices.count) \(collection)(s) available. Read the parent collection resource for the current valid indices.",
+            extras: [
+                "uri": uri,
+                "requested_index": requestedIndex,
+                "available_count": availableIndices.count,
+                "available_indices": availableIndices,
+                "collection": collection,
+            ]
+        )
+        return ReadResource.Result(
+            contents: [.text(body, uri: uri, mimeType: "application/json")]
+        )
+    }
+
     private static func readTrack(at index: Int, cache: StateCache, uri: String) async throws -> ReadResource.Result {
         if let track = await cache.getTrack(at: index) {
             let json = encodeJSON(track)
@@ -833,7 +864,14 @@ extension ResourceHandlers {
                 contents: [.text(json, uri: uri, mimeType: "application/json")]
             )
         }
-        throw MCPError.invalidParams("No track at index \(index)")
+        // Tracks are positionally indexed (`getTrack(at:)` uses `tracks.indices`),
+        // so the valid set is 0..<count.
+        return indexOutOfRangeResult(
+            uri: uri,
+            requestedIndex: index,
+            availableIndices: Array(0..<(await cache.getTracks().count)),
+            collection: "track"
+        )
     }
 
     /// B1 (#11) — `data_source` for `logic://mixer` strips. Strip volume/pan
@@ -1071,6 +1109,12 @@ extension ResourceHandlers {
         router: ChannelRouter,
         uri: String
     ) async throws -> ReadResource.Result {
+        // The regions read returns an empty array for an index with no regions —
+        // already a classifiable empty-state — and its live-route "no JSON-RPC
+        // response" hang is bounded by the resource-read deadline (#199), NOT by a
+        // track-count short-circuit: the cache can hold regions for a track whose
+        // header isn't in the track array, so track_count is not a reliable
+        // existence proxy here.
         if case .success(let payload) = await router.route(operation: "region.get_regions"),
            let liveRegions = try? RegionInfo.decodeToolPayload(payload) {
             await cache.updateRegions(liveRegions.map { $0.asRegionState() })
@@ -1084,7 +1128,14 @@ extension ResourceHandlers {
 
     private static func readMixerStrip(at index: Int, cache: StateCache, uri: String) async throws -> ReadResource.Result {
         guard let strip = await cache.getChannelStrip(at: index) else {
-            throw MCPError.invalidParams("No channel strip at index \(index)")
+            // Mixer strips are keyed by `trackIndex` (not array position), so the
+            // valid set is the actual trackIndex values — possibly non-contiguous.
+            return indexOutOfRangeResult(
+                uri: uri,
+                requestedIndex: index,
+                availableIndices: await cache.getChannelStrips().map(\.trackIndex).sorted(),
+                collection: "channel strip"
+            )
         }
         // B2 (#11): give the single-strip read the same envelope + provenance as
         // logic://mixer, so a harness reading an individual strip gets the same

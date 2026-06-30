@@ -158,6 +158,7 @@ enum HonestContract {
         /// other channel can save an untitled document without a path; the
         /// caller must supply one via `project.save_as`. #144 (P3 hardening).
         case unsupportedState
+        case indexOutOfRange
 
         var rawValue: String {
             switch self {
@@ -199,6 +200,7 @@ enum HonestContract {
             case .unsupportedTrackType: return "unsupported_track_type"
             case .pathNotInLibrary: return "path_not_in_library"
             case .unsupportedState: return "unsupported_state"
+            case .indexOutOfRange: return "index_out_of_range"
             }
         }
     }
@@ -367,6 +369,10 @@ enum HonestContract {
         // State C `unsupported_state` — no fallback channel can save a document
         // that has no on-disk path; the caller must use `project.save_as`.
         FailureError.unsupportedState.rawValue,
+        // #200: an out-of-range/empty indexed resource template read is terminal
+        // — retrying the same index against the same project state can't succeed;
+        // the client must read the parent collection for valid indices.
+        FailureError.indexOutOfRange.rawValue,
     ]
 
     /// Returns true if the given message is a State-C envelope whose `error`

@@ -2275,10 +2275,15 @@ def main():
 
     # Template resource
     r = read_resource(client, "logic://tracks/0")
-    T("resource template tracks/0 responds", r, lambda _: True)  # may return track or error, both valid
+    T("resource template tracks/0 responds", r, lambda _: True)  # may return track or typed out-of-range, both valid
 
+    # #200: an out-of-range indexed-template read returns a typed, classifiable
+    # index_out_of_range body (never a raw JSON-RPC -32602 / no response).
     r = read_resource(client, "logic://tracks/-1")
-    T("resource template tracks/-1 throws", r, lambda _: "error" in r or is_error(r))
+    _oob = safe_json(resource_text(r)) or {}
+    T("resource template tracks/-1 returns typed index_out_of_range (#200)", r,
+      lambda _: _oob.get("error") == "index_out_of_range" and _oob.get("success") is False
+      and _oob.get("requested_index") == -1)
 
     # Unknown URI
     r = read_resource(client, "logic://nonexistent")
