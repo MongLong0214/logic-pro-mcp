@@ -17,7 +17,7 @@
       ]
     }
   ],
-  "version": "3.7.3",
+  "version": "3.7.4",
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
       "distribution": {
@@ -31,7 +31,7 @@
             "brew install logic-pro-mcp"
           ]
         },
-        "release": "https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.7.3"
+        "release": "https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.7.4"
       },
       "discovery": {
         "categories": [

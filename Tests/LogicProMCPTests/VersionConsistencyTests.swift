@@ -23,7 +23,7 @@ private func readRepoFile(_ relativePath: String) throws -> String {
 @Test func testServerVersionMatchesPackagingArtefacts() throws {
     let sourceVersion = ServerConfig.serverVersion
     #expect(
-        sourceVersion == "3.7.3",
+        sourceVersion == "3.7.4",
         "version surfaces must match the published stable release — bump all packaging artefacts together"
     )
 

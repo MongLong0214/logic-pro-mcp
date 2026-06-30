@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [3.7.4] — 2026-06-30
+
+Bug-fix and robustness release closing the v3.7.3 complete-surface QA backlog (#199–#202). No public tool/resource/template surface change (10 tools / 18 resources / 11 templates unchanged).
+
+### Fixed
+
+- A mutating operation that hits the per-command server-side deadline no longer pins the whole write surface. The mutation gate is now reclaimable a short, bounded grace (15s) after the deadline abandons the op — instead of holding until the wedged work returns or the 360s stale-holder TTL — so one timed-out `logic_transport.play` can't leave every other mutating command returning `mutating_operation_in_progress` for minutes. The timeout envelope advertises this (`mutation_gate: "reclaimable_after_grace"`, `gate_reclaim_after_sec`); the reclaim is epoch-guarded so a late release from the abandoned op cannot free a successor's claim (#201).
+- Resource reads (`logic://…`) now run under the same server-side deadline as tool calls. A read backed by a live Accessibility route (`logic://transport/state`, `logic://tracks/{index}/regions`) on a wedged/occluded session previously could block past the client's read timeout and return no JSON-RPC response; it now returns a typed `operation_timeout` resource body. Genuine read errors still propagate unchanged (#199).
+- Indexed resource templates (`logic://tracks/{index}`, `logic://mixer/{strip}`) now fail closed with a typed, classifiable `index_out_of_range` body (carrying `requested_index`, `available_count`, and the exact `available_indices`) for an out-of-range or empty-project index, instead of a raw JSON-RPC `-32602`. The mixer reports its actual (possibly non-contiguous) `trackIndex` set rather than implying a `0..<N` range (#200).
+- Command tokens that are recognised by the dispatchers but deliberately not part of the production MCP contract (`logic_tracks.set_color`, `logic_mixer.set_send`/`set_output`/`set_input`/`toggle_eq`/`reset_strip`/`bypass_plugin`) now return a distinct, machine-classifiable `command_not_exposed` State C (`not_exposed: true`, `supported: false`) instead of a generic `not_implemented`, so a complete-surface harness can classify them as intentionally-unsupported rather than a malfunction. Documented in `docs/API.md` (#202).
+
+### Changed
+
+- Pinned the Model Context Protocol Swift SDK to `0.12.1` (patch update within the existing `from: 0.11.0` range; full suite + strict live E2E green).
+
 ## [3.7.3] — 2026-06-30
 
 Bug-fix and diagnostic-honesty release closing the open GitHub issue backlog (#178, #186–#190). No public tool/resource/template surface change (10 tools / 18 resources / 11 templates unchanged).

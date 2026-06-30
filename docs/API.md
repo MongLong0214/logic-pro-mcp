@@ -151,6 +151,6 @@ A few command tokens are recognised by the dispatchers but are deliberately **no
 
 ## Error Format
 
-State C errors use stable machine-readable strings such as `invalid_params`, `not_implemented`, `command_not_exposed`, `element_not_found`, `readback_mismatch`, `port_unavailable`, `channels_exhausted`, `unsupported_param_readback`, and `confirmation_required`.
+State C errors use stable machine-readable strings such as `invalid_params`, `not_implemented`, `command_not_exposed`, `index_out_of_range`, `element_not_found`, `readback_mismatch`, `port_unavailable`, `channels_exhausted`, `unsupported_param_readback`, and `confirmation_required`.
 
 Clients should branch on `state`, `verified`, `error`, and `retry_safe`; do not parse human prose as the contract.
