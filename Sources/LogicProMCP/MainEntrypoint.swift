@@ -1,3 +1,4 @@
+import Darwin
 import Dispatch
 import Foundation
 
@@ -22,6 +23,9 @@ enum MainEntrypoint {
         approvalStoreFactory: () -> any ManualValidationStoring = { ManualValidationStore() },
         doctorRuntime: SetupDoctor.Runtime = .production,
         lifecycleRuntime: SetupLifecycle.Runtime = .production,
+        // Injected so doctor's color/TTY gating is pinnable in tests (AC-5.4).
+        isStdoutTTY: () -> Bool = { isatty(STDOUT_FILENO) != 0 },
+        doctorEnvironment: [String: String] = ProcessInfo.processInfo.environment,
         writeStdout: (String) -> Void = { message in
             FileHandle.standardOutput.write(Data(message.utf8))
         },
@@ -32,16 +36,30 @@ enum MainEntrypoint {
         let approvalStore = approvalStoreFactory()
 
         if isDoctorCommand(arguments) {
+            // Arm the opt-in update lookup ONLY when --check-updates is present, so
+            // the default run never touches the network (G7/NG4). A test-injected
+            // lookup (already non-nil) is left untouched.
+            var runtime = doctorRuntime
+            if arguments.contains("--check-updates"), runtime.latestReleaseLookup == nil {
+                runtime.latestReleaseLookup = { SetupDoctor.productionLatestReleaseLookup() }
+            }
             let report = SetupDoctor.generate(
                 arguments: arguments,
                 permissionStatus: permissionCheck(),
                 approvals: await approvalStore.list(),
-                runtime: doctorRuntime
+                runtime: runtime
             )
-            let output = arguments.contains("--json")
-                ? encodeJSON(report)
-                : SetupDoctor.renderHuman(report)
-            writeStdout(output + "\n")
+            if arguments.contains("--json") {
+                // --json is the machine contract: identical bytes regardless of
+                // verbosity/color flags (AC-5.5).
+                writeStdout(encodeJSON(report) + "\n")
+            } else {
+                let mode: SetupDoctor.OutputMode = arguments.contains("--verbose")
+                    ? .verbose
+                    : (arguments.contains("--quiet") ? .quiet : .default)
+                let useColor = isStdoutTTY() && doctorEnvironment["NO_COLOR"] == nil
+                writeStdout(SetupDoctor.renderHuman(report, mode: mode, useColor: useColor) + "\n")
+            }
             return SetupDoctor.shouldExitWithFailure(report) ? 1 : 0
         }
 

@@ -13,6 +13,13 @@ private func doctorRuntime(
     logicRunning: Bool = true,
     visibleWindow: Bool = true,
     registration: SetupDoctor.ClaudeRegistration = .registered(command: "/usr/local/bin/LogicProMCP"),
+    // v2 seams — hermetic defaults (all-good) so the new checks pass by default and
+    // existing tests keep their `.ok` aggregate. Tests override per-case.
+    cliclickPath: String? = "/opt/homebrew/bin/cliclick",
+    cliclickPresentOnPath: Bool = true,
+    macOSVersion: OperatingSystemVersion? = OperatingSystemVersion(majorVersion: 14, minorVersion: 0, patchVersion: 0),
+    monotonicNowMs: @escaping () -> Double = { 0 },
+    latestReleaseLookup: (() -> SetupDoctor.UpdateOutcome)? = nil,
     commandHandler: @escaping (String, [String]) -> SetupDoctor.CommandOutput? = { executable, arguments in
         if executable == "/usr/bin/codesign" {
             return .init(exitCode: 0, stdout: "", stderr: "")
@@ -27,7 +34,7 @@ private func doctorRuntime(
         return nil
     }
 ) -> SetupDoctor.Runtime {
-    SetupDoctor.Runtime(
+    var runtime = SetupDoctor.Runtime(
         resolveExecutablePath: { _ in executablePath },
         fileExists: { _ in exists },
         isExecutableFile: { _ in executable },
@@ -36,6 +43,19 @@ private func doctorRuntime(
         runCommand: commandHandler,
         readClaudeRegistration: { registration }
     )
+    runtime.cliclickPath = { cliclickPath }
+    runtime.cliclickPresentOnPath = { cliclickPresentOnPath }
+    runtime.macOSVersion = { macOSVersion }
+    runtime.monotonicNowMs = monotonicNowMs
+    runtime.latestReleaseLookup = latestReleaseLookup
+    return runtime
+}
+
+/// All-permissions-granted status (incl. System Events) — the v2 default for tests
+/// that expect a healthy `.ok` aggregate. The 2-arg PermissionStatus init defaults
+/// systemEvents to `.notVerifiable`, which (correctly) makes the report non-ok.
+private func grantedPermissionStatus() -> PermissionChecker.PermissionStatus {
+    .init(accessibility: true, automationLogicPro: true, systemEventsAutomation: .granted)
 }
 
 private func allApprovals() -> [ManualValidationChannel: ManualValidationApproval] {
@@ -54,12 +74,12 @@ private func issue26RepositoryRootURL() -> URL {
 @Test func testSetupDoctorJSONContractStableCheckIDsAndOKAggregation() throws {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: .init(accessibility: true, automationLogicPro: true),
+        permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime()
     )
 
-    #expect(report.schema == "logic_pro_mcp_doctor.v1")
+    #expect(report.schema == "logic_pro_mcp_doctor.v2")
     #expect(report.status == .ok)
     #expect(report.installSource == .homebrew)
 
@@ -74,13 +94,16 @@ private func issue26RepositoryRootURL() -> URL {
         "mcp.claude_code_registration",
         "permissions.accessibility",
         "permissions.automation_logic_pro",
+        "permissions.automation_system_events",
+        "dependencies.cliclick",
+        "system.macos_version",
         "logic.application_state",
         "channels.manual_validation",
     ])
 
     let json = encodeJSON(report)
     let object = try #require(sharedJSONObject(json))
-    #expect(object["schema"] as? String == "logic_pro_mcp_doctor.v1")
+    #expect(object["schema"] as? String == "logic_pro_mcp_doctor.v2")
     #expect(object["status"] as? String == "ok")
     #expect(object["install_source"] as? String == "homebrew")
     #expect(object["version"] as? String == ServerConfig.serverVersion)
@@ -137,7 +160,7 @@ private func issue26RepositoryRootURL() -> URL {
     var stderr = ""
     let exitCode = await MainEntrypoint.run(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionCheck: { .init(accessibility: true, automationLogicPro: true) },
+        permissionCheck: { grantedPermissionStatus() },
         serverFactory: {
             Issue.record("Server should not start for doctor")
             return DoctorMockMainServer()
@@ -151,7 +174,7 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(exitCode == 0)
     #expect(stderr.isEmpty)
     let json = try #require(sharedJSONObject(stdout))
-    #expect(json["schema"] as? String == "logic_pro_mcp_doctor.v1")
+    #expect(json["schema"] as? String == "logic_pro_mcp_doctor.v2")
     #expect(json["status"] as? String == "ok")
 }
 
@@ -553,7 +576,7 @@ private func issue26RepositoryRootURL() -> URL {
 
     let exitCode = await MainEntrypoint.run(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionCheck: { .init(accessibility: true, automationLogicPro: true) },
+        permissionCheck: { grantedPermissionStatus() },
         serverFactory: {
             Issue.record("Server should not start for doctor")
             return DoctorMockMainServer()
@@ -610,7 +633,7 @@ private func issue26RepositoryRootURL() -> URL {
 @Test func testAggregateStatusWarnWithoutFailOrManualIsDegraded() {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: .init(accessibility: true, automationLogicPro: true),
+        permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(commandHandler: { executable, arguments in
             if executable == "/usr/bin/codesign" { return nil } // -> warn

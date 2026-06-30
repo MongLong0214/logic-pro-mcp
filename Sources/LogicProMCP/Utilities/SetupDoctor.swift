@@ -32,6 +32,25 @@ enum SetupDoctor {
         case none
     }
 
+    /// Closed, typed taxonomy added in v2 (lazycodex-style `CheckCategory`).
+    /// Parallel to the v1 free-string `domain`, which is retained for back-compat.
+    enum Category: String, Codable, Sendable {
+        case installation
+        case configuration
+        case permissions
+        case dependencies
+        case runtime
+        case updates
+    }
+
+    /// Display-grade severity derived from `CheckStatus`. Used for headline
+    /// ordering ("fix the error first") — never drives the exit code.
+    enum Severity: String, Codable, Sendable {
+        case error
+        case warning
+        case info
+    }
+
     struct Remediation: Codable, Equatable, Sendable {
         let type: RemediationType
         let value: String
@@ -44,6 +63,48 @@ enum SetupDoctor {
         let summary: String
         let evidence: [String: String]
         let remediation: Remediation
+        // v2 additive fields. `category`/`severity` are derived in the `check`
+        // factory; `durationMs` is stamped post-hoc by the `generate` timing
+        // wrapper (var so the wrapper can set it without rebuilding the struct).
+        let category: Category
+        let severity: Severity
+        var durationMs: Double
+
+        // Explicit CodingKeys enumerate EVERY key — the six v1 keys keep their
+        // exact wire names so a v2 payload stays a strict field-superset of v1,
+        // and adding `duration_ms` can never silently rename a v1 key.
+        enum CodingKeys: String, CodingKey {
+            case id
+            case domain
+            case status
+            case summary
+            case evidence
+            case remediation
+            case category
+            case severity
+            case durationMs = "duration_ms"
+        }
+    }
+
+    /// v2 roll-up. Invariant: passed+failed+warnings+manual+skipped == total == checks.count.
+    struct Summary: Codable, Equatable, Sendable {
+        let total: Int
+        let passed: Int
+        let failed: Int
+        let warnings: Int
+        let manual: Int
+        let skipped: Int
+        let durationMs: Double
+
+        enum CodingKeys: String, CodingKey {
+            case total
+            case passed
+            case failed
+            case warnings
+            case manual
+            case skipped
+            case durationMs = "duration_ms"
+        }
     }
 
     struct Report: Codable, Equatable, Sendable {
@@ -52,6 +113,9 @@ enum SetupDoctor {
         let version: String
         let installSource: InstallSource
         let checks: [Check]
+        // v2 additive top-level fields.
+        let summary: Summary
+        let headline: String
 
         enum CodingKeys: String, CodingKey {
             case schema
@@ -59,6 +123,8 @@ enum SetupDoctor {
             case version
             case installSource = "install_source"
             case checks
+            case summary
+            case headline
         }
     }
 
@@ -91,6 +157,19 @@ enum SetupDoctor {
         let logicProHasVisibleWindow: () -> Bool
         let runCommand: (String, [String]) -> CommandOutput?
         let readClaudeRegistration: () -> ClaudeRegistration
+        // v2 seams. Defaults keep every existing `Runtime(...)` construction site
+        // compiling; `.production` and the test helper supply real/fake impls.
+        // `cliclickPath` reuses the runtime's own trusted resolver so the doctor
+        // can never green-light a cliclick the bounce/export path would reject.
+        var cliclickPath: () -> String? = { ProjectExportExecutor.resolveTrustedCliclick() }
+        var cliclickPresentOnPath: () -> Bool = { ProjectExportExecutor.commandExists("cliclick") }
+        var macOSVersion: () -> OperatingSystemVersion? = { ProcessInfo.processInfo.operatingSystemVersion }
+        // Monotonic millisecond clock for per-check timing. Monotonic (uptime),
+        // never wall-clock, so a duration can never go negative across an NTP step.
+        var monotonicNowMs: () -> Double = { Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000.0 }
+        // nil ⇒ the opt-in update check is not emitted and no network is touched.
+        // Non-nil only when `--check-updates` is passed (wired in MainEntrypoint).
+        var latestReleaseLookup: (() -> UpdateOutcome)?
 
         static let production = Runtime(
             resolveExecutablePath: { raw in
@@ -117,7 +196,19 @@ enum SetupDoctor {
         )
     }
 
-    static let schema = "logic_pro_mcp_doctor.v1"
+    /// Typed outcome of the opt-in update lookup, so the check body can write an
+    /// accurate enumerated `reason` (AC-6.4) instead of collapsing every failure
+    /// mode to a bare `nil`.
+    enum UpdateOutcome: Equatable, Sendable {
+        case found(version: String)
+        case offline
+        case sourceUnavailable
+        case parseError
+        case httpError
+        case timeout
+    }
+
+    static let schema = "logic_pro_mcp_doctor.v2"
 
     static let remediationAnchorsByCheckID: [String: String] = [
         "binary.path": "docs/SETUP.md#doctor-binarypath",
@@ -128,6 +219,10 @@ enum SetupDoctor {
         "mcp.claude_code_registration": "docs/SETUP.md#doctor-mcpclaude-code-registration",
         "permissions.accessibility": "docs/SETUP.md#doctor-permissionsaccessibility",
         "permissions.automation_logic_pro": "docs/SETUP.md#doctor-permissionsautomation-logic-pro",
+        "permissions.automation_system_events": "docs/SETUP.md#doctor-permissionsautomation-system-events",
+        "dependencies.cliclick": "docs/SETUP.md#doctor-dependenciescliclick",
+        "system.macos_version": "docs/SETUP.md#doctor-systemmacos-version",
+        "updates.latest_release": "docs/SETUP.md#doctor-updateslatest-release",
         "logic.application_state": "docs/SETUP.md#doctor-logicapplication-state",
         "channels.manual_validation": "docs/SETUP.md#doctor-channelsmanual-validation",
     ]
@@ -140,45 +235,145 @@ enum SetupDoctor {
     ) -> Report {
         let executablePath = runtime.resolveExecutablePath(arguments.first)
         let installSource = detectInstallSource(executablePath: executablePath, runtime: runtime)
+
+        // Per-check monotonic timing. Each check runs once, in declared order
+        // (sequential — no concurrency), wrapped to stamp `duration_ms`. Checks
+        // are non-throwing, so no exception isolation is required.
+        func timed(_ make: () -> Check) -> Check {
+            let start = runtime.monotonicNowMs()
+            var result = make()
+            result.durationMs = max(0, runtime.monotonicNowMs() - start)
+            return result
+        }
+
         var checks: [Check] = []
 
-        checks.append(binaryPathCheck(executablePath: executablePath, runtime: runtime))
-        checks.append(binaryExecutableCheck(executablePath: executablePath, runtime: runtime))
-        checks.append(binaryVersionCheck())
-        checks.append(installSourceCheck(installSource: installSource, executablePath: executablePath))
-        checks.append(releaseSignatureCheck(executablePath: executablePath, runtime: runtime))
-        checks.append(releaseQuarantineCheck(executablePath: executablePath, runtime: runtime))
-        checks.append(claudeRegistrationCheck(runtime: runtime))
-        checks.append(accessibilityPermissionCheck(permissionStatus))
-        checks.append(automationPermissionCheck(permissionStatus))
-        checks.append(logicApplicationStateCheck(runtime: runtime))
-        checks.append(manualValidationCheck(approvals: approvals))
+        checks.append(timed { binaryPathCheck(executablePath: executablePath, runtime: runtime) })
+        checks.append(timed { binaryExecutableCheck(executablePath: executablePath, runtime: runtime) })
+        checks.append(timed { binaryVersionCheck() })
+        checks.append(timed { installSourceCheck(installSource: installSource, executablePath: executablePath) })
+        checks.append(timed { releaseSignatureCheck(executablePath: executablePath, runtime: runtime) })
+        checks.append(timed { releaseQuarantineCheck(executablePath: executablePath, runtime: runtime) })
+        checks.append(timed { claudeRegistrationCheck(runtime: runtime) })
+        checks.append(timed { accessibilityPermissionCheck(permissionStatus) })
+        checks.append(timed { automationPermissionCheck(permissionStatus) })
+        checks.append(timed { systemEventsAutomationCheck(permissionStatus) })
+        checks.append(timed { cliclickDependencyCheck(runtime: runtime) })
+        checks.append(timed { macOSVersionCheck(runtime: runtime) })
+        checks.append(timed { logicApplicationStateCheck(runtime: runtime) })
+        checks.append(timed { manualValidationCheck(approvals: approvals) })
+        // Opt-in update check: emitted only when `--check-updates` armed the lookup seam.
+        if let lookup = runtime.latestReleaseLookup {
+            checks.append(timed { updateCheck(outcome: lookup()) })
+        }
 
+        // Honesty chokepoint (G1/AC-1.5): the report can never claim `ok` while a
+        // required permission is ungranted. Extracted to a pure helper so the invariant
+        // is OWNED and directly unit-tested here, not left emergent on each permission
+        // check happening to be non-pass.
+        let status = clampStatusForPermissions(
+            aggregateStatus(checks),
+            allGranted: permissionStatus.allGranted
+        )
+
+        let totalDurationMs = checks.reduce(0.0) { $0 + $1.durationMs }
         return Report(
             schema: schema,
-            status: aggregateStatus(checks),
+            status: status,
             version: ServerConfig.serverVersion,
             installSource: installSource,
-            checks: checks
+            checks: checks,
+            summary: calculateSummary(checks, totalDurationMs: totalDurationMs),
+            headline: computeHeadline(checks: checks, status: status)
         )
     }
 
-    static func renderHuman(_ report: Report) -> String {
-        var lines: [String] = [
-            "Logic Pro MCP doctor",
-            "schema: \(report.schema)",
-            "status: \(report.status.rawValue)",
-            "version: \(report.version)",
-            "install_source: \(report.installSource.rawValue)",
-            "",
-        ]
+    enum OutputMode: String, Sendable {
+        case `default`
+        case verbose
+        case quiet
+    }
+
+    static func renderHuman(
+        _ report: Report,
+        mode: OutputMode = .default,
+        useColor: Bool = false
+    ) -> String {
+        var lines: [String] = []
+        // Headline (next action) + summary roll-up lead the report in every mode.
+        lines.append(report.headline)
+        lines.append(renderSummaryLine(report.summary))
+        // Existing v1 header block is preserved so the non-TTY human shape stays
+        // a back-compatible superset (a scraper grepping these lines keeps working).
+        lines.append("Logic Pro MCP doctor")
+        lines.append("schema: \(report.schema)")
+        lines.append("status: \(report.status.rawValue)")
+        lines.append("version: \(report.version)")
+        lines.append("install_source: \(report.installSource.rawValue)")
+        lines.append("")
         for check in report.checks {
-            lines.append("[\(check.status.rawValue)] \(check.id) - \(check.summary)")
+            if mode == .quiet, check.status == .pass {
+                continue
+            }
+            lines.append(renderCheckLine(check, useColor: useColor))
             if check.remediation.type != .none {
-                lines.append("  remediation: \(check.remediation.value)")
+                lines.append("  \u{2192} \(check.remediation.value)")
+            }
+            if mode == .verbose {
+                for key in check.evidence.keys.sorted() {
+                    lines.append("    \(key)=\(check.evidence[key] ?? "")")
+                }
+                lines.append("    duration_ms: \(formatDuration(check.durationMs))")
             }
         }
         return lines.joined(separator: "\n")
+    }
+
+    private static func renderSummaryLine(_ summary: Summary) -> String {
+        var parts: [String] = ["\(summary.passed) passed"]
+        if summary.failed > 0 {
+            parts.append("\(summary.failed) failed")
+        }
+        if summary.warnings > 0 {
+            parts.append("\(summary.warnings) warning\(summary.warnings == 1 ? "" : "s")")
+        }
+        if summary.manual > 0 {
+            parts.append("\(summary.manual) manual")
+        }
+        if summary.skipped > 0 {
+            parts.append("\(summary.skipped) skipped")
+        }
+        return "summary: \(parts.joined(separator: ", ")) (\(formatDuration(summary.durationMs))ms)"
+    }
+
+    private static func renderCheckLine(_ check: Check, useColor: Bool) -> String {
+        guard useColor else {
+            // Plain ASCII fallback (non-TTY / NO_COLOR): byte-clean for pipes & CI.
+            return "[\(check.status.rawValue)] \(check.id) - \(check.summary)"
+        }
+        let reset = "\u{1B}[0m"
+        let (symbol, color) = colorSymbol(for: check.status)
+        return "\(color)\(symbol)\(reset) \(check.id) - \(check.summary)"
+    }
+
+    /// (symbol, ANSI color prefix) per status. Only used when color is enabled.
+    private static func colorSymbol(for status: CheckStatus) -> (String, String) {
+        switch status {
+        case .pass:
+            return ("\u{2713}", "\u{1B}[32m")   // ✓ green
+        case .fail:
+            return ("\u{2717}", "\u{1B}[31m")   // ✗ red
+        case .warn:
+            return ("\u{26A0}", "\u{1B}[33m")   // ⚠ yellow
+        case .manual:
+            return ("\u{2022}", "\u{1B}[34m")   // • blue
+        case .skipped:
+            return ("\u{2205}", "\u{1B}[90m")   // ∅ grey
+        }
+    }
+
+    private static func formatDuration(_ ms: Double) -> String {
+        String(Int(ms.rounded()))
     }
 
     static func shouldExitWithFailure(_ report: Report) -> Bool {
@@ -196,6 +391,14 @@ enum SetupDoctor {
             return .degraded
         }
         return .ok
+    }
+
+    /// Honesty chokepoint (G1/AC-1.5): the report must never be `ok` when a required
+    /// permission is ungranted. Pure + directly unit-tested so the invariant is owned
+    /// here rather than left to emerge from each permission check being non-pass.
+    /// `allGranted == accessibility && automationLogicPro && automationSystemEvents`.
+    static func clampStatusForPermissions(_ status: ReportStatus, allGranted: Bool) -> ReportStatus {
+        (!allGranted && status == .ok) ? .degraded : status
     }
 
     private static func binaryPathCheck(executablePath: String?, runtime: Runtime) -> Check {
@@ -443,6 +646,194 @@ enum SetupDoctor {
         )
     }
 
+    private static func systemEventsAutomationCheck(_ status: PermissionChecker.PermissionStatus) -> Check {
+        // Surfaces the System Events automation target the runtime treats as a HARD
+        // requirement (#188) but the v1 doctor dropped. Honest mapping: a probe that
+        // could-not-run (.notVerifiable) is `manual`, never `fail` ("denied").
+        let checkStatus: CheckStatus
+        switch status.systemEventsAutomationState {
+        case .granted:
+            checkStatus = .pass
+        case .notGranted:
+            checkStatus = .fail
+        case .notVerifiable:
+            checkStatus = .manual
+        }
+        return check(
+            id: "permissions.automation_system_events",
+            domain: "permissions",
+            status: checkStatus,
+            summary: systemEventsSummary(for: status.systemEventsAutomationState),
+            evidence: ["state": status.systemEventsAutomationState.rawValue],
+            remediationType: status.systemEventsAutomationState == .granted ? .none : .systemSettings
+        )
+    }
+
+    private static func cliclickDependencyCheck(runtime: Runtime) -> Check {
+        // Reuse the runtime's OWN trusted resolver so the doctor cannot green-light a
+        // cliclick the bounce/export path would reject (trusted canonical path +
+        // non-group/other-writable parent). cliclick gates only bounce/export, so a
+        // missing/untrusted binary is `warn` (→ degraded → exit 0), never `fail`.
+        if let path = runtime.cliclickPath() {
+            return check(
+                id: "dependencies.cliclick",
+                domain: "dependencies",
+                status: .pass,
+                summary: "cliclick is installed at a trusted path.",
+                evidence: ["path": path, "trusted": "true"],
+                remediationType: .none
+            )
+        }
+        if runtime.cliclickPresentOnPath() {
+            return check(
+                id: "dependencies.cliclick",
+                domain: "dependencies",
+                status: .warn,
+                summary: "cliclick is present but not at a trusted path (or its parent directory is writable); bounce/export will not use it.",
+                evidence: ["trusted": "false", "present_on_path": "true"],
+                remediationType: .command,
+                remediationValueOverride: "brew install cliclick"
+            )
+        }
+        return check(
+            id: "dependencies.cliclick",
+            domain: "dependencies",
+            status: .warn,
+            summary: "cliclick is not installed; bounce/export operations require it.",
+            evidence: ["trusted": "false", "present_on_path": "false"],
+            remediationType: .command,
+            remediationValueOverride: "brew install cliclick"
+        )
+    }
+
+    private static func macOSVersionCheck(runtime: Runtime) -> Check {
+        let minimumMajor = 14 // Package.swift: platforms: [.macOS(.v14)]
+        guard let version = runtime.macOSVersion() else {
+            return check(
+                id: "system.macos_version",
+                domain: "system",
+                status: .skipped,
+                summary: "macOS version could not be determined.",
+                evidence: ["reason": "version_unreadable"],
+                remediationType: .docs
+            )
+        }
+        let versionString = "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
+        if version.majorVersion >= minimumMajor {
+            return check(
+                id: "system.macos_version",
+                domain: "system",
+                status: .pass,
+                summary: "macOS \(versionString) meets the minimum (\(minimumMajor)+).",
+                evidence: ["version": versionString, "minimum_major": String(minimumMajor)],
+                remediationType: .none
+            )
+        }
+        return check(
+            id: "system.macos_version",
+            domain: "system",
+            status: .fail,
+            summary: "macOS \(versionString) is below the required minimum (\(minimumMajor)+).",
+            evidence: ["version": versionString, "minimum_major": String(minimumMajor)],
+            remediationType: .docs
+        )
+    }
+
+    private static func updateCheck(outcome: UpdateOutcome) -> Check {
+        let installed = ServerConfig.serverVersion
+        switch outcome {
+        case let .found(rawLatest):
+            let latest = normalizeVersion(rawLatest)
+            let order = compareVersions(installed, latest)
+            if order >= 0 {
+                return check(
+                    id: "updates.latest_release",
+                    domain: "updates",
+                    status: .pass,
+                    summary: "Installed version \(installed) is up to date.",
+                    evidence: ["installed": installed, "latest": latest],
+                    remediationType: .none
+                )
+            }
+            return check(
+                id: "updates.latest_release",
+                domain: "updates",
+                status: .warn,
+                summary: "A newer release is available: \(latest) (installed \(installed)).",
+                evidence: ["installed": installed, "latest": latest],
+                remediationType: .command,
+                remediationValueOverride: "brew upgrade logic-pro-mcp"
+            )
+        case .offline, .sourceUnavailable, .parseError, .httpError, .timeout:
+            // Redaction (AC-6.4): evidence carries ONLY an enumerated reason — never
+            // stderr, env, tokened URLs, or headers. The lookup is unauthenticated.
+            return check(
+                id: "updates.latest_release",
+                domain: "updates",
+                status: .skipped,
+                summary: "Could not check for the latest release.",
+                evidence: ["reason": updateReason(outcome)],
+                remediationType: .docs
+            )
+        }
+    }
+
+    private static func updateReason(_ outcome: UpdateOutcome) -> String {
+        switch outcome {
+        case .found:
+            return "found"
+        case .offline:
+            return "offline"
+        case .sourceUnavailable:
+            return "source_unavailable"
+        case .parseError:
+            return "parse_error"
+        case .httpError:
+            return "http_error"
+        case .timeout:
+            return "timeout"
+        }
+    }
+
+    /// Normalize a release tag for comparison: strip a leading `v` (`v3.7.4` → `3.7.4`)
+    /// and drop any pre-release/build suffix (`4.0.0-beta.1` → `4.0.0`) so a hyphenated
+    /// segment can't be misread as a numeric component by `compareVersions` (which would
+    /// otherwise rank a pre-release as newer than its GA release).
+    static func normalizeVersion(_ raw: String) -> String {
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("v") || value.hasPrefix("V") {
+            value = String(value.dropFirst())
+        }
+        return value.components(separatedBy: "-").first ?? value
+    }
+
+    /// Numeric, component-wise version compare (NEVER lexicographic: "3.9" < "3.10").
+    /// Returns negative if a < b, 0 if equal, positive if a > b.
+    static func compareVersions(_ a: String, _ b: String) -> Int {
+        let lhs = a.split(separator: ".").map { Int($0) ?? 0 }
+        let rhs = b.split(separator: ".").map { Int($0) ?? 0 }
+        let count = max(lhs.count, rhs.count)
+        for index in 0..<count {
+            let left = index < lhs.count ? lhs[index] : 0
+            let right = index < rhs.count ? rhs[index] : 0
+            if left != right {
+                return left < right ? -1 : 1
+            }
+        }
+        return 0
+    }
+
+    private static func systemEventsSummary(for state: PermissionChecker.CheckState) -> String {
+        switch state {
+        case .granted:
+            return "Automation permission for System Events is granted."
+        case .notGranted:
+            return "Automation permission for System Events is not granted."
+        case .notVerifiable:
+            return "Automation permission for System Events could not be verified."
+        }
+    }
+
     private static func logicApplicationStateCheck(runtime: Runtime) -> Check {
         let running = runtime.logicProRunning()
         let visible = running && runtime.logicProHasVisibleWindow()
@@ -532,14 +923,94 @@ enum SetupDoctor {
         remediationValueOverride: String? = nil
     ) -> Check {
         let value = remediationValueOverride ?? defaultRemediationValue(for: id, type: remediationType)
+        // category/severity are DERIVED here (single chokepoint) so no check can be
+        // built with an inconsistent taxonomy and the 11 existing call sites need no
+        // edit. durationMs is stamped post-hoc by the `generate` timing wrapper.
         return Check(
             id: id,
             domain: domain,
             status: status,
             summary: summary,
             evidence: evidence,
-            remediation: Remediation(type: remediationType, value: value)
+            remediation: Remediation(type: remediationType, value: value),
+            category: category(forDomain: domain),
+            severity: severity(for: status),
+            durationMs: 0
         )
+    }
+
+    /// Maps the v1 free-string `domain` to the closed v2 `Category`. Complete table —
+    /// every domain a check can carry has a row; unknown domains fall back to runtime.
+    static func category(forDomain domain: String) -> Category {
+        switch domain {
+        case "binary", "install", "release", "system":
+            return .installation
+        case "mcp", "channels":
+            return .configuration
+        case "permissions":
+            return .permissions
+        case "dependencies":
+            return .dependencies
+        case "updates":
+            return .updates
+        case "logic":
+            return .runtime
+        default:
+            return .runtime
+        }
+    }
+
+    /// Total status→severity mapping (AC-4.1). `skipped` is `info` (could-not-verify
+    /// is not actionable noise), not `warning`.
+    static func severity(for status: CheckStatus) -> Severity {
+        switch status {
+        case .fail:
+            return .error
+        case .warn, .manual:
+            return .warning
+        case .skipped, .pass:
+            return .info
+        }
+    }
+
+    static func calculateSummary(_ checks: [Check], totalDurationMs: Double) -> Summary {
+        Summary(
+            total: checks.count,
+            passed: checks.filter { $0.status == .pass }.count,
+            failed: checks.filter { $0.status == .fail }.count,
+            warnings: checks.filter { $0.status == .warn }.count,
+            manual: checks.filter { $0.status == .manual }.count,
+            skipped: checks.filter { $0.status == .skipped }.count,
+            durationMs: totalDurationMs
+        )
+    }
+
+    /// The "next action" one-liner (AC-4.2/4.3): names the single highest-priority
+    /// remediation — errors before warnings, then stable check order. `info`
+    /// (pass/skipped) is never headlined. All-pass → healthy message.
+    static func computeHeadline(checks: [Check], status: ReportStatus) -> String {
+        let priority: (Severity) -> Int = { severity in
+            switch severity {
+            case .error: return 0
+            case .warning: return 1
+            case .info: return 2
+            }
+        }
+        // Stable: enumerate in declared order, pick the first lowest-priority-number
+        // non-pass check (errors win ties by appearing first at priority 0).
+        let actionable = checks
+            .filter { $0.status != .pass }
+            .min(by: { priority($0.severity) < priority($1.severity) })
+        guard let lead = actionable, lead.severity != .info else {
+            // No actionable (error/warning) check. Distinguish a truly clean run from
+            // one that is merely usable-but-not-fully-verified (e.g. a skipped check
+            // degrades the aggregate) — never claim "healthy" while status is non-ok.
+            return status == .ok
+                ? "Logic Pro MCP install is healthy."
+                : "Logic Pro MCP install is usable; some checks could not be verified."
+        }
+        let remediationHint = lead.remediation.type == .none ? "" : " — \(lead.remediation.value)"
+        return "Next action [\(lead.id)]: \(lead.summary)\(remediationHint)"
     }
 
     private static func defaultRemediationValue(for id: String, type: RemediationType) -> String {
@@ -552,6 +1023,9 @@ enum SetupDoctor {
             }
             if id == "permissions.automation_logic_pro" {
                 return "System Settings > Privacy & Security > Automation > Logic Pro"
+            }
+            if id == "permissions.automation_system_events" {
+                return "System Settings > Privacy & Security > Automation > System Events"
             }
             return remediationAnchorsByCheckID[id] ?? "docs/SETUP.md#doctor"
         case .command, .docs, .manual:
@@ -616,6 +1090,62 @@ enum SetupDoctor {
         case let .spawnFailed(message):
             return .spawnFailed(message)
         }
+    }
+
+    /// Production update lookup (wired by MainEntrypoint only under `--check-updates`).
+    /// UNAUTHENTICATED public read — no Authorization header, no token — so no secret
+    /// is ever in scope to leak into evidence (AC-6.4). Bounded; degrades to a typed
+    /// failure outcome that the check renders as `skipped`, never `fail`.
+    static func productionLatestReleaseLookup() -> UpdateOutcome {
+        let repo = "MongLong0214/logic-pro-mcp"
+        let url = "https://api.github.com/repos/\(repo)/releases/latest"
+        if let result = runProductionCommand(
+            executable: "/usr/bin/curl",
+            arguments: ["-fsSL", "--max-time", "3", "-H", "Accept: application/vnd.github+json", url],
+            timeout: 3.5
+        ) {
+            switch result {
+            case let .completed(output):
+                if output.exitCode == 0 {
+                    return parseLatestTag(from: output.stdout).map { .found(version: $0) } ?? .parseError
+                }
+                if output.exitCode == 28 {
+                    return .timeout // curl --max-time self-terminated before the bounded wrapper.
+                }
+                if output.exitCode == 22 {
+                    return .httpError // curl -f: HTTP response >= 400
+                }
+                // Other curl failures (could-not-resolve/connect) → try gh, else offline.
+            case .timedOut:
+                return .timeout
+            case .spawnFailed:
+                break // curl missing — try gh.
+            }
+        }
+        // gh fallback (best-effort; gh is a dev tool, often absent on end-user installs).
+        for ghPath in ["/opt/homebrew/bin/gh", "/usr/local/bin/gh"] {
+            if let gh = runProductionCommand(
+                executable: ghPath,
+                arguments: ["release", "view", "--repo", repo, "--json", "tagName", "-q", ".tagName"],
+                timeout: 3.5
+            )?.output, gh.exitCode == 0 {
+                let tag = gh.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+                return tag.isEmpty ? .parseError : .found(version: tag)
+            }
+        }
+        return .offline
+    }
+
+    /// Parse `tag_name` from the GitHub "latest release" JSON. Returns nil on any
+    /// shape mismatch (→ `.parseError`). Never echoes the payload anywhere.
+    static func parseLatestTag(from json: String) -> String? {
+        guard let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tag = object["tag_name"] as? String,
+              !tag.isEmpty else {
+            return nil
+        }
+        return tag
     }
 
     /// Production reader for the Claude Code registration. Parses ~/.claude.json

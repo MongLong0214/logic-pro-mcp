@@ -8,7 +8,9 @@ private final class PermissionRuntimeHarness: @unchecked Sendable {
     var running = true
     var probeResult = true
     var systemEventsProbeCalls = 0
-    var systemEventsProbeResult = true
+    // Tri-state now (was Bool): the seam returns a CheckState so a could-not-run
+    // probe can be modelled as .notVerifiable, distinct from a denial (.notGranted).
+    var systemEventsProbeState: PermissionChecker.CheckState = .granted
 
     func runtime() -> PermissionChecker.Runtime {
         PermissionChecker.Runtime(
@@ -23,7 +25,7 @@ private final class PermissionRuntimeHarness: @unchecked Sendable {
             },
             runSystemEventsAutomationProbe: {
                 self.systemEventsProbeCalls += 1
-                return self.systemEventsProbeResult
+                return self.systemEventsProbeState
             }
         )
     }
@@ -31,7 +33,7 @@ private final class PermissionRuntimeHarness: @unchecked Sendable {
 
 @Test func testPermissionCheckerSystemEventsAutomationProbeReflectsGrant() {
     let harness = PermissionRuntimeHarness()
-    harness.systemEventsProbeResult = true
+    harness.systemEventsProbeState = .granted
 
     let state = PermissionChecker.checkSystemEventsAutomationState(runtime: harness.runtime())
 
@@ -46,12 +48,24 @@ private final class PermissionRuntimeHarness: @unchecked Sendable {
     // is reported as not_granted, not not_verifiable.
     let harness = PermissionRuntimeHarness()
     harness.running = false
-    harness.systemEventsProbeResult = false
+    harness.systemEventsProbeState = .notGranted
 
     let state = PermissionChecker.checkSystemEventsAutomationState(runtime: harness.runtime())
 
     #expect(state == .notGranted)
     #expect(harness.systemEventsProbeCalls == 1)
+}
+
+@Test func testPermissionCheckerSystemEventsProbeCouldNotRunIsNotVerifiable() {
+    // A probe that could not run (osascript timeout / spawn failure) maps to
+    // .notVerifiable, NOT .notGranted — an infrastructure failure is not a denial.
+    let harness = PermissionRuntimeHarness()
+    harness.systemEventsProbeState = .notVerifiable
+
+    let state = PermissionChecker.checkSystemEventsAutomationState(runtime: harness.runtime())
+
+    #expect(state == .notVerifiable)
+    #expect(PermissionChecker.checkSystemEventsAutomation(runtime: harness.runtime()) == false)
 }
 
 @Test func testPermissionCheckerCheckAccessibilityUsesInjectedRuntimeAndPrompt() {

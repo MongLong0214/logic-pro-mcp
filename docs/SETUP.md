@@ -125,6 +125,22 @@ From your MCP client:
 
 Fully configured hosts should show Accessibility, AppleScript, CoreMIDI, MCU, MIDIKeyCommands, Scripter, and CGEvent as available. Skipping Key Commands or Scripter is valid when you do not need those paths.
 
+## Doctor (`logic_pro_mcp_doctor.v2`)
+
+`doctor` is read-only and safe to run before starting the server. Flags:
+
+| Flag | Effect |
+|------|--------|
+| (none) | Human report: a "next action" headline, a `summary:` counts line, and one line per check. |
+| `--verbose` | Adds each check's evidence and `duration_ms`. |
+| `--quiet` | Headline + summary + failing/non-pass checks only. |
+| `--json` | Machine report. Identical bytes regardless of `--verbose`/`--quiet`/color. |
+| `--check-updates` | Opt-in: adds an `updates.latest_release` check (unauthenticated GitHub releases read). The default run never touches the network. |
+
+Color and unicode symbols are emitted only when stdout is a TTY and `NO_COLOR` is unset; otherwise output is plain ASCII (`[pass]`-style), so pipes and CI logs stay clean.
+
+The `v2` report is a **field-superset** of `v1`: every v1 key keeps its name, semantics, and value. New fields are additive — a top-level `summary` block (`total`, `passed`, `failed`, `warnings`, `manual`, `skipped`, `duration_ms`) and `headline`, plus per-check `category`, `severity`, and `duration_ms`. The `schema` string changes `v1`→`v2`; consumers should prefix-match `logic_pro_mcp_doctor.`, not exact-equal a version. Exit code is unchanged: `failed` → 1, otherwise 0.
+
 ## Doctor Remediation Anchors
 
 These anchors are intentionally compact because `doctor --json` links to them.
@@ -160,6 +176,22 @@ Grant Accessibility to the launcher app in System Settings.
 <a id="doctor-permissionsautomation-logic-pro"></a>
 ### `permissions.automation_logic_pro`
 Grant Automation access for Logic Pro. If status is `not_verifiable`, launch Logic Pro once and rerun doctor.
+
+<a id="doctor-permissionsautomation-system-events"></a>
+### `permissions.automation_system_events`
+Grant Automation access for **System Events** (System Settings > Privacy & Security > Automation → System Events). This is a separate TCC target from Logic Pro automation and is required by MIDI import / tempo-dialog / project-state paths (#188). If status is `manual` (`not_verifiable`), the probe could not run — rerun doctor.
+
+<a id="doctor-dependenciescliclick"></a>
+### `dependencies.cliclick`
+Install `cliclick` (`brew install cliclick`) at a trusted path. Bounce/export operations require it; the doctor reuses the runtime's trusted resolver, so a `cliclick` found only on `PATH` or with a writable parent directory reports `warn`.
+
+<a id="doctor-systemmacos-version"></a>
+### `system.macos_version`
+Logic Pro MCP requires macOS 14 or newer. Upgrade macOS if this check fails.
+
+<a id="doctor-updateslatest-release"></a>
+### `updates.latest_release`
+Shown only with `doctor --check-updates`. If a newer release exists, `brew upgrade logic-pro-mcp` (or reinstall from the target release). A `skipped` status means the check could not reach the release source (offline / unavailable) — it never blocks.
 
 <a id="doctor-logicapplication-state"></a>
 ### `logic.application_state`

@@ -293,7 +293,7 @@ import Testing
         checkAccessibility: { _ in true },
         isLogicProRunning: { false },
         runAutomationProbe: { false },
-        runSystemEventsAutomationProbe: { false }
+        runSystemEventsAutomationProbe: { .notGranted }
     ))
     #expect(status.accessibility == true)
     #expect(status.automationState == .notVerifiable)

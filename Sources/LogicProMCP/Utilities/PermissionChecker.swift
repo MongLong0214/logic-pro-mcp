@@ -35,7 +35,12 @@ enum PermissionChecker {
         // Logic Pro automation granted can still have System Events denied —
         // which is exactly the #188 gap where health looked green but
         // record_sequence failed mid-import with an Apple Events denial.
-        let runSystemEventsAutomationProbe: @Sendable () -> Bool
+        //
+        // Tri-state (not Bool): a probe that RAN and was denied → .notGranted, but a
+        // probe that COULD NOT RUN (osascript timeout / spawn failure / unexpected
+        // output) → .notVerifiable. Collapsing the latter to .notGranted would report
+        // "denied" for an infrastructure failure — a false-RED the doctor must not emit.
+        let runSystemEventsAutomationProbe: @Sendable () -> CheckState
 
         static let production = Runtime(
             checkAccessibility: { prompt in
@@ -163,7 +168,7 @@ enum PermissionChecker {
     }
 
     static func checkSystemEventsAutomationState(runtime: Runtime = .production) -> CheckState {
-        runtime.runSystemEventsAutomationProbe() ? .granted : .notGranted
+        runtime.runSystemEventsAutomationProbe()
     }
 
     /// Full permission check.
@@ -197,22 +202,27 @@ enum PermissionChecker {
         return trimmed == ServerConfig.logicProProcessName
     }
 
-    private static func runSystemEventsAutomationProbeViaShell() -> Bool {
-        // A no-op read against System Events. If the launcher lacks Automation →
-        // System Events, osascript exits non-zero (e.g. errAEEventNotPermitted
-        // -1743) and the probe reports notGranted instead of letting a later
-        // MIDI import fail mid-mutation with the same denial.
+    private static func runSystemEventsAutomationProbeViaShell() -> CheckState {
+        // A no-op read against System Events. Distinguish three outcomes honestly:
+        //  - osascript ran, exit 0, returned "System Events"  → .granted
+        //  - osascript ran, exit != 0 (e.g. errAEEventNotPermitted -1743) → .notGranted (real denial)
+        //  - osascript could not run (timeout / spawn failure) or returned unexpected
+        //    output → .notVerifiable (an infrastructure failure is NOT a denial).
         let script = "tell application \"System Events\" to return name"
-        guard case let .completed(output) = BoundedProcessRunner.run(
+        switch BoundedProcessRunner.run(
             executable: "/usr/bin/osascript",
             arguments: ["-e", script],
             timeout: 1.0,
             outputLimitBytes: 4 * 1024
-        ), output.exitCode == 0 else {
-            return false
+        ) {
+        case let .completed(output):
+            if output.exitCode == 0 {
+                let trimmed = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed == "System Events" ? .granted : .notVerifiable
+            }
+            return .notGranted
+        case .timedOut, .spawnFailed:
+            return .notVerifiable
         }
-
-        let trimmed = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed == "System Events"
     }
 }
