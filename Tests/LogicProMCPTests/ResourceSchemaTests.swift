@@ -354,6 +354,27 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect((uptimeSec ?? -1) >= 0)
 }
 
+@Test func testHealthResponseDependenciesSection() async throws {
+    // #210: health surfaces cliclick trust status with a diagnosis.
+    let cache = StateCache()
+    let router = ChannelRouter()
+
+    let result = await SystemDispatcher.handle(command: "health", params: [:], router: router, cache: cache)
+    let json = try #require(sharedParseJSON(toolText(result)) as? [String: Any])
+    let dependencies = try #require(json["dependencies"] as? [String: Any])
+    let cliclick = try #require(dependencies["cliclick"] as? Bool)
+    let trust = try #require(dependencies["cliclick_trust"] as? String)
+    #expect(!trust.isEmpty)
+    if cliclick {
+        #expect(trust == "trusted")
+        #expect(dependencies["cliclick_path"] as? String != nil)
+    } else {
+        // unresolved → carries the per-candidate diagnosis + remediation (not a bare flag)
+        #expect(trust.contains("tried:"))
+        #expect(trust.contains("LOGIC_PRO_MCP_CLICLICK"))
+    }
+}
+
 @Test func testMixerResponseIncludesPluginParams() async {
     let cache = StateCache()
     var strip = ChannelStripState(trackIndex: 0)

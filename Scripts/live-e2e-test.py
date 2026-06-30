@@ -34,11 +34,9 @@ STRICT_LIVE = os.environ.get("LOGIC_PRO_MCP_STRICT_LIVE", "0") == "1"
 TRANSPORT = os.environ.get("LOGIC_PRO_MCP_E2E_TRANSPORT", "tmux" if STRICT_LIVE else "popen")
 FRESH_BOOTSTRAP = os.environ.get("LOGIC_PRO_MCP_BOOTSTRAP_FRESH", "1" if STRICT_LIVE else "0") == "1"
 TIMEOUT = int(os.environ.get("LOGIC_PRO_MCP_E2E_TIMEOUT", "40" if STRICT_LIVE else "10"))
-TRUSTED_CLICLICK_PATHS = (
-    "/opt/homebrew/bin/cliclick",
-    "/usr/local/bin/cliclick",
-    "/usr/bin/cliclick",
-)
+# issue #210: use the production resolver (single source of truth) instead of a 3rd
+# divergent mirror — guarantees the live harness accepts exactly what bounce/export accepts.
+from logic_bounce_ui import trusted_cliclick_path  # noqa: E402
 
 
 def coverage_environment():
@@ -52,26 +50,6 @@ def coverage_environment():
         env["LOGIC_PRO_MCP_PROFILE_DIR"] = profile_dir
         env["LLVM_PROFILE_FILE"] = os.path.join(profile_dir, "%m-%p.profraw")
     return env
-
-
-def trusted_cliclick_path() -> Optional[str]:
-    candidates = (os.environ.get("LOGIC_PRO_MCP_CLICLICK"), *TRUSTED_CLICLICK_PATHS)
-    for candidate in candidates:
-        if not candidate:
-            continue
-        path = os.path.abspath(os.path.expanduser(candidate))
-        if path not in TRUSTED_CLICLICK_PATHS:
-            continue
-        parent = os.path.dirname(path)
-        try:
-            parent_mode = os.stat(parent).st_mode
-        except OSError:
-            continue
-        if parent_mode & 0o022:
-            continue
-        if os.path.isfile(path) and os.access(path, os.X_OK):
-            return path
-    return None
 
 
 def coverage_shell_prefix():

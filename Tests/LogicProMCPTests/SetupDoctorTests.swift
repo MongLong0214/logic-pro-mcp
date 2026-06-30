@@ -43,7 +43,18 @@ private func doctorRuntime(
         runCommand: commandHandler,
         readClaudeRegistration: { registration }
     )
-    runtime.cliclickPath = { cliclickPath }
+    runtime.cliclickResolution = {
+        if let path = cliclickPath {
+            return ProjectExportExecutor.CliclickResolution(
+                resolvedPath: path,
+                candidates: [.init(path: path, source: .override, reason: .resolved)]
+            )
+        }
+        return ProjectExportExecutor.CliclickResolution(
+            resolvedPath: nil,
+            candidates: [.init(path: "/opt/homebrew/bin/cliclick", source: .canonical, reason: .parentWritable)]
+        )
+    }
     runtime.cliclickPresentOnPath = { cliclickPresentOnPath }
     runtime.macOSVersion = { macOSVersion }
     runtime.monotonicNowMs = monotonicNowMs

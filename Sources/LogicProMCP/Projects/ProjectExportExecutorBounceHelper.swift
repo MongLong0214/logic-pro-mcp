@@ -53,8 +53,8 @@ extension ProjectExportExecutor {
         executablePath: String? = nil,
         timeout: TimeInterval = bounceHelperTimeout,
         fileExists: @Sendable (String) -> Bool = { FileManager.default.fileExists(atPath: $0) },
-        resolveCliclick: @Sendable ([String: String]) -> String? = { environment in
-            ProjectExportExecutor.resolveTrustedCliclick(environment: environment)
+        resolveCliclick: @Sendable ([String: String]) -> ProjectExportExecutor.CliclickResolution = { environment in
+            ProjectExportExecutor.resolveCliclickDetailed(environment: environment)
         },
         runProcess: BounceHelperProcessRunner = { executable, arguments, timeout in
             BoundedProcessRunner.run(
@@ -75,8 +75,11 @@ extension ProjectExportExecutor {
         guard fileExists(helper) else {
             return .failure("bounce_helper_missing: \(helper)")
         }
-        guard let cliclickPath = resolveCliclick(environment) else {
-            return .failure("bounce_helper_dependency_missing: cliclick")
+        let cliclickResolution = resolveCliclick(environment)
+        guard let cliclickPath = cliclickResolution.resolvedPath else {
+            // Diagnosable failure (issue #210): name every candidate + why it was rejected +
+            // the remediation, instead of a bare dependency_missing.
+            return .failure("bounce_helper_dependency_missing: cliclick — \(cliclickResolution.diagnosticSummary)")
         }
         let result = runProcess(
             "/usr/bin/python3",

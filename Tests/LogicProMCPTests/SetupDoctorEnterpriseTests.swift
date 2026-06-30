@@ -28,7 +28,18 @@ private func enterpriseRuntime(
         },
         readClaudeRegistration: { .registered(command: "/opt/homebrew/bin/LogicProMCP") }
     )
-    runtime.cliclickPath = { cliclickPath }
+    runtime.cliclickResolution = {
+        if let path = cliclickPath {
+            return ProjectExportExecutor.CliclickResolution(
+                resolvedPath: path,
+                candidates: [.init(path: path, source: .override, reason: .resolved)]
+            )
+        }
+        return ProjectExportExecutor.CliclickResolution(
+            resolvedPath: nil,
+            candidates: [.init(path: "/opt/homebrew/bin/cliclick", source: .canonical, reason: .parentWritable)]
+        )
+    }
     runtime.cliclickPresentOnPath = { cliclickPresentOnPath }
     runtime.macOSVersion = { macOSVersion }
     runtime.monotonicNowMs = monotonicNowMs
@@ -313,7 +324,16 @@ private struct FrozenV1Report: Codable {
 @Test func test_t2_cliclick_warn_absent() throws {
     let c = try #require(check(makeReport(runtime: enterpriseRuntime(cliclickPath: nil, cliclickPresentOnPath: false)), "dependencies.cliclick"))
     #expect(c.status == .warn)
-    #expect(c.remediation.value == "brew install cliclick")
+    #expect(c.remediation.value.contains("chmod g-w /opt/homebrew/bin"))
+}
+
+@Test func test_t2_cliclick_unresolved_surfaces_candidate_reasons() throws {
+    // #210 diagnosability: an unresolved cliclick exposes WHY each candidate failed.
+    let c = try #require(check(makeReport(runtime: enterpriseRuntime(cliclickPath: nil)), "dependencies.cliclick"))
+    #expect(c.status == .warn)
+    let candidates = try #require(c.evidence["candidates"])
+    #expect(candidates.contains("parent_writable"))
+    #expect(c.evidence["trusted"] == "false")
 }
 
 @Test func test_t2_macos_pass_ge_14() throws {
@@ -350,7 +370,7 @@ private struct FrozenV1Report: Codable {
     let out = SetupDoctor.renderHuman(report, mode: .default, useColor: false)
     #expect(out.contains("summary:"))
     #expect(out.contains("[pass] binary.path"))
-    #expect(out.contains("\u{2192} brew install cliclick")) // → remediation on a non-pass check
+    #expect(out.contains("\u{2192} chmod g-w /opt/homebrew/bin")) // → remediation on a non-pass check
 }
 
 @Test func test_t3_verbose_render_adds_evidence_and_duration() {

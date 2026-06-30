@@ -159,9 +159,12 @@ enum SetupDoctor {
         let readClaudeRegistration: () -> ClaudeRegistration
         // v2 seams. Defaults keep every existing `Runtime(...)` construction site
         // compiling; `.production` and the test helper supply real/fake impls.
-        // `cliclickPath` reuses the runtime's own trusted resolver so the doctor
-        // can never green-light a cliclick the bounce/export path would reject.
-        var cliclickPath: () -> String? = { ProjectExportExecutor.resolveTrustedCliclick() }
+        // `cliclickResolution` reuses the runtime's OWN trusted resolver (incl. per-candidate
+        // rejection reasons, issue #210) so the doctor can never green-light a cliclick the
+        // bounce/export path would reject, and surfaces WHY it was rejected.
+        var cliclickResolution: () -> ProjectExportExecutor.CliclickResolution = {
+            ProjectExportExecutor.resolveCliclickDetailed()
+        }
         var cliclickPresentOnPath: () -> Bool = { ProjectExportExecutor.commandExists("cliclick") }
         var macOSVersion: () -> OperatingSystemVersion? = { ProcessInfo.processInfo.operatingSystemVersion }
         // Monotonic millisecond clock for per-check timing. Monotonic (uptime),
@@ -673,11 +676,12 @@ enum SetupDoctor {
     }
 
     private static func cliclickDependencyCheck(runtime: Runtime) -> Check {
-        // Reuse the runtime's OWN trusted resolver so the doctor cannot green-light a
-        // cliclick the bounce/export path would reject (trusted canonical path +
-        // non-group/other-writable parent). cliclick gates only bounce/export, so a
-        // missing/untrusted binary is `warn` (→ degraded → exit 0), never `fail`.
-        if let path = runtime.cliclickPath() {
+        // Reuse the runtime's OWN trusted resolver (incl. per-candidate rejection reasons, #210)
+        // so the doctor cannot green-light a cliclick the bounce/export path would reject, and so a
+        // rejection is DIAGNOSABLE. cliclick gates only bounce/export, so missing/untrusted is
+        // `warn` (→ degraded → exit 0), never `fail`.
+        let resolution = runtime.cliclickResolution()
+        if let path = resolution.resolvedPath {
             return check(
                 id: "dependencies.cliclick",
                 domain: "dependencies",
@@ -687,25 +691,27 @@ enum SetupDoctor {
                 remediationType: .none
             )
         }
-        if runtime.cliclickPresentOnPath() {
-            return check(
-                id: "dependencies.cliclick",
-                domain: "dependencies",
-                status: .warn,
-                summary: "cliclick is present but not at a trusted path (or its parent directory is writable); bounce/export will not use it.",
-                evidence: ["trusted": "false", "present_on_path": "true"],
-                remediationType: .command,
-                remediationValueOverride: "brew install cliclick"
-            )
-        }
+        // Per-candidate reasons (e.g. "/opt/homebrew/bin/cliclick=parent_writable") — this is the
+        // exact diagnosis #210 asked for: the binary was found but rejected, and WHY.
+        let candidatesEvidence = resolution.candidates
+            .map { "\($0.path)=\($0.reason.rawValue)" }
+            .joined(separator: ", ")
+        let presentOnPath = runtime.cliclickPresentOnPath()
+        let summary = presentOnPath
+            ? "cliclick is present but no candidate is at a trusted path (or a parent dir is writable); bounce/export will not use it."
+            : "cliclick is not installed at a trusted path; bounce/export operations require it."
         return check(
             id: "dependencies.cliclick",
             domain: "dependencies",
             status: .warn,
-            summary: "cliclick is not installed; bounce/export operations require it.",
-            evidence: ["trusted": "false", "present_on_path": "false"],
+            summary: summary,
+            evidence: [
+                "trusted": "false",
+                "present_on_path": presentOnPath ? "true" : "false",
+                "candidates": candidatesEvidence.isEmpty ? "none" : candidatesEvidence,
+            ],
             remediationType: .command,
-            remediationValueOverride: "brew install cliclick"
+            remediationValueOverride: "chmod g-w /opt/homebrew/bin  (or set LOGIC_PRO_MCP_CLICLICK to an approved absolute path)"
         )
     }
 

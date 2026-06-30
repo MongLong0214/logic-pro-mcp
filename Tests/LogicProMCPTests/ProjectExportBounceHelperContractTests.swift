@@ -7,6 +7,15 @@ struct ProjectExportBounceHelperContractTests {
     // Use nonexistent fixture roots; real /opt/homebrew can make URL stats stall on CI.
     private static let trustedCliclick = "/opt/homebrew/bin/cliclick"
 
+    // #210: the resolveCliclick seam now returns a CliclickResolution. Test helpers.
+    private static func resolvedCliclick(_ path: String) -> ProjectExportExecutor.CliclickResolution {
+        .init(resolvedPath: path, candidates: [.init(path: path, source: .canonical, reason: .resolved)])
+    }
+    private static let unresolvedCliclick = ProjectExportExecutor.CliclickResolution(
+        resolvedPath: nil,
+        candidates: [.init(path: "/opt/homebrew/bin/cliclick", source: .canonical, reason: .parentWritable)]
+    )
+
     @Test("resolver honors LOGIC_PRO_MCP_SHARE_DIR for custom install layouts")
     func resolverUsesConfiguredShareDir() {
         let resolved = ProjectExportExecutor.resolveBounceHelperPath(
@@ -119,6 +128,9 @@ struct ProjectExportBounceHelperContractTests {
 
     @Test("cliclick resolver ignores PATH hijacks and rejects writable trusted dirs")
     func cliclickResolverRejectsUntrustedLocations() {
+        // PATH hijack: nothing trusted is executable → rejected. (Acceptance is covered
+        // hermetically in CliclickTrustResolverTests, which can inject the realpath/isRegularFile
+        // seams the String? wrapper does not expose.)
         let hijacked = ProjectExportExecutor.resolveTrustedCliclick(
             environment: ["PATH": "/tmp"],
             isExecutable: { $0 == "/tmp/cliclick" },
@@ -126,13 +138,7 @@ struct ProjectExportBounceHelperContractTests {
         )
         #expect(hijacked == nil)
 
-        let trusted = ProjectExportExecutor.resolveTrustedCliclick(
-            environment: ["LOGIC_PRO_MCP_CLICLICK": Self.trustedCliclick],
-            isExecutable: { $0 == Self.trustedCliclick },
-            attributesOfItem: { _ in [.posixPermissions: NSNumber(value: 0o755)] }
-        )
-        #expect(trusted == Self.trustedCliclick)
-
+        // Writable canonical parent (0o777) → rejected before any file check.
         let writableTrustedDir = ProjectExportExecutor.resolveTrustedCliclick(
             environment: ["LOGIC_PRO_MCP_CLICLICK": Self.trustedCliclick],
             isExecutable: { $0 == Self.trustedCliclick },
@@ -142,14 +148,14 @@ struct ProjectExportBounceHelperContractTests {
     }
 
     @Test("runBounceHelper fails closed before launch when cliclick is missing")
-    func runBounceHelperFailsWhenCliclickIsMissing() async {
+    func runBounceHelperFailsWhenCliclickIsMissing() async throws {
         let result = await ProjectExportExecutor.runBounceHelper(
             artifactPath: "/tmp/output/Song.wav",
             environment: [:],
             currentDirectoryPath: "/tmp/repo",
             executablePath: "/Applications/LogicProMCP/LogicProMCP",
             fileExists: { $0 == "/Applications/LogicProMCP/Scripts/logic_bounce.py" },
-            resolveCliclick: { _ in nil },
+            resolveCliclick: { _ in Self.unresolvedCliclick },
             runProcess: { _, _, _ in
                 Issue.record("missing cliclick should fail before spawning the helper")
                 return .timedOut
@@ -157,7 +163,11 @@ struct ProjectExportBounceHelperContractTests {
         )
 
         #expect(result.artifactPath == nil)
-        #expect(result.error == "bounce_helper_dependency_missing: cliclick")
+        // #210: the failure is now diagnosable — prefix preserved, candidate reasons + remediation appended.
+        let error = try #require(result.error)
+        #expect(error.hasPrefix("bounce_helper_dependency_missing: cliclick"))
+        #expect(error.contains("parent_writable"))
+        #expect(error.contains("chmod g-w /opt/homebrew/bin"))
         #expect(!result.bounceFired)
     }
 
@@ -169,7 +179,7 @@ struct ProjectExportBounceHelperContractTests {
             currentDirectoryPath: "/tmp/repo",
             executablePath: "/Applications/LogicProMCP/LogicProMCP",
             fileExists: { $0 == "/Applications/LogicProMCP/Scripts/logic_bounce.py" },
-            resolveCliclick: { _ in Self.trustedCliclick },
+            resolveCliclick: { _ in Self.resolvedCliclick(Self.trustedCliclick) },
             runProcess: { _, arguments, _ in
                 #expect(Array(arguments.suffix(2)) == ["--cliclick-path", Self.trustedCliclick])
                 return .timedOut
@@ -185,7 +195,7 @@ struct ProjectExportBounceHelperContractTests {
             currentDirectoryPath: "/tmp/repo",
             executablePath: "/Applications/LogicProMCP/LogicProMCP",
             fileExists: { $0 == "/Applications/LogicProMCP/Scripts/logic_bounce.py" },
-            resolveCliclick: { _ in Self.trustedCliclick },
+            resolveCliclick: { _ in Self.resolvedCliclick(Self.trustedCliclick) },
             runProcess: { _, _, _ in
                 .completed(
                     .init(
@@ -211,7 +221,7 @@ struct ProjectExportBounceHelperContractTests {
             currentDirectoryPath: "/tmp/repo",
             executablePath: "/Applications/LogicProMCP/LogicProMCP",
             fileExists: { $0 == "/Applications/LogicProMCP/Scripts/logic_bounce.py" },
-            resolveCliclick: { _ in Self.trustedCliclick },
+            resolveCliclick: { _ in Self.resolvedCliclick(Self.trustedCliclick) },
             runProcess: { _, _, _ in
                 .completed(
                     .init(
@@ -234,7 +244,7 @@ struct ProjectExportBounceHelperContractTests {
             currentDirectoryPath: "/tmp/repo",
             executablePath: "/Applications/LogicProMCP/LogicProMCP",
             fileExists: { $0 == "/Applications/LogicProMCP/Scripts/logic_bounce.py" },
-            resolveCliclick: { _ in Self.trustedCliclick },
+            resolveCliclick: { _ in Self.resolvedCliclick(Self.trustedCliclick) },
             runProcess: { _, _, _ in
                 .completed(
                     .init(
@@ -264,7 +274,7 @@ struct ProjectExportBounceHelperContractTests {
             currentDirectoryPath: "/tmp/repo",
             executablePath: "/Applications/LogicProMCP/LogicProMCP",
             fileExists: { $0 == "/Applications/LogicProMCP/Scripts/logic_bounce.py" },
-            resolveCliclick: { _ in Self.trustedCliclick },
+            resolveCliclick: { _ in Self.resolvedCliclick(Self.trustedCliclick) },
             runProcess: { _, _, _ in
                 .completed(
                     .init(

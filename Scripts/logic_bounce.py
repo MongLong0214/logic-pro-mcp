@@ -28,14 +28,17 @@ from typing import Optional
 from logic_input_source import TARGET_INPUT_SOURCE_IDS, TISRuntime, select_input_source, set_input_abc
 from logic_bounce_ui import (
     OSA_TIMEOUT_SEC,
+    CliclickResolution,
     bounce_dialog_present,
     bounce_focus_diagnostics,
     bounce_settings_present,
     cliclick,
+    cliclick_resolution,
     click_bounce_settings_confirm,
     open_bounce_dialog,
     osa,
     save_panel_present,
+    set_resolved_cliclick,
     trusted_cliclick_path,
 )
 
@@ -150,12 +153,15 @@ def main() -> int:
     result = {"name": target_name, "output_dir": output_dir, "target_path": target_path}
     result["bounce_fired"] = False
 
-    cliclick_path = trusted_cliclick_path(args.cliclick_path)
+    resolution = cliclick_resolution(args.cliclick_path)
+    cliclick_path = resolution.resolved_path
     if cliclick_path is None:
         result["success"] = False
         result["error"] = "cliclick_missing"
+        result["reason"] = resolution.diagnostic_summary()  # issue #210: diagnosable, not bare
         print(json.dumps(result)); return 1
     os.environ["LOGIC_PRO_MCP_CLICLICK"] = cliclick_path
+    set_resolved_cliclick(cliclick_path)  # resolve-once: per-click cliclick() reuses this (R5)
 
     # 1. deterministic input-source switch (avoid Korean IME mangling the filename)
     if not set_input_abc():

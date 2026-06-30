@@ -97,6 +97,20 @@ struct SystemDispatcher {
             }
         }
 
+        // #210: surface cliclick trust status (bounce/export dependency) with a diagnosis,
+        // so a found-but-rejected cliclick is visible in health, not just at bounce time.
+        struct DependenciesSection: Encodable {
+            let cliclick: Bool          // resolved to a trusted path?
+            let cliclickPath: String?   // the resolved trusted path, if any
+            let cliclickTrust: String   // "trusted", or the per-candidate diagnosis + remediation
+
+            enum CodingKeys: String, CodingKey {
+                case cliclick
+                case cliclickPath = "cliclick_path"
+                case cliclickTrust = "cliclick_trust"
+            }
+        }
+
         let logicProRunning: Bool
         let logicProHasWindow: Bool
         let logicProHasDocument: Bool
@@ -106,6 +120,7 @@ struct SystemDispatcher {
         let cache: CacheSection
         let permissions: PermissionsSection
         let process: ProcessSection
+        let dependencies: DependenciesSection
 
         enum CodingKeys: String, CodingKey {
             case logicProRunning = "logic_pro_running"
@@ -117,6 +132,7 @@ struct SystemDispatcher {
             case cache
             case permissions
             case process
+            case dependencies
         }
     }
 
@@ -219,7 +235,16 @@ struct SystemDispatcher {
                     cpuPercentUnits: process.cpuPercentUnits,
                     cpuSampleWindowSec: Double(String(format: "%.3f", process.cpuSampleWindowSec))
                         ?? process.cpuSampleWindowSec
-                )
+                ),
+                dependencies: {
+                    // Read-only filesystem trust check (no spawn) — safe in health.
+                    let cliclick = ProjectExportExecutor.resolveCliclickDetailed()
+                    return .init(
+                        cliclick: cliclick.resolvedPath != nil,
+                        cliclickPath: cliclick.resolvedPath,
+                        cliclickTrust: cliclick.resolvedPath != nil ? "trusted" : cliclick.diagnosticSummary
+                    )
+                }()
             )
             let json = encodeJSON(health)
             return toolTextResult(json)

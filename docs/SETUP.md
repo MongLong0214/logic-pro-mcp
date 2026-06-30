@@ -183,7 +183,45 @@ Grant Automation access for **System Events** (System Settings > Privacy & Secur
 
 <a id="doctor-dependenciescliclick"></a>
 ### `dependencies.cliclick`
-Install `cliclick` (`brew install cliclick`) at a trusted path. Bounce/export operations require it; the doctor reuses the runtime's trusted resolver, so a `cliclick` found only on `PATH` or with a writable parent directory reports `warn`.
+Install `cliclick` (`brew install cliclick`) at a **trusted** path — bounce/export require it. The doctor
+reuses the runtime's own trust resolver, so a `cliclick` that is installed but not *trusted* reports `warn`
+with the exact reason per candidate (e.g. `parent_writable`, `not_found`, `ancestor_writable`,
+`owner_untrusted`, `sha256_mismatch`). See the trust model below for what "trusted" means and how to fix it.
+
+#### cliclick trust model
+
+The server only executes a `cliclick` that another non-root user on the machine cannot swap. Two ways a
+path is trusted:
+
+1. **Canonical** — one of `/opt/homebrew/bin/cliclick`, `/usr/local/bin/cliclick`, `/usr/bin/cliclick`
+   whose **immediate parent directory** is not group/world-writable.
+2. **Operator-approved (`LOGIC_PRO_MCP_CLICLICK`)** — any absolute path that, after resolving symlinks,
+   is an executable regular file that is **not** group/world-writable, is owned by root or you, and whose
+   **every parent directory up to `/`** is non-group/world-writable and owned by root or you. Optionally pin
+   the exact build with `LOGIC_PRO_MCP_CLICLICK_SHA256=<64-hex sha256>`.
+
+**Apple-Silicon Homebrew note (issue #210):** `brew` commonly leaves `/opt/homebrew/bin` (and
+`/opt/homebrew/Cellar`) group-writable (`775`), so the bundled cliclick is found-but-rejected. Fixes:
+
+- **Simplest:** `chmod g-w /opt/homebrew/bin` — makes the **canonical** path trusted (it checks only the
+  immediate parent, not the Homebrew Cellar the symlink points at). `brew` keeps working as the directory
+  owner; note an upgrade may reset it to `775`, in which case re-run the one-liner. **Caveat:** the canonical
+  cliclick is a symlink into `/opt/homebrew/Cellar`, which stays group-writable, so it remains swappable by
+  other admin-group members — use the **Hardened** option below for full isolation on a shared machine.
+- **Hardened:** copy `cliclick` to a directory whose whole ancestry is non-group/world-writable and owned by
+  root or you (e.g. a root-owned `/usr/local/bin`), then `export LOGIC_PRO_MCP_CLICLICK=/that/path/cliclick`
+  (optionally with `LOGIC_PRO_MCP_CLICLICK_SHA256`). Pointing the override at the stock Homebrew cliclick is
+  intentionally **rejected** (`ancestor_writable` at `/opt/homebrew/Cellar`) because that directory is
+  group-writable — use a clean copy instead.
+
+A rejected resolution is fully diagnosable: `LogicProMCP doctor --json` (`dependencies.cliclick.evidence.candidates`),
+`logic_system health` (`dependencies.cliclick_trust`), and the bounce/export error
+(`bounce_helper_dependency_missing: cliclick — tried: …`) all name each candidate and its reason.
+
+> **Trust model scope.** The writable check inspects POSIX mode bits (group/world write) and ownership;
+> it does not inspect macOS ACLs. On a managed Mac that grants write via an ACL on a `755` directory, prefer
+> the `LOGIC_PRO_MCP_CLICLICK_SHA256` content pin. The threat model is a non-root local user; a same-uid
+> process is out of scope (it can already act as you).
 
 <a id="doctor-systemmacos-version"></a>
 ### `system.macos_version`
