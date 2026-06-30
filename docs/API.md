@@ -1,6 +1,6 @@
 # API Reference
 
-Current stable surface: Logic Pro MCP v3.7.3 exposes 10 tools, 18 static resources, and 11 resource templates.
+Current stable surface: Logic Pro MCP v3.7.4 exposes 10 tools, 18 static resources, and 11 resource templates.
 
 Use tools for actions. Use resources for state. Treat every mutating result as one of:
 
