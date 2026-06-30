@@ -225,11 +225,16 @@ private func makeBundleURL(version: String) throws -> URL {
 }
 
 @Test func testPermissionStatusAllGrantedSummaryOmitsRemediation() {
-    let status = PermissionChecker.PermissionStatus(accessibility: true, automationLogicPro: true)
+    let status = PermissionChecker.PermissionStatus(
+        accessibility: true,
+        automationLogicPro: true,
+        systemEventsAutomation: .granted
+    )
 
     #expect(status.allGranted == true)
     #expect(status.summary.contains("Accessibility: granted"))
     #expect(status.summary.contains("Automation (Logic Pro): granted"))
+    #expect(status.summary.contains("Automation (System Events): granted"))
     #expect(status.summary.contains("System Settings") == false)
 }
 

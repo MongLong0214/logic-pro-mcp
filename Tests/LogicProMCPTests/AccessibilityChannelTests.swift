@@ -1236,11 +1236,11 @@ private func makeSetInstrumentFixture() -> (
 
     #expect(!result.isSuccess)
     let obj = decodeAccessibilityJSON(result.message)
-    #expect((obj["success"] as? Bool) == false)
+    #expect((obj["success"] as? Bool)! == false)
     #expect(obj["error"] as? String == "permission_denied")
     #expect(obj["permission"] as? String == "automation_system_events")
     #expect(obj["failure_stage"] as? String == "preflight_system_events_permission")
-    #expect((obj["write_attempted"] as? Bool) == false)
+    #expect((obj["write_attempted"] as? Bool)! == false)
     #expect((obj["safe_to_retry"] as? Bool)!)
 }
 
@@ -1288,7 +1288,7 @@ private func makeTempoSliderFixture(
 
     #expect(!result.isSuccess)
     let obj = decodeAccessibilityJSON(result.message)
-    #expect((obj["success"] as? Bool) == false)
+    #expect((obj["success"] as? Bool)! == false)
     #expect(obj["error"] as? String == "readback_mismatch")
     #expect(obj["via"] as? String == "slider-increment")
     #expect((obj["requested"] as? Double) == 96)

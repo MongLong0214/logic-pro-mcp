@@ -27,7 +27,7 @@ private actor MockMainServer: ServerStarting {
     let exitCode = await MainEntrypoint.run(
         arguments: ["LogicProMCP", "--check-permissions"],
         permissionCheck: {
-            .init(accessibility: true, automationLogicPro: true)
+            .init(accessibility: true, automationLogicPro: true, systemEventsAutomation: .granted)
         },
         serverFactory: {
             Issue.record("Server should not be created when checking permissions")
@@ -39,6 +39,35 @@ private actor MockMainServer: ServerStarting {
     #expect(exitCode == 0)
     #expect(stderr.contains("Accessibility: granted"))
     #expect(stderr.contains("Automation (Logic Pro): granted"))
+    #expect(stderr.contains("Automation (System Events): granted"))
+}
+
+@Test func testMainEntrypointReturnsFailureWhenSystemEventsAutomationDenied() async {
+    // #188 readiness honesty: Accessibility + Logic Pro automation can be
+    // granted while Automation → System Events (a separate TCC target driving
+    // MIDI import / tempo dialog / project-state probes) is denied. The
+    // readiness gate must exit non-zero so an install guide or CI check never
+    // reads exit 0 as "ready" and then fails mid-import.
+    var stderr = ""
+    let exitCode = await MainEntrypoint.run(
+        arguments: ["LogicProMCP", "--check-permissions"],
+        permissionCheck: {
+            .init(
+                accessibilityState: .granted,
+                automationState: .granted,
+                systemEventsAutomationState: .notGranted
+            )
+        },
+        serverFactory: {
+            Issue.record("Server should not be created when checking permissions")
+            return MockMainServer()
+        },
+        writeStderr: { stderr += $0 }
+    )
+
+    #expect(exitCode == 1)
+    #expect(stderr.contains("Automation (System Events): NOT GRANTED"))
+    #expect(stderr.contains("allow control of System Events"))
 }
 
 @Test func testMainEntrypointReturnsFailureForMissingPermissions() async {

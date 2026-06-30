@@ -78,7 +78,14 @@ enum PermissionChecker {
         var automationVerifiable: Bool { automationState != .notVerifiable }
         var automationSystemEvents: Bool { systemEventsAutomationState.isGranted }
 
-        var allGranted: Bool { accessibility && automationLogicPro }
+        // System Events automation is a hard requirement, not optional: MIDI
+        // import, the tempo dialog, and project-state probes all drive
+        // `tell application "System Events"`. Excluding it let
+        // `--check-permissions` exit 0 while those paths fail mid-mutation with
+        // an Apple Events denial — the exact #188 false-green. The production
+        // probe is unconditional (System Events is always running), so a denied
+        // target is reported truthfully here rather than advertised as ready.
+        var allGranted: Bool { accessibility && automationLogicPro && automationSystemEvents }
 
         var summary: String {
             var lines: [String] = []

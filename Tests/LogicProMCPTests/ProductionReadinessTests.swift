@@ -305,7 +305,8 @@ import Testing
 @Test func testPermissionStatusSummaryFormatsCorrectly() {
     let granted = PermissionChecker.PermissionStatus(
         accessibilityState: .granted,
-        automationState: .granted
+        automationState: .granted,
+        systemEventsAutomationState: .granted
     )
     #expect(granted.allGranted == true)
     #expect(granted.summary.contains("granted"))
