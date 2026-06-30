@@ -364,7 +364,13 @@ actor LogicProServer {
                 )
             },
             readResource: { params in
-                try await ResourceHandlers.read(uri: params.uri, cache: cache, router: router)
+                // #199: bound every resource read with the same liveness backstop
+                // as tool calls. A live-route-backed read on a wedged Logic
+                // session must return a typed operation_timeout body, never leave
+                // the client with no JSON-RPC response.
+                try await Self.runResourceReadWithDeadline(uri: params.uri) {
+                    try await ResourceHandlers.read(uri: params.uri, cache: cache, router: router)
+                }
             },
             listResourceTemplates: { _ in
                 let connected = await cache.getMCUConnection().isConnected
@@ -514,6 +520,73 @@ actor LogicProServer {
         }
     }
 
+    // MARK: - #199 resource-read deadline (resources had NO backstop)
+
+    /// Resource reads (`logic://…`) had no deadline wrapper, unlike tool calls.
+    /// A read backed by a live AX route (`logic://transport/state`,
+    /// `logic://tracks/{i}/regions`) on a wedged/occluded Logic session could
+    /// block past the client's read timeout and leave it with NO JSON-RPC
+    /// response (#199). This backstop bounds every resource read the same way
+    /// the #112 deadline bounds tool calls. Set to match the fast tool tier so a
+    /// healthy read (sub-second) can never false-trip; only a genuine hang trips.
+    static let resourceReadDeadlineSeconds: Double = 25
+
+    /// Typed `operation_timeout` envelope returned as the resource body when a
+    /// read exceeds its deadline — a bounded JSON-RPC response the client can
+    /// classify, instead of a hang with no response.
+    static func resourceReadTimeoutResult(uri: String, seconds: Double) -> ReadResource.Result {
+        let body = HonestContract.encodeStateC(
+            error: .operationTimeout,
+            hint: "Resource read \(uri) exceeded the \(Int(seconds))s server-side deadline and was abandoned so the stdio loop stays responsive.",
+            extras: [
+                "uri": uri,
+                "timeout_sec": seconds,
+                "recovery_hint": "Logic Pro may be busy, occluded, or showing a modal dialog. Dismiss any dialog and retry; check logic_system.health.",
+            ]
+        )
+        return ReadResource.Result(contents: [.text(body, uri: uri, mimeType: "application/json")])
+    }
+
+    /// Race a throwing resource read against `resourceReadDeadlineSeconds`. A
+    /// genuine read error (invalid URI, etc.) is rethrown unchanged so existing
+    /// JSON-RPC error semantics are preserved; only a deadline overrun is
+    /// converted into a typed `operation_timeout` resource body. Mirrors
+    /// `runWithDeadline` but for the read-only `ReadResource.Result` shape, so
+    /// it never touches the mutation gate.
+    static func runResourceReadWithDeadline(
+        uri: String,
+        deadlineOverride: Double? = nil,
+        work: @escaping @Sendable () async throws -> ReadResource.Result
+    ) async throws -> ReadResource.Result {
+        let deadline = deadlineOverride ?? resourceReadDeadlineSeconds
+        return try await withCheckedThrowingContinuation { continuation in
+            let race = ResourceDeadlineRace()
+            let timeoutHandle = DeadlineTimeoutHandle()
+            let workTask = Task.detached(priority: .userInitiated) {
+                do {
+                    let result = try await work()
+                    if race.resume(continuation, returning: result) { timeoutHandle.cancel() }
+                } catch {
+                    if race.resume(continuation, throwing: error) { timeoutHandle.cancel() }
+                }
+            }
+            let timeoutTask = DispatchWorkItem {
+                let didWin = race.resume(
+                    continuation,
+                    returning: Self.resourceReadTimeoutResult(uri: uri, seconds: deadline)
+                )
+                if didWin {
+                    workTask.cancel()
+                }
+            }
+            timeoutHandle.set(timeoutTask)
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(
+                deadline: .now() + deadline,
+                execute: timeoutTask
+            )
+        }
+    }
+
     private static let mutatingCommandsByTool: [String: Set<String>] = [
         "logic_transport": [
             "play", "stop", "record", "pause", "rewind", "fast_forward", "toggle_cycle",
@@ -578,6 +651,41 @@ actor LogicProServer {
             resumed = true
             lock.unlock()
             continuation.resume(returning: result)
+            return true
+        }
+    }
+
+    /// #199 throwing-capable single-winner race for the resource-read deadline.
+    /// Like `DeadlineRace` but resumes a `CheckedContinuation<…, Error>` and can
+    /// resume with either a value (read success / timeout body) or a thrown
+    /// error (genuine read failure), guaranteeing the continuation resumes once.
+    private final class ResourceDeadlineRace: @unchecked Sendable {
+        private let lock = NSLock()
+        private var resumed = false
+
+        @discardableResult
+        func resume(
+            _ continuation: CheckedContinuation<ReadResource.Result, Error>,
+            returning result: ReadResource.Result
+        ) -> Bool {
+            lock.lock()
+            if resumed { lock.unlock(); return false }
+            resumed = true
+            lock.unlock()
+            continuation.resume(returning: result)
+            return true
+        }
+
+        @discardableResult
+        func resume(
+            _ continuation: CheckedContinuation<ReadResource.Result, Error>,
+            throwing error: Error
+        ) -> Bool {
+            lock.lock()
+            if resumed { lock.unlock(); return false }
+            resumed = true
+            lock.unlock()
+            continuation.resume(throwing: error)
             return true
         }
     }
