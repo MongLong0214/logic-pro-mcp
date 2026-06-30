@@ -275,14 +275,20 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect(json["type"] as? String == "software_instrument")
 }
 
-@Test func testTrackResourceRejectsMissingIndex() async {
+@Test func testTrackResourceRejectsMissingIndex() async throws {
     let cache = StateCache()
     await cache.updateTracks([TrackState(id: 0, name: "Kick", type: .audio)])
     let router = ChannelRouter()
 
-    await #expect(throws: MCPError.self) {
-        try await ResourceHandlers.read(uri: "logic://tracks/99", cache: cache, router: router)
-    }
+    // #200: out-of-range indexed-template reads return a typed, classifiable
+    // index_out_of_range body (with the requested index + available count) rather
+    // than a raw JSON-RPC -32602.
+    let result = try await ResourceHandlers.read(uri: "logic://tracks/99", cache: cache, router: router)
+    let obj = sharedJSONObject(sharedResourceText(result))
+    #expect((obj?["success"] as? Bool)! == false)
+    #expect(obj?["error"] as? String == "index_out_of_range")
+    #expect(obj?["requested_index"] as? Int == 99)
+    #expect(obj?["available_count"] as? Int == 1)
 }
 
 @Test func testTracksAndProjectResourcesReturnEmptyDataWhenNoDocumentOpen() async throws {

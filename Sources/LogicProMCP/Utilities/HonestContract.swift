@@ -165,6 +165,7 @@ enum HonestContract {
         /// from the workflow census, so a complete-surface harness can classify
         /// the response as expected rather than a malfunction. Terminal. #202.
         case commandNotExposed
+        case indexOutOfRange
 
         var rawValue: String {
             switch self {
@@ -207,6 +208,7 @@ enum HonestContract {
             case .pathNotInLibrary: return "path_not_in_library"
             case .unsupportedState: return "unsupported_state"
             case .commandNotExposed: return "command_not_exposed"
+            case .indexOutOfRange: return "index_out_of_range"
             }
         }
     }
@@ -378,6 +380,10 @@ enum HonestContract {
         // #202: a deliberately not-exposed command token is terminal — no channel
         // can expose a surface the production contract intentionally omits.
         FailureError.commandNotExposed.rawValue,
+        // #200: an out-of-range/empty indexed resource template read is terminal
+        // — retrying the same index against the same project state can't succeed;
+        // the client must read the parent collection for valid indices.
+        FailureError.indexOutOfRange.rawValue,
     ]
 
     /// Returns true if the given message is a State-C envelope whose `error`

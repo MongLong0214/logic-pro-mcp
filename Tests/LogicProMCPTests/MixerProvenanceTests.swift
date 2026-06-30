@@ -112,11 +112,16 @@ import Testing
         #expect(stripJSON?["trackIndex"] as? Int == 2)
     }
 
-    @Test func testMixerStripMissingThrows() async {
+    @Test func testMixerStripMissingReturnsTypedOutOfRange() async throws {
+        // #200: a missing channel strip returns a typed index_out_of_range body
+        // (classifiable + recoverable), not a thrown JSON-RPC error.
         let cache = StateCache()
         let router = ChannelRouter()
-        await #expect(throws: (any Error).self) {
-            _ = try await ResourceHandlers.read(uri: "logic://mixer/9", cache: cache, router: router)
-        }
+        let result = try await ResourceHandlers.read(uri: "logic://mixer/9", cache: cache, router: router)
+        let obj = sharedJSONObject(sharedResourceText(result))
+        #expect((obj?["success"] as? Bool)! == false)
+        #expect(obj?["error"] as? String == "index_out_of_range")
+        #expect(obj?["requested_index"] as? Int == 9)
+        #expect(obj?["collection"] as? String == "channel strip")
     }
 }

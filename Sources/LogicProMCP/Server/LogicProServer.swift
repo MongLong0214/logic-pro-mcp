@@ -138,6 +138,11 @@ final class LogicMutationGate: @unchecked Sendable {
     private let lock = NSLock()
     private var activeOperation: String?
     private var acquiredAt: Date?
+    /// Set when the command deadline abandons the current holder (#201). A
+    /// timed-out holder is reclaimable after the much shorter `timedOutReclaimGrace`
+    /// rather than the blanket `staleHolderTTL`, so one hung transport/track op
+    /// cannot pin the entire write surface for minutes.
+    private var timedOutAt: Date?
     private var epoch: UInt64 = 0
 
     /// Staleness safety valve. The #112 deadline frees the stdio loop on a hang,
@@ -150,24 +155,54 @@ final class LogicMutationGate: @unchecked Sendable {
     /// longest command deadline so a healthy long-running op never trips it.
     private let staleHolderTTL: TimeInterval
 
-    init(staleHolderTTL: TimeInterval = 360) {
+    /// #201: once the command deadline has ABANDONED a mutating op, the server
+    /// already gave up on it — holding the gate for the full `staleHolderTTL`
+    /// (minutes) needlessly locks out every other mutation. After the deadline
+    /// marks the holder timed-out, the gate is reclaimable after this short
+    /// grace, set comfortably above the worst-case single blocked AX call
+    /// (≈2.5s) so the abandoned work has unwound before a successor proceeds.
+    private let timedOutReclaimGrace: TimeInterval
+
+    init(staleHolderTTL: TimeInterval = 360, timedOutReclaimGrace: TimeInterval = 15) {
         self.staleHolderTTL = staleHolderTTL
+        self.timedOutReclaimGrace = timedOutReclaimGrace
     }
 
     func tryAcquire(operation: String, now: Date = Date()) -> Claim? {
         lock.lock()
         defer { lock.unlock() }
         if let active = activeOperation, let since = acquiredAt {
-            guard now.timeIntervalSince(since) >= staleHolderTTL else { return nil }
-            Log.warn(
-                "Reclaiming stale mutation gate from \(active) held \(Int(now.timeIntervalSince(since)))s (TTL \(Int(staleHolderTTL))s) — prior op may still be wedged",
-                subsystem: "server"
-            )
+            if let timedOutAt, now.timeIntervalSince(timedOutAt) >= timedOutReclaimGrace {
+                Log.warn(
+                    "Reclaiming timed-out mutation gate from \(active) (grace \(Int(timedOutReclaimGrace))s elapsed) — prior op was abandoned by the command deadline",
+                    subsystem: "server"
+                )
+            } else if now.timeIntervalSince(since) >= staleHolderTTL {
+                Log.warn(
+                    "Reclaiming stale mutation gate from \(active) held \(Int(now.timeIntervalSince(since)))s (TTL \(Int(staleHolderTTL))s) — prior op may still be wedged",
+                    subsystem: "server"
+                )
+            } else {
+                return nil
+            }
         }
         epoch &+= 1
         activeOperation = operation
         acquiredAt = now
+        timedOutAt = nil
         return Claim(epoch: epoch, operation: operation)
+    }
+
+    /// Mark the current holder (if `claim` still owns the gate) as abandoned by
+    /// the command deadline, starting the short `timedOutReclaimGrace` window.
+    /// Epoch-guarded so a late mark from an abandoned op cannot affect a
+    /// successor that already reclaimed the gate.
+    func markTimedOut(_ claim: Claim, now: Date = Date()) {
+        lock.lock()
+        if epoch == claim.epoch {
+            timedOutAt = now
+        }
+        lock.unlock()
     }
 
     func release(_ claim: Claim) {
@@ -175,6 +210,7 @@ final class LogicMutationGate: @unchecked Sendable {
         if epoch == claim.epoch {
             activeOperation = nil
             acquiredAt = nil
+            timedOutAt = nil
         }
         lock.unlock()
     }
@@ -206,7 +242,12 @@ actor LogicProServer {
     private let cgEventChannel: CGEventChannel
     private let appleScriptChannel: AppleScriptChannel
     private let runtimeOverrides: LogicProServerRuntimeOverrides?
-    private let mutationGate = LogicMutationGate()
+    /// #201: after the command deadline abandons a mutating op, the gate is
+    /// reclaimable this many seconds later so one hung op cannot pin the whole
+    /// write surface for the full stale-holder TTL. Single source of truth for
+    /// the gate's grace and the timeout envelope's `gate_reclaim_after_sec`.
+    static let mutationGateReclaimGraceSeconds: Double = 15
+    private let mutationGate = LogicMutationGate(timedOutReclaimGrace: LogicProServer.mutationGateReclaimGraceSeconds)
 
     init(
         runtimeOverrides: LogicProServerRuntimeOverrides? = nil,
@@ -364,7 +405,13 @@ actor LogicProServer {
                 )
             },
             readResource: { params in
-                try await ResourceHandlers.read(uri: params.uri, cache: cache, router: router)
+                // #199: bound every resource read with the same liveness backstop
+                // as tool calls. A live-route-backed read on a wedged Logic
+                // session must return a typed operation_timeout body, never leave
+                // the client with no JSON-RPC response.
+                try await Self.runResourceReadWithDeadline(uri: params.uri) {
+                    try await ResourceHandlers.read(uri: params.uri, cache: cache, router: router)
+                }
             },
             listResourceTemplates: { _ in
                 let connected = await cache.getMCUConnection().isConnected
@@ -415,9 +462,15 @@ actor LogicProServer {
             "recovery_hint": "Logic Pro may be busy, occluded, or showing a modal dialog. Dismiss any dialog and retry; check logic_system.health.",
         ]
         if mutationMayStillBeRunning {
+            // #201: the abandoned op's effect is unknown, so this result is not
+            // itself safe to retry — but the gate no longer pins the session
+            // indefinitely. It auto-reclaims `gate_reclaim_after_sec` after this
+            // timeout, so unrelated mutating commands recover on their own
+            // (their `mutating_operation_in_progress` refusal is `safe_to_retry`).
             extras["safe_to_retry"] = false
             extras["underlying_operation_stopped"] = false
-            extras["mutation_gate"] = "held_until_underlying_operation_returns"
+            extras["mutation_gate"] = "reclaimable_after_grace"
+            extras["gate_reclaim_after_sec"] = Self.mutationGateReclaimGraceSeconds
         }
         let body = HonestContract.encodeStateC(
             error: .operationTimeout,
@@ -504,6 +557,81 @@ actor LogicProServer {
                 )
                 if didWin {
                     workTask.cancel()
+                    // #201: the deadline has abandoned this op. Start the gate's
+                    // bounded reclaim grace so a successor mutation recovers
+                    // without waiting for the (possibly wedged) work to return or
+                    // for the multi-minute stale-holder TTL. Epoch-guarded: if the
+                    // work later returns and releases, that wins harmlessly first.
+                    if let heldMutationGate, let heldClaim {
+                        heldMutationGate.markTimedOut(heldClaim)
+                    }
+                }
+            }
+            timeoutHandle.set(timeoutTask)
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(
+                deadline: .now() + deadline,
+                execute: timeoutTask
+            )
+        }
+    }
+
+    // MARK: - #199 resource-read deadline (resources had NO backstop)
+
+    /// Resource reads (`logic://…`) had no deadline wrapper, unlike tool calls.
+    /// A read backed by a live AX route (`logic://transport/state`,
+    /// `logic://tracks/{i}/regions`) on a wedged/occluded Logic session could
+    /// block past the client's read timeout and leave it with NO JSON-RPC
+    /// response (#199). This backstop bounds every resource read the same way
+    /// the #112 deadline bounds tool calls. Set to match the fast tool tier so a
+    /// healthy read (sub-second) can never false-trip; only a genuine hang trips.
+    static let resourceReadDeadlineSeconds: Double = 25
+
+    /// Typed `operation_timeout` envelope returned as the resource body when a
+    /// read exceeds its deadline — a bounded JSON-RPC response the client can
+    /// classify, instead of a hang with no response.
+    static func resourceReadTimeoutResult(uri: String, seconds: Double) -> ReadResource.Result {
+        let body = HonestContract.encodeStateC(
+            error: .operationTimeout,
+            hint: "Resource read \(uri) exceeded the \(Int(seconds))s server-side deadline and was abandoned so the stdio loop stays responsive.",
+            extras: [
+                "uri": uri,
+                "timeout_sec": seconds,
+                "recovery_hint": "Logic Pro may be busy, occluded, or showing a modal dialog. Dismiss any dialog and retry; check logic_system.health.",
+            ]
+        )
+        return ReadResource.Result(contents: [.text(body, uri: uri, mimeType: "application/json")])
+    }
+
+    /// Race a throwing resource read against `resourceReadDeadlineSeconds`. A
+    /// genuine read error (invalid URI, etc.) is rethrown unchanged so existing
+    /// JSON-RPC error semantics are preserved; only a deadline overrun is
+    /// converted into a typed `operation_timeout` resource body. Mirrors
+    /// `runWithDeadline` but for the read-only `ReadResource.Result` shape, so
+    /// it never touches the mutation gate.
+    static func runResourceReadWithDeadline(
+        uri: String,
+        deadlineOverride: Double? = nil,
+        work: @escaping @Sendable () async throws -> ReadResource.Result
+    ) async throws -> ReadResource.Result {
+        let deadline = deadlineOverride ?? resourceReadDeadlineSeconds
+        return try await withCheckedThrowingContinuation { continuation in
+            let race = ResourceDeadlineRace()
+            let timeoutHandle = DeadlineTimeoutHandle()
+            let workTask = Task.detached(priority: .userInitiated) {
+                do {
+                    let result = try await work()
+                    if race.resume(continuation, returning: result) { timeoutHandle.cancel() }
+                } catch {
+                    if race.resume(continuation, throwing: error) { timeoutHandle.cancel() }
+                }
+            }
+            let timeoutTask = DispatchWorkItem {
+                let didWin = race.resume(
+                    continuation,
+                    returning: Self.resourceReadTimeoutResult(uri: uri, seconds: deadline)
+                )
+                if didWin {
+                    workTask.cancel()
                 }
             }
             timeoutHandle.set(timeoutTask)
@@ -578,6 +706,41 @@ actor LogicProServer {
             resumed = true
             lock.unlock()
             continuation.resume(returning: result)
+            return true
+        }
+    }
+
+    /// #199 throwing-capable single-winner race for the resource-read deadline.
+    /// Like `DeadlineRace` but resumes a `CheckedContinuation<…, Error>` and can
+    /// resume with either a value (read success / timeout body) or a thrown
+    /// error (genuine read failure), guaranteeing the continuation resumes once.
+    private final class ResourceDeadlineRace: @unchecked Sendable {
+        private let lock = NSLock()
+        private var resumed = false
+
+        @discardableResult
+        func resume(
+            _ continuation: CheckedContinuation<ReadResource.Result, Error>,
+            returning result: ReadResource.Result
+        ) -> Bool {
+            lock.lock()
+            if resumed { lock.unlock(); return false }
+            resumed = true
+            lock.unlock()
+            continuation.resume(returning: result)
+            return true
+        }
+
+        @discardableResult
+        func resume(
+            _ continuation: CheckedContinuation<ReadResource.Result, Error>,
+            throwing error: Error
+        ) -> Bool {
+            lock.lock()
+            if resumed { lock.unlock(); return false }
+            resumed = true
+            lock.unlock()
+            continuation.resume(throwing: error)
             return true
         }
     }
