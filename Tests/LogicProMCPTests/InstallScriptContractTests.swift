@@ -17,8 +17,8 @@ import Testing
     let setup = try scriptContents("docs/SETUP.md")
     let installer = try scriptContents("Scripts/install.sh")
 
-    #expect(readme.contains("v3.7.2/Scripts/install.sh"))
-    #expect(setup.contains("v3.7.2/Scripts/install.sh"))
+    #expect(readme.contains("v3.7.3/Scripts/install.sh"))
+    #expect(setup.contains("v3.7.3/Scripts/install.sh"))
     #expect(installer.contains("awk -v artifact=\"$ARCHIVE\" '$2 == artifact {print $1}'"))
     #expect(readme.contains("verifies the downloaded `LogicProMCP-macOS-universal.tar.gz` archive"))
     #expect(readme.contains("LogicProMCP-macOS-universal.tar.gz SHA256SUMS entry"))

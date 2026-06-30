@@ -11,11 +11,11 @@ class LogicProMcp < Formula
   # arm64-only metadata, so inspect RELEASE-METADATA.json when auditing a
   # specific tag.
   #
-  # SHA256 is copied from the published v3.7.2 SHA256SUMS.txt for
+  # SHA256 is copied from the published v3.7.3 SHA256SUMS.txt for
   # LogicProMCP-macOS-universal.tar.gz.
   on_macos do
     url "https://github.com/MongLong0214/logic-pro-mcp/releases/download/v#{version}/LogicProMCP-macOS-universal.tar.gz"
-    sha256 "6d6a4208a32e0405b8006f8e341e04940af7bce7d3dd3ed10d84ae07256b475c"
+    sha256 "e09bea4df54d80c58416394ee495715002edfde77ef5a027894762fd0c6f78ba"
   end
 
   depends_on :macos => :sonoma
