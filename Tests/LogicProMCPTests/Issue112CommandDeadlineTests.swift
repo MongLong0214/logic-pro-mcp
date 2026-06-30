@@ -252,4 +252,131 @@ struct Issue112CommandDeadlineTests {
         #expect(obj?["error"] as? String == "operation_timeout")
         #expect(obj?["operation"] as? String == "logic_navigate.create_marker")
     }
+
+    // MARK: - #201 bounded post-timeout gate reclaim
+
+    @Test("a timed-out holder is reclaimed after the short grace, not the full stale TTL")
+    func timedOutHolderReclaimsAfterGrace() {
+        let gate = LogicMutationGate(staleHolderTTL: 360, timedOutReclaimGrace: 15)
+        let t0 = Date()
+        let first = gate.tryAcquire(operation: "logic_transport.play", now: t0)
+        #expect(first != nil)
+        // The command deadline abandons logic_transport.play at its 25s deadline.
+        gate.markTimedOut(first!, now: t0.addingTimeInterval(25))
+        // Within the grace after the timeout, the gate is still genuinely held —
+        // a successor mutation is refused (the abandoned work may still be unwinding).
+        #expect(gate.tryAcquire(operation: "logic_transport.stop", now: t0.addingTimeInterval(25 + 14)) == nil)
+        // Past the grace, a successor reclaims it — recovery happens ~40s after the
+        // op started, NOT after the 360s blanket stale-holder TTL (#201).
+        let second = gate.tryAcquire(operation: "logic_transport.stop", now: t0.addingTimeInterval(25 + 16))
+        #expect(second != nil)
+        #expect(gate.currentOperation() == "logic_transport.stop")
+        // The abandoned op's late release must NOT free the reclaimed gate (epoch).
+        gate.release(first!)
+        #expect(gate.currentOperation() == "logic_transport.stop")
+        gate.release(second!)
+        #expect(gate.currentOperation() == nil)
+    }
+
+    @Test("markTimedOut is epoch-guarded against an already-reclaimed successor")
+    func markTimedOutIsEpochGuarded() {
+        let gate = LogicMutationGate(staleHolderTTL: 5, timedOutReclaimGrace: 15)
+        let t0 = Date()
+        let first = gate.tryAcquire(operation: "logic_tracks.rename", now: t0)
+        #expect(first != nil)
+        // A successor reclaims via the stale TTL before any timeout mark.
+        let second = gate.tryAcquire(operation: "logic_tracks.mute", now: t0.addingTimeInterval(6))
+        #expect(second != nil)
+        // A late timeout mark from the abandoned first op must not mark the
+        // successor — the successor is healthy and still owns the gate.
+        gate.markTimedOut(first!, now: t0.addingTimeInterval(7))
+        // Within the successor's own grace/TTL a third op is still refused.
+        #expect(gate.tryAcquire(operation: "logic_tracks.solo", now: t0.addingTimeInterval(8)) == nil)
+        gate.release(second!)
+        #expect(gate.currentOperation() == nil)
+    }
+
+    @Test("a healthy (non-timed-out) holder still requires the full stale TTL")
+    func nonTimedOutHolderUsesStaleTTL() {
+        let gate = LogicMutationGate(staleHolderTTL: 360, timedOutReclaimGrace: 15)
+        let t0 = Date()
+        let first = gate.tryAcquire(operation: "logic_project.bounce", now: t0)
+        #expect(first != nil)
+        // No timeout mark → the short grace must NOT apply to a healthy long-running
+        // op; it is still held well past the grace window.
+        #expect(gate.tryAcquire(operation: "logic_tracks.mute", now: t0.addingTimeInterval(16)) == nil)
+        // Only the full stale TTL reclaims a healthy long-running holder.
+        #expect(gate.tryAcquire(operation: "logic_tracks.mute", now: t0.addingTimeInterval(361)) != nil)
+    }
+
+    @Test("a timed-out mutating deadline result advertises bounded gate reclaim")
+    func timeoutResultAdvertisesBoundedReclaim() {
+        let result = LogicProServer.deadlineTimeoutResult(
+            tool: "logic_transport", command: "play", seconds: 25, mutationMayStillBeRunning: true
+        )
+        #expect(result.isError!)
+        let obj = json(result)
+        #expect(obj?["error"] as? String == "operation_timeout")
+        #expect(obj?["mutation_gate"] as? String == "reclaimable_after_grace")
+        #expect((obj?["gate_reclaim_after_sec"] as? Double) == LogicProServer.mutationGateReclaimGraceSeconds)
+        // The abandoned op's own effect is unknown → still not safe to retry, and
+        // it was not stopped (only abandoned).
+        #expect(!((obj?["safe_to_retry"] as? Bool)!))
+        #expect(!((obj?["underlying_operation_stopped"] as? Bool)!))
+    }
+
+    @Test("a timed-out mutating op frees the gate after the reclaim grace, end-to-end")
+    func timedOutMutationRecoversGateEndToEnd() async throws {
+        // The wedged op never returns (held by the semaphore for the whole test),
+        // so recovery can ONLY come from the #201 bounded reclaim, not from the
+        // work's own release. Grace is injected short so the test stays fast.
+        let blocker = BlockingWorkProbe()
+        let gate = LogicMutationGate(staleHolderTTL: 360, timedOutReclaimGrace: 0.3)
+        let resultProbe = ResultProbe()
+
+        let runner = Task {
+            let result = await LogicProServer.runWithDeadline(
+                tool: "logic_transport",
+                command: "play",
+                deadlineOverride: 0.05,
+                mutationGate: gate
+            ) {
+                blocker.run()
+            }
+            await resultProbe.store(result)
+        }
+
+        #expect(try await waitUntil(timeoutNanoseconds: 5_000_000_000) { blocker.hasEntered() })
+        #expect(try await waitUntil(timeoutNanoseconds: 10_000_000_000) { await resultProbe.hasResult() })
+        #expect(json(await resultProbe.load()!)?["error"] as? String == "operation_timeout")
+
+        // Immediately after the timeout (within the grace) a follow-up is refused —
+        // the wedged play may still be unwinding.
+        let refused = await LogicProServer.runWithDeadline(
+            tool: "logic_transport",
+            command: "stop",
+            deadlineOverride: 1,
+            mutationGate: gate
+        ) {
+            toolTextResult("{\"unexpected\":true}")
+        }
+        #expect(json(refused)?["error"] as? String == "mutating_operation_in_progress")
+
+        // Once the reclaim grace elapses, the gate auto-recovers WITHOUT the wedged
+        // play ever returning, so a follow-up mutation proceeds (#201).
+        try await Task.sleep(nanoseconds: 500_000_000) // > the 0.3s injected grace
+        let recovered = await LogicProServer.runWithDeadline(
+            tool: "logic_transport",
+            command: "stop",
+            deadlineOverride: 1,
+            mutationGate: gate
+        ) {
+            toolTextResult("{\"verified\":true}")
+        }
+        #expect(recovered.isError != true)
+        #expect((json(recovered)?["verified"] as? Bool)!)
+
+        blocker.unblock()
+        await runner.value
+    }
 }

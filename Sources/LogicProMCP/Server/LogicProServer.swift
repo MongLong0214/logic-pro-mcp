@@ -138,6 +138,11 @@ final class LogicMutationGate: @unchecked Sendable {
     private let lock = NSLock()
     private var activeOperation: String?
     private var acquiredAt: Date?
+    /// Set when the command deadline abandons the current holder (#201). A
+    /// timed-out holder is reclaimable after the much shorter `timedOutReclaimGrace`
+    /// rather than the blanket `staleHolderTTL`, so one hung transport/track op
+    /// cannot pin the entire write surface for minutes.
+    private var timedOutAt: Date?
     private var epoch: UInt64 = 0
 
     /// Staleness safety valve. The #112 deadline frees the stdio loop on a hang,
@@ -150,24 +155,54 @@ final class LogicMutationGate: @unchecked Sendable {
     /// longest command deadline so a healthy long-running op never trips it.
     private let staleHolderTTL: TimeInterval
 
-    init(staleHolderTTL: TimeInterval = 360) {
+    /// #201: once the command deadline has ABANDONED a mutating op, the server
+    /// already gave up on it — holding the gate for the full `staleHolderTTL`
+    /// (minutes) needlessly locks out every other mutation. After the deadline
+    /// marks the holder timed-out, the gate is reclaimable after this short
+    /// grace, set comfortably above the worst-case single blocked AX call
+    /// (≈2.5s) so the abandoned work has unwound before a successor proceeds.
+    private let timedOutReclaimGrace: TimeInterval
+
+    init(staleHolderTTL: TimeInterval = 360, timedOutReclaimGrace: TimeInterval = 15) {
         self.staleHolderTTL = staleHolderTTL
+        self.timedOutReclaimGrace = timedOutReclaimGrace
     }
 
     func tryAcquire(operation: String, now: Date = Date()) -> Claim? {
         lock.lock()
         defer { lock.unlock() }
         if let active = activeOperation, let since = acquiredAt {
-            guard now.timeIntervalSince(since) >= staleHolderTTL else { return nil }
-            Log.warn(
-                "Reclaiming stale mutation gate from \(active) held \(Int(now.timeIntervalSince(since)))s (TTL \(Int(staleHolderTTL))s) — prior op may still be wedged",
-                subsystem: "server"
-            )
+            if let timedOutAt, now.timeIntervalSince(timedOutAt) >= timedOutReclaimGrace {
+                Log.warn(
+                    "Reclaiming timed-out mutation gate from \(active) (grace \(Int(timedOutReclaimGrace))s elapsed) — prior op was abandoned by the command deadline",
+                    subsystem: "server"
+                )
+            } else if now.timeIntervalSince(since) >= staleHolderTTL {
+                Log.warn(
+                    "Reclaiming stale mutation gate from \(active) held \(Int(now.timeIntervalSince(since)))s (TTL \(Int(staleHolderTTL))s) — prior op may still be wedged",
+                    subsystem: "server"
+                )
+            } else {
+                return nil
+            }
         }
         epoch &+= 1
         activeOperation = operation
         acquiredAt = now
+        timedOutAt = nil
         return Claim(epoch: epoch, operation: operation)
+    }
+
+    /// Mark the current holder (if `claim` still owns the gate) as abandoned by
+    /// the command deadline, starting the short `timedOutReclaimGrace` window.
+    /// Epoch-guarded so a late mark from an abandoned op cannot affect a
+    /// successor that already reclaimed the gate.
+    func markTimedOut(_ claim: Claim, now: Date = Date()) {
+        lock.lock()
+        if epoch == claim.epoch {
+            timedOutAt = now
+        }
+        lock.unlock()
     }
 
     func release(_ claim: Claim) {
@@ -175,6 +210,7 @@ final class LogicMutationGate: @unchecked Sendable {
         if epoch == claim.epoch {
             activeOperation = nil
             acquiredAt = nil
+            timedOutAt = nil
         }
         lock.unlock()
     }
@@ -206,7 +242,12 @@ actor LogicProServer {
     private let cgEventChannel: CGEventChannel
     private let appleScriptChannel: AppleScriptChannel
     private let runtimeOverrides: LogicProServerRuntimeOverrides?
-    private let mutationGate = LogicMutationGate()
+    /// #201: after the command deadline abandons a mutating op, the gate is
+    /// reclaimable this many seconds later so one hung op cannot pin the whole
+    /// write surface for the full stale-holder TTL. Single source of truth for
+    /// the gate's grace and the timeout envelope's `gate_reclaim_after_sec`.
+    static let mutationGateReclaimGraceSeconds: Double = 15
+    private let mutationGate = LogicMutationGate(timedOutReclaimGrace: LogicProServer.mutationGateReclaimGraceSeconds)
 
     init(
         runtimeOverrides: LogicProServerRuntimeOverrides? = nil,
@@ -415,9 +456,15 @@ actor LogicProServer {
             "recovery_hint": "Logic Pro may be busy, occluded, or showing a modal dialog. Dismiss any dialog and retry; check logic_system.health.",
         ]
         if mutationMayStillBeRunning {
+            // #201: the abandoned op's effect is unknown, so this result is not
+            // itself safe to retry — but the gate no longer pins the session
+            // indefinitely. It auto-reclaims `gate_reclaim_after_sec` after this
+            // timeout, so unrelated mutating commands recover on their own
+            // (their `mutating_operation_in_progress` refusal is `safe_to_retry`).
             extras["safe_to_retry"] = false
             extras["underlying_operation_stopped"] = false
-            extras["mutation_gate"] = "held_until_underlying_operation_returns"
+            extras["mutation_gate"] = "reclaimable_after_grace"
+            extras["gate_reclaim_after_sec"] = Self.mutationGateReclaimGraceSeconds
         }
         let body = HonestContract.encodeStateC(
             error: .operationTimeout,
@@ -504,6 +551,14 @@ actor LogicProServer {
                 )
                 if didWin {
                     workTask.cancel()
+                    // #201: the deadline has abandoned this op. Start the gate's
+                    // bounded reclaim grace so a successor mutation recovers
+                    // without waiting for the (possibly wedged) work to return or
+                    // for the multi-minute stale-holder TTL. Epoch-guarded: if the
+                    // work later returns and releases, that wins harmlessly first.
+                    if let heldMutationGate, let heldClaim {
+                        heldMutationGate.markTimedOut(heldClaim)
+                    }
                 }
             }
             timeoutHandle.set(timeoutTask)
