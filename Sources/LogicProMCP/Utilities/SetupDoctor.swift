@@ -242,7 +242,10 @@ enum SetupDoctor {
         func timed(_ make: () -> Check) -> Check {
             let start = runtime.monotonicNowMs()
             var result = make()
-            result.durationMs = max(0, runtime.monotonicNowMs() - start)
+            // Round to whole milliseconds so the JSON machine contract matches the
+            // human renderer's `formatDuration` precision and sub-millisecond timing
+            // jitter doesn't churn the `--json` bytes run-to-run (sub-ms checks → 0).
+            result.durationMs = (max(0, runtime.monotonicNowMs() - start)).rounded()
             return result
         }
 
@@ -288,7 +291,7 @@ enum SetupDoctor {
         )
     }
 
-    enum OutputMode: String, Sendable {
+    enum OutputMode: Sendable {
         case `default`
         case verbose
         case quiet
@@ -744,6 +747,19 @@ enum SetupDoctor {
         switch outcome {
         case let .found(rawLatest):
             let latest = normalizeVersion(rawLatest)
+            // An unparseable tag (e.g. "v", "-beta.1", "latest") normalizes to a value
+            // with no numeric major. compareVersions would treat it as 0.0.0 and falsely
+            // report "up to date" — so report skipped/parse_error instead of fabricating a pass.
+            guard let major = latest.split(separator: ".").first, Int(major) != nil else {
+                return check(
+                    id: "updates.latest_release",
+                    domain: "updates",
+                    status: .skipped,
+                    summary: "Could not parse the latest release version.",
+                    evidence: ["reason": "parse_error"],
+                    remediationType: .docs
+                )
+            }
             let order = compareVersions(installed, latest)
             if order >= 0 {
                 return check(

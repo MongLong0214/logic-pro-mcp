@@ -583,3 +583,46 @@ private func runEntrypoint(
     #expect(report.status == .degraded)
     #expect(report.headline == "Logic Pro MCP install is usable; some checks could not be verified.")
 }
+
+// MARK: - Final merge-gate hardening (zero-edge-case pass)
+
+@Test func test_t4_update_unparseable_tag_is_skipped_not_false_pass() throws {
+    // boomer-B1/B5: a tag with no numeric major (bare "v", pure pre-release, "latest")
+    // must NOT be reported "up to date" — it normalizes to no version and is unparseable.
+    for raw in ["v", "-beta.1", "latest", ""] {
+        let report = makeReport(runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: raw) }))
+        let c = try #require(check(report, "updates.latest_release"))
+        #expect(c.status == .skipped, "tag '\(raw)' should be skipped, got \(c.status)")
+        #expect(c.evidence["reason"] == "parse_error")
+    }
+}
+
+@Test func test_t1_summary_counts_invariant_with_update_check_15() {
+    // boomer-B2-3: invariant must hold with the opt-in update check present (15 checks).
+    let report = makeReport(runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: ServerConfig.serverVersion) }))
+    #expect(report.checks.count == 15)
+    let s = report.summary
+    #expect(s.total == 15)
+    #expect(s.passed + s.failed + s.warnings + s.manual + s.skipped == s.total)
+}
+
+@Test func test_t4_entrypoint_check_updates_flag_surfaces_update_check() async {
+    // boomer-B2-2: the --check-updates flag path is wired through MainEntrypoint end-to-end.
+    // (Inject a fake lookup so the test is hermetic — no network.)
+    let (_, out) = await runEntrypoint(
+        ["LogicProMCP", "doctor", "--check-updates", "--json"],
+        runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: ServerConfig.serverVersion) })
+    )
+    #expect(out.contains("updates.latest_release"))
+}
+
+@Test func test_t1_duration_ms_is_whole_milliseconds() {
+    // debugger-P2: duration_ms is rounded to whole ms so the --json contract matches the
+    // human renderer and sub-ms jitter doesn't churn the bytes. With the default {0} clock,
+    // every duration collapses to exactly 0.0.
+    let report = makeReport()
+    for c in report.checks {
+        #expect(c.durationMs == c.durationMs.rounded())
+    }
+    #expect(report.summary.durationMs == report.summary.durationMs.rounded())
+}
