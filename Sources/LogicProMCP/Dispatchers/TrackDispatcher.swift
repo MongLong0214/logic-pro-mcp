@@ -392,11 +392,7 @@ struct TrackDispatcher {
             ))
 
         case "set_color":
-            return toolStateCResult(
-                .notImplemented,
-                hint: "set_color is not exposed in the production MCP contract",
-                extras: ["operation": "track.set_color"]
-            )
+            return notExposedCommandResult(operation: "track.set_color")
 
         case "set_automation":
             guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {

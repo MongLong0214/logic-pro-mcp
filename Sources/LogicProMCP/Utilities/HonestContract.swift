@@ -158,6 +158,13 @@ enum HonestContract {
         /// other channel can save an untitled document without a path; the
         /// caller must supply one via `project.save_as`. #144 (P3 hardening).
         case unsupportedState
+        /// A command token the dispatcher recognises but that is deliberately
+        /// NOT part of the production MCP contract (no deterministic / verified
+        /// path exists yet). Distinct from `.notImplemented` (a surface that does
+        /// not exist at all): these are catalogued not-exposed stubs, excluded
+        /// from the workflow census, so a complete-surface harness can classify
+        /// the response as expected rather than a malfunction. Terminal. #202.
+        case commandNotExposed
 
         var rawValue: String {
             switch self {
@@ -199,6 +206,7 @@ enum HonestContract {
             case .unsupportedTrackType: return "unsupported_track_type"
             case .pathNotInLibrary: return "path_not_in_library"
             case .unsupportedState: return "unsupported_state"
+            case .commandNotExposed: return "command_not_exposed"
             }
         }
     }
@@ -367,6 +375,9 @@ enum HonestContract {
         // State C `unsupported_state` — no fallback channel can save a document
         // that has no on-disk path; the caller must use `project.save_as`.
         FailureError.unsupportedState.rawValue,
+        // #202: a deliberately not-exposed command token is terminal — no channel
+        // can expose a surface the production contract intentionally omits.
+        FailureError.commandNotExposed.rawValue,
     ]
 
     /// Returns true if the given message is a State-C envelope whose `error`

@@ -27,6 +27,26 @@ func toolInvalidParamsResult(_ hint: String, extras: [String: Any] = [:]) -> Cal
     toolStateCResult(.invalidParams, hint: hint, extras: extras)
 }
 
+/// #202: a command token the dispatcher recognises but that is deliberately not
+/// part of the production MCP contract. Returns a single, machine-classifiable
+/// shape — `error:"command_not_exposed"` + `not_exposed:true` + `supported:false`
+/// — so a complete-surface harness can mark it expected rather than a
+/// malfunction. The hint keeps the canonical "not exposed in the production MCP
+/// contract" phrase (the workflow census uses it to detect stubs); `reason`
+/// carries any operation-specific detail.
+func notExposedCommandResult(operation: String, reason: String? = nil) -> CallTool.Result {
+    let detail = reason.map { " — \($0)" } ?? ""
+    return toolStateCResult(
+        .commandNotExposed,
+        hint: "\(operation) is not exposed in the production MCP contract\(detail)",
+        extras: [
+            "operation": operation,
+            "not_exposed": true,
+            "supported": false,
+        ]
+    )
+}
+
 func commandParamsToolSchema(commandDescription: String) -> Value {
     .object([
         "type": .string("object"),

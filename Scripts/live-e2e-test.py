@@ -1905,8 +1905,14 @@ def main():
     r = call_tool(client, "logic_mixer", "set_master_volume", {"volume": 0.8})
     T("mixer.set_master_volume dispatches", r, lambda _: len(tool_text(r)) > 0)
 
+    # #202: deliberately not-exposed command tokens return a single
+    # machine-classifiable command_not_exposed shape (not a generic
+    # not_implemented), so a complete-surface harness can mark them expected.
     r = call_tool(client, "logic_mixer", "set_send", {"index": 0, "send": 0, "value": 0.5})
-    T("mixer.set_send dispatches", r, lambda _: len(tool_text(r)) > 0)
+    _ne = safe_json(tool_text(r)) or {}
+    T("mixer.set_send returns typed command_not_exposed (#202)", r,
+      lambda _: _ne.get("error") == "command_not_exposed" and _ne.get("not_exposed") is True
+      and _ne.get("supported") is False)
 
     # ═══════════════════════════════════════════════════════════════
     # §6 MIDI Live Operations (25 tests)

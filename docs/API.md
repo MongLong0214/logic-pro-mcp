@@ -142,8 +142,15 @@ Destructive or file-writing paths require confirmation. `save_as` verifies the r
 
 Use `health` for channel readiness and `help` for command summaries.
 
+### Not-exposed commands
+
+A few command tokens are recognised by the dispatchers but are deliberately **not part of the production MCP contract** (no deterministic / verified path exists yet). They are excluded from the workflow command census and return a single machine-classifiable State C shape — `error: "command_not_exposed"`, `not_exposed: true`, `supported: false`, plus the `operation` — so a complete-surface demo/test harness can classify them as *expected*, not a malfunction:
+
+- `logic_tracks.set_color`
+- `logic_mixer.set_send`, `logic_mixer.set_output`, `logic_mixer.set_input`, `logic_mixer.toggle_eq`, `logic_mixer.reset_strip`, `logic_mixer.bypass_plugin`
+
 ## Error Format
 
-State C errors use stable machine-readable strings such as `invalid_params`, `not_implemented`, `element_not_found`, `readback_mismatch`, `port_unavailable`, `channels_exhausted`, `unsupported_param_readback`, and `confirmation_required`.
+State C errors use stable machine-readable strings such as `invalid_params`, `not_implemented`, `command_not_exposed`, `element_not_found`, `readback_mismatch`, `port_unavailable`, `channels_exhausted`, `unsupported_param_readback`, and `confirmation_required`.
 
 Clients should branch on `state`, `verified`, `error`, and `retry_safe`; do not parse human prose as the contract.

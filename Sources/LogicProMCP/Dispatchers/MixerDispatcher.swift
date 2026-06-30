@@ -63,26 +63,16 @@ struct MixerDispatcher {
             ])
 
         case "set_send":
-            return toolStateCResult(
-                .notImplemented,
-                hint:
-                "set_send is not exposed in the production MCP contract because targeted send/bus control is not yet deterministic",
-                extras: ["operation": "mixer.set_send"]
+            return notExposedCommandResult(
+                operation: "mixer.set_send",
+                reason: "targeted send/bus control is not yet deterministic"
             )
 
         case "set_output":
-            return toolStateCResult(
-                .notImplemented,
-                hint: "set_output is not exposed in the production MCP contract",
-                extras: ["operation": "mixer.set_output"]
-            )
+            return notExposedCommandResult(operation: "mixer.set_output")
 
         case "set_input":
-            return toolStateCResult(
-                .notImplemented,
-                hint: "set_input is not exposed in the production MCP contract",
-                extras: ["operation": "mixer.set_input"]
-            )
+            return notExposedCommandResult(operation: "mixer.set_input")
 
         case "set_master_volume":
             guard let volume = doubleParamOrNil(params, "value", "volume") else {
@@ -100,18 +90,10 @@ struct MixerDispatcher {
             ])
 
         case "toggle_eq":
-            return toolStateCResult(
-                .notImplemented,
-                hint: "toggle_eq is not exposed in the production MCP contract",
-                extras: ["operation": "mixer.toggle_eq"]
-            )
+            return notExposedCommandResult(operation: "mixer.toggle_eq")
 
         case "reset_strip":
-            return toolStateCResult(
-                .notImplemented,
-                hint: "reset_strip is not exposed in the production MCP contract",
-                extras: ["operation": "mixer.reset_strip"]
-            )
+            return notExposedCommandResult(operation: "mixer.reset_strip")
 
         case "insert_plugin":
             guard let track = intParamOrNil(params, "track", "track_index", "index"), track >= 0 else {
@@ -151,11 +133,9 @@ struct MixerDispatcher {
         case "bypass_plugin":
             // Still removed from the public surface: no verified AX/MCU
             // readback path exists for bypass writes yet.
-            return toolStateCResult(
-                .notImplemented,
-                hint:
-                "\(command) is not exposed in the production MCP contract; use set_plugin_param via Scripter on the selected track instead",
-                extras: ["operation": "mixer.\(command)"]
+            return notExposedCommandResult(
+                operation: "mixer.bypass_plugin",
+                reason: "no verified readback path for bypass writes yet; use set_plugin_param via Scripter on the selected track instead"
             )
 
         case "set_plugin_param":

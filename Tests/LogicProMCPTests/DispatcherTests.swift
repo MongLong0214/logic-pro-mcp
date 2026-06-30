@@ -101,7 +101,10 @@ private func parseDispatcherObject(_ raw: String) -> [String: Any]? {
         router: router,
         cache: cache
     )
-    expectStateC(unsupportedMixerCommand, error: "not_implemented", operation: "mixer.set_output")
+    // #202: deliberately not-exposed commands now report the distinct,
+    // machine-classifiable `command_not_exposed` code (not the generic
+    // `not_implemented`), so a complete-surface harness can mark them expected.
+    expectStateC(unsupportedMixerCommand, error: "command_not_exposed", operation: "mixer.set_output")
 }
 
 private final class ProjectLifecycleHarness {
