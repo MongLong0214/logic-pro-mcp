@@ -6,7 +6,7 @@ BINARY="LogicProMCP"
 ARCHIVE="LogicProMCP-macOS-universal.tar.gz"
 INSTALL_DIR="${LOGIC_PRO_MCP_INSTALL_DIR:-/usr/local/bin}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION="${LOGIC_PRO_MCP_VERSION:-v3.7.2}"
+VERSION="${LOGIC_PRO_MCP_VERSION:-v3.7.3}"
 SHA256="${LOGIC_PRO_MCP_SHA256:-}"
 EXPECTED_TEAM_ID="${LOGIC_PRO_MCP_TEAM_ID:-}"
 REGISTER_CLAUDE="${LOGIC_PRO_MCP_REGISTER_CLAUDE:-1}"
@@ -168,7 +168,7 @@ fi
 
 if [ "$VERSION" = "latest" ]; then
     echo "  Error: mutable 'latest' installs are not allowed in enterprise mode."
-    echo "    Set LOGIC_PRO_MCP_VERSION to a pinned tag, e.g. v3.7.2."
+    echo "    Set LOGIC_PRO_MCP_VERSION to a pinned tag, e.g. v3.7.3."
     exit 1
 fi
 

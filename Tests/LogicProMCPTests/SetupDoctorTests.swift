@@ -22,7 +22,7 @@ private func doctorRuntime(
         }
         if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
            arguments == ["list", "--versions", "logic-pro-mcp"] {
-            return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.2\n", stderr: "")
+            return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.3\n", stderr: "")
         }
         return nil
     }
@@ -273,7 +273,7 @@ private func issue26RepositoryRootURL() -> URL {
             commandHandler: { executable, arguments in
                 if executable == "/opt/homebrew/bin/brew",
                    arguments == ["list", "--versions", "logic-pro-mcp"] {
-                    return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.2\n", stderr: "")
+                    return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.3\n", stderr: "")
                 }
                 return nil
             }
@@ -298,7 +298,7 @@ private func issue26RepositoryRootURL() -> URL {
                 return .init(exitCode: 1, stdout: "", stderr: "No such xattr")
             }
             if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew" {
-                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.2\n", stderr: "")
+                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.3\n", stderr: "")
             }
             return nil
         })
@@ -321,7 +321,7 @@ private func issue26RepositoryRootURL() -> URL {
                 return .init(exitCode: 0, stdout: "0081;...;Safari;\n", stderr: "")
             }
             if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew" {
-                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.2\n", stderr: "")
+                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.3\n", stderr: "")
             }
             return nil
         })
@@ -347,7 +347,7 @@ private func issue26RepositoryRootURL() -> URL {
                 return .init(exitCode: 13, stdout: "", stderr: "Operation not permitted")
             }
             if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew" {
-                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.2\n", stderr: "")
+                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.3\n", stderr: "")
             }
             return nil
         })
@@ -566,7 +566,7 @@ private func issue26RepositoryRootURL() -> URL {
             }
             if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
                arguments == ["list", "--versions", "logic-pro-mcp"] {
-                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.2\n", stderr: "")
+                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.3\n", stderr: "")
             }
             return nil
         }),
@@ -598,7 +598,7 @@ private func issue26RepositoryRootURL() -> URL {
                 }
                 if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
                    arguments == ["list", "--versions", "logic-pro-mcp"] {
-                    return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.2\n", stderr: "")
+                    return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.3\n", stderr: "")
                 }
                 return nil
             }
@@ -619,7 +619,7 @@ private func issue26RepositoryRootURL() -> URL {
             }
             if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
                arguments == ["list", "--versions", "logic-pro-mcp"] {
-                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.2\n", stderr: "")
+                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.3\n", stderr: "")
             }
             return nil
         })

@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+## [3.7.3] — 2026-06-30
+
+Bug-fix and diagnostic-honesty release closing the open GitHub issue backlog (#178, #186–#190). No public tool/resource/template surface change (10 tools / 18 resources / 11 templates unchanged).
+
+### Fixed
+
+- `transport.set_tempo` slider-increment fallback no longer reports a State B success when the observed tempo does not match the request. When typed entry does not commit and the increment fallback cannot land the requested value, it now fails closed with State C `readback_mismatch` (`via: "slider-increment"`, `requested`/`observed`, `safe_to_retry: true`) — it never claims success on a readback mismatch (#189).
+- `midi.import_file` now preflights Automation → System Events authorization (a separate TCC target from Logic Pro Accessibility/Automation) and fails closed with State C `permission_denied` (`permission: "automation_system_events"`, `failure_stage: "preflight_system_events_permission"`, `write_attempted: false`) before driving the import, instead of aborting mid-flight on a bare Apple Events denial (#188).
+- Health/`--check-permissions` now surface System Events automation state explicitly (`automation_system_events` field plus an "Automation (System Events):" summary line), so the dependency is visible before an import is attempted (#188).
+- Blocking-dialog refusals on transport and other mutating operations now enrich the State C envelope with the dialog identity — `dialog_title`, `dialog_role`, `owning_window`, `dialog_buttons`, and a Cancel-first `recovery_action` — instead of a bare `blocking_dialog_present` flag (#190).
+- Fresh-session bootstrap now clears a stuck "Save changes?" prompt whose buttons carry no Accessibility name: after the marker-matched Cancel it falls back to an Escape key event (Cancel-before-Escape), so the bootstrap no longer dead-ends on an unnamed save dialog (#187).
+- `Scripts/logic_key_event.swift` now accepts `--return`/`--enter`/`esc` aliases (a leading `--` is stripped), adds a `--check` no-post preflight and `--help`/`--list`, and fails closed (exit 64) on an unknown key while naming the supported keys, so demo capture no longer aborts on `--return` (#186).
+
+### Documentation
+
+- Added the community Discord invite to `CONTRIBUTING.md`, `docs/SETUP.md`, and `docs/TROUBLESHOOTING.md` (#178).
+
 ## [3.7.2] — 2026-06-28
 
 Production-readiness hardening pass. No public tool/resource/template surface change (10 tools / 18 resources / 11 templates unchanged).
