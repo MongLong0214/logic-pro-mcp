@@ -22,6 +22,50 @@ private actor MockMainServer: ServerStarting {
     }
 }
 
+@Test func testMainEntrypointHelpFlagPrintsUsageAndExitsWithoutServer() async {
+    // #213: `--help` must print CLI usage and exit 0 WITHOUT starting the MCP
+    // server channels (pre-fix it started the server and timed out).
+    var stdout = ""
+    var stderr = ""
+    let exitCode = await MainEntrypoint.run(
+        arguments: ["LogicProMCP", "--help"],
+        permissionCheck: {
+            Issue.record("Permission check should not run for --help")
+            return .init(accessibility: false, automationLogicPro: false)
+        },
+        serverFactory: {
+            Issue.record("Server must not be created for --help")
+            return MockMainServer()
+        },
+        writeStdout: { stdout += $0 },
+        writeStderr: { stderr += $0 }
+    )
+
+    #expect(exitCode == 0)
+    #expect(stdout.contains("USAGE:"))
+    #expect(stdout.contains("--version"))
+    #expect(stdout.contains("doctor"))
+    #expect(stdout.contains("--check-permissions"))
+    #expect(stdout.contains("Start the MCP server over stdio"))
+    #expect(stderr.isEmpty)
+}
+
+@Test func testMainEntrypointHelpShortFlagPrintsUsage() async {
+    var stdout = ""
+    let exitCode = await MainEntrypoint.run(
+        arguments: ["LogicProMCP", "-h"],
+        serverFactory: {
+            Issue.record("Server must not be created for -h")
+            return MockMainServer()
+        },
+        writeStdout: { stdout += $0 },
+        writeStderr: { _ in }
+    )
+
+    #expect(exitCode == 0)
+    #expect(stdout.contains("USAGE:"))
+}
+
 @Test func testMainEntrypointReturnsSuccessForGrantedPermissions() async {
     var stderr = ""
     let exitCode = await MainEntrypoint.run(
