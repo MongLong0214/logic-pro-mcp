@@ -864,6 +864,19 @@ def main():
     T("system.help mentions logic_project", r, lambda _: "logic_project" in help_text)
     T("system.help mentions logic_system", r, lambda _: "logic_system" in help_text)
 
+    # #219: an unknown help category returns a typed unknown_category error
+    # (never a silent fall-through to full help with isError:false).
+    r = call_tool(client, "logic_system", "help", params={"category": "bogus"})
+    _uc = tool_json(r) or {}
+    T("system.help unknown category returns typed unknown_category (#219)", r,
+      lambda _: is_error(r) and _uc.get("error") == "unknown_category"
+      and _uc.get("requested_category") == "bogus"
+      and isinstance(_uc.get("valid_categories"), list))
+    # A valid category still succeeds; an absent category still returns full help.
+    r = call_tool(client, "logic_system", "help", params={"category": "transport"})
+    T("system.help valid category succeeds", r,
+      lambda _: not is_error(r) and "logic_transport commands" in tool_text(r))
+
     r = call_tool(client, "logic_system", "health")
     health_text = tool_text(r)
     health = safe_json(health_text)
