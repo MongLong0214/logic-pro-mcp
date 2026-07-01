@@ -33,10 +33,20 @@ enum MainEntrypoint {
             FileHandle.standardError.write(Data(message.utf8))
         }
     ) async -> Int {
-        // `--help` is a terminal global flag: print usage and exit WITHOUT
-        // creating the approval store, checking permissions, or — critically —
-        // starting the long-lived MCP server channels (#213). Placed before
-        // every other branch so no side effect runs first.
+        // `--version` and `--help` are terminal global flags: print and exit
+        // WITHOUT creating the approval store, checking permissions, or —
+        // critically — starting the long-lived MCP server channels (#212/#213).
+        // Placed before every other branch so no side effect runs first.
+        //
+        // `--version` emits the bare version string only: SetupLifecycle
+        // .productionInstalledBinaryVersion() runs the installed binary with
+        // `--version`, requires exit 0, and compares the trimmed stdout for
+        // EQUALITY against ServerConfig.serverVersion to detect install drift.
+        // Any prefix (e.g. "logic-pro-mcp 3.7.4") would break that equality.
+        if hasFlag("--version", or: "-V", in: arguments) {
+            writeStdout(ServerConfig.serverVersion + "\n")
+            return 0
+        }
         if hasFlag("--help", or: "-h", in: arguments) {
             writeStdout(usageText + "\n")
             return 0
@@ -209,7 +219,7 @@ enum MainEntrypoint {
         With no arguments the binary runs as an MCP stdio server. See docs/SETUP.md for setup.
         """
 
-    /// True when a terminal global flag (`--help`, `--version`, …) appears
+    /// True when a terminal global flag (`--version`, `--help`, …) appears
     /// anywhere in the user-supplied arguments (the program path at index 0 is
     /// ignored). These flags print-and-exit, so they are checked before any
     /// subcommand parsing or server startup.
