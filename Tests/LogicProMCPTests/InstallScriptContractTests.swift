@@ -29,6 +29,7 @@ import Testing
 
 @Test func testInstallScriptIncludesSignatureAndGatekeeperVerification() throws {
     let script = try scriptContents("Scripts/install.sh")
+    let removedTool = "cli" + "click"
 
     #expect(script.contains("verify_signature()"))
     #expect(script.contains("verify_gatekeeper()"))
@@ -36,8 +37,7 @@ import Testing
     #expect(script.contains("spctl --assess --type execute"))
     #expect(script.contains("RELEASE-METADATA.json"))
     #expect(script.contains("could not resolve TeamIdentifier from release metadata"))
-    #expect(script.contains("require_command \"cliclick\""))
-    #expect(script.contains("brew install cliclick"))
+    #expect(!script.contains("require_command \"\(removedTool)\""))
 }
 
 @Test func testInstallScriptExtractsTeamIDFromSingleLineReleaseMetadata() throws {
@@ -107,11 +107,6 @@ import Testing
     #expect(workflow.contains("LOGIC_PRO_MCP_SHARE_DIR"))
     #expect(workflow.contains("LogicProMCP-macOS-universal.tar.gz"))
     #expect(workflow.contains("test -f \"$LOGIC_PRO_MCP_SHARE_DIR/logic_ui_jxa.py\""))
-    // The install-validation job MUST install cliclick before running install.sh:
-    // install.sh hard-requires it (require_command "cliclick"), and GitHub's macOS
-    // runners don't ship it, so without this the job fails "required dependency
-    // missing: cliclick" on every tagged release.
-    #expect(workflow.contains("brew install cliclick"))
     #expect(packageScript.contains("RELEASE-METADATA.json"))
     #expect(packageScript.contains("Scripts/logic_bounce.py"))
     #expect(packageScript.contains("Scripts/logic_bounce_ui.py"))
@@ -121,7 +116,9 @@ import Testing
     #expect(packageScript.contains("rm -f LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz SHA256SUMS.txt RELEASE-METADATA.json"))
     #expect(packageScript.contains("binary_file=\"$binary_dir/$binary_name\""))
     #expect(packageScript.contains("python3 - \"$release_version\" \"$team_id\" \"$signing\" \"$arch_json\""))
-    #expect(try scriptContents("Formula/logic-pro-mcp.rb").contains("depends_on \"cliclick\""))
+    let removedTool = "cli" + "click"
+    #expect(!workflow.contains("brew install \(removedTool)"))
+    #expect(!(try scriptContents("Formula/logic-pro-mcp.rb")).contains("depends_on \"\(removedTool)\""))
 }
 
 @Test func testReleaseWorkflowMarksHyphenTagsAsPrereleases() throws {

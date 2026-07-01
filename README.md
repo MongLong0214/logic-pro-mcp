@@ -113,7 +113,7 @@ Logic Pro MCP uses a different model. It routes each operation to the strongest 
 
 ## Quick Start
 
-**Prerequisites**: macOS 14+, Logic Pro 12.0.1+, `cliclick`, and an MCP client that can launch a stdio server. Published GitHub Actions/Homebrew assets are universal (`arm64` + `x86_64`) and do not require Xcode. Homebrew installs `cliclick` automatically; source builds and the pinned shell installer expect it to already be present (`brew install cliclick`).
+**Prerequisites**: macOS 14+, Logic Pro 12.0.1+, and an MCP client that can launch a stdio server. Published GitHub Actions/Homebrew assets are universal (`arm64` + `x86_64`) and do not require Xcode. Bounce/export uses the bundled native CGEvent helper with no third-party click binary.
 
 The package manifest uses Swift tools 6.0 for compatibility. Current source verification uses Xcode 16.4 / Swift 6.2 in CI.
 
@@ -187,7 +187,6 @@ Expected: all 7 channels `ready` after full setup, or 5 if you intentionally ski
 The installer is **fail-closed**: it refuses to run without explicit `LOGIC_PRO_MCP_SHA256` + `LOGIC_PRO_MCP_TEAM_ID` env pins. It verifies the downloaded `LogicProMCP-macOS-universal.tar.gz` archive, so copy the SHA from that archive entry in the release's `SHA256SUMS.txt`:
 
 ```bash
-brew install cliclick
 curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.7.4/Scripts/install.sh -o install.sh
 # inspect install.sh, then:
 LOGIC_PRO_MCP_SHA256=<paste LogicProMCP-macOS-universal.tar.gz SHA256SUMS entry> \

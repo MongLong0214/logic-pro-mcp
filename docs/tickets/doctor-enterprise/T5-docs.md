@@ -11,10 +11,10 @@ Document the v2 report and the new checks so remediation anchors resolve and ope
 ## Design / changes
 - `docs/SETUP.md`:
   - Add anchored sections for new check IDs so `remediationAnchorsByCheckID` resolves:
-    `#doctor-permissionsautomation-system-events`, `#doctor-dependenciescliclick`, `#doctor-systemmacos-version`,
+    `#doctor-permissionsautomation-system-events`, `#doctor-systemmacos-version`,
     `#doctor-updateslatest-release`.
   - Document `--verbose` / `--quiet` / `--check-updates` flags + that color is TTY/`NO_COLOR`-gated.
-  - Note `brew install cliclick` is required for bounce/export.
+  - Note bounce/export uses the native CGEvent helper and has no external click-binary dependency.
 - `docs/API.md`:
   - Document `logic_pro_mcp_doctor.v2`: the new `summary` block, per-check `category`/`severity`/`duration_ms`,
     `headline`; state it is a field-superset of v1 and consumers should prefix-match the schema string.

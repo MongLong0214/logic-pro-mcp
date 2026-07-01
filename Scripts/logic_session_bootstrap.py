@@ -544,6 +544,31 @@ def _send_escape_key() -> bool:
 
 
 def _click_dialog_button(window_markers: Sequence[str], button_labels: Sequence[str]) -> bool:
+    native_script = Path(__file__).with_name("logic_ax_button_press.swift")
+    if native_script.exists():
+        try:
+            native = subprocess.run(
+                ["/usr/bin/swift", str(native_script)],
+                input=json.dumps(
+                    {
+                        "windowMarkers": list(window_markers),
+                        "buttonLabels": list(button_labels),
+                    },
+                    ensure_ascii=False,
+                ),
+                capture_output=True,
+                text=True,
+                timeout=6.0,
+                check=False,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            native = None
+        if native is not None and native.returncode == 0:
+            payload = _safe_json(native.stdout.strip())
+            if isinstance(payload, dict) and payload.get("ok") is True:
+                time.sleep(0.5)
+                return True
+
     window_markers_json = json.dumps(list(window_markers), ensure_ascii=False)
     button_labels_json = json.dumps(list(button_labels), ensure_ascii=False)
     script = f"""

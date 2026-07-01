@@ -97,6 +97,11 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
         json["mcu"] = mcu
     }
 
+    if var permissions = json["permissions"] as? [String: Any] {
+        permissions.removeValue(forKey: "post_event_access")
+        json["permissions"] = permissions
+    }
+
     json.removeValue(forKey: "logic_pro_version")
     json.removeValue(forKey: "process")
     return json
@@ -354,25 +359,13 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect((uptimeSec ?? -1) >= 0)
 }
 
-@Test func testHealthResponseDependenciesSection() async throws {
-    // #210: health surfaces cliclick trust status with a diagnosis.
+@Test func testHealthResponseOmitsRemovedExternalClickDependencySection() async throws {
     let cache = StateCache()
     let router = ChannelRouter()
 
     let result = await SystemDispatcher.handle(command: "health", params: [:], router: router, cache: cache)
     let json = try #require(sharedParseJSON(toolText(result)) as? [String: Any])
-    let dependencies = try #require(json["dependencies"] as? [String: Any])
-    let cliclick = try #require(dependencies["cliclick"] as? Bool)
-    let trust = try #require(dependencies["cliclick_trust"] as? String)
-    #expect(!trust.isEmpty)
-    if cliclick {
-        #expect(trust == "trusted")
-        #expect(dependencies["cliclick_path"] as? String != nil)
-    } else {
-        // unresolved → carries the per-candidate diagnosis + remediation (not a bare flag)
-        #expect(trust.contains("tried:"))
-        #expect(trust.contains("LOGIC_PRO_MCP_CLICLICK"))
-    }
+    #expect(json["dependencies"] == nil)
 }
 
 @Test func testMixerResponseIncludesPluginParams() async {

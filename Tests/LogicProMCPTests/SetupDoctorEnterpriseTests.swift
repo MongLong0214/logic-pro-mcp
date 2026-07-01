@@ -5,8 +5,6 @@ import Testing
 // MARK: - Hermetic runtime/permission builders for the v2 doctor surface
 
 private func enterpriseRuntime(
-    cliclickPath: String? = "/opt/homebrew/bin/cliclick",
-    cliclickPresentOnPath: Bool = true,
     macOSVersion: OperatingSystemVersion? = OperatingSystemVersion(majorVersion: 14, minorVersion: 0, patchVersion: 0),
     monotonicNowMs: @escaping () -> Double = { 0 },
     latestReleaseLookup: (() -> SetupDoctor.UpdateOutcome)? = nil
@@ -28,19 +26,6 @@ private func enterpriseRuntime(
         },
         readClaudeRegistration: { .registered(command: "/opt/homebrew/bin/LogicProMCP") }
     )
-    runtime.cliclickResolution = {
-        if let path = cliclickPath {
-            return ProjectExportExecutor.CliclickResolution(
-                resolvedPath: path,
-                candidates: [.init(path: path, source: .override, reason: .resolved)]
-            )
-        }
-        return ProjectExportExecutor.CliclickResolution(
-            resolvedPath: nil,
-            candidates: [.init(path: "/opt/homebrew/bin/cliclick", source: .canonical, reason: .parentWritable)]
-        )
-    }
-    runtime.cliclickPresentOnPath = { cliclickPresentOnPath }
     runtime.macOSVersion = { macOSVersion }
     runtime.monotonicNowMs = monotonicNowMs
     runtime.latestReleaseLookup = latestReleaseLookup
@@ -135,12 +120,10 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
 }
 
 @Test func test_t1_summary_status_formula_degraded() {
-    // cliclick absent → a single warn → degraded (no fail, no manual).
     let report = makeReport(
-        runtime: enterpriseRuntime(cliclickPath: nil, cliclickPresentOnPath: false)
+        runtime: enterpriseRuntime(macOSVersion: nil)
     )
     #expect(report.status == .degraded)
-    // AC-3.5 split into separate assertions (an OR-compound would hide the && parts).
     #expect(report.summary.failed == 0)
     #expect(report.summary.manual == 0)
     #expect(report.summary.warnings > 0 || report.summary.skipped > 0)
@@ -157,7 +140,7 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
 
 @Test func test_t1_summary_duration_is_sum_of_per_check() {
     // Deterministic monotonic clock: 0,1,2,3,... Each check = 2 calls (start,end),
-    // delta 1ms. 14 checks (no update check) → summary == 14.0, and >= max per-check.
+    // delta 1ms. 13 checks (no update check) → summary == 13.0, and >= max per-check.
     var tick = 0.0
     let report = makeReport(
         runtime: enterpriseRuntime(monotonicNowMs: {
@@ -166,10 +149,10 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
             return value
         })
     )
-    #expect(report.checks.count == 14)
+    #expect(report.checks.count == 13)
     let perCheckSum = report.checks.reduce(0.0) { $0 + $1.durationMs }
     #expect(report.summary.durationMs == perCheckSum)
-    #expect(report.summary.durationMs == 14.0)
+    #expect(report.summary.durationMs == 13.0)
     let maxPerCheck = report.checks.map(\.durationMs).max() ?? 0
     #expect(report.summary.durationMs >= maxPerCheck)
     #expect(report.summary.durationMs >= 0)
@@ -192,9 +175,8 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
 }
 
 @Test func test_t1_headline_names_highest_severity() {
-    // accessibility fail (error) + cliclick absent (warning) → headline names the error.
     let report = makeReport(
-        runtime: enterpriseRuntime(cliclickPath: nil, cliclickPresentOnPath: false),
+        runtime: enterpriseRuntime(),
         permission: granted(accessibility: false)
     )
     #expect(report.headline.contains("permissions.accessibility"))
@@ -264,7 +246,7 @@ private struct FrozenV1Report: Codable {
     #expect(!first.remediation.type.isEmpty)
 }
 
-// MARK: - T2: System Events / cliclick / macOS checks
+// MARK: - T2: System Events / macOS checks
 
 @Test func test_t2_system_events_pass() throws {
     let c = try #require(check(makeReport(permission: granted(systemEvents: .granted)), "permissions.automation_system_events"))
@@ -307,35 +289,6 @@ private struct FrozenV1Report: Codable {
     #expect(systemEvents.status == .fail)
 }
 
-@Test func test_t2_cliclick_pass_when_trusted() throws {
-    let c = try #require(check(makeReport(runtime: enterpriseRuntime(cliclickPath: "/opt/homebrew/bin/cliclick")), "dependencies.cliclick"))
-    #expect(c.status == .pass)
-    #expect(c.evidence["path"] == "/opt/homebrew/bin/cliclick")
-    #expect(c.category == .dependencies)
-}
-
-@Test func test_t2_cliclick_warn_present_on_path_only() throws {
-    let c = try #require(check(makeReport(runtime: enterpriseRuntime(cliclickPath: nil, cliclickPresentOnPath: true)), "dependencies.cliclick"))
-    #expect(c.status == .warn)
-    #expect(c.evidence["trusted"] == "false")
-    #expect(c.evidence["present_on_path"] == "true")
-}
-
-@Test func test_t2_cliclick_warn_absent() throws {
-    let c = try #require(check(makeReport(runtime: enterpriseRuntime(cliclickPath: nil, cliclickPresentOnPath: false)), "dependencies.cliclick"))
-    #expect(c.status == .warn)
-    #expect(c.remediation.value.contains("chmod g-w /opt/homebrew/bin"))
-}
-
-@Test func test_t2_cliclick_unresolved_surfaces_candidate_reasons() throws {
-    // #210 diagnosability: an unresolved cliclick exposes WHY each candidate failed.
-    let c = try #require(check(makeReport(runtime: enterpriseRuntime(cliclickPath: nil)), "dependencies.cliclick"))
-    #expect(c.status == .warn)
-    let candidates = try #require(c.evidence["candidates"])
-    #expect(candidates.contains("parent_writable"))
-    #expect(c.evidence["trusted"] == "false")
-}
-
 @Test func test_t2_macos_pass_ge_14() throws {
     let c = try #require(check(makeReport(runtime: enterpriseRuntime(macOSVersion: OperatingSystemVersion(majorVersion: 14, minorVersion: 5, patchVersion: 1))), "system.macos_version"))
     #expect(c.status == .pass)
@@ -366,11 +319,11 @@ private struct FrozenV1Report: Codable {
 // MARK: - T3: presentation
 
 @Test func test_t3_default_render_shape() {
-    let report = makeReport(runtime: enterpriseRuntime(cliclickPath: nil, cliclickPresentOnPath: false))
+    let report = makeReport(permission: granted(systemEvents: .notGranted))
     let out = SetupDoctor.renderHuman(report, mode: .default, useColor: false)
     #expect(out.contains("summary:"))
     #expect(out.contains("[pass] binary.path"))
-    #expect(out.contains("\u{2192} chmod g-w /opt/homebrew/bin")) // → remediation on a non-pass check
+    #expect(out.contains("permissions.automation_system_events"))
 }
 
 @Test func test_t3_verbose_render_adds_evidence_and_duration() {
@@ -380,22 +333,21 @@ private struct FrozenV1Report: Codable {
 }
 
 @Test func test_t3_quiet_render_only_nonpass() {
-    let report = makeReport(runtime: enterpriseRuntime(cliclickPath: nil, cliclickPresentOnPath: false))
+    let report = makeReport(permission: granted(systemEvents: .notGranted))
     let out = SetupDoctor.renderHuman(report, mode: .quiet, useColor: false)
-    #expect(out.contains("[warn] dependencies.cliclick"))
+    #expect(out.contains("[fail] permissions.automation_system_events"))
     #expect(!out.contains("[pass] binary.path")) // pass lines omitted in quiet mode
 }
 
 @Test func test_t3_color_on_tty() {
-    // Fixture with a non-pass check so a colored symbol is actually rendered.
-    let report = makeReport(runtime: enterpriseRuntime(cliclickPath: nil, cliclickPresentOnPath: false))
+    let report = makeReport(permission: granted(systemEvents: .notGranted))
     let out = SetupDoctor.renderHuman(report, mode: .default, useColor: true)
     #expect(out.contains("\u{1B}[")) // ANSI escape present
     #expect(out.contains("\u{2713}")) // ✓ symbol for a pass check
 }
 
 @Test func test_t3_plain_when_not_tty() {
-    let report = makeReport(runtime: enterpriseRuntime(cliclickPath: nil, cliclickPresentOnPath: false))
+    let report = makeReport(runtime: enterpriseRuntime())
     let out = SetupDoctor.renderHuman(report, mode: .default, useColor: false)
     #expect(!out.contains("\u{1B}[")) // no ANSI escapes
     #expect(out.contains("[pass]"))
@@ -459,7 +411,7 @@ private func runEntrypoint(
 }
 
 @Test func test_t3_entrypoint_plain_when_no_color_env_even_on_tty() async {
-    let report = enterpriseRuntime(cliclickPath: nil, cliclickPresentOnPath: false)
+    let report = enterpriseRuntime()
     let (_, out) = await runEntrypoint(
         ["LogicProMCP", "doctor"], runtime: report, isTTY: true, env: ["NO_COLOR": "1"]
     )
@@ -467,7 +419,7 @@ private func runEntrypoint(
 }
 
 @Test func test_t3_entrypoint_color_on_tty_without_no_color() async {
-    let report = enterpriseRuntime(cliclickPath: nil, cliclickPresentOnPath: false)
+    let report = enterpriseRuntime()
     let (_, out) = await runEntrypoint(
         ["LogicProMCP", "doctor"], runtime: report, isTTY: true, env: [:]
     )
@@ -617,12 +569,12 @@ private func runEntrypoint(
     }
 }
 
-@Test func test_t1_summary_counts_invariant_with_update_check_15() {
-    // boomer-B2-3: invariant must hold with the opt-in update check present (15 checks).
+@Test func test_t1_summary_counts_invariant_with_update_check_14() {
+    // boomer-B2-3: invariant must hold with the opt-in update check present (14 checks).
     let report = makeReport(runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: ServerConfig.serverVersion) }))
-    #expect(report.checks.count == 15)
+    #expect(report.checks.count == 14)
     let s = report.summary
-    #expect(s.total == 15)
+    #expect(s.total == 14)
     #expect(s.passed + s.failed + s.warnings + s.manual + s.skipped == s.total)
 }
 

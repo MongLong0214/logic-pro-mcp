@@ -106,7 +106,6 @@ func writeFile(_ url: URL, contents: String) throws {
 }
 
 func makeInstallerFixture(
-    includeCliclick: Bool,
     includeProjectHelperScripts: Bool = true,
     includeSharedJXAHelper: Bool = true,
     symlinkedBounceHelper: Bool = false
@@ -224,10 +223,6 @@ func makeInstallerFixture(
         exit 0
         """
     )
-    if includeCliclick {
-        try writeExecutable(fakeBin.appendingPathComponent("cliclick"), contents: "#!/bin/bash\nexit 0\n")
-    }
-
     return InstallerFixture(
         sandbox: sandbox,
         archiveURL: archiveURL,

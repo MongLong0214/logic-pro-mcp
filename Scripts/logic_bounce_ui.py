@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import hashlib
-import os
 import subprocess
 import time
+from ctypes import CDLL, POINTER, Structure, byref, c_bool, c_double, c_int64, c_size_t, c_uint16, c_uint32, c_uint64, c_void_p
 from collections.abc import Callable
-from typing import Final, Literal, NamedTuple, NoReturn, Optional, TypedDict, Union
+from typing import Final, Literal, NoReturn, Optional, TypedDict, Union
 
 from logic_ui_jxa import SAVE_PANEL_SNAPSHOT_SOURCE, parse_jxa_json_result, run_jxa
 
@@ -16,19 +15,42 @@ RunOsa = Callable[[str, float], str]
 
 
 OSA_TIMEOUT_SEC: Final = 8.0
-CLICLICK_TIMEOUT_SEC: Final = 3.0
 BOUNCE_CONFIRM_BUTTONS: Final[tuple[str, str]] = ("OK", "확인")
 BOUNCE_DIALOG_KEYWORDS: Final[tuple[str, str]] = ("bounce", "바운스")
 BOUNCE_SETTINGS_MARKERS: Final[tuple[str, ...]] = ("pcm", "realtime", "offline", "normalize", "audio tail", "실시간", "오프라인", "노멀라이즈")
 SAVE_PANEL_CONFIRM_BUTTONS: Final[tuple[str, str]] = ("bounce", "바운스")
 SAVE_PANEL_CANCEL_BUTTONS: Final[tuple[str, str]] = ("cancel", "취소")
 SAVE_PANEL_NAME_LABELS: Final[tuple[str, str]] = ("save as:", "다른 이름으로 저장:", "이름으로 저장:")
-TRUSTED_CLICLICK_DIRS: Final[tuple[str, ...]] = ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin")
-TRUSTED_CLICLICK_CANDIDATES: Final[tuple[str, ...]] = (
-    "/opt/homebrew/bin/cliclick",
-    "/usr/local/bin/cliclick",
-    "/usr/bin/cliclick",
-)
+KCG_HID_EVENT_TAP: Final = 0
+KCG_EVENT_LEFT_MOUSE_DOWN: Final = 1
+KCG_EVENT_LEFT_MOUSE_UP: Final = 2
+KCG_EVENT_KEYBOARD_DOWN: Final = True
+KCG_EVENT_KEYBOARD_UP: Final = False
+KCG_MOUSE_BUTTON_LEFT: Final = 0
+KCG_MOUSE_EVENT_CLICK_STATE: Final = 1
+KCG_EVENT_FLAG_MASK_SHIFT: Final = 0x00020000
+KCG_EVENT_FLAG_MASK_CONTROL: Final = 0x00040000
+KCG_EVENT_FLAG_MASK_ALTERNATE: Final = 0x00080000
+KCG_EVENT_FLAG_MASK_COMMAND: Final = 0x00100000
+MODIFIER_FLAGS: Final[dict[str, int]] = {
+    "cmd": KCG_EVENT_FLAG_MASK_COMMAND,
+    "command": KCG_EVENT_FLAG_MASK_COMMAND,
+    "shift": KCG_EVENT_FLAG_MASK_SHIFT,
+    "alt": KCG_EVENT_FLAG_MASK_ALTERNATE,
+    "option": KCG_EVENT_FLAG_MASK_ALTERNATE,
+    "ctrl": KCG_EVENT_FLAG_MASK_CONTROL,
+    "control": KCG_EVENT_FLAG_MASK_CONTROL,
+}
+KEY_CODES: Final[dict[str, int]] = {
+    "a": 0x00,
+    "delete": 0x33,
+    "return": 0x24,
+    "enter": 0x24,
+    "escape": 0x35,
+    "esc": 0x35,
+    "space": 0x31,
+    "tab": 0x30,
+}
 
 
 class SavePanelSnapshotOk(TypedDict):
@@ -68,6 +90,175 @@ class BounceFocusDiagnostics(TypedDict):
     save_panel_snapshot: SavePanelSnapshot
 
 
+class CGPoint(Structure):
+    _fields_ = [("x", c_double), ("y", c_double)]
+
+
+class NativeCGEventDriver:
+    def __init__(self) -> None:
+        app_services = CDLL("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")
+        core_foundation = CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+
+        self._mouse_event = app_services.CGEventCreateMouseEvent
+        self._mouse_event.argtypes = [c_void_p, c_uint32, CGPoint, c_uint32]
+        self._mouse_event.restype = c_void_p
+
+        self._keyboard_event = app_services.CGEventCreateKeyboardEvent
+        self._keyboard_event.argtypes = [c_void_p, c_uint16, c_bool]
+        self._keyboard_event.restype = c_void_p
+
+        self._keyboard_unicode = app_services.CGEventKeyboardSetUnicodeString
+        self._keyboard_unicode.argtypes = [c_void_p, c_size_t, POINTER(c_uint16)]
+        self._keyboard_unicode.restype = None
+
+        self._set_integer = app_services.CGEventSetIntegerValueField
+        self._set_integer.argtypes = [c_void_p, c_uint32, c_int64]
+        self._set_integer.restype = None
+
+        self._set_flags = app_services.CGEventSetFlags
+        self._set_flags.argtypes = [c_void_p, c_uint64]
+        self._set_flags.restype = None
+
+        self._post = app_services.CGEventPost
+        self._post.argtypes = [c_uint32, c_void_p]
+        self._post.restype = None
+
+        self._release = core_foundation.CFRelease
+        self._release.argtypes = [c_void_p]
+        self._release.restype = None
+
+        self._held_flags = 0
+
+    def click(self, x: int, y: int) -> bool:
+        point = CGPoint(float(x), float(y))
+        return self._post_mouse(KCG_EVENT_LEFT_MOUSE_DOWN, point) and self._post_mouse(KCG_EVENT_LEFT_MOUSE_UP, point)
+
+    def key_down(self, key: str) -> bool:
+        flag = MODIFIER_FLAGS.get(key.lower())
+        if flag is None:
+            return self._post_key_name(key, key_down=True)
+        self._held_flags |= flag
+        return True
+
+    def key_up(self, key: str) -> bool:
+        flag = MODIFIER_FLAGS.get(key.lower())
+        if flag is None:
+            return self._post_key_name(key, key_down=False)
+        self._held_flags &= ~flag
+        return True
+
+    def key_press(self, key: str) -> bool:
+        return self._post_key_name(key, key_down=True) and self._post_key_name(key, key_down=False)
+
+    def reset_modifiers(self) -> None:
+        self._held_flags = 0
+
+    def type_text(self, text: str) -> bool:
+        for character in text:
+            if self._held_flags:
+                key_code = KEY_CODES.get(character.lower())
+                if key_code is None:
+                    return False
+                if not self._post_key_code(key_code, key_down=True) or not self._post_key_code(key_code, key_down=False):
+                    return False
+                continue
+            if not self._post_unicode_character(character):
+                return False
+        return True
+
+    def _post_mouse(self, event_type: int, point: CGPoint) -> bool:
+        event = self._mouse_event(None, event_type, point, KCG_MOUSE_BUTTON_LEFT)
+        if not event:
+            return False
+        try:
+            self._set_integer(event, KCG_MOUSE_EVENT_CLICK_STATE, 1)
+            self._post(KCG_HID_EVENT_TAP, event)
+            return True
+        finally:
+            self._release(event)
+
+    def _post_key_name(self, key: str, *, key_down: bool) -> bool:
+        key_code = KEY_CODES.get(key.lower())
+        if key_code is None:
+            return False
+        return self._post_key_code(key_code, key_down=key_down)
+
+    def _post_key_code(self, key_code: int, *, key_down: bool) -> bool:
+        event = self._keyboard_event(None, c_uint16(key_code), key_down)
+        if not event:
+            return False
+        try:
+            self._set_flags(event, c_uint64(self._held_flags))
+            self._post(KCG_HID_EVENT_TAP, event)
+            return True
+        finally:
+            self._release(event)
+
+    def _post_unicode_character(self, character: str) -> bool:
+        encoded = character.encode("utf-16-le")
+        units = (c_uint16 * (len(encoded) // 2)).from_buffer_copy(encoded)
+        down = self._keyboard_event(None, 0, KCG_EVENT_KEYBOARD_DOWN)
+        up = self._keyboard_event(None, 0, KCG_EVENT_KEYBOARD_UP)
+        if not down or not up:
+            if down:
+                self._release(down)
+            if up:
+                self._release(up)
+            return False
+        try:
+            self._keyboard_unicode(down, len(units), units)
+            self._keyboard_unicode(up, len(units), units)
+            self._post(KCG_HID_EVENT_TAP, down)
+            self._post(KCG_HID_EVENT_TAP, up)
+            return True
+        finally:
+            self._release(down)
+            self._release(up)
+
+
+_NATIVE_DRIVER: NativeCGEventDriver | None = None
+
+
+def _native_driver() -> NativeCGEventDriver:
+    global _NATIVE_DRIVER
+    if _NATIVE_DRIVER is None:
+        _NATIVE_DRIVER = NativeCGEventDriver()
+    return _NATIVE_DRIVER
+
+
+def send_ui_events(*commands: str, driver: NativeCGEventDriver | None = None) -> bool:
+    event_driver = driver if driver is not None else _native_driver()
+    try:
+        for command in commands:
+            prefix, separator, payload = command.partition(":")
+            if separator != ":":
+                return False
+            if prefix == "c":
+                try:
+                    x_raw, y_raw = payload.split(",", 1)
+                    if not event_driver.click(int(x_raw), int(y_raw)):
+                        return False
+                except ValueError:
+                    return False
+            elif prefix == "kd":
+                if not event_driver.key_down(payload):
+                    return False
+            elif prefix == "ku":
+                if not event_driver.key_up(payload):
+                    return False
+            elif prefix == "kp":
+                if not event_driver.key_press(payload):
+                    return False
+            elif prefix == "t":
+                if not event_driver.type_text(payload):
+                    return False
+            else:
+                return False
+        return True
+    finally:
+        event_driver.reset_modifiers()
+
+
 def osa(script: str, timeout: float = OSA_TIMEOUT_SEC) -> str:
     try:
         result = subprocess.run(
@@ -79,207 +270,6 @@ def osa(script: str, timeout: float = OSA_TIMEOUT_SEC) -> str:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return ""
     return result.stdout.strip()
-
-
-# cliclick trust model (issue #210) — MUST stay in parity with the Swift resolver
-# (ProjectExportExecutorBounceHelperResolution.swift) and the live-e2e mirror.
-# Reason vocabulary is identical across all three implementations.
-R_RESOLVED: Final = "resolved"
-R_NOT_ABSOLUTE: Final = "not_absolute"
-R_NOT_FOUND: Final = "not_found"
-R_NOT_EXECUTABLE: Final = "not_executable"
-R_PARENT_WRITABLE: Final = "parent_writable"
-R_FILE_WRITABLE: Final = "file_writable"
-R_OWNER_UNTRUSTED: Final = "owner_untrusted"
-R_ANCESTOR_WRITABLE: Final = "ancestor_writable"
-R_SHA256_MISMATCH: Final = "sha256_mismatch"
-
-
-class CliclickCandidate(NamedTuple):
-    path: str
-    source: str  # "override" | "canonical"
-    reason: str
-
-
-class CliclickResolution(NamedTuple):
-    resolved_path: Optional[str]
-    candidates: list[CliclickCandidate]
-
-    def diagnostic_summary(self) -> str:
-        tried = (
-            ", ".join(f"{c.path}={c.reason}" for c in self.candidates)
-            if self.candidates
-            else "no candidates"
-        )
-        return (
-            f"tried: {tried}; fix: run `chmod g-w /opt/homebrew/bin` so the canonical cliclick "
-            "resolves (note: its symlink target under /opt/homebrew/Cellar stays group-writable, so it "
-            "remains swappable by admin-group users — for full isolation copy cliclick to a non-writable "
-            "dir and set LOGIC_PRO_MCP_CLICLICK to it, optionally with LOGIC_PRO_MCP_CLICLICK_SHA256). "
-            "See docs/SETUP.md#doctor-dependenciescliclick."
-        )
-
-
-def _trusted_owner(uid: int) -> bool:
-    return uid == 0 or uid == os.getuid()
-
-
-def _sha256_of(path: str) -> Optional[str]:
-    try:
-        digest = hashlib.sha256()
-        with open(path, "rb") as handle:
-            for chunk in iter(lambda: handle.read(65536), b""):
-                digest.update(chunk)
-        return digest.hexdigest()
-    except OSError:
-        return None
-
-
-def _validate_ancestry(real: str) -> Optional[str]:
-    # Walk immediate parent … "/" inclusive. Any group/world-writable, non-{root,self}-owned,
-    # or unreadable ancestor is untrusted (fail-closed).
-    current = os.path.dirname(real)
-    while True:
-        try:
-            stat_result = os.stat(current)
-        except OSError:
-            return R_ANCESTOR_WRITABLE
-        if stat_result.st_mode & 0o022:
-            return R_ANCESTOR_WRITABLE
-        if not _trusted_owner(stat_result.st_uid):
-            return R_ANCESTOR_WRITABLE
-        parent = os.path.dirname(current)
-        if parent == current:  # reached "/"
-            break
-        current = parent
-    return None
-
-
-def _evaluate_canonical(path: str) -> str:
-    # Shipped rule (NG1): immediate-parent non-writable, NO symlink resolution.
-    normalized = os.path.abspath(os.path.expanduser(path))
-    parent = os.path.dirname(normalized)
-    try:
-        parent_mode = os.stat(parent).st_mode
-    except OSError:
-        return R_NOT_FOUND
-    if parent_mode & 0o022:
-        return R_PARENT_WRITABLE
-    if not os.path.isfile(normalized):
-        return R_NOT_FOUND
-    if not os.access(normalized, os.X_OK):
-        return R_NOT_EXECUTABLE
-    return R_RESOLVED
-
-
-def _evaluate_arbitrary(path: str, environ: "os._Environ[str] | dict[str, str]") -> tuple[str, Optional[str]]:
-    # Strict, symlink-resolved, fail-closed. Returns (reason, resolved_real_path_or_None).
-    trimmed = (path or "").strip()
-    if not trimmed or "\0" in trimmed:
-        return (R_NOT_FOUND, None)
-    expanded = os.path.expanduser(trimmed)
-    if not expanded.startswith("/"):
-        return (R_NOT_ABSOLUTE, None)
-    real = os.path.realpath(expanded)  # follows symlinks; does NOT raise on missing
-    if not os.path.isfile(real):  # explicit existence check (realpath won't raise)
-        return (R_NOT_FOUND, None)
-    if not os.access(real, os.X_OK):
-        return (R_NOT_EXECUTABLE, None)
-    try:
-        stat_result = os.stat(real)  # os.stat follows to the real file (NOT lstat)
-    except OSError:
-        return (R_NOT_FOUND, None)
-    if stat_result.st_mode & 0o022:
-        return (R_FILE_WRITABLE, None)
-    if not _trusted_owner(stat_result.st_uid):
-        return (R_OWNER_UNTRUSTED, None)
-    ancestor_reason = _validate_ancestry(real)
-    if ancestor_reason is not None:
-        return (ancestor_reason, None)
-    if "LOGIC_PRO_MCP_CLICLICK_SHA256" in environ:
-        pin = environ["LOGIC_PRO_MCP_CLICLICK_SHA256"].strip().lower()
-        actual = _sha256_of(real)
-        if len(pin) != 64 or any(c not in "0123456789abcdef" for c in pin) or actual is None or actual != pin:
-            return (R_SHA256_MISMATCH, None)
-    return (R_RESOLVED, real)
-
-
-def _classify_and_validate(
-    path: str,
-    environ: "os._Environ[str] | dict[str, str]",
-) -> tuple[str, Optional[str]]:
-    # Location classification (mirrors how the Swift side accepted a path): a canonical
-    # path uses the canonical rule (no symlink follow); anything else is strict-arbitrary.
-    normalized = os.path.abspath(os.path.expanduser(path)) if path else ""
-    if normalized in TRUSTED_CLICLICK_CANDIDATES:
-        reason = _evaluate_canonical(normalized)
-        return (reason, normalized if reason == R_RESOLVED else None)
-    return _evaluate_arbitrary(path, environ)
-
-
-def cliclick_resolution(
-    override: str | None = None,
-    environ: "os._Environ[str] | dict[str, str] | None" = None,
-) -> CliclickResolution:
-    environ = os.environ if environ is None else environ
-    candidates: list[CliclickCandidate] = []
-
-    # 1) Explicit override arg (the --cliclick-path the Swift side already resolved) —
-    #    validated by LOCATION classification so it matches Swift's accept decision exactly.
-    if override and override.strip():
-        reason, resolved = _classify_and_validate(override, environ)
-        candidates.append(CliclickCandidate(os.path.abspath(os.path.expanduser(override)), "override", reason))
-        if reason == R_RESOLVED and resolved is not None:
-            return CliclickResolution(resolved, candidates)
-
-    # 2) Operator env override (LOGIC_PRO_MCP_CLICLICK) — ALWAYS strict-arbitrary.
-    env_override = environ.get("LOGIC_PRO_MCP_CLICLICK")
-    if env_override and env_override.strip():
-        reason, resolved = _evaluate_arbitrary(env_override, environ)
-        candidates.append(CliclickCandidate(os.path.abspath(os.path.expanduser(env_override)), "override", reason))
-        if reason == R_RESOLVED and resolved is not None:
-            return CliclickResolution(resolved, candidates)
-
-    # 3) Canonical candidates — shipped rule.
-    for canonical in TRUSTED_CLICLICK_CANDIDATES:
-        reason = _evaluate_canonical(canonical)
-        candidates.append(CliclickCandidate(canonical, "canonical", reason))
-        if reason == R_RESOLVED:
-            return CliclickResolution(canonical, candidates)
-
-    return CliclickResolution(None, candidates)
-
-
-def trusted_cliclick_path(override: str | None = None) -> str | None:
-    # Back-compat thin wrapper.
-    return cliclick_resolution(override).resolved_path
-
-
-# Resolve-once cache (issue #210 / R5): logic_bounce.py main validates the cliclick path once
-# and records it here so per-click cliclick() calls do NOT re-resolve (closes the TOCTOU window
-# multiplied by per-click re-resolution).
-_RESOLVED_CLICLICK: Optional[str] = None
-
-
-def set_resolved_cliclick(path: Optional[str]) -> None:
-    global _RESOLVED_CLICLICK
-    _RESOLVED_CLICLICK = path
-
-
-def cliclick(*args: str) -> bool:
-    executable = _RESOLVED_CLICLICK if _RESOLVED_CLICLICK is not None else trusted_cliclick_path()
-    if executable is None:
-        return False
-    try:
-        result = subprocess.run(
-            [executable, *args],
-            capture_output=True,
-            text=True,
-            timeout=CLICLICK_TIMEOUT_SEC,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
-    return result.returncode == 0
 
 
 def _logic_front_container_name(container: str, run_osa: RunOsa = osa) -> str:

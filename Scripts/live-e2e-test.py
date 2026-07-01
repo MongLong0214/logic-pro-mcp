@@ -34,9 +34,7 @@ STRICT_LIVE = os.environ.get("LOGIC_PRO_MCP_STRICT_LIVE", "0") == "1"
 TRANSPORT = os.environ.get("LOGIC_PRO_MCP_E2E_TRANSPORT", "tmux" if STRICT_LIVE else "popen")
 FRESH_BOOTSTRAP = os.environ.get("LOGIC_PRO_MCP_BOOTSTRAP_FRESH", "1" if STRICT_LIVE else "0") == "1"
 TIMEOUT = int(os.environ.get("LOGIC_PRO_MCP_E2E_TIMEOUT", "40" if STRICT_LIVE else "10"))
-# issue #210: use the production resolver (single source of truth) instead of a 3rd
-# divergent mirror — guarantees the live harness accepts exactly what bounce/export accepts.
-from logic_bounce_ui import trusted_cliclick_path  # noqa: E402
+from logic_bounce_ui import send_ui_events  # noqa: E402
 
 
 def coverage_environment():
@@ -600,18 +598,10 @@ def ui_stop_logic_transport():
     )
     if result.returncode == 0:
         return True
-    cliclick_path = trusted_cliclick_path()
-    if cliclick_path is None:
-        return False
     try:
-        fallback = subprocess.run(
-            [cliclick_path, "kp:space"],
-            capture_output=True,
-            text=True,
-        )
-    except FileNotFoundError:
+        return send_ui_events("kp:space")
+    except (OSError, RuntimeError):
         return False
-    return fallback.returncode == 0
 
 
 def dismiss_safe_logic_dialog():

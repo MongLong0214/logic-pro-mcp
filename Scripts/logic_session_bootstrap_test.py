@@ -348,6 +348,26 @@ class ActivationHelperTests(unittest.TestCase):
         )
 
 
+class DialogButtonHelperTests(unittest.TestCase):
+    def test_click_dialog_button_uses_native_ax_helper(self):
+        native_result = mock.Mock(returncode=0, stdout='{"ok":true}\n')
+        with (
+            mock.patch("logic_session_bootstrap.subprocess.run", return_value=native_result) as run_process,
+            mock.patch("logic_session_bootstrap.time.sleep") as sleep,
+        ):
+            clicked = bootstrap_module._click_dialog_button(("Choose a Project",), ("Choose",))
+
+        self.assertTrue(clicked)
+        args, kwargs = run_process.call_args
+        self.assertEqual(args[0][0], "/usr/bin/swift")
+        self.assertTrue(args[0][1].endswith("logic_ax_button_press.swift"))
+        self.assertEqual(
+            json.loads(kwargs["input"]),
+            {"windowMarkers": ["Choose a Project"], "buttonLabels": ["Choose"]},
+        )
+        sleep.assert_called_once_with(0.5)
+
+
 class BootstrapFreshSessionTests(unittest.TestCase):
     def test_uses_configured_timeout_for_health_probe(self):
         health_timeouts: list[float | None] = []

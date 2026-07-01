@@ -3,7 +3,7 @@
 **Version**: 0.3
 **Author**: dev-pipeline (orchestrator)
 **Date**: 2026-06-30
-**Status**: Approved
+**Status**: Approved; amended 2026-07-01 after the native CGEvent bounce/export backend removed the legacy external click dependency
 **Size**: L (implemented as 4 independently-revertable tickets — see §App-A)
 
 > Reference model: [`code-yeongyu/lazycodex`](https://github.com/code-yeongyu/lazycodex) `doctor` command
@@ -37,10 +37,6 @@ remediation. It is honest and read-only. But measured against a mature reference
     `PermissionChecker.PermissionStatus.systemEventsAutomationState` and is part of `allGranted`
     (a *hard* requirement: MIDI import / tempo-dialog drive `tell application "System Events"`, issue #188),
     yet the doctor surfaces only Logic Pro automation (`SetupDoctor.swift:153`) and silently drops it.
-  - `dependencies.cliclick` — `cliclick` is a real runtime dependency of the bounce/export helper
-    (`bounce_helper_dependency_missing: cliclick`); a missing install was a prior release blocker, yet
-    the doctor never checks it. The runtime accepts it only via `ProjectExportExecutor.resolveTrustedCliclick`
-    (strict: 3 canonical paths + `LOGIC_PRO_MCP_CLICLICK` override + non-group/other-writable parent).
   - `system.macos_version` — the package requires macOS 14+ (`Package.swift: platforms: [.macOS(.v14)]`);
     the doctor never validates the OS.
   - `updates.latest_release` — no way to learn the installed version is behind the latest release.
@@ -51,8 +47,8 @@ The doctor reports *what it checks* honestly, but (a) omits several already-requ
 an enterprise support and CI gate tool.
 
 ### 1.3 Impact of Not Solving
-- Operators hit `bounce_helper_dependency_missing: cliclick` or a denied System Events target (#188)
-  at *runtime* even though `doctor` reported "ok" — eroding trust in the doctor.
+- Operators hit a denied System Events target (#188) at *runtime* even though `doctor` reported "ok" —
+  eroding trust in the doctor.
 - Support cannot ask a user to "paste the doctor summary"; there is no summary.
 - CI/monitoring cannot scrape a counts roll-up or per-check timing.
 
@@ -63,8 +59,9 @@ an enterprise support and CI gate tool.
       `permissions.automation_system_events` fed by the already-collected `systemEventsAutomationState`.
       **The report status must never be `ok` when `permissionStatus.allGranted == false`**, enforced by a
       single explicit chokepoint (not an emergent consequence) — see §4.2.
-- [ ] G2: Add coverage checks for real dependencies/environment: `dependencies.cliclick` (reusing the
-      runtime's own `resolveTrustedCliclick`), `system.macos_version`, and an opt-in `updates.latest_release`.
+- [ ] G2: Add coverage checks for real environment state: `system.macos_version` and an opt-in
+      `updates.latest_release`. The legacy external click dependency is intentionally out of scope because
+      bounce/export now uses the bundled native CGEvent backend.
 - [ ] G3: Add a structured `summary` roll-up (`total/passed/failed/warnings/manual/skipped` +
       total `duration_ms`) and per-check `duration_ms`, surfaced in both human and JSON output.
 - [ ] G4: Add severity grading (`error`/`warning`/`info`) and a `category` per check; render a
@@ -127,21 +124,17 @@ an enterprise support and CI gate tool.
       with Logic Pro closed, `permissions.automation_logic_pro` may be `manual` while
       `permissions.automation_system_events` is independently `pass`/`fail`.
 
-### US-2: Dependency & environment coverage
-**As an** operator, **I want** doctor to verify `cliclick` and the macOS version,
-**so that** runtime dependency failures surface at diagnosis time, not mid-operation.
+### US-2: Environment coverage
+**As an** operator, **I want** doctor to verify the macOS version,
+**so that** unsupported runtime environments surface at diagnosis time.
 
 **Acceptance Criteria:**
-- [ ] AC-2.1: `dependencies.cliclick` resolves cliclick **through the same resolver the runtime uses**
-      (`ProjectExportExecutor.resolveTrustedCliclick`): a trusted path (one of `/opt/homebrew/bin`,
-      `/usr/local/bin`, `/usr/bin` cliclick, or the `LOGIC_PRO_MCP_CLICLICK` override) whose parent dir is
-      not group/other-writable → `pass`, with the resolved path in evidence.
-- [ ] AC-2.2: Given cliclick is **not** resolvable by `resolveTrustedCliclick` but `commandExists("cliclick")`
-      is true (present on PATH only, or parent dir writable, or non-canonical path), then status is `warn`
-      with summary "present but not at a trusted path / parent dir is writable" and evidence noting the
-      distinction. (Not `pass` — it would fabricate a green the runtime won't honor.)
-- [ ] AC-2.3: Given cliclick absent everywhere, then `warn` (not `fail` — it gates only bounce/export)
-      with a `command` remediation `brew install cliclick`.
+- [ ] AC-2.1: The doctor emits no dependency check, remediation, warning, or degraded status for the
+      removed external click binary.
+- [ ] AC-2.2: The default report count reflects only active checks: the obsolete dependency check is not
+      present in `checks`, `summary.total`, remediation anchors, or rendered output.
+- [ ] AC-2.3: Install, doctor, health, and export surfaces do not ask the operator to install or approve the
+      removed external click binary.
 - [ ] AC-2.4: Given macOS major version ≥ 14, then `system.macos_version` is `pass` with the version
       string in evidence. A well-formed future version (e.g. 15, 26) also passes (no upper bound, major-only).
 - [ ] AC-2.5: Given macOS major version < 14, then `system.macos_version` is `fail`.
@@ -226,14 +219,13 @@ All work stays inside the doctor subsystem and its entrypoint:
 Execution is **sequential**: each check closure runs in declared order, wrapped by a monotonic-clock
 delta to populate `duration_ms`; checks are non-throwing so no exception isolation is required (E9).
 
-The `Runtime` injection seam is extended with: `cliclickPath: () -> String?` (→ `resolveTrustedCliclick`),
-`cliclickPresentOnPath: () -> Bool` (→ `commandExists("cliclick")`), `macOSVersion: () -> OperatingSystemVersion?`
+The `Runtime` injection seam is extended with: `macOSVersion: () -> OperatingSystemVersion?`
 (nil ⇒ unreadable → `skipped`, E12), `monotonicNowMs: () -> Double`, and a **typed** update-lookup seam
 `latestReleaseLookup: (() -> UpdateOutcome)?` (nil ⇒ update check not run; non-nil only when `--check-updates`
 is passed). `UpdateOutcome` is an enum `.found(version: String) | .offline | .sourceUnavailable | .parseError
 | .httpError | .timeout` so the check body can write an accurate enumerated `reason` (AC-6.3/6.4) instead of
-collapsing every failure to `nil`. `.production` wires real implementations (`resolveTrustedCliclick`,
-`ProcessInfo`, `DispatchTime`, the curl→gh lookup); tests inject fakes. No new external frameworks.
+collapsing every failure to `nil`. `.production` wires real implementations (`ProcessInfo`, `DispatchTime`,
+the curl→gh lookup); tests inject fakes. No new external frameworks.
 
 ### 4.2 Data Model Changes
 Schema bumps to `logic_pro_mcp_doctor.v2`. **`Check` gains an explicit `CodingKeys` enum that enumerates
@@ -301,8 +293,7 @@ Exit codes are verbosity-independent.
 | Schema evolution | mutate v1 / v2 superset / parallel endpoint | **v2 field-superset** | Additive keys keep v1 readers working; one schema; mirrors lazycodex's single rich model. Schema string is the one intended change (prefix-match guidance, G6). |
 | System Events data source | new TCC probe / reuse `PermissionStatus` | **reuse** | Already gathered by `permissionCheck()`; no second TCC prompt (NG3). |
 | System Events `.notVerifiable` | drop AC / doctor-only total mapping / widen the probe seam | **widen probe seam to tri-state (NG1 exception)** | Collapsing a hung/spawn-failed osascript to `.notGranted` reports "denied" for an un-runnable probe — a false-RED that violates the Honest Contract. Tri-state (`denial→notGranted`, `could-not-run→notVerifiable`) makes `→manual` honest and live-reachable. Exit codes unchanged. |
-| cliclick check | re-implement path search / reuse `resolveTrustedCliclick` | **reuse the runtime resolver** | Re-implementing a looser search is exactly how doctor/runtime drift produces false-greens (#1.3). Reuse = honest. |
-| cliclick severity | fail / warn | **warn** | cliclick gates only bounce/export, not core MCP; `fail` over-states. `warn`→`degraded`→exit 0. |
+| Removed external click dependency | keep legacy pass-only check / remove the check | **remove the check** | Bounce/export uses native CGEvent; a pass-only dependency check adds noise and retaining a gate would recreate the incident class. |
 | `critical` field | keep / drop | **drop (NG7)** | Redundant with `severity == .error` + stable order; no AC needs it; exit stays `failed→1`. |
 | Timing clock | wall-clock `Date()` / monotonic | **injected monotonic** (`DispatchTime`-based) | Wall-clock can step backward (NTP) → negative duration; monotonic guarantees AC-3.2/3.4. |
 | Update source | `gh` primary / `curl` primary | **unauthenticated `curl` to `api.github.com/.../releases/latest` primary, `gh release view` fallback** | End-users (Homebrew/release-binary) won't have `gh`; `gh`-first ⇒ skipped for nearly everyone. Unauthenticated ⇒ no token in scope (AC-6.4). Both degrade to `skipped`. |
@@ -314,9 +305,9 @@ Exit codes are verbosity-independent.
 | # | Scenario | Expected Behavior | Severity |
 |---|----------|-------------------|----------|
 | E1 | System Events check supplied `.notVerifiable` (forward-compat / injected) | `manual`, not `pass`/`fail` (AC-1.4) | High |
-| E2 | cliclick present only on PATH (not a trusted canonical path) | `warn` "present but not trusted", NOT `pass` (AC-2.2) | High |
-| E3 | cliclick at a trusted path but parent dir group/other-writable | `resolveTrustedCliclick` rejects → `warn` (AC-2.2) | Med |
-| E4 | cliclick absent everywhere | `warn` + `brew install cliclick` (AC-2.3) | Med |
+| E2 | Removed external click binary present on PATH | No doctor check, warning, or remediation is emitted (AC-2.1) | High |
+| E3 | Removed external click binary has an untrusted install layout | No doctor check, warning, or remediation is emitted (AC-2.1) | Med |
+| E4 | Removed external click binary absent everywhere | No doctor check, warning, or remediation is emitted (AC-2.3) | Med |
 | E5 | macOS version reads major-only (e.g. "14") or future ("15"/"26") | `pass` (major ≥ 14, no upper bound) (AC-2.4) | Low |
 | E6 | `--check-updates` offline / source unavailable | `skipped` w/ enumerated reason (AC-6.3/6.4) | Med |
 | E7 | `--check-updates` malformed/parse failure | `skipped` w/ `parse_error` (never `fail`) | Low |
@@ -345,7 +336,7 @@ env, tokened URLs, or headers. Claude-config reading remains the existing read-o
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
-| Default `doctor` wall time | typically ≤ ~3s (no network) — **empirical, not a hard bound**; checks run serially and worst-case = sum of bounded timeouts (codesign+xattr+brew dominate; the 3 new local checks add ~0: `sw_vers` is instant, cliclick is a path probe, System Events is already in the permission path) | `summary.duration_ms` |
+| Default `doctor` wall time | typically ≤ ~3s (no network) — **empirical, not a hard bound**; checks run serially and worst-case = sum of bounded timeouts (codesign+xattr+brew dominate; the active new local checks add ~0: `sw_vers` is instant, System Events is already in the permission path) | `summary.duration_ms` |
 | Per local external command | bounded by `BoundedProcessRunner` (≤1.5s) | per-check `duration_ms` |
 | `--check-updates` added latency | bounded network call (≤3.0s), opt-in only | `updates.latest_release.duration_ms` |
 
@@ -356,8 +347,7 @@ The `summary` block + per-check `duration_ms` + stable check IDs are the scrapea
 
 ### 8.1 Unit Tests (TDD — Red first for every ticket)
 - New checks: System Events (pass/fail/manual + AC-1.5 monotonicity with each input false independently +
-  AC-1.6 independence), cliclick (trusted→pass / PATH-only→warn / writable-parent→warn / absent→warn,
-  via injected `resolveTrustedCliclick` + `commandExists`), macOS (≥14 pass / future pass / <14 fail / unreadable skipped),
+  AC-1.6 independence), macOS (≥14 pass / future pass / <14 fail / unreadable skipped),
   update check (up-to-date pass / behind warn / offline|parse|timeout skipped + AC-6.4 redaction).
 - Model/contract: v2 schema string exactly `logic_pro_mcp_doctor.v2`; summary counts invariant
   (Σ == total == checks.count); each check has category/severity/duration_ms; severity↔status total mapping;
@@ -398,7 +388,6 @@ renderer (T2) and the network check (T3). Reverting the PR restores v1 exactly.
 | Dependency | Owner | Status | Risk if Delayed |
 |-----------|-------|--------|-----------------|
 | `PermissionChecker.systemEventsAutomationState` | existing | present | none |
-| `ProjectExportExecutor.resolveTrustedCliclick` / `commandExists` | existing | present (internal static) | none |
 | `BoundedProcessRunner` | existing | present | none |
 | `gh`/network for `--check-updates` | external, opt-in | optional | none (skipped) |
 
@@ -417,7 +406,7 @@ renderer (T2) and the network check (T3). Reverting the PR restores v1 exactly.
 | Metric | Baseline | Target | Measurement |
 |--------|----------|--------|-------------|
 | Required-permission coverage | Logic Pro only | + System Events | new check present & AC-1.5 monotone |
-| Checks count | 11 | 14 (+System Events,+cliclick,+macOS) (+updates opt-in = 15) | `summary.total` |
+| Checks count | 11 | 13 (+System Events,+macOS) (+updates opt-in = 14) | `summary.total` |
 | Doctor test count | 27 | 27 + new TDD specs | `swift test --no-parallel` |
 | v1 consumer breakage | n/a | 0 | E10 (a)+(b)+(c) |
 
@@ -438,7 +427,8 @@ renderer (T2) and the network check (T3). Reverting the PR restores v1 exactly.
 
 - **T1 — Data layer (highest risk):** schema v2 superset + explicit `Check` CodingKeys + `Summary` +
   `Category`/`Severity`/`duration_ms` + monotonic timing + monotonicity chokepoint + the 3 non-network
-  checks (System Events, cliclick, macOS) + the NG1 `PermissionChecker` System Events probe-seam tri-state
+  checks as originally reviewed, amended to the 2 active checks (System Events, macOS) after the native
+  CGEvent backend removed the external click dependency + the NG1 `PermissionChecker` System Events probe-seam tri-state
   widening (denial vs could-not-run). Owns E10, schema-version, AC-1.x, AC-3.x.
 - **T2 — Presentation layer:** 3 renderer modes + TTY/`NO_COLOR` + headline + `--verbose`/`--quiet`/`--json`
   precedence wiring in `MainEntrypoint`. Owns US-4, US-5, E8/E9/E14.
@@ -453,7 +443,7 @@ renderer (T2) and the network check (T3). Reverting the PR restores v1 exactly.
 | boomer #1 | System Events `.notVerifiable` unreachable in production → AC dead | AC-1.4 reworded: total honest mapping, documented production yields pass/fail only, manual branch via injected state; §12 follow-up |
 | boomer #2 | `Check` has no CodingKeys; adding `duration_ms` risks renaming v1 keys | Explicit CodingKeys lists ALL keys (§4.2) + E10(a) literal-key + E10(b) frozen-struct tests |
 | boomer #3 / strategist P2-2 | `critical: Bool` redundant | Dropped (NG7) |
-| guardian P1-1 / strategist P2-6 | cliclick must reuse `resolveTrustedCliclick`, not a looser PATH search | AC-2.1/2.2 mandate the runtime resolver; "or PATH" downgraded to `warn` |
+| guardian P1-1 / strategist P2-6 | legacy external click dependency must not drift from runtime truth | Superseded by native CGEvent backend: the dependency check and resolver references are removed rather than kept as a fake green. |
 | guardian P1-2 | `allGranted` monotonicity emergent, not enforced | §4.2 explicit chokepoint guard + AC-1.5 per-input tests |
 | strategist P1-1 | schema string change breaks exact-equal consumers | G6 prefix-match guidance + v2-exact assertion test |
 | strategist P1-2 | split L into independently-revertable tickets | §App-A 4-ticket split |

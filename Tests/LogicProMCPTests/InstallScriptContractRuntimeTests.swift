@@ -2,7 +2,7 @@ import Foundation
 import Testing
 
 @Test func testInstallScriptStandaloneCopyWorksWithoutSiblingCommonFile() throws {
-    let fixture = try makeInstallerFixture(includeCliclick: true)
+    let fixture = try makeInstallerFixture()
     let standaloneDir = try makeInstallScriptTempDir("logicpromcp-install-standalone-\(UUID().uuidString)")
     let standaloneScript = standaloneDir.appendingPathComponent("install.sh")
     try writeExecutable(standaloneScript, contents: try scriptContents("Scripts/install.sh"))
@@ -32,7 +32,6 @@ import Testing
 
 @Test func testInstallScriptSupportsPublishedV371ArchiveWithoutProjectHelpers() throws {
     let fixture = try makeInstallerFixture(
-        includeCliclick: true,
         includeProjectHelperScripts: false,
         includeSharedJXAHelper: false
     )
@@ -84,7 +83,7 @@ import Testing
 }
 
 @Test func testInstallScriptUsesSudoWhenCustomShareDirNeedsElevation() throws {
-    let fixture = try makeInstallerFixture(includeCliclick: true)
+    let fixture = try makeInstallerFixture()
     let protectedRoot = fixture.sandbox.appendingPathComponent("protected-root", isDirectory: true)
     let customShareDir = protectedRoot.appendingPathComponent("share/logic-pro-mcp", isDirectory: true)
     let sudoLog = fixture.sandbox.appendingPathComponent("sudo.log")
@@ -125,7 +124,7 @@ import Testing
 }
 
 @Test func testInstallScriptRejectsSymlinkedHelperArchiveMember() throws {
-    let fixture = try makeInstallerFixture(includeCliclick: true, symlinkedBounceHelper: true)
+    let fixture = try makeInstallerFixture(symlinkedBounceHelper: true)
 
     let result = try runShellScript(
         "Scripts/install.sh",
@@ -229,7 +228,7 @@ import Testing
 }
 
 @Test func testInstallScriptPersistsShareDirIntoClaudeRegistrationForCustomNonBinLayouts() throws {
-    let fixture = try makeInstallerFixture(includeCliclick: true)
+    let fixture = try makeInstallerFixture()
 
     let result = try runShellScript(
         "Scripts/install.sh",
@@ -262,8 +261,8 @@ import Testing
     #expect(FileManager.default.fileExists(atPath: fixture.shareDir.appendingPathComponent("logic_ui_jxa.py").path))
 }
 
-@Test func testInstallScriptFailsClosedWhenCliclickIsMissing() throws {
-    let fixture = try makeInstallerFixture(includeCliclick: false)
+@Test func testInstallScriptHasNoExternalClickToolGate() throws {
+    let fixture = try makeInstallerFixture()
 
     let result = try runShellScript(
         "Scripts/install.sh",
@@ -280,9 +279,10 @@ import Testing
         ]
     )
 
-    #expect(result.exitCode != 0)
-    #expect(result.combinedOutput.contains("required dependency missing: cliclick"))
-    #expect(!FileManager.default.fileExists(atPath: fixture.installRoot.appendingPathComponent("LogicProMCP").path))
+    #expect(result.exitCode == 0)
+    let removedTool = "cli" + "click"
+    #expect(!result.combinedOutput.contains("required dependency missing: \(removedTool)"))
+    #expect(FileManager.default.fileExists(atPath: fixture.installRoot.appendingPathComponent("LogicProMCP").path))
 }
 
 @Test func testReleasePackageScriptRequiresTeamIDForNotarizedMode() throws {
@@ -296,7 +296,7 @@ import Testing
 }
 
 @Test func testReleaseTarballFixtureMatchesFormulaInstallPaths() throws {
-    let fixture = try makeInstallerFixture(includeCliclick: false)
+    let fixture = try makeInstallerFixture()
     let sandbox = try makeInstallScriptTempDir("logicpromcp-release-verify-\(UUID().uuidString)")
     let scriptURL = sandbox.appendingPathComponent("Scripts/release-verify-formula-install-paths.sh")
     let formulaURL = sandbox.appendingPathComponent("Formula/logic-pro-mcp.rb")

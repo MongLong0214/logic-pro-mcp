@@ -159,13 +159,6 @@ enum SetupDoctor {
         let readClaudeRegistration: () -> ClaudeRegistration
         // v2 seams. Defaults keep every existing `Runtime(...)` construction site
         // compiling; `.production` and the test helper supply real/fake impls.
-        // `cliclickResolution` reuses the runtime's OWN trusted resolver (incl. per-candidate
-        // rejection reasons, issue #210) so the doctor can never green-light a cliclick the
-        // bounce/export path would reject, and surfaces WHY it was rejected.
-        var cliclickResolution: () -> ProjectExportExecutor.CliclickResolution = {
-            ProjectExportExecutor.resolveCliclickDetailed()
-        }
-        var cliclickPresentOnPath: () -> Bool = { ProjectExportExecutor.commandExists("cliclick") }
         var macOSVersion: () -> OperatingSystemVersion? = { ProcessInfo.processInfo.operatingSystemVersion }
         // Monotonic millisecond clock for per-check timing. Monotonic (uptime),
         // never wall-clock, so a duration can never go negative across an NTP step.
@@ -223,7 +216,6 @@ enum SetupDoctor {
         "permissions.accessibility": "docs/SETUP.md#doctor-permissionsaccessibility",
         "permissions.automation_logic_pro": "docs/SETUP.md#doctor-permissionsautomation-logic-pro",
         "permissions.automation_system_events": "docs/SETUP.md#doctor-permissionsautomation-system-events",
-        "dependencies.cliclick": "docs/SETUP.md#doctor-dependenciescliclick",
         "system.macos_version": "docs/SETUP.md#doctor-systemmacos-version",
         "updates.latest_release": "docs/SETUP.md#doctor-updateslatest-release",
         "logic.application_state": "docs/SETUP.md#doctor-logicapplication-state",
@@ -264,7 +256,6 @@ enum SetupDoctor {
         checks.append(timed { accessibilityPermissionCheck(permissionStatus) })
         checks.append(timed { automationPermissionCheck(permissionStatus) })
         checks.append(timed { systemEventsAutomationCheck(permissionStatus) })
-        checks.append(timed { cliclickDependencyCheck(runtime: runtime) })
         checks.append(timed { macOSVersionCheck(runtime: runtime) })
         checks.append(timed { logicApplicationStateCheck(runtime: runtime) })
         checks.append(timed { manualValidationCheck(approvals: approvals) })
@@ -672,46 +663,6 @@ enum SetupDoctor {
             summary: systemEventsSummary(for: status.systemEventsAutomationState),
             evidence: ["state": status.systemEventsAutomationState.rawValue],
             remediationType: status.systemEventsAutomationState == .granted ? .none : .systemSettings
-        )
-    }
-
-    private static func cliclickDependencyCheck(runtime: Runtime) -> Check {
-        // Reuse the runtime's OWN trusted resolver (incl. per-candidate rejection reasons, #210)
-        // so the doctor cannot green-light a cliclick the bounce/export path would reject, and so a
-        // rejection is DIAGNOSABLE. cliclick gates only bounce/export, so missing/untrusted is
-        // `warn` (→ degraded → exit 0), never `fail`.
-        let resolution = runtime.cliclickResolution()
-        if let path = resolution.resolvedPath {
-            return check(
-                id: "dependencies.cliclick",
-                domain: "dependencies",
-                status: .pass,
-                summary: "cliclick is installed at a trusted path.",
-                evidence: ["path": path, "trusted": "true"],
-                remediationType: .none
-            )
-        }
-        // Per-candidate reasons (e.g. "/opt/homebrew/bin/cliclick=parent_writable") — this is the
-        // exact diagnosis #210 asked for: the binary was found but rejected, and WHY.
-        let candidatesEvidence = resolution.candidates
-            .map { "\($0.path)=\($0.reason.rawValue)" }
-            .joined(separator: ", ")
-        let presentOnPath = runtime.cliclickPresentOnPath()
-        let summary = presentOnPath
-            ? "cliclick is present but no candidate is at a trusted path (or a parent dir is writable); bounce/export will not use it."
-            : "cliclick is not installed at a trusted path; bounce/export operations require it."
-        return check(
-            id: "dependencies.cliclick",
-            domain: "dependencies",
-            status: .warn,
-            summary: summary,
-            evidence: [
-                "trusted": "false",
-                "present_on_path": presentOnPath ? "true" : "false",
-                "candidates": candidatesEvidence.isEmpty ? "none" : candidatesEvidence,
-            ],
-            remediationType: .command,
-            remediationValueOverride: "chmod g-w /opt/homebrew/bin  (or set LOGIC_PRO_MCP_CLICLICK to an approved absolute path)"
         )
     }
 

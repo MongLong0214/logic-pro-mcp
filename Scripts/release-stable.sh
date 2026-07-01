@@ -101,6 +101,7 @@ run python3 Scripts/logic_controller_learn_mode_test.py
 run python3 Scripts/logic_key_event_test.py
 run swiftc -typecheck Scripts/logic_key_event.swift
 run swiftc -typecheck Scripts/logic_ui_snapshot.swift
+run swiftc -typecheck Scripts/logic_ax_button_press.swift
 run swift test --no-parallel
 run swift build -c release
 

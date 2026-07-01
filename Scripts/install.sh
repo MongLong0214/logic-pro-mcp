@@ -272,7 +272,6 @@ if curl -fsSL "$DOWNLOAD_URL" -o "$TMP_ARCHIVE" 2>/dev/null; then
     verify_signature "$EXTRACTED_BINARY"
     verify_gatekeeper "$EXTRACTED_BINARY"
     strip_quarantine "$EXTRACTED_BINARY"
-    require_command "cliclick" "Install it first: brew install cliclick"
     chmod +x "$EXTRACTED_BINARY"
     echo "  Installing to $INSTALL_DIR/$BINARY..."
     USE_SUDO=0

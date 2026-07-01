@@ -19,7 +19,6 @@ class LogicProMcp < Formula
   end
 
   depends_on :macos => :sonoma
-  depends_on "cliclick"
 
   # NOTE (v3.1.6): no `depends_on xcode:` — this Formula installs the
   # pre-built GitHub release binary; it does not invoke `swift build` or any

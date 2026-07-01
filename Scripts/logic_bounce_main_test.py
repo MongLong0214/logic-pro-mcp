@@ -21,8 +21,8 @@ def _window_metrics_osa(script, timeout=logic_bounce.OSA_TIMEOUT_SEC):
     return ""
 
 
-def _cliclick_with_staged_artifact(staging_dir: str, typed_name):
-    def fake_cliclick(*commands):
+def _ui_events_with_staged_artifact(staging_dir: str, typed_name):
+    def fake_ui_events(*commands):
         for command in commands:
             if command.startswith("t:"):
                 typed_name["value"] = command[2:]
@@ -33,7 +33,7 @@ def _cliclick_with_staged_artifact(staging_dir: str, typed_name):
             os.utime(artifact, (1001.0, 1001.0))
         return True
 
-    return fake_cliclick
+    return fake_ui_events
 
 
 class LogicBounceMainTests(unittest.TestCase):
@@ -53,9 +53,8 @@ class LogicBounceMainTests(unittest.TestCase):
                 mock.patch.object(logic_bounce, "bounce_dialog_present", return_value=False),
                 mock.patch.object(logic_bounce, "bounce_focus_diagnostics", return_value={"frontmost_app": "Logic Pro"}),
                 mock.patch.object(logic_bounce, "save_panel_present", return_value=False),
-                mock.patch.object(logic_bounce, "cliclick_resolution", return_value=logic_bounce.CliclickResolution("/opt/homebrew/bin/cliclick", [])),
                 mock.patch.object(logic_bounce, "osa", side_effect=_window_metrics_osa),
-                mock.patch.object(logic_bounce, "cliclick", return_value=None),
+                mock.patch.object(logic_bounce, "send_ui_events", return_value=None),
                 mock.patch.object(logic_bounce.time, "sleep", lambda _: None),
                 mock.patch.object(logic_bounce.time, "time", lambda: 1000.0),
                 contextlib.redirect_stdout(stdout),
@@ -84,9 +83,8 @@ class LogicBounceMainTests(unittest.TestCase):
                 mock.patch.object(logic_bounce, "click_bounce_settings_confirm", return_value=True),
                 mock.patch.object(logic_bounce, "bounce_dialog_present", return_value=True),
                 mock.patch.object(logic_bounce, "save_panel_present", return_value=True),
-                mock.patch.object(logic_bounce, "cliclick_resolution", return_value=logic_bounce.CliclickResolution("/opt/homebrew/bin/cliclick", [])),
                 mock.patch.object(logic_bounce, "osa", side_effect=_window_metrics_osa),
-                mock.patch.object(logic_bounce, "cliclick", side_effect=_cliclick_with_staged_artifact(staging_dir, typed_name)),
+                mock.patch.object(logic_bounce, "send_ui_events", side_effect=_ui_events_with_staged_artifact(staging_dir, typed_name)),
                 mock.patch.object(logic_bounce.time, "sleep", lambda _: None),
                 mock.patch.object(logic_bounce.time, "time", lambda: 1000.0),
                 mock.patch.object(logic_bounce, "unique_staging_name", return_value=staged_name),
@@ -116,9 +114,8 @@ class LogicBounceMainTests(unittest.TestCase):
                 mock.patch.object(logic_bounce, "click_bounce_settings_confirm", return_value=True),
                 mock.patch.object(logic_bounce, "bounce_dialog_present", return_value=False),
                 mock.patch.object(logic_bounce, "save_panel_present", return_value=True),
-                mock.patch.object(logic_bounce, "cliclick_resolution", return_value=logic_bounce.CliclickResolution("/opt/homebrew/bin/cliclick", [])),
                 mock.patch.object(logic_bounce, "osa", side_effect=_window_metrics_osa),
-                mock.patch.object(logic_bounce, "cliclick", side_effect=_cliclick_with_staged_artifact(staging_dir, typed_name)),
+                mock.patch.object(logic_bounce, "send_ui_events", side_effect=_ui_events_with_staged_artifact(staging_dir, typed_name)),
                 mock.patch.object(logic_bounce.time, "sleep", lambda _: None),
                 mock.patch.object(logic_bounce.time, "time", lambda: 1000.0),
                 mock.patch.object(logic_bounce, "unique_staging_name", return_value=staged_name),
@@ -140,7 +137,7 @@ class LogicBounceMainTests(unittest.TestCase):
             ]
             stdout = io.StringIO()
 
-            def fake_cliclick(*commands):
+            def fake_ui_events(*commands):
                 return "c:840,768" not in commands
 
             with (
@@ -149,9 +146,8 @@ class LogicBounceMainTests(unittest.TestCase):
                 mock.patch.object(logic_bounce, "open_bounce_dialog", return_value=(True, ["key_command"])),
                 mock.patch.object(logic_bounce, "click_bounce_settings_confirm", return_value=True),
                 mock.patch.object(logic_bounce, "save_panel_present", return_value=True),
-                mock.patch.object(logic_bounce, "cliclick_resolution", return_value=logic_bounce.CliclickResolution("/opt/homebrew/bin/cliclick", [])),
                 mock.patch.object(logic_bounce, "osa", side_effect=_window_metrics_osa),
-                mock.patch.object(logic_bounce, "cliclick", side_effect=fake_cliclick),
+                mock.patch.object(logic_bounce, "send_ui_events", side_effect=fake_ui_events),
                 mock.patch.object(logic_bounce.time, "sleep", lambda _: None),
                 mock.patch.object(logic_bounce.time, "time", lambda: 1000.0),
                 mock.patch.object(logic_bounce, "unique_staging_name", return_value="Song--lpmcp-fixed"),

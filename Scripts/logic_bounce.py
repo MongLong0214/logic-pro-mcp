@@ -2,7 +2,7 @@
 """Drive Logic Pro 12.2's Bounce dialog to produce an audio file at a target path.
 
 Logic exposes no AppleScript bounce verb and its save panel's filename field is not
-Accessibility-exposed, so this drives the dialog with cliclick (CGEvent). Coordinates
+Accessibility-exposed, so this drives the dialog with native CGEvent posts. Coordinates
 are computed from the save-panel window frame (AX-readable) for portability. The bounce
 is written to a staging folder (a sidebar Favorite, default Downloads) and moved to the
 requested output_dir afterwards, because Cmd+Shift+G "Go to Folder" cannot be confirmed
@@ -28,18 +28,14 @@ from typing import Optional
 from logic_input_source import TARGET_INPUT_SOURCE_IDS, TISRuntime, select_input_source, set_input_abc
 from logic_bounce_ui import (
     OSA_TIMEOUT_SEC,
-    CliclickResolution,
     bounce_dialog_present,
     bounce_focus_diagnostics,
     bounce_settings_present,
-    cliclick,
-    cliclick_resolution,
     click_bounce_settings_confirm,
     open_bounce_dialog,
     osa,
     save_panel_present,
-    set_resolved_cliclick,
-    trusted_cliclick_path,
+    send_ui_events,
 )
 
 _select_input_source = select_input_source
@@ -134,7 +130,6 @@ def main() -> int:
     ap.add_argument("--name", help="legacy filename without extension")
     ap.add_argument("--output-dir", help="legacy final destination dir (absolute)")
     ap.add_argument("--staging", default=os.path.expanduser("~/Downloads"))
-    ap.add_argument("--cliclick-path", help="trusted absolute cliclick executable path")
     args = ap.parse_args()
 
     if args.target_path:
@@ -152,16 +147,6 @@ def main() -> int:
 
     result = {"name": target_name, "output_dir": output_dir, "target_path": target_path}
     result["bounce_fired"] = False
-
-    resolution = cliclick_resolution(args.cliclick_path)
-    cliclick_path = resolution.resolved_path
-    if cliclick_path is None:
-        result["success"] = False
-        result["error"] = "cliclick_missing"
-        result["reason"] = resolution.diagnostic_summary()  # issue #210: diagnosable, not bare
-        print(json.dumps(result)); return 1
-    os.environ["LOGIC_PRO_MCP_CLICLICK"] = cliclick_path
-    set_resolved_cliclick(cliclick_path)  # resolve-once: per-click cliclick() reuses this (R5)
 
     # 1. deterministic input-source switch (avoid Korean IME mangling the filename)
     if not set_input_abc():
@@ -208,22 +193,22 @@ def main() -> int:
     # 5. set a clean Save As name (offsets calibrated live against the standard
     # Logic 12.2 bounce save panel: frame [520,142,880,604] -> field (1040,196))
     saveas = (ox + int(0.591 * w), oy + 54)
-    if not cliclick(f"c:{saveas[0]},{saveas[1]}"):
+    if not send_ui_events(f"c:{saveas[0]},{saveas[1]}"):
         result["success"] = False
         result["error"] = "save_panel_name_click_failed"
         print(json.dumps(result)); return 1
     time.sleep(0.4)
-    if not cliclick("kd:cmd", "t:a", "ku:cmd"):
+    if not send_ui_events("kd:cmd", "t:a", "ku:cmd"):
         result["success"] = False
         result["error"] = "save_panel_name_select_failed"
         print(json.dumps(result)); return 1
     time.sleep(0.2)
-    if not cliclick("kp:delete"):
+    if not send_ui_events("kp:delete"):
         result["success"] = False
         result["error"] = "save_panel_name_clear_failed"
         print(json.dumps(result)); return 1
     time.sleep(0.2)
-    if not cliclick(f"t:{staged_name}"):
+    if not send_ui_events(f"t:{staged_name}"):
         result["success"] = False
         result["error"] = "save_panel_name_type_failed"
         print(json.dumps(result)); return 1
@@ -232,7 +217,7 @@ def main() -> int:
     # 6. navigate to the staging Favorite (sidebar Downloads); go-to-folder is unusable.
     # Sidebar is a fixed-width left column: Downloads row at frame +(86,184).
     downloads = (ox + 86, oy + 184)
-    if not cliclick(f"c:{downloads[0]},{downloads[1]}"):
+    if not send_ui_events(f"c:{downloads[0]},{downloads[1]}"):
         result["success"] = False
         result["error"] = "save_panel_staging_sidebar_click_failed"
         print(json.dumps(result)); return 1
@@ -245,7 +230,7 @@ def main() -> int:
         os.remove(staged)
     bounce_btn = (ox + w - 60, oy + h - 32)
     bounce_started_at = time.time()
-    if not cliclick(f"c:{bounce_btn[0]},{bounce_btn[1]}"):
+    if not send_ui_events(f"c:{bounce_btn[0]},{bounce_btn[1]}"):
         result["success"] = False
         result["error"] = "bounce_button_click_failed"
         print(json.dumps(result)); return 1
