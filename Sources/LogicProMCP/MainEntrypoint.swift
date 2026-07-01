@@ -33,6 +33,25 @@ enum MainEntrypoint {
             FileHandle.standardError.write(Data(message.utf8))
         }
     ) async -> Int {
+        // `--version` and `--help` are terminal global flags: print and exit
+        // WITHOUT creating the approval store, checking permissions, or —
+        // critically — starting the long-lived MCP server channels (#212/#213).
+        // Placed before every other branch so no side effect runs first.
+        //
+        // `--version` emits the bare version string only: SetupLifecycle
+        // .productionInstalledBinaryVersion() runs the installed binary with
+        // `--version`, requires exit 0, and compares the trimmed stdout for
+        // EQUALITY against ServerConfig.serverVersion to detect install drift.
+        // Any prefix (e.g. "logic-pro-mcp 3.7.4") would break that equality.
+        if hasFlag("--version", or: "-V", in: arguments) {
+            writeStdout(ServerConfig.serverVersion + "\n")
+            return 0
+        }
+        if hasFlag("--help", or: "-h", in: arguments) {
+            writeStdout(usageText + "\n")
+            return 0
+        }
+
         let approvalStore = approvalStoreFactory()
 
         if isDoctorCommand(arguments) {
@@ -61,6 +80,30 @@ enum MainEntrypoint {
                 writeStdout(SetupDoctor.renderHuman(report, mode: mode, useColor: useColor) + "\n")
             }
             return SetupDoctor.shouldExitWithFailure(report) ? 1 : 0
+        }
+
+        if isLifecycleSubcommand(arguments) {
+            // #214: `LogicProMCP lifecycle <install|update|uninstall> [--json]`
+            // is the documented read-only planning surface. Pre-fix the
+            // `lifecycle` verb was unparsed and fell through to server startup
+            // (the audit saw a hang/timeout). It prints the SAME plan the bare
+            // `<action> --dry-run` form produces — no `--dry-run` needed because
+            // the `lifecycle` namespace never executes anything; live execution
+            // stays delegated to Scripts/install.sh / uninstall.sh.
+            guard let command = lifecycleSubcommandAction(arguments) else {
+                let valid = SetupLifecycle.Command.allCases.map(\.rawValue).joined(separator: "|")
+                writeStderr(
+                    "Usage: LogicProMCP lifecycle <\(valid)> [--json]\n"
+                        + "Prints a read-only lifecycle plan (see docs/SETUP.md).\n"
+                )
+                return 1
+            }
+            let plan = SetupLifecycle.plan(command: command, runtime: lifecycleRuntime)
+            let output = arguments.contains("--json")
+                ? encodeJSON(plan)
+                : SetupLifecycle.renderHuman(plan)
+            writeStdout(output + "\n")
+            return 0
         }
 
         if let command = lifecycleCommand(arguments) {
@@ -177,6 +220,38 @@ enum MainEntrypoint {
         }
     }
 
+    /// CLI usage printed by `--help`. Kept in sync with the command branches
+    /// below and the CLI surface documented in docs/SETUP.md.
+    static let usageText = """
+        \(ServerConfig.serverName) \(ServerConfig.serverVersion) — Logic Pro MCP server
+
+        USAGE:
+          LogicProMCP                          Start the MCP server over stdio (default; used by an MCP client)
+          LogicProMCP --help, -h               Print this help and exit
+          LogicProMCP --version, -V            Print the version and exit
+          LogicProMCP doctor [--json] [--verbose|--quiet] [--check-updates]
+                                               Print a diagnostic report and exit
+          LogicProMCP <install|update|uninstall> --dry-run [--json]
+                                               Print a read-only lifecycle plan and exit
+          LogicProMCP --check-permissions      Print macOS permission status and exit (non-zero if not ready)
+          LogicProMCP --list-approvals         List manual channel approvals and exit
+          LogicProMCP --approve-channel <MIDIKeyCommands|Scripter> [--approval-note <note>]
+                                               Record a manual channel approval and exit
+          LogicProMCP --revoke-channel <MIDIKeyCommands|Scripter>
+                                               Revoke a manual channel approval and exit
+
+        With no arguments the binary runs as an MCP stdio server. See docs/SETUP.md for setup.
+        """
+
+    /// True when a terminal global flag (`--version`, `--help`, …) appears
+    /// anywhere in the user-supplied arguments (the program path at index 0 is
+    /// ignored). These flags print-and-exit, so they are checked before any
+    /// subcommand parsing or server startup.
+    private static func hasFlag(_ flag: String, or alias: String? = nil, in arguments: [String]) -> Bool {
+        let userArgs = arguments.dropFirst()
+        return userArgs.contains(flag) || (alias.map { userArgs.contains($0) } ?? false)
+    }
+
     private static func optionValue(_ option: String, in arguments: [String]) -> String? {
         guard let index = arguments.firstIndex(of: option), arguments.indices.contains(index + 1) else {
             return nil
@@ -191,5 +266,20 @@ enum MainEntrypoint {
     private static func lifecycleCommand(_ arguments: [String]) -> SetupLifecycle.Command? {
         guard let first = Array(arguments.dropFirst()).first else { return nil }
         return SetupLifecycle.Command(rawValue: first)
+    }
+
+    private static func isLifecycleSubcommand(_ arguments: [String]) -> Bool {
+        Array(arguments.dropFirst()).first == "lifecycle"
+    }
+
+    /// The action following the `lifecycle` verb, e.g. `lifecycle install` →
+    /// `.install`. The first non-flag token after `lifecycle` is the action, so
+    /// `lifecycle install --json` and `lifecycle --json install` both resolve.
+    /// Returns nil for a missing or unrecognized action (→ usage error).
+    private static func lifecycleSubcommandAction(_ arguments: [String]) -> SetupLifecycle.Command? {
+        guard let actionRaw = arguments.dropFirst(2).first(where: { !$0.hasPrefix("-") }) else {
+            return nil
+        }
+        return SetupLifecycle.Command(rawValue: actionRaw)
     }
 }

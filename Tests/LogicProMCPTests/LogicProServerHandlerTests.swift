@@ -27,10 +27,12 @@ private let serverResourceText = sharedResourceText
         "logic_system",
         "logic_plugins",
     ])
-    // MCU disconnected by default in a fresh LogicProServer, so the list
-    // excludes `logic://mcu/state`.
+    // #215: the list always advertises the full static catalog, including
+    // `logic://mcu/state`, even in a fresh (MCU-disconnected) server — the
+    // resource is always directly readable and the docs advertise it as stable.
     let resourceURIs = Set(resources.resources.map(\.uri))
-    let expectedNonMCUResources: Set<String> = [
+    let expectedResources: Set<String> = [
+        "logic://mcu/state",
         "logic://system/health",
         "logic://transport/state",
         "logic://tracks",
@@ -49,8 +51,9 @@ private let serverResourceText = sharedResourceText
         "logic://workflow-skills",
         "logic://workflow-skills/schema",
     ]
-    #expect(expectedNonMCUResources.isSubset(of: resourceURIs))
-    #expect(!resourceURIs.contains("logic://mcu/state"))
+    #expect(expectedResources.isSubset(of: resourceURIs))
+    #expect(resourceURIs.contains("logic://mcu/state"))
+    #expect(resourceURIs.count == 18)
     let templateURIs = Set(templates.templates.map(\.uriTemplate))
     let expectedTemplates: Set<String> = [
         "logic://tracks/{index}",
@@ -313,10 +316,11 @@ private let serverResourceText = sharedResourceText
 
     let handlers = await server.makeHandlers()
     let resources = await handlers.listResources(ListResources.Parameters())
-    // MCU is disconnected in a fresh cache, so `logic://mcu/state` is filtered
-    // out. Non-MCU resources (markers, library/inventory, …) remain visible.
+    // #215: the full static catalog is always listed, including
+    // `logic://mcu/state`, even with a fresh (MCU-disconnected) cache.
     let uris = Set(resources.resources.map(\.uri))
-    let expectedNonMCUResources: Set<String> = [
+    let expectedResources: Set<String> = [
+        "logic://mcu/state",
         "logic://system/health",
         "logic://transport/state",
         "logic://tracks",
@@ -335,8 +339,9 @@ private let serverResourceText = sharedResourceText
         "logic://workflow-skills",
         "logic://workflow-skills/schema",
     ]
-    #expect(expectedNonMCUResources.isSubset(of: uris))
-    #expect(!uris.contains("logic://mcu/state"))
+    #expect(expectedResources.isSubset(of: uris))
+    #expect(uris.contains("logic://mcu/state"))
+    #expect(uris.count == 18)
     // server.start() runs serve() to completion then tears poller/channels/ports
     // down in reverse order. With serve recorded as a no-op, the tail section
     // executes immediately so stopPoller is captured too.

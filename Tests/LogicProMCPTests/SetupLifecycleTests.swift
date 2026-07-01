@@ -514,6 +514,98 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
     #expect(stderr.contains("Scripts/uninstall.sh"))
 }
 
+@Test func testMainEntrypointLifecycleSubcommandJSONExitsZeroWithoutStartingServer() async throws {
+    // #214: the documented `LogicProMCP lifecycle <action> --json` form must
+    // print the read-only plan and exit 0 WITHOUT starting the server (pre-fix
+    // it was unparsed and fell through to server startup → hang/timeout).
+    var stdout = ""
+    var stderr = ""
+    let exitCode = await MainEntrypoint.run(
+        arguments: ["LogicProMCP", "lifecycle", "install", "--json"],
+        permissionCheck: { .init(accessibility: true, automationLogicPro: true) },
+        serverFactory: {
+            Issue.record("Server should not start for a lifecycle plan")
+            return LifecycleMockMainServer()
+        },
+        approvalStoreFactory: { ManualValidationStore() },
+        lifecycleRuntime: lifecycleRuntime(),
+        writeStdout: { stdout += $0 },
+        writeStderr: { stderr += $0 }
+    )
+
+    #expect(exitCode == 0)
+    #expect(stderr.isEmpty)
+    let json = try #require(sharedJSONObject(stdout))
+    #expect(json["schema"] as? String == "logic_pro_mcp_lifecycle_plan.v1")
+    #expect(json["command"] as? String == "install")
+    // Read-only: the wire contract must state the plan does nothing.
+    #expect(json["execution_mode"] as? String == "dry_run_only")
+}
+
+@Test func testMainEntrypointLifecycleSubcommandHumanOutputMatchesDryRunForm() async {
+    // `lifecycle uninstall` (no --dry-run) prints the human plan, exit 0.
+    var stdout = ""
+    var stderr = ""
+    let exitCode = await MainEntrypoint.run(
+        arguments: ["LogicProMCP", "lifecycle", "uninstall"],
+        permissionCheck: { .init(accessibility: true, automationLogicPro: true) },
+        serverFactory: {
+            Issue.record("Server should not start for a lifecycle plan")
+            return LifecycleMockMainServer()
+        },
+        approvalStoreFactory: { ManualValidationStore() },
+        lifecycleRuntime: lifecycleRuntime(),
+        writeStdout: { stdout += $0 },
+        writeStderr: { stderr += $0 }
+    )
+
+    #expect(exitCode == 0)
+    #expect(stderr.isEmpty)
+    #expect(stdout.contains("Logic Pro MCP lifecycle plan"))
+    #expect(stdout.contains("command: uninstall"))
+    #expect(stdout.contains("execution_mode: dry_run_only"))
+}
+
+@Test func testMainEntrypointLifecycleSubcommandMissingActionShowsUsage() async {
+    var stdout = ""
+    var stderr = ""
+    let exitCode = await MainEntrypoint.run(
+        arguments: ["LogicProMCP", "lifecycle"],
+        permissionCheck: { .init(accessibility: true, automationLogicPro: true) },
+        serverFactory: {
+            Issue.record("Server should not start for a lifecycle usage error")
+            return LifecycleMockMainServer()
+        },
+        approvalStoreFactory: { ManualValidationStore() },
+        lifecycleRuntime: lifecycleRuntime(),
+        writeStdout: { stdout += $0 },
+        writeStderr: { stderr += $0 }
+    )
+
+    #expect(exitCode == 1)
+    #expect(stdout.isEmpty)
+    #expect(stderr.contains("Usage: LogicProMCP lifecycle"))
+    #expect(stderr.contains("install|update|uninstall"))
+}
+
+@Test func testMainEntrypointLifecycleSubcommandUnknownActionShowsUsage() async {
+    var stderr = ""
+    let exitCode = await MainEntrypoint.run(
+        arguments: ["LogicProMCP", "lifecycle", "frobnicate", "--json"],
+        permissionCheck: { .init(accessibility: true, automationLogicPro: true) },
+        serverFactory: {
+            Issue.record("Server should not start for a lifecycle usage error")
+            return LifecycleMockMainServer()
+        },
+        approvalStoreFactory: { ManualValidationStore() },
+        lifecycleRuntime: lifecycleRuntime(),
+        writeStderr: { stderr += $0 }
+    )
+
+    #expect(exitCode == 1)
+    #expect(stderr.contains("Usage: LogicProMCP lifecycle"))
+}
+
 @Test func testMainEntrypointUnknownFirstArgStillStartsServer() async {
     // A non-lifecycle, non-doctor first arg must not be hijacked by the lifecycle
     // router — the server still starts.
