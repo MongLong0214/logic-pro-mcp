@@ -848,6 +848,19 @@ def main():
     }
     T("resources/templates/list includes required templates", r, lambda r: required_template_uris.issubset(template_uris))
 
+    # #218: invalid pagination cursors are rejected with JSON-RPC -32602 (the
+    # server paginates into a single page and never issues a nextCursor), not
+    # silently ignored (which returned a full first page as if no cursor).
+    for method in ["tools/list", "resources/list", "resources/templates/list"]:
+        r = client.send({"jsonrpc": "2.0", "id": nid(), "method": method,
+                         "params": {"cursor": "bogus"}})
+        T(f"{method} rejects invalid cursor with -32602 (#218)", r,
+          lambda _, resp=r: isinstance(resp, dict) and resp.get("error", {}).get("code") == -32602)
+        # A cursor-less call on the same method still returns a normal page.
+        r = client.send({"jsonrpc": "2.0", "id": nid(), "method": method, "params": {}})
+        T(f"{method} without cursor still returns a page (#218)", r,
+          lambda _, resp=r: isinstance(resp, dict) and "result" in resp)
+
     # ═══════════════════════════════════════════════════════════════
     # §2 System Diagnostics (15 tests)
     # ═══════════════════════════════════════════════════════════════

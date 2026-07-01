@@ -69,6 +69,21 @@ private let serverResourceText = sharedResourceText
     #expect(expectedTemplates.isSubset(of: templateURIs))
 }
 
+@Test func testInvalidPaginationCursorRejectedWithInvalidParams() {
+    // #218: the server paginates into a single page and never issues a
+    // nextCursor, so ANY client cursor is invalid → JSON-RPC -32602. An absent
+    // cursor (nil) is the normal first-page read and must pass.
+    for method in ["tools/list", "resources/list", "resources/templates/list"] {
+        #expect(LogicProServer.invalidCursorError("bogus", method: method)?.code == -32602)
+        #expect(LogicProServer.invalidCursorError("", method: method)?.code == -32602)
+        #expect(LogicProServer.invalidCursorError(nil, method: method) == nil)
+    }
+    // The error message identifies the offending method + cursor.
+    let err = LogicProServer.invalidCursorError("abc", method: "tools/list")
+    #expect(err?.errorDescription?.contains("tools/list") == true)
+    #expect(err?.errorDescription?.contains("abc") == true)
+}
+
 @Test func testLogicProServerHandlersDispatchToolNamesWithoutStartingServer() async {
     let server = LogicProServer()
     let handlers = await server.makeHandlers()

@@ -771,10 +771,27 @@ actor LogicProServer {
         }
     }
 
+    /// #218: MCP list methods paginate everything into a single page — the
+    /// server never issues a `nextCursor`. So ANY cursor a client sends is a
+    /// stale/fabricated continuation token. Per the MCP pagination guidance,
+    /// reject it with `-32602 invalidParams` instead of silently returning the
+    /// first page (which makes a fresh read indistinguishable from a broken
+    /// continuation and hides client/harness pagination bugs). Absent cursor
+    /// (nil) is the normal first-page read and passes.
+    static func invalidCursorError(_ cursor: String?, method: String) -> MCPError? {
+        guard let cursor else { return nil }
+        return .invalidParams(
+            "Invalid pagination cursor for \(method): \"\(cursor)\". "
+                + "This server returns all results in a single page and never issues a nextCursor, "
+                + "so no cursor value is valid."
+        )
+    }
+
     private func registerTools() async {
         let handlers = makeHandlers(dialogPresent: { AXLogicProElements.dialogPresent() })
         await server.withMethodHandler(ListTools.self) { params in
-            await handlers.listTools(params)
+            if let error = Self.invalidCursorError(params.cursor, method: "tools/list") { throw error }
+            return await handlers.listTools(params)
         }
         await server.withMethodHandler(CallTool.self) { params in
             await handlers.callTool(params)
@@ -786,7 +803,8 @@ actor LogicProServer {
     private func registerResources() async {
         let handlers = makeHandlers()
         await server.withMethodHandler(ListResources.self) { params in
-            await handlers.listResources(params)
+            if let error = Self.invalidCursorError(params.cursor, method: "resources/list") { throw error }
+            return await handlers.listResources(params)
         }
 
         await server.withMethodHandler(ReadResource.self) { params in
@@ -794,7 +812,8 @@ actor LogicProServer {
         }
 
         await server.withMethodHandler(ListResourceTemplates.self) { params in
-            await handlers.listResourceTemplates(params)
+            if let error = Self.invalidCursorError(params.cursor, method: "resources/templates/list") { throw error }
+            return await handlers.listResourceTemplates(params)
         }
     }
 
