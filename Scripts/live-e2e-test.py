@@ -1647,6 +1647,31 @@ def main():
         ),
     )
 
+    # #222 — deterministic apply contract / no panel-state drift. An invalid
+    # path loads NOTHING (non-destructive), so we can fire it twice: both must
+    # return the SAME deterministic State C error (never cascade into a
+    # `library_panel_unavailable` inherited from the first attempt), the
+    # nav-failure path must report the panel left open
+    # (`panel_open_after_failure`), and a library read between the two attempts
+    # must still succeed (panel not wedged).
+    invalid_path = "ZZZNoSuchCategory/ZZZNoSuchPreset"
+    d1 = tool_json(call_tool(client, "logic_tracks", "set_instrument",
+                             {"index": 0, "path": invalid_path})) or {}
+    mid = read_resource(client, "logic://library/inventory")
+    mid_ok = mid is not None and safe_json(resource_text(mid)) is not None
+    d2 = tool_json(call_tool(client, "logic_tracks", "set_instrument",
+                             {"index": 0, "path": invalid_path})) or {}
+    T("set_instrument invalid path is a deterministic State C (#222)", "ok",
+      lambda _: d1.get("success") is False and isinstance(d1.get("error"), str))
+    T("set_instrument failure does not cascade on the next attempt (#222)", "ok",
+      lambda _: d2.get("success") is False and d2.get("error") == d1.get("error"))
+    T("library read still works between failed set_instrument attempts (#222)", "ok",
+      lambda _: mid_ok)
+    if d1.get("precondition") == "library_nav_failed":
+        T("set_instrument nav-failure leaves the Library panel open (#222)", "ok",
+          lambda _: d1.get("panel_open_after_failure") is True
+          and d2.get("panel_open_after_failure") is True)
+
     probe_category = None
     probe_preset = None
     if tracks and isinstance(list_library_json, dict):

@@ -3319,6 +3319,12 @@ actor AccessibilityChannel: Channel {
             LibraryAccessor.selectPath(segments: pathSegments, runtime: runtime)
         }
         guard let didSelect = navOutcome else {
+            // #222 — leave the Library panel in a known-open baseline before
+            // returning, so a subsequent set_instrument is not poisoned by a
+            // panel the abandoned navigation left closed/wedged (the reported
+            // cascade: later attempts saw `library_panel_unavailable` even after
+            // re-opening). See `restageLibraryPanelAfterFailure`.
+            let restaged = await Self.restageLibraryPanelAfterFailure(staging: staging, runtime: runtime)
             return .error(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
                 hint: "set_instrument Library navigation exceeded 15s and was abandoned — the Library panel's AX surface is unresponsive (a prior invalid-path attempt can leave it wedged). Re-open the Library (⌘L) and retry; restart Logic if it persists. Run scan_library first so an unknown path fails fast as path_not_in_library instead of navigating live.",
@@ -3328,7 +3334,11 @@ actor AccessibilityChannel: Channel {
                     preset: preset,
                     targetTrackIndex: targetTrackIndex as Any? ?? NSNull(),
                     targetTrackName: targetTrackName
-                ).merging(["precondition": "library_nav_timeout"]) { _, new in new }
+                ).merging([
+                    "precondition": "library_nav_timeout",
+                    "panel_open_after_failure": restaged.panelOpen,
+                    "panel_restaged_after_failure": restaged.reopened,
+                ]) { _, new in new }
             ))
         }
         guard didSelect else {
@@ -3341,6 +3351,15 @@ actor AccessibilityChannel: Channel {
             // match `track.select`'s State C envelope. Previously this was
             // `.success(...)` which masked isError:false on the MCP wire and
             // broke clients switching on envelope-level error state.
+            // #222 — a failed finder-column navigation can leave the panel
+            // closed/drilled, so before returning we re-stage it to a
+            // known-open baseline. This makes the failure NON-CASCADING: the
+            // next set_instrument starts from an open panel instead of a
+            // `library_panel_unavailable` inherited from this attempt. The
+            // returned error stays the deterministic `ax_write_failed` (the
+            // path genuinely did not resolve); the side effect is the no-drift
+            // guarantee, surfaced via `panel_open_after_failure`.
+            let restaged = await Self.restageLibraryPanelAfterFailure(staging: staging, runtime: runtime)
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: "Library path not fully resolvable: \(resolvedPath)",
@@ -3350,7 +3369,11 @@ actor AccessibilityChannel: Channel {
                     preset: preset,
                     targetTrackIndex: targetTrackIndex as Any? ?? NSNull(),
                     targetTrackName: targetTrackName
-                )
+                ).merging([
+                    "precondition": "library_nav_failed",
+                    "panel_open_after_failure": restaged.panelOpen,
+                    "panel_restaged_after_failure": restaged.reopened,
+                ]) { _, new in new }
             ))
         }
         try? await Task.sleep(nanoseconds: 800_000_000) // let Logic load the instrument
@@ -3397,6 +3420,25 @@ actor AccessibilityChannel: Channel {
                 "readback_state": HonestContract.UncertainReason.readbackUnavailable.rawValue
             ]) { _, new in new }
         ))
+    }
+
+    /// #222 — after a failed `set_instrument` navigation, leave the Library
+    /// panel in a known-open baseline so the failure does not cascade into the
+    /// next attempt (the reported symptom: a later `set_instrument` reported
+    /// `library_panel_unavailable` because a prior failed nav left the panel
+    /// closed/wedged). `⌘L` is a TOGGLE, so we re-open ONLY when the panel is
+    /// actually closed — never re-toggle an already-open panel shut. Returns
+    /// the observed post-failure panel state for the response diagnostics.
+    private static func restageLibraryPanelAfterFailure(
+        staging: LibraryPanelStaging,
+        runtime: AXLogicProElements.Runtime
+    ) async -> (panelOpen: Bool, reopened: Bool) {
+        if staging.isPanelOpen(runtime) {
+            return (panelOpen: true, reopened: false)
+        }
+        await staging.openPanel(runtime)
+        try? await Task.sleep(nanoseconds: 400_000_000) // panel slide-in settle
+        return (panelOpen: staging.isPanelOpen(runtime), reopened: true)
     }
 
     private static func setInstrumentBaseExtras(

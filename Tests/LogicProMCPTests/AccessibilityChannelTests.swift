@@ -2293,6 +2293,104 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     #expect(obj["error"] as? String != "ax_write_failed")
 }
 
+@Test func testSetInstrumentReopensPanelLeftClosedByFailedNav() async {
+    // #222 — a failed finder-column navigation can leave the Library panel
+    // closed, poisoning the NEXT set_instrument with a `library_panel_unavailable`
+    // it did not cause. After a nav failure the panel must be re-staged to a
+    // known-open baseline. Panel is open at the precondition, "closed" by the
+    // failed nav, then re-opened on the failure path.
+    let fixture = makeSetInstrumentFixture()
+    let logicRuntime = fixture.builder.makeLogicRuntime(
+        appElement: fixture.app,
+        setAttributeHandler: { _, _, _ in true },
+        performActionHandler: { element, action in
+            guard action == kAXPressAction as String else { return true }
+            if element == fixture.secondHeader {
+                fixture.builder.setAttribute(fixture.firstHeader, kAXSelectedAttribute as String, false)
+                fixture.builder.setAttribute(fixture.secondHeader, kAXSelectedAttribute as String, true)
+            }
+            return true
+        }
+    )
+    let panelOpen = SequencedBool([true, false, true]) // precondition→open, restage-check→closed, post-open→open
+    let openCalls = CallCounter()
+    let result = await AccessibilityChannel.setTrackInstrument(
+        params: ["index": "1", "path": "Bass/Nonexistent Preset"],
+        runtime: logicRuntime,
+        staging: AccessibilityChannel.LibraryPanelStaging(
+            isPanelOpen: { _ in panelOpen.next() },
+            openPanel: { _ in openCalls.inc() },
+            resolvePath: { _ in true }   // cache says the path exists → attempt nav
+        )
+    )
+
+    #expect(!result.isSuccess)
+    let obj = decodeAccessibilityJSON(result.message)
+    // The path genuinely didn't resolve → deterministic ax_write_failed.
+    #expect(obj["error"] as? String == "ax_write_failed")
+    #expect(obj["precondition"] as? String == "library_nav_failed")
+    // No-drift guarantee: the panel was re-staged and is left open.
+    #expect(obj["panel_restaged_after_failure"] as? Bool == true)
+    #expect(obj["panel_open_after_failure"] as? Bool == true)
+    #expect(openCalls.count == 1)
+}
+
+@Test func testSetInstrumentNavFailureNeverRetogglesAnAlreadyOpenPanel() async {
+    // #222 safety: ⌘L is a TOGGLE. When a failed nav leaves the panel still
+    // open, the re-stage must NOT re-open it (which would toggle it shut). It
+    // must be left open and openPanel must never be called.
+    let fixture = makeSetInstrumentFixture()
+    let logicRuntime = fixture.builder.makeLogicRuntime(
+        appElement: fixture.app,
+        setAttributeHandler: { _, _, _ in true },
+        performActionHandler: { element, action in
+            guard action == kAXPressAction as String else { return true }
+            if element == fixture.secondHeader {
+                fixture.builder.setAttribute(fixture.firstHeader, kAXSelectedAttribute as String, false)
+                fixture.builder.setAttribute(fixture.secondHeader, kAXSelectedAttribute as String, true)
+            }
+            return true
+        }
+    )
+    let openCalls = CallCounter()
+    let result = await AccessibilityChannel.setTrackInstrument(
+        params: ["index": "1", "path": "Bass/Nonexistent Preset"],
+        runtime: logicRuntime,
+        staging: AccessibilityChannel.LibraryPanelStaging(
+            isPanelOpen: { _ in true },   // panel stays open throughout
+            openPanel: { _ in openCalls.inc() },
+            resolvePath: { _ in true }
+        )
+    )
+
+    #expect(!result.isSuccess)
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect(obj["error"] as? String == "ax_write_failed")
+    #expect(obj["panel_restaged_after_failure"] as? Bool == false)
+    #expect(obj["panel_open_after_failure"] as? Bool == true)
+    #expect(openCalls.count == 0, "must never re-toggle an already-open panel shut")
+}
+
+private final class SequencedBool: @unchecked Sendable {
+    private let lock = NSLock()
+    private let seq: [Bool]
+    private var idx = 0
+    init(_ seq: [Bool]) { self.seq = seq }
+    func next() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        let value = idx < seq.count ? seq[idx] : (seq.last ?? false)
+        idx += 1
+        return value
+    }
+}
+
+private final class CallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var n = 0
+    func inc() { lock.lock(); n += 1; lock.unlock() }
+    var count: Int { lock.lock(); defer { lock.unlock() }; return n }
+}
+
 private final class LockedFlag: @unchecked Sendable {
     private let lock = NSLock()
     private var flag = false
