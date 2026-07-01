@@ -14,7 +14,7 @@
   <a href="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml"><img src="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
   <a href="https://discord.gg/4M3s79DBzz"><img src="https://img.shields.io/badge/Discord-Community-5865F2.svg?style=flat-square&logo=discord&logoColor=white" /></a>
-  <img src="https://img.shields.io/badge/tests-1876_passing-brightgreen.svg?style=flat-square" />
+  <img src="https://img.shields.io/badge/tests-1933_passing-brightgreen.svg?style=flat-square" />
   <img src="https://img.shields.io/badge/stable-v3.7.4-blue.svg?style=flat-square" />
 </p>
 
@@ -57,7 +57,7 @@ Logic Pro MCP: region imported, instrument routed, readback exposed through reso
 | Read resources | 18 static resources for health, transport, tracks, mixer, markers, project metadata, project audit/cleanup planning, MIDI ports, MCU state, library inventory, stock plugin/instrument intelligence, Session Players, and workflow skills |
 | Resource templates | 11 templates for track, region, mixer-strip, stock plugin detail/search, stock instrument detail/search, Session Player detail, session-plan dry run, and workflow detail/search lookup |
 | Control channels | MCU, Accessibility, AppleScript, CoreMIDI, CGEvent, Scripter, MIDI Key Commands |
-| Verification line | Current source tree: `1876` Swift tests, release build, and strict fresh live Logic E2E `352/352` |
+| Verification line | Current source tree: `1933` Swift tests, release build, and strict fresh live Logic E2E `352/352` |
 | Release state | Published stable `v3.7.4`; previous stable `v3.7.3` remains available for pinned installs |
 | Community layer | Official Discord for setup support, release notes, reproducible bug triage, product requests, demos, and contributor discussion |
 
@@ -230,7 +230,7 @@ The public docs tree is intentionally scoped: setup, API, troubleshooting, READM
 
 | Gate | Current evidence |
 |------|------------------|
-| Full deterministic suite | Current source tree: `swift test` -> `1876` passed, `0` failed |
+| Full deterministic suite | Current source tree: `swift test` -> `1933` passed, `0` failed |
 | Release build | Current source tree: `swift build -c release` passed |
 | Python E2E syntax | PR #24 verification: `python3 -m py_compile Scripts/live-e2e-test.py` passed |
 | Targeted live plugin proof | Logic Pro 12.2: `logic_plugins.insert_verified track=6 insert=6 plugin=Gain` returned State A with `observed_slot:6`, `write_source:"ax_exact_slot_popup"`, and independent `get_inventory` readback |

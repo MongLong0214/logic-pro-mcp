@@ -1,7 +1,7 @@
 # PRD: Issue #210 - Native CGEvent bounce backend
 
 **Status**: Superseded by the native CGEvent backend
-**Branch**: `fix/issue-210-native-cgevent-backend`
+**PR**: #211
 
 ## Current Decision
 
