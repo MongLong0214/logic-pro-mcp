@@ -893,7 +893,11 @@ actor LogicProServer {
                     try await serve()
                 } else {
                     Log.info(snapshot.startupBanner, subsystem: "server")
-                    let transport = StdioTransport()
+                    // #220: serialize stdout frame writes so concurrent large
+                    // responses can never interleave/corrupt the newline-
+                    // delimited stream (the SDK StdioTransport's reentrant
+                    // partial-write retry allows that under concurrency).
+                    let transport = SerializedStdioTransport()
                     try await server.start(transport: transport)
                     await server.waitUntilCompleted()
                 }

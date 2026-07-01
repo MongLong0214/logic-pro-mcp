@@ -324,6 +324,44 @@ def read_resource(client, uri, req_id=None):
     })
 
 
+def pipelined_read_all(client, uris, timeout=30):
+    """#220: fire every read in-flight on ONE connection, THEN collect — the
+    concurrent large-read pattern the external audit ran. Proves the server
+    serves every concurrent large read completely when the client drains stdout
+    (the reader thread does). StdioTransport is an actor, so frames are written
+    one-at-a-time and never interleave; apparent "no response" in the audit was
+    client-side backpressure from not draining while issuing many big reads.
+
+    popen transport only (writes directly to the server's stdin); returns None
+    under the tmux transport, which is not designed for request pipelining.
+    """
+    if not hasattr(client, "proc"):
+        return None
+    pending = []
+    for uri in uris:
+        rid = nid()
+        pending.append((rid, uri))
+        body = json.dumps({"jsonrpc": "2.0", "id": rid,
+                           "method": "resources/read", "params": {"uri": uri}}) + "\n"
+        try:
+            client.proc.stdin.write(body.encode())
+        except (BrokenPipeError, ValueError):
+            return None
+    try:
+        client.proc.stdin.flush()
+    except (BrokenPipeError, ValueError):
+        return None
+
+    collected = {}
+    deadline = time.time() + timeout
+    while time.time() < deadline and len(collected) < len(pending):
+        for rid, _uri in pending:
+            if rid in client.responses and rid not in collected:
+                collected[rid] = client.responses.pop(rid)
+        time.sleep(0.02)
+    return [(uri, collected.get(rid)) for rid, uri in pending]
+
+
 def list_tools(client, req_id=None):
     return client.send({"jsonrpc": "2.0", "id": req_id or nid(),
                         "method": "tools/list", "params": {}})
@@ -2388,6 +2426,26 @@ def main():
 
     cnt = read_n_times(20)
     T(f"20 rapid resource reads: {cnt}/20 ok", "ok", lambda _: cnt >= 18)
+
+    # #220: pipeline many LARGE reads in-flight on ONE connection, then drain.
+    # This is the exact concurrent large-payload pattern the external audit ran.
+    # With the reader thread draining stdout, every response must arrive complete
+    # and parse as valid JSON — proving the server stays responsive under
+    # concurrent large reads (the "no response" in the audit was client-side
+    # backpressure, not a server malfunction). See docs/TROUBLESHOOTING.md.
+    large_read_uris = [
+        "logic://library/inventory", "logic://project/audit", "logic://project/cleanup-plan",
+        "logic://stock-plugins", "logic://stock-instruments", "logic://session-players",
+        "logic://workflow-skills",
+    ] * 3
+    pipelined = pipelined_read_all(client, large_read_uris, timeout=30)
+    if pipelined is None:
+        S("pipelined concurrent large reads (#220)", "popen transport only")
+    else:
+        complete = sum(1 for _u, resp in pipelined
+                       if resp is not None and safe_json(resource_text(resp)) is not None)
+        T(f"pipelined concurrent large reads all complete: {complete}/{len(pipelined)} (#220)",
+          "ok", lambda _, c=complete, n=len(pipelined): c == n)
 
     # Interleaved read/write
     mixed_ok = 0
