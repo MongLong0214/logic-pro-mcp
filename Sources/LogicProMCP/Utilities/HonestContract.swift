@@ -166,6 +166,11 @@ enum HonestContract {
         /// the response as expected rather than a malfunction. Terminal. #202.
         case commandNotExposed
         case indexOutOfRange
+        /// A `logic_system.help` category token that is not one of the known
+        /// dispatcher categories. Distinct from `.invalidParams` so a client
+        /// can tell a typo'd category apart from a missing required argument,
+        /// and so an unknown category never silently returns full help. #219.
+        case unknownCategory
 
         var rawValue: String {
             switch self {
@@ -209,6 +214,7 @@ enum HonestContract {
             case .unsupportedState: return "unsupported_state"
             case .commandNotExposed: return "command_not_exposed"
             case .indexOutOfRange: return "index_out_of_range"
+            case .unknownCategory: return "unknown_category"
             }
         }
     }
@@ -384,6 +390,11 @@ enum HonestContract {
         // — retrying the same index against the same project state can't succeed;
         // the client must read the parent collection for valid indices.
         FailureError.indexOutOfRange.rawValue,
+        // #219: an unknown help category is terminal — no channel/retry can turn
+        // a bad category token into a valid one; the caller must pick a listed
+        // category. (help doesn't route through the fallback chain; listed for
+        // classification consistency.)
+        FailureError.unknownCategory.rawValue,
     ]
 
     /// Returns true if the given message is a State-C envelope whose `error`

@@ -38,6 +38,10 @@ enum ServerCatalog {
         PluginsDispatcher.tool,
     ]
 
+    /// O(1) membership set for the registered tool names — used by the
+    /// protocol-boundary validation to reject an unknown `tools/call` name.
+    static let toolNames: Set<String> = Set(tools.map(\.name))
+
     static func startupBanner(channelCount: Int) -> String {
         "Starting \(ServerConfig.serverName) v\(ServerConfig.serverVersion) — \(tools.count) tools, \(ResourceProvider.resources.count) resources, \(channelCount) channels"
     }
@@ -396,11 +400,14 @@ actor LogicProServer {
                 }
             },
             listResources: { _ in
-                // Filter MCU-only resources when the control surface is offline
-                // so the LLM doesn't discover probes that would return empty.
-                let connected = await cache.getMCUConnection().isConnected
-                return ListResources.Result(
-                    resources: ResourceProvider.resources(mcuConnected: connected),
+                // #215: always advertise the full static catalog so discovery
+                // matches the documented "18 static resources" and the URIs
+                // that are directly readable. `logic://mcu/state` stays listed
+                // even when the MCU surface is offline — a direct read returns
+                // a meaningful `{ connected: false, … }` payload, so hiding it
+                // from the list while it remained readable was the discrepancy.
+                ListResources.Result(
+                    resources: ResourceProvider.resources,
                     nextCursor: nil
                 )
             },
@@ -414,9 +421,8 @@ actor LogicProServer {
                 }
             },
             listResourceTemplates: { _ in
-                let connected = await cache.getMCUConnection().isConnected
-                return ListResourceTemplates.Result(
-                    templates: ResourceProvider.templates(mcuConnected: connected)
+                ListResourceTemplates.Result(
+                    templates: ResourceProvider.templates
                 )
             }
         )
@@ -787,6 +793,35 @@ actor LogicProServer {
         )
     }
 
+    /// Protocol-boundary validation for `tools/call`, applied by the SDK
+    /// registration wrapper BEFORE dispatch. Returns the JSON-RPC error the
+    /// server must raise for a malformed request, or nil when the call is
+    /// well-formed enough to dispatch.
+    ///
+    /// #216 + #217: reject a malformed `tools/call` at the protocol boundary
+    /// with `-32602 invalidParams` (not a `result` carrying `isError: true`,
+    /// which protocol clients classify as a tool-level failure). Two
+    /// malformations, checked in order:
+    ///  * #216 — the tool `name` is not a registered tool.
+    ///  * #217 — the schema-required `command` argument is missing or empty
+    ///    (previously dispatched as an empty command → misleading domain error
+    ///    "Unknown system command: ."). Validates command PRESENCE only; a
+    ///    present command whose command-specific params are missing (e.g.
+    ///    `set_tempo` with no `tempo`) still dispatches and returns the
+    ///    dispatcher's typed domain `invalid_params` State C.
+    /// Single source of truth for the wire behavior; the dispatch switch's
+    /// `default: "Unknown tool"` branch remains only as unreachable defense.
+    static func toolCallProtocolError(name: String, arguments: [String: Value]?) -> MCPError? {
+        guard ServerCatalog.toolNames.contains(name) else {
+            return .invalidParams("Unknown tool: \(name)")
+        }
+        let command = arguments?["command"]?.stringValue
+        if command == nil || command?.isEmpty == true {
+            return .invalidParams("Missing required argument 'command' for tool '\(name)'")
+        }
+        return nil
+    }
+
     private func registerTools() async {
         let handlers = makeHandlers(dialogPresent: { AXLogicProElements.dialogPresent() })
         await server.withMethodHandler(ListTools.self) { params in
@@ -794,7 +829,12 @@ actor LogicProServer {
             return await handlers.listTools(params)
         }
         await server.withMethodHandler(CallTool.self) { params in
-            await handlers.callTool(params)
+            // #216/#217: reject a malformed tools/call (unknown tool name or
+            // missing/empty required command) with a JSON-RPC error before dispatch.
+            if let error = Self.toolCallProtocolError(name: params.name, arguments: params.arguments) {
+                throw error
+            }
+            return await handlers.callTool(params)
         }
     }
 
