@@ -2291,13 +2291,18 @@ def main():
         r = call_tool(client, tool, cmd)
         T(f"{tool} rejects unknown command", r, lambda _: is_error(r))
 
-    # Unknown tool name
+    # #216: an unknown tool name is rejected at the protocol boundary with a
+    # JSON-RPC -32602 invalidParams error (not a result with isError:true).
     r = call_tool(client, "logic_imaginary", "anything")
-    T("unknown tool name rejected", r, lambda _: is_error(r))
+    T("unknown tool name rejected with JSON-RPC -32602 (#216)", r,
+      lambda _: isinstance(r, dict) and r.get("error", {}).get("code") == -32602)
+    T("unknown tool name error is not a tool result", r,
+      lambda _: isinstance(r, dict) and "result" not in r)
 
-    # Empty tool name
+    # Empty tool name is also not a registered tool → -32602.
     r = call_tool(client, "", "anything")
-    T("empty tool name rejected", r, lambda _: is_error(r))
+    T("empty tool name rejected with JSON-RPC -32602 (#216)", r,
+      lambda _: isinstance(r, dict) and r.get("error", {}).get("code") == -32602)
 
     # Missing command for all 8 tools
     for tool in ["logic_transport", "logic_tracks", "logic_mixer", "logic_midi",

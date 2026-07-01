@@ -38,6 +38,10 @@ enum ServerCatalog {
         PluginsDispatcher.tool,
     ]
 
+    /// O(1) membership set for the registered tool names — used by the
+    /// protocol-boundary validation to reject an unknown `tools/call` name.
+    static let toolNames: Set<String> = Set(tools.map(\.name))
+
     static func startupBanner(channelCount: Int) -> String {
         "Starting \(ServerConfig.serverName) v\(ServerConfig.serverVersion) — \(tools.count) tools, \(ResourceProvider.resources.count) resources, \(channelCount) channels"
     }
@@ -771,13 +775,36 @@ actor LogicProServer {
         }
     }
 
+    /// Protocol-boundary validation for `tools/call`, applied by the SDK
+    /// registration wrapper BEFORE dispatch. Returns the JSON-RPC error the
+    /// server must raise for a malformed request, or nil when the call is
+    /// well-formed enough to dispatch.
+    ///
+    /// #216: an unknown tool `name` is an invalid `tools/call` parameter, so it
+    /// is rejected with `-32602 invalidParams` at the protocol layer instead of
+    /// a successful `result` carrying `isError: true` (which protocol clients
+    /// classify as a tool-level failure, not an invalid MCP request). This is
+    /// the single source of truth for the wire behavior; the dispatch switch's
+    /// `default: "Unknown tool"` branch remains only as unreachable defense.
+    static func toolCallProtocolError(name: String, arguments: [String: Value]?) -> MCPError? {
+        guard ServerCatalog.toolNames.contains(name) else {
+            return .invalidParams("Unknown tool: \(name)")
+        }
+        return nil
+    }
+
     private func registerTools() async {
         let handlers = makeHandlers(dialogPresent: { AXLogicProElements.dialogPresent() })
         await server.withMethodHandler(ListTools.self) { params in
             await handlers.listTools(params)
         }
         await server.withMethodHandler(CallTool.self) { params in
-            await handlers.callTool(params)
+            // #216: reject malformed tools/call requests at the protocol
+            // boundary with a JSON-RPC error before dispatch.
+            if let error = Self.toolCallProtocolError(name: params.name, arguments: params.arguments) {
+                throw error
+            }
+            return await handlers.callTool(params)
         }
     }
 
