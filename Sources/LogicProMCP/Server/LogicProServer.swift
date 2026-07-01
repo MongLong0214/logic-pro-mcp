@@ -396,11 +396,14 @@ actor LogicProServer {
                 }
             },
             listResources: { _ in
-                // Filter MCU-only resources when the control surface is offline
-                // so the LLM doesn't discover probes that would return empty.
-                let connected = await cache.getMCUConnection().isConnected
-                return ListResources.Result(
-                    resources: ResourceProvider.resources(mcuConnected: connected),
+                // #215: always advertise the full static catalog so discovery
+                // matches the documented "18 static resources" and the URIs
+                // that are directly readable. `logic://mcu/state` stays listed
+                // even when the MCU surface is offline — a direct read returns
+                // a meaningful `{ connected: false, … }` payload, so hiding it
+                // from the list while it remained readable was the discrepancy.
+                ListResources.Result(
+                    resources: ResourceProvider.resources,
                     nextCursor: nil
                 )
             },
@@ -414,9 +417,8 @@ actor LogicProServer {
                 }
             },
             listResourceTemplates: { _ in
-                let connected = await cache.getMCUConnection().isConnected
-                return ListResourceTemplates.Result(
-                    templates: ResourceProvider.templates(mcuConnected: connected)
+                ListResourceTemplates.Result(
+                    templates: ResourceProvider.templates
                 )
             }
         )

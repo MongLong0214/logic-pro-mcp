@@ -436,7 +436,7 @@ struct SystemDispatcher {
                   logic://project/audit         — Read-only project/session audit
                   logic://project/cleanup-plan  — Read-only serializable cleanup plan
                   logic://midi/ports            — MIDI ports
-                  logic://mcu/state             — MCU control-surface state (hidden in list when disconnected)
+                  logic://mcu/state             — MCU control-surface state (readable even when disconnected)
                   logic://library/inventory     — Cached Library tree JSON
                   logic://stock-plugins         — Stock plugin intelligence catalog
                   logic://stock-plugins/census  — Stock plugin census metadata
