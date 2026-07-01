@@ -271,8 +271,8 @@ struct SystemDispatcher {
     /// Accepted `help` categories. `"all"` (and an absent category) returns the
     /// full help; every other entry maps to a dispatcher-specific section in
     /// `helpText(for:)`. Kept in lockstep with that switch by
-    /// `SystemDispatcherHelpTests` so a new dispatcher section can't drift out
-    /// of the accepted set.
+    /// `testValidHelpCategoriesStayInLockstepWithHelpText` so a new dispatcher
+    /// section can't drift out of the accepted set.
     static let validHelpCategories = [
         "all", "transport", "tracks", "mixer", "midi", "edit", "navigate", "project", "system",
     ]
