@@ -825,6 +825,9 @@ def main():
         "logic://markers",
         "logic://project/info",
         "logic://midi/ports",
+        # #215: mcu/state is always listed (it is always directly readable and
+        # the docs advertise a stable 18-resource catalog), even MCU-disconnected.
+        "logic://mcu/state",
         "logic://library/inventory",
         "logic://stock-plugins",
         "logic://stock-plugins/census",
@@ -833,6 +836,8 @@ def main():
         "logic://workflow-skills/schema",
     }
     T("resources/list includes required resources", r, lambda r: required_resource_uris.issubset(resource_uris))
+    T("resources/list includes mcu/state even when MCU disconnected (#215)", r,
+      lambda _: "logic://mcu/state" in resource_uris)
 
     r = list_resource_templates(client)
     templates = r.get("result", {}).get("resourceTemplates", []) if r else []
@@ -863,6 +868,19 @@ def main():
     T("system.help mentions logic_navigate", r, lambda _: "logic_navigate" in help_text)
     T("system.help mentions logic_project", r, lambda _: "logic_project" in help_text)
     T("system.help mentions logic_system", r, lambda _: "logic_system" in help_text)
+
+    # #219: an unknown help category returns a typed unknown_category error
+    # (never a silent fall-through to full help with isError:false).
+    r = call_tool(client, "logic_system", "help", params={"category": "bogus"})
+    _uc = tool_json(r) or {}
+    T("system.help unknown category returns typed unknown_category (#219)", r,
+      lambda _: is_error(r) and _uc.get("error") == "unknown_category"
+      and _uc.get("requested_category") == "bogus"
+      and isinstance(_uc.get("valid_categories"), list))
+    # A valid category still succeeds; an absent category still returns full help.
+    r = call_tool(client, "logic_system", "help", params={"category": "transport"})
+    T("system.help valid category succeeds", r,
+      lambda _: not is_error(r) and "logic_transport commands" in tool_text(r))
 
     r = call_tool(client, "logic_system", "health")
     health_text = tool_text(r)
@@ -2190,8 +2208,8 @@ def main():
         "logic://workflow-skills/schema",
         "logic://workflow-skills/logic.workflow.plugins.stock_chain_plan",
         "logic://workflow-skills/search?query=plugin",
-        # mcu/state is read-testable even when filtered from list (direct reads
-        # bypass the connection gate so clients bookmarking the URI still work).
+        # mcu/state is both listed (#215) and directly readable, even when the
+        # MCU surface is disconnected — a read returns { connected: false, … }.
         "logic://mcu/state",
     ]
     for uri in resources_to_test:
