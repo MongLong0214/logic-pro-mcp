@@ -863,6 +863,9 @@ def main():
         "logic://markers",
         "logic://project/info",
         "logic://midi/ports",
+        # #215: mcu/state is always listed (it is always directly readable and
+        # the docs advertise a stable 18-resource catalog), even MCU-disconnected.
+        "logic://mcu/state",
         "logic://library/inventory",
         "logic://stock-plugins",
         "logic://stock-plugins/census",
@@ -871,6 +874,8 @@ def main():
         "logic://workflow-skills/schema",
     }
     T("resources/list includes required resources", r, lambda r: required_resource_uris.issubset(resource_uris))
+    T("resources/list includes mcu/state even when MCU disconnected (#215)", r,
+      lambda _: "logic://mcu/state" in resource_uris)
 
     r = list_resource_templates(client)
     templates = r.get("result", {}).get("resourceTemplates", []) if r else []
@@ -885,6 +890,19 @@ def main():
         "logic://workflow-skills/search?query={query}",
     }
     T("resources/templates/list includes required templates", r, lambda r: required_template_uris.issubset(template_uris))
+
+    # #218: invalid pagination cursors are rejected with JSON-RPC -32602 (the
+    # server paginates into a single page and never issues a nextCursor), not
+    # silently ignored (which returned a full first page as if no cursor).
+    for method in ["tools/list", "resources/list", "resources/templates/list"]:
+        r = client.send({"jsonrpc": "2.0", "id": nid(), "method": method,
+                         "params": {"cursor": "bogus"}})
+        T(f"{method} rejects invalid cursor with -32602 (#218)", r,
+          lambda _, resp=r: isinstance(resp, dict) and resp.get("error", {}).get("code") == -32602)
+        # A cursor-less call on the same method still returns a normal page.
+        r = client.send({"jsonrpc": "2.0", "id": nid(), "method": method, "params": {}})
+        T(f"{method} without cursor still returns a page (#218)", r,
+          lambda _, resp=r: isinstance(resp, dict) and "result" in resp)
 
     # ═══════════════════════════════════════════════════════════════
     # §2 System Diagnostics (15 tests)
@@ -901,6 +919,19 @@ def main():
     T("system.help mentions logic_navigate", r, lambda _: "logic_navigate" in help_text)
     T("system.help mentions logic_project", r, lambda _: "logic_project" in help_text)
     T("system.help mentions logic_system", r, lambda _: "logic_system" in help_text)
+
+    # #219: an unknown help category returns a typed unknown_category error
+    # (never a silent fall-through to full help with isError:false).
+    r = call_tool(client, "logic_system", "help", params={"category": "bogus"})
+    _uc = tool_json(r) or {}
+    T("system.help unknown category returns typed unknown_category (#219)", r,
+      lambda _: is_error(r) and _uc.get("error") == "unknown_category"
+      and _uc.get("requested_category") == "bogus"
+      and isinstance(_uc.get("valid_categories"), list))
+    # A valid category still succeeds; an absent category still returns full help.
+    r = call_tool(client, "logic_system", "help", params={"category": "transport"})
+    T("system.help valid category succeeds", r,
+      lambda _: not is_error(r) and "logic_transport commands" in tool_text(r))
 
     r = call_tool(client, "logic_system", "health")
     health_text = tool_text(r)
@@ -2228,8 +2259,8 @@ def main():
         "logic://workflow-skills/schema",
         "logic://workflow-skills/logic.workflow.plugins.stock_chain_plan",
         "logic://workflow-skills/search?query=plugin",
-        # mcu/state is read-testable even when filtered from list (direct reads
-        # bypass the connection gate so clients bookmarking the URI still work).
+        # mcu/state is both listed (#215) and directly readable, even when the
+        # MCU surface is disconnected — a read returns { connected: false, … }.
         "logic://mcu/state",
     ]
     for uri in resources_to_test:
@@ -2329,20 +2360,34 @@ def main():
         r = call_tool(client, tool, cmd)
         T(f"{tool} rejects unknown command", r, lambda _: is_error(r))
 
-    # Unknown tool name
+    # #216: an unknown tool name is rejected at the protocol boundary with a
+    # JSON-RPC -32602 invalidParams error (not a result with isError:true).
     r = call_tool(client, "logic_imaginary", "anything")
-    T("unknown tool name rejected", r, lambda _: is_error(r))
+    T("unknown tool name rejected with JSON-RPC -32602 (#216)", r,
+      lambda _: isinstance(r, dict) and r.get("error", {}).get("code") == -32602)
+    T("unknown tool name error is not a tool result", r,
+      lambda _: isinstance(r, dict) and "result" not in r)
 
-    # Empty tool name
+    # Empty tool name is also not a registered tool → -32602.
     r = call_tool(client, "", "anything")
-    T("empty tool name rejected", r, lambda _: is_error(r))
+    T("empty tool name rejected with JSON-RPC -32602 (#216)", r,
+      lambda _: isinstance(r, dict) and r.get("error", {}).get("code") == -32602)
 
-    # Missing command for all 8 tools
+    # #217: a tools/call with a missing/empty required `command` is rejected at
+    # the protocol boundary with JSON-RPC -32602 (not dispatched as an empty
+    # command that returns a misleading domain "Unknown … command: ." error).
     for tool in ["logic_transport", "logic_tracks", "logic_mixer", "logic_midi",
                  "logic_edit", "logic_navigate"]:
+        # missing `arguments` entirely
+        r = client.send({"jsonrpc": "2.0", "id": nid(), "method": "tools/call",
+                         "params": {"name": tool}})
+        T(f"{tool} missing arguments → JSON-RPC -32602 (#217)", r,
+          lambda _, resp=r: isinstance(resp, dict) and resp.get("error", {}).get("code") == -32602)
+        # present-but-empty `arguments` (no command key)
         r = client.send({"jsonrpc": "2.0", "id": nid(), "method": "tools/call",
                          "params": {"name": tool, "arguments": {}}})
-        T(f"{tool} handles missing command", r, lambda _: r is not None)
+        T(f"{tool} missing command → JSON-RPC -32602 (#217)", r,
+          lambda _, resp=r: isinstance(resp, dict) and resp.get("error", {}).get("code") == -32602)
 
     # Fail-closed semantic payload checks. These are environment-independent:
     # the dispatcher must reject before it can route to Logic/CoreMIDI.
@@ -2368,6 +2413,20 @@ def main():
             r,
             lambda _, resp=r: is_error(resp) and "invalid_params" in tool_text(resp),
         )
+
+    # #221: a fast-FAILING mutation must release the mutation gate so an
+    # immediately-following (serial) mutation is never falsely blocked with
+    # `mutating_operation_in_progress`. rename_marker and set_cycle_range both
+    # fail closed with State C (not_implemented) with or without a live
+    # document and perform no mutation, so this is side-effect-free. NOTE: a
+    # PARALLEL overlap refusal (safe_to_retry:true) is CORRECT serialization,
+    # not a malfunction — the complete-surface contract run fires mutations
+    # serially (client.send awaits each response before the next request).
+    _ = call_tool(client, "logic_navigate", "rename_marker", params={"index": 0, "name": "gate-probe"})
+    r = call_tool(client, "logic_transport", "set_cycle_range", params={"start": 1, "end": 2})
+    _gate = tool_json(r) or {}
+    T("serial mutation after a failed mutation is not gate-blocked (#221)", r,
+      lambda _: _gate.get("error") != "mutating_operation_in_progress")
 
     # ═══════════════════════════════════════════════════════════════
     # §13 Concurrent Stress Test (5 tests)

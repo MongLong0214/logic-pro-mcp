@@ -127,18 +127,20 @@ struct ResourceProviderTests {
         #expect(timestamps == ["2026-06-23T00:00:00Z"])
     }
 
-    // MARK: - Dynamic MCU filtering
+    // MARK: - Stable resource surface (#215)
 
-    @Test("MCU-specific resources are hidden when MCU is disconnected")
-    func mcuFiltering() {
-        let connected = ResourceProvider.resources(mcuConnected: true).map(\.uri)
-        let disconnected = ResourceProvider.resources(mcuConnected: false).map(\.uri)
-
-        #expect(connected.contains("logic://mcu/state"))
-        #expect(!disconnected.contains("logic://mcu/state"))
-        // Non-MCU resources always visible.
-        #expect(disconnected.contains("logic://transport/state"))
-        #expect(disconnected.contains("logic://tracks"))
+    @Test("logic://mcu/state is always listed — matches the docs + readable surface")
+    func mcuStateAlwaysListed() {
+        // #215: `logic://mcu/state` used to be filtered out of the list when
+        // the MCU surface was disconnected, even though it stayed directly
+        // readable and the docs advertise a stable 18-resource catalog. It is
+        // now always present so list == docs == readable surface.
+        let uris = ResourceProvider.resources.map(\.uri)
+        #expect(uris.contains("logic://mcu/state"))
+        #expect(uris.contains("logic://transport/state"))
+        #expect(uris.contains("logic://tracks"))
+        // The documented stable surface is exactly 18 resources.
+        #expect(uris.count == 18)
     }
 
     // MARK: - Template placeholders

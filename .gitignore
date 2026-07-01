@@ -52,3 +52,7 @@ artifacts/acid-track-composition-v4/acid-track-applyback-test.logicx/
 docs/media/capture-reddit-*.py
 docs/media/render-reddit-*.py
 docs/media/reddit-dudddee-*
+
+# Python bytecode cache
+__pycache__/
+*.pyc
