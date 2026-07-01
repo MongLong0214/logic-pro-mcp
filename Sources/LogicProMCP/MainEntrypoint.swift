@@ -63,6 +63,30 @@ enum MainEntrypoint {
             return SetupDoctor.shouldExitWithFailure(report) ? 1 : 0
         }
 
+        if isLifecycleSubcommand(arguments) {
+            // #214: `LogicProMCP lifecycle <install|update|uninstall> [--json]`
+            // is the documented read-only planning surface. Pre-fix the
+            // `lifecycle` verb was unparsed and fell through to server startup
+            // (the audit saw a hang/timeout). It prints the SAME plan the bare
+            // `<action> --dry-run` form produces — no `--dry-run` needed because
+            // the `lifecycle` namespace never executes anything; live execution
+            // stays delegated to Scripts/install.sh / uninstall.sh.
+            guard let command = lifecycleSubcommandAction(arguments) else {
+                let valid = SetupLifecycle.Command.allCases.map(\.rawValue).joined(separator: "|")
+                writeStderr(
+                    "Usage: LogicProMCP lifecycle <\(valid)> [--json]\n"
+                        + "Prints a read-only lifecycle plan (see docs/SETUP.md).\n"
+                )
+                return 1
+            }
+            let plan = SetupLifecycle.plan(command: command, runtime: lifecycleRuntime)
+            let output = arguments.contains("--json")
+                ? encodeJSON(plan)
+                : SetupLifecycle.renderHuman(plan)
+            writeStdout(output + "\n")
+            return 0
+        }
+
         if let command = lifecycleCommand(arguments) {
             // Live execution is intentionally NOT performed here — it is delegated
             // to Scripts/install.sh / uninstall.sh. Without --dry-run we refuse
@@ -191,5 +215,20 @@ enum MainEntrypoint {
     private static func lifecycleCommand(_ arguments: [String]) -> SetupLifecycle.Command? {
         guard let first = Array(arguments.dropFirst()).first else { return nil }
         return SetupLifecycle.Command(rawValue: first)
+    }
+
+    private static func isLifecycleSubcommand(_ arguments: [String]) -> Bool {
+        Array(arguments.dropFirst()).first == "lifecycle"
+    }
+
+    /// The action following the `lifecycle` verb, e.g. `lifecycle install` →
+    /// `.install`. The first non-flag token after `lifecycle` is the action, so
+    /// `lifecycle install --json` and `lifecycle --json install` both resolve.
+    /// Returns nil for a missing or unrecognized action (→ usage error).
+    private static func lifecycleSubcommandAction(_ arguments: [String]) -> SetupLifecycle.Command? {
+        guard let actionRaw = arguments.dropFirst(2).first(where: { !$0.hasPrefix("-") }) else {
+            return nil
+        }
+        return SetupLifecycle.Command(rawValue: actionRaw)
     }
 }
