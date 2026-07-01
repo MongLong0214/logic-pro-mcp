@@ -701,7 +701,36 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     #expect(r.isError!)
 }
 
+@Test func testE2EMissingCommandRejectedAtProtocolBoundary() async {
+    // #217: on the wire, a tools/call with a missing `arguments` object or a
+    // missing/empty `command` is rejected with JSON-RPC -32602 invalidParams
+    // (the SDK registration wrapper throws before dispatch), instead of
+    // dispatching as an empty command and returning "Unknown … command: .".
+    let toolNames = [
+        "logic_transport", "logic_tracks", "logic_mixer", "logic_midi",
+        "logic_edit", "logic_navigate", "logic_project", "logic_system",
+    ]
+    for name in toolNames {
+        // Missing `arguments` object entirely.
+        let missingArgs = LogicProServer.toolCallProtocolError(name: name, arguments: nil)
+        #expect(missingArgs?.code == -32602, "\(name): missing arguments → -32602")
+        // Present-but-empty `arguments` (no `command` key).
+        let emptyArgs = LogicProServer.toolCallProtocolError(name: name, arguments: [:])
+        #expect(emptyArgs?.code == -32602, "\(name): empty arguments → -32602")
+        // Empty-string `command`.
+        let emptyCmd = LogicProServer.toolCallProtocolError(name: name, arguments: ["command": .string("")])
+        #expect(emptyCmd?.code == -32602, "\(name): empty command → -32602")
+        // A present command passes the boundary (params validated in dispatch).
+        let present = LogicProServer.toolCallProtocolError(name: name, arguments: ["command": .string("health")])
+        #expect(present == nil, "\(name): present command must pass the boundary")
+    }
+    #expect(LogicProServer.toolCallProtocolError(name: "logic_system", arguments: [:])
+        == .invalidParams("Missing required argument 'command' for tool 'logic_system'"))
+}
+
 @Test func testE2EAllDispatchersHandleMissingCommandGracefully() async {
+    // Defensive internal path: `handlers.callTool` (bypassing the wrapper) must
+    // still return a non-empty result rather than crash for an empty command.
     let h = await makeE2EHandlers()
     let toolNames = [
         "logic_transport", "logic_tracks", "logic_mixer", "logic_midi",

@@ -771,13 +771,39 @@ actor LogicProServer {
         }
     }
 
+    /// Protocol-boundary validation for `tools/call`, applied by the SDK
+    /// registration wrapper BEFORE dispatch. Returns the JSON-RPC error the
+    /// server must raise for a malformed request, or nil when the call is
+    /// well-formed enough to dispatch.
+    ///
+    /// #217: every tool schema marks `command` as required. A `tools/call` with
+    /// a missing `arguments` object or a missing/empty `command` used to
+    /// dispatch as an empty command and return a misleading domain error
+    /// ("Unknown system command: ."). It is now rejected at the protocol layer
+    /// with `-32602 invalidParams` naming the missing field. This validates the
+    /// PRESENCE of `command` only — a present command whose command-specific
+    /// params are missing (e.g. `set_tempo` with no `tempo`) still dispatches
+    /// and returns the dispatcher's typed domain `invalid_params` State C.
+    static func toolCallProtocolError(name: String, arguments: [String: Value]?) -> MCPError? {
+        let command = arguments?["command"]?.stringValue
+        if command == nil || command?.isEmpty == true {
+            return .invalidParams("Missing required argument 'command' for tool '\(name)'")
+        }
+        return nil
+    }
+
     private func registerTools() async {
         let handlers = makeHandlers(dialogPresent: { AXLogicProElements.dialogPresent() })
         await server.withMethodHandler(ListTools.self) { params in
             await handlers.listTools(params)
         }
         await server.withMethodHandler(CallTool.self) { params in
-            await handlers.callTool(params)
+            // #217: reject a tools/call with a missing/empty required `command`
+            // at the protocol boundary with a JSON-RPC error before dispatch.
+            if let error = Self.toolCallProtocolError(name: params.name, arguments: params.arguments) {
+                throw error
+            }
+            return await handlers.callTool(params)
         }
     }
 

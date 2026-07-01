@@ -2299,12 +2299,21 @@ def main():
     r = call_tool(client, "", "anything")
     T("empty tool name rejected", r, lambda _: is_error(r))
 
-    # Missing command for all 8 tools
+    # #217: a tools/call with a missing/empty required `command` is rejected at
+    # the protocol boundary with JSON-RPC -32602 (not dispatched as an empty
+    # command that returns a misleading domain "Unknown … command: ." error).
     for tool in ["logic_transport", "logic_tracks", "logic_mixer", "logic_midi",
                  "logic_edit", "logic_navigate"]:
+        # missing `arguments` entirely
+        r = client.send({"jsonrpc": "2.0", "id": nid(), "method": "tools/call",
+                         "params": {"name": tool}})
+        T(f"{tool} missing arguments → JSON-RPC -32602 (#217)", r,
+          lambda _, resp=r: isinstance(resp, dict) and resp.get("error", {}).get("code") == -32602)
+        # present-but-empty `arguments` (no command key)
         r = client.send({"jsonrpc": "2.0", "id": nid(), "method": "tools/call",
                          "params": {"name": tool, "arguments": {}}})
-        T(f"{tool} handles missing command", r, lambda _: r is not None)
+        T(f"{tool} missing command → JSON-RPC -32602 (#217)", r,
+          lambda _, resp=r: isinstance(resp, dict) and resp.get("error", {}).get("code") == -32602)
 
     # Fail-closed semantic payload checks. These are environment-independent:
     # the dispatcher must reject before it can route to Logic/CoreMIDI.
