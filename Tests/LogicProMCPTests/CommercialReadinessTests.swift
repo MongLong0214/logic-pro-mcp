@@ -316,6 +316,60 @@ private let toolText = sharedToolText
     }
 }
 
+@Test func testSystemHelpUnknownCategoryReturnsTypedError() async {
+    // #219: a present-but-unrecognized category must NOT silently fall back to
+    // full help. It returns a typed unknown_category State C listing the valid
+    // categories so a client can detect a typo.
+    let result = await SystemDispatcher.handle(
+        command: "help",
+        params: ["category": .string("bogus")],
+        router: ChannelRouter(),
+        cache: StateCache()
+    )
+    #expect(result.isError!)
+    let json = (try? JSONSerialization.jsonObject(with: Data(toolText(result).utf8))) as? [String: Any]
+    #expect(json?["error"] as? String == "unknown_category")
+    #expect(json?["success"] as? Bool == false)
+    #expect(json?["requested_category"] as? String == "bogus")
+    let valid = json?["valid_categories"] as? [String]
+    #expect(valid?.contains("transport") == true)
+    #expect(valid?.contains("all") == true)
+    // It must NOT leak the full help text on the error path.
+    #expect(!toolText(result).contains("logic_transport  — Transport control"))
+}
+
+@Test func testSystemHelpAbsentCategoryStillReturnsFullHelp() async {
+    // Regression guard: omitting `category` remains the full-help contract.
+    let result = await SystemDispatcher.handle(
+        command: "help",
+        params: [:],
+        router: ChannelRouter(),
+        cache: StateCache()
+    )
+    #expect(!(result.isError!))
+    #expect(toolText(result).contains("Logic Pro MCP"))
+}
+
+@Test func testValidHelpCategoriesStayInLockstepWithHelpText() async {
+    // Every accepted category (except "all") must map to a category-specific
+    // section; "all" must map to the overview. Prevents drift between the
+    // accepted set and the helpText switch.
+    for category in SystemDispatcher.validHelpCategories {
+        let result = await SystemDispatcher.handle(
+            command: "help",
+            params: ["category": .string(category)],
+            router: ChannelRouter(),
+            cache: StateCache()
+        )
+        #expect(!(result.isError!), "Accepted category \(category) must succeed")
+        if category == "all" {
+            #expect(toolText(result).contains("Logic Pro MCP"))
+        } else {
+            #expect(toolText(result).contains("logic_\(category) commands"))
+        }
+    }
+}
+
 @Test func testSystemHelpEnumeratesEveryRegisteredResourceAndTemplate() async {
     // The help overview is an LLM-facing capability-discovery surface: it must
     // ENUMERATE every registered resource/template, not merely claim the count.

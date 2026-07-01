@@ -196,7 +196,7 @@ Approve MIDIKeyCommands or Scripter only after completing the matching Logic-sid
 
 ## Lifecycle Anchors
 
-`LogicProMCP lifecycle ... --json` is read-only. These anchors are stable remediation targets.
+`LogicProMCP lifecycle <install|update|uninstall> [--json]` prints a read-only lifecycle plan and exits without starting the server — e.g. `LogicProMCP lifecycle install --json`. (The bare `LogicProMCP install --dry-run --json` form produces the same plan.) These anchors are stable remediation targets.
 
 <a id="lifecycle-binaryinstall"></a>
 ### `binary.install`

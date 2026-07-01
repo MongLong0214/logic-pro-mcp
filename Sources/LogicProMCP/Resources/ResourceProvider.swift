@@ -6,31 +6,21 @@ import MCP
 /// in the tool list. Clients can watch/poll them to keep a local mirror in
 /// sync without consuming tool-call budget.
 ///
-/// Dynamic surface: the full `resources` list is advertised for capability
-/// announcement, but at `resources/list` request time we filter out MCU-only
-/// resources when the control surface isn't connected so the LLM doesn't
-/// discover probes that would just return empty payloads.
+/// Stable surface: `resources/list` always advertises the full static set,
+/// matching the documented "18 static resources" catalog and the URIs that
+/// are directly readable. `logic://mcu/state` is included even when the MCU
+/// control surface is disconnected — a direct read returns a meaningful
+/// `{ connected: false, … }` payload (not an empty probe), so hiding it from
+/// discovery while it stayed readable made the list disagree with both the
+/// docs and the readable surface (#215).
 struct ResourceProvider {
 
-    /// Full static resource set. Used for capability announcement and
-    /// back-compat with callers that read `.resources` synchronously.
+    /// Full static resource set — the single source of truth for both
+    /// capability announcement and `resources/list`.
     static let resources: [Resource] = baseResources
 
     /// Full static template set.
     static let templates: [Resource.Template] = baseTemplates
-
-    /// Dynamic resource list used at `resources/list` request time.
-    /// When `mcuConnected == false`, hides MCU-only resources so the LLM
-    /// doesn't waste tokens probing offline hardware.
-    static func resources(mcuConnected: Bool) -> [Resource] {
-        mcuConnected ? baseResources : baseResources.filter { !isMCUOnly($0.uri) }
-    }
-
-    /// Dynamic template list. Currently none of the templates are MCU-specific,
-    /// but the factory is exposed for symmetry + future growth.
-    static func templates(mcuConnected _: Bool) -> [Resource.Template] {
-        baseTemplates
-    }
 
     // MARK: - Declarations
 
@@ -243,10 +233,4 @@ struct ResourceProvider {
             mimeType: "application/json"
         ),
     ]
-
-    // MARK: - Filtering
-
-    private static func isMCUOnly(_ uri: String) -> Bool {
-        uri == "logic://mcu/state"
-    }
 }

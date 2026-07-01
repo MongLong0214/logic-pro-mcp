@@ -689,6 +689,17 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 // ═══════════════════════════════════════════════════════════════════════
 
 @Test func testE2EUnknownToolNameReturnsError() async {
+    // #216: on the wire an unknown tool is rejected at the protocol boundary
+    // with JSON-RPC -32602 invalidParams (the SDK registration wrapper throws
+    // this before dispatch). `handlers.callTool` itself keeps a defensive
+    // "Unknown tool" tool-result for its unreachable internal path.
+    let error = LogicProServer.toolCallProtocolError(
+        name: "logic_nonexistent",
+        arguments: ["command": .string("test")]
+    )
+    #expect(error == .invalidParams("Unknown tool: logic_nonexistent"))
+    #expect(error?.code == -32602)
+
     let h = await makeE2EHandlers()
     let r = await h.callTool(CallTool.Parameters(name: "logic_nonexistent", arguments: ["command": .string("test")]))
     #expect(r.isError!)
@@ -696,12 +707,55 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 }
 
 @Test func testE2EEmptyToolNameReturnsError() async {
+    // #216: an empty tool name is not a registered tool → protocol -32602.
+    let error = LogicProServer.toolCallProtocolError(name: "", arguments: ["command": .string("test")])
+    #expect(error?.code == -32602)
+
     let h = await makeE2EHandlers()
     let r = await h.callTool(CallTool.Parameters(name: "", arguments: ["command": .string("test")]))
     #expect(r.isError!)
 }
 
+@Test func testE2EMissingCommandRejectedAtProtocolBoundary() async {
+    // #217: on the wire, a tools/call with a missing `arguments` object or a
+    // missing/empty `command` is rejected with JSON-RPC -32602 invalidParams
+    // (the SDK registration wrapper throws before dispatch), instead of
+    // dispatching as an empty command and returning "Unknown … command: .".
+    let toolNames = [
+        "logic_transport", "logic_tracks", "logic_mixer", "logic_midi",
+        "logic_edit", "logic_navigate", "logic_project", "logic_system",
+    ]
+    for name in toolNames {
+        // Missing `arguments` object entirely.
+        let missingArgs = LogicProServer.toolCallProtocolError(name: name, arguments: nil)
+        #expect(missingArgs?.code == -32602, "\(name): missing arguments → -32602")
+        // Present-but-empty `arguments` (no `command` key).
+        let emptyArgs = LogicProServer.toolCallProtocolError(name: name, arguments: [:])
+        #expect(emptyArgs?.code == -32602, "\(name): empty arguments → -32602")
+        // Empty-string `command`.
+        let emptyCmd = LogicProServer.toolCallProtocolError(name: name, arguments: ["command": .string("")])
+        #expect(emptyCmd?.code == -32602, "\(name): empty command → -32602")
+        // A present command passes the boundary (params validated in dispatch).
+        let present = LogicProServer.toolCallProtocolError(name: name, arguments: ["command": .string("health")])
+        #expect(present == nil, "\(name): present command must pass the boundary")
+    }
+    #expect(LogicProServer.toolCallProtocolError(name: "logic_system", arguments: [:])
+        == .invalidParams("Missing required argument 'command' for tool 'logic_system'"))
+}
+
+@Test func testKnownToolPassesProtocolBoundary() async {
+    // Every registered tool must pass the boundary check (no false -32602).
+    for name in ServerCatalog.tools.map(\.name) {
+        #expect(
+            LogicProServer.toolCallProtocolError(name: name, arguments: ["command": .string("noop")]) == nil,
+            "\(name) must not be rejected at the protocol boundary"
+        )
+    }
+}
+
 @Test func testE2EAllDispatchersHandleMissingCommandGracefully() async {
+    // Defensive internal path: `handlers.callTool` (bypassing the wrapper) must
+    // still return a non-empty result rather than crash for an empty command.
     let h = await makeE2EHandlers()
     let toolNames = [
         "logic_transport", "logic_tracks", "logic_mixer", "logic_midi",
