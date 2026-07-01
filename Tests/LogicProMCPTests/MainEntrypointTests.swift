@@ -22,6 +22,49 @@ private actor MockMainServer: ServerStarting {
     }
 }
 
+@Test func testMainEntrypointVersionFlagPrintsBareVersionAndExitsWithoutServer() async {
+    // #212: `--version` must print the version and exit 0 WITHOUT starting the
+    // MCP server channels (pre-fix it started the server and timed out).
+    var stdout = ""
+    var stderr = ""
+    let exitCode = await MainEntrypoint.run(
+        arguments: ["LogicProMCP", "--version"],
+        permissionCheck: {
+            Issue.record("Permission check should not run for --version")
+            return .init(accessibility: false, automationLogicPro: false)
+        },
+        serverFactory: {
+            Issue.record("Server must not be created for --version")
+            return MockMainServer()
+        },
+        writeStdout: { stdout += $0 },
+        writeStderr: { stderr += $0 }
+    )
+
+    #expect(exitCode == 0)
+    // Bare version only — SetupLifecycle.productionInstalledBinaryVersion()
+    // compares this stdout for equality against ServerConfig.serverVersion.
+    #expect(stdout == ServerConfig.serverVersion + "\n")
+    #expect(stdout.trimmingCharacters(in: .whitespacesAndNewlines) == ServerConfig.serverVersion)
+    #expect(stderr.isEmpty)
+}
+
+@Test func testMainEntrypointVersionShortFlagPrintsVersion() async {
+    var stdout = ""
+    let exitCode = await MainEntrypoint.run(
+        arguments: ["LogicProMCP", "-V"],
+        serverFactory: {
+            Issue.record("Server must not be created for -V")
+            return MockMainServer()
+        },
+        writeStdout: { stdout += $0 },
+        writeStderr: { _ in }
+    )
+
+    #expect(exitCode == 0)
+    #expect(stdout.trimmingCharacters(in: .whitespacesAndNewlines) == ServerConfig.serverVersion)
+}
+
 @Test func testMainEntrypointReturnsSuccessForGrantedPermissions() async {
     var stderr = ""
     let exitCode = await MainEntrypoint.run(
