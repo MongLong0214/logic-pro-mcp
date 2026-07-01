@@ -2331,6 +2331,20 @@ def main():
             lambda _, resp=r: is_error(resp) and "invalid_params" in tool_text(resp),
         )
 
+    # #221: a fast-FAILING mutation must release the mutation gate so an
+    # immediately-following (serial) mutation is never falsely blocked with
+    # `mutating_operation_in_progress`. rename_marker and set_cycle_range both
+    # fail closed with State C (not_implemented) with or without a live
+    # document and perform no mutation, so this is side-effect-free. NOTE: a
+    # PARALLEL overlap refusal (safe_to_retry:true) is CORRECT serialization,
+    # not a malfunction — the complete-surface contract run fires mutations
+    # serially (client.send awaits each response before the next request).
+    _ = call_tool(client, "logic_navigate", "rename_marker", params={"index": 0, "name": "gate-probe"})
+    r = call_tool(client, "logic_transport", "set_cycle_range", params={"start": 1, "end": 2})
+    _gate = tool_json(r) or {}
+    T("serial mutation after a failed mutation is not gate-blocked (#221)", r,
+      lambda _: _gate.get("error") != "mutating_operation_in_progress")
+
     # ═══════════════════════════════════════════════════════════════
     # §13 Concurrent Stress Test (5 tests)
     # ═══════════════════════════════════════════════════════════════
