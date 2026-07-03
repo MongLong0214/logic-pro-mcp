@@ -85,6 +85,8 @@ public struct LibraryRoot: Codable, Sendable, Equatable {
     public let nodeCount: Int
     public let leafCount: Int
     public let folderCount: Int
+    public let candidatePatchCount: Int
+    public let nonApplicablePatchCount: Int
     public let root: LibraryNode
     public let categories: [String]
     public let presetsByCategory: [String: [String]]
@@ -102,6 +104,8 @@ public struct LibraryRoot: Codable, Sendable, Equatable {
         case nodeCount
         case leafCount
         case folderCount
+        case candidatePatchCount
+        case nonApplicablePatchCount
         case root
         case categories
         case presetsByCategory
@@ -114,6 +118,7 @@ public struct LibraryRoot: Codable, Sendable, Equatable {
         selectionRestored: Bool,
         truncatedBranches: Int, probeTimeouts: Int, cycleCount: Int,
         nodeCount: Int, leafCount: Int, folderCount: Int,
+        candidatePatchCount: Int? = nil, nonApplicablePatchCount: Int = 0,
         root: LibraryNode, categories: [String], presetsByCategory: [String: [String]],
         skippedDirectoryCount: Int = 0, scanWarnings: [String] = []
     ) {
@@ -127,6 +132,8 @@ public struct LibraryRoot: Codable, Sendable, Equatable {
         self.nodeCount = nodeCount
         self.leafCount = leafCount
         self.folderCount = folderCount
+        self.candidatePatchCount = candidatePatchCount ?? leafCount
+        self.nonApplicablePatchCount = nonApplicablePatchCount
         self.root = root
         self.categories = categories
         self.presetsByCategory = presetsByCategory
@@ -146,6 +153,8 @@ public struct LibraryRoot: Codable, Sendable, Equatable {
         self.nodeCount = try container.decode(Int.self, forKey: .nodeCount)
         self.leafCount = try container.decode(Int.self, forKey: .leafCount)
         self.folderCount = try container.decode(Int.self, forKey: .folderCount)
+        self.candidatePatchCount = try container.decodeIfPresent(Int.self, forKey: .candidatePatchCount) ?? self.leafCount
+        self.nonApplicablePatchCount = try container.decodeIfPresent(Int.self, forKey: .nonApplicablePatchCount) ?? 0
         self.root = try container.decode(LibraryNode.self, forKey: .root)
         self.categories = try container.decode([String].self, forKey: .categories)
         self.presetsByCategory = try container.decode([String: [String]].self, forKey: .presetsByCategory)
@@ -166,11 +175,23 @@ enum LibraryAccessor {
     struct Runtime: Sendable {
         let ax: AXHelpers.Runtime
         let postMouseClick: @Sendable (CGPoint) -> Bool
+        let postMouseDoubleClick: @Sendable (CGPoint) -> Bool
 
         static let production = Runtime(
             ax: .production,
             postMouseClick: { point in
                 return LibraryAccessor.productionMouseClick(at: point)
+            },
+            postMouseDoubleClick: { point in
+                _ = ProcessUtils.activateLogicPro()
+                usleep(120_000)
+                CGWarpMouseCursorPosition(point)
+                usleep(30_000)
+                if LibraryAccessor.postCliclick(command: "dc", at: point) {
+                    return true
+                }
+                AXMouseHelper.doubleClick(at: point)
+                return true
             }
         )
     }
@@ -570,7 +591,6 @@ enum LibraryAccessor {
                 currentPreset: nil
             )
         }
-        // First column is categories; second is presets
         let categories = columnGroups[0].items.map(\.text)
         let presets    = columnGroups[1].items.map(\.text)
 
@@ -578,9 +598,7 @@ enum LibraryAccessor {
         let currentCategory = detectSelectedText(
             elements: columnGroups[0].items, browser: browser, runtime: runtime.ax
         )
-        let currentPreset = detectSelectedText(
-            elements: columnGroups[1].items, browser: browser, runtime: runtime.ax
-        )
+        let currentPreset = readSelectedPresetName(in: browser, runtime: runtime.ax)
         // Presets belong to `currentCategory`
         var dict: [String: [String]] = [:]
         if let c = currentCategory {
@@ -643,11 +661,9 @@ enum LibraryAccessor {
         )
     }
 
-    /// Select a category by name. v3.0.3+: AX-native path — sets the parent
-    /// AXList's `AXSelectedChildren` to the target static-text element (which
-    /// auto-scrolls it into view and highlights the row) and fires AXPress to
-    /// commit the column expand. No CGEvent, no coordinates. Returns true if
-    /// the element was found and both AX operations were dispatched.
+    /// Select a category by name. Logic's Library can report successful AX
+    /// selection without changing the visible column, so this also posts a
+    /// native click at the row center when coordinates are readable.
     @discardableResult
     static func selectCategory(
         named name: String,
@@ -655,6 +671,8 @@ enum LibraryAccessor {
         library: Runtime = .production
     ) -> Bool {
         guard let browser = findLibraryBrowser(runtime: runtime) else { return false }
+        resetHorizontalScroll(for: browser, runtime: runtime.ax)
+        let visibleFrame = frame(of: browser, runtime: runtime.ax)
         let texts = AXHelpers.findAllDescendants(
             of: browser, role: kAXStaticTextRole, maxDepth: 6, runtime: runtime.ax
         )
@@ -662,17 +680,11 @@ enum LibraryAccessor {
             named: name,
             in: texts,
             prefer: .leftmost,
+            visibleIn: visibleFrame,
             runtime: runtime.ax
         ) else { return false }
-        // v3.0.3 — AX-native selection (same pattern as selectPreset). AXList
-        // parent's AXSelectedChildren attribute commits the category switch
-        // and AXPress fires the column expand. Works regardless of viewport.
-        // v3.1.0 (T2) — previously we discarded both AX return codes and
-        // unconditionally returned true, which made `set_instrument` report
-        // success even when the category click never committed. Now we
-        // require at least one of (parent AXSelectedChildren set, target
-        // AXPress) to return `.success`. That matches what actually moves
-        // Logic's Library column.
+        let targetFrame = frame(of: targetEl, runtime: runtime.ax)
+        let targetPoint = position(of: targetEl, runtime: runtime.ax)
         var selectedChildrenOK = false
         if let parent = AXHelpers.getAttribute(
             targetEl, kAXParentAttribute, runtime: runtime.ax
@@ -685,8 +697,84 @@ enum LibraryAccessor {
             )
         }
         let pressOK = AXHelpers.performAction(targetEl, kAXPressAction, runtime: runtime.ax)
-        Thread.sleep(forTimeInterval: 0.25)
-        return selectedChildrenOK || pressOK
+        let clicked: Bool
+        if let pos = targetPoint {
+            debugLibraryClick("selectCategory name=\(name) frame=\(String(describing: targetFrame)) point=\(pos)")
+            clicked = library.postMouseClick(pos)
+        } else {
+            clicked = false
+        }
+        Thread.sleep(forTimeInterval: 0.30)
+        return clicked || selectedChildrenOK || pressOK
+    }
+
+    @discardableResult
+    private static func resetHorizontalScroll(for browser: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
+        let browserFrame = frame(of: browser, runtime: runtime)
+        var didReset = false
+        var root: AXUIElement? = browser
+        for _ in 0..<5 {
+            guard let current = root else { break }
+            didReset = resetHorizontalScroll(
+                in: current,
+                browserFrame: browserFrame,
+                runtime: runtime
+            ) || didReset
+            root = AXHelpers.getAttribute(
+                current, kAXParentAttribute, runtime: runtime
+            ) as AXUIElement?
+        }
+        if browserFrame == nil {
+            debugLibraryClick("reset frame=nil")
+        }
+        return didReset
+    }
+
+    @discardableResult
+    private static func resetHorizontalScroll(
+        in browser: AXUIElement,
+        browserFrame: CGRect?,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        let scrollBars = AXHelpers.findAllDescendants(
+            of: browser, role: kAXScrollBarRole, maxDepth: 10, runtime: runtime
+        )
+        var didReset = false
+        for scrollBar in scrollBars {
+            let orientation: String? = AXHelpers.getAttribute(
+                scrollBar, kAXOrientationAttribute, runtime: runtime
+            )
+            guard orientation == kAXHorizontalOrientationValue as String else { continue }
+            guard horizontallyOverlaps(scrollBar, browserFrame: browserFrame, runtime: runtime) else { continue }
+            didReset = AXHelpers.setAttribute(
+                scrollBar,
+                kAXValueAttribute,
+                NSNumber(value: 0),
+                runtime: runtime
+            ) || didReset
+            if let scrollFrame = frame(of: scrollBar, runtime: runtime) {
+                let resetPoint = CGPoint(x: scrollFrame.minX + 6, y: scrollFrame.midY)
+                debugLibraryClick("reset scrollbar frame=\(scrollFrame) point=\(resetPoint)")
+                _ = postCliclick(command: "c", at: resetPoint)
+                didReset = true
+            }
+        }
+        if didReset {
+            Thread.sleep(forTimeInterval: 0.10)
+        }
+        return didReset
+    }
+
+    private static func horizontallyOverlaps(
+        _ element: AXUIElement,
+        browserFrame: CGRect?,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        guard let browserFrame, let elementFrame = frame(of: element, runtime: runtime) else {
+            return true
+        }
+        return elementFrame.maxX >= browserFrame.minX - 8
+            && elementFrame.minX <= browserFrame.maxX + 8
     }
 
     /// Select a preset by name in the currently-active category. v3.0.3: Logic
@@ -697,51 +785,71 @@ enum LibraryAccessor {
     @discardableResult
     static func selectPreset(
         named name: String,
+        commit: Bool = true,
         runtime: AXLogicProElements.Runtime = .production,
         library: Runtime = .production
     ) -> Bool {
         guard let browser = findLibraryBrowser(runtime: runtime) else { return false }
+        let visibleFrame = frame(of: browser, runtime: runtime.ax)
         let texts = AXHelpers.findAllDescendants(
             of: browser, role: kAXStaticTextRole, maxDepth: 6, runtime: runtime.ax
         )
-        // v3.0.3 breakthrough — no click, no coordinates, no scroll guesses.
-        // Pure AX API two-step:
-        //   1. Set AXSelectedChildren on the parent AXList to include the
-        //      target static-text element. Standard AppKit NSTableView row
-        //      selection path — this AUTO-SCROLLS the row into view and
-        //      sets the selection highlight.
-        //   2. Perform AXPress on the element. Logic's AXPress handler for
-        //      Library preset rows commits the load onto the selected track.
-        //
-        // Works on rows that are scrolled far below the viewport (verified
-        // live — TR-909 at logical y=3541 on a 1325px screen loaded cleanly).
-        // No CGEvent, so screen geometry / multi-monitor setups don't matter.
         guard let targetEl = textElement(
             named: name,
             in: texts,
             prefer: .rightmost,
+            visibleIn: visibleFrame,
+            runtime: runtime.ax
+        ) ?? textElementByScrolling(
+            named: name,
+            in: browser,
+            prefer: .rightmost,
+            visibleIn: visibleFrame,
             runtime: runtime.ax
         ) else { return false }
+        let targetFrame = frame(of: targetEl, runtime: runtime.ax)
+        let targetPoint = position(of: targetEl, runtime: runtime.ax)
+        if !commit, let pos = targetPoint {
+            debugLibraryClick("selectPreset name=\(name) commit=\(commit) frame=\(String(describing: targetFrame)) point=\(pos)")
+            let clicked = library.postMouseClick(pos)
+            Thread.sleep(forTimeInterval: 0.30)
+            if clicked { return true }
+        }
         guard let parent = AXHelpers.getAttribute(
             targetEl, kAXParentAttribute, runtime: runtime.ax
         ) as AXUIElement? else {
-            // Fall back to coord click if we can't reach the parent list.
-            guard let pos = position(of: targetEl, runtime: runtime.ax) else { return false }
-            AXMouseHelper.doubleClick(at: pos)
+            guard let pos = targetPoint else { return false }
+            let clicked = commit ? library.postMouseDoubleClick(pos) : library.postMouseClick(pos)
             Thread.sleep(forTimeInterval: 0.2)
-            return true
+            return clicked
         }
         let arr = [targetEl] as CFArray
-        _ = AXHelpers.setAttribute(parent, kAXSelectedChildrenAttribute, arr, runtime: runtime.ax)
+        let selectedChildrenOK = AXHelpers.setAttribute(parent, kAXSelectedChildrenAttribute, arr, runtime: runtime.ax)
         Thread.sleep(forTimeInterval: 0.20)   // let the scroll settle
         let pressResult = AXHelpers.performAction(targetEl, kAXPressAction, runtime: runtime.ax)
-        Thread.sleep(forTimeInterval: 0.30)   // let Logic swap the plugin chain
-        return pressResult
+        Thread.sleep(forTimeInterval: 0.30)
+        guard commit else {
+            return selectedChildrenOK || pressResult
+        }
+        if let pos = targetPoint {
+            debugLibraryClick("selectPreset name=\(name) commit=\(commit) frame=\(String(describing: targetFrame)) point=\(pos)")
+            let doubleClicked = library.postMouseDoubleClick(pos)
+            Thread.sleep(forTimeInterval: 0.50)
+            return doubleClicked || selectedChildrenOK || pressResult
+        }
+        return selectedChildrenOK || pressResult
     }
 
-    private enum ColumnPreference {
+    enum ColumnPreference {
         case leftmost
         case rightmost
+    }
+
+    private struct TextCandidate {
+        let element: AXUIElement
+        let value: String
+        let columnX: CGFloat
+        let y: CGFloat
     }
 
     /// Pick a Library row by visible column. Logic's Library can show duplicate
@@ -752,20 +860,156 @@ enum LibraryAccessor {
         named name: String,
         in texts: [AXUIElement],
         prefer: ColumnPreference,
+        visibleIn visibleFrame: CGRect? = nil,
         runtime: AXHelpers.Runtime
     ) -> AXUIElement? {
-        let matches = texts.compactMap { t -> (element: AXUIElement, x: CGFloat)? in
-            guard let value: String = AXHelpers.getAttribute(t, kAXValueAttribute, runtime: runtime),
-                  value == name
-            else { return nil }
-            return (t, position(of: t, runtime: runtime)?.x ?? 0)
+        let candidates = textCandidates(
+            in: texts,
+            visibleIn: visibleFrame,
+            runtime: runtime
+        )
+        guard !candidates.isEmpty else { return nil }
+        let columns = distinctColumnXs(from: candidates)
+        debugLibraryClick(
+            "textElement name=\(name) prefer=\(prefer) columns=\(columns) matches=\(candidates.filter { $0.value == name }.map { "\($0.value)@x=\($0.columnX),y=\($0.y)" })"
+        )
+        let preferredColumnX: CGFloat?
+        switch prefer {
+        case .leftmost:
+            preferredColumnX = columns.first
+        case .rightmost:
+            guard columns.count >= 2 else { return nil }
+            preferredColumnX = columns.last
+        }
+        guard let preferredColumnX else { return nil }
+        let matches = candidates.filter {
+            $0.value == name && abs($0.columnX - preferredColumnX) < 40
+        }
+        return matches.min { $0.y < $1.y }?.element
+    }
+
+    private static func textElementByScrolling(
+        named name: String,
+        in browser: AXUIElement,
+        prefer: ColumnPreference,
+        visibleIn visibleFrame: CGRect?,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        guard let scrollBar = verticalScrollBar(
+            in: browser,
+            prefer: prefer,
+            browserFrame: visibleFrame,
+            runtime: runtime
+        ) else { return nil }
+
+        for rawValue in stride(from: 0.0, through: 1.0001, by: 0.025) {
+            _ = AXHelpers.setAttribute(
+                scrollBar,
+                kAXValueAttribute,
+                NSNumber(value: min(1.0, rawValue)),
+                runtime: runtime
+            )
+            Thread.sleep(forTimeInterval: 0.04)
+            let texts = AXHelpers.findAllDescendants(
+                of: browser, role: kAXStaticTextRole, maxDepth: 6, runtime: runtime
+            )
+            if let target = textElement(
+                named: name,
+                in: texts,
+                prefer: prefer,
+                visibleIn: visibleFrame,
+                runtime: runtime
+            ) {
+                return target
+            }
+        }
+        return nil
+    }
+
+    private static func verticalScrollBar(
+        in browser: AXUIElement,
+        prefer: ColumnPreference,
+        browserFrame: CGRect?,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        let scrollBars = AXHelpers.findAllDescendants(
+            of: browser, role: kAXScrollBarRole, maxDepth: 10, runtime: runtime
+        )
+        let vertical = scrollBars.filter { scrollBar in
+            let orientation: String? = AXHelpers.getAttribute(
+                scrollBar, kAXOrientationAttribute, runtime: runtime
+            )
+            guard orientation == kAXVerticalOrientationValue as String else { return false }
+            return horizontallyOverlaps(scrollBar, browserFrame: browserFrame, runtime: runtime)
+        }
+        let sorted = vertical.sorted { lhs, rhs in
+            let lhsX = frame(of: lhs, runtime: runtime)?.midX ?? 0
+            let rhsX = frame(of: rhs, runtime: runtime)?.midX ?? 0
+            return lhsX < rhsX
         }
         switch prefer {
         case .leftmost:
-            return matches.min { $0.x < $1.x }?.element
+            return sorted.first
         case .rightmost:
-            return matches.max { $0.x < $1.x }?.element
+            return sorted.last
         }
+    }
+
+    private static func distinctColumnXs(from candidates: [TextCandidate]) -> [CGFloat] {
+        candidates.map(\.columnX).sorted().reduce(into: []) { columns, x in
+            if let last = columns.last, abs(last - x) < 40 {
+                return
+            }
+            columns.append(x)
+        }
+    }
+
+    private static func textCandidates(
+        in texts: [AXUIElement],
+        visibleIn visibleFrame: CGRect?,
+        runtime: AXHelpers.Runtime
+    ) -> [TextCandidate] {
+        texts.compactMap { t -> TextCandidate? in
+            guard let rawValue: String = AXHelpers.getAttribute(t, kAXValueAttribute, runtime: runtime),
+                  ancestorRole(t, role: kAXListRole as String, maxDepth: 4, runtime: runtime) != nil
+            else { return nil }
+            let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else { return nil }
+            let elementFrame = frame(of: t, runtime: runtime)
+            if let visibleFrame, let elementFrame, !visibleFrame.intersects(elementFrame) {
+                return nil
+            }
+            let elementPosition = position(of: t, runtime: runtime)
+            return TextCandidate(
+                element: t,
+                value: value,
+                columnX: elementFrame?.midX ?? elementPosition?.x ?? 0,
+                y: elementFrame?.minY ?? elementPosition?.y ?? 0
+            )
+        }
+    }
+
+    private static func ancestorRole(
+        _ element: AXUIElement,
+        role: String,
+        maxDepth: Int,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        var current: AXUIElement? = element
+        for _ in 0..<maxDepth {
+            guard let parent = AXHelpers.getAttribute(
+                current ?? element,
+                kAXParentAttribute,
+                runtime: runtime
+            ) as AXUIElement? else {
+                return nil
+            }
+            if (AXHelpers.getAttribute(parent, kAXRoleAttribute, runtime: runtime) as String?) == role {
+                return parent
+            }
+            current = parent
+        }
+        return nil
     }
 
     /// Convenience: set category then preset with a short delay for Logic to
@@ -800,7 +1044,7 @@ enum LibraryAccessor {
     @discardableResult
     static func selectPath(
         segments: [String],
-        settleDelay: TimeInterval = 0.35,
+        settleDelay: TimeInterval = 1.0,
         runtime: AXLogicProElements.Runtime = .production,
         library: Runtime = .production
     ) -> Bool {
@@ -819,7 +1063,12 @@ enum LibraryAccessor {
             if idx == 0 {
                 ok = selectCategory(named: seg, runtime: runtime, library: library)
             } else {
-                ok = selectPreset(named: seg, runtime: runtime, library: library)
+                ok = selectPreset(
+                    named: seg,
+                    commit: idx == segments.count - 1,
+                    runtime: runtime,
+                    library: library
+                )
             }
             if !ok { return false }
             // Allow Logic to slide the column / update visible children before
@@ -839,6 +1088,7 @@ enum LibraryAccessor {
                 waitForSegmentVisible(
                     named: nextSeg,
                     timeout: settleDelay,
+                    rightmostColumnOnly: true,
                     runtime: runtime
                 )
             }
@@ -855,11 +1105,16 @@ enum LibraryAccessor {
         named name: String,
         timeout: TimeInterval,
         pollInterval: TimeInterval = 0.05,
+        rightmostColumnOnly: Bool = false,
         runtime: AXLogicProElements.Runtime = .production
     ) {
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
-            if segmentIsVisible(named: name, runtime: runtime) { return }
+            if segmentIsVisible(
+                named: name,
+                rightmostColumnOnly: rightmostColumnOnly,
+                runtime: runtime
+            ) { return }
             Thread.sleep(forTimeInterval: pollInterval)
         } while Date() < deadline
     }
@@ -868,15 +1123,28 @@ enum LibraryAccessor {
     /// the currently-visible Library browser? Used by `waitForSegmentVisible`.
     static func segmentIsVisible(
         named name: String,
+        rightmostColumnOnly: Bool = false,
         runtime: AXLogicProElements.Runtime = .production
     ) -> Bool {
         guard let browser = findLibraryBrowser(runtime: runtime) else { return false }
+        let visibleFrame = frame(of: browser, runtime: runtime.ax)
         let texts = AXHelpers.findAllDescendants(
             of: browser, role: kAXStaticTextRole, maxDepth: 6, runtime: runtime.ax
         )
-        return texts.contains { t in
-            (AXHelpers.getAttribute(t, kAXValueAttribute, runtime: runtime.ax) as String?) == name
+        if rightmostColumnOnly {
+            return textElement(
+                named: name,
+                in: texts,
+                prefer: .rightmost,
+                visibleIn: visibleFrame,
+                runtime: runtime.ax
+            ) != nil
         }
+        return textCandidates(
+            in: texts,
+            visibleIn: visibleFrame,
+            runtime: runtime.ax
+        ).contains { $0.value == name }
     }
 
     // MARK: - Private helpers
@@ -932,6 +1200,17 @@ enum LibraryAccessor {
             return nil
         }
         return CGPoint(x: cgPos.x + cgSize.width / 2, y: cgPos.y + cgSize.height / 2)
+    }
+
+    private static func frame(
+        of element: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> CGRect? {
+        guard let cgPos = AXHelpers.getPosition(element, runtime: runtime),
+              let cgSize = AXHelpers.getSize(element, runtime: runtime) else {
+            return nil
+        }
+        return CGRect(origin: cgPos, size: cgSize)
     }
 
     /// Try to detect which item in a column is currently selected/highlighted.
@@ -1032,9 +1311,11 @@ enum LibraryAccessor {
                 continue
             }
             for child in arr {
-                if let value: String = AXHelpers.getAttribute(
+                if let rawValue: String = AXHelpers.getAttribute(
                     child, kAXValueAttribute, runtime: runtime
-                ), !value.isEmpty {
+                ) {
+                    let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !value.isEmpty else { continue }
                     // Library has 2 columns (category, preset); the preset
                     // column comes after the category column left-to-right.
                     // Prefer the rightmost selected child so the return value
@@ -1059,25 +1340,51 @@ enum LibraryAccessor {
     /// Uses CGEvent — macOS accepts this from processes with Accessibility
     /// permission.
     static func productionMouseClick(at point: CGPoint) -> Bool {
-        guard let source = CGEventSource(stateID: .hidSystemState) else {
+        _ = ProcessUtils.activateLogicPro()
+        usleep(120_000)
+        CGWarpMouseCursorPosition(point)
+        usleep(30_000)
+        if postCliclick(command: "c", at: point) {
+            return true
+        }
+        return AXMouseHelper.click(at: point)
+    }
+
+    private static func postCliclick(command: String, at point: CGPoint) -> Bool {
+        let candidates = ["/opt/homebrew/bin/cliclick", "/usr/local/bin/cliclick"]
+        guard let executable = candidates.first(where: {
+            FileManager.default.isExecutableFile(atPath: $0)
+        }) else {
             return false
         }
-        let down = CGEvent(
-            mouseEventSource: source,
-            mouseType: .leftMouseDown,
-            mouseCursorPosition: point,
-            mouseButton: .left
-        )
-        let up = CGEvent(
-            mouseEventSource: source,
-            mouseType: .leftMouseUp,
-            mouseCursorPosition: point,
-            mouseButton: .left
-        )
-        down?.post(tap: .cghidEventTap)
-        // Brief delay between down and up so macOS treats this as a single click
-        usleep(50_000) // 50ms
-        up?.post(tap: .cghidEventTap)
-        return down != nil && up != nil
+        let x = Int(point.x.rounded())
+        let y = Int(point.y.rounded())
+        debugLibraryClick("cliclick \(command):\(x),\(y) executable=\(executable)")
+        guard case let .completed(output) = BoundedProcessRunner.run(
+            executable: executable,
+            arguments: ["\(command):\(x),\(y)"],
+            timeout: 1.0,
+            outputLimitBytes: 4_096
+        ) else {
+            debugLibraryClick("cliclick \(command):\(x),\(y) result=spawn_or_timeout")
+            return false
+        }
+        debugLibraryClick("cliclick \(command):\(x),\(y) exit=\(output.exitCode)")
+        return output.exitCode == 0
+    }
+
+    private static func debugLibraryClick(_ message: String) {
+        guard ProcessInfo.processInfo.environment["LOGIC_LIBRARY_CLICK_DEBUG"] == "1" else {
+            return
+        }
+        let line = "\(Date()) \(message)\n"
+        let url = URL(fileURLWithPath: "/tmp/logic-library-click-debug.log")
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+        }
+        guard let handle = try? FileHandle(forWritingTo: url) else { return }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        _ = try? handle.write(contentsOf: Data(line.utf8))
     }
 }

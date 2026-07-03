@@ -2135,6 +2135,40 @@ private func makeTempoSliderFixture(
     #expect(obj["readback_state"] as? String == "verified")
 }
 
+@Test func testAccessibilityChannelSetInstrumentTrimsLibraryReadbackPadding() async {
+    let fixture = makeSetInstrumentFixture()
+    fixture.builder.setAttribute(fixture.preset, kAXValueAttribute as String, "Sub Bass ")
+    let logicRuntime = fixture.builder.makeLogicRuntime(
+        appElement: fixture.app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            guard action == kAXPressAction as String else { return true }
+            if element == fixture.secondHeader {
+                fixture.builder.setAttribute(fixture.firstHeader, kAXSelectedAttribute as String, false)
+                fixture.builder.setAttribute(fixture.secondHeader, kAXSelectedAttribute as String, true)
+            }
+            return true
+        }
+    )
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: fixture.builder,
+        app: fixture.app,
+        logicRuntime: logicRuntime
+    )
+
+    let result = await channel.execute(
+        operation: "track.set_instrument",
+        params: ["index": "1", "path": "Bass/Sub Bass"]
+    )
+
+    #expect(result.isSuccess)
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect((obj["verified"] as? Bool)!)
+    #expect(obj["requested_patch_name"] as? String == "Sub Bass")
+    #expect(obj["observed_patch_name"] as? String == "Sub Bass")
+    #expect(obj["readback_state"] as? String == "verified")
+}
+
 @Test func testAccessibilityChannelSetInstrumentFailsClosedWhenTrackSelectionIsUnverified() async {
     let fixture = makeSetInstrumentFixture()
     let channel = makeAXBackedAccessibilityChannel(builder: fixture.builder, app: fixture.app)
@@ -2251,7 +2285,7 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     #expect(obj["error"] as? String == "library_panel_unavailable")
     #expect(obj["precondition"] as? String == "panel_closed")
     let hint = try #require(obj["hint"] as? String)
-    #expect(hint.contains("⌘L"))
+    #expect(hint.contains("Y"))
     // Auto-open must have been attempted before failing closed.
     #expect(openAttempted.value)
     // Must NOT be the misleading legacy error.
@@ -2291,6 +2325,76 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     #expect(obj["error"] as? String == "path_not_in_library")
     #expect(obj["precondition"] as? String == "missing_path")
     #expect(obj["error"] as? String != "ax_write_failed")
+}
+
+@Test func testSetInstrumentFolderPathFailsClosedBeforeAXNav() async {
+    let fixture = makeSetInstrumentFixture()
+    fixture.builder.setAttribute(fixture.category, kAXValueAttribute as String, "Synthesizer")
+    fixture.builder.setAttribute(fixture.preset, kAXValueAttribute as String, "Bass")
+    let logicRuntime = fixture.builder.makeLogicRuntime(
+        appElement: fixture.app,
+        setAttributeHandler: { _, _, _ in true },
+        performActionHandler: { element, action in
+            guard action == kAXPressAction as String else { return true }
+            if element == fixture.secondHeader {
+                fixture.builder.setAttribute(fixture.firstHeader, kAXSelectedAttribute as String, false)
+                fixture.builder.setAttribute(fixture.secondHeader, kAXSelectedAttribute as String, true)
+            }
+            return true
+        }
+    )
+
+    let result = await AccessibilityChannel.setTrackInstrument(
+        params: ["index": "1", "path": "Synthesizer/Bass"],
+        runtime: logicRuntime,
+        staging: AccessibilityChannel.LibraryPanelStaging(
+            isPanelOpen: { _ in true },
+            openPanel: { _ in },
+            resolvePathKind: { _ in .folder },
+            resolvePath: { _ in true }
+        )
+    )
+
+    #expect(!result.isSuccess)
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect(obj["error"] as? String == "folder_not_preset")
+    #expect(obj["precondition"] as? String == "folder_path")
+    #expect(obj["requested_path"] as? String == "Synthesizer/Bass")
+    #expect(!fixture.builder.actionCalls.map(\.elementID).contains(fixture.builder.elementID(fixture.category)))
+    #expect(!fixture.builder.actionCalls.map(\.elementID).contains(fixture.builder.elementID(fixture.preset)))
+}
+
+@Test func testLibraryPanelOpenUsesAXViewLibraryMenu() async {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(30_000)
+    let menuBar = builder.element(30_001)
+    let viewMenu = builder.element(30_002)
+    let libraryItem = builder.element(30_003)
+
+    builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setChildren(menuBar, [viewMenu])
+    builder.setAttribute(viewMenu, kAXTitleAttribute as String, "View")
+    builder.setChildren(viewMenu, [libraryItem])
+    builder.setAttribute(libraryItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+    builder.setAttribute(libraryItem, kAXTitleAttribute as String, "Show Library")
+
+    final class MenuClickBox: @unchecked Sendable { var clicked = false }
+    let menuClick = MenuClickBox()
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            if builder.elementID(element) == builder.elementID(libraryItem),
+               action == kAXPressAction as String {
+                menuClick.clicked = true
+            }
+            return true
+        }
+    )
+
+    await AccessibilityChannel.openLibraryPanelViaKeyCommand(runtime: runtime)
+
+    #expect(menuClick.clicked)
 }
 
 @Test func testSetInstrumentReopensPanelLeftClosedByFailedNav() async {
@@ -2336,7 +2440,7 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
 }
 
 @Test func testSetInstrumentNavFailureNeverRetogglesAnAlreadyOpenPanel() async {
-    // #222 safety: ⌘L is a TOGGLE. When a failed nav leaves the panel still
+    // #222 safety: the Library shortcut is a TOGGLE. When a failed nav leaves the panel still
     // open, the re-stage must NOT re-open it (which would toggle it shut). It
     // must be left open and openPanel must never be called.
     let fixture = makeSetInstrumentFixture()

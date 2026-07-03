@@ -27,7 +27,16 @@ enum ProcessUtils {
             },
             activateLogicPro: {
                 guard let app = ProcessUtils.logicProApp() else { return false }
-                return ProcessUtils.runAppKit { app.activate(); return true } ?? false
+                return ProcessUtils.activateLogicProWithFallback(
+                    appKitActivate: {
+                        ProcessUtils.runAppKit {
+                            app.activate()
+                        }
+                    },
+                    appleScriptActivate: {
+                        ProcessUtils.activateLogicProViaAppleScript()
+                    }
+                )
             },
             logicProBundleURL: {
                 // RB-2 (v3.4.0): same rationale as `logicProApp()` — both
@@ -73,6 +82,27 @@ enum ProcessUtils {
             return nil
         }
         return DispatchQueue.main.sync(execute: body)
+    }
+
+    static func activateLogicProWithFallback(
+        appKitActivate: () -> Bool?,
+        appleScriptActivate: () -> Bool
+    ) -> Bool {
+        let appKitActivated = appKitActivate() == true
+        return appleScriptActivate() || appKitActivated
+    }
+
+    private static func activateLogicProViaAppleScript() -> Bool {
+        let script = """
+        tell application "Logic Pro" to activate
+        try
+            tell application "System Events"
+                tell process "Logic Pro" to set frontmost to true
+            end tell
+        end try
+        return "ok"
+        """
+        return runAppleScript(script) != nil
     }
 
     /// RB-2 (2026-05-08 enterprise review) closed in v3.4.0: pre-fix this

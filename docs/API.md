@@ -75,6 +75,8 @@ Use explicit indices or names. Track mutation fails closed when the target canno
 
 Common commands: `create_audio`, `create_instrument`, `create_drummer`, `create_external_midi`, `select`, `rename`, `delete`, `duplicate`, `mute`, `solo`, `arm`, `set_instrument`, `record_sequence`, `get_regions`.
 
+For Library patches, treat `presetsByCategory` as a browse/catalog view. Default `scan_library` uses the local filesystem catalog from the user Logic Library plus Logic Pro's app bundle, dedupes relative `.patch` candidates, and reports `candidatePatchCount` plus `nonApplicablePatchCount` when a file candidate has no Panel-taxonomy route. Before calling `set_instrument`, call `resolve_path` and require `exists: true`, `kind: "leaf"`, and `loadable: true`. Folder/category rows return `loadable: false` and `set_instrument` fails closed with `folder_not_preset` instead of treating a selected row as a loaded patch.
+
 `record_sequence` writes a server-generated MIDI file under a private server-managed temp directory, imports it into Logic, and verifies the created region. If the import returns an unverified State B result, including GM Device / External MIDI lanes that can bounce silent, `record_sequence` fails closed with `audibility_unverified` or `import_unverified` instead of promoting region readback to audible success.
 
 ### `logic_mixer`

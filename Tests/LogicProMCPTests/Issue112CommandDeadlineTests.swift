@@ -148,7 +148,7 @@ struct Issue112CommandDeadlineTests {
     func blockingWorkDoesNotDelayTimeoutReturn() async throws {
         let blocker = BlockingWorkProbe()
         let resultProbe = ResultProbe()
-        let gate = LogicMutationGate()
+        let gate = LogicMutationGate(staleHolderTTL: 3_600, timedOutReclaimGrace: 3_600)
 
         let runner = Task {
             let result = await LogicProServer.runWithDeadline(
@@ -224,6 +224,7 @@ struct Issue112CommandDeadlineTests {
         #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: "bounce") == 300)
         // Medium tier — multi-step menu/library navigation.
         #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: "set_instrument") == 90)
+        #expect(AccessibilityChannel.setInstrumentLibraryNavigationDeadlineSeconds == 30)
         #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_plugins", command: "insert_verified") == 90)
         #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: "play_sequence") == 90)
     }
@@ -350,17 +351,7 @@ struct Issue112CommandDeadlineTests {
         #expect(try await waitUntil(timeoutNanoseconds: 10_000_000_000) { await resultProbe.hasResult() })
         #expect(json(await resultProbe.load()!)?["error"] as? String == "operation_timeout")
 
-        // Immediately after the timeout (within the grace) a follow-up is refused —
-        // the wedged play may still be unwinding.
-        let refused = await LogicProServer.runWithDeadline(
-            tool: "logic_transport",
-            command: "stop",
-            deadlineOverride: 1,
-            mutationGate: gate
-        ) {
-            toolTextResult("{\"unexpected\":true}")
-        }
-        #expect(json(refused)?["error"] as? String == "mutating_operation_in_progress")
+        #expect(gate.currentOperation() == "logic_transport.play")
 
         // Once the reclaim grace elapses, the gate auto-recovers WITHOUT the wedged
         // play ever returning, so a follow-up mutation proceeds (#201).

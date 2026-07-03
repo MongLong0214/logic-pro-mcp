@@ -9,9 +9,11 @@ import Foundation
 /// v3.0.5 assumed the disk hierarchy WAS the Library Panel path. That was
 /// wrong: Logic's Panel "flattens" some level-2 folders to top-level (e.g.
 /// `Drums & Percussion/Electronic Drums/...` on disk is `Electronic Drums/...`
-/// in the Panel) and also renames some intermediate folders (`z01 Kit Pieces`
-/// → `Kit Pieces`). Emitting raw disk paths meant `selectPath` failed at
-/// segment 0 on the majority of patches.
+/// in the Panel), promotes newer grouped content (`Brass & Woodwind/Studio Horns`
+/// → `Studio Horns`, `Strings/Studio Strings` → `Studio Strings`), and also
+/// renames some intermediate folders (`z01 Kit Pieces` → `Kit Pieces`). Emitting
+/// raw disk paths meant `selectPath` failed at segment 0 on the majority of
+/// patches.
 ///
 /// v3.0.6 introduces `mapDiskPathToPanel`: a longest-prefix mapper that
 /// rewrites disk segments into Panel segments before they're baked into a
@@ -33,6 +35,9 @@ enum LibraryDiskScanner {
     /// navigate to.
     static let defaultBundleRelativePath =
         "Music/Logic Pro Library.bundle/Patches/Instrument"
+
+    static let defaultAppBundlePath =
+        "/Applications/Logic Pro.app/Contents/Resources/Library.bundle/Patches/Instrument"
 
     /// The `.patch` suffix marks a leaf patch bundle. Stripped from the
     /// display name so clients see "Acid Etched Bass", not "Acid Etched
@@ -62,11 +67,12 @@ enum LibraryDiskScanner {
     /// 1-segment Panel path `Acoustic Drums/...` before the fallback
     /// `Drums & Percussion` → (no-match) check runs.
     ///
-    /// Verified against `Resources/library-inventory.json` (v3.0.4 AX snapshot).
+    /// Verified against `Resources/library-inventory.json` (AX panel snapshot).
     /// Panel categories: Bass, Acoustic Drums, Electronic Drums, Percussion,
     /// Guitar, Acoustic Piano, Clavinet, Electric Piano, Mellotron, Organ,
-    /// Mallet, Synthesizer, Orchestral.
+    /// Mallet, Studio Horns, Studio Strings, Synthesizer, Orchestral, World.
     static let diskToPanel: [String: String] = [
+        "Brass & Woodwind/Studio Horns": "Studio Horns",
         "Drums & Percussion/Acoustic Drums": "Acoustic Drums",
         "Drums & Percussion/Electronic Drums": "Electronic Drums",
         "Drums & Percussion/Percussion": "Percussion",
@@ -76,8 +82,8 @@ enum LibraryDiskScanner {
         "Keyboard/Mellotron": "Mellotron",
         "Keyboard/Organ": "Organ",
         "z_Legacy/Orchestral": "Orchestral",
-        // Strings live under a disk top-level not shown in the Panel;
-        // Logic groups them under Orchestral in the Panel taxonomy.
+        "z_Legacy/World": "World",
+        "Strings/Studio Strings": "Studio Strings",
         "Strings": "Orchestral",
     ]
 
@@ -91,6 +97,12 @@ enum LibraryDiskScanner {
     /// Panel drops the `z01 ` sort prefix from intra-category folders.
     static let intermediateRenames: [String: String] = [
         "z01 Kit Pieces": "Kit Pieces",
+        "z02 Multi-Channel Kits": "Multi-Channel Kits",
+    ]
+
+    private static let nonApplicableDiskPathKeys: Set<String> = [
+        "Drums & Percussion/Electronic Drums/z01 Kit Pieces/Template/Empty Pad",
+        "Drums & Percussion/Electronic Drums/z01 Kit Pieces/Template/Empty Quick Sampler",
     ]
 
     /// Rewrite a disk-segment sequence into Panel-segment form.
@@ -122,7 +134,6 @@ enum LibraryDiskScanner {
             let tail = Array(diskSegments.dropFirst())
             return [diskSegments[0]] + tail.map { renameIntermediate($0) }
         }
-        // 3. Unmapped top-level (e.g. `z_Legacy/World`). Caller must drop.
         return nil
     }
 
@@ -147,8 +158,13 @@ enum LibraryDiskScanner {
     ) throws -> LibraryRoot {
         let start = Date()
         let home = homeDirectory ?? URL(fileURLWithPath: NSHomeDirectory())
-        let bundleURL = home.appendingPathComponent(defaultBundleRelativePath)
-        return try scan(bundleURL: bundleURL, fileManager: fileManager, start: start)
+        let userBundleURL = home.appendingPathComponent(defaultBundleRelativePath)
+        let appBundleURL = URL(fileURLWithPath: defaultAppBundlePath)
+        return try scan(
+            bundleURLs: [userBundleURL, appBundleURL],
+            fileManager: fileManager,
+            start: start
+        )
     }
 
     /// Scan a specific Patches/Instrument directory. Tests use this entry
@@ -158,58 +174,128 @@ enum LibraryDiskScanner {
         fileManager: FileManager = .default,
         start: Date = Date()
     ) throws -> LibraryRoot {
-        // 1. Validate the bundle path exists and is a directory.
-        var isDir: ObjCBool = false
-        let exists = fileManager.fileExists(atPath: bundleURL.path, isDirectory: &isDir)
-        guard exists else {
-            throw ScanError.bundleNotFound(bundleURL.path)
-        }
-        guard isDir.boolValue else {
-            throw ScanError.notADirectory(bundleURL.path)
+        try scan(
+            bundleURLs: [bundleURL],
+            fileManager: fileManager,
+            start: start,
+            requireAllBundles: true
+        )
+    }
+
+    static func scan(
+        bundleURLs: [URL],
+        fileManager: FileManager = .default,
+        start: Date = Date()
+    ) throws -> LibraryRoot {
+        try scan(
+            bundleURLs: bundleURLs,
+            fileManager: fileManager,
+            start: start,
+            requireAllBundles: false
+        )
+    }
+
+    private static func scan(
+        bundleURLs: [URL],
+        fileManager: FileManager,
+        start: Date,
+        requireAllBundles: Bool
+    ) throws -> LibraryRoot {
+        guard let firstBundleURL = bundleURLs.first else {
+            throw ScanError.bundleNotFound("")
         }
 
-        // 2. Enumerate top-level DISK category directories. Each raw disk
-        //    top-level produces a sub-tree of leaves; we then redistribute
-        //    those leaves under Panel categories via `mapDiskPathToPanel`.
-        let topNames: [String]
-        do {
-            topNames = try fileManager.contentsOfDirectory(atPath: bundleURL.path)
-                .filter { !$0.hasPrefix(".") }   // skip .DS_Store etc.
-                .sorted()
-        } catch {
-            throw ScanError.enumerationFailed(bundleURL.path)
-        }
-
-        // 3. Walk disk top-levels and collect raw (diskSegments, kind) tuples
-        //    for every reachable leaf + folder. We'll rebuild the tree under
-        //    Panel taxonomy in step 4.
         var visited = Set<String>()
         var rawLeaves: [[String]] = []
         var skippedDirectoryCount = 0
         var scanWarnings: [String] = []
-        for name in topNames {
-            let childURL = bundleURL.appendingPathComponent(name)
-            guard isDirectory(childURL, fileManager: fileManager) else { continue }
-            collectDiskLeaves(
-                url: childURL,
-                pathSegments: [name],
-                depth: 1,
-                visited: &visited,
-                rawLeaves: &rawLeaves,
-                skippedDirectoryCount: &skippedDirectoryCount,
-                scanWarnings: &scanWarnings,
-                fileManager: fileManager
-            )
+        var scannedBundleCount = 0
+        for bundleURL in bundleURLs {
+            var isDir: ObjCBool = false
+            let exists = fileManager.fileExists(atPath: bundleURL.path, isDirectory: &isDir)
+            guard exists else {
+                if requireAllBundles {
+                    throw ScanError.bundleNotFound(bundleURL.path)
+                }
+                recordBundleWarning(
+                    "missing_bundle",
+                    path: bundleURL.path,
+                    scanWarnings: &scanWarnings
+                )
+                continue
+            }
+            guard isDir.boolValue else {
+                if requireAllBundles {
+                    throw ScanError.notADirectory(bundleURL.path)
+                }
+                recordBundleWarning(
+                    "not_directory",
+                    path: bundleURL.path,
+                    scanWarnings: &scanWarnings
+                )
+                continue
+            }
+
+            let topNames: [String]
+            do {
+                topNames = try fileManager.contentsOfDirectory(atPath: bundleURL.path)
+                    .filter { !$0.hasPrefix(".") }
+                    .sorted()
+            } catch {
+                if requireAllBundles {
+                    throw ScanError.enumerationFailed(bundleURL.path)
+                }
+                recordBundleWarning(
+                    "enumeration_failed",
+                    path: bundleURL.path,
+                    scanWarnings: &scanWarnings
+                )
+                continue
+            }
+
+            scannedBundleCount += 1
+            for name in topNames {
+                let childURL = bundleURL.appendingPathComponent(name)
+                guard isDirectory(childURL, fileManager: fileManager) else { continue }
+                collectDiskLeaves(
+                    url: childURL,
+                    pathSegments: [name],
+                    depth: 1,
+                    visited: &visited,
+                    rawLeaves: &rawLeaves,
+                    skippedDirectoryCount: &skippedDirectoryCount,
+                    scanWarnings: &scanWarnings,
+                    fileManager: fileManager
+                )
+            }
         }
 
-        // 4. Redistribute disk leaves into Panel-rooted buckets.
-        //    leaves keyed by Panel top-level category → list of Panel-relative
-        //    segments (including the category as segs[0]). Paths that do not
-        //    map to any Panel category are dropped silently.
+        guard scannedBundleCount > 0 else {
+            throw ScanError.bundleNotFound(firstBundleURL.path)
+        }
+
+        let uniqueRawLeaves = deduplicateRawLeaves(rawLeaves)
+
         var panelLeavesByCategory: [String: [[String]]] = [:]
         var panelCategoryOrder: [String] = []
-        for diskSegs in rawLeaves {
+        var nonApplicablePatchCount = 0
+        for diskSegs in uniqueRawLeaves {
+            if nonApplicableDiskPathKeys.contains(diskSegs.joined(separator: "/")) {
+                recordNonApplicablePatch(
+                    diskSegs,
+                    reason: "non_applicable:no_panel_template_route",
+                    nonApplicablePatchCount: &nonApplicablePatchCount,
+                    scanWarnings: &scanWarnings
+                )
+                continue
+            }
             guard let panelSegs = mapDiskPathToPanel(diskSegs), !panelSegs.isEmpty else {
+                recordNonApplicablePatch(
+                    diskSegs,
+                    reason: "non_applicable:no_panel_taxonomy_route",
+                    nonApplicablePatchCount: &nonApplicablePatchCount,
+                    scanWarnings: &scanWarnings
+                )
                 continue
             }
             let category = panelSegs[0]
@@ -220,8 +306,6 @@ enum LibraryDiskScanner {
             panelLeavesByCategory[category]!.append(panelSegs)
         }
 
-        // 5. Sort Panel categories alphabetically to match the AX-scan output
-        //    contract, and build a tree for each.
         panelCategoryOrder.sort()
         var topChildren: [LibraryNode] = []
         for category in panelCategoryOrder {
@@ -256,6 +340,8 @@ enum LibraryDiskScanner {
             nodeCount: counts.total,
             leafCount: counts.leaves,
             folderCount: counts.folders,
+            candidatePatchCount: uniqueRawLeaves.count,
+            nonApplicablePatchCount: nonApplicablePatchCount,
             root: rootNode,
             categories: categories,
             presetsByCategory: presetsByCategory,
@@ -265,6 +351,40 @@ enum LibraryDiskScanner {
     }
 
     // MARK: - Private helpers
+
+    private static func deduplicateRawLeaves(_ rawLeaves: [[String]]) -> [[String]] {
+        var seen = Set<String>()
+        var unique: [[String]] = []
+        for leaf in rawLeaves {
+            let key = leaf.joined(separator: "\u{0000}")
+            guard seen.insert(key).inserted else { continue }
+            unique.append(leaf)
+        }
+        return unique
+    }
+
+    private static func recordBundleWarning(
+        _ code: String,
+        path: String,
+        scanWarnings: inout [String]
+    ) {
+        guard scanWarnings.count < maxScanWarnings else { return }
+        scanWarnings.append("\(code) path=\"\(path)\"")
+    }
+
+    private static func recordNonApplicablePatch(
+        _ diskSegments: [String],
+        reason: String,
+        nonApplicablePatchCount: inout Int,
+        scanWarnings: inout [String]
+    ) {
+        nonApplicablePatchCount += 1
+        guard scanWarnings.count < maxScanWarnings else { return }
+        let path = diskSegments.joined(separator: "/")
+        scanWarnings.append(
+            "unmapped_patch path=\"\(path)\" reason=\"\(reason)\""
+        )
+    }
 
     /// First-pass walk: produces a flat list of `diskSegments` for every
     /// reachable `.patch` leaf. Uses `visited` (keyed by resolved absolute
@@ -296,6 +416,7 @@ enum LibraryDiskScanner {
             var segs = pathSegments
             if let last = segs.last, last.hasSuffix(patchSuffix) {
                 segs[segs.count - 1] = String(last.dropLast(patchSuffix.count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
             }
             rawLeaves.append(segs)
             return

@@ -687,6 +687,8 @@ def is_library_root_json(value):
         and isinstance(value.get("nodeCount"), int)
         and isinstance(value.get("leafCount"), int)
         and isinstance(value.get("folderCount"), int)
+        and isinstance(value.get("candidatePatchCount"), int)
+        and isinstance(value.get("nonApplicablePatchCount"), int)
     )
 
 
@@ -1690,10 +1692,26 @@ def main():
                 presets = presets_by_category.get(category)
                 if not isinstance(presets, list):
                     continue
-                preset = next((item for item in presets if isinstance(item, str) and item), None)
-                if preset:
+                for preset in presets:
+                    if not isinstance(preset, str) or not preset:
+                        continue
+                    candidate_path = f"{category}/{preset}"
+                    resolved = tool_json(call_tool(
+                        client,
+                        "logic_tracks",
+                        "resolve_path",
+                        {"path": candidate_path},
+                    )) or {}
+                    if not (
+                        resolved.get("exists") is True
+                        and resolved.get("kind") == "leaf"
+                        and resolved.get("loadable") is True
+                    ):
+                        continue
                     probe_category = category
                     probe_preset = preset
+                    break
+                if probe_category and probe_preset:
                     break
 
     if tracks and probe_category and probe_preset:
@@ -1729,6 +1747,9 @@ def main():
                             "permission_denied",
                             "readback_unavailable",
                             "readback_mismatch",
+                            "folder_not_preset",
+                            "path_not_in_library",
+                            "unsupported_track_type",
                         }
                         and set_instrument_json.get("requested_patch_name") == probe_preset
                         and set_instrument_json.get("requested_category") == probe_category

@@ -298,7 +298,7 @@ struct SystemDispatcher {
                   set_automation    -> { index: Int, mode: String } (read/write/touch/latch/trim/off)
                   set_instrument    -> { index: Int, path: String } OR { index: Int, category: String, preset: String }
                   list_library      -> {} — Read currently visible Library columns
-                  scan_library      -> { mode?: "ax"|"disk"|"both" } — disk (default) reads ~/Music/Logic Pro Library.bundle (5,400+ leaves); ax runs legacy live Panel scan; both returns diff
+                  scan_library      -> { mode?: "ax"|"disk"|"both" } — disk (default) dedupes user/app-bundle Instrument .patch candidates; ax runs legacy live Panel scan; both returns diff
                   resolve_path      -> { path: String } — Cache-backed Library lookup
                   scan_plugin_presets -> { submenuOpenDelayMs?: Int } — Focused plugin Setting-menu scan
 

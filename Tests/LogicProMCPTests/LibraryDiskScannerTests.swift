@@ -98,6 +98,33 @@ struct LibraryDiskScannerTests {
         #expect(leaf.path == "Synthesizer/Bass/Acid Etched Bass")
     }
 
+    @Test("leaf names trim filesystem padding before becoming Panel paths")
+    func leafTrimsPatchDisplayPadding() throws {
+        let (bundle, tmp) = try makeFixture(tree: [
+            "Drums & Percussion/Electronic Drums/z01 Kit Pieces/02 Snares/Snare 3 - Pawn Shop 808 .patch",
+        ])
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let root = try LibraryDiskScanner.scan(bundleURL: bundle)
+        let electronic = try #require(root.root.children.first { $0.name == "Electronic Drums" })
+        let kitPieces = try #require(electronic.children.first { $0.name == "Kit Pieces" })
+        let snares = try #require(kitPieces.children.first { $0.name == "02 Snares" })
+        let leaf = try #require(snares.children.first)
+
+        #expect(leaf.name == "Snare 3 - Pawn Shop 808")
+        #expect(leaf.path == "Electronic Drums/Kit Pieces/02 Snares/Snare 3 - Pawn Shop 808")
+        #expect(root.presetsByCategory["Electronic Drums"] == ["Snare 3 - Pawn Shop 808"])
+
+        let resolved = try #require(
+            LibraryAccessor.resolvePath(
+                "Electronic Drums/Kit Pieces/02 Snares/Snare 3 - Pawn Shop 808",
+                in: root
+            )
+        )
+        #expect(resolved.exists)
+        #expect(resolved.kind == .leaf)
+    }
+
     @Test("presetsByCategory flattens leaves under their top-level category")
     func presetsByCategoryFlattensCorrectly() throws {
         let (bundle, tmp) = try makeFixture(tree: [
@@ -287,12 +314,28 @@ struct LibraryDiskScannerTests {
         #expect(mapped == ["Orchestral", "Film Strings"])
     }
 
-    @Test("mapDiskPathToPanel: Strings → Orchestral")
-    func mapperRoutesStringsToOrchestral() {
+    @Test("mapDiskPathToPanel: z_Legacy/World → World")
+    func mapperFlattensWorld() {
         let mapped = LibraryDiskScanner.mapDiskPathToPanel(
-            ["Strings", "Solo Cello"]
+            ["z_Legacy", "World", "Stringed", "Koto"]
         )
-        #expect(mapped == ["Orchestral", "Solo Cello"])
+        #expect(mapped == ["World", "Stringed", "Koto"])
+    }
+
+    @Test("mapDiskPathToPanel: Brass & Woodwind/Studio Horns → Studio Horns")
+    func mapperFlattensStudioHorns() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Brass & Woodwind", "Studio Horns", "3-Piece Section", "Chicago Street"]
+        )
+        #expect(mapped == ["Studio Horns", "3-Piece Section", "Chicago Street"])
+    }
+
+    @Test("mapDiskPathToPanel: Strings/Studio Strings → Studio Strings")
+    func mapperFlattensStudioStrings() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Strings", "Studio Strings", "Section Instruments", "Abbey Wood"]
+        )
+        #expect(mapped == ["Studio Strings", "Section Instruments", "Abbey Wood"])
     }
 
     @Test("mapDiskPathToPanel: Bass identity passthrough")
@@ -325,11 +368,10 @@ struct LibraryDiskScannerTests {
         #expect(mapped == ["Synthesizer", "Bass", "Acid Etched Bass"])
     }
 
-    @Test("mapDiskPathToPanel: unmapped top-level returns nil (dropped)")
+    @Test("mapDiskPathToPanel: unknown top-level returns nil (dropped)")
     func mapperRejectsUnmapped() {
-        // z_Legacy without /Orchestral has no Panel route.
         let mapped = LibraryDiskScanner.mapDiskPathToPanel(
-            ["z_Legacy", "World", "Gamelan"]
+            ["Third Party", "Vendor", "Patch"]
         )
         #expect(mapped == nil)
     }
@@ -346,25 +388,104 @@ struct LibraryDiskScannerTests {
         #expect(mapped == ["Acoustic Drums", "Kit Pieces", "Kick"])
     }
 
+    @Test("mapDiskPathToPanel: z02 Multi-Channel Kits → Multi-Channel Kits")
+    func mapperRenamesZ02MultiChannelKits() {
+        let mapped = LibraryDiskScanner.mapDiskPathToPanel(
+            ["Drums & Percussion", "Acoustic Drums", "z02 Multi-Channel Kits", "8-Bit+"]
+        )
+        #expect(mapped == ["Acoustic Drums", "Multi-Channel Kits", "8-Bit+"])
+    }
+
     @Test("mapDiskPathToPanel: empty input returns empty array")
     func mapperHandlesEmpty() {
         #expect(LibraryDiskScanner.mapDiskPathToPanel([]) == [])
     }
 
-    @Test("scan drops unmapped top-levels (e.g. z_Legacy/World)")
-    func scanDropsUnmappedCategories() throws {
+    @Test("scan maps current Logic grouped libraries into Panel categories")
+    func scanMapsGroupedLibraryCategories() throws {
         let (bundle, tmp) = try makeFixture(tree: [
             "Bass/Sub Bass.patch",
-            "z_Legacy/World/Gamelan.patch",    // should be dropped
-            "z_Legacy/Orchestral/Film Strings.patch",  // should land under Orchestral
+            "Brass & Woodwind/Studio Horns/3-Piece Section/Chicago Street.patch",
+            "Strings/Studio Strings/Section Instruments/Abbey Wood.patch",
+            "z_Legacy/World/Stringed/Koto.patch",
+            "z_Legacy/Orchestral/Brass/French Horns.patch",
         ])
         defer { try? FileManager.default.removeItem(at: tmp) }
 
         let root = try LibraryDiskScanner.scan(bundleURL: bundle)
-        #expect(root.categories.sorted() == ["Bass", "Orchestral"])
-        #expect(root.leafCount == 2)
+        #expect(root.categories.sorted() == ["Bass", "Orchestral", "Studio Horns", "Studio Strings", "World"])
+        #expect(root.leafCount == 5)
+        let horns = try #require(LibraryAccessor.resolvePath("Studio Horns/3-Piece Section", in: root))
+        #expect(horns.kind == .folder)
+        let strings = try #require(LibraryAccessor.resolvePath("Studio Strings/Section Instruments", in: root))
+        #expect(strings.kind == .folder)
+        let world = try #require(LibraryAccessor.resolvePath("World/Stringed", in: root))
+        #expect(world.kind == .folder)
         let orchestral = try #require(root.root.children.first { $0.name == "Orchestral" })
-        #expect(orchestral.children.map(\.name) == ["Film Strings"])
+        #expect(orchestral.children.map(\.name) == ["Brass"])
+    }
+
+    @Test("scan combines multiple bundle roots and deduplicates relative patch paths")
+    func scanCombinesMultipleBundleRoots() throws {
+        let (userBundle, userTmp) = try makeFixture(tree: [
+            "Bass/Sub Bass.patch",
+            "Keyboard/Electric Piano/Deluxe Classic.patch",
+            "Drums & Percussion/Electronic Drums/z01 Kit Pieces/Empty Pad.patch",
+        ])
+        let (appBundle, appTmp) = try makeFixture(tree: [
+            "Bass/Sub Bass.patch",
+            "Keyboard/Electric Piano/Deluxe Classic.patch",
+            "Drums & Percussion/Electronic Drums/z01 Kit Pieces/Template/Empty Pad.patch",
+            "Drums & Percussion/Electronic Drums/z01 Kit Pieces/Template/Empty Quick Sampler.patch",
+        ])
+        defer {
+            try? FileManager.default.removeItem(at: userTmp)
+            try? FileManager.default.removeItem(at: appTmp)
+        }
+
+        let root = try LibraryDiskScanner.scan(bundleURLs: [userBundle, appBundle])
+
+        #expect(root.leafCount == 3)
+        #expect(root.candidatePatchCount == 5)
+        #expect(root.nonApplicablePatchCount == 2)
+        let emptyPad = try #require(
+            LibraryAccessor.resolvePath(
+                "Electronic Drums/Kit Pieces/Empty Pad",
+                in: root
+            )
+        )
+        #expect(emptyPad.kind == LibraryNodeKind.leaf)
+        let templatePad = try #require(
+            LibraryAccessor.resolvePath(
+                "Electronic Drums/Kit Pieces/Template/Empty Pad",
+                in: root
+            )
+        )
+        #expect(templatePad.exists == false)
+        #expect(root.scanWarnings.contains { warning in
+            warning.contains("Template/Empty Pad")
+                && warning.contains("no_panel_template_route")
+        })
+    }
+
+    @Test("scan reports unmapped patch candidates instead of silently dropping them")
+    func scanReportsUnmappedPatchCandidates() throws {
+        let (bundle, tmp) = try makeFixture(tree: [
+            "Deluxe Classic.patch",
+            "Bass/Sub Bass.patch",
+        ])
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let root = try LibraryDiskScanner.scan(bundleURL: bundle)
+
+        #expect(root.leafCount == 1)
+        #expect(root.candidatePatchCount == 2)
+        #expect(root.nonApplicablePatchCount == 1)
+        #expect(root.scanWarnings.contains { warning in
+            warning.contains("unmapped_patch")
+                && warning.contains("Deluxe Classic")
+                && warning.contains("non_applicable")
+        })
     }
 
     @Test("scan flattens Drums & Percussion + Keyboard into Panel-visible top-levels")
@@ -400,6 +521,23 @@ struct LibraryDiskScannerTests {
         let kick = try #require(kitPieces.children.first)
         #expect(kick.name == "Kick")
         #expect(kick.path == "Acoustic Drums/Kit Pieces/Kick")
+    }
+
+    @Test("scan renames z02 intermediate folders to their Panel equivalents")
+    func scanRenamesZ02Folders() throws {
+        let (bundle, tmp) = try makeFixture(tree: [
+            "Drums & Percussion/Acoustic Drums/z02 Multi-Channel Kits/8-Bit+.patch",
+        ])
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let root = try LibraryDiskScanner.scan(bundleURL: bundle)
+        let acoustic = try #require(root.root.children.first { $0.name == "Acoustic Drums" })
+        let multiChannel = try #require(acoustic.children.first { $0.name == "Multi-Channel Kits" })
+        #expect(multiChannel.kind == .folder)
+        #expect(multiChannel.path == "Acoustic Drums/Multi-Channel Kits")
+        let kit = try #require(multiChannel.children.first)
+        #expect(kit.name == "8-Bit+")
+        #expect(kit.path == "Acoustic Drums/Multi-Channel Kits/8-Bit+")
     }
 
     /// v3.0.6 contract assertion: every emitted top-level category must exist

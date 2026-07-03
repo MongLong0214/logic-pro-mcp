@@ -11,12 +11,10 @@ actor AccessibilityChannel: Channel {
 
     // T4: actor state for scanLibraryAll orchestration
     private var scanInProgress: Bool = false
-    // v3.1.0 (T6) — split the single `lastScan` into three source-keyed caches
-    // so a `mode:disk` call no longer poisons the panel-only view that
-    // `library.resolve_path` needs for Load-via-Library (panel-only paths
-    // never load from disk-only entries). `lastScan` remains populated with
-    // whichever cache was last written so legacy call sites that ask for
-    // "any recent scan" still work; new code reads the source-specific cache.
+    // v3.1.0 (T6) — split the single `lastScan` into three source-keyed caches.
+    // Panel scans certify Panel presence; disk scans provide the full local
+    // candidate catalog; `lastScan` remains populated for legacy callers that
+    // only ask for "any recent scan".
     private var lastScan: LibraryRoot? = nil
     private var lastPanelScan: LibraryRoot? = nil
     private var lastDiskScan: LibraryRoot? = nil
@@ -339,11 +337,8 @@ actor AccessibilityChannel: Channel {
                 return await self.runLiveScan(runtime: runtime.logicRuntime)
             }
         case "library.resolve_path":
-            // v3.1.0 (T6) — panel-only lookups prefer the panel cache because
-            // only panel entries are loadable via `selectPath`. Disk-only
-            // entries are returned with `source:"disk-only"` + `loadable:false`
-            // and a warning, which lets the client avoid calling
-            // `set_instrument` against a path that will fail deterministically.
+            // v3.1.0 (T6) + #222 — panel hits win; disk hits are loadable
+            // candidates only when no panel cache has proved the path absent.
             return AccessibilityChannel.resolveLibraryPath(
                 params: params,
                 lastPanelScan: lastPanelScan,
@@ -365,21 +360,46 @@ actor AccessibilityChannel: Channel {
                 runtime: runtime.logicRuntime, settleMs: settleMs
             )
         case "track.set_instrument":
-            // #135/#141 — wire a cache-backed pre-resolver from the live
-            // Panel-scan cache (read-only). Only the AX/panel cache counts:
-            // disk-mode scan does NOT satisfy set_instrument's live-panel
-            // requirement, so we resolve against `lastPanelScan` only. A nil
-            // cache → undecided (attempt nav), preserving prior behavior.
+            // #135/#141/#222 — wire a cache-backed pre-resolver. A Panel cache
+            // can certify a path as Panel-present; an already-captured disk
+            // cache can fail fast for non-leaf factory paths, but we do not
+            // create a fresh disk scan here. Disk inventory is not the same
+            // denominator as the live Panel inventory, and treating an implicit
+            // disk miss as a hard Panel miss reintroduces the #222 contract bug.
             let panelScanSnapshot = self.lastPanelScan
+            let diskScanSnapshot = self.lastDiskScan
             let staging = AccessibilityChannel.LibraryPanelStaging(
                 isPanelOpen: { rt in LibraryAccessor.isLibraryPanelOpen(runtime: rt) },
                 openPanel: { rt in await AccessibilityChannel.openLibraryPanelViaKeyCommand(runtime: rt) },
-                resolvePath: { path in
-                    guard let root = panelScanSnapshot,
-                          let resolution = LibraryAccessor.resolvePath(path, in: root) else {
-                        return nil   // no cache → undecided, attempt nav
+                resolvePathKind: { path in
+                    if let panelRoot = panelScanSnapshot,
+                       let panelResolution = LibraryAccessor.resolvePath(path, in: panelRoot),
+                       panelResolution.exists {
+                        if let diskRoot = diskScanSnapshot,
+                           let diskResolution = LibraryAccessor.resolvePath(path, in: diskRoot),
+                           diskResolution.exists,
+                           diskResolution.kind != .leaf {
+                            return diskResolution.kind
+                        }
+                        return panelResolution.kind
                     }
-                    return resolution.exists
+                    if let diskRoot = diskScanSnapshot,
+                       let diskResolution = LibraryAccessor.resolvePath(path, in: diskRoot),
+                       diskResolution.exists {
+                        return diskResolution.kind
+                    }
+                    return nil
+                },
+                resolvePath: { path in
+                    if let root = panelScanSnapshot,
+                       let resolution = LibraryAccessor.resolvePath(path, in: root) {
+                        return resolution.exists
+                    }
+                    if let root = diskScanSnapshot,
+                       let resolution = LibraryAccessor.resolvePath(path, in: root) {
+                        return resolution.exists
+                    }
+                    return nil   // no cache → undecided, attempt nav
                 }
             )
             let result = await AccessibilityChannel.setTrackInstrument(
@@ -2394,7 +2414,7 @@ actor AccessibilityChannel: Channel {
         runtime: AXLogicProElements.Runtime = .production
     ) -> ChannelResult {
         guard let inventory = LibraryAccessor.enumerate(runtime: runtime) else {
-            return .error("Library panel not found. Open Library (⌘L) in Logic Pro.")
+            return .error("Library panel not found. Open Library (Y) in Logic Pro.")
         }
         do {
             let data = try JSONEncoder().encode(inventory)
@@ -2419,7 +2439,7 @@ actor AccessibilityChannel: Channel {
         // there being no visible project window to operate on.
         guard self.runtime.hasVisibleWindow() else {
             Log.info("scan_all: preflight failed — no visible Logic window", subsystem: "ax")
-            return .error("Library panel not found. Open Library (⌘L) in Logic Pro.")
+            return .error("Library panel not found. Open Library (Y) in Logic Pro.")
         }
 
         // Precondition: only start the scan if the Library panel is actually open.
@@ -2428,7 +2448,7 @@ actor AccessibilityChannel: Channel {
         // any expensive setup (probe construction, snapshot extraction).
         guard LibraryAccessor.isLibraryPanelOpen(runtime: runtime) else {
             Log.info("scan_all: preflight failed in \(Int(Date().timeIntervalSince(t0) * 1000))ms — panel closed", subsystem: "ax")
-            return .error("Library panel not found. Open Library (⌘L) in Logic Pro.")
+            return .error("Library panel not found. Open Library (Y) in Logic Pro.")
         }
         Log.info("scan_all: preflight OK in \(Int(Date().timeIntervalSince(t0) * 1000))ms", subsystem: "ax")
 
@@ -2456,7 +2476,7 @@ actor AccessibilityChannel: Channel {
             settleDelayMs: 150
         )
         guard let r = result else {
-            return .error("Library panel not found. Open Library (⌘L) in Logic Pro.")
+            return .error("Library panel not found. Open Library (Y) in Logic Pro.")
         }
         // v3.1.0 (T6) — AX scan response now includes `source:"panel"` so
         // clients can distinguish it from disk/both responses and route
@@ -2488,12 +2508,12 @@ actor AccessibilityChannel: Channel {
 
     // MARK: - v3.0.5 disk-backed scan
 
-    /// v3.0.5 — filesystem-backed `library.scan_all`. Enumerates
-    /// `~/Music/Logic Pro Library.bundle/Patches/Instrument/` and produces a
-    /// schema-identical `LibraryRoot` to the AX scan, but with full depth.
-    /// Falls back to the legacy AX scan if the bundle is missing or unreadable
-    /// (custom installs, Jam-Pack-only users, permission errors). Populates
-    /// `lastScan` so `library.resolve_path` works against the disk tree.
+    /// v3.0.5 — filesystem-backed `library.scan_all`. Enumerates the user
+    /// Logic Library and Logic Pro app-bundle Instrument patch roots, dedupes
+    /// relative `.patch` paths, and produces a schema-identical `LibraryRoot`
+    /// to the AX scan, but with full depth. Falls back to the legacy AX scan if
+    /// no configured bundle can be scanned. Populates `lastScan` so
+    /// `library.resolve_path` works against the disk tree.
     private func runDiskScan(runtime: AXLogicProElements.Runtime) async -> ChannelResult {
         let t0 = Date()
         Log.info("scan_all: entering runDiskScan (mode=disk)", subsystem: "ax")
@@ -2872,9 +2892,11 @@ actor AccessibilityChannel: Channel {
         let matchedPath: String?
         let children: [String]?
         let reason: String?
-        // v3.1.0 (T6) — when the match comes from the disk scan but not the
-        // panel scan, `source` is `"disk-only"` and `loadable` is false so
-        // clients know not to attempt `set_instrument` on this path.
+        // v3.1.0 (T6) — when a panel cache is present and the match comes from
+        // disk only, `source` is `"disk-only"` and `loadable` is false so
+        // clients know not to attempt `set_instrument` on a panel-missing path.
+        // Without a panel cache, disk leaf paths are loadable candidates; the
+        // actual apply still has to be verified by `set_instrument`.
         // When the match exists in the panel scan (or we only have a panel
         // scan), `source` is `"panel"` and `loadable` is true.
         let source: String?
@@ -2910,32 +2932,62 @@ actor AccessibilityChannel: Channel {
         guard let path = params["path"], !path.isEmpty else {
             return .error("Missing 'path' parameter for library.resolve_path")
         }
-        // v3.1.0 (T6) — resolution ladder:
-        //  1. If panel cache has the path, return source:"panel", loadable:true
-        //  2. Else if disk cache has it, return source:"disk-only",
-        //     loadable:false + warning (can't be loaded via AX Library Panel)
-        //  3. Else fall back to the legacy `lastScan` (whatever was written
+        // v3.1.0 (T6) + #222 — resolution ladder:
+        //  1. If panel cache has the path, return source:"panel"; loadable is
+        //     true only for leaf nodes. Folder/category rows are browse rows,
+        //     not set_instrument targets.
+        //  2. Else if disk cache has it and no panel cache exists, return
+        //     source:"disk"; leaf paths are loadable candidates, folders are
+        //     non-loadable browse rows.
+        //  3. Else if disk cache has it but panel cache missed it, return
+        //     source:"disk-only", loadable:false + warning.
+        //  4. Else fall back to the legacy `lastScan` (whatever was written
         //     most recently) so callers that only ran one scan still work.
-        //  4. Else return exists:false.
+        //  5. Else return exists:false.
         // Panel cache: take the hit only if the path exists there. A
         // `PathResolution(exists:false)` means the segment wasn't found in
         // the panel tree — fall through to the disk cache before declaring
         // the entry unloadable.
         if let root = lastPanelScan,
            let res = LibraryAccessor.resolvePath(path, in: root), res.exists {
+            let diskOverride = lastDiskScan
+                .flatMap { LibraryAccessor.resolvePath(path, in: $0) }
+                .flatMap { diskRes in
+                    diskRes.exists && diskRes.kind != .leaf ? diskRes : nil
+                }
+            let effectiveKind = diskOverride?.kind ?? res.kind
+            let effectiveMatchedPath = diskOverride?.matchedPath ?? res.matchedPath
+            let effectiveChildren = diskOverride?.children ?? res.children
+            let loadable = effectiveKind == .leaf
             return encodeOrError(ResolvePathResponse(
-                exists: true, kind: res.kind?.rawValue,
-                matchedPath: res.matchedPath, children: res.children,
-                reason: nil, source: "panel", loadable: true, warning: nil
+                exists: true, kind: effectiveKind?.rawValue,
+                matchedPath: effectiveMatchedPath, children: effectiveChildren,
+                reason: loadable ? nil : Self.nonLoadableReason(for: effectiveKind),
+                source: "panel",
+                loadable: loadable,
+                warning: loadable ? nil : Self.nonLoadableWarning(path: path, kind: effectiveKind)
             ))
         }
         if let root = lastDiskScan,
            let res = LibraryAccessor.resolvePath(path, in: root), res.exists {
+            let hasPanelCache = lastPanelScan != nil
+            let isLoadableDiskCandidate = !hasPanelCache && res.kind == .leaf
+            let source = hasPanelCache ? "disk-only" : "disk"
+            let warning: String?
+            if isLoadableDiskCandidate {
+                warning = nil
+            } else if hasPanelCache {
+                warning = "Path exists on disk but isn't exposed via Logic's Library Panel. set_instrument will fail for this entry; run scan_library with mode=ax to see Panel-loadable paths."
+            } else {
+                warning = Self.nonLoadableWarning(path: path, kind: res.kind)
+            }
             return encodeOrError(ResolvePathResponse(
                 exists: true, kind: res.kind?.rawValue,
                 matchedPath: res.matchedPath, children: res.children,
-                reason: nil, source: "disk-only", loadable: false,
-                warning: "Path exists on disk but isn't exposed via Logic's Library Panel. set_instrument will fail for this entry; run scan_library with mode=ax to see Panel-loadable paths."
+                reason: isLoadableDiskCandidate ? nil : Self.nonLoadableReason(for: res.kind),
+                source: source,
+                loadable: isLoadableDiskCandidate,
+                warning: warning
             ))
         }
         // Legacy fallback — use whatever cache was last populated.
@@ -2954,17 +3006,35 @@ actor AccessibilityChannel: Channel {
         }
         // If lastScanSource is "disk" or "both" and we didn't find the path
         // in lastPanelScan above, treat as disk-only.
-        let isPanelLoadable = lastScanSource == "panel"
+        let isPanelLoadable = lastScanSource == "panel" && res.exists && res.kind == .leaf
+        let warning: String?
+        if isPanelLoadable {
+            warning = nil
+        } else if lastScanSource == "panel", res.exists {
+            warning = Self.nonLoadableWarning(path: path, kind: res.kind)
+        } else {
+            warning = "Path resolved from \(lastScanSource ?? "unknown") cache; may not be loadable via Library Panel."
+        }
         return encodeOrError(ResolvePathResponse(
             exists: res.exists,
             kind: res.kind?.rawValue,
             matchedPath: res.matchedPath,
             children: res.children,
-            reason: nil,
+            reason: isPanelLoadable ? nil : Self.nonLoadableReason(for: res.kind),
             source: lastScanSource,
-            loadable: isPanelLoadable ? res.exists : false,
-            warning: isPanelLoadable ? nil : "Path resolved from \(lastScanSource ?? "unknown") cache; may not be loadable via Library Panel."
+            loadable: isPanelLoadable,
+            warning: warning
         ))
+    }
+
+    private static func nonLoadableReason(for kind: LibraryNodeKind?) -> String? {
+        guard let kind, kind != .leaf else { return nil }
+        return kind == .folder ? "folder_path" : "not_loadable_path"
+    }
+
+    private static func nonLoadableWarning(path: String, kind: LibraryNodeKind?) -> String {
+        let kindLabel = kind?.rawValue ?? "unknown"
+        return "Library path '\(path)' resolves to \(kindLabel); set_instrument accepts only leaf preset paths."
     }
 
     private static func encodeOrError<T: Encodable>(_ value: T) -> ChannelResult {
@@ -2981,20 +3051,33 @@ actor AccessibilityChannel: Channel {
 
     /// Injectable staging seam for `setTrackInstrument`'s Library-panel
     /// precondition + path pre-resolution. Production wires live AX reads + a
-    /// ⌘L auto-open; tests inject deterministic outcomes (panel closed/open,
+    /// View-menu auto-open; tests inject deterministic outcomes (panel closed/open,
     /// path present/absent) without driving real Logic UI. #131/#135/#141.
     struct LibraryPanelStaging: Sendable {
         /// Read-only: is the Library panel currently open?
         let isPanelOpen: @Sendable (AXLogicProElements.Runtime) -> Bool
-        /// Attempt to open the Library panel (⌘L / View > Show Library). Best
+        /// Attempt to open the Library panel (View > Show Library). Best
         /// effort; the caller re-checks `isPanelOpen` afterwards.
         let openPanel: @Sendable (AXLogicProElements.Runtime) async -> Void
+        let resolvePathKind: @Sendable (String) -> LibraryNodeKind?
         /// Pre-resolve the requested path against the cached inventory WITHOUT
         /// touching live AX. Returns:
         ///   .some(true)  → path is known to EXIST in the cache (attempt nav)
         ///   .some(false) → path is known to be ABSENT (fail closed, do not nav)
         ///   nil          → no cache available / cannot decide (attempt nav)
         let resolvePath: @Sendable (String) -> Bool?
+
+        init(
+            isPanelOpen: @Sendable @escaping (AXLogicProElements.Runtime) -> Bool,
+            openPanel: @Sendable @escaping (AXLogicProElements.Runtime) async -> Void,
+            resolvePathKind: @Sendable @escaping (String) -> LibraryNodeKind? = { _ in nil },
+            resolvePath: @Sendable @escaping (String) -> Bool?
+        ) {
+            self.isPanelOpen = isPanelOpen
+            self.openPanel = openPanel
+            self.resolvePathKind = resolvePathKind
+            self.resolvePath = resolvePath
+        }
 
         static let production = LibraryPanelStaging(
             isPanelOpen: { rt in LibraryAccessor.isLibraryPanelOpen(runtime: rt) },
@@ -3005,29 +3088,72 @@ actor AccessibilityChannel: Channel {
         )
     }
 
-    /// Best-effort Library-panel open via ⌘L (Logic's default "Show/Hide
-    /// Library" key command). Mirrors the existing osascript keystroke pattern
-    /// used by `runTempoFallbackScript`. No verification here — the caller
-    /// re-checks `isLibraryPanelOpen` after a settle. v3.6.x (#131/#135/#141).
+    /// Best-effort Library-panel open via the View menu. Avoid user key-command
+    /// mappings here because live #222 testing showed shortcut drift can open
+    /// Controller Assignments instead of the Library panel.
+    /// No verification here — the caller re-checks `isLibraryPanelOpen` after
+    /// a settle. v3.6.x (#131/#135/#141), hardened for #222.
     static func openLibraryPanelViaKeyCommand(
         runtime: AXLogicProElements.Runtime = .production
     ) async {
         _ = ProcessUtils.activateLogicPro()
         try? await Task.sleep(nanoseconds: 150_000_000)
-        let script = """
-        tell application "System Events"
-            tell process "Logic Pro"
-                set frontmost to true
-                delay 0.15
-                keystroke "l" using command down
-            end tell
-        end tell
-        """
-        _ = BoundedProcessRunner.run(
-            executable: "/usr/bin/osascript",
-            arguments: ["-e", script],
-            timeout: 5.0,
-            outputLimitBytes: 4 * 1024
+        _ = await clickLibraryMenuItem(runtime: runtime)
+    }
+
+    private static func clickLibraryMenuItem(runtime: AXLogicProElements.Runtime) async -> Bool {
+        guard let menuBar = AXLogicProElements.getMenuBar(runtime: runtime),
+              let viewMenu = AXLocalePolicy.findMenuBarItem(
+                in: menuBar,
+                matching: AXLocalePolicy.viewMenuBar,
+                runtime: runtime.ax
+              ) else {
+            return false
+        }
+
+        if !clickAXElementCenter(viewMenu, runtime: runtime.ax),
+           !AXHelpers.performAction(viewMenu, kAXPressAction as String, runtime: runtime.ax) {
+            return false
+        }
+        try? await Task.sleep(nanoseconds: 120_000_000)
+
+        let libraryMenuItem = AXLocalePolicy.LabelSet(
+            canonical: "Show Library",
+            variants: ["라이브러리 보기", "라이브러리"],
+            rationale: "Logic exposes View menu items as localized AX titles without stable identifiers."
+        )
+        guard let item = AXLocalePolicy.findMenuItem(
+            under: viewMenu,
+            matching: libraryMenuItem,
+            mode: .exact,
+            runtime: runtime.ax
+        ) else {
+            AXMouseHelper.pressEscape()
+            return false
+        }
+
+        if let enabled: Bool = AXHelpers.getAttribute(item, kAXEnabledAttribute, runtime: runtime.ax),
+           !enabled {
+            AXMouseHelper.pressEscape()
+            return false
+        }
+
+        if clickAXElementCenter(item, runtime: runtime.ax)
+            || AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax) {
+            return true
+        }
+        AXMouseHelper.pressEscape()
+        return false
+    }
+
+    private static func clickAXElementCenter(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
+        guard let pos = AXHelpers.getPosition(element, runtime: runtime),
+              let size = AXHelpers.getSize(element, runtime: runtime),
+              size.width > 0, size.height > 0 else {
+            return false
+        }
+        return LibraryAccessor.productionMouseClick(
+            at: CGPoint(x: pos.x + size.width / 2, y: pos.y + size.height / 2)
         )
     }
 
@@ -3043,6 +3169,8 @@ actor AccessibilityChannel: Channel {
             return true
         }
     }
+
+    static let setInstrumentLibraryNavigationDeadlineSeconds: Double = 30
 
     /// Run a blocking Library-navigation closure under a hard wall-clock
     /// deadline. Returns the closure's result, or `nil` if the deadline elapsed
@@ -3263,7 +3391,7 @@ actor AccessibilityChannel: Channel {
         // rows do not exist and selectPath fails with the misleading
         // "Library path not fully resolvable" even when the path is valid.
         // Mirror scan_all's guard: if the panel is closed, try to auto-open it
-        // (⌘L), settle, and re-check; if it still cannot be staged, fail closed
+        // (Y), settle, and re-check; if it still cannot be staged, fail closed
         // with a TYPED `library_panel_unavailable` error and an actionable hint
         // — NOT ax_write_failed.
         if !staging.isPanelOpen(runtime) {
@@ -3272,7 +3400,7 @@ actor AccessibilityChannel: Channel {
             if !staging.isPanelOpen(runtime) {
                 return .error(HonestContract.encodeStateC(
                     error: .libraryPanelUnavailable,
-                    hint: "Library panel not found. Open Library (⌘L) in Logic Pro, then retry.",
+                    hint: "Library panel not found. Open Library (Y) in Logic Pro, then retry.",
                     extras: setInstrumentBaseExtras(
                         requestedPath: resolvedPath,
                         category: category,
@@ -3290,6 +3418,22 @@ actor AccessibilityChannel: Channel {
         // from "path exists but live AX nav failed" (still surfaces below as
         // ax_write_failed, a retry/timing signal). `resolvePath` returns nil
         // when no cache is available, in which case we attempt nav as before.
+        if let pathKind = staging.resolvePathKind(resolvedPath), pathKind != .leaf {
+            return .error(HonestContract.encodeStateC(
+                error: .folderNotPreset,
+                hint: "Library path '\(resolvedPath)' resolves to a \(pathKind.rawValue), not a loadable preset leaf. Pick a leaf path below it from scan_library.",
+                extras: setInstrumentBaseExtras(
+                    requestedPath: resolvedPath,
+                    category: category,
+                    preset: preset,
+                    targetTrackIndex: targetTrackIndex as Any? ?? NSNull(),
+                    targetTrackName: targetTrackName
+                ).merging([
+                    "precondition": "folder_path",
+                    "path_kind": pathKind.rawValue,
+                ]) { _, new in new }
+            ))
+        }
         if staging.resolvePath(resolvedPath) == false {
             return .error(HonestContract.encodeStateC(
                 error: .pathNotInLibrary,
@@ -3315,7 +3459,9 @@ actor AccessibilityChannel: Channel {
         // timeout, hanging the stdio loop. Fail closed with a typed State C
         // instead of hanging. The happy path resolves in a few seconds, well
         // under this ceiling.
-        let navOutcome = await AccessibilityChannel.runWithDeadline(seconds: 15) {
+        let navOutcome = await AccessibilityChannel.runWithDeadline(
+            seconds: Self.setInstrumentLibraryNavigationDeadlineSeconds
+        ) {
             LibraryAccessor.selectPath(segments: pathSegments, runtime: runtime)
         }
         guard let didSelect = navOutcome else {
@@ -3327,7 +3473,7 @@ actor AccessibilityChannel: Channel {
             let restaged = await Self.restageLibraryPanelAfterFailure(staging: staging, runtime: runtime)
             return .error(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
-                hint: "set_instrument Library navigation exceeded 15s and was abandoned — the Library panel's AX surface is unresponsive (a prior invalid-path attempt can leave it wedged). Re-open the Library (⌘L) and retry; restart Logic if it persists. Run scan_library first so an unknown path fails fast as path_not_in_library instead of navigating live.",
+                hint: "set_instrument Library navigation exceeded \(Int(Self.setInstrumentLibraryNavigationDeadlineSeconds))s and was abandoned — the Library panel's AX surface is unresponsive (a prior invalid-path attempt can leave it wedged). Re-open the Library (Y) and retry; restart Logic if it persists. Run scan_library first so an unknown path fails fast as path_not_in_library instead of navigating live.",
                 extras: setInstrumentBaseExtras(
                     requestedPath: resolvedPath,
                     category: category,
@@ -3426,7 +3572,7 @@ actor AccessibilityChannel: Channel {
     /// panel in a known-open baseline so the failure does not cascade into the
     /// next attempt (the reported symptom: a later `set_instrument` reported
     /// `library_panel_unavailable` because a prior failed nav left the panel
-    /// closed/wedged). `⌘L` is a TOGGLE, so we re-open ONLY when the panel is
+    /// closed/wedged). The Library key command is a TOGGLE, so we re-open ONLY when the panel is
     /// actually closed — never re-toggle an already-open panel shut. Returns
     /// the observed post-failure panel state for the response diagnostics.
     private static func restageLibraryPanelAfterFailure(

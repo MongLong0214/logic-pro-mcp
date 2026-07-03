@@ -201,6 +201,61 @@ private func makeBundleURL(version: String) throws -> URL {
     #expect(harness.activateCalls == 1)
 }
 
+@Test func testProcessUtilsActivationFallsBackWhenAppKitActivationIsUnavailable() {
+    var appKitCalls = 0
+    var appleScriptCalls = 0
+
+    let activated = ProcessUtils.activateLogicProWithFallback(
+        appKitActivate: {
+            appKitCalls += 1
+            return nil
+        },
+        appleScriptActivate: {
+            appleScriptCalls += 1
+            return true
+        }
+    )
+
+    #expect(activated == true)
+    #expect(appKitCalls == 1)
+    #expect(appleScriptCalls == 1)
+}
+
+@Test func testProcessUtilsActivationUsesAppleScriptWhenAppKitActivationFails() {
+    var appleScriptCalls = 0
+
+    let activated = ProcessUtils.activateLogicProWithFallback(
+        appKitActivate: { false },
+        appleScriptActivate: {
+            appleScriptCalls += 1
+            return true
+        }
+    )
+
+    #expect(activated == true)
+    #expect(appleScriptCalls == 1)
+}
+
+@Test func testProcessUtilsActivationReinforcesSuccessfulAppKitActivationWithAppleScript() {
+    var appKitCalls = 0
+    var appleScriptCalls = 0
+
+    let activated = ProcessUtils.activateLogicProWithFallback(
+        appKitActivate: {
+            appKitCalls += 1
+            return true
+        },
+        appleScriptActivate: {
+            appleScriptCalls += 1
+            return true
+        }
+    )
+
+    #expect(activated == true)
+    #expect(appKitCalls == 1)
+    #expect(appleScriptCalls == 1)
+}
+
 @Test func testProcessUtilsProductionActivateWrapperReturnsWithoutCrash() {
     let activated = ProcessUtils.activateLogicPro()
 

@@ -3,10 +3,8 @@ import Testing
 @testable import LogicProMCP
 
 // v3.1.0 (T6) — scan_library now writes three separate caches (panel / disk
-// / both) so a disk scan no longer poisons resolve_path lookups that should
-// only return Panel-loadable entries. resolve_path responses carry `source`
-// and `loadable` fields so the client can avoid set_instrument on disk-only
-// paths that would deterministically fail.
+// / both). resolve_path responses carry `source` and `loadable` fields so the
+// client can distinguish disk-catalog candidates from panel-proven misses.
 
 @Test func testResolvePathMissingCacheReturnsReason() async {
     // No scan has been run; resolve_path should hint at scan_library without
@@ -44,6 +42,67 @@ import Testing
     #expect(obj["source"] as? String == "panel")
     #expect((obj["loadable"] as? Bool)!)
     #expect(obj["warning"] == nil)
+}
+
+@Test func testResolvePathReturnsPanelFolderAsNonLoadable() async {
+    let channel = AccessibilityChannel(runtime: makeRuntime())
+    let root = makeFolderRoot()
+    await channel.seedLastScanForTest(root, source: "panel")
+
+    let result = await channel.execute(
+        operation: "library.resolve_path",
+        params: ["path": "Synthesizer/Bass"]
+    )
+    let obj = try! JSONSerialization.jsonObject(
+        with: Data(result.message.utf8)
+    ) as! [String: Any]
+    #expect((obj["exists"] as? Bool)!)
+    #expect(obj["kind"] as? String == "folder")
+    #expect(obj["source"] as? String == "panel")
+    #expect(!((obj["loadable"] as? Bool)!))
+    #expect(obj["reason"] as? String == "folder_path")
+    #expect((obj["warning"] as? String)?.contains("leaf preset paths") == true)
+}
+
+@Test func testResolvePathReturnsDiskLeafAsLoadableCandidateWithoutPanelCache() async {
+    let channel = AccessibilityChannel(runtime: makeRuntime())
+    let disk = makeFolderRoot()
+    await channel.seedLastScanForTest(disk, source: "disk")
+
+    let result = await channel.execute(
+        operation: "library.resolve_path",
+        params: ["path": "Synthesizer/Bass/Acid Etched Bass"]
+    )
+    let obj = try! JSONSerialization.jsonObject(
+        with: Data(result.message.utf8)
+    ) as! [String: Any]
+    #expect((obj["exists"] as? Bool)!)
+    #expect(obj["kind"] as? String == "leaf")
+    #expect(obj["source"] as? String == "disk")
+    #expect((obj["loadable"] as? Bool)!)
+    #expect(obj["reason"] == nil)
+    #expect(obj["warning"] == nil)
+}
+
+@Test func testResolvePathUsesDiskTreeToDisambiguateShallowPanelFolderRows() async {
+    let channel = AccessibilityChannel(runtime: makeRuntime())
+    let shallowPanel = makeTestRoot(categories: ["Synthesizer"], presets: ["Bass"])
+    let diskTree = makeFolderRoot()
+    await channel.seedLastScanForTest(shallowPanel, source: "panel")
+    await channel.seedLastScanForTest(diskTree, source: "disk")
+
+    let result = await channel.execute(
+        operation: "library.resolve_path",
+        params: ["path": "Synthesizer/Bass"]
+    )
+    let obj = try! JSONSerialization.jsonObject(
+        with: Data(result.message.utf8)
+    ) as! [String: Any]
+    #expect((obj["exists"] as? Bool)!)
+    #expect(obj["kind"] as? String == "folder")
+    #expect(obj["source"] as? String == "panel")
+    #expect(!((obj["loadable"] as? Bool)!))
+    #expect(obj["reason"] as? String == "folder_path")
 }
 
 // v3.1.0 (Ralph-2 / C3) — `mode:both` regression guard. Previously,
@@ -155,5 +214,36 @@ private func makeTestRoot(categories: [String], presets: [String]) -> LibraryRoo
         cycleCount: 0, nodeCount: 1 + categories.count + categories.count * presets.count,
         leafCount: categories.count * presets.count, folderCount: 1 + categories.count,
         root: root, categories: categories, presetsByCategory: byCat
+    )
+}
+
+private func makeFolderRoot() -> LibraryRoot {
+    let acid = LibraryNode(
+        name: "Acid Etched Bass",
+        path: "Synthesizer/Bass/Acid Etched Bass",
+        kind: .leaf,
+        children: []
+    )
+    let bass = LibraryNode(
+        name: "Bass",
+        path: "Synthesizer/Bass",
+        kind: .folder,
+        children: [acid]
+    )
+    let synth = LibraryNode(
+        name: "Synthesizer",
+        path: "Synthesizer",
+        kind: .folder,
+        children: [bass]
+    )
+    let root = LibraryNode(name: "(library-root)", path: "", kind: .folder, children: [synth])
+    return LibraryRoot(
+        generatedAt: "2026-07-02T00:00:00Z",
+        scanDurationMs: 0, measuredSettleDelayMs: 0,
+        selectionRestored: false, truncatedBranches: 0, probeTimeouts: 0,
+        cycleCount: 0, nodeCount: 4, leafCount: 1, folderCount: 3,
+        root: root,
+        categories: ["Synthesizer"],
+        presetsByCategory: ["Synthesizer": ["Acid Etched Bass"]]
     )
 }
