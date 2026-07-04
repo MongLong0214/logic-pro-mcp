@@ -425,6 +425,20 @@ enum AXLocalePolicy {
         rationale: "Locates a plugin-editor window's Compare checkbox for the non-blocking chrome signature; English canonical only (OQ-1: Korean/localized unverified → unverified locales stay blocking, fail-closed). Read-only classifier."
     )
 
+    /// #234: the channel-strip "Link" checkbox in a Logic plugin-EDITOR window.
+    /// Present from the moment the editor first opens — UNLIKE the Compare
+    /// checkbox, which only appears once the plugin has preset/edit state to
+    /// compare (live 12.3 Gain evidence 2026-07-05, `axwhy234.out`). Combined with
+    /// the bypass checkbox + close-button attribute it forms the alternative
+    /// chrome branch (compare OR link) that recognizes a freshly-inserted editor.
+    /// English canonical only; Korean/localized UNVERIFIED (OQ-1) → unverified
+    /// locales conservatively stay BLOCKING (fail-closed).
+    static let pluginWindowLinkControl = LabelSet(
+        canonical: "link",
+        variants: [],
+        rationale: "Locates a plugin-editor window's channel-strip Link checkbox for the non-blocking chrome signature (present from first open, unlike Compare); English canonical only (OQ-1 fail-closed). Read-only classifier."
+    )
+
     /// Automation-mode labels that must NOT be read as a plugin display name.
     static let pluginAutomationLabelExact = LabelSet(
         canonical: "읽기, 오토메이션이 활성화됨",
