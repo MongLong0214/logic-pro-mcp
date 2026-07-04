@@ -1,0 +1,30 @@
+WINDOW 'Audio 2' subrole=AXDialog
+  kAXCloseButtonAttribute: PRESENT
+  direct children: 46
+  [0] AXButton desc='close' title=''
+  [1] AXButton desc='toolbar' title=''
+  [2] AXCheckBox desc='link' title=''
+  [3] AXMenuButton desc='view' title='100%'
+  [4] AXStaticText desc='' title=''
+  [5] AXPopUpButton desc='' title=''
+  [6] AXStaticText desc='' title=''
+  [7] AXCheckBox desc='bypass' title=' '
+  [8] AXCheckBox desc='compare' title='Compare'
+  [9] AXGroup desc='' title=''
+  [10] AXGroup desc='' title=''
+  [11] AXGroup desc='' title=''
+  checkbox descs: ["link", "bypass", "compare"]
+WINDOW 'Audio 1' subrole=AXDialog
+  kAXCloseButtonAttribute: PRESENT
+  direct children: 9
+  [0] AXButton desc='close' title=''
+  [1] AXButton desc='toolbar' title=''
+  [2] AXCheckBox desc='link' title=''
+  [3] AXMenuButton desc='view' title='51%'
+  [4] AXButton desc='bypass' title=' '
+  [5] AXPopUpButton desc='' title=''
+  [6] AXGroup desc='' title=''
+  [7] AXStaticText desc='' title=''
+  [8] AXStaticText desc='' title=''
+  checkbox descs: ["link"]
+WINDOW 'Untitled 54 - Tracks' subrole=AXStandardWindow
