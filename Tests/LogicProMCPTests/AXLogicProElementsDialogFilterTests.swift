@@ -224,17 +224,20 @@ import Testing
 /// track name), which tripped the v3.7.2 modal guard on unrelated ops. A plugin
 /// editor is distinguished from a true modal by Logic's own chrome — the window
 /// exposes `kAXCloseButtonAttribute` plus, among its direct children, a
-/// bypass-labeled AND a compare-labeled `AXCheckBox`. This fixture transcribes
-/// the live 12.3 dump (`axdialog234.out` / PRD Appendix A). The `include*` /
-/// `chromeRole` knobs let the fail-closed partial-chrome cases strip one
-/// conjunct at a time. The close-button is set as the ATTRIBUTE (locale-neutral,
-/// the exact handle the live probe closed the editor through), never as a
-/// `desc='close'` child.
+/// bypass-labeled `AXCheckBox` AND a compare-OR-link-labeled `AXCheckBox`. This
+/// "Deluxe" shape (bypass + compare) transcribes the live 12.3 dump
+/// (`axdialog234.out` / PRD Appendix A); `buildFreshGainEditorWindow` models the
+/// freshly-inserted shape (bypass + link, no compare — `axwhy234.out`). The
+/// `include*` / `chromeRole` knobs let the fail-closed partial-chrome cases strip
+/// one conjunct at a time. The close-button is set as the ATTRIBUTE (locale-
+/// neutral, the exact handle the live probe closed the editor through), never as
+/// a `desc='close'` child.
 private func buildPluginEditorWindow(
     _ builder: FakeAXRuntimeBuilder,
     base: Int,
     includeBypass: Bool = true,
     includeCompare: Bool = true,
+    includeLink: Bool = false,
     includeClose: Bool = true,
     chromeRole: String = kAXCheckBoxRole as String
 ) -> AXUIElement {
@@ -244,6 +247,7 @@ private func buildPluginEditorWindow(
     let compare = builder.element(base + 3)
     let bodySlider = builder.element(base + 4)
     let bodyField = builder.element(base + 5)
+    let link = builder.element(base + 6)
 
     builder.setAttribute(window, kAXSubroleAttribute as String, kAXDialogSubrole as String)
     builder.setAttribute(window, kAXTitleAttribute as String, "Deluxe Classic")
@@ -254,6 +258,11 @@ private func buildPluginEditorWindow(
     }
 
     var children: [AXUIElement] = []
+    if includeLink {
+        builder.setAttribute(link, kAXRoleAttribute as String, chromeRole)
+        builder.setAttribute(link, kAXDescriptionAttribute as String, "link")
+        children.append(link)
+    }
     if includeBypass {
         builder.setAttribute(bypass, kAXRoleAttribute as String, chromeRole)
         builder.setAttribute(bypass, kAXTitleAttribute as String, " ")
@@ -275,11 +284,59 @@ private func buildPluginEditorWindow(
     return window
 }
 
-/// Which single conjunct a partial-chrome variant withholds (AC-4.4 / test #5).
+/// #234: a freshly-inserted plugin's auto-opened editor (live 12.3 Gain evidence,
+/// `axwhy234.out`, 2026-07-05): `AXDialog title='Audio 1'`, `kAXCloseButtonAttribute`
+/// present, direct children = close/toolbar buttons, a `link` checkbox, a `view`
+/// menu-button, a `bypass` checkbox, a popup, a group, and two static texts —
+/// crucially NO `compare` checkbox (Compare chrome appears only once the plugin
+/// has preset/edit state). This is the single most common editor state in the
+/// verified apply-back flow, so it must classify non-blocking.
+private func buildFreshGainEditorWindow(
+    _ builder: FakeAXRuntimeBuilder,
+    base: Int
+) -> AXUIElement {
+    let window = builder.element(base)
+    let closeButton = builder.element(base + 1)
+    let toolbarButton = builder.element(base + 2)
+    let link = builder.element(base + 3)
+    let viewMenu = builder.element(base + 4)
+    let bypass = builder.element(base + 5)
+    let popup = builder.element(base + 6)
+    let group = builder.element(base + 7)
+    let staticA = builder.element(base + 8)
+    let staticB = builder.element(base + 9)
+
+    builder.setAttribute(window, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(window, kAXTitleAttribute as String, "Audio 1")
+    builder.setAttribute(closeButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(closeButton, kAXDescriptionAttribute as String, "close")
+    builder.setAttribute(window, kAXCloseButtonAttribute as String, closeButton)
+
+    builder.setAttribute(toolbarButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(toolbarButton, kAXDescriptionAttribute as String, "toolbar")
+    builder.setAttribute(link, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(link, kAXDescriptionAttribute as String, "link")
+    builder.setAttribute(viewMenu, kAXRoleAttribute as String, kAXMenuButtonRole as String)
+    builder.setAttribute(viewMenu, kAXTitleAttribute as String, "51%")
+    builder.setAttribute(viewMenu, kAXDescriptionAttribute as String, "view")
+    builder.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(bypass, kAXTitleAttribute as String, " ")
+    builder.setAttribute(bypass, kAXDescriptionAttribute as String, "bypass")
+    builder.setAttribute(popup, kAXRoleAttribute as String, kAXPopUpButtonRole as String)
+    builder.setAttribute(group, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(staticA, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    builder.setAttribute(staticB, kAXRoleAttribute as String, kAXStaticTextRole as String)
+
+    builder.setChildren(window, [closeButton, toolbarButton, link, viewMenu, bypass, popup, group, staticA, staticB])
+    return window
+}
+
+/// Which conjunct(s) a partial-chrome variant withholds (AC-4.4).
 /// Internal (not `private`) so the parameterized `@Test` below can name it.
 struct PartialChromeVariant: Sendable {
     let includeBypass: Bool
     let includeCompare: Bool
+    let includeLink: Bool
     let includeClose: Bool
     let chromeRole: String
     let name: String
@@ -353,27 +410,36 @@ struct PartialChromeVariant: Sendable {
 }
 
 @Test(arguments: [
+    // bypass present but NEITHER compare NOR link → the chrome branch is unmet.
     PartialChromeVariant(
-        includeBypass: true, includeCompare: false, includeClose: true,
-        chromeRole: kAXCheckBoxRole as String, name: "bypass without compare"
+        includeBypass: true, includeCompare: false, includeLink: false, includeClose: true,
+        chromeRole: kAXCheckBoxRole as String, name: "bypass without compare or link"
     ),
+    // link present but no bypass → bypass conjunct unmet.
     PartialChromeVariant(
-        includeBypass: false, includeCompare: true, includeClose: true,
-        chromeRole: kAXCheckBoxRole as String, name: "compare without bypass"
+        includeBypass: false, includeCompare: false, includeLink: true, includeClose: true,
+        chromeRole: kAXCheckBoxRole as String, name: "link without bypass"
     ),
+    // link+compare but no bypass → bypass conjunct unmet.
     PartialChromeVariant(
-        includeBypass: true, includeCompare: true, includeClose: false,
-        chromeRole: kAXCheckBoxRole as String, name: "bypass+compare without close attribute"
+        includeBypass: false, includeCompare: true, includeLink: true, includeClose: true,
+        chromeRole: kAXCheckBoxRole as String, name: "link+compare without bypass"
     ),
+    // full chrome but NO close-button attribute → close conjunct unmet.
     PartialChromeVariant(
-        includeBypass: true, includeCompare: true, includeClose: true,
+        includeBypass: true, includeCompare: true, includeLink: true, includeClose: false,
+        chromeRole: kAXCheckBoxRole as String, name: "full chrome without close attribute"
+    ),
+    // right labels on non-checkbox roles → no matching AXCheckBox children.
+    PartialChromeVariant(
+        includeBypass: true, includeCompare: true, includeLink: true, includeClose: true,
         chromeRole: kAXButtonRole as String, name: "labels on non-checkbox roles"
     ),
 ])
 func testPartialChromeStaysBlocking(_ variant: PartialChromeVariant) {
     // AC-4.4: any window matching only part of the chrome signature stays
-    // blocking (fail-closed). Pin — every variant is an AXDialog, so it passes
-    // pre-fix; post-fix each is rejected by the missing conjunct.
+    // blocking (fail-closed). Pin — every variant is an AXDialog missing a
+    // required conjunct, so it stays blocking both pre- and post-fix.
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(1)
     let arrange = builder.element(2)
@@ -382,6 +448,7 @@ func testPartialChromeStaysBlocking(_ variant: PartialChromeVariant) {
         base: 100,
         includeBypass: variant.includeBypass,
         includeCompare: variant.includeCompare,
+        includeLink: variant.includeLink,
         includeClose: variant.includeClose,
         chromeRole: variant.chromeRole
     )
@@ -393,6 +460,23 @@ func testPartialChromeStaysBlocking(_ variant: PartialChromeVariant) {
         AXLogicProElements.dialogPresent(runtime: runtime),
         "\(variant.name) must stay blocking"
     )
+}
+
+@Test func testFreshPluginEditorWithoutCompareIsNonBlocking() {
+    // #234 live gap (axwhy234.out): a freshly-inserted plugin's editor exposes
+    // link + bypass but NO compare. The signature's compare-OR-link branch must
+    // still recognize it as a plugin editor → non-blocking on BOTH public
+    // surfaces. FAILS pre-fix (compare-only signature classifies it blocking).
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let editor = buildFreshGainEditorWindow(builder, base: 100)
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [editor, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(!AXLogicProElements.dialogPresent(runtime: runtime))
+    #expect(AXLogicProElements.blockingDialogInfo(runtime: runtime) == nil)
 }
 
 @Test func testEditorPlusRealDialogStillReportsDialog() {
