@@ -3,7 +3,7 @@
 **PRD**: docs/prd/PRD-issue-234-mixer-strip-selection-12-3.md (v0.2)
 **Issue**: https://github.com/MongLong0214/logic-pro-mcp/issues/234
 **Size**: L
-**Current Phase**: 4 (ticket review)
+**Current Phase**: 5 (TDD implementation)
 **Baseline**: main @ 21167ff — `swift test --no-parallel` 1955 passed (2026-07-04)
 **Branch (Phase 5)**: fix/234-mixer-strip-selection-12-3
 
@@ -27,7 +27,7 @@
 | 2 (PRD) | 2 | **CONVERGED** | 0 | 0 | 0 | boomer R2 Task A. D4 close-conjunct을 `kAXCloseButtonAttribute`로 정밀화 (R2-#1 정합) |
 | 4 (tickets) | 1 | HAS_ISSUES | 0 | 3 | 2(+1 P3) | R2 Task B. 수용: #1(T3 4-conjunct 시그니처), #2(T2 set_param 테스트+liveInsertSlot AC 제거), #3(T2 #8/#9 AC-1.2/3.3 매핑), #4(T1 red/pin 라벨), #5(T3 public-surface 단언), #6(T4 앵커) |
 | 4 (tickets) | 2 | HAS_ISSUES | 0 | 0 | 3(+1 P3) | worktree 재실행. 수용: #1(T1 #7 full-chain 경유+red셋 정정), #2(T2 set_param 파일표+red셋), #3(T3 red셋 {1,2,7}+EC 앵커), #4(PRD plugin_editor wire 표현 제거) |
-| 4 (tickets) | 3 | (pending) | | | | 4건 반영 확인 |
+| 4 (tickets) | 3 | **CONVERGED** | 0 | 0 | 0 | Phase 4 완료. Phase 5(codex gpt-5.5 xhigh TDD) 진입 |
 
 ## Live Evidence Index (scratchpad, 2026-07-04)
 - `axdump234.out` — 12.3 window census + toolbar-as-winner dump
