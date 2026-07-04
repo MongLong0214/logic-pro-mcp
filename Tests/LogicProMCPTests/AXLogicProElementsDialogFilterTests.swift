@@ -285,15 +285,18 @@ private func buildPluginEditorWindow(
 }
 
 /// #234: a freshly-inserted plugin's auto-opened editor (live 12.3 Gain evidence,
-/// `axwhy234.out`, 2026-07-05): `AXDialog title='Audio 1'`, `kAXCloseButtonAttribute`
-/// present, direct children = close/toolbar buttons, a `link` checkbox, a `view`
-/// menu-button, a `bypass` checkbox, a popup, a group, and two static texts —
-/// crucially NO `compare` checkbox (Compare chrome appears only once the plugin
-/// has preset/edit state). This is the single most common editor state in the
-/// verified apply-back flow, so it must classify non-blocking.
+/// `axwhy234.out` / `axwhy234b.out`, 2026-07-05): `AXDialog title='Audio 1'`,
+/// `kAXCloseButtonAttribute` present, direct children = close/toolbar buttons, a
+/// `link` checkbox, a `view` menu-button, a `bypass` toggle, a popup, a group, and
+/// two static texts — crucially NO `compare` checkbox (Compare chrome appears only
+/// once the plugin has preset/edit state). The toggle ROLE flaps with window focus
+/// (checkbox when key, button when not): `bypassRole` models both. This is the
+/// single most common editor state in the verified apply-back flow, so it must
+/// classify non-blocking regardless of focus.
 private func buildFreshGainEditorWindow(
     _ builder: FakeAXRuntimeBuilder,
-    base: Int
+    base: Int,
+    bypassRole: String = kAXCheckBoxRole as String
 ) -> AXUIElement {
     let window = builder.element(base)
     let closeButton = builder.element(base + 1)
@@ -319,7 +322,7 @@ private func buildFreshGainEditorWindow(
     builder.setAttribute(viewMenu, kAXRoleAttribute as String, kAXMenuButtonRole as String)
     builder.setAttribute(viewMenu, kAXTitleAttribute as String, "51%")
     builder.setAttribute(viewMenu, kAXDescriptionAttribute as String, "view")
-    builder.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(bypass, kAXRoleAttribute as String, bypassRole)
     builder.setAttribute(bypass, kAXTitleAttribute as String, " ")
     builder.setAttribute(bypass, kAXDescriptionAttribute as String, "bypass")
     builder.setAttribute(popup, kAXRoleAttribute as String, kAXPopUpButtonRole as String)
@@ -410,36 +413,45 @@ struct PartialChromeVariant: Sendable {
 }
 
 @Test(arguments: [
-    // bypass present but NEITHER compare NOR link → the chrome branch is unmet.
+    // bypass present (checkbox) but NEITHER compare NOR link → chrome branch unmet.
     PartialChromeVariant(
         includeBypass: true, includeCompare: false, includeLink: false, includeClose: true,
-        chromeRole: kAXCheckBoxRole as String, name: "bypass without compare or link"
+        chromeRole: kAXCheckBoxRole as String, name: "bypass checkbox without companion"
     ),
-    // link present but no bypass → bypass conjunct unmet.
+    // same, bypass as a BUTTON — the pin must hold in either toggle role form.
+    PartialChromeVariant(
+        includeBypass: true, includeCompare: false, includeLink: false, includeClose: true,
+        chromeRole: kAXButtonRole as String, name: "bypass button without companion"
+    ),
+    // link (button) but no bypass → bypass conjunct unmet.
     PartialChromeVariant(
         includeBypass: false, includeCompare: false, includeLink: true, includeClose: true,
-        chromeRole: kAXCheckBoxRole as String, name: "link without bypass"
+        chromeRole: kAXButtonRole as String, name: "link button without bypass"
     ),
-    // link+compare but no bypass → bypass conjunct unmet.
+    // link+compare (checkbox) but no bypass → bypass conjunct unmet.
     PartialChromeVariant(
         includeBypass: false, includeCompare: true, includeLink: true, includeClose: true,
         chromeRole: kAXCheckBoxRole as String, name: "link+compare without bypass"
     ),
-    // full chrome but NO close-button attribute → close conjunct unmet.
+    // full chrome as BUTTONS but NO close-button attribute → close conjunct unmet
+    // (valid toggle role, so this proves the close attribute is still required).
     PartialChromeVariant(
         includeBypass: true, includeCompare: true, includeLink: true, includeClose: false,
-        chromeRole: kAXCheckBoxRole as String, name: "full chrome without close attribute"
+        chromeRole: kAXButtonRole as String, name: "full button chrome without close attribute"
     ),
-    // right labels on non-checkbox roles → no matching AXCheckBox children.
+    // right labels on genuinely NON-toggle roles (static text) → no matching
+    // AXCheckBox/AXButton children. AXButton is now a valid toggle role, so the
+    // wrong-role pin must use a role the matcher never scans.
     PartialChromeVariant(
         includeBypass: true, includeCompare: true, includeLink: true, includeClose: true,
-        chromeRole: kAXButtonRole as String, name: "labels on non-checkbox roles"
+        chromeRole: kAXStaticTextRole as String, name: "labels on non-toggle roles"
     ),
 ])
 func testPartialChromeStaysBlocking(_ variant: PartialChromeVariant) {
     // AC-4.4: any window matching only part of the chrome signature stays
-    // blocking (fail-closed). Pin — every variant is an AXDialog missing a
-    // required conjunct, so it stays blocking both pre- and post-fix.
+    // blocking (fail-closed), whether the toggles are checkboxes or buttons. Pin —
+    // every variant is an AXDialog missing a required conjunct, so it stays
+    // blocking both pre- and post-fix.
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(1)
     let arrange = builder.element(2)
@@ -471,6 +483,24 @@ func testPartialChromeStaysBlocking(_ variant: PartialChromeVariant) {
     let app = builder.element(1)
     let arrange = builder.element(2)
     let editor = buildFreshGainEditorWindow(builder, base: 100)
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [editor, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(!AXLogicProElements.dialogPresent(runtime: runtime))
+    #expect(AXLogicProElements.blockingDialogInfo(runtime: runtime) == nil)
+}
+
+@Test func testUnfocusedFreshGainEditorIsNonBlocking() {
+    // #234 v2 live gap (axwhy234b.out, same 'Audio 1' window minutes apart): the
+    // editor's toggle chrome role-flaps with window focus — the bypass toggle is
+    // an AXButton (not AXCheckBox) while the editor is NOT key. The matcher must
+    // scan AXCheckBox|AXButton toggles or it re-refuses project.save. FAILS pre-fix
+    // (checkbox-only filter misses the AXButton bypass → classified blocking).
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let editor = buildFreshGainEditorWindow(builder, base: 100, bypassRole: kAXButtonRole as String)
 
     builder.setAttribute(app, kAXWindowsAttribute as String, [editor, arrange])
 

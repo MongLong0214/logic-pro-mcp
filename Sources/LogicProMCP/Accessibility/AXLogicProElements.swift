@@ -179,15 +179,19 @@ enum AXLogicProElements {
     ///      handle the live 2026-07-04 probe closed the editor through; true
     ///      modal sheets do not carry one. This is the ATTRIBUTE, never the
     ///      child button's localized `desc='close'` text (PRD D4);
-    ///   3. a bypass-labeled `AXCheckBox` among the DIRECT children;
-    ///   4. a compare-labeled OR link-labeled `AXCheckBox` among the DIRECT
-    ///      children. Compare chrome is preset-state-dependent — absent on a
-    ///      freshly-inserted plugin — while the channel-strip Link toggle is
-    ///      present from the first open (live 12.3 Gain evidence 2026-07-05,
-    ///      `axwhy234.out`); either satisfies this branch, and a true modal
-    ///      carries none of bypass/compare/link nor a close-button attribute.
-    /// Follows the `isKeyboardLayoutOverlayWindow` exclusion precedent. The
-    /// compare/link labels are English-only (OQ-1) so non-EN locales stay blocking.
+    ///   3. a bypass-labeled toggle among the DIRECT children;
+    ///   4. a compare-labeled OR link-labeled toggle among the DIRECT children.
+    /// A "toggle" is an `AXCheckBox` OR an `AXButton` (any subrole): the editor's
+    /// toggle chrome ROLE-FLAPS with window focus on 12.3 — checkbox when the
+    /// editor is key, button when it is not (live evidence `axwhy234b.out`,
+    /// 2026-07-05: same 'Audio 1' window dumped minutes apart; Logic exposes the
+    /// same toggle species as AXButton elsewhere, e.g. strip mute/solo). Compare
+    /// chrome is preset-state-dependent — absent on a freshly-inserted plugin —
+    /// while the channel-strip Link toggle is present from first open
+    /// (`axwhy234.out`); either satisfies conjunct 4, and a true modal carries
+    /// none of bypass/compare/link nor a close-button attribute. Follows the
+    /// `isKeyboardLayoutOverlayWindow` exclusion precedent; compare/link labels
+    /// are English-only (OQ-1) so non-EN locales stay blocking.
     private static func isPluginEditorWindow(
         _ window: AXUIElement,
         runtime: AXHelpers.Runtime
@@ -200,13 +204,18 @@ enum AXLogicProElements {
         )
         guard closeButton != nil else { return false }
 
-        let directCheckboxes = AXHelpers.getChildren(window, runtime: runtime).filter {
-            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXCheckBoxRole as String)
+        // Scan AXCheckBox AND AXButton toggles — the labeled chrome role-flaps
+        // with window focus (see doc comment). The close-button attribute conjunct
+        // already gates out true modal sheets (they carry no close button), so
+        // widening the toggle role cannot promote a real modal to an editor.
+        let directToggles = AXHelpers.getChildren(window, runtime: runtime).filter {
+            let role = AXHelpers.getRole($0, runtime: runtime) ?? ""
+            return role == (kAXCheckBoxRole as String) || role == (kAXButtonRole as String)
         }
-        let hasBypass = directCheckboxes.contains { child in
+        let hasBypass = directToggles.contains { child in
             AXLocalePolicy.pluginBypassControl.containsAny(in: elementSearchText(child, runtime: runtime))
         }
-        let hasCompareOrLink = directCheckboxes.contains { child in
+        let hasCompareOrLink = directToggles.contains { child in
             let text = elementSearchText(child, runtime: runtime)
             return AXLocalePolicy.pluginWindowCompareControl.containsAny(in: text)
                 || AXLocalePolicy.pluginWindowLinkControl.containsAny(in: text)
