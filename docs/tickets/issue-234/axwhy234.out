@@ -1,0 +1,14 @@
+WINDOW 'Audio 1' subrole=AXDialog
+  kAXCloseButtonAttribute: PRESENT
+  direct children: 9
+  [0] AXButton desc='close' title=''
+  [1] AXButton desc='toolbar' title=''
+  [2] AXCheckBox desc='link' title=''
+  [3] AXMenuButton desc='view' title='51%'
+  [4] AXCheckBox desc='bypass' title=' '
+  [5] AXPopUpButton desc='' title=''
+  [6] AXGroup desc='' title=''
+  [7] AXStaticText desc='' title=''
+  [8] AXStaticText desc='' title=''
+  checkbox descs: ["link", "bypass"]
+WINDOW 'Untitled 54 - Tracks' subrole=AXStandardWindow
