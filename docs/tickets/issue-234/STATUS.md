@@ -17,7 +17,7 @@
 | T1 | 12.3 mixer strips-container selection fix + fixtures | Done | PASS | ab2a0e9. Red {1,2,3,5,7}/pins {4,6} 확인, 1962 tests green, 라이브 12.3 확인: fresh audio strip inventory = 1 empty slot (was []) |
 | T2 | get_inventory zero-slot honesty gate + write-path diagnostics | Done | PASS | df71a49 (Opus agent). RED 사후증명: 구소스+신테스트 65중 15이슈 실패 확인. 1971 tests green. 공유 slotAddressingFailureDetail + 단일 힌트 상수 (D6/AC-5) |
 | T3 | Plugin-editor window ≠ blocking modal | Done | PASS | eedc437 (Opus agent). RED {1,2,7}/pins {3,4,5,6} 티켓 §6 일치. 1969 green. + a410499 (live-e2e 술어 강화, T4 AC-7) + 9e44c21 (CHANGELOG) |
-| T4 | Live 12.3 E2E replay + evidence (release gate) | In Progress | - | AC-7 술어 강화 완료(a410499). 라이브 리플레이 대기 |
+| T4 | Live 12.3 E2E replay + evidence (release gate) | Done | PASS | 전 AC 라이브 green: AC-2/3/6 verified State A, AC-4.3 save-with-unfocused-editor 성공, strict 스위트 369/369(+1 transport-skip). 라이브 발견 갭 2건(compare 상태-의존, 토글 role-flap) red-first로 수정 |
 
 ## Review History
 
@@ -48,3 +48,4 @@
 - AC-6 PASS: insert_verified Compressor@0 (track 2) State A; set_param_verified threshold 0.5 normalized State A (observed_normalized 0.5, ax_plugin_window).
 - AC-4 recorded: legacy insert_plugin slot 2 -> honest element_not_found visible_slots:1 (append stub excluded by 12.2-era 9px rule; pre-existing, not #234).
 - AC-4.3 in progress: save-with-editor-open refused twice -> two live classifier gaps found+fixed: (1) compare is preset-state-dependent -> compare|link (53bde72); (2) toggle chrome role-flaps AXCheckBox<->AXButton with focus (axwhy234b.out) -> v2 amendment in progress.
+- 2026-07-05 strict live suite (hardened predicate): 369 passed, 1 skipped (#220 popen-only), 370 total — ALL GREEN.
