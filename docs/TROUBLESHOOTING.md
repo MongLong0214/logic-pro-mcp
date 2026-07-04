@@ -45,6 +45,18 @@ If the MCP client launches from a different environment, register with an absolu
 
 Check the MCP client logs, confirm the command path, and run `LogicProMCP --check-permissions`. macOS TCC permissions apply to the parent app that launches the server.
 
+### Concurrent large reads appear to time out ("no response")
+
+The server speaks newline-delimited JSON-RPC over a single stdout pipe, and it serializes writes (one response frame is fully flushed before the next starts — frames never interleave or corrupt). If a client fires several large reads at once — e.g. `logic://library/inventory`, `logic_tracks.scan_library` in disk mode, `logic://project/audit` — and does not drain stdout while it keeps sending, the pipe back-pressures: later responses queue behind the one being flushed and can exceed a short client deadline, looking like "no response." Run alone, each returns quickly.
+
+This is client-side backpressure, not a server stall. Mitigations:
+
+- Drain stdout concurrently with sending (read responses on a separate thread/task), as any correct MCP stdio client does.
+- Or serialize very large reads (await each before issuing the next).
+- Prefer resource reads for polling large state instead of firing many in parallel.
+
+The server produces every response, complete and well-formed, under concurrent load (covered by `Issue220ConcurrentLargeReadTests` and the live-e2e pipelined-read check).
+
 ## Permissions
 
 ### Accessibility denied

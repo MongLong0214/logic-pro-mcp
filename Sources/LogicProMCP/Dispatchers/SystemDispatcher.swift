@@ -237,6 +237,23 @@ struct SystemDispatcher {
             return toolTextResult("State refresh triggered. Cache will be updated on next poll cycle.")
 
         case "help":
+            // #219: an unknown category used to fall through to full help with
+            // isError:false, hiding client typos. An absent category still means
+            // "full help", but a present-but-unrecognized category now returns a
+            // typed `unknown_category` State C that lists the valid categories.
+            if let requested = params["category"]?.stringValue,
+               !Self.validHelpCategories.contains(requested) {
+                let body = HonestContract.encodeStateC(
+                    error: .unknownCategory,
+                    hint: "Unknown help category '\(requested)'. "
+                        + "Valid categories: \(Self.validHelpCategories.joined(separator: ", ")).",
+                    extras: [
+                        "requested_category": requested,
+                        "valid_categories": Self.validHelpCategories,
+                    ]
+                )
+                return toolTextResult(body, isError: true)
+            }
             let category = stringParam(params, "category", default: "all")
             let helpText = Self.helpText(for: category)
             return toolTextResult(helpText)
@@ -250,6 +267,15 @@ struct SystemDispatcher {
     }
 
     // MARK: - Help text
+
+    /// Accepted `help` categories. `"all"` (and an absent category) returns the
+    /// full help; every other entry maps to a dispatcher-specific section in
+    /// `helpText(for:)`. Kept in lockstep with that switch by
+    /// `testValidHelpCategoriesStayInLockstepWithHelpText` so a new dispatcher
+    /// section can't drift out of the accepted set.
+    static let validHelpCategories = [
+        "all", "transport", "tracks", "mixer", "midi", "edit", "navigate", "project", "system",
+    ]
 
     private static func helpText(for category: String) -> String {
         switch category {
@@ -436,7 +462,7 @@ struct SystemDispatcher {
                   logic://project/audit         — Read-only project/session audit
                   logic://project/cleanup-plan  — Read-only serializable cleanup plan
                   logic://midi/ports            — MIDI ports
-                  logic://mcu/state             — MCU control-surface state (hidden in list when disconnected)
+                  logic://mcu/state             — MCU control-surface state (readable even when disconnected)
                   logic://library/inventory     — Cached Library tree JSON
                   logic://stock-plugins         — Stock plugin intelligence catalog
                   logic://stock-plugins/census  — Stock plugin census metadata
