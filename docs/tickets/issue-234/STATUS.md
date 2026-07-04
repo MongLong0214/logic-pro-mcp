@@ -49,3 +49,8 @@
 - AC-4 recorded: legacy insert_plugin slot 2 -> honest element_not_found visible_slots:1 (append stub excluded by 12.2-era 9px rule; pre-existing, not #234).
 - AC-4.3 in progress: save-with-editor-open refused twice -> two live classifier gaps found+fixed: (1) compare is preset-state-dependent -> compare|link (53bde72); (2) toggle chrome role-flaps AXCheckBox<->AXButton with focus (axwhy234b.out) -> v2 amendment in progress.
 - 2026-07-05 strict live suite (hardened predicate): 369 passed, 1 skipped (#220 popen-only), 370 total — ALL GREEN.
+
+## Phase 6 boomer review + evidence closure (2026-07-05)
+- boomer Phase 6 (codex gpt-5.5 xhigh) flagged an evidence-integrity gap: the initially-committed transcript predated the two live classifier fixes, so it showed AC-4.3/AC-6 failing while STATUS claimed PASS. VALID.
+- Closed by committing the actual green transcripts + an EVIDENCE.md AC→transcript map, renaming the initial run to `probe234e-initial-run-prefix-gaps.txt`, and amending the false AC-3 'trailing empty row' claim to match live reality (9px append-stub excluded; 2nd same-strip insert = honest State C).
+- FINAL live results: AC-1.5/2.2/2.3/4.3 green (probe234-final-green-transcript.txt), AC-6 green (probe234f), E8 real-modal-block (probe234k2), strict suite 369/1skip/370.

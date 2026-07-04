@@ -1,0 +1,238 @@
+
+===== create_audio =====
+{
+ "dialog_confirmation_attempted": false,
+ "menu_clicked": "New Audio Track",
+ "observed_delta": 1,
+ "observed_track_index": 3,
+ "observed_track_name": "Audio 2",
+ "observed_track_type": "audio",
+ "observed_track_type_inferred": "audio",
+ "requested_delta": 1,
+ "success": true,
+ "track_count_after": 4,
+ "track_count_before": 3,
+ "track_type_verification_source": "menu_clicked",
+ "verification_source": "track_count_delta",
+ "verified": true
+}
+track: 3
+
+===== AC-1.5: fresh audio strip inventory (>=1 empty slot) =====
+{
+ "complete": true,
+ "hc_schema": 2,
+ "mixer_reveal_attempted": false,
+ "mixer_reveal_strategies": [],
+ "operation": "logic_plugins.get_inventory",
+ "plugins": [
+  {
+   "bypassed": null,
+   "insert": 0,
+   "name": null,
+   "occupied": false,
+   "plugin_id": null,
+   "read_status": "empty"
+  }
+ ],
+ "plugins_fetched_at": "2026-07-04T21:48:43.245Z",
+ "plugins_source": "ax",
+ "plugins_unknown_reason": null,
+ "state": "A",
+ "success": true,
+ "track": 3,
+ "verified": true
+}
+
+===== AC-2.2: insert_verified Gain @0 (State A expected) =====
+{
+ "hc_schema": 2,
+ "observed_plugin_id": "logic.stock.effect.gain",
+ "observed_plugin_name": "Gain",
+ "observed_slot": 0,
+ "operation": "logic_plugins.insert_verified",
+ "select_trace": {
+  "go_to_position_closed": false,
+  "observed_name": "Gain",
+  "observed_slot": 0,
+  "plugin_selection_id": "logic.stock.effect.gain",
+  "plugin_windows_hidden": true,
+  "pre_inventory_readable": true,
+  "requested_insert": 0,
+  "requested_plugin_id": "logic.stock.effect.gain",
+  "requested_track": 3,
+  "search_query": "Gain",
+  "slot_popup_anchor_verified": true,
+  "slot_popup_menu_found": true,
+  "slot_popup_open_clicked": true,
+  "strategies_attempted": [
+   "slot_popup_direct_exact_leaf"
+  ],
+  "target_slot_found": true,
+  "track_select_ok": true,
+  "track_select_verified": true,
+  "window_raised": true,
+  "winning_menu_path": "Gain",
+  "winning_strategy": "slot_popup_direct_exact_leaf",
+  "write_source": "ax_exact_slot_popup"
+ },
+ "state": "A",
+ "success": true,
+ "target_identity": {
+  "insert": 0,
+  "plugin_id": "logic.stock.effect.gain",
+  "track_index": 3
+ },
+ "verified": true,
+ "verify_source": "ax_plugin_inventory",
+ "write_source": "ax_exact_slot_popup"
+}
+
+===== AC-2.3: get_inventory after Gain (occupied @0) =====
+{
+ "complete": true,
+ "hc_schema": 2,
+ "mixer_reveal_attempted": false,
+ "mixer_reveal_strategies": [],
+ "operation": "logic_plugins.get_inventory",
+ "plugins": [
+  {
+   "bypassed": false,
+   "insert": 0,
+   "name": "Gain",
+   "occupied": true,
+   "plugin_id": "logic.stock.effect.gain",
+   "read_status": "ok"
+  }
+ ],
+ "plugins_fetched_at": "2026-07-04T21:48:46.483Z",
+ "plugins_source": "ax",
+ "plugins_unknown_reason": null,
+ "state": "A",
+ "success": true,
+ "track": 3,
+ "verified": true
+}
+
+===== AC-6: insert_verified Compressor @1 on SAME strip (2nd-slot addressability truth) =====
+{
+ "error": "invalid_params",
+ "hc_schema": 2,
+ "operation": "logic_plugins.insert_verified",
+ "safe_to_retry": false,
+ "state": "C",
+ "success": false,
+ "target_identity": {
+  "insert": 1,
+  "plugin_id": "logic.stock.effect.compressor",
+  "track_index": 3
+ },
+ "verified": false,
+ "what_was_attempted": "address insert slot 1",
+ "what_was_observed": "slot 1 is out of range (1 slots)",
+ "write_attempted": false
+}
+
+===== AC-4.3: project.save WITH auto-opened Gain editor (SUCCESS expected) =====
+{
+ "document_path": "/Users/isaac/Music/Logic/Untitled 54.logicx",
+ "method": "applescript",
+ "observed_mtime": "2026-07-04T21:48:47Z",
+ "operation": "project.save",
+ "previous_mtime": "2026-07-04T21:44:42Z",
+ "raw": "{\"result\":\"OK\"}",
+ "success": true,
+ "verified": true,
+ "verify_source": "file_mtime"
+}
+
+===== AC-4.3 health: no blocking dialog with editor open =====
+{
+ "cache": {
+  "poll_mode": "active",
+  "project": "Untitled 54 - Tracks",
+  "track_count": 4,
+  "transport_age_sec": 4.4
+ },
+ "channels": [
+  {
+   "available": true,
+   "channel": "Accessibility",
+   "detail": "AX connected to Logic Pro",
+   "ready": true,
+   "verification_status": "runtime_ready"
+  },
+  {
+   "available": true,
+   "channel": "AppleScript",
+   "detail": "AppleScript ready",
+   "ready": true,
+   "verification_status": "runtime_ready"
+  },
+  {
+   "available": true,
+   "channel": "CGEvent",
+   "detail": "CGEvent ready",
+   "ready": true,
+   "verification_status": "runtime_ready"
+  },
+  {
+   "available": true,
+   "channel": "CoreMIDI",
+   "detail": "CoreMIDI client active, virtual ports created",
+   "ready": true,
+   "verification_status": "runtime_ready"
+  },
+  {
+   "available": true,
+   "channel": "MCU",
+   "detail": "MCU device registration confirmed, feedback stale (7s)",
+   "ready": true,
+   "verification_status": "runtime_ready"
+  },
+  {
+   "available": true,
+   "channel": "MIDIKeyCommands",
+   "detail": "Port: LogicProMCP-KeyCmd-Internal — Virtual MIDI port 'LogicProMCP-KeyCmd-Internal' is ready. Manual MIDI Learn required — see docs/SETUP.md §4. Effectively keycmd-only (no working non-keycmd fallback on Logic 12.2): edit.duplicate, edit.normalize, edit.toggle_step_input, nav.goto_marker, nav.delete_marker, project.bounce, transport.capture_recording. Other preset ops have an AX/MCU/AppleScript/CGEvent fallback and do not require keycmd binding. Orphans (in mappingTable + routingTable but no MCP tool exposes a call path): automation.set_mode, note.up_semitone, note.up_octave, note.down_semitone, note.down_octave, view.toggle_smart_controls, view.toggle_plugin_windows, view.toggle_automation (CC 57; distinct from automation.toggle_view CC 85), track.create_stack. Tracked in NG6 follow-up.",
+   "ready": false,
+   "verification_status": "manual_validation_required"
+  },
+  {
+   "available": true,
+   "channel": "Scripter",
+   "detail": "Virtual MIDI port 'LogicProMCP-Scripter-Internal' is ready. Scripter insertion is not verifiable programmatically. Run `LogicProMCP --approve-channel Scripter` after manual validation",
+   "ready": false,
+   "verification_status": "manual_validation_required"
+  }
+ ],
+ "logic_pro_has_document": true,
+ "logic_pro_has_window": true,
+ "logic_pro_running": true,
+ "logic_pro_version": "12.3",
+ "mcu": {
+  "connected": true,
+  "feedback_stale": true,
+  "last_feedback_at": "2026-07-04T21:48:39.721Z",
+  "port_name": "LogicProMCP-MCU-Internal",
+  "registered_as_device": true
+ },
+ "permissions": {
+  "accessibility": true,
+  "accessibility_status": "granted",
+  "automation": true,
+  "automation_granted": true,
+  "automation_status": "granted",
+  "automation_system_events": true,
+  "automation_system_events_status": "granted",
+  "automation_verifiable": true,
+  "post_event_access": true
+ },
+ "process": {
+  "cpu_percent": 0,
+  "cpu_percent_status": "warming_up",
+  "cpu_percent_units": "single_core_lifetime_average",
+  "cpu_sample_window_sec": 0,
+  "memory_mb": 75.1,
+  "uptime_sec": 0
+ }
+}

@@ -1,0 +1,183 @@
+serverInfo: {"name": "logic-pro-mcp", "version": "3.7.4"}
+
+===== create_audio =====
+{
+ "dialog_confirmation_attempted": false,
+ "menu_clicked": "New Audio Track",
+ "observed_delta": 1,
+ "observed_track_index": 2,
+ "observed_track_name": "Audio 1",
+ "observed_track_type": "audio",
+ "observed_track_type_inferred": "audio",
+ "requested_delta": 1,
+ "success": true,
+ "track_count_after": 3,
+ "track_count_before": 2,
+ "track_type_verification_source": "menu_clicked",
+ "verification_source": "track_count_delta",
+ "verified": true
+}
+audio track index: 2
+
+===== AC-1.5: get_inventory fresh audio strip (>=1 slot; v3.7.4 returned []) =====
+{
+ "complete": true,
+ "hc_schema": 2,
+ "mixer_reveal_attempted": true,
+ "mixer_reveal_strategies": [
+  "ax_menu_view_show_mixer"
+ ],
+ "operation": "logic_plugins.get_inventory",
+ "plugins": [
+  {
+   "bypassed": null,
+   "insert": 0,
+   "name": null,
+   "occupied": false,
+   "plugin_id": null,
+   "read_status": "empty"
+  }
+ ],
+ "plugins_fetched_at": "2026-07-04T21:45:33.050Z",
+ "plugins_source": "ax",
+ "plugins_unknown_reason": null,
+ "state": "A",
+ "success": true,
+ "track": 2,
+ "verified": true
+}
+
+===== save_as persistent path =====
+{
+ "error": "channels_exhausted",
+ "hint": "AppleScript error: timedOut",
+ "last_error": "AppleScript error: timedOut",
+ "operation": "project.save_as",
+ "success": false
+}
+
+===== AC-2.2: insert_verified Gain @0 =====
+{
+ "error": "project_identity_mismatch",
+ "hc_schema": 2,
+ "operation": "logic_plugins.insert_verified",
+ "safe_to_retry": false,
+ "state": "C",
+ "success": false,
+ "target_identity": {
+  "plugin_id_requested": "Gain",
+  "project_path_expected": "/Users/isaac/Music/Logic/issue234-final.logicx",
+  "project_path_observed": "/Users/isaac/Music/Logic/Untitled 54.logicx",
+  "track_index": 2
+ },
+ "verified": false,
+ "what_was_attempted": "verify front document is the expected duplicate before writing",
+ "what_was_observed": "front document path did not match project_expected_path",
+ "write_attempted": false
+}
+
+===== AC-2.3: get_inventory after insert (Gain @0) =====
+{
+ "complete": true,
+ "hc_schema": 2,
+ "mixer_reveal_attempted": false,
+ "mixer_reveal_strategies": [],
+ "operation": "logic_plugins.get_inventory",
+ "plugins": [
+  {
+   "bypassed": null,
+   "insert": 0,
+   "name": null,
+   "occupied": false,
+   "plugin_id": null,
+   "read_status": "empty"
+  }
+ ],
+ "plugins_fetched_at": "2026-07-04T21:45:44.171Z",
+ "plugins_source": "ax",
+ "plugins_unknown_reason": null,
+ "state": "A",
+ "success": true,
+ "track": 2,
+ "verified": true
+}
+
+===== AC-4.3b: project.save WITH auto-opened editor (expect success) =====
+{
+ "blocking_dialog_present": true,
+ "dialog_buttons": [],
+ "dialog_role": "AXDialog",
+ "dialog_title": "Save",
+ "error": "unsupported_state",
+ "failure_stage": "preflight_blocking_dialog",
+ "hint": "Refusing project.save: a blocking Logic dialog/sheet is present (Save). Dismiss the \"Save\" dialog (press Escape or its Cancel/close control), then retry.",
+ "operation": "project.save",
+ "owning_window": "Untitled 54 - Tracks",
+ "recovery_action": "Dismiss the \"Save\" dialog (press Escape or its Cancel/close control), then retry.",
+ "safe_to_retry": true,
+ "success": false,
+ "write_attempted": false
+}
+
+===== E8 setup: dirty via set_volume =====
+{
+ "control": "volume",
+ "detent_raw_step": 10,
+ "nudge_steps": 7,
+ "observed": 0.5333333333333333,
+ "observed_after": 0.5333333333333333,
+ "observed_before": 0.7578947368421053,
+ "observed_raw": 103,
+ "operation": "mixer.set_volume",
+ "quantization_note": "Logic exposes this fader to AX in ~10-raw-unit detents; observed is the nearest representable level to requested.",
+ "requested": 0.55,
+ "success": true,
+ "target_identity": {
+  "control": "volume",
+  "track_index": 2
+ },
+ "target_raw": 105.50000000000001,
+ "track": 2,
+ "verified": true,
+ "verify_source": "ax_slider",
+ "write_method": "ax_increment_decrement"
+}
+
+>>> File > Close Project (REAL sheet expected: dirty doc)
+osascript rc: 0 
+
+===== E8: track.select MUST refuse (identified real dialog) =====
+{
+ "blocking_dialog_present": true,
+ "dialog_buttons": [],
+ "dialog_role": "AXDialog",
+ "dialog_title": "Save",
+ "error": "unsupported_state",
+ "failure_stage": "preflight_blocking_dialog",
+ "hint": "Refusing track.select: a blocking Logic dialog/sheet is present (Save). Dismiss the \"Save\" dialog (press Escape or its Cancel/close control), then retry.",
+ "operation": "track.select",
+ "owning_window": "Untitled 54 - Tracks",
+ "recovery_action": "Dismiss the \"Save\" dialog (press Escape or its Cancel/close control), then retry.",
+ "safe_to_retry": true,
+ "success": false,
+ "write_attempted": false
+}
+
+>>> Escape
+
+===== post-Escape: save works again =====
+{
+ "blocking_dialog_present": true,
+ "dialog_buttons": [],
+ "dialog_role": "AXDialog",
+ "dialog_title": "Save",
+ "error": "unsupported_state",
+ "failure_stage": "preflight_blocking_dialog",
+ "hint": "Refusing project.save: a blocking Logic dialog/sheet is present (Save). Dismiss the \"Save\" dialog (press Escape or its Cancel/close control), then retry.",
+ "operation": "project.save",
+ "owning_window": "Untitled 54 - Tracks",
+ "recovery_action": "Dismiss the \"Save\" dialog (press Escape or its Cancel/close control), then retry.",
+ "safe_to_retry": true,
+ "success": false,
+ "write_attempted": false
+}

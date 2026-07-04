@@ -98,7 +98,7 @@ So the fix is **container selection + honesty**, not a rewrite of slot classific
 
 - [ ] AC-2.1: Given the 12.3 fixture, `insert_plugin {slot:0}` no longer fails `element_not_found/visible_slots:0`; slot resolution finds the empty row (write path beyond resolution exercised live, not in unit fixtures).
 - [ ] AC-2.2: Live on 12.3 (scratch project): `insert_verified {track:0, insert:0, plugin:"Gain", mode:"duplicate_applyback", project_expected_path:<path>}` returns State A with post-insert readback showing Gain at insert 0.
-- [ ] AC-2.3: Live on 12.3 after AC-2.2: `get_inventory` shows `Gain` occupied at insert 0 plus a trailing empty row.
+- [ ] AC-2.3: Live on 12.3 after AC-2.2: `get_inventory` shows `Gain` occupied at insert 0. (CORRECTED 2026-07-05: a filled strip exposes only its occupied row — the append affordance is a ~9px stub excluded by the pre-existing rule, NG1; a same-session second insert fails honest State C. Evidence `axstrip234-after-gain.out`.)
 
 ### US-3: No more false verified-empty (honesty gate)
 **As a** Honest Contract consumer, **I want** zero-slot enumerations to be State B, **so that** future AX-tree drift can never again masquerade as a verified empty chain.

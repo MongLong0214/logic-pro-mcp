@@ -1,0 +1,219 @@
+
+===== create_audio (Audio 2) =====
+{
+ "dialog_confirmation_attempted": false,
+ "menu_clicked": "New Audio Track",
+ "observed_delta": 1,
+ "observed_track_index": 2,
+ "observed_track_name": "Audio 2",
+ "observed_track_type": "audio",
+ "observed_track_type_inferred": "audio",
+ "requested_delta": 1,
+ "success": true,
+ "track_count_after": 3,
+ "track_count_before": 2,
+ "track_type_verification_source": "menu_clicked",
+ "verification_source": "track_count_delta",
+ "verified": true
+}
+
+===== AC-6: insert_verified Compressor @0 (track 2) =====
+{
+ "hc_schema": 2,
+ "observed_plugin_id": "logic.stock.effect.compressor",
+ "observed_plugin_name": "Compressor",
+ "observed_slot": 0,
+ "operation": "logic_plugins.insert_verified",
+ "select_trace": {
+  "go_to_position_closed": false,
+  "observed_name": "Compressor",
+  "observed_slot": 0,
+  "plugin_selection_id": "logic.stock.effect.compressor",
+  "plugin_windows_hidden": true,
+  "pre_inventory_readable": true,
+  "requested_insert": 0,
+  "requested_plugin_id": "logic.stock.effect.compressor",
+  "requested_track": 2,
+  "search_query": "Compressor",
+  "slot_popup_anchor_verified": true,
+  "slot_popup_menu_found": true,
+  "slot_popup_open_clicked": true,
+  "strategies_attempted": [
+   "slot_popup_direct_exact_leaf",
+   "slot_popup_search_exact_leaf"
+  ],
+  "target_slot_found": true,
+  "track_select_ok": true,
+  "track_select_verified": true,
+  "window_raised": true,
+  "winning_menu_path": "Compressor",
+  "winning_strategy": "slot_popup_search_exact_leaf",
+  "write_source": "ax_exact_slot_popup"
+ },
+ "state": "A",
+ "success": true,
+ "target_identity": {
+  "insert": 0,
+  "plugin_id": "logic.stock.effect.compressor",
+  "track_index": 2
+ },
+ "verified": true,
+ "verify_source": "ax_plugin_inventory",
+ "write_source": "ax_exact_slot_popup"
+}
+
+===== AC-6: set_param_verified threshold (track 2) =====
+{
+ "display_unit": "%",
+ "hc_schema": 2,
+ "observed_display": "0 %",
+ "observed_normalized": 0.5,
+ "operation": "logic_plugins.set_param_verified",
+ "param": "threshold",
+ "requested_normalized": 0.5,
+ "state": "A",
+ "success": true,
+ "target_identity": {
+  "insert": 0,
+  "plugin_id": "logic.stock.effect.compressor",
+  "track_index": 2
+ },
+ "tolerance": 1,
+ "verified": true,
+ "verify_source": "ax_plugin_window",
+ "write_source": "ax_plugin_window"
+}
+
+===== final inventory (track 2) =====
+{
+ "complete": true,
+ "hc_schema": 2,
+ "mixer_reveal_attempted": false,
+ "mixer_reveal_strategies": [],
+ "operation": "logic_plugins.get_inventory",
+ "plugins": [
+  {
+   "bypassed": false,
+   "insert": 0,
+   "name": "Compressor",
+   "occupied": true,
+   "plugin_id": "logic.stock.effect.compressor",
+   "read_status": "ok"
+  }
+ ],
+ "plugins_fetched_at": "2026-07-04T21:17:32.811Z",
+ "plugins_source": "ax",
+ "plugins_unknown_reason": null,
+ "state": "A",
+ "success": true,
+ "track": 2,
+ "verified": true
+}
+
+===== AC-4.3: project.save with plugin editor window open =====
+{
+ "blocking_dialog_present": true,
+ "dialog_buttons": [],
+ "dialog_role": "AXDialog",
+ "dialog_title": "Audio 1",
+ "error": "unsupported_state",
+ "failure_stage": "preflight_blocking_dialog",
+ "hint": "Refusing project.save: a blocking Logic dialog/sheet is present (Audio 1). Dismiss the \"Audio 1\" dialog (press Escape or its Cancel/close control), then retry.",
+ "operation": "project.save",
+ "owning_window": "Untitled 54 - Tracks",
+ "recovery_action": "Dismiss the \"Audio 1\" dialog (press Escape or its Cancel/close control), then retry.",
+ "safe_to_retry": true,
+ "success": false,
+ "write_attempted": false
+}
+
+===== health dialog state =====
+{
+ "cache": {
+  "poll_mode": "active",
+  "project": "Untitled 54 - Tracks",
+  "track_count": 3,
+  "transport_age_sec": 1.1
+ },
+ "channels": [
+  {
+   "available": true,
+   "channel": "Accessibility",
+   "detail": "AX connected to Logic Pro",
+   "ready": true,
+   "verification_status": "runtime_ready"
+  },
+  {
+   "available": true,
+   "channel": "AppleScript",
+   "detail": "AppleScript ready",
+   "ready": true,
+   "verification_status": "runtime_ready"
+  },
+  {
+   "available": true,
+   "channel": "CGEvent",
+   "detail": "CGEvent ready",
+   "ready": true,
+   "verification_status": "runtime_ready"
+  },
+  {
+   "available": true,
+   "channel": "CoreMIDI",
+   "detail": "CoreMIDI client active, virtual ports created",
+   "ready": true,
+   "verification_status": "runtime_ready"
+  },
+  {
+   "available": true,
+   "channel": "MCU",
+   "detail": "MCU device registration confirmed, feedback stale (8s)",
+   "ready": true,
+   "verification_status": "runtime_ready"
+  },
+  {
+   "available": true,
+   "channel": "MIDIKeyCommands",
+   "detail": "Port: LogicProMCP-KeyCmd-Internal — Virtual MIDI port 'LogicProMCP-KeyCmd-Internal' is ready. Manual MIDI Learn required — see docs/SETUP.md §4. Effectively keycmd-only (no working non-keycmd fallback on Logic 12.2): edit.duplicate, edit.normalize, edit.toggle_step_input, nav.goto_marker, nav.delete_marker, project.bounce, transport.capture_recording. Other preset ops have an AX/MCU/AppleScript/CGEvent fallback and do not require keycmd binding. Orphans (in mappingTable + routingTable but no MCP tool exposes a call path): automation.set_mode, note.up_semitone, note.up_octave, note.down_semitone, note.down_octave, view.toggle_smart_controls, view.toggle_plugin_windows, view.toggle_automation (CC 57; distinct from automation.toggle_view CC 85), track.create_stack. Tracked in NG6 follow-up.",
+   "ready": false,
+   "verification_status": "manual_validation_required"
+  },
+  {
+   "available": true,
+   "channel": "Scripter",
+   "detail": "Virtual MIDI port 'LogicProMCP-Scripter-Internal' is ready. Scripter insertion is not verifiable programmatically. Run `LogicProMCP --approve-channel Scripter` after manual validation",
+   "ready": false,
+   "verification_status": "manual_validation_required"
+  }
+ ],
+ "logic_pro_has_document": true,
+ "logic_pro_has_window": true,
+ "logic_pro_running": true,
+ "logic_pro_version": "12.3",
+ "mcu": {
+  "connected": true,
+  "feedback_stale": true,
+  "last_feedback_at": "2026-07-04T21:17:24.557Z",
+  "port_name": "LogicProMCP-MCU-Internal",
+  "registered_as_device": true
+ },
+ "permissions": {
+  "accessibility": true,
+  "accessibility_status": "granted",
+  "automation": true,
+  "automation_granted": true,
+  "automation_status": "granted",
+  "automation_system_events": true,
+  "automation_system_events_status": "granted",
+  "automation_verifiable": true,
+  "post_event_access": true
+ },
+ "process": {
+  "cpu_percent": 0,
+  "cpu_percent_status": "warming_up",
+  "cpu_percent_units": "single_core_lifetime_average",
+  "cpu_sample_window_sec": 0,
+  "memory_mb": 74.6,
+  "uptime_sec": 0
+ }
+}
