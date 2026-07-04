@@ -14,7 +14,7 @@
 
 | Ticket | Title | Status | Review | Notes |
 |--------|-------|--------|--------|-------|
-| T1 | 12.3 mixer strips-container selection fix + fixtures | Todo | - | P0, M |
+| T1 | 12.3 mixer strips-container selection fix + fixtures | Done | PASS | ab2a0e9. Red {1,2,3,5,7}/pins {4,6} 확인, 1962 tests green, 라이브 12.3 확인: fresh audio strip inventory = 1 empty slot (was []) |
 | T2 | get_inventory zero-slot honesty gate + write-path diagnostics | Todo | - | P0, S. Depends: T1 |
 | T3 | Plugin-editor window ≠ blocking modal | Todo | - | P1, M. Parallel |
 | T4 | Live 12.3 E2E replay + evidence (release gate) | Todo | - | P0, S. Depends: T1-T3 |
@@ -34,3 +34,7 @@
 - `axdump234b.out` — production-replica candidate ranking + real strips container full dump
 - `axdialog234.out` — plugin-editor AXDialog chrome (PRD Appendix A)
 - probe transcripts — get_inventory false verified-empty / insert_plugin visible_slots:0 / insert_verified "(0 slots)" State C
+
+## Live Findings During Phase 5
+- 2026-07-04 post-T1 probe: legacy insert_plugin now RESOLVES slot 0 (visible_slots:0 gone) but fails later at popup menu selection (`ax_write_failed: plugin menu selection failed`) on 12.3 — root-cause in T4 live phase; if the slot-popup tree drifted, verified insert path may be affected too (blocks PRD AC-2.2).
+- Instrument strip t0 inventory post-T1: [empty@0, E-Piano occupied@1] — NG2 misreport observed as documented; cross-section child order matches T1 fixture ordering.
