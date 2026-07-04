@@ -1,0 +1,43 @@
+### WINDOWS
+AXWindow/AXStandardWindow title='Untitled 54 - Tracks' (0,30 1920x1050) kids=10
+
+### MAIN WINDOW: AXWindow/AXStandardWindow title='Untitled 54 - Tracks' (0,30 1920x1050) kids=10
+
+### MIXER-NAMED CANDIDATES (4)
+path=/AXWindow[6]/AXGroup[0]/AXList[2]/AXGroup[0]/AXLayoutArea kids=2 :: AXLayoutArea desc='Mixer' (366,394 235x685) kids=2
+path=/AXWindow[9]/AXGroup kids=2 :: AXGroup desc='Mixer' (603,405 1317x675) kids=2
+path=/AXWindow[9]/AXGroup[0]/AXGroup kids=8 :: AXGroup desc='Mixer' (603,405 1317x37) kids=8
+path=/AXWindow[9]/AXGroup[1]/AXLayoutArea kids=3 :: AXLayoutArea desc='Mixer' (603,442 1317x638) kids=3
+
+### AUDIO-FX TEXT HITS (4) — paths only, first 40
+path=/AXWindow[6]/AXGroup[0]/AXList[2]/AXGroup[0]/AXLayoutArea[0]/AXLayoutItem[11]/AXButton :: AXButton desc='audio plug-in' help='Audio Effect slot. Insert an audio effect. Click an occupied slot to open the plug-in. Use effects to alter signals in real time. ' (389,643 69x18) kids=0
+path=/AXWindow[6]/AXGroup[0]/AXList[2]/AXGroup[0]/AXLayoutArea[1]/AXLayoutItem[9]/AXButton :: AXButton desc='audio plug-in' help='Audio Effect slot. Insert an audio effect. Click an occupied slot to open the plug-in. Use effects to alter signals in real time. ' (507,643 69x18) kids=0
+path=/AXWindow[9]/AXGroup[1]/AXLayoutArea[0]/AXLayoutItem[11]/AXButton :: AXButton desc='audio plug-in' help='Audio Effect slot. Insert an audio effect. Click an occupied slot to open the plug-in. Use effects to alter signals in real time. ' (699,585 58x18) kids=0
+path=/AXWindow[9]/AXGroup[1]/AXLayoutArea[1]/AXLayoutItem[9]/AXButton :: AXButton desc='audio plug-in' help='Audio Effect slot. Insert an audio effect. Click an occupied slot to open the plug-in. Use effects to alter signals in real time. ' (766,585 58x18) kids=0
+
+### DEEP DUMP OF BEST MIXER CANDIDATE (depth 7)
+AXGroup desc='Mixer' (603,405 1317x37) kids=8
+  AXButton desc='Leave Folder' help='Leave Folder' (612,413 35x23) kids=0
+  AXGroup (653,413 213x23) kids=3
+    AXMenuButton/AXSegment desc='Edit' (653,413 61x23) kids=0
+    AXMenuButton/AXSegment desc='Options' (714,413 84x23) kids=0
+    AXMenuButton/AXSegment desc='View' (798,413 66x23) kids=0
+  AXStaticText val='Sends on Faders:' (873,413 107x25) kids=0
+  AXCheckBox title='Sends on Faders:' help='Sends on Faders - On/Off. Swaps the Pan knob and Fader on channel strips so that they control the panning and volume of the chosen send. ' val='0' (981,413 32x23) kids=0
+  AXPopUpButton help='Off, Sends on Faders pop-up menu. Assigns the Pan knob and Fader on channel strips to control the panning and volume of the chosen send. ' val='Off' (1013,413 118x23) kids=0
+  AXRadioGroup (1175,413 172x23) kids=3
+    AXRadioButton/AXSegment desc='Single' help='Show Signal Flow of Attentioned Track' val='0' (1175,413 64x23) kids=0
+    AXRadioButton/AXSegment desc='Tracks' help='Show all Channel Strips used by Tracks' val='1' (1239,413 65x23) kids=0
+    AXRadioButton/AXSegment desc='All' help='Show all Channel Strips' val='0' (1304,413 41x23) kids=0
+  AXGroup (1359,412 481x23) kids=8
+    AXCheckBox/AXSegment desc='Audio' help='Display Audio Channel Strips' val='1' (1359,412 61x23) kids=0
+    AXCheckBox/AXSegment desc='Inst' help='Display Inst Channel Strips' val='1' (1420,412 48x23) kids=0
+    AXCheckBox/AXSegment desc='Aux' help='Display Aux Channel Strips' val='1' (1468,412 48x23) kids=0
+    AXCheckBox/AXSegment desc='Bus' help='Display Bus Channel Strips' val='1' (1516,412 48x23) kids=0
+    AXCheckBox/AXSegment desc='Input' help='Display Input Channel Strips' val='1' (1564,412 56x23) kids=0
+    AXCheckBox/AXSegment desc='Output' help='Display Output Channel Strips' val='1' (1620,412 68x23) kids=0
+    AXCheckBox/AXSegment desc='Master/VCA' help='Display Master/VCA Channel Strips' val='1' (1688,412 97x23) kids=0
+    AXCheckBox/AXSegment desc='MIDI' help='Display MIDI Channel Strips' val='1' (1785,412 53x23) kids=0
+  AXRadioGroup (1845,412 67x23) kids=2
+    AXRadioButton/AXSegment desc='Narrow Channel Strips' help='Narrow Channel Strips' val='1' (1845,412 33x23) kids=0
+    AXRadioButton/AXSegment desc='Wide Channel Strips' help='Wide Channel Strips' val='0' (1878,412 32x23) kids=0

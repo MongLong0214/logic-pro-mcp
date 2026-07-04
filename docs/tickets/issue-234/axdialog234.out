@@ -1,0 +1,71 @@
+strip: AXLayoutItem/ title='' desc='Deluxe Classic' kids=17
+occupied-slot group: AXGroup/ title='' desc='E-Piano' kids=3
+AXPress open -> success
+
+### WINDOWS AFTER OPEN
+AXWindow/AXDialog title='Deluxe Classic' desc='' kids=52 | dialogSubrole=true
+AXWindow/AXStandardWindow title='Untitled 54 - Tracks' desc='' kids=10 | dialogSubrole=false
+
+### PLUGIN-WINDOW CANDIDATE SUBTREE (depth 3, first 60 nodes)
+AXWindow/AXDialog title='Deluxe Classic' desc='' kids=52
+  AXButton/ title='' desc='close' kids=0
+  AXButton/ title='' desc='toolbar' kids=0
+  AXCheckBox/ title='' desc='link' kids=0
+  AXMenuButton/ title='100%' desc='view' kids=0
+  AXStaticText/ title='' desc='' kids=0
+  AXCheckBox/ title=' ' desc='bypass' kids=0
+  AXCheckBox/ title='Compare' desc='compare' kids=0
+  AXGroup/ title='' desc='' kids=2
+    AXButton/AXSegment title='' desc='previous' kids=0
+    AXButton/AXSegment title='' desc='next' kids=0
+  AXGroup/ title='' desc='' kids=2
+    AXButton/AXSegment title='' desc='Copy' kids=0
+    AXButton/AXSegment title='' desc='Paste' kids=0
+  AXGroup/ title='' desc='' kids=2
+    AXButton/AXSegment title='' desc='Undo' kids=0
+    AXButton/AXSegment title='' desc='Redo' kids=0
+  AXPopUpButton/ title='' desc='' kids=0
+  AXTextField/ title='' desc='' kids=0
+  AXTextField/ title='' desc='' kids=0
+  AXPopUpButton/ title='' desc='' kids=0
+  AXSlider/ title='' desc='' kids=1
+    AXSlider/ title='' desc='' kids=0
+  AXSlider/ title='' desc='' kids=1
+    AXSlider/ title='' desc='' kids=0
+  AXRadioGroup/ title='' desc='' kids=2
+    AXButton/ title='EFFECTS' desc='' kids=0
+    AXButton/ title='DETAILS' desc='' kids=0
+  AXSlider/ title='' desc='' kids=1
+    AXValueIndicator/ title='' desc='' kids=0
+  AXTextField/ title='' desc='' kids=0
+  AXTextField/ title='' desc='' kids=0
+  AXTextField/ title='' desc='' kids=0
+  AXTextField/ title='' desc='' kids=0
+  AXTextField/ title='' desc='' kids=0
+  AXTextField/ title='' desc='' kids=0
+  AXTextField/ title='' desc='' kids=0
+  AXTextField/ title='' desc='' kids=0
+  AXTextField/ title='' desc='' kids=0
+  AXTextField/ title='' desc='' kids=0
+  AXTextField/ title='' desc='' kids=0
+  AXTextField/ title='' desc='' kids=0
+  AXSlider/ title='' desc='' kids=1
+    AXSlider/ title='' desc='' kids=0
+  AXSlider/ title='' desc='' kids=1
+    AXSlider/ title='' desc='' kids=0
+  AXSlider/ title='' desc='' kids=1
+    AXSlider/ title='' desc='' kids=0
+  AXSlider/ title='' desc='' kids=1
+    AXSlider/ title='' desc='' kids=0
+  AXSlider/ title='' desc='' kids=1
+    AXSlider/ title='' desc='' kids=0
+  AXSlider/ title='' desc='' kids=1
+    AXSlider/ title='' desc='' kids=0
+  AXSlider/ title='' desc='' kids=1
+    AXSlider/ title='' desc='' kids=0
+  AXSlider/ title='' desc='' kids=1
+    AXSlider/ title='' desc='' kids=0
+  AXSlider/ title='' desc='' kids=1
+    AXSlider/ title='' desc='' kids=0
+
+close pressed -> success

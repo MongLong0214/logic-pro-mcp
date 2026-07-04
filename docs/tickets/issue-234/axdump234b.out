@@ -1,0 +1,130 @@
+### CANDIDATE RANKING (production sort: stripCount desc, then totalKids desc)
+[0] strips=8 kids=8 inspectorAncestor=false path=/AXWindow[9]/AXGroup[0]/AXGroup
+     AXGroup desc='Mixer' (603,405 1317x37) kids=8
+[1] strips=3 kids=3 inspectorAncestor=false path=/AXWindow[9]/AXGroup[1]/AXLayoutArea
+     AXLayoutArea desc='Mixer' (603,442 1317x638) kids=3
+[2] strips=2 kids=2 inspectorAncestor=true path=/AXWindow[6]/AXGroup[0]/AXList[2]/AXGroup[0]/AXLayoutArea
+     AXLayoutArea desc='Mixer' (366,394 235x685) kids=2
+[3] strips=2 kids=2 inspectorAncestor=false path=/AXWindow[9]/AXGroup
+     AXGroup desc='Mixer' (603,405 1317x675) kids=2
+
+### PRODUCTION WINNER (non-inspector): /AXWindow[9]/AXGroup[0]/AXGroup
+### ITS 'STRIPS' (as mixerChannelStrips returns):
+strip[0]: AXButton desc='Leave Folder' help='Leave Folder' (612,413 35x23) kids=0
+strip[1]: AXGroup (653,413 213x23) kids=3
+strip[2]: AXStaticText val='Sends on Faders:' (873,413 107x25) kids=0
+strip[3]: AXCheckBox title='Sends on Faders:' help='Sends on Faders - On/Off. Swaps the Pan knob and Fader on channel stri' val='0' (981,413 32x23) kids=0
+strip[4]: AXPopUpButton help='Off, Sends on Faders pop-up menu. Assigns the Pan knob and Fader on ch' val='Off' (1013,413 118x23) kids=0
+strip[5]: AXRadioGroup (1175,413 172x23) kids=3
+strip[6]: AXGroup (1359,412 481x23) kids=8
+strip[7]: AXRadioGroup (1845,412 67x23) kids=2
+
+### REAL STRIPS CONTAINER /AXWindow[9]/AXGroup[1]/AXLayoutArea — full dump depth 5
+AXLayoutArea desc='Mixer' (603,442 1317x638) kids=3
+  AXLayoutItem desc='Deluxe Classic' (695,442 67x623) kids=17
+    AXTextField desc='name' help='Name field. Double-click to rename the channel strip. ' val='Deluxe Classic' (695,1029 66x24) kids=0
+    AXButton/AXSwitch desc='mute' help='Mute button. Silence a channel strip so it’s no longer audible. Use on' val='off' (699,1006 28x18) kids=0
+    AXButton/AXSwitch desc='solo' help='Solo button. Isolate a channel strip’s signal so that it can be heard ' val='off' (729,1006 28x18) kids=0
+    AXSlider desc='volume fader' help='Volume fader. Set a track’s playback volume. Use on an aux or output c' val='173' (702,824 20x180) kids=1
+      AXValueIndicator desc='fader knob' (701,858 22x46) kids=0
+    AXTextField desc='volume fader level' title='volume fader level, 0.0 dB' help='Volume display. Shows the position of the Volume fader referenced to t' (700,805 27x18) kids=0
+    AXButton desc='peak level meter' title='peak level meter' help='Peak Level display. Shows the signal peak during playback. Values abov' val='signal clipping off' (729,805 27x18) kids=0
+    AXSlider desc='pan' help='Pan/Balance knob. Drag vertically to position the channel strip signal' val='0' (710,763 37x37) kids=1
+      AXStaticText desc='knob readout' (710,763 37x37) kids=0
+    AXGroup desc='Read, automation enabled' (699,701 58x18) kids=2
+      AXCheckBox desc='automation' val='1' (699,701 20x18) kids=0
+      AXButton desc='list' (719,701 38x18) kids=0
+    AXPopUpButton desc='group' title='group' help='Group slot. Add the channel strip to a group. You can also define whic' (700,678 56x18) kids=0
+    AXButton desc='Stereo Output' help='Output slot. Click and hold to choose the channel strip output destina' (699,655 58x18) kids=0
+    AXButton desc='send button' help='Send slot. Route the signal to an aux channel strip. Use sends to proc' (699,629 40x18) kids=0
+    AXButton desc='audio plug-in' help='Audio Effect slot. Insert an audio effect. Click an occupied slot to o' (699,585 58x18) kids=0
+    AXGroup desc='E-Piano' (699,559 58x18) kids=3
+      AXCheckBox desc='bypass' val='0' (699,559 20x18) kids=0
+      AXButton desc='open' (719,559 21x18) kids=0
+      AXButton desc='list' (740,559 17x18) kids=0
+    AXButton desc='MIDI plug-in' help='MIDI Effect slot. Insert a MIDI effect. Click an occupied slot to open' (699,533 58x18) kids=0
+    AXButton desc='EQ' help='EQ display. Click to add a Channel EQ or open an inserted Channel or L' val='off' (699,499 58x29) kids=0
+    AXButton/AXSwitch desc='gain reduction meter' help='Gain reduction meter. Shows the gain reduction of the first Compressor' val='off' (699,486 58x9) kids=0
+    AXButton desc='Deluxe Classic' help='Setting button. Load and save channel strip settings, which contain se' (699,464 58x18) kids=0
+  AXLayoutItem desc='Stereo Out' (762,442 67x623) kids=15
+    AXTextField desc='name' help='Name field. Double-click to rename the channel strip. ' val='Stereo Out' (762,1029 66x24) kids=0
+    AXButton/AXSwitch desc='mute' help='Mute button. Silence a channel strip so it’s no longer audible. Use on' val='off' (766,1006 28x18) kids=0
+    AXButton/AXSwitch desc='bounce' help='Bounce button. Render the signal of one or more output channel strips ' val='off' (796,986 28x18) kids=0
+    AXSlider desc='volume fader' help='Volume fader. Set a track’s playback volume. Use on an aux or output c' val='173' (769,824 20x180) kids=1
+      AXValueIndicator desc='fader knob' (768,858 22x46) kids=0
+    AXTextField desc='volume fader level' title='volume fader level, 0.0 dB' help='Volume display. Shows the position of the Volume fader referenced to t' (767,805 27x18) kids=0
+    AXButton desc='peak level meter' title='peak level meter' help='Peak Level display. Shows the signal peak during playback. Values abov' val='signal clipping off' (796,805 27x18) kids=0
+    AXSlider desc='pan' help='Pan/Balance knob. Drag vertically to position the channel strip signal' val='0' (777,763 37x37) kids=1
+      AXStaticText desc='knob readout' (777,763 37x37) kids=0
+    AXGroup desc='Read, automation enabled' (766,701 58x18) kids=2
+      AXCheckBox desc='automation' val='1' (766,701 20x18) kids=0
+      AXButton desc='list' (786,701 38x18) kids=0
+    AXPopUpButton desc='group' title='group' help='Group slot. Add the channel strip to a group. You can also define whic' (767,678 56x18) kids=0
+    AXButton desc='audio plug-in' help='Audio Effect slot. Insert an audio effect. Click an occupied slot to o' (766,585 58x18) kids=0
+    AXButton/AXSwitch desc='channel mode' help='Output Channel Mode button. Switches a pair of linked outputs between ' val='Stereo' (766,559 58x18) kids=0
+    AXButton desc='mastering assistant' help='Mastering Assistant. Click to insert Mastering Assistant. ' (766,603 58x18) kids=0
+    AXButton desc='EQ' help='EQ display. Click to add a Channel EQ or open an inserted Channel or L' val='off' (766,499 58x29) kids=0
+    AXButton/AXSwitch desc='gain reduction meter' help='Gain reduction meter. Shows the gain reduction of the first Compressor' val='off' (766,486 58x9) kids=0
+    AXButton desc='setting' help='Setting button. Load and save channel strip settings, which contain se' (766,464 58x18) kids=0
+  AXLayoutItem desc='Master' (829,442 67x623) kids=7
+    AXTextField desc='name' help='Name field. Double-click to rename the channel strip. ' val='Master' (829,1029 66x24) kids=0
+    AXButton/AXSwitch desc='mute' help='Mute button. Silence a channel strip so it’s no longer audible. Use on' val='off' (833,1006 28x18) kids=0
+    AXButton/AXSwitch desc='dim' help='Dim button. Set the volume according to the Dim value set in Audio Gen' val='off' (863,1006 28x18) kids=0
+    AXSlider desc='volume fader' help='Volume fader. Set a track’s playback volume. Use on an aux or output c' val='173' (852,824 20x180) kids=1
+      AXValueIndicator desc='fader knob' (851,858 22x46) kids=0
+    AXTextField desc='volume fader level' title='volume fader level, 0.0 dB' help='Volume display. Shows the position of the Volume fader referenced to t' (834,805 57x18) kids=0
+    AXGroup desc='Read, automation disabled' (833,701 58x18) kids=2
+      AXCheckBox desc='automation' val='0' (833,701 20x18) kids=0
+      AXButton desc='list' (853,701 38x18) kids=0
+    AXPopUpButton desc='group' title='group' help='Group slot. Add the channel strip to a group. You can also define whic' (834,678 56x18) kids=0
+
+### REAL STRIPS CONTAINER /AXWindow[6]/AXGroup[0]/AXList[2]/AXGroup[0]/AXLayoutArea — full dump depth 5
+AXLayoutArea desc='Mixer' (366,394 235x685) kids=2
+  AXLayoutItem desc='Deluxe Classic' help='Left inspector channel strip. Control the signal of the selected track' (366,116 118x963) kids=19
+    AXTextField desc='name' help='Name field. Double-click to rename the channel strip. ' val='Deluxe Classic' (366,1055 117x24) kids=0
+    AXButton/AXSwitch desc='mute' help='Mute button. Silence a channel strip so it’s no longer audible. Use on' val='off' (389,1027 33x18) kids=0
+    AXButton/AXSwitch desc='solo' help='Solo button. Isolate a channel strip’s signal so that it can be heard ' val='off' (425,1027 33x18) kids=0
+    AXSlider desc='volume fader' help='Volume fader. Set a track’s playback volume. Use on an aux or output c' val='173' (396,845 20x180) kids=1
+      AXValueIndicator desc='fader knob' (395,878 22x46) kids=0
+    AXTextField desc='volume fader level' title='volume fader level, 0.0 dB' help='Volume display. Shows the position of the Volume fader referenced to t' (389,827 33x18) kids=0
+    AXButton desc='peak level meter' title='peak level meter' help='Peak Level display. Shows the signal peak during playback. Values abov' val='signal clipping off' (425,827 33x18) kids=0
+    AXSlider desc='pan' help='Pan/Balance knob. Drag vertically to position the channel strip signal' val='0' (405,785 37x37) kids=1
+      AXStaticText desc='knob readout' (405,785 37x37) kids=0
+    AXGroup desc='Read, automation enabled' (389,760 69x18) kids=2
+      AXCheckBox desc='automation' val='1' (389,760 20x18) kids=0
+      AXButton desc='list' (409,760 49x18) kids=0
+    AXPopUpButton desc='group' title='group, Group' help='Group slot. Add the channel strip to a group. You can also define whic' (390,737 67x18) kids=0
+    AXButton desc='Stereo Output' help='Output slot. Click and hold to choose the channel strip output destina' (389,714 69x18) kids=0
+    AXButton desc='send button' help='Send slot. Route the signal to an aux channel strip. Use sends to proc' (389,688 50x18) kids=0
+    AXButton desc='audio plug-in' help='Audio Effect slot. Insert an audio effect. Click an occupied slot to o' (389,643 69x18) kids=0
+    AXGroup desc='E-Piano' (389,618 69x18) kids=3
+      AXCheckBox desc='bypass' val='0' (389,618 20x18) kids=0
+      AXButton desc='open' (409,618 32x18) kids=0
+      AXButton desc='list' (441,618 17x18) kids=0
+    AXButton desc='MIDI plug-in' help='MIDI Effect slot. Insert a MIDI effect. Click an occupied slot to open' (389,591 69x18) kids=0
+    AXButton desc='EQ' help='EQ display. Click to add a Channel EQ or open an inserted Channel or L' val='off' (389,556 69x31) kids=0
+    AXButton/AXSwitch desc='gain reduction meter' help='Gain reduction meter. Shows the gain reduction of the first Compressor' val='off' (389,545 69x9) kids=0
+    AXButton desc='Deluxe Classic' help='Setting button. Load and save channel strip settings, which contain se' (389,524 69x18) kids=0
+    AXButton desc='library indicator, Deluxe Classic' help='Library Focus triangle. Click to view Library content for the highligh' val='on' (366,524 23x18) kids=0
+    AXButton desc='library indicator, E-Piano' help='Library Focus triangle. Click to view Library content for the highligh' val='off' (366,618 23x18) kids=0
+  AXLayoutItem desc='Stereo Out' help='Right inspector channel strip. Shows the output channel strip for the ' (484,116 118x963) kids=16
+    AXTextField desc='name' help='Name field. Double-click to rename the channel strip. ' val='Stereo Out' (484,1055 117x24) kids=0
+    AXButton/AXSwitch desc='mute' help='Mute button. Silence a channel strip so it’s no longer audible. Use on' val='off' (507,1027 33x18) kids=0
+    AXButton/AXSwitch desc='bounce' help='Bounce button. Render the signal of one or more output channel strips ' val='off' (543,1007 33x18) kids=0
+    AXSlider desc='volume fader' help='Volume fader. Set a track’s playback volume. Use on an aux or output c' val='173' (514,845 20x180) kids=1
+      AXValueIndicator desc='fader knob' (513,878 22x46) kids=0
+    AXTextField desc='volume fader level' title='volume fader level, 0.0 dB' help='Volume display. Shows the position of the Volume fader referenced to t' (507,827 33x18) kids=0
+    AXButton desc='peak level meter' title='peak level meter' help='Peak Level display. Shows the signal peak during playback. Values abov' val='signal clipping off' (543,827 33x18) kids=0
+    AXSlider desc='pan' help='Pan/Balance knob. Drag vertically to position the channel strip signal' val='0' (523,785 37x37) kids=1
+      AXStaticText desc='knob readout' (523,785 37x37) kids=0
+    AXGroup desc='Read, automation enabled' (507,760 69x18) kids=2
+      AXCheckBox desc='automation' val='1' (507,760 20x18) kids=0
+      AXButton desc='list' (527,760 49x18) kids=0
+    AXPopUpButton desc='group' title='group, Group' help='Group slot. Add the channel strip to a group. You can also define whic' (508,737 67x18) kids=0
+    AXButton desc='audio plug-in' help='Audio Effect slot. Insert an audio effect. Click an occupied slot to o' (507,643 69x18) kids=0
+    AXButton/AXSwitch desc='channel mode' help='Output Channel Mode button. Switches a pair of linked outputs between ' val='Stereo' (507,618 69x18) kids=0
+    AXButton desc='mastering assistant' help='Mastering Assistant. Click to insert Mastering Assistant. ' (507,661 69x18) kids=0
+    AXButton desc='EQ' help='EQ display. Click to add a Channel EQ or open an inserted Channel or L' val='off' (507,556 69x31) kids=0
+    AXButton/AXSwitch desc='gain reduction meter' help='Gain reduction meter. Shows the gain reduction of the first Compressor' val='off' (507,545 69x9) kids=0
+    AXButton desc='setting' help='Setting button. Load and save channel strip settings, which contain se' (507,524 69x18) kids=0
+    AXButton desc='library indicator, (null)' help='Library Focus triangle. Click to view Library content for the highligh' val='off' (484,524 23x18) kids=0
