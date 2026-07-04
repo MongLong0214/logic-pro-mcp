@@ -50,8 +50,9 @@ Make State A structurally require ≥ 1 enumerated slot in `logic_plugins.get_in
 |------|------------|-------------|
 | `Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift` | Modify | Zero-slot State B branch in `defaultGetPluginInventory` (~167); zero-slot-distinct State C wording in `defaultInsertVerified` (~1021), `performVerifiedParamWrite` (~631), `liveInsertSlot` (~1588) |
 | `Sources/LogicProMCP/Channels/AccessibilityChannel.swift` | Modify | Legacy insert path zero-slot hint (~2204) |
-| `Tests/LogicProMCPTests/PluginGetInventoryTests.swift` | Modify | §3.1 tests #1-#4 |
+| `Tests/LogicProMCPTests/PluginGetInventoryTests.swift` | Modify | §3.1 tests #1-#4, #8, #9 |
 | `Tests/LogicProMCPTests/PluginInsertVerifiedTests.swift` | Modify | §3.1 tests #5-#6 (or sibling file per conventions) |
+| `Tests/LogicProMCPTests/PluginSetParamVerifiedLiveTests.swift` | Modify | §3.1 test #7 (zero-slot set_param addressing — boomer R2b-#2) |
 
 ### 4.2 Implementation Steps (Green Phase)
 
@@ -67,7 +68,7 @@ Make State A structurally require ≥ 1 enumerated slot in `logic_plugins.get_in
 - EC-2 (PRD E10): future drift → State B honesty (the whole point of this ticket).
 
 ## 6. Review Checklist
-- [ ] Red: 테스트 #1/#2 FAILED on main 확인 (#3는 T1 이후 GREEN이어야 — 픽스처 유효성 핀)
+- [ ] Red: 테스트 #1/#2/#5/#6/#7/#9 FAILED on this branch(post-T1) 확인; #3/#4 PASS (State A floor 픽스처 핀), #8 PASS (T1 회귀 핀 — T1이 먼저 선택을 고치므로 red 불가; boomer R2b-#2 disposition)
 - [ ] Green: PASSED
 - [ ] AC 전부 충족 (AC-5는 PR 본문 문서화로 충족)
 - [ ] 기존 테스트 깨지지 않음

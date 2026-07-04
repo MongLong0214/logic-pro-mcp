@@ -69,7 +69,7 @@ So the fix is **container selection + honesty**, not a rewrite of slot classific
 - [ ] G2: `logic_plugins get_inventory` on 12.3 returns the real insert chain (empty rows as `read_status:"empty"` items; occupied rows with names) — reproduction script flips from the §1.1 failures to successes.
 - [ ] G3: **Honesty gate**: `get_inventory` can never return State A with zero enumerated slots. Zero slots ⇒ State B `readback_unavailable` with a distinct `plugins_unknown_reason` (e.g. `insert_section_not_enumerable`) and a recovery hint. A healthy strip with a visible Audio FX section always exposes ≥ 1 slot item (the empty append row), so `plugins:[]` under State A becomes structurally impossible.
 - [ ] G4: `logic_mixer insert_plugin`, `logic_plugins insert_verified`, `logic_plugins set_param_verified` reach slot addressing on 12.3 (their pre-existing gates unchanged); live E2E inserts Gain on the scratch project and reads it back verified.
-- [ ] G5 (secondary, from issue): a plugin editor window (live 12.3 evidence: `AXWindow subrole=AXDialog`, title = track name, chrome children `close`/`toolbar` buttons + `bypass`/`compare` checkboxes + `view` menubutton) is classified as `plugin_editor`, **not** as a blocking modal dialog, so unrelated ops (`project.save`, `track.select`) are no longer refused while a plugin window is open. Unknown/unmatched window shapes keep the current fail-closed "blocking" classification.
+- [ ] G5 (secondary, from issue): a plugin editor window (live 12.3 evidence: `AXWindow subrole=AXDialog`, title = track name, chrome incl. close-button attribute + `bypass`/`compare` checkboxes) is recognized as a plugin editor **internally** and excluded from blocking-dialog classification, so unrelated ops (`project.save`, `track.select`) are no longer refused while a plugin window is open. Public behavior (boomer R2b-#4): `dialogPresent()` → false, `blockingDialogInfo()` → nil, health reports no blocking dialog — no wire-shape addition. Unknown/unmatched window shapes keep the current fail-closed "blocking" classification.
 - [ ] G6: Regression fixtures for both tree shapes (12.2-style and 12.3-style, built on `FakeAXRuntimeBuilder`) lock the selection, enumeration, honesty-gate, and dialog-classification behaviors; full suite + live 12.3 E2E green.
 
 ### 2.2 Non-Goals
@@ -137,7 +137,7 @@ One fix point heals all consumers.
 
 ### 4.2 Data Model Changes
 
-None on disk. Wire: `plugins_unknown_reason` gains value `insert_section_not_enumerable` (State B). `blockingDialogInfo` diagnostics gain a `plugin_editor` (non-blocking) classification outcome. No State A shape change.
+None on disk. Wire: `plugins_unknown_reason` gains value `insert_section_not_enumerable` (State B). Plugin-editor recognition is **internal only** (boomer R2b-#4): editors simply stop appearing as blockers — `dialogPresent()` false, `blockingDialogInfo()` nil, no new wire field. No State A shape change.
 
 ### 4.3 API Design
 

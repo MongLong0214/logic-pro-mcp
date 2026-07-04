@@ -63,11 +63,11 @@ Stop classifying Logic 12.3 plugin-editor windows (`AXWindow subrole=AXDialog`, 
 
 ## 5. Edge Cases
 - EC-1 (PRD E7/E8/E9): editor open during ops; true modal; partial chrome.
-- EC-2: editor + real modal simultaneously (test #7).
+- EC-2: editor + real modal simultaneously (test #6).
 - EC-3: unverified locale → conservative blocking (AC-6).
 
 ## 6. Review Checklist
-- [ ] Red: 테스트 #1-#3 FAILED on main 확인 (#4-#7 pins PASS)
+- [ ] Red: 테스트 #1/#2/#7 FAILED on this branch 확인 (#7은 main에서 editor가 blocking으로 분류되어 StatePoller가 캐시 갱신을 억제하므로 red); #3/#4/#5/#6 PASS (pins — boomer R2b-#3 corrected)
 - [ ] Green: 전부 PASSED
 - [ ] AC 전부 충족
 - [ ] 기존 dialog-filter/StatePoller/#190 진단 테스트 무손상

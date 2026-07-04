@@ -32,7 +32,7 @@ Make `getMixerArea` select the real channel-strips container on Logic 12.3 (tool
 | 4 | `test122ShapeStillSelected` | Unit | 12.2 shape: window → `AXGroup desc='Mixer'` → `AXLayoutArea desc='Mixer'` → strips | Layout area wins |
 | 5 | `test123KoreanLocaleSelection` | Unit | #1 with `desc='믹서'` everywhere | Layout area wins |
 | 6 | `test123InspectorAreaStillExcluded` | Unit | 12.3 fixture + inspector-marked ancestor containing a 2-strip layout area, main mixer hidden | `getMixerArea == nil` (not the inspector area) |
-| 7 | `test123EnumerationEndToEnd` | Integration | Fixture #1 where strip children mirror the live dump (name field, mute/solo, fader, pan, automation group, group popup, output/send buttons, empty `audio plug-in` row + occupied group + `MIDI plug-in` row + EQ/meters/setting) | `audioPluginInsertSlots(strips[0])` returns exactly [occupied, empty] with physical indices (proves NG1: classifiers untouched and correct on 12.3) |
+| 7 | `test123EnumerationEndToEnd` | Integration | Fixture #1 where strip children mirror the live dump (name field, mute/solo, fader, pan, automation group, group popup, output/send buttons, empty `audio plug-in` row + occupied group + `MIDI plug-in` row + EQ/meters/setting). **Drives the full chain**: `getMixerArea` → `mixerChannelStrips` → `audioPluginInsertSlots(strips[0])` (boomer R2b-#1: enumerating the fixture strip directly would pass on main — the classifiers are healthy; the red color comes from selection) | Chain returns exactly [occupied, empty] with physical indices (proves NG1: classifiers untouched and correct on 12.3) |
 
 Red-phase requirement (boomer R2-#4 corrected): #1, #2, #3, **#5**, #7 must FAIL against current `main` (the Korean 12.3 fixture hits the same fallback-ranking bug — `mixerNamedElement` matches '믹서' and the toolbar still wins); #4 (12.2 shape) and #6 (inspector exclusion — existing coverage at `AXLogicProElementsTests.swift:307` extends to the 12.3 variant) must PASS already and serve as regression pins.
 
@@ -68,7 +68,7 @@ Red-phase requirement (boomer R2-#4 corrected): #1, #2, #3, **#5**, #7 must FAIL
 - EC-4 (PRD E5): inspector exclusion fixture.
 
 ## 6. Review Checklist
-- [ ] Red: 신규 테스트 #1-#3/#6/#7 FAILED on main 확인
+- [ ] Red: 신규 테스트 #1/#2/#3/#5/#7 FAILED on main 확인; #4/#6 PASS (pins)
 - [ ] Green: 전체 신규 테스트 PASSED
 - [ ] Refactor: N/A
 - [ ] AC 전부 충족
