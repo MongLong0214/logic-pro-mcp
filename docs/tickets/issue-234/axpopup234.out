@@ -1,0 +1,322 @@
+strips: ["Deluxe Classic", "Audio 1", "Stereo Out", "Master"]
+target strip: AXLayoutItem/ title='' desc='Audio 1' kids=19
+empty slot: AXButton/ title='' desc='audio plug-in' kids=0
+AXPress slot -> err -25204
+
+=== scanning app root ===
+
+### MENU at /AXApplication[0]/AXWindow[9]/AXGroup[1]/AXLayoutArea[4] :: AXMenu/ title='' desc='' kids=25
+  [0] AXMenuItem/ title='' desc='' kids=1
+  [1] AXMenuItem/ title='Recent' desc='' kids=0
+  [2] AXMenuItem/ title='Channel EQ' desc='' kids=1
+  [3] AXMenuItem/ title='Tremolo' desc='' kids=1
+  [4] AXMenuItem/ title='Flanger' desc='' kids=1
+  [5] AXMenuItem/ title='AutoFilter' desc='' kids=1
+  [6] AXMenuItem/ title='Distortion' desc='' kids=1
+  [7] AXMenuItem/ title='' desc='' kids=0
+  [8] AXMenuItem/ title='Amps and Pedals' desc='' kids=1
+  [9] AXMenuItem/ title='Delay' desc='' kids=1
+  [10] AXMenuItem/ title='Distortion' desc='' kids=1
+  [11] AXMenuItem/ title='Dynamics' desc='' kids=1
+  [12] AXMenuItem/ title='EQ' desc='' kids=1
+  [13] AXMenuItem/ title='Filter' desc='' kids=1
+  [14] AXMenuItem/ title='Imaging' desc='' kids=1
+  [15] AXMenuItem/ title='Metering' desc='' kids=1
+  [16] AXMenuItem/ title='Modulation' desc='' kids=1
+  [17] AXMenuItem/ title='Multi Effects' desc='' kids=1
+  [18] AXMenuItem/ title='Pitch' desc='' kids=1
+  [19] AXMenuItem/ title='Reverb' desc='' kids=1
+  [20] AXMenuItem/ title='Specialized' desc='' kids=1
+  [21] AXMenuItem/ title='Utility' desc='' kids=1
+  [22] AXMenuItem/ title='' desc='' kids=0
+  [23] AXMenuItem/ title='Audio Units' desc='' kids=1
+  [24] AXMenuItem/ title='' desc='' kids=0
+
+### MENU at /AXApplication[1]/AXMenuBar[0]/AXMenuBarItem[0] :: AXMenu/ title='' desc='' kids=21
+  [0] AXMenuItem/ title='이 Mac에 관하여' desc='' kids=0
+  [1] AXMenuItem/ title='시스템 정보' desc='' kids=0
+  [2] AXMenuItem/ title='' desc='' kids=0
+  [3] AXMenuItem/ title='시스템 설정…' desc='' kids=0
+  [4] AXMenuItem/ title='App Store…, 6개의 업데이트' desc='' kids=0
+  [5] AXMenuItem/ title='' desc='' kids=0
+  [6] AXMenuItem/ title='최근 사용 항목' desc='' kids=1
+  [7] AXMenuItem/ title='' desc='' kids=0
+  [8] AXMenuItem/ title='강제 종료...' desc='' kids=0
+  [9] AXMenuItem/ title='Logic Pro 강제 종료' desc='' kids=0
+  [10] AXMenuItem/ title='' desc='' kids=0
+  [11] AXMenuItem/ title='잠자기' desc='' kids=0
+  [12] AXMenuItem/ title='재시동…' desc='' kids=0
+  [13] AXMenuItem/ title='재시동' desc='' kids=0
+  [14] AXMenuItem/ title='시스템 종료…' desc='' kids=0
+  [15] AXMenuItem/ title='시스템 종료' desc='' kids=0
+  [16] AXMenuItem/ title='' desc='' kids=0
+  [17] AXMenuItem/ title='잠금 화면' desc='' kids=0
+  [18] AXMenuItem/ title='Isaac 로그아웃…' desc='' kids=0
+  [19] AXMenuItem/ title='Isaac 로그아웃' desc='' kids=0
+  [20] AXMenuItem/ title='' desc='' kids=0
+
+### MENU at /AXApplication[1]/AXMenuBar[1]/AXMenuBarItem[0] :: AXMenu/ title='' desc='' kids=19
+  [0] AXMenuItem/ title='About Logic Pro' desc='' kids=0
+  [1] AXMenuItem/ title='Learn About Apple Creator Studio…' desc='' kids=0
+  [2] AXMenuItem/ title='Learn About Logic Remote…' desc='' kids=0
+  [3] AXMenuItem/ title='' desc='' kids=0
+  [4] AXMenuItem/ title='Settings' desc='' kids=1
+  [5] AXMenuItem/ title='Control Surfaces' desc='' kids=1
+  [6] AXMenuItem/ title='Key Commands' desc='' kids=1
+  [7] AXMenuItem/ title='' desc='' kids=0
+  [8] AXMenuItem/ title='Sound Library…' desc='' kids=0
+  [9] AXMenuItem/ title='' desc='' kids=0
+  [10] AXMenuItem/ title='Provide Logic Pro Feedback' desc='' kids=0
+  [11] AXMenuItem/ title='' desc='' kids=0
+  [12] AXMenuItem/ title='Services' desc='' kids=1
+  [13] AXMenuItem/ title='' desc='' kids=0
+  [14] AXMenuItem/ title='Hide Logic Pro' desc='' kids=0
+  [15] AXMenuItem/ title='Hide Others' desc='' kids=0
+  [16] AXMenuItem/ title='Show All' desc='' kids=0
+  [17] AXMenuItem/ title='' desc='' kids=0
+  [18] AXMenuItem/ title='Quit Logic Pro' desc='' kids=0
+
+### MENU at /AXApplication[1]/AXMenuBar[2]/AXMenuBarItem[0] :: AXMenu/ title='' desc='' kids=26
+  [0] AXMenuItem/ title='New' desc='' kids=0
+  [1] AXMenuItem/ title='New from Template…' desc='' kids=0
+  [2] AXMenuItem/ title='Open…' desc='' kids=0
+  [3] AXMenuItem/ title='Open Recent' desc='' kids=1
+  [4] AXMenuItem/ title='' desc='' kids=0
+  [5] AXMenuItem/ title='Close' desc='' kids=0
+  [6] AXMenuItem/ title='Close Project' desc='' kids=0
+  [7] AXMenuItem/ title='Save' desc='' kids=0
+  [8] AXMenuItem/ title='Save As…' desc='' kids=0
+  [9] AXMenuItem/ title='Save A Copy As…' desc='' kids=0
+  [10] AXMenuItem/ title='Save as Template…' desc='' kids=0
+  [11] AXMenuItem/ title='Revert to' desc='' kids=1
+  [12] AXMenuItem/ title='' desc='' kids=0
+  [13] AXMenuItem/ title='Project Alternatives' desc='' kids=1
+  [14] AXMenuItem/ title='Project Management' desc='' kids=1
+  [15] AXMenuItem/ title='Project Settings' desc='' kids=1
+  [16] AXMenuItem/ title='' desc='' kids=0
+  [17] AXMenuItem/ title='Page Setup…' desc='' kids=0
+  [18] AXMenuItem/ title='Print' desc='' kids=0
+  [19] AXMenuItem/ title='' desc='' kids=0
+  [20] AXMenuItem/ title='Movie' desc='' kids=1
+  [21] AXMenuItem/ title='' desc='' kids=0
+  [22] AXMenuItem/ title='Import' desc='' kids=1
+  [23] AXMenuItem/ title='Export' desc='' kids=1
+  [24] AXMenuItem/ title='Bounce' desc='' kids=1
+  [25] AXMenuItem/ title='Share' desc='' kids=1
+
+### MENU at /AXApplication[1]/AXMenuBar[3]/AXMenuBarItem[0] :: AXMenu/ title='' desc='' kids=30
+  [0] AXMenuItem/ title='Undo Create Track' desc='' kids=0
+  [1] AXMenuItem/ title='Can’t Redo' desc='' kids=0
+  [2] AXMenuItem/ title='Undo History…' desc='' kids=0
+  [3] AXMenuItem/ title='Delete Undo History' desc='' kids=0
+  [4] AXMenuItem/ title='' desc='' kids=0
+  [5] AXMenuItem/ title='Mixer Undo' desc='' kids=0
+  [6] AXMenuItem/ title='Mixer Redo' desc='' kids=0
+  [7] AXMenuItem/ title='Undo selected Channel Strips' desc='' kids=0
+  [8] AXMenuItem/ title='Redo selected Channel Strips' desc='' kids=0
+  [9] AXMenuItem/ title='Delete Mixer Undo History' desc='' kids=0
+  [10] AXMenuItem/ title='Include Mixer Undo Steps in Project Undo History' desc='' kids=0
+  [11] AXMenuItem/ title='' desc='' kids=0
+  [12] AXMenuItem/ title='Cut' desc='' kids=0
+  [13] AXMenuItem/ title='Copy' desc='' kids=0
+  [14] AXMenuItem/ title='Paste' desc='' kids=0
+  [15] AXMenuItem/ title='Delete' desc='' kids=0
+  [16] AXMenuItem/ title='' desc='' kids=0
+  [17] AXMenuItem/ title='Select All' desc='' kids=0
+  [18] AXMenuItem/ title='Deselect All' desc='' kids=0
+  [19] AXMenuItem/ title='Invert Selection' desc='' kids=0
+  [20] AXMenuItem/ title='Select Audio Channel Strips' desc='' kids=0
+  [21] AXMenuItem/ title='Select Instrument Channel Strips' desc='' kids=0
+  [22] AXMenuItem/ title='Select Summing Stack Channel Strips' desc='' kids=0
+  [23] AXMenuItem/ title='Select Auxiliary Channel Strips' desc='' kids=0
+  [24] AXMenuItem/ title='Select Output Channel Strips' desc='' kids=0
+  [25] AXMenuItem/ title='Select MIDI Channel Strips' desc='' kids=0
+  [26] AXMenuItem/ title='' desc='' kids=0
+  [27] AXMenuItem/ title='Select Same-Colored Channel Strips' desc='' kids=0
+  [28] AXMenuItem/ title='Select Muted Channel Strips' desc='' kids=0
+  [29] AXMenuItem/ title='Select Channel Strips with Same Panner Type' desc='' kids=0
+
+### MENU at /AXApplication[1]/AXMenuBar[4]/AXMenuBarItem[0] :: AXMenu/ title='' desc='' kids=32
+  [0] AXMenuItem/ title='New Tracks…' desc='' kids=0
+  [1] AXMenuItem/ title='New Audio Track' desc='' kids=0
+  [2] AXMenuItem/ title='New Software Instrument Track' desc='' kids=0
+  [3] AXMenuItem/ title='New Session Player SI Track…' desc='' kids=0
+  [4] AXMenuItem/ title='New External MIDI Track' desc='' kids=0
+  [5] AXMenuItem/ title='Other' desc='' kids=1
+  [6] AXMenuItem/ title='Rename Track' desc='' kids=0
+  [7] AXMenuItem/ title='' desc='' kids=0
+  [8] AXMenuItem/ title='Delete Track' desc='' kids=0
+  [9] AXMenuItem/ title='Delete Unused Tracks' desc='' kids=0
+  [10] AXMenuItem/ title='' desc='' kids=0
+  [11] AXMenuItem/ title='Create Track Stack…' desc='' kids=0
+  [12] AXMenuItem/ title='Flatten Stack' desc='' kids=0
+  [13] AXMenuItem/ title='Convert Folder Stack to Summing Stack' desc='' kids=0
+  [14] AXMenuItem/ title='' desc='' kids=0
+  [15] AXMenuItem/ title='Global Tracks' desc='' kids=1
+  [16] AXMenuItem/ title='Show Track Alternatives' desc='' kids=0
+  [17] AXMenuItem/ title='Show Output Track' desc='' kids=0
+  [18] AXMenuItem/ title='' desc='' kids=0
+  [19] AXMenuItem/ title='Replace or Double Drum Track…' desc='' kids=0
+  [20] AXMenuItem/ title='Convert Regions to New Sampler Track…' desc='' kids=0
+  [21] AXMenuItem/ title='' desc='' kids=0
+  [22] AXMenuItem/ title='Search and Select Track…' desc='' kids=0
+  [23] AXMenuItem/ title='Hide/Show Selected Tracks' desc='' kids=0
+  [24] AXMenuItem/ title='Hide/Show Unselected Tracks' desc='' kids=0
+  [25] AXMenuItem/ title='Unhide All Tracks' desc='' kids=0
+  [26] AXMenuItem/ title='Toggle Hide View' desc='' kids=0
+  [27] AXMenuItem/ title='' desc='' kids=0
+  [28] AXMenuItem/ title='Sort Tracks by' desc='' kids=1
+  [29] AXMenuItem/ title='Assign Track Color…' desc='' kids=0
+  [30] AXMenuItem/ title='Assign Track Icon…' desc='' kids=0
+  [31] AXMenuItem/ title='Configure Track Header…' desc='' kids=0
+
+### MENU at /AXApplication[1]/AXMenuBar[5]/AXMenuBarItem[0] :: AXMenu/ title='' desc='' kids=21
+  [0] AXMenuItem/ title='Go To' desc='' kids=1
+  [1] AXMenuItem/ title='' desc='' kids=0
+  [2] AXMenuItem/ title='Scroll to Selection' desc='' kids=0
+  [3] AXMenuItem/ title='Set Locators by Selection and Enable Cycle' desc='' kids=0
+  [4] AXMenuItem/ title='Set Rounded Locators by Selection and Enable Cycle' desc='' kids=0
+  [5] AXMenuItem/ title='' desc='' kids=0
+  [6] AXMenuItem/ title='Move Locators Forward by Cycle Length' desc='' kids=0
+  [7] AXMenuItem/ title='Move Locators Backwards by Cycle Length' desc='' kids=0
+  [8] AXMenuItem/ title='' desc='' kids=0
+  [9] AXMenuItem/ title='Create Marker' desc='' kids=0
+  [10] AXMenuItem/ title='Other' desc='' kids=1
+  [11] AXMenuItem/ title='Rename Marker' desc='' kids=0
+  [12] AXMenuItem/ title='Delete Marker at Playhead Position' desc='' kids=0
+  [13] AXMenuItem/ title='' desc='' kids=0
+  [14] AXMenuItem/ title='Open Marker List' desc='' kids=0
+  [15] AXMenuItem/ title='Open Marker Text' desc='' kids=0
+  [16] AXMenuItem/ title='' desc='' kids=0
+  [17] AXMenuItem/ title='Play Button Options' desc='' kids=1
+  [18] AXMenuItem/ title='Stop Button Options' desc='' kids=1
+  [19] AXMenuItem/ title='' desc='' kids=0
+  [20] AXMenuItem/ title='Auto Set Locators' desc='' kids=1
+
+### MENU at /AXApplication[1]/AXMenuBar[6]/AXMenuBarItem[0] :: AXMenu/ title='' desc='' kids=12
+  [0] AXMenuItem/ title='Count-in' desc='' kids=1
+  [1] AXMenuItem/ title='Metronome Settings…' desc='' kids=0
+  [2] AXMenuItem/ title='' desc='' kids=0
+  [3] AXMenuItem/ title='Use Musical Grid' desc='' kids=0
+  [4] AXMenuItem/ title='Allow Quick Punch-In' desc='' kids=0
+  [5] AXMenuItem/ title='Auto Input Monitoring' desc='' kids=0
+  [6] AXMenuItem/ title='Low Latency Monitoring Mode' desc='' kids=0
+  [7] AXMenuItem/ title='' desc='' kids=0
+  [8] AXMenuItem/ title='Record Button Options' desc='' kids=1
+  [9] AXMenuItem/ title='Overlapping MIDI Recordings' desc='' kids=1
+  [10] AXMenuItem/ title='Overlapping Audio Recordings' desc='' kids=1
+  [11] AXMenuItem/ title='Recording Settings…' desc='' kids=0
+
+### MENU at /AXApplication[1]/AXMenuBar[7]/AXMenuBarItem[0] :: AXMenu/ title='' desc='' kids=22
+  [0] AXMenuItem/ title='Show Automation' desc='' kids=0
+  [1] AXMenuItem/ title='Create Track Automation' desc='' kids=1
+  [2] AXMenuItem/ title='Convert Automation' desc='' kids=1
+  [3] AXMenuItem/ title='Delete Automation' desc='' kids=1
+  [4] AXMenuItem/ title='' desc='' kids=0
+  [5] AXMenuItem/ title='Move Track Automation with Regions' desc='' kids=1
+  [6] AXMenuItem/ title='Enable Automation Quick Access' desc='' kids=0
+  [7] AXMenuItem/ title='Autoselect Automation Parameter in Read Mode' desc='' kids=0
+  [8] AXMenuItem/ title='Automation Settings…' desc='' kids=0
+  [9] AXMenuItem/ title='' desc='' kids=0
+  [10] AXMenuItem/ title='Group Settings' desc='' kids=0
+  [11] AXMenuItem/ title='Groups Active' desc='' kids=0
+  [12] AXMenuItem/ title='Create Group' desc='' kids=0
+  [13] AXMenuItem/ title='I/O Labels…' desc='' kids=0
+  [14] AXMenuItem/ title='I/O Assignments…' desc='' kids=0
+  [15] AXMenuItem/ title='Pre-Fader Metering' desc='' kids=0
+  [16] AXMenuItem/ title='' desc='' kids=0
+  [17] AXMenuItem/ title='Search and Add Plug-in…' desc='' kids=0
+  [18] AXMenuItem/ title='Mastering Assistant…' desc='' kids=0
+  [19] AXMenuItem/ title='' desc='' kids=0
+  [20] AXMenuItem/ title='Dolby Atmos…' desc='' kids=0
+  [21] AXMenuItem/ title='' desc='' kids=0
+
+### MENU at /AXApplication[1]/AXMenuBar[8]/AXMenuBarItem[0] :: AXMenu/ title='' desc='' kids=22
+  [0] AXMenuItem/ title='Hide Library' desc='' kids=0
+  [1] AXMenuItem/ title='Show Inspector' desc='' kids=0
+  [2] AXMenuItem/ title='' desc='' kids=0
+  [3] AXMenuItem/ title='Hide Mixer' desc='' kids=0
+  [4] AXMenuItem/ title='Show Smart Controls' desc='' kids=0
+  [5] AXMenuItem/ title='Show Editor' desc='' kids=0
+  [6] AXMenuItem/ title='' desc='' kids=0
+  [7] AXMenuItem/ title='Show List Editors' desc='' kids=0
+  [8] AXMenuItem/ title='Show Note Pads' desc='' kids=0
+  [9] AXMenuItem/ title='Show Loop Browser' desc='' kids=0
+  [10] AXMenuItem/ title='Show Browsers' desc='' kids=0
+  [11] AXMenuItem/ title='' desc='' kids=0
+  [12] AXMenuItem/ title='Show Control Bar' desc='' kids=0
+  [13] AXMenuItem/ title='Customize Control Bar and Display…' desc='' kids=0
+  [14] AXMenuItem/ title='' desc='' kids=0
+  [15] AXMenuItem/ title='Show Toolbar' desc='' kids=0
+  [16] AXMenuItem/ title='Customize Toolbar…' desc='' kids=0
+  [17] AXMenuItem/ title='' desc='' kids=0
+  [18] AXMenuItem/ title='Show Movie Window' desc='' kids=0
+  [19] AXMenuItem/ title='Show Colors' desc='' kids=0
+  [20] AXMenuItem/ title='' desc='' kids=0
+  [21] AXMenuItem/ title='Enter Full Screen' desc='' kids=0
+
+### MENU at /AXApplication[1]/AXMenuBar[9]/AXMenuBarItem[0] :: AXMenu/ title='' desc='' kids=48
+  [0] AXMenuItem/ title='Minimize' desc='' kids=0
+  [1] AXMenuItem/ title='Minimize All' desc='' kids=0
+  [2] AXMenuItem/ title='Zoom' desc='' kids=0
+  [3] AXMenuItem/ title='Zoom All' desc='' kids=0
+  [4] AXMenuItem/ title='Fill' desc='' kids=0
+  [5] AXMenuItem/ title='Center' desc='' kids=0
+  [6] AXMenuItem/ title='' desc='' kids=0
+  [7] AXMenuItem/ title='Move & Resize' desc='' kids=1
+  [8] AXMenuItem/ title='Full Screen Tile' desc='' kids=1
+  [9] AXMenuItem/ title='' desc='' kids=0
+  [10] AXMenuItem/ title='Remove Window from Set' desc='' kids=0
+  [11] AXMenuItem/ title='' desc='' kids=0
+  [12] AXMenuItem/ title='Move to AH-200HZB' desc='' kids=0
+  [13] AXMenuItem/ title='Move to DELL P2425H' desc='' kids=0
+  [14] AXMenuItem/ title='Cycle Through Windows' desc='' kids=0
+  [15] AXMenuItem/ title='' desc='' kids=0
+  [16] AXMenuItem/ title='Bring All to Front' desc='' kids=0
+  [17] AXMenuItem/ title='Arrange in Front' desc='' kids=0
+  [18] AXMenuItem/ title='' desc='' kids=0
+  [19] AXMenuItem/ title='Open Main Window' desc='' kids=0
+  [20] AXMenuItem/ title='Open Mixer' desc='' kids=0
+  [21] AXMenuItem/ title='' desc='' kids=0
+  [22] AXMenuItem/ title='Open Smart Controls' desc='' kids=0
+  [23] AXMenuItem/ title='Open Piano Roll' desc='' kids=0
+  [24] AXMenuItem/ title='Open Score Editor' desc='' kids=0
+  [25] AXMenuItem/ title='Open Step Sequencer' desc='' kids=0
+  [26] AXMenuItem/ title='Open Step Editor' desc='' kids=0
+  [27] AXMenuItem/ title='Open Audio Track Editor' desc='' kids=0
+  [28] AXMenuItem/ title='Open Audio File Editor' desc='' kids=0
+  [29] AXMenuItem/ title='Open Smart Tempo Editor' desc='' kids=0
+  [30] AXMenuItem/ title='' desc='' kids=0
+  [31] AXMenuItem/ title='Open Event List' desc='' kids=0
+  [32] AXMenuItem/ title='Open Signature List' desc='' kids=0
+  [33] AXMenuItem/ title='Open Project Audio' desc='' kids=0
+  [34] AXMenuItem/ title='' desc='' kids=0
+  [35] AXMenuItem/ title='Open MIDI Transform' desc='' kids=0
+  [36] AXMenuItem/ title='' desc='' kids=0
+  [37] AXMenuItem/ title='Open Transport Float' desc='' kids=0
+  [38] AXMenuItem/ title='Show Event Float' desc='' kids=0
+  [39] AXMenuItem/ title='Show Region Inspector Float' desc='' kids=0
+  [40] AXMenuItem/ title='' desc='' kids=0
+  [41] AXMenuItem/ title='Show Keyboard' desc='' kids=0
+  [42] AXMenuItem/ title='Show Musical Typing' desc='' kids=0
+  [43] AXMenuItem/ title='Show Step Input Keyboard' desc='' kids=0
+  [44] AXMenuItem/ title='' desc='' kids=0
+  [45] AXMenuItem/ title='Hide All Plug-in Windows' desc='' kids=0
+  [46] AXMenuItem/ title='' desc='' kids=0
+  [47] AXMenuItem/ title='Untitled 54 - Tracks' desc='' kids=0
+
+### MENU at /AXApplication[1]/AXMenuBar[10]/AXMenuBarItem[0] :: AXMenu/ title='' desc='' kids=9
+  [0] AXMenuItem/ title='Screenset 1 (Tracks/Mixer/Library)' desc='' kids=0
+  [1] AXMenuItem/ title='' desc='' kids=0
+  [2] AXMenuItem/ title='Duplicate…' desc='' kids=0
+  [3] AXMenuItem/ title='Rename…' desc='' kids=0
+  [4] AXMenuItem/ title='' desc='' kids=0
+  [5] AXMenuItem/ title='Delete' desc='' kids=0
+  [6] AXMenuItem/ title='' desc='' kids=0
+  [7] AXMenuItem/ title='Lock' desc='' kids=0
+  [8] AXMenuItem/ title='Revert to Saved' desc='' kids=0
+
+=== windows (1) ===
+AXWindow/AXStandardWindow title='Untitled 54 - Tracks' desc='' kids=10
+
+Escape sent
