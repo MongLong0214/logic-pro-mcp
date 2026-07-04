@@ -217,3 +217,213 @@ import Testing
     let runtime = builder.makeLogicRuntime(appElement: app)
     #expect(AXLogicProElements.dialogPresent(runtime: runtime) == false)
 }
+
+// MARK: - #234 plugin-editor window classification
+
+/// #234: Logic 12.3 tags plugin-editor windows with subrole `AXDialog` (title =
+/// track name), which tripped the v3.7.2 modal guard on unrelated ops. A plugin
+/// editor is distinguished from a true modal by Logic's own chrome — the window
+/// exposes `kAXCloseButtonAttribute` plus, among its direct children, a
+/// bypass-labeled AND a compare-labeled `AXCheckBox`. This fixture transcribes
+/// the live 12.3 dump (`axdialog234.out` / PRD Appendix A). The `include*` /
+/// `chromeRole` knobs let the fail-closed partial-chrome cases strip one
+/// conjunct at a time. The close-button is set as the ATTRIBUTE (locale-neutral,
+/// the exact handle the live probe closed the editor through), never as a
+/// `desc='close'` child.
+private func buildPluginEditorWindow(
+    _ builder: FakeAXRuntimeBuilder,
+    base: Int,
+    includeBypass: Bool = true,
+    includeCompare: Bool = true,
+    includeClose: Bool = true,
+    chromeRole: String = kAXCheckBoxRole as String
+) -> AXUIElement {
+    let window = builder.element(base)
+    let closeButton = builder.element(base + 1)
+    let bypass = builder.element(base + 2)
+    let compare = builder.element(base + 3)
+    let bodySlider = builder.element(base + 4)
+    let bodyField = builder.element(base + 5)
+
+    builder.setAttribute(window, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(window, kAXTitleAttribute as String, "Deluxe Classic")
+    if includeClose {
+        builder.setAttribute(closeButton, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(closeButton, kAXDescriptionAttribute as String, "close")
+        builder.setAttribute(window, kAXCloseButtonAttribute as String, closeButton)
+    }
+
+    var children: [AXUIElement] = []
+    if includeBypass {
+        builder.setAttribute(bypass, kAXRoleAttribute as String, chromeRole)
+        builder.setAttribute(bypass, kAXTitleAttribute as String, " ")
+        builder.setAttribute(bypass, kAXDescriptionAttribute as String, "bypass")
+        children.append(bypass)
+    }
+    if includeCompare {
+        builder.setAttribute(compare, kAXRoleAttribute as String, chromeRole)
+        builder.setAttribute(compare, kAXTitleAttribute as String, "Compare")
+        builder.setAttribute(compare, kAXDescriptionAttribute as String, "compare")
+        children.append(compare)
+    }
+    // Plugin body (evidence — never conjuncts).
+    builder.setAttribute(bodySlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setAttribute(bodyField, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    children.append(contentsOf: [bodySlider, bodyField])
+
+    builder.setChildren(window, children)
+    return window
+}
+
+/// Which single conjunct a partial-chrome variant withholds (AC-4.4 / test #5).
+/// Internal (not `private`) so the parameterized `@Test` below can name it.
+struct PartialChromeVariant: Sendable {
+    let includeBypass: Bool
+    let includeCompare: Bool
+    let includeClose: Bool
+    let chromeRole: String
+    let name: String
+}
+
+@Test func testDialogPresentFalseWithOnlyPluginEditorOpen() {
+    // AC-4.1: a standalone plugin-editor window (full chrome signature) is not
+    // a blocking modal.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let editor = buildPluginEditorWindow(builder, base: 100)
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [editor, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    // Direct boolean (never `== false`): `#expect(bool == false)` is a dead
+    // assertion in this toolchain (repo issue #92).
+    #expect(!AXLogicProElements.dialogPresent(runtime: runtime))
+}
+
+@Test func testBlockingDialogInfoNilWithPluginEditor() {
+    // AC-4.1: the same window yields no blocking-dialog identity.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let editor = buildPluginEditorWindow(builder, base: 100)
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [editor, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(AXLogicProElements.blockingDialogInfo(runtime: runtime) == nil)
+}
+
+@Test func testSaveSheetStillBlocking() {
+    // AC-4.2: a true save sheet (AXDialog, Save/Cancel, no close attribute, no
+    // plugin chrome) stays blocking. Pin — passes pre-fix.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let sheet = builder.element(2)
+    let saveButton = builder.element(3)
+    let cancelButton = builder.element(4)
+    let arrange = builder.element(5)
+
+    builder.setAttribute(sheet, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(sheet, kAXTitleAttribute as String, "Save")
+    builder.setChildren(sheet, [saveButton, cancelButton])
+    builder.setAttribute(saveButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(saveButton, kAXTitleAttribute as String, "Save")
+    builder.setAttribute(cancelButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(cancelButton, kAXTitleAttribute as String, "Cancel")
+    builder.setAttribute(app, kAXWindowsAttribute as String, [sheet, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(AXLogicProElements.dialogPresent(runtime: runtime))
+}
+
+@Test func testSystemDialogStillBlocking() {
+    // AC-4.2: an AXSystemDialog is not an editor (the editor conjunct requires
+    // subrole AXDialog) and stays blocking. Pin — passes pre-fix.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let systemDialog = builder.element(2)
+    let arrange = builder.element(3)
+
+    builder.setAttribute(systemDialog, kAXSubroleAttribute as String, kAXSystemDialogSubrole as String)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [systemDialog, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(AXLogicProElements.dialogPresent(runtime: runtime))
+}
+
+@Test(arguments: [
+    PartialChromeVariant(
+        includeBypass: true, includeCompare: false, includeClose: true,
+        chromeRole: kAXCheckBoxRole as String, name: "bypass without compare"
+    ),
+    PartialChromeVariant(
+        includeBypass: false, includeCompare: true, includeClose: true,
+        chromeRole: kAXCheckBoxRole as String, name: "compare without bypass"
+    ),
+    PartialChromeVariant(
+        includeBypass: true, includeCompare: true, includeClose: false,
+        chromeRole: kAXCheckBoxRole as String, name: "bypass+compare without close attribute"
+    ),
+    PartialChromeVariant(
+        includeBypass: true, includeCompare: true, includeClose: true,
+        chromeRole: kAXButtonRole as String, name: "labels on non-checkbox roles"
+    ),
+])
+func testPartialChromeStaysBlocking(_ variant: PartialChromeVariant) {
+    // AC-4.4: any window matching only part of the chrome signature stays
+    // blocking (fail-closed). Pin — every variant is an AXDialog, so it passes
+    // pre-fix; post-fix each is rejected by the missing conjunct.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let editor = buildPluginEditorWindow(
+        builder,
+        base: 100,
+        includeBypass: variant.includeBypass,
+        includeCompare: variant.includeCompare,
+        includeClose: variant.includeClose,
+        chromeRole: variant.chromeRole
+    )
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [editor, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(
+        AXLogicProElements.dialogPresent(runtime: runtime),
+        "\(variant.name) must stay blocking"
+    )
+}
+
+@Test func testEditorPlusRealDialogStillReportsDialog() {
+    // AC-4.1 + regression: an editor AND a true save sheet are both open. The
+    // real modal must still be reported (not masked by the editor). The sheet is
+    // first in window order so this also passes pre-fix (both AXDialog → the
+    // sheet is the first blocking window either way).
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let sheet = builder.element(2)
+    let cancelButton = builder.element(3)
+    let saveButton = builder.element(4)
+    let arrange = builder.element(5)
+    let editor = buildPluginEditorWindow(builder, base: 100)
+
+    builder.setAttribute(sheet, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(sheet, kAXTitleAttribute as String, "Save")
+    builder.setChildren(sheet, [cancelButton, saveButton])
+    builder.setAttribute(cancelButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(cancelButton, kAXTitleAttribute as String, "Cancel")
+    builder.setAttribute(saveButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(saveButton, kAXTitleAttribute as String, "Save")
+    builder.setAttribute(arrange, kAXTitleAttribute as String, "Untitled 54 - Tracks")
+    builder.setAttribute(app, kAXWindowsAttribute as String, [sheet, editor, arrange])
+    builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(AXLogicProElements.dialogPresent(runtime: runtime))
+    let info = AXLogicProElements.blockingDialogInfo(runtime: runtime)
+    let resolved = try! #require(info)
+    #expect(resolved.title == "Save")
+    #expect(resolved.buttonTitles.contains("Cancel"))
+    #expect(resolved.buttonTitles.contains("Save"))
+}

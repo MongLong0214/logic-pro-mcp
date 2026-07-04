@@ -1,3 +1,4 @@
+@preconcurrency import ApplicationServices
 import Foundation
 import Testing
 @testable import LogicProMCP
@@ -164,6 +165,63 @@ private func seedCache(_ cache: StateCache) async {
     #expect(await cache.getAXOccluded() == false,
             "axOccluded must clear once polls recover")
     #expect(await cache.getHasDocument() == true)
+}
+
+/// #234 (AC-4.5 / D7): a plugin-editor window (Logic 12.3 tags it AXDialog,
+/// title = track name) must NOT occlude the StatePoller cache lifecycle for
+/// EITHER `dialogPresent` consumer. Wiring `dialogPresent` through the REAL
+/// classifier over a 12.3 editor fixture, a genuinely-closing document (project
+/// + tracks failing) must still clear after `failureThreshold` misses — exactly
+/// the 12.2 baseline. Pre-fix the editor is classified as blocking, so
+/// `dialogPresent` returns true and the poller suppresses the lifecycle (cache
+/// preserved, axOccluded flagged) — the bug this pins.
+@Test func testStatePollerCacheLifecycleWithEditorOpen() async {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let editor = builder.element(100)
+    let closeButton = builder.element(101)
+    let bypass = builder.element(102)
+    let compare = builder.element(103)
+
+    builder.setAttribute(editor, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(editor, kAXTitleAttribute as String, "Deluxe Classic")
+    builder.setAttribute(closeButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(editor, kAXCloseButtonAttribute as String, closeButton)
+    builder.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(bypass, kAXDescriptionAttribute as String, "bypass")
+    builder.setAttribute(compare, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(compare, kAXTitleAttribute as String, "Compare")
+    builder.setAttribute(compare, kAXDescriptionAttribute as String, "compare")
+    builder.setChildren(editor, [bypass, compare])
+    builder.setAttribute(app, kAXWindowsAttribute as String, [editor, arrange])
+    let editorRuntime = builder.makeLogicRuntime(appElement: app)
+
+    let cache = StateCache()
+    await seedCache(cache)
+
+    let channel = AccessibilityChannel(runtime: makeOccludedRuntime())
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(
+            hasVisibleWindow: { true },
+            dialogPresent: { AXLogicProElements.dialogPresent(runtime: editorRuntime) }
+        )
+    )
+
+    await poller.refreshNow()
+    await poller.refreshNow()
+    // Direct boolean binds (never `== true/false`): those are dead assertions in
+    // this toolchain (repo issue #92).
+    let hasDocAfter2 = await cache.getHasDocument()
+    #expect(hasDocAfter2, "first 2 misses must not clear (failureThreshold=3 contract)")
+
+    await poller.refreshNow()
+    let hasDocAfter3 = await cache.getHasDocument()
+    let occludedAfter3 = await cache.getAXOccluded()
+    #expect(!hasDocAfter3, "an open plugin editor must not suppress the cache lifecycle (#234)")
+    #expect(!occludedAfter3, "a plugin editor is not an occluding modal (#234)")
 }
 
 @Test func testPollerStillClearsCacheWhenDocumentTrulyClosesWithoutOcclusion() async {

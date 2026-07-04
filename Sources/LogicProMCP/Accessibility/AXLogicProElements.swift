@@ -161,6 +161,50 @@ enum AXLogicProElements {
     ) -> Bool {
         guard isDialogWindow(window, runtime: runtime) else { return false }
         return !isKeyboardLayoutOverlayWindow(window, runtime: runtime)
+            && !isPluginEditorWindow(window, runtime: runtime)
+    }
+
+    /// #234: Logic 12.3 tags plugin-EDITOR windows with subrole `AXDialog` and a
+    /// title equal to the track name, which tripped the v3.7.2 modal guard on
+    /// unrelated ops (`project.save`, `track.select`) while an editor was open.
+    /// On 12.2 those windows were plain (non-dialog), so this restores the 12.2
+    /// baseline by excluding them for BOTH `dialogPresent` consumers (dispatcher
+    /// modal guard AND StatePoller cache lifecycle — PRD D7).
+    ///
+    /// A plugin editor is told apart from a true modal by Logic's own plugin-
+    /// window chrome, required CONJUNCTIVELY — any missing conjunct ⇒ not an
+    /// editor ⇒ stays blocking (fail-closed):
+    ///   1. subrole `AXDialog` (an `AXSystemDialog` is never an editor);
+    ///   2. the window exposes `kAXCloseButtonAttribute` — the locale-neutral
+    ///      handle the live 2026-07-04 probe closed the editor through; true
+    ///      modal sheets do not carry one. This is the ATTRIBUTE, never the
+    ///      child button's localized `desc='close'` text (PRD D4);
+    ///   3. a bypass-labeled `AXCheckBox` among the DIRECT children;
+    ///   4. a compare-labeled `AXCheckBox` among the DIRECT children.
+    /// Follows the `isKeyboardLayoutOverlayWindow` exclusion precedent. The
+    /// compare label is English-only (OQ-1) so non-EN locales stay blocking.
+    private static func isPluginEditorWindow(
+        _ window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        let subrole: String? = AXHelpers.getAttribute(window, kAXSubroleAttribute, runtime: runtime)
+        guard subrole == (kAXDialogSubrole as String) else { return false }
+
+        let closeButton: AXUIElement? = AXHelpers.getAttribute(
+            window, kAXCloseButtonAttribute, runtime: runtime
+        )
+        guard closeButton != nil else { return false }
+
+        let directCheckboxes = AXHelpers.getChildren(window, runtime: runtime).filter {
+            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXCheckBoxRole as String)
+        }
+        let hasBypass = directCheckboxes.contains { child in
+            AXLocalePolicy.pluginBypassControl.containsAny(in: elementSearchText(child, runtime: runtime))
+        }
+        let hasCompare = directCheckboxes.contains { child in
+            AXLocalePolicy.pluginWindowCompareControl.containsAny(in: elementSearchText(child, runtime: runtime))
+        }
+        return hasBypass && hasCompare
     }
 
     private static func isKeyboardLayoutOverlayWindow(
