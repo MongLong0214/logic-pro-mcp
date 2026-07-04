@@ -15,9 +15,9 @@
 | Ticket | Title | Status | Review | Notes |
 |--------|-------|--------|--------|-------|
 | T1 | 12.3 mixer strips-container selection fix + fixtures | Done | PASS | ab2a0e9. Red {1,2,3,5,7}/pins {4,6} 확인, 1962 tests green, 라이브 12.3 확인: fresh audio strip inventory = 1 empty slot (was []) |
-| T2 | get_inventory zero-slot honesty gate + write-path diagnostics | Todo | - | P0, S. Depends: T1 |
-| T3 | Plugin-editor window ≠ blocking modal | Todo | - | P1, M. Parallel |
-| T4 | Live 12.3 E2E replay + evidence (release gate) | Todo | - | P0, S. Depends: T1-T3 |
+| T2 | get_inventory zero-slot honesty gate + write-path diagnostics | Done | PASS | df71a49 (Opus agent). RED 사후증명: 구소스+신테스트 65중 15이슈 실패 확인. 1971 tests green. 공유 slotAddressingFailureDetail + 단일 힌트 상수 (D6/AC-5) |
+| T3 | Plugin-editor window ≠ blocking modal | Done | PASS | eedc437 (Opus agent). RED {1,2,7}/pins {3,4,5,6} 티켓 §6 일치. 1969 green. + a410499 (live-e2e 술어 강화, T4 AC-7) + 9e44c21 (CHANGELOG) |
+| T4 | Live 12.3 E2E replay + evidence (release gate) | In Progress | - | AC-7 술어 강화 완료(a410499). 라이브 리플레이 대기 |
 
 ## Review History
 
@@ -39,3 +39,5 @@
 - 2026-07-04 post-T1 probe: legacy insert_plugin now RESOLVES slot 0 (visible_slots:0 gone) but fails later at popup menu selection (`ax_write_failed: plugin menu selection failed`) on 12.3 — root-cause in T4 live phase; if the slot-popup tree drifted, verified insert path may be affected too (blocks PRD AC-2.2).
 - Instrument strip t0 inventory post-T1: [empty@0, E-Piano occupied@1] — NG2 misreport observed as documented; cross-section child order matches T1 fixture ordering.
 - 2026-07-04 popup dump (axpopup234.out): 12.3 slot-popup root menu DOES satisfy the legacy walker signature (Channel EQ/Utility/Audio Units all present). Slot AXPress returns -25204 (cannotComplete) yet the menu mounts anyway; legacy path waits a fixed 250ms before scanning — mount latency is the prime suspect for `plugin menu selection failed`. Legacy failure is honest State C (PRD T4 AC-4 already scopes it: success OR honest verbatim failure). insert_verified uses poll-based popup machinery — validate at T4; root-cause further ONLY if the verified path fails (blocks AC-2.2). Post-run scan: 0 stray menus open.
+
+- Phase 5 implementer record: T1 codex gpt-5.5 xhigh; codex T2 died twice (exit 144, session restart) -> T2/T3 delivered by Opus agents per Isaac's fallback authorization. T2 agent worked silently through heartbeat/stand-down (commit landed 1min before idle); duplicate T2 start on wt234-t2b aborted cleanly.

@@ -411,6 +411,20 @@ enum AXLocalePolicy {
         rationale: "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists)."
     )
 
+    /// #234: the "Compare" checkbox in a Logic plugin-EDITOR window. Combined
+    /// with `pluginBypassControl` and the window's `kAXCloseButtonAttribute`, it
+    /// forms the conjunctive chrome signature that classifies a plugin editor as
+    /// NON-blocking (so unrelated ops proceed while it is open). English
+    /// canonical only: the Korean/localized "Compare" label is UNVERIFIED
+    /// (OQ-1 — English UI is the only live-confirmed locale), so `variants` stays
+    /// empty and unverified locales conservatively remain BLOCKING (fail-closed)
+    /// rather than risk excluding a real modal.
+    static let pluginWindowCompareControl = LabelSet(
+        canonical: "compare",
+        variants: [],
+        rationale: "Locates a plugin-editor window's Compare checkbox for the non-blocking chrome signature; English canonical only (OQ-1: Korean/localized unverified → unverified locales stay blocking, fail-closed). Read-only classifier."
+    )
+
     /// Automation-mode labels that must NOT be read as a plugin display name.
     static let pluginAutomationLabelExact = LabelSet(
         canonical: "읽기, 오토메이션이 활성화됨",

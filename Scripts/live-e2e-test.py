@@ -695,6 +695,11 @@ def plugin_inventory_result_ok(resp):
         and env.get("operation") == "logic_plugins.get_inventory"
         and env.get("plugins_source") == "ax"
         and isinstance(env.get("plugins"), list)
+        # #234: require >=1 slot. A healthy strip's insert section always exposes
+        # at least the empty append row (zero slots now returns State B), so an
+        # empty list here means enumeration is blind — the exact silent pass that
+        # kept this suite 352/352 green while 12.3 inventory was dead.
+        and len(env.get("plugins")) >= 1
     )
 
 
