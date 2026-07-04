@@ -642,3 +642,49 @@ private func insertParams(
     #expect(result.succeeded == false)
     #expect(counter.count == 1, "unverifiable removal must click Undo at most once (no blind re-undo)")
 }
+
+// MARK: - #234 zero-slot slot-addressing diagnostics (AC-5)
+
+@Test func testInsertVerifiedZeroSlotsStateCDistinctDiagnostics() async {
+    // A zero-slot (Master-shaped) strip through the insert slot-addressing guard.
+    // Pre-#234 this reported the bare "slot 0 is out of range (0 slots)"; now the
+    // observation names the real condition (insert_section_not_enumerable
+    // semantics) and carries the recovery hint. Still State C with its existing
+    // invalid_params code — writes never soften to State B — and no write is
+    // attempted (the gate fails closed before the live-write boundary).
+    let b = FakeAXRuntimeBuilder()
+    let runtime = makeMixerFixture(b) { b in masterShapedStripChildren(b, base: 970) }
+    let obj = await runInsert(insertParams(insert: "0"), runtime: runtime)
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "invalid_params")
+    #expect(!((obj["write_attempted"] as? Bool)!))
+    let observed = (obj["what_was_observed"] as? String) ?? ""
+    #expect(observed.contains("no enumerable insert slots"))
+    let hint = (obj["recovery_hint"] as? String) ?? ""
+    #expect(hint.contains("Master"))
+}
+
+@Test func testLegacyInsertPluginZeroSlotsHint() async {
+    // Legacy logic_mixer.insert_plugin against a zero-slot strip keeps its
+    // element_not_found code and visible_slots:0 field, but its hint now names the
+    // insert-section-not-enumerable condition instead of the generic out-of-range
+    // message (AC-5). The gate fails before menu selection.
+    let b = FakeAXRuntimeBuilder()
+    let runtime = makeMixerFixture(b) { b in masterShapedStripChildren(b, base: 980) }
+    let result = await AccessibilityChannel.defaultInsertPlugin(
+        params: ["track": "0", "slot": "0", "plugin_name": "Gain"],
+        runtime: runtime,
+        selectPlugin: { _, _, _ in
+            Issue.record("a zero-slot strip must fail before menu selection")
+            return true
+        }
+    )
+    #expect(!result.isSuccess)
+    let obj = try! JSONSerialization.jsonObject(with: result.message.data(using: .utf8)!) as! [String: Any]
+    #expect(obj["error"] as? String == "element_not_found")
+    #expect(obj["visible_slots"] as? Int == 0)
+    #expect(b.actionCalls.isEmpty)
+    let hint = (obj["hint"] as? String) ?? ""
+    #expect(hint.contains("no enumerable insert slots"))
+}

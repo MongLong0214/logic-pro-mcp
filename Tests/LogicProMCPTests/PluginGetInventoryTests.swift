@@ -395,3 +395,132 @@ private func makeMixerFixture(
     #expect((obj["mixer_reveal_key_sent"] as? Bool)!)
     #expect((obj["recovery_hint"] as? String)?.contains("Show Mixer") == true)
 }
+
+// MARK: - #234 zero-slot honesty gate (US-3 / AC-1..AC-4)
+
+@Test func testGetInventoryZeroSlotsIsStateBNotVerifiedEmpty() async throws {
+    // A Master/VCA-shaped strip enumerates zero insert slots. Pre-#234 this encoded
+    // State A with plugins:[] — a false verified-empty read. The honesty gate now
+    // degrades it to State B readback_unavailable so future AX drift can never again
+    // masquerade as a verified empty chain (AC-1, EC-1/E2).
+    let b = FakeAXRuntimeBuilder()
+    let runtime = makeMixerFixture(b) { b in masterShapedStripChildren(b, base: 810) }
+
+    let result = await AccessibilityChannel.defaultGetPluginInventory(params: ["track": "0"], runtime: runtime)
+    #expect(result.isSuccess) // State B is success:true, verified:false
+    let obj = decodeObject(result.message)
+
+    #expect(obj["state"] as? String == "B")
+    #expect(!((obj["verified"] as? Bool)!))
+    #expect(obj["reason"] as? String == "readback_unavailable")
+    #expect(obj["plugins_unknown_reason"] as? String == "insert_section_not_enumerable")
+    let safeToRetry = try #require(obj["safe_to_retry"] as? Bool)
+    #expect(safeToRetry)
+    #expect(obj["track"] as? Int == 0)
+    #expect(obj["plugins_source"] as? String == "ax")
+    #expect(obj["hc_schema"] as? Int == 2)
+    #expect(obj["plugins"] == nil, "a verified-empty chain is now structurally impossible")
+
+    let observed = (obj["what_was_observed"] as? String) ?? ""
+    #expect(observed.contains("0 enumerable insert-slot elements"))
+    // The recovery hint names BOTH likely causes: mixer AX-layout drift and a
+    // strip type without an insert section (Master/VCA) — D6.
+    let hint = (obj["recovery_hint"] as? String) ?? ""
+    #expect(hint.contains("drift"))
+    #expect(hint.contains("Master"))
+}
+
+@Test func testGetInventoryZeroSlotsCarriesRevealDiagnostics() async {
+    // The zero-slot State B carries the SAME reveal diagnostics State A carries
+    // (AC-4) so an operator can tell "revealed then blind" from "already visible
+    // then blind". The mixer is already visible → attempted:false, [] strategies.
+    let b = FakeAXRuntimeBuilder()
+    let runtime = makeMixerFixture(b) { b in masterShapedStripChildren(b, base: 820) }
+
+    let result = await AccessibilityChannel.defaultGetPluginInventory(params: ["track": "0"], runtime: runtime)
+    let obj = decodeObject(result.message)
+
+    #expect(obj["state"] as? String == "B")
+    #expect(obj["plugins_unknown_reason"] as? String == "insert_section_not_enumerable")
+    #expect(!((obj["mixer_reveal_attempted"] as? Bool)!))
+    let strategies = try! #require(obj["mixer_reveal_strategies"] as? [String])
+    #expect(strategies.isEmpty)
+}
+
+@Test func testGetInventorySingleEmptySlotIsStateA() async {
+    // The State A floor: one empty Audio FX row → State A with exactly one
+    // read_status:"empty" item (AC-2). A healthy visible insert section always
+    // exposes at least this empty append row.
+    let b = FakeAXRuntimeBuilder()
+    let runtime = makeMixerFixture(b) { b in [addEmptySlot(b, 830)] }
+
+    let result = await AccessibilityChannel.defaultGetPluginInventory(params: ["track": "0"], runtime: runtime)
+    let obj = decodeObject(result.message)
+    #expect(obj["state"] as? String == "A")
+    #expect((obj["verified"] as? Bool)!)
+    let plugins = obj["plugins"] as! [[String: Any]]
+    #expect(plugins.count == 1)
+    #expect(plugins[0]["read_status"] as? String == "empty")
+}
+
+@Test(arguments: [1, 2, 3])
+func testGetInventoryStateAImpliesNonEmptyPlugins(_ slotCount: Int) async {
+    // State A floor invariant: whenever get_inventory returns State A it carries
+    // >= 1 enumerated slot (AC-3.2 direction). The zero-slot → State B direction is
+    // pinned by testGetInventoryZeroSlots* — a State A with plugins:[] is now
+    // structurally unreachable. Sweeps 1..3 real slots.
+    let b = FakeAXRuntimeBuilder()
+    let runtime = makeMixerFixture(b) { b in (0..<slotCount).map { addEmptySlot(b, 840 + $0) } }
+
+    let result = await AccessibilityChannel.defaultGetPluginInventory(params: ["track": "0"], runtime: runtime)
+    let obj = decodeObject(result.message)
+    #expect(obj["state"] as? String == "A", "slot count \(slotCount)")
+    let plugins = obj["plugins"] as! [[String: Any]]
+    #expect(plugins.count == slotCount)
+    #expect(plugins.count >= 1, "State A always carries >= 1 enumerated slot")
+}
+
+@Test func testGetInventoryOverFull123WindowFixture() async {
+    // The full 12.3 window (outer wrapper + toolbar sibling + nested layout area)
+    // with a live-dump strip [empty audio row, occupied "Gain"]. Driving
+    // get_inventory with revealMixer wired to the REAL selection proves the toolbar
+    // no longer wins and both slots enumerate (AC-1.2, T1 regression pin).
+    let b = FakeAXRuntimeBuilder()
+    let strip = makeLiveDumpStrip(b, id: 600)
+    let fixture = make123MixerFixture(stripCount: 3, firstStrip: strip, builder: b)
+
+    let result = await AccessibilityChannel.defaultGetPluginInventory(
+        params: ["track": "0"],
+        runtime: fixture.runtime,
+        revealMixer: { rt in (AXLogicProElements.getMixerArea(runtime: rt), .alreadyVisible) }
+    )
+    let obj = decodeObject(result.message)
+    #expect(obj["state"] as? String == "A")
+    #expect(obj["plugins_unknown_reason"] is NSNull)
+    let plugins = obj["plugins"] as! [[String: Any]]
+    #expect(plugins.count == 2)
+    #expect(plugins.map { $0["insert"] as! Int } == [0, 1])
+    #expect(plugins[0]["read_status"] as? String == "empty")
+    #expect(plugins[1]["read_status"] as? String == "ok")
+    #expect(plugins[1]["name"] as? String == "Gain")
+    #expect(plugins[1]["plugin_id"] as? String == "logic.stock.effect.gain")
+}
+
+@Test func testGetInventoryToolbarSelectedFlowsToStateB() async {
+    // Simulate the pre-T1 wrong selection: feed the mixer TOOLBAR (not the strips
+    // container) as the mixer. Its 8 widgets are treated as "strips" via the
+    // all-children fallback, strip[0] enumerates zero slots — and the honesty gate
+    // degrades that blind path to State B, never a false State A (AC-3.3 / US-3).
+    let fixture = make123MixerFixture(stripCount: 3)
+    let toolbar = try! #require(fixture.toolbar)
+
+    let result = await AccessibilityChannel.defaultGetPluginInventory(
+        params: ["track": "0"],
+        runtime: fixture.runtime,
+        revealMixer: { _ in (toolbar, .alreadyVisible) }
+    )
+    let obj = decodeObject(result.message)
+    #expect(obj["state"] as? String == "B")
+    #expect(obj["plugins_unknown_reason"] as? String == "insert_section_not_enumerable")
+    #expect(obj["plugins"] == nil)
+}

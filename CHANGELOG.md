@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- `logic_plugins.get_inventory` can no longer return a false verified-empty read (State A with `plugins:[]`). A visible insert section always exposes at least the empty append row, so an enumeration of zero slots now degrades to State B `readback_unavailable` with `plugins_unknown_reason: "insert_section_not_enumerable"`, `safe_to_retry: true`, the mixer-reveal diagnostics, and a recovery hint naming both likely causes (mixer AX-layout drift; a strip type without an insert section, e.g. Master/VCA). Future AX-tree drift now degrades honestly instead of masquerading as a verified empty chain. Honest-direction behavior change, non-breaking (`plugins_unknown_reason` gains one enumerated value; State A payload shape unchanged) (#234).
+- The write-path slot-addressing guards (`logic_plugins.insert_verified` / `set_param_verified` and legacy `logic_mixer.insert_plugin`) now distinguish a zero-slot strip from an index beyond a non-empty chain: a `(0 slots)` failure names the `insert_section_not_enumerable` condition and carries the same recovery hint instead of the bare "slot N is out of range (0 slots)". These remain State C — writes never soften to State B (#234).
+
 ## [3.7.4] — 2026-06-30
 
 Bug-fix and robustness release closing the v3.7.3 complete-surface QA backlog (#199–#202). No public tool/resource/template surface change (10 tools / 18 resources / 11 templates unchanged).

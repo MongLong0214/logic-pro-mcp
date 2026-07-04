@@ -91,6 +91,51 @@ extension AccessibilityChannel {
         return (items, complete)
     }
 
+    // MARK: - #234 zero-slot honesty (shared)
+
+    /// Recovery hint for a strip that exposes zero enumerable insert slots. Named
+    /// once and shared by `get_inventory`'s State B branch and every write-path
+    /// slot-addressing guard so the two likely causes are always spelled out
+    /// identically: the mixer's AX layout drifted, or the addressed strip has no
+    /// insert section (Master/VCA). #234 D6 — a single retry-able reason, never a
+    /// `strip_has_no_inserts` confidence we cannot actually verify.
+    static let insertSectionNotEnumerableRecoveryHint =
+        "No insert slots were enumerable on the located mixer strip. This usually "
+        + "means the mixer's AX layout drifted (reopen it via View > Show Mixer and "
+        + "retry) or the addressed strip has no insert section (e.g. a Master or VCA "
+        + "strip). Confirm the target track's channel strip shows an Audio FX "
+        + "section, then retry."
+
+    struct SlotAddressingFailureDetail {
+        let observed: String
+        let recoveryHint: String?
+    }
+
+    /// Shared slot-addressing failure detail (#234). A strip that enumerates ZERO
+    /// insert slots is the Logic 12.3 mixer-drift signature: the pre-fix
+    /// "slot N is out of range (0 slots)" wording hid a blind read behind a
+    /// looks-like-a-bad-index message. When the chain is empty the observation
+    /// names the real condition (insert_section_not_enumerable semantics) and
+    /// carries the recovery hint; a non-empty chain addressed past its end keeps
+    /// the plain wording and no hint. Write paths keep their existing State C error
+    /// code — only the diagnostics change, never the fail-closed verdict.
+    static func slotAddressingFailureDetail(
+        requestedIndex: Int,
+        slotCount: Int
+    ) -> SlotAddressingFailureDetail {
+        guard slotCount == 0 else {
+            return SlotAddressingFailureDetail(
+                observed: "slot \(requestedIndex) is out of range (\(slotCount) slots)",
+                recoveryHint: nil
+            )
+        }
+        return SlotAddressingFailureDetail(
+            observed: "the located strip exposed no enumerable insert slots (0 slots), "
+                + "so its insert section could not be read",
+            recoveryHint: insertSectionNotEnumerableRecoveryHint
+        )
+    }
+
     /// `plugin.get_inventory` channel entry. Non-mutating: never carries
     /// `write_source`/`verify_source`. Returns a `complete:true|false` snapshot
     /// (HC-v2-adjacent inventory shape) when the strip can be enumerated, or
@@ -165,6 +210,31 @@ extension AccessibilityChannel {
         }
 
         let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax)
+        // #234 honesty gate — a visible insert section always exposes at least the
+        // empty append row, so an enumeration of ZERO slots means the strip could
+        // not be read (12.3 mixer AX-layout drift, or a strip type without an insert
+        // section such as Master/VCA), NOT a verified-empty chain. Encoding State A
+        // with plugins:[] here would be a false verified-empty read; degrade to
+        // State B so future drift can never masquerade as verified knowledge.
+        guard !slots.isEmpty else {
+            return .success(HonestContract.encodeV2StateB(
+                reason: .readbackUnavailable,
+                extras: [
+                    "operation": operation,
+                    "track": track,
+                    "plugins_source": "ax",
+                    "plugins_fetched_at": fetchedAt,
+                    "plugins_unknown_reason": "insert_section_not_enumerable",
+                    "mixer_reveal_attempted": reveal.attempted,
+                    "mixer_reveal_strategies": reveal.strategies,
+                    "what_was_attempted": "read insert chain inventory for track \(track)",
+                    "what_was_observed": "the mixer strip for track \(track) was located but "
+                        + "exposed 0 enumerable insert-slot elements",
+                    "recovery_hint": insertSectionNotEnumerableRecoveryHint,
+                    "safe_to_retry": true,
+                ]
+            ))
+        }
         let built = pluginInventoryItems(for: slots)
 
         return .success(HonestContract.encodeV2StateA(extras: [
@@ -634,19 +704,34 @@ extension AccessibilityChannel {
             return .error(incompleteInventoryStateC(operation, identity, "one or more insert slots are unreadable (complete:false)"))
         }
         guard insert < slots.count, slots[insert].occupied else {
-            return .error(HonestContract.encodeV2StateC(
-                error: .incompleteInventory,
-                extras: [
-                    "operation": operation,
-                    "target_identity": identity,
-                    "what_was_attempted": "locate the occupied plugin at insert \(insert)",
-                    "what_was_observed": insert < slots.count
-                        ? "insert \(insert) is empty — no plugin to write into"
-                        : "insert \(insert) is out of range (\(slots.count) slots)",
-                    "safe_to_retry": false,
-                    "write_attempted": false,
-                ]
-            ))
+            // #234 — an empty chain names the insert_section_not_enumerable
+            // condition (with the recovery hint) rather than the bare "(0 slots)"
+            // out-of-range wording. An empty-but-in-range slot or an out-of-range
+            // index on a non-empty chain keeps its prior wording. Still State C —
+            // the write never softens to State B.
+            let observed: String
+            var recoveryHint: String?
+            if slots.isEmpty {
+                let detail = slotAddressingFailureDetail(requestedIndex: insert, slotCount: 0)
+                observed = detail.observed
+                recoveryHint = detail.recoveryHint
+            } else {
+                observed = insert < slots.count
+                    ? "insert \(insert) is empty — no plugin to write into"
+                    : "insert \(insert) is out of range (\(slots.count) slots)"
+            }
+            var extras: [String: Any] = [
+                "operation": operation,
+                "target_identity": identity,
+                "what_was_attempted": "locate the occupied plugin at insert \(insert)",
+                "what_was_observed": observed,
+                "safe_to_retry": false,
+                "write_attempted": false,
+            ]
+            if let recoveryHint {
+                extras["recovery_hint"] = recoveryHint
+            }
+            return .error(HonestContract.encodeV2StateC(error: .incompleteInventory, extras: extras))
         }
 
         // Step 8 — plugin window: prefer an already-open window titled with the
@@ -1034,17 +1119,23 @@ extension AccessibilityChannel {
             ))
         }
         guard insert < slots.count else {
-            return .error(HonestContract.encodeV2StateC(
-                error: .invalidParams,
-                extras: [
-                    "operation": operation,
-                    "target_identity": identity,
-                    "what_was_attempted": "address insert slot \(insert)",
-                    "what_was_observed": "slot \(insert) is out of range (\(slots.count) slots)",
-                    "safe_to_retry": false,
-                    "write_attempted": false,
-                ]
-            ))
+            // #234 — a zero-slot chain names the insert_section_not_enumerable
+            // condition (with the recovery hint) instead of the bare "(0 slots)"
+            // out-of-range wording; a non-empty chain addressed past its end is
+            // unchanged. Still State C — the write never softens to State B.
+            let detail = slotAddressingFailureDetail(requestedIndex: insert, slotCount: slots.count)
+            var extras: [String: Any] = [
+                "operation": operation,
+                "target_identity": identity,
+                "what_was_attempted": "address insert slot \(insert)",
+                "what_was_observed": detail.observed,
+                "safe_to_retry": false,
+                "write_attempted": false,
+            ]
+            if let recoveryHint = detail.recoveryHint {
+                extras["recovery_hint"] = recoveryHint
+            }
+            return .error(HonestContract.encodeV2StateC(error: .invalidParams, extras: extras))
         }
         // `read_status == .empty` is the ONLY write-safe state — an
         // occupied-unreadable slot is never treated as empty (D4, AC21).
@@ -1586,6 +1677,12 @@ extension AccessibilityChannel {
         let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax)
         guard track >= 0, track < strips.count else { return nil }
         let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax)
+        // #234 — a zero-slot result on this mid-flight re-resolution means the
+        // insert section became non-enumerable after the pre-insert snapshot
+        // (insert_section_not_enumerable semantics, per slotAddressingFailureDetail).
+        // Returning nil routes the caller to a transient setup failure; the static
+        // fixture tree can't simulate a mid-operation vanish, so this wording is
+        // pinned by the three tested envelope sites rather than a dedicated unit AC.
         guard insert >= 0, insert < slots.count else { return nil }
         return slots[insert]
     }

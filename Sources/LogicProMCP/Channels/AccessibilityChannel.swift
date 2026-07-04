@@ -2203,9 +2203,17 @@ actor AccessibilityChannel: Channel {
         let strip = strips[track]
         let slots = AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: runtime.ax)
         guard slotIndex < slots.count else {
+            // #234 — a zero-slot strip names the insert_section_not_enumerable
+            // condition (retaining visible_slots:0); an out-of-range index on a
+            // non-empty chain keeps the generic wording.
+            let detail = AccessibilityChannel.slotAddressingFailureDetail(
+                requestedIndex: slotIndex, slotCount: slots.count
+            )
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
-                hint: "plugin slot out of range for visible mixer strip",
+                hint: slots.isEmpty
+                    ? "\(detail.observed). \(AccessibilityChannel.insertSectionNotEnumerableRecoveryHint)"
+                    : "plugin slot out of range for visible mixer strip",
                 extras: ["track": track, "slot": slotIndex, "visible_slots": slots.count]
             ))
         }

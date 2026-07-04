@@ -42,7 +42,8 @@ private final class LiveFixture: @unchecked Sendable {
         beforeValue: Double = 51,
         pluginWindowPresent: Bool = true,
         forcedAfterValue: Double? = nil,
-        otherTracks: Int = 0
+        otherTracks: Int = 0,
+        emptyInsertChain: Bool = false
     ) {
         let b = builder
         let app = b.element(1000)
@@ -75,11 +76,18 @@ private final class LiveFixture: @unchecked Sendable {
             let strip = b.element(1200 + i)
             b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
             if i == track {
-                var slots: [AXUIElement] = []
-                for s in 0...insert {
-                    slots.append(LiveFixture.occupiedSlot(b, 1300 + s, name: s == insert ? "Compressor" : "Plugin \(s)"))
+                if emptyInsertChain {
+                    // #234 — a Master/VCA-shaped target strip that exposes zero
+                    // enumerable insert slots, to exercise the slot-addressing
+                    // guard's zero-slot branch.
+                    b.setChildren(strip, masterShapedStripChildren(b, base: 1500))
+                } else {
+                    var slots: [AXUIElement] = []
+                    for s in 0...insert {
+                        slots.append(LiveFixture.occupiedSlot(b, 1300 + s, name: s == insert ? "Compressor" : "Plugin \(s)"))
+                    }
+                    b.setChildren(strip, slots)
                 }
-                b.setChildren(strip, slots)
             } else {
                 b.setChildren(strip, [LiveFixture.emptySlot(b, 1400 + i)])
             }
@@ -360,6 +368,28 @@ private func thresholdParams(
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "incomplete_inventory")
     #expect(!((obj["write_attempted"] as? Bool)!))
+}
+
+// MARK: - #234 zero-slot slot-addressing diagnostics (AC-5 / boomer R2-#2)
+
+@Test func testSetParamVerifiedZeroSlotsStateCDistinctDiagnostics() async {
+    // A zero-slot (Master-shaped) target strip through set_param_verified's slot-
+    // addressing guard. Pre-#234 the guard reported the bare "insert N is out of
+    // range (0 slots)"; now it names the insert_section_not_enumerable condition
+    // and carries the recovery hint. Still State C with its existing
+    // incomplete_inventory code — the write path never softens to State B — and no
+    // write is attempted.
+    let fixture = LiveFixture(beforeValue: 51, emptyInsertChain: true)
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "incomplete_inventory")
+    #expect(!((obj["write_attempted"] as? Bool)!))
+    let observed = (obj["what_was_observed"] as? String) ?? ""
+    #expect(observed.contains("no enumerable insert slots"))
+    let hint = (obj["recovery_hint"] as? String) ?? ""
+    #expect(hint.contains("Master"))
+    #expect(fixture.currentSliderValue == 51, "no write may occur when the slot cannot be addressed")
 }
 
 // MARK: - Other parameter (Gain) stays unsupported (no write)
