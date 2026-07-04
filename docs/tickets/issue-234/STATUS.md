@@ -41,3 +41,10 @@
 - 2026-07-04 popup dump (axpopup234.out): 12.3 slot-popup root menu DOES satisfy the legacy walker signature (Channel EQ/Utility/Audio Units all present). Slot AXPress returns -25204 (cannotComplete) yet the menu mounts anyway; legacy path waits a fixed 250ms before scanning — mount latency is the prime suspect for `plugin menu selection failed`. Legacy failure is honest State C (PRD T4 AC-4 already scopes it: success OR honest verbatim failure). insert_verified uses poll-based popup machinery — validate at T4; root-cause further ONLY if the verified path fails (blocks AC-2.2). Post-run scan: 0 stray menus open.
 
 - Phase 5 implementer record: T1 codex gpt-5.5 xhigh; codex T2 died twice (exit 144, session restart) -> T2/T3 delivered by Opus agents per Isaac's fallback authorization. T2 agent worked silently through heartbeat/stand-down (commit landed 1min before idle); duplicate T2 start on wt234-t2b aborted cleanly.
+
+## T4 Live Progress (2026-07-05)
+- AC-2 PASS: fresh audio strip get_inventory = 1 empty slot (probe234e-live-transcript.txt).
+- AC-3 PASS: insert_verified Gain@0 State A + readback Gain occupied@0 (ordering matches user model).
+- AC-6 PASS: insert_verified Compressor@0 (track 2) State A; set_param_verified threshold 0.5 normalized State A (observed_normalized 0.5, ax_plugin_window).
+- AC-4 recorded: legacy insert_plugin slot 2 -> honest element_not_found visible_slots:1 (append stub excluded by 12.2-era 9px rule; pre-existing, not #234).
+- AC-4.3 in progress: save-with-editor-open refused twice -> two live classifier gaps found+fixed: (1) compare is preset-state-dependent -> compare|link (53bde72); (2) toggle chrome role-flaps AXCheckBox<->AXButton with focus (axwhy234b.out) -> v2 amendment in progress.
