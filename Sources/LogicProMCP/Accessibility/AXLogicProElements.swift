@@ -629,11 +629,13 @@ enum AXLogicProElements {
             return mixer
         }
 
-        // Logic Pro 12.2 exposes the visible bottom Mixer as:
+        // #234: Logic Pro 12.2 exposes the visible bottom Mixer as:
         //   AXGroup(desc:"믹서") -> AXLayoutArea(desc:"믹서") -> AXLayoutItem strips
-        // with no AXIdentifier. Do not fall back to the Inspector's small
-        // two-strip "믹서" area; that would make a full mixer read silently
-        // return only selected-track + output strips.
+        // with no AXIdentifier. Logic Pro 12.3 wraps that layout area with an
+        // outer AXGroup(desc:"Mixer") and a sibling toolbar AXGroup(desc:"Mixer").
+        // Do not fall back to the Inspector's small two-strip "믹서" area; that
+        // would make a full mixer read silently return only selected-track +
+        // output strips.
         return mixerAreaCandidates(in: window, runtime: runtime.ax)
             .sorted { lhs, rhs in
                 if lhs.stripCount != rhs.stripCount { return lhs.stripCount > rhs.stripCount }
@@ -734,7 +736,7 @@ enum AXLogicProElements {
            isMixerNamedElement(element, runtime: runtime),
            isMixerContainerRole(AXHelpers.getRole(element, runtime: runtime)),
            hasDirectChannelStripChildren(element, runtime: runtime) {
-            let strips = mixerChannelStrips(in: element, runtime: runtime)
+            let strips = channelStripLayoutItems(in: element, runtime: runtime)
             candidates.append(MixerAreaCandidate(
                 element: element,
                 stripCount: strips.count,
@@ -777,7 +779,16 @@ enum AXLogicProElements {
         _ element: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Bool {
-        !mixerChannelStrips(in: element, runtime: runtime).isEmpty
+        !channelStripLayoutItems(in: element, runtime: runtime).isEmpty
+    }
+
+    private static func channelStripLayoutItems(
+        in element: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> [AXUIElement] {
+        AXHelpers.getChildren(element, runtime: runtime).filter {
+            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXLayoutItemRole as String)
+        }
     }
 
     static func mixerChannelStrips(
