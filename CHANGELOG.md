@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+
+- The modal-dialog guard no longer refuses unrelated operations while a plugin editor window is open. Logic 12.3 tags plugin editor windows with the `AXDialog` subrole, so `project.save`, `track.select`, and other unrelated ops previously failed closed as if a blocking modal were up. Plugin editors are now recognized by their window chrome — a close-button attribute plus bypass and compare checkboxes — and excluded from blocking-dialog classification; unknown window shapes stay blocking (fail-closed) and non-English locales are conservatively unchanged pending label verification (#234).
+- The strict live E2E suite's verified-inventory check now requires a non-empty plugin list, so a blind Accessibility enumeration that returns zero slots can no longer pass the gate silently as it did while insert enumeration was broken (#234).
+
 ## [3.7.4] — 2026-06-30
 
 Bug-fix and robustness release closing the v3.7.3 complete-surface QA backlog (#199–#202). No public tool/resource/template surface change (10 tools / 18 resources / 11 templates unchanged).
