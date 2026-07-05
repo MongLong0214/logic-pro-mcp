@@ -282,11 +282,16 @@ struct MCUProtocol {
 
     // MARK: - Handshake
 
+    // v3.8.0 (WS6 / AC5, audit #29) — `HandshakeResult` + `parseDeviceResponse`
+    // are unused by production code (Logic doesn't reliably emit a discrete
+    // Device Response; MCUChannel treats any well-formed feedback as
+    // registration). They are retained ONLY because MCUProtocolTests pins
+    // their decode contract. The unconstructable `.timeout` case (never
+    // returned by `parseDeviceResponse`) has been removed.
     enum HandshakeResult: Sendable, Equatable {
         case success(firmwareVersion: [UInt8])  // Device responded with version info
         case failure(reason: String)             // Response received but malformed
-        case noResponse                          // No response within timeout
-        case timeout                             // Partial response, timed out
+        case noResponse                          // No response
     }
 
     /// Encode MCU Device Query: F0 00 00 66 14 00 F7

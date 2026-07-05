@@ -29,20 +29,26 @@ actor MCUFeedbackParser {
         // Device Query. Once we receive any well-formed feedback on the dedicated
         // LogicProMCP-MCU-Internal port, registration is operationally established even if the
         // explicit handshake response is absent.
-        var conn = await cache.getMCUConnection()
-        conn.lastFeedbackAt = Date()
-        conn.isConnected = true
-        if !conn.portName.isEmpty {
-            conn.registeredAsDevice = true
+        // v3.8.0 (WS6 / AC3, audit #7) — atomic RMW so a concurrent start()/
+        // stop() can't lose this connection update across an await boundary.
+        await cache.updateMCUConnection { conn in
+            conn.lastFeedbackAt = Date()
+            conn.isConnected = true
+            if !conn.portName.isEmpty {
+                conn.registeredAsDevice = true
+            }
         }
-        await cache.updateMCUConnection(conn)
 
         let offset = await trackOffset()
 
         switch event {
         case .pitchBend(let channel, let value):
-            // Fader position: channel 0-7 = strip → track = strip + bankOffset
-            let trackIndex = Int(channel) + offset
+            // Fader position. Channels 0-7 are the per-strip faders and follow
+            // the bank offset. Channel 8 is the MASTER fader, which is
+            // bank-invariant (audit #6): adding the offset to it wrote the
+            // master volume onto an unrelated banked track (8 + offset) and
+            // broke set_master_volume's echo verification.
+            let trackIndex = channel == 8 ? 8 : Int(channel) + offset
             let normalized = Double(value) / 16383.0
             await cache.updateFader(strip: trackIndex, volume: normalized)
 

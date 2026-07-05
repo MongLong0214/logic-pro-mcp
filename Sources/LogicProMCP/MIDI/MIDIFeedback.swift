@@ -59,6 +59,33 @@ enum MIDIFeedback {
                 continue
             }
 
+            // System Real-Time (0xF8-0xFF): a single status byte with no data.
+            // These may appear ANYWHERE — including between the data bytes of
+            // a running-status stream — so they must be consumed on their own
+            // WITHOUT disturbing `runningStatus`. Previously they fell into the
+            // channel-voice branch, which overwrote runningStatus with 0xF8+
+            // and then double-consumed a following byte (audit #5), silently
+            // dropping the next message.
+            if byte >= 0xF8 {
+                i += 1
+                continue
+            }
+
+            // System Common (0xF1-0xF7): resets running status and carries a
+            // fixed number of data bytes. Consume the status byte plus exactly
+            // its data bytes so the following channel-voice message survives.
+            if byte >= 0xF1 {
+                runningStatus = 0
+                let dataBytes: Int
+                switch byte {
+                case 0xF2: dataBytes = 2  // Song Position Pointer
+                case 0xF1, 0xF3: dataBytes = 1  // MTC Quarter Frame, Song Select
+                default: dataBytes = 0  // 0xF4/0xF5 undefined, 0xF6 Tune Request, 0xF7 EOX
+                }
+                i += 1 + dataBytes
+                continue
+            }
+
             // Determine status byte: new status or running status
             let status: UInt8
             let channel: UInt8

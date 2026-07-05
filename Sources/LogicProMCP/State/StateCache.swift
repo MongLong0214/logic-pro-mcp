@@ -344,6 +344,17 @@ actor StateCache {
         mcuConnection = state
     }
 
+    /// v3.8.0 (WS6 / AC3, audit #7) — atomic read-modify-write of the MCU
+    /// connection state within a single actor turn. The MCU feedback parser
+    /// and the channel's start()/stop() both touch this struct; a
+    /// get→mutate→set split across `await` boundaries let a concurrent writer
+    /// lose an update (e.g. a feedback event flipping `isConnected` between a
+    /// stop()'s read and its write). Mutating in place on the actor closes
+    /// that window structurally.
+    func updateMCUConnection(mutator: (inout MCUConnectionState) -> Void) {
+        mutator(&mcuConnection)
+    }
+
     func updateMCUDisplay(_ display: MCUDisplayState) {
         mcuDisplay = display
     }
