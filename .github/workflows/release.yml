@@ -12,12 +12,14 @@ on:
       - 'v[0-9]*.[0-9]*.[0-9]*'
       - 'v[0-9]*.[0-9]*.[0-9]*-*'
 
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: macos-15
+    # Only the build job creates the GitHub Release (needs contents:write).
+    # Scoped per-job instead of workflow-level so the read-only
+    # validate-install job below does NOT inherit write access.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -174,6 +176,10 @@ jobs:
 
   validate-install:
     needs: build
+    # Read-only: checks out the repo and curls the just-published (public)
+    # release assets to exercise install/uninstall. No write scope required.
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -201,7 +207,11 @@ jobs:
           # exercising the fail-closed hardened path, not the opt-in
           # same-origin fallback. This simulates what a downstream consumer
           # following README.md §Quick Start Option B would do.
-          VERSION="${{ github.ref_name }}"
+          # Use the step env (set from github.ref_name above) rather than
+          # re-interpolating ${{ github.ref_name }} into the run: block. The
+          # tag is already SemVer-gated by the build job this needs:, and as a
+          # shell variable it can't reach the parser as a template expansion.
+          VERSION="$LOGIC_PRO_MCP_VERSION"
           BASE="https://github.com/${{ github.repository }}/releases/download/$VERSION"
           LOGIC_PRO_MCP_SHA256=$(curl -fsSL "$BASE/SHA256SUMS.txt" \
               | awk '$2 == "LogicProMCP-macOS-universal.tar.gz" {print $1}')
