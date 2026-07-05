@@ -17,18 +17,18 @@ struct NavigateDispatcher {
         switch command {
         case "goto_bar":
             guard params["bar"] != nil else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "goto_bar requires explicit 'bar'"
+                return toolInvalidParamsResult(
+                    "goto_bar requires explicit 'bar'"
                 )
             }
             guard let bar = intParamOrNil(params, "bar") else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "goto_bar 'bar' must be an integer in 1..9999"
+                return toolInvalidParamsResult(
+                    "goto_bar 'bar' must be an integer in 1..9999"
                 )
             }
             guard (1...9999).contains(bar) else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "goto_bar 'bar' must be in 1..9999 (got \(bar))"
+                return toolInvalidParamsResult(
+                    "goto_bar 'bar' must be in 1..9999 (got \(bar))"
                 )
             }
             let result = await router.route(
@@ -87,8 +87,8 @@ struct NavigateDispatcher {
             // failure. No silent wrong-target navigation.
             if params["index"] != nil {
                 guard let index = intParamOrNil(params, "index"), index >= 0 else {
-                    return MIDIDispatcher.invalidParamsResult(
-                        hint: "goto_marker 'index' must be an integer >= 0"
+                    return toolInvalidParamsResult(
+                        "goto_marker 'index' must be an integer >= 0"
                     )
                 }
                 if let target = markers.first(where: { $0.id == index }) {
@@ -186,8 +186,8 @@ struct NavigateDispatcher {
             // a misnamed param was the class of bug that hid 100% false-positive
             // test coverage earlier in the hardening loop.
             guard params["level"] != nil || params["direction"] != nil else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "set_zoom requires explicit 'level' or 'direction'"
+                return toolInvalidParamsResult(
+                    "set_zoom requires explicit 'level' or 'direction'"
                 )
             }
             let level = stringParam(params, "level", "direction", default: "fit")
@@ -210,8 +210,8 @@ struct NavigateDispatcher {
             default:
                 guard let numericLevel = Int(level),
                       (1...10).contains(numericLevel) else {
-                    return MIDIDispatcher.invalidParamsResult(
-                        hint: "set_zoom 'level' must be one of: in, out, fit, or integer 1..10"
+                    return toolInvalidParamsResult(
+                        "set_zoom 'level' must be one of: in, out, fit, or integer 1..10"
                     )
                 }
                 let result = await router.route(
@@ -223,8 +223,8 @@ struct NavigateDispatcher {
 
         case "toggle_view":
             guard params["view"] != nil else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "toggle_view requires explicit 'view'"
+                return toolInvalidParamsResult(
+                    "toggle_view requires explicit 'view'"
                 )
             }
             let view = stringParam(params, "view", default: "mixer")

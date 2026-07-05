@@ -72,29 +72,9 @@ struct TrackDispatcher {
                 extras: ["operation": "track.select"]
             )
 
-        case "create_audio":
-            let result = await router.route(operation: "track.create_audio")
-            if result.isSuccess, !channelSuccessIsVerified(result) {
-                return toolTextResult(result.message, isError: true)
-            }
-            return toolTextResult(result)
-
-        case "create_instrument":
-            let result = await router.route(operation: "track.create_instrument")
-            if result.isSuccess, !channelSuccessIsVerified(result) {
-                return toolTextResult(result.message, isError: true)
-            }
-            return toolTextResult(result)
-
-        case "create_drummer":
-            let result = await router.route(operation: "track.create_drummer")
-            if result.isSuccess, !channelSuccessIsVerified(result) {
-                return toolTextResult(result.message, isError: true)
-            }
-            return toolTextResult(result)
-
-        case "create_external_midi":
-            let result = await router.route(operation: "track.create_external_midi")
+        case "create_audio", "create_instrument", "create_drummer", "create_external_midi":
+            // 4 byte-identical bodies; the channel op is always "track.<command>".
+            let result = await router.route(operation: "track.\(command)")
             if result.isSuccess, !channelSuccessIsVerified(result) {
                 return toolTextResult(result.message, isError: true)
             }
@@ -124,9 +104,7 @@ struct TrackDispatcher {
             // an irrecoverable data-loss scenario. Refuse the delete and
             // require the caller to re-issue selection (or accept that the
             // selection is uncertain and abort).
-            guard let data = selectResult.message.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let verified = json["verified"] as? Bool, verified == true else {
+            guard channelResultIsVerified(selectResult) else {
                 return toolStateCResult(
                     .readbackMismatch,
                     hint: "track.delete refused: track \(index) selection unverified (State B). Cannot safely delete unverified target — re-select or fix Logic Pro AX state and retry.",
@@ -163,9 +141,7 @@ struct TrackDispatcher {
             // differ from the requested index), creating a phantom track
             // and confusing the caller's mental model. Refuse and require
             // the caller to re-issue selection.
-            guard let data = selectResult.message.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let verified = json["verified"] as? Bool, verified == true else {
+            guard channelResultIsVerified(selectResult) else {
                 return toolStateCResult(
                     .readbackMismatch,
                     hint: "track.duplicate refused: track \(index) selection unverified (State B). Cannot safely duplicate unverified target — re-select or fix Logic Pro AX state and retry.",
@@ -219,89 +195,13 @@ struct TrackDispatcher {
             return toolTextResult(result)
 
         case "mute":
-            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
-                return toolInvalidParamsResult(
-                    "mute requires explicit 'index' (Int ≥ 0)",
-                    extras: ["operation": "track.set_mute"]
-                )
-            }
-            let enabled: Bool
-            if params["enabled"] != nil {
-                guard let parsed = boolParamOrNil(params, "enabled") else {
-                    return MIDIDispatcher.invalidParamsResult(
-                        hint: "mute 'enabled' must be boolean true/false"
-                    )
-                }
-                enabled = parsed
-            } else {
-                enabled = true
-            }
-            let result = await router.route(
-                operation: "track.set_mute",
-                params: ["index": String(index), "enabled": String(enabled)]
-            )
-            // #106: never surface an unverified channel success — a State B
-            // "success without read-back" is reported as an error so callers
-            // can't mistake a fired-but-unconfirmed toggle for a verified one.
-            if result.isSuccess, !trackToggleResultIsVerified(result) {
-                return toolTextResult(result.message, isError: true)
-            }
-            return toolTextResult(result)
+            return await handleToggle(command: "mute", operation: "track.set_mute", params: params, router: router)
 
         case "solo":
-            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
-                return toolInvalidParamsResult(
-                    "solo requires explicit 'index' (Int ≥ 0)",
-                    extras: ["operation": "track.set_solo"]
-                )
-            }
-            let enabled: Bool
-            if params["enabled"] != nil {
-                guard let parsed = boolParamOrNil(params, "enabled") else {
-                    return MIDIDispatcher.invalidParamsResult(
-                        hint: "solo 'enabled' must be boolean true/false"
-                    )
-                }
-                enabled = parsed
-            } else {
-                enabled = true
-            }
-            let result = await router.route(
-                operation: "track.set_solo",
-                params: ["index": String(index), "enabled": String(enabled)]
-            )
-            // #106: same verified-only gate as mute/arm.
-            if result.isSuccess, !trackToggleResultIsVerified(result) {
-                return toolTextResult(result.message, isError: true)
-            }
-            return toolTextResult(result)
+            return await handleToggle(command: "solo", operation: "track.set_solo", params: params, router: router)
 
         case "arm":
-            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
-                return toolInvalidParamsResult(
-                    "arm requires explicit 'index' (Int ≥ 0)",
-                    extras: ["operation": "track.set_arm"]
-                )
-            }
-            let enabled: Bool
-            if params["enabled"] != nil {
-                guard let parsed = boolParamOrNil(params, "enabled") else {
-                    return MIDIDispatcher.invalidParamsResult(
-                        hint: "arm 'enabled' must be boolean true/false"
-                    )
-                }
-                enabled = parsed
-            } else {
-                enabled = true
-            }
-            let result = await router.route(
-                operation: "track.set_arm",
-                params: ["index": String(index), "enabled": String(enabled)]
-            )
-            if result.isSuccess, !trackToggleResultIsVerified(result) {
-                return toolTextResult(result.message, isError: true)
-            }
-            return toolTextResult(result)
+            return await handleToggle(command: "arm", operation: "track.set_arm", params: params, router: router)
 
         case "record_sequence":
             return await handleRecordSequenceSMF(params: params, router: router, cache: cache)
@@ -479,8 +379,8 @@ struct TrackDispatcher {
             let effectiveMode = AccessibilityChannel.parseScanMode(mode)
             if !mode.isEmpty {
                 guard ["ax", "disk", "both"].contains(mode) else {
-                    return MIDIDispatcher.invalidParamsResult(
-                        hint: "scan_library 'mode' must be one of: ax, disk, both"
+                    return toolInvalidParamsResult(
+                        "scan_library 'mode' must be one of: ax, disk, both"
                     )
                 }
                 scanParams["mode"] = mode
@@ -500,8 +400,8 @@ struct TrackDispatcher {
             if params["submenuOpenDelayMs"] != nil {
                 guard let parsed = intParamOrNil(params, "submenuOpenDelayMs"),
                       (0...5000).contains(parsed) else {
-                    return MIDIDispatcher.invalidParamsResult(
-                        hint: "scan_plugin_presets 'submenuOpenDelayMs' must be an integer in 0..5000"
+                    return toolInvalidParamsResult(
+                        "scan_plugin_presets 'submenuOpenDelayMs' must be an integer in 0..5000"
                     )
                 }
                 settleMs = parsed
@@ -523,6 +423,47 @@ struct TrackDispatcher {
                 extras: ["operation": "track.\(command)"]
             )
         }
+    }
+
+    /// Shared mute/solo/arm handler (3 near-identical bodies). Parses the
+    /// required `index` (≥0) and optional `enabled` (default true), routes the
+    /// set op, then surfaces a #106 State-B (unverified) channel success as an
+    /// error. Per-command error-hint strings are preserved verbatim via
+    /// `command`; `operation` is the channel op ("track.set_mute", etc.).
+    private static func handleToggle(
+        command: String,
+        operation: String,
+        params: [String: Value],
+        router: ChannelRouter
+    ) async -> CallTool.Result {
+        guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
+            return toolInvalidParamsResult(
+                "\(command) requires explicit 'index' (Int ≥ 0)",
+                extras: ["operation": operation]
+            )
+        }
+        let enabled: Bool
+        if params["enabled"] != nil {
+            guard let parsed = boolParamOrNil(params, "enabled") else {
+                return toolInvalidParamsResult(
+                    "\(command) 'enabled' must be boolean true/false"
+                )
+            }
+            enabled = parsed
+        } else {
+            enabled = true
+        }
+        let result = await router.route(
+            operation: operation,
+            params: ["index": String(index), "enabled": String(enabled)]
+        )
+        // #106: never surface an unverified channel success — a State B
+        // "success without read-back" is reported as an error so callers
+        // can't mistake a fired-but-unconfirmed toggle for a verified one.
+        if result.isSuccess, !trackToggleResultIsVerified(result) {
+            return toolTextResult(result.message, isError: true)
+        }
+        return toolTextResult(result)
     }
 
     private static func modalGuardedTrackOperation(for command: String) -> String? {

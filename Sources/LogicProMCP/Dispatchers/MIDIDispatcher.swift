@@ -22,17 +22,17 @@ struct MIDIDispatcher {
             let note: Int
             switch midiData7Param(params, "note", requiredBy: "send_note") {
             case .success(let parsed): note = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             let velocity: Int
             switch optionalMidiData7Param(params, "velocity", default: 100, requiredBy: "send_note") {
             case .success(let parsed): velocity = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             let durationMs: Int
             switch optionalDurationMsParam(params, "duration_ms", default: 500, requiredBy: "send_note") {
             case .success(let parsed): durationMs = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await dispatchSendOp(
                 baseOp: "midi.send_note",
@@ -49,17 +49,17 @@ struct MIDIDispatcher {
             let notes: String
             switch midiData7ListParam(params, "notes", requiredBy: "send_chord") {
             case .success(let parsed): notes = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             let velocity: Int
             switch optionalMidiData7Param(params, "velocity", default: 100, requiredBy: "send_chord") {
             case .success(let parsed): velocity = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             let durationMs: Int
             switch optionalDurationMsParam(params, "duration_ms", default: 500, requiredBy: "send_chord") {
             case .success(let parsed): durationMs = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await dispatchSendOp(
                 baseOp: "midi.send_chord",
@@ -79,27 +79,27 @@ struct MIDIDispatcher {
             // by `NoteSequenceParser` (T3) — there is no top-level channel,
             // so we skip `validateMidiChannel` and only validate `port`.
             guard params["channel"] == nil else {
-                return invalidParamsResult(
-                    hint: "play_sequence does not support top-level 'channel'; use the optional per-event channel field in notes"
+                return toolInvalidParamsResult(
+                    "play_sequence does not support top-level 'channel'; use the optional per-event channel field in notes"
                 )
             }
             guard let notes = params["notes"]?.stringValue, !notes.isEmpty else {
-                return invalidParamsResult(hint: "play_sequence requires 'notes' as a non-empty string")
+                return toolInvalidParamsResult("play_sequence requires 'notes' as a non-empty string")
             }
             switch NoteSequenceParser.parse(notes) {
             case .success(let events):
                 guard !events.isEmpty, events.count <= 256 else {
-                    return invalidParamsResult(hint: "play_sequence 'notes' count must be 1..256")
+                    return toolInvalidParamsResult("play_sequence 'notes' count must be 1..256")
                 }
                 if let violation = NoteSequenceParser.realtimeTimingViolation(in: events) {
-                    return invalidParamsResult(hint: "play_sequence: \(violation)")
+                    return toolInvalidParamsResult("play_sequence: \(violation)")
                 }
             case .failure(let error):
-                return invalidParamsResult(hint: "play_sequence: \(error.hint)")
+                return toolInvalidParamsResult("play_sequence: \(error.hint)")
             }
             switch validatePort(params) {
             case .failure(let msg):
-                return invalidParamsResult(hint: msg.message)
+                return toolInvalidParamsResult(msg.message)
             case .success(let port):
                 let opKey = port == "midi" ? "midi.play_sequence" : "midi.play_sequence.\(port)"
                 return await routedTextResult(router, operation: opKey, params: [
@@ -111,12 +111,12 @@ struct MIDIDispatcher {
             let controller: Int
             switch midiData7Param(params, "controller", requiredBy: "send_cc") {
             case .success(let parsed): controller = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             let value: Int
             switch midiData7Param(params, "value", requiredBy: "send_cc") {
             case .success(let parsed): value = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await dispatchSendOp(
                 baseOp: "midi.send_cc",
@@ -132,7 +132,7 @@ struct MIDIDispatcher {
             let program: Int
             switch midiData7Param(params, "program", requiredBy: "send_program_change") {
             case .success(let parsed): program = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await dispatchSendOp(
                 baseOp: "midi.send_program_change",
@@ -147,7 +147,7 @@ struct MIDIDispatcher {
             let value: Int
             switch pitchBendParam(params, "value", requiredBy: "send_pitch_bend") {
             case .success(let parsed): value = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await dispatchSendOp(
                 baseOp: "midi.send_pitch_bend",
@@ -162,7 +162,7 @@ struct MIDIDispatcher {
             let value: Int
             switch midiData7Param(params, "value", requiredBy: "send_aftertouch") {
             case .success(let parsed): value = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await dispatchSendOp(
                 baseOp: "midi.send_aftertouch",
@@ -184,7 +184,7 @@ struct MIDIDispatcher {
             let data: String
             switch sysexDataParam(params) {
             case .success(let parsed): data = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await routedTextResult(router, operation: "midi.send_sysex", params: ["data": data])
 
@@ -195,7 +195,7 @@ struct MIDIDispatcher {
             let path: String
             switch importFilePathParam(params) {
             case .success(let parsed): path = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await routedTextResult(router, operation: "midi.import_file", params: [
                 "path": path,
@@ -238,17 +238,17 @@ struct MIDIDispatcher {
                 return reject
             }
             guard params["bar"] != nil || params["time"] != nil else {
-                return invalidParamsResult(hint: "mmc_locate requires explicit 'bar' or 'time'")
+                return toolInvalidParamsResult("mmc_locate requires explicit 'bar' or 'time'")
             }
             // Prefer `bar` (int) → expand to bar.beat.sub.tick, else SMPTE `time`.
             // intParam handles int/double/string coercion, so a stringified bar
             // ("5") is accepted too.
             if params["bar"] != nil {
                 guard let bar = intParamOrNil(params, "bar") else {
-                    return invalidParamsResult(hint: "mmc_locate 'bar' must be an integer in 1..9999")
+                    return toolInvalidParamsResult("mmc_locate 'bar' must be an integer in 1..9999")
                 }
                 guard (1...9999).contains(bar) else {
-                    return invalidParamsResult(hint: "mmc_locate 'bar' must be in 1..9999 (got \(bar))")
+                    return toolInvalidParamsResult("mmc_locate 'bar' must be in 1..9999 (got \(bar))")
                 }
                 // #108: bar-based locate drives the same Go-To-Position path as
                 // transport.goto_position, so finalize it through the identical
@@ -268,7 +268,7 @@ struct MIDIDispatcher {
                 )
             }
             guard let time = params["time"]?.stringValue, isValidSMPTE(time) else {
-                return invalidParamsResult(hint: "mmc_locate 'time' must be HH:MM:SS:FF")
+                return toolInvalidParamsResult("mmc_locate 'time' must be HH:MM:SS:FF")
             }
             return await routedTextResult(router, operation: "mmc.locate", params: [
                 "time": time,
@@ -279,17 +279,17 @@ struct MIDIDispatcher {
                 return reject
             }
             guard params["note"] != nil, params["duration"] != nil else {
-                return invalidParamsResult(hint: "step_input requires explicit 'note' and 'duration'")
+                return toolInvalidParamsResult("step_input requires explicit 'note' and 'duration'")
             }
             let note: Int
             switch midiData7Param(params, "note", requiredBy: "step_input") {
             case .success(let parsed): note = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             let duration: String
             switch stepDurationParam(params, "duration", requiredBy: "step_input") {
             case .success(let parsed): duration = parsed
-            case .failure(let msg): return invalidParamsResult(hint: msg.message)
+            case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await routedTextResult(router, operation: "midi.step_input", params: [
                 "note": String(note),
@@ -321,11 +321,11 @@ struct MIDIDispatcher {
     ) async -> CallTool.Result {
         switch validatePort(params) {
         case .failure(let msg):
-            return invalidParamsResult(hint: msg.message)
+            return toolInvalidParamsResult(msg.message)
         case .success(let port):
             switch validateMidiChannel(params) {
             case .failure(let msg):
-                return invalidParamsResult(hint: msg.message)
+                return toolInvalidParamsResult(msg.message)
             case .success(let wireChannel):
                 let opKey = port == "midi" ? baseOp : "\(baseOp).\(port)"
                 var allParams = additionalParams
@@ -345,16 +345,9 @@ struct MIDIDispatcher {
         command: String
     ) -> CallTool.Result? {
         guard params["port"] != nil else { return nil }
-        return invalidParamsResult(
-            hint: "port parameter not supported for \(command)"
+        return toolInvalidParamsResult(
+            "port parameter not supported for \(command)"
         )
-    }
-
-    /// Wraps a hint string in a State C `invalid_params` envelope. Centralized
-    /// so all dispatch-level rejections (port + channel + record_sequence)
-    /// produce the same wire shape.
-    static func invalidParamsResult(hint: String) -> CallTool.Result {
-        toolInvalidParamsResult(hint)
     }
 
     // MARK: - Validation Helpers (T2)

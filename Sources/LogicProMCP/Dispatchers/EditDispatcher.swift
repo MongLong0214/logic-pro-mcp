@@ -69,8 +69,8 @@ struct EditDispatcher {
 
         case "quantize":
             guard params["value"] != nil || params["grid"] != nil else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "quantize requires explicit 'value' or 'grid'"
+                return toolInvalidParamsResult(
+                    "quantize requires explicit 'value' or 'grid'"
                 )
             }
             let value = stringParam(params, "value", "grid", default: "1/16")

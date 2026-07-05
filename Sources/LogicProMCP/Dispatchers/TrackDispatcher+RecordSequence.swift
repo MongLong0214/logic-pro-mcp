@@ -36,16 +36,16 @@ extension TrackDispatcher {
         // `port:"keycmd"` would route this op gets an actionable hint instead
         // of a misleading success at the wrong transport.
         if params["port"] != nil {
-            return MIDIDispatcher.invalidParamsResult(
-                hint: "port parameter not supported for record_sequence"
+            return toolInvalidParamsResult(
+                "port parameter not supported for record_sequence"
             )
         }
         let bar: Int
         if params["bar"] != nil {
             guard let parsed = intParamOrNil(params, "bar"),
                   (1...9999).contains(parsed) else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "record_sequence 'bar' must be an integer in 1..9999"
+                return toolInvalidParamsResult(
+                    "record_sequence 'bar' must be an integer in 1..9999"
                 )
             }
             bar = parsed
@@ -55,21 +55,21 @@ extension TrackDispatcher {
         let notes: String
         if let rawNotes = params["notes"] {
             guard let parsed = rawNotes.stringValue, !parsed.isEmpty else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "record_sequence requires 'notes' as a non-empty string"
+                return toolInvalidParamsResult(
+                    "record_sequence requires 'notes' as a non-empty string"
                 )
             }
             notes = parsed
         } else {
-            return MIDIDispatcher.invalidParamsResult(
-                hint: "record_sequence requires 'notes' (semicolon-separated 'pitch,offsetMs,durMs[,vel[,ch]]')"
+            return toolInvalidParamsResult(
+                "record_sequence requires 'notes' (semicolon-separated 'pitch,offsetMs,durMs[,vel[,ch]]')"
             )
         }
         let requestedTempo: Double?
         if params["tempo"] != nil {
             guard let parsed = doubleParamOrNil(params, "tempo"), (5.0...999.0).contains(parsed) else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "record_sequence 'tempo' must be numeric in 5..999"
+                return toolInvalidParamsResult(
+                    "record_sequence 'tempo' must be numeric in 5..999"
                 )
             }
             requestedTempo = parsed

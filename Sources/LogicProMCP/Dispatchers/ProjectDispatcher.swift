@@ -47,7 +47,7 @@ struct ProjectDispatcher {
                 audit(command, phase: .rejected, reason: "invalid confirmed")
                 return (
                     false,
-                    MIDIDispatcher.invalidParamsResult(hint: "\(command) \(hint)")
+                    toolInvalidParamsResult("\(command) \(hint)")
                 )
             }
         }
@@ -440,8 +440,8 @@ struct ProjectDispatcher {
         let stepID = stringParam(params, "step_id", "stepId")
         guard !stepID.isEmpty else {
             audit(command, phase: .rejected, reason: "missing step_id")
-            return MIDIDispatcher.invalidParamsResult(
-                hint: "cleanup_apply requires 'step_id' (an id from logic_project cleanup_plan)"
+            return toolInvalidParamsResult(
+                "cleanup_apply requires 'step_id' (an id from logic_project cleanup_plan)"
             )
         }
 
@@ -451,7 +451,7 @@ struct ProjectDispatcher {
         switch strictBoolParam(params, "confirmed") {
         case .invalid(let hint):
             audit(command, phase: .rejected, reason: "invalid confirmed")
-            return MIDIDispatcher.invalidParamsResult(hint: "cleanup_apply \(hint)")
+            return toolInvalidParamsResult("cleanup_apply \(hint)")
         case .missing:
             audit(command, phase: .confirmationRequired, reason: stepID)
             return cleanupApplyStateC(

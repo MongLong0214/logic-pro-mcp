@@ -69,21 +69,21 @@ struct TransportDispatcher {
 
         case "set_tempo":
             guard params["tempo"] != nil || params["bpm"] != nil else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "set_tempo requires explicit 'tempo' or 'bpm'"
+                return toolInvalidParamsResult(
+                    "set_tempo requires explicit 'tempo' or 'bpm'"
                 )
             }
             guard let tempo = doubleParamOrNil(params, "tempo", "bpm") else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "set_tempo requires numeric 'tempo' or 'bpm'"
+                return toolInvalidParamsResult(
+                    "set_tempo requires numeric 'tempo' or 'bpm'"
                 )
             }
             // Logic Pro's tempo range is 5..990 BPM; the schema documents 20..999.
             // Accept a slightly-wider 5..999 to match Logic's actual behavior,
             // reject anything clearly absurd so a typo doesn't silently pass.
             guard (5.0...999.0).contains(tempo) else {
-                    return MIDIDispatcher.invalidParamsResult(
-                        hint: "set_tempo 'tempo' must be in 5..999 (got \(tempo))"
+                    return toolInvalidParamsResult(
+                        "set_tempo 'tempo' must be in 5..999 (got \(tempo))"
                     )
             }
             let result = await router.route(
@@ -107,20 +107,20 @@ struct TransportDispatcher {
                 )
             }
             guard params["bar"] != nil || params["position"] != nil else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "goto_position requires explicit 'bar' or 'position'"
+                return toolInvalidParamsResult(
+                    "goto_position requires explicit 'bar' or 'position'"
                 )
             }
             // intParam coerces int/double/string so `{"bar":"5"}` works too.
             if params["bar"] != nil {
                 guard let bar = intParamOrNil(params, "bar") else {
-                    return MIDIDispatcher.invalidParamsResult(
-                        hint: "goto_position 'bar' must be an integer in 1..9999"
+                    return toolInvalidParamsResult(
+                        "goto_position 'bar' must be an integer in 1..9999"
                     )
                 }
                 guard (1...9999).contains(bar) else {
-                    return MIDIDispatcher.invalidParamsResult(
-                        hint: "goto_position 'bar' must be in 1..9999 (got \(bar))"
+                    return toolInvalidParamsResult(
+                        "goto_position 'bar' must be in 1..9999 (got \(bar))"
                     )
                 }
                 let result = await router.route(
@@ -139,8 +139,8 @@ struct TransportDispatcher {
             //   Bar/beat: "N.N.N.N" with bar 1..9999, beat 1..16, sub 1..16, tick 1..999
             //   SMPTE:    "HH:MM:SS:FF" with HH 0..23, MM/SS 0..59, FF 0..99
             guard TransportDispatcher.isValidPositionString(time) else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "goto_position 'position' must be bar.beat.sub.tick (e.g. 1.1.1.1) or HH:MM:SS:FF (got '\(time)')"
+                return toolInvalidParamsResult(
+                    "goto_position 'position' must be bar.beat.sub.tick (e.g. 1.1.1.1) or HH:MM:SS:FF (got '\(time)')"
                 )
             }
             let result = await router.route(
@@ -156,26 +156,26 @@ struct TransportDispatcher {
 
         case "set_cycle_range":
             guard params["start"] != nil, params["end"] != nil else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "set_cycle_range requires explicit 'start' and 'end'"
+                return toolInvalidParamsResult(
+                    "set_cycle_range requires explicit 'start' and 'end'"
                 )
             }
             guard let start = intParamOrNil(params, "start"),
                   let end = intParamOrNil(params, "end") else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "set_cycle_range requires integer 'start' and 'end'"
+                return toolInvalidParamsResult(
+                    "set_cycle_range requires integer 'start' and 'end'"
                 )
             }
             // Bounds: same window as goto_position.bar (1..9999).
             // Enforce start <= end so a swapped-argument typo surfaces early.
             guard (1...9999).contains(start), (1...9999).contains(end) else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "set_cycle_range 'start' and 'end' must be in 1..9999 (got \(start)..\(end))"
+                return toolInvalidParamsResult(
+                    "set_cycle_range 'start' and 'end' must be in 1..9999 (got \(start)..\(end))"
                 )
             }
             guard start <= end else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "set_cycle_range 'start' (\(start)) must be <= 'end' (\(end))"
+                return toolInvalidParamsResult(
+                    "set_cycle_range 'start' (\(start)) must be <= 'end' (\(end))"
                 )
             }
             let result = await router.route(
