@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [3.8.0] — Unreleased
 
-Enterprise review-and-refactor sweep. A read-only A–Z review (5 reviewers) plus a second-round security/concurrency/completeness audit drove a behavior-preserving internal refactor, a small set of correctness/honesty fixes, and security hardening. **No public tool/resource/template surface change (10 tools / 18 resources / 11 templates unchanged).** Also carries the already-merged Logic Pro 12.3 insert-slot enumeration recovery (#234). `swift test --no-parallel` → 2070 passed; strict fresh live Logic Pro 12.3 E2E → 372 passed / 1 skipped / 373 total.
+Enterprise review-and-refactor sweep. A read-only A–Z review (5 reviewers) plus a second-round security/concurrency/completeness audit drove a behavior-preserving internal refactor, a small set of correctness/honesty fixes, and security hardening. **No public tool/resource/template surface change (10 tools / 18 resources / 11 templates unchanged).** Also carries the already-merged Logic Pro 12.3 insert-slot enumeration recovery (#234). `swift test --no-parallel` → 2072 passed; strict fresh live Logic Pro 12.3 E2E → 372 passed / 1 skipped / 373 total.
 
 ### Fixed
 
@@ -34,6 +34,21 @@ Enterprise review-and-refactor sweep. A read-only A–Z review (5 reviewers) plu
 - **`HonestContract.FailureError` is now a `String`-backed enum**, removing a hand-maintained ~45-line `rawValue` switch that could drift; the raw strings are byte-identical and pinned by tests.
 - **Duplication removed** across channels, dispatchers, MIDI, and resources (CoreMIDI channel/velocity parsing, catch-block helpers, AppleScript static/instance pairs, the `ChannelRouter` routing table → `RoutingTable.swift`, library-node helpers, and more) — all behavior-preserving.
 - No public tool/resource/template surface change: **10 tools / 18 resources / 11 templates unchanged.**
+
+### Behavior changes (intentional, tested)
+
+The zero golden static-wire diff freezes the **discovery / error / schema** surface only — `tools/list`, `resources/list`, resource templates, and error-envelope shapes. It does **not** freeze runtime or live-data behavior. The following are intentional, ticketed, tested behavior changes, each covered by unit tests and/or the live E2E suite (not by the static golden). No MCP wire schema, tool name, parameter, or error-envelope shape changed.
+
+- `logic://tracks` now reports the REAL `volume` / `pan` / `automationMode` from the live track header instead of the fabricated `0.0` / `0.0` / `off` placeholders — honesty exception #1 (value-only: keys and types unchanged).
+- Permission status is now tri-state (`granted` / `not_granted` / `not_verifiable`) rather than boolean, so a probe infrastructure failure is no longer collapsed into a false denial — honesty exception #2.
+- MIDI System Common / Real-Time status bytes `0xF1`–`0xFF` are now skipped in feedback parsing instead of corrupting running status (WS6).
+- MCU master-fader feedback now lands correctly at every bank offset; previously only bank offset 0 was updated (WS6).
+- `create_marker` now issues one extra `nav.get_markers` read before mutating, to target the marker faithfully (WS4).
+- `PluginsDispatcher.nonEmptyString` now trims surrounding whitespace before the emptiness check (WS4).
+- `stringParam` alias-conflict now fails closed — a value supplied under two conflicting aliases is rejected rather than silently resolved (WS4).
+- The bounce helper now resolves `python3` via `PATH` and honors the `LOGIC_PRO_MCP_BOUNCE_HELPER` override allowlist (WS4).
+- Pan/volume reads now fail closed — an out-of-range AX value is clamped to the valid range rather than surfaced raw (WS3).
+- `library.scan_all` and `plugin.scan_presets` are once again mutually exclusive: either AX-tree scan in flight rejects the other, restoring the single-scan guard that the God-object split accidentally dropped (restored in this release).
 
 ### Security
 
