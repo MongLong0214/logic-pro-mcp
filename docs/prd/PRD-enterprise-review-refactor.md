@@ -1,102 +1,123 @@
 # PRD: Enterprise-Grade Review & Refactor Sweep (v3.8.0)
 
-**Version**: 0.1 (draft — pending boomer convergence)
+**Version**: 0.2 (post round-2 audits + boomer PRD R1)
 **Author**: Fable 5 (scope/decisions) — implementation by Opus/Sonnet agents
 **Date**: 2026-07-05
-**Status**: Draft
+**Status**: In Review
 **Size**: XL
 **Baseline**: main `7bb8bf3`, v3.7.4, 1980 tests green (`swift test --no-parallel`), 0 open GitHub issues.
+**Branch**: `chore/enterprise-review-refactor-v3.8.0` (worktree `logic-pro-mcp-refactor`).
 
 ---
 
 ## 1. Problem Statement
 
 ### 1.1 Background
-Full A→Z read-only review of the codebase (Sources 81 files/40.3k LOC, Tests 166 files/47.8k LOC, Scripts 48, docs 8) by 5 parallel Opus reviewers. The codebase is **mature and well-factored** — reviewers found essentially no production-broken code. But a decade-equivalent of incremental issue-driven growth has left: God-object files, a genuine concurrency bug, a large body of **dead test assertions** (false-green on safety behaviors), scattered duplication, locale-policy bypasses, one zero-coverage safety-critical utility, a release-script checksum gap, and stale user-facing docs. Full findings: `docs/tickets/enterprise-refactor/REVIEW-FINDINGS.md`.
+Two review rounds, all read-only:
+- **Round 1** (5 domain reviewers, capped): structure/dup/consistency across the whole tree.
+- **Round 2** (3 cap-free deep audits): security (whole codebase + 11 scripts + Formula + 3 CI workflows), Swift-6 concurrency (every actor/Task/Sendable), and completeness+adversarial (100% of the files round 1 skipped + empirical re-verification of round-1 claims).
+
+Verdict: the codebase is **mature, crash-hardened** (zero `fatalError`/`try!`/`print`; guarded downcasts; bounds-checked input) and **security-clean at the MCP boundary** (0 Critical/High reachable by an untrusted client). Findings: `docs/tickets/enterprise-refactor/REVIEW-FINDINGS.md` + `AUDIT-ROUND2.md`.
 
 ### 1.2 Problem Definition
-Bring the codebase to enterprise standard **without changing external behavior**: fix the real defects, split the God objects, kill duplication/dead code, make the test suite actually assert what it claims, harden the release path, and bring every user-facing doc into line with the shipped code — then release.
+Bring the codebase to enterprise standard **without changing external behavior**: fix the real defects (a P0 crash, a P1 concurrency race across 2 sites, honesty-contract gaps, a supply-chain CI injection), split the God objects, kill the reviewed duplication/dead code, make the test suite actually assert what it claims (~356 dead assertions), align every user-facing doc with the shipped code — then release v3.8.0.
 
 ### 1.3 Impact of Not Solving
-- **~172 dead test assertions** (empirically proven — the `#expect` macro treats `Bool == Bool` as always-pass) mean CI is green on assertions that test nothing, including the exact fail-closed/honesty guards the product's value rests on. Future regressions in those paths ship silently.
-- The **MCU feedback `Task{}` ordering race** (P0) corrupts parser state and is the probable root of the historical "MCU echo flake" (PR #153).
-- Two 5.4k/1.8k-line God objects raise every future change's cost and review risk.
-- Stale docs (mixer "send"=MCU, test counts 1933/1846 vs ~1980) mislead users and contributors.
+- **P0 SIGPIPE**: a client disconnecting mid-write kills the server before the #220 EPIPE path runs (empirically proven fatal).
+- **~356 dead test assertions** (2× the round-1 estimate; the `#expect` macro treats `Bool == Bool` as always-pass, incl. non-optional) — CI is green on assertions that test nothing, including the fail-closed/honesty guards the product sells.
+- **MCU feedback race (2 sites)**: out-of-order parser state → false State A/B on MCU-verified ops.
+- **`logic://tracks` fabricates volume/pan/automationMode** — an honesty-contract breach on a public resource.
+- **CI `publish-mcp.yml` script injection** — a crafted release tag runs arbitrary code under the project's OIDC identity.
+- Two God objects (5.4k/1.8k LOC) inflate every future change's risk; stale docs mislead users.
 
 ## 2. Goals & Non-Goals
 
 ### 2.1 Goals
-- [ ] G1: Fix all reachable correctness/safety defects (MCU race, dead safety-guard assertions, BoundedProcessRunner coverage, release.sh checksum verify, SMFWriter denominator landmine).
-- [ ] G2: Split the two God objects (`AccessibilityChannel` 5369→~800, `AXLogicProElements` 1799→~500) into behavior-preserving same-type extensions; split `ResourceHandlers` (1466) and `TrackDispatcher.record_sequence` (620).
-- [ ] G3: Eliminate the reviewed low-risk duplication/dead-code/locale-bypass clusters (route stragglers through existing helpers; hoist triplicates; delete dead code; centralize labels into AXLocalePolicy).
-- [ ] G4: Convert all ~172 dead assertions to live ones with the correct optionality-dependent transform; add the mutation-gate completeness test + BoundedProcessRunnerTests.
-- [ ] G5: Bring every user-facing doc (README, CHANGELOG, CONTRIBUTING, SECURITY, docs/API·SETUP·TROUBLESHOOTING) into exact agreement with the shipped code.
-- [ ] G6: **Zero external-behavior change** — MCP surface stays 10 tools/18 resources/11 templates; every wire shape and error envelope byte-identical; `swift test --no-parallel` green at every step; strict live E2E parity preserved.
-- [ ] G7: Ship as **v3.8.0** (minor: substantial internal hardening + test-integrity + docs, no public surface change; bundles the already-merged #234).
+- G1 [correctness/security] Fix: P0 SIGPIPE; MCU 2-site ordering race (+ bank-offset + conn-atomic + MIDIFeedback status-byte); PermissionChecker tri-state; `extractTrackState` fabricated data; AXHelpers unguarded downcast; NavigateDispatcher marker pre-poll; SMFWriter denominator+traps; release.sh Formula-sha verify; **CI M1 publish-mcp injection + M2 /private install bypass + CI least-privilege/pin**; L1 env-exec allowlist; L2 /tmp debug log.
+- G2 [structure] Split God objects behavior-preservingly: `AccessibilityChannel` 5369→~800 (8 ext, ~24 private→internal), `AXLogicProElements` 1799→~500 (6 ext), `ResourceHandlers` 1466 (4 ext), `TrackDispatcher.record_sequence` 620 (1 ext).
+- G3 [dedup/dead] Route stragglers through existing helpers; hoist triplicates; delete confirmed dead code (lastBothScan, findTrackOutline, unconsumed inbound stream, etc.); centralize AXLocalePolicy bypasses; FailureError String-backed enum; deterministicFindings decompose; shared AppleScript escape.
+- G4 [test integrity] Convert all ~356 dead assertions to live (5 optionality-dependent transforms + a per-assertion ledger + flip/fault-injection proof on safety-critical files); add mutation-gate completeness test + BoundedProcessRunnerTests; promote FakeAXRuntimeBuilder AX helpers; remove JSON-helper clones.
+- G5 [docs] README/CHANGELOG/CONTRIBUTING/SECURITY/docs(API·SETUP·TROUBLESHOOTING) exactly match shipped code (mixer "send" removal, fader/pan channel, test counts, E2E numbers, version anchors).
+- G6 [safety gate] **Zero external-behavior change**, proven by: `swift test --no-parallel` green after each ticket + **golden byte-snapshots** (tool descriptors, unknown-command/invalid-param errors, representative HC envelopes, route mappings, resource URIs) captured pre-refactor and diffed post + strict live E2E parity + a broad live-surface baseline↔post diff (see §5).
+- G7 Ship **v3.8.0** (minor: substantial internal hardening + test integrity + docs + security fixes; no public tool/resource/template surface change; bundles merged #234).
 
-### 2.2 Non-Goals (explicitly EXCLUDED — reviewer-unanimous HIGH RISK / out of scope)
-- NG1: **HC-surface normalization** — CoreMIDI/MCU return free-form success strings while AppleScript wraps in HC envelopes; unifying is a wire change across dozens of ops. DEFER.
-- NG2: **HC v1→v2 unification** — main file uses HC v1 (118×), +VerifiedPlugins uses v2 (36×); intentional & test-enforced; unifying is BREAKING. DEFER.
-- NG3: **same-failure-two-codes** (`.axWriteFailed` vs `.portUnavailable` for the same keycmd throw) — wire change. DEFER.
-- NG4: **AX-main blocking-sleep→async** — removing `Thread.sleep` on the synchronous AX Runtime closures needs an async-signature ripple across the actor; systemic H risk. Only the **CGEvent** blocking sleep (tractable, Runtime already injects no-op in tests) is in scope.
-- NG5: **Monster-function internal phase-extraction** (`defaultInsertVerified` 465, `defaultImportMIDIFile` 418, `setTrackInstrument` 380) — this is logic re-arrangement, not a pure move; qualitatively higher regression risk than file-splitting. File-splitting solves the file-size problem; internal decomposition is a separate follow-up. DEFER (file-move only).
-- NG6: **StockPluginCatalog externalization to JSON/plist** — reviewer-flagged as anti-pattern: it is ALREADY data-driven (Seed array + factories); externalizing trades compile-time safety + zero-dep deploy for runtime load risk with no gain. DO NOT.
-- NG7: **Removing reserved wire fields** (`spectralCentroidHz`, `frequencyPeaks` always-nil) — they are a declared v1 schema contract, not dead code. Leave + document.
-- NG8: Any new feature, tool, resource, or template.
+### 2.2 Non-Goals (EXCLUDED — HIGH RISK / low-value / out of scope; each with reason)
+- NG1 HC-surface normalization (CoreMIDI/MCU free-form vs AppleScript envelopes) — wire change, dozens of ops. DEFER.
+- NG2 HC v1→v2 unification — test-enforced (HonestContractV2Tests:151/157), BREAKING. DEFER.
+- NG3 same-failure-two-codes (`.axWriteFailed` vs `.portUnavailable`) — wire change. DEFER.
+- NG4 AX-main blocking-sleep→async — synchronous AX Runtime closures; async ripple = systemic H risk. DEFER.
+- NG5 Monster-function internal phase-extraction (defaultInsertVerified 465, defaultImportMIDIFile 418, setTrackInstrument 380) — logic re-arrangement, not a pure move. File-split solves size; internals DEFER.
+- NG6 StockPluginCatalog JSON externalization — already data-driven; externalizing loses compile-time safety + zero-dep deploy. DO NOT.
+- NG7 Removing reserved wire fields (spectralCentroidHz/frequencyPeaks) — declared v1 schema. Leave + document.
+- NG8 New feature/tool/resource/template.
+- **NG9 [new] Cooperative-pool blocking sweep** (setTempo 370ms / runLiveScan 50s / AppleScript-on-pool) — MEDIUM risk, wide, NOT correctness (mitigated: mutation-gate serializes, reads don't sleep, stdio+deadline off-pool). Concurrency audit + boomer both flag as risky-wide. DEFER (follow-up issue).
+- **NG10 [new] CGEvent async-sleep** (postShortcutSequence) — naive Task.sleep introduces actor reentrancy → concurrent goto_position keystroke interleave (boomer PRD #2). DEFER unless done as a serialized key-worker (out of scope this sweep).
+- **NG11 [new] P2-3 bespoke-error-string→FailureError** — would edit HonestContract (WS5) AND Track/ProjectDispatcher (WS4) = cross-workstream coupling for a documented-terminal, non-bug consistency nit. DEFER.
+- **NG12 [new] LogicProServer deadline-race dedup (round-1 #10)** — load-bearing #112/#199 concurrency backstop; boomer "own commit, last." DEFER.
 
 ## 3. Technical Design
 
-### 3.1 Constraints
-- `Package.swift` auto-globs `Sources/LogicProMCP` and `Tests/LogicProMCPTests` (no explicit `sources:` list) → adding/moving `.swift` files needs NO manifest edit; git-mv into subdirs is safe.
-- **Actor private-visibility rule** (the hard constraint on splitting `AccessibilityChannel`): cross-file extensions cannot see an actor's `private` stored state. So the 13-14 stored props + the 4 private scan-orchestrators that mutate them stay in the CORE file; only ~21 of 89 private funcs need `private`→`internal`; ~40 handlers are already `internal` (0 change).
-- Every refactor is behavior-preserving; `swift test --no-parallel` (authoritative, matches CI) must stay green after each ticket.
+### 3.1 Constraints (verified)
+- `Package.swift` auto-globs `Sources/LogicProMCP` + `Tests/LogicProMCPTests` (no `sources:` list) → adding/moving/git-mv `.swift` needs NO manifest edit.
+- **Actor private-visibility rule**: cross-file extensions can't see an actor's `private` stored state. AccessibilityChannel: keep 9 private stored props + 4 private instance scan-orchestrators + `execute()` in CORE; promote ~24 private statics to internal (21 execute-referenced + 3 cross-boundary: `encodeResult`, `menuItem`, `verifyTrackSelection`); ~40 already internal.
+- **`#expect(Bool == Bool)` is DEAD** at the pinned toolchain (Swift 6.2.4) — empirically proven twice. Only bare `#expect(x)`/`#expect(!x)`/`#expect(x!)` assert.
+- Every refactor behavior-preserving; `swift test --no-parallel` (CI-authoritative) green after each ticket.
 
-### 3.2 Workstream decomposition (file-owner-disjoint for parallel-safe merge)
-Two phases; within each, agents own DISJOINT file sets so branches merge without conflict.
+### 3.2 Workstream decomposition (file-atomic ownership; verified conflict-free)
+Round-2 confirmed the ONLY cross-directory extension is `extension LogicProServer` declared in `MainEntrypoint.swift` (root) → root entrypoints belong to the Server owner. MCU fix spans 3 files across dirs → made ONE atomic workstream. No file is edited by two workstreams.
 
-**Phase-1 (production source, parallel by directory owner):**
-- WS-A `Channels/AccessibilityChannel*` — 8-extension split (+Transport/+Tracks/+Mixer/+Plugins/+Library/+Regions/+MIDIImport/+Project) + dead `lastBothScan` + `scanInProgress` split + JSON-encoder merge + State-C typed-helper port.
-- WS-B `Channels/{CoreMIDI,MCU,AppleScript,MIDIKeyCommands,Scripter,CGEvent,ChannelRouter}` — **MCU P0 race fix** + MCU fast-path race + CoreMIDI param-parse Result + catch-block helpers + AppleScript static/instance dedup + ChannelRouter table→RoutingTable.swift + CGEvent async sleep.
-- WS-C `Accessibility/* + Plugins/* + Audio/*` — AXLogicProElements 6-extension split + dead `findTrackOutline` delete + LibraryNode triplicate hoist + AXLocalePolicy bypass cluster (library/track-type/marker-tables/cancel) + PluginInspector→AXHelpers + AnalysisPolicy.default.
-- WS-D `Dispatchers/* + Resources/* + Server/* + State/*` — ResourceHandlers split + TrackDispatcher record_sequence split + create_*/toggle helpers + inline verified-parse→helper + MIDIDispatcher.invalidParamsResult 50-site route + mutation-gate completeness test + StatePoller generic poll.
-- WS-E `Utilities/* + Workflows/* + MIDI/*` — FailureError String-backed enum + deterministicFindings decompose + SetupDoctor requireBinary + remediation-infra dedup + **SMFWriter denominator fix** + P2-3 bespoke-error-string→FailureError.
-- WS-F `Scripts/*.sh` — release.sh Formula-sha grep verify + validate_share_dir protected-path symmetry + release.sh no-op-commit guard.
+**Phase 1 — production source (parallel, disjoint file sets):**
+- **WS1** `Channels/AccessibilityChannel.swift` + new `AccessibilityChannel+{Transport,Tracks,Mixer,Plugins,Library,Regions,MIDIImport,Project}.swift` — 8-ext split (~24 promotions; `encodeResult`→`+Shared`/Core), dead `lastBothScan` delete, `scanInProgress`→two flags, `encodeOrError`/`encodeResult` merge, State-C typed-helper port. (Does NOT touch +VerifiedPlugins beyond compile.)
+- **WS2** `Channels/{AppleScript,CoreMIDI,MIDIKeyCommands,Scripter,CGEventChannel,ChannelRouter,Channel}.swift` — CoreMIDI param→Result(.error not throw), catch-block helpers, AppleScript static/instance dedup + `iso8601String` static, ChannelRouter table→`RoutingTable.swift`, Scripter/MIDIKeyCommands shared keycmd protocol (preserve RoutingAuditInvariant log strings). (CGEvent: NG10, untouched.)
+- **WS3** `Accessibility/{AXLogicProElements(6-ext split), AXHelpers(downcast guard), AXValueExtractors(extractTrackState honesty + slider fail-closed + track-type LabelSet), AXLocalePolicy(library/marker/cancel labels), PluginInspector(→AXHelpers), LibraryAccessor(triplicate hoist + cliclick→native + L2 /tmp + library label), LibraryDiskScanner, AXMouseHelper}` + `Plugins/{StockPluginCatalog optional +split, VerifiedPluginCatalog doc}` + `Audio/AudioAnalyzer(AnalysisPolicy.default)`. LibraryNode triplicate → shared extension. Delete dead `findTrackOutline`, `pressDelete`, `setNormalizedSliderValue`.
+- **WS4** `Dispatchers/*` + `Resources/*` + `State/*` + `Server/{ServerConfig,SerializedStdioTransport}` + `main.swift` + `MainEntrypoint.swift` — **SIGPIPE fix** (SerializedStdioTransport+MainEntrypoint), ResourceHandlers 4-ext split, record_sequence→+ext, create_*/toggle helpers, inline verified-parse→`channelResultIsVerified` (resolves that dead helper), 50× `invalidParamsResult`→canonical, StatePoller generic poll, NavigateDispatcher marker pre-poll, PluginsDispatcher trim-fix, DispatcherSupport stringParam alias-guard, StateModels MCU structs→Codable, ProjectExport bounce-helper python3 PATH + BOUNCE_HELPER L1 allowlist, export dialog preflight. **Does NOT touch LogicProServer.swift (WS6 owns its MCU lines; deadline dedup = NG12).**
+- **WS5** `Utilities/*` + `Workflows/*` + `MIDI/{SMFWriter,NoteSequenceParser,MIDIPortManager,MIDIEngine,MMCCommands,MCUTrace}` — FailureError String-backed enum (P1-1), deterministicFindings decompose, SetupDoctor requireBinary + tri-state PermissionChecker + INSTALL_DIR L1 allowlist, remediation-infra dedup (SetupDoctor↔SetupLifecycle shared type), SMFWriter denominator + bpm/numerator trap guards, BoundedProcessRunner UTF8 decode + escalation logging, shared AppleScriptSafety escape, DestructivePolicy JSON via shared layer, delete unconsumed MIDIEngine.inboundMessages, dead MMC tier. **Does NOT touch MCUFeedbackParser/MIDIFeedback/MCUProtocol (WS6).**
+- **WS6 [MCU pipeline — ATOMIC]** `Channels/MCUChannel.swift` + `Server/LogicProServer.swift` (MCU fan-out :1051) + `MIDI/{MCUFeedbackParser,MIDIFeedback,MCUProtocol}.swift` — replace BOTH per-event `Task{}` fan-outs with ONE ordered AsyncStream single-consumer (start/cancel lifecycle), bank-offset master-fader fix, conn atomic mutator, MIDIFeedback System-Common/RT status-byte handling, delete dead MCUProtocol handshake. Owns ALL of LogicProServer.swift so WS4 never touches it.
+- **WS7** `Scripts/*.sh` + `.github/workflows/*` + `Formula/*` — release.sh Formula-sha `grep -Fq` verify + no-op-commit guard, install-common validate_share_dir symmetry + M2 /private realpath blocklist, **M1 publish-mcp.yml env-indirection**, CI least-privilege + SHA-pin checkout, release.yml env over ref_name.
 
-**Phase-2 (tests, after Phase-1 merges — soures stable):**
-- WS-G `Tests/*` dead-assertion sweep (~172, safety-critical first, optionality-dependent transforms) + FakeAXRuntimeBuilder helper promotion + JSON-helper clone removal + BoundedProcessRunnerTests. Runs after Phase-1 so it transforms the FINAL assertions (incl. any tests Phase-1 touched).
+**Phase 2 — tests (after Phase-1 fully merged + green):**
+- **WS8** `Tests/*` — ~356 dead-assertion sweep (per-assertion LEDGER: file/orig-expr/static-type/nil-rule/replacement; safety-critical files get flip/fault-injection proof), FakeAXRuntimeBuilder helper promotion, JSON-helper clone removal, mutation-gate completeness test, BoundedProcessRunnerTests, StateModels Codable round-trip test.
 
-**Phase-3 (docs, WS-H, can overlap Phase-2):** all user-facing md — see Phase D.
+**Phase 3 — docs (overlaps Phase 2):** **WS9** all user-facing md (§ Goals G5).
 
 ### 3.3 Key Decisions
 | # | Decision | Rationale |
 |---|----------|-----------|
-| D1 | Split God objects by pure file-move (extensions), NOT internal function decomposition | Pure moves are L-risk + compiler-verified; internal decomposition (NG5) is logic re-arrangement, deferred |
-| D2 | Phase tests AFTER source (WS-G last) | Avoids two agents editing the same test file; WS-G sees the final assertion set |
-| D3 | Directory-disjoint workstream ownership | Parallel branches merge conflict-free; only CHANGELOG is centrally merged (Phase D) |
-| D4 | Dead-assertion transform is per-case (5 rules), NOT global sed | Optionality + nil-semantics differ; wrong transform (force-unwrap where nil is valid success) introduces crashes |
-| D5 | Exclude all wire-shape changes (NG1-3) | The product's contract + 1980 tests + strict-live pins freeze the surface; enterprise ≠ rewrite |
-| D6 | v3.8.0 minor | Substantial internal + test + docs, zero public-surface change, bundles #234 |
+| D1 | God-object split = pure file-move only | L-risk, compiler-verified; internals = NG5 |
+| D2 | Tests (WS8) after source merges | one agent per test file; WS8 sees final assertions (incl. Phase-1-touched) |
+| D3 | MCU fix = one atomic workstream (WS6) owning all of LogicProServer.swift | fix spans 3 dirs; ordering pipeline must be coherent; prevents WS4/WS6 file collision |
+| D4 | Dead-assertion: per-case transform + LEDGER + flip-test on safety-critical | boomer #3: wrong optional transform can pass while asserting wrong nil semantics |
+| D5 | Golden byte-snapshots pre/post for wire-sensitive refactors | boomer #4: tests can pass while strings/envelopes/routes drift; also = the broad behavior-preservation E2E the user asked for |
+| D6 | Exclude NG9-12 (cooperative-pool, CGEvent-async, P2-3, deadline-dedup) | MEDIUM-risk-wide or cross-workstream or load-bearing; enterprise ≠ risky rewrite |
+| D7 | v3.8.0 minor | internal + test + docs + security, zero public surface change |
 
 ## 4. Edge Cases & Risk
 | # | Scenario | Mitigation |
 |---|----------|------------|
-| E1 | God-object split breaks a test-pinned func by moving it | Funcs resolve by type not file; 29 test-pinned names verified file-agnostic; full suite after each split |
-| E2 | Dead-assertion transform turns a silently-passing test RED (real latent bug surfaces) | That IS the goal — investigate each newly-red test; do not paper over |
-| E3 | MCU race fix changes feedback timing → parser tests flake | Single-consumer AsyncStream preserves ordering; run MCUFeedbackParserTests + MCU echo tests repeatedly |
-| E4 | Parallel branch merge conflict | Directory-disjoint ownership (D3); integrate sequentially with full-suite gate between merges |
-| E5 | SMFWriter denominator fix breaks a test pinning the wrong value | Reviewer confirmed sole caller hardcodes 4/4; grep for tests asserting bar-offset before changing |
-| E6 | private→internal promotion leaks encapsulation | Only ~21 promotions, all handler funcs (not state); stored props stay private in core |
+| E1 | Split moves a test-pinned func | 39 pinned names resolve by type not file; full suite per split |
+| E2 | Dead-assertion transform turns a test RED (latent bug surfaces) | GOAL — investigate each; never paper over |
+| E3 | Wrong optional transform passes but asserts wrong nil-semantics | D4 ledger + flip/fault-injection on safety-critical files |
+| E4 | Wire drift passes existing tests | D5 golden snapshots diffed pre/post |
+| E5 | MCU stream fix leaks task / drops echo / breaks lifecycle | tests: burst FIFO order, start-stop-start, post-stop ignored, no leak; `.unbounded` buffer |
+| E6 | Parallel branch merge conflict | file-atomic ownership (§3.2); integrate sequentially, full-suite gate between |
+| E7 | SMFWriter denominator fix breaks a test pinning wrong value | grep tests for bar-offset assertions first; caller hardcodes 4/4 |
+| E8 | CI workflow fix (M1) can't be unit-tested | actionlint + a dry `workflow_dispatch` on the branch; env-indirection is a known-safe pattern |
 
-## 5. Testing Strategy
-- Every ticket: `swift test --no-parallel` green before commit (CI-authoritative).
-- WS-G success = suite still green AND newly-live assertions verified meaningful (spot-check the safety-critical ones actually FAIL when the guarded behavior is broken — flip-test a sample).
-- New tests: mutation-gate completeness (per-tool: every accepted command is gated or on read-only allowlist), BoundedProcessRunnerTests (SIGTERM→SIGKILL, >64KB no-deadlock, timeout, normal).
-- Final: full suite + strict live E2E parity (369/370 baseline) + release validate-install.
+## 5. Testing Strategy (over-broad by design — user directive)
+1. **Per-ticket**: `swift test --no-parallel` green before commit.
+2. **Golden byte-snapshots (behavior-preservation harness)**: BEFORE Phase 1, capture from the v3.7.4 binary — every tool descriptor JSON, unknown-command + invalid-param error envelopes, a representative HC State A/B/C envelope per surface, the full ChannelRouter route table, and every resource URI + all 11 templates' output. AFTER each wire-sensitive workstream, re-capture and `diff` = 0. Committed as the refactor's proof.
+3. **Dead-assertion integrity**: ledger for all ~356; for every safety-critical file (Issue136GotoDriftHonest, PluginInsertVerified, AXPluginInsertSlotsDrift, DispatcherTests success-guards), temporarily break the guarded behavior and confirm the NOW-live assertion FAILS (flip-test), then revert.
+4. **New coverage**: mutation-gate completeness (per-tool: every accepted command gated or on read-only allowlist); BoundedProcessRunnerTests (SIGTERM-ignoring child→SIGKILL, >64KB no-deadlock, timeout→.timedOut, normal→.completed); StateModels Codable round-trip; SIGPIPE regression (broken-pipe write survives).
+5. **Live E2E (over-broad)**: capture a **full-surface live baseline** on the v3.7.4 binary (drive all 10 tools' safe/read ops + all 18 resources + representative templates against real Logic 12.3, snapshot responses), then re-run against the refactored binary and diff (behavior-preserving proof on the real app). Plus strict `live-e2e-test.sh` (369/370 baseline) after integration, and the #234 verified-plugin live probes.
+6. **Release gate**: full suite + strict live + `release.yml` validate-install macos-14/15.
 
 ## 6. Rollout
-v3.8.0 via the standard choreography: prepare PR (version bump + CHANGELOG) → `release-stable.sh v3.8.0` (tag) → `release.yml` validate-install macos-14/15 → evidence-sync PR (README/docs/Formula sha256 = published tarball). Single-revert per workstream if needed.
+Sequential integration of WS1-7 into the branch (full-suite gate between each merge) → WS8 (tests) → WS9 (docs) → v3.8.0 choreography: prepare PR (version bump + CHANGELOG) → `release-stable.sh v3.8.0` (tag) → `release.yml` validate-install → evidence-sync PR (README/docs/Formula sha256 = published tarball). Per-workstream single-revert if a merge regresses. **M3 notarization**: ship via the existing notarized path OR document out-of-band-pin as the sole enterprise-grade install (Isaac decision at release).
 
 ## 7. Open Questions
-- [ ] OQ1: Do WS-A and WS-C (both large God-object splits) merge cleanly given AccessibilityChannel calls AXLogicProElements? (Signatures unchanged → yes; confirm at integration.)
-- [ ] OQ2: Exact dead-assertion count after Phase-1 (Phase-1 may add/touch assertions). WS-G recounts live.
-- [ ] OQ3: Should the ~30 positional-magic-arg call sites (toolStep bare Bool/String?) get labels this sweep or defer? (Low value, wide; lean defer unless cheap.)
+- OQ1: WS1 (AccessibilityChannel split) + WS3 (AXLogicProElements split) both large — confirm clean at integration (signatures unchanged → expected yes).
+- OQ2: Golden-snapshot harness — build as a committed test target or a throwaway script? (Lean: committed `ContractSnapshotTests` for durable regression value.)
+- OQ3: M3 notarization is an Isaac/release decision (authenticity vs current ADHOC+out-of-band-pin). Surface at Phase E.
+
+## Appendix — must-fix-before-release (ranked, from audits)
+P0 SIGPIPE → P1 MCU 2-site race → P1 publish-mcp injection (M1) → P1 dead safety-guard assertions → P1 extractTrackState honesty → P1 PermissionChecker tri-state → M2 /private install bypass → release.sh Formula verify → the rest.
