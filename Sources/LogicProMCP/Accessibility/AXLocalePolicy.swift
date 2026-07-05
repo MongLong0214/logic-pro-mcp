@@ -305,6 +305,47 @@ enum AXLocalePolicy {
         rationale: "Locates the per-track record-enable AXCheckBox; verbatim description match; read-only locator."
     )
 
+    // --- Track-header automation-mode read (WS3 AC2, value-only honesty fix) ---
+    //
+    // `logic://tracks` previously fabricated `automationMode = .off`. These label
+    // sets classify the mode carried on the track-header automation control's
+    // description/value. `automationModeContext` GATES the read so unrelated
+    // "read"/"write" AX text elsewhere in the header cannot be misread as an
+    // automation mode. Read-only classifiers — none gate a State-A success; on
+    // no match the caller RETAINS the pre-fix `.off` default. English canonical
+    // is the only live-confirmed locale (OQ-1 per #234); Korean variants are
+    // best-effort and, when absent, degrade safely to the unchanged `.off`.
+    static let automationModeContext = LabelSet(
+        canonical: "automation",
+        variants: ["오토메이션"],
+        rationale: "Gates the track-header automation-mode read to the automation control; read-only classifier."
+    )
+    static let automationModeWrite = LabelSet(
+        canonical: "write",
+        variants: ["쓰기"],
+        rationale: "Classifies the track-header automation mode as Write; read-only classifier."
+    )
+    static let automationModeTrim = LabelSet(
+        canonical: "trim",
+        variants: ["트림"],
+        rationale: "Classifies the track-header automation mode as Trim; read-only classifier."
+    )
+    static let automationModeTouch = LabelSet(
+        canonical: "touch",
+        variants: ["터치"],
+        rationale: "Classifies the track-header automation mode as Touch; read-only classifier."
+    )
+    static let automationModeLatch = LabelSet(
+        canonical: "latch",
+        variants: ["래치"],
+        rationale: "Classifies the track-header automation mode as Latch; read-only classifier."
+    )
+    static let automationModeRead = LabelSet(
+        canonical: "read",
+        variants: ["읽기"],
+        rationale: "Classifies the track-header automation mode as Read; read-only classifier."
+    )
+
     // --- Plugin Setting popup locator (read-only, `.contains`) ---
 
     static let settingPopupValue = LabelSet(

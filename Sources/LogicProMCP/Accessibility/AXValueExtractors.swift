@@ -254,6 +254,17 @@ enum AXValueExtractors {
 
 
     /// Read a track header and extract its basic state.
+    ///
+    /// WS3 AC2 (value-only honesty fix): `volume`/`pan`/`automationMode` now
+    /// report the REAL track-header values instead of the fabricated
+    /// `0.0`/`0.0`/`.off`. The `TrackState` type is UNCHANGED — the fields stay
+    /// non-optional `Double`/`Double`/`AutomationMode` with no sentinel, no
+    /// nullable, and no new enum case. On a rare AX-read failure each reader
+    /// returns the SAME default the resource fabricated before this fix, so no
+    /// new unreadable representation is introduced (the resource's existing
+    /// `source`/`ax_occluded` fields already flag degraded reads). `volume`/`pan`
+    /// use the identical header-fader readback the #107 write path uses, so
+    /// `logic://tracks` and the mixer speak the same contract units.
     static func extractTrackState(
         from header: AXUIElement,
         index: Int,
@@ -274,10 +285,70 @@ enum AXValueExtractors {
             isSoloed: soloed,
             isArmed: armed,
             isSelected: selected,
-            volume: 0.0,
-            pan: 0.0,
+            volume: extractTrackHeaderVolume(from: header, runtime: runtime),
+            pan: extractTrackHeaderPan(from: header, runtime: runtime),
+            automationMode: extractTrackAutomationMode(from: header, runtime: runtime),
             color: extractTrackColor(from: header, runtime: runtime)
         )
+    }
+
+    /// Real track-header volume as the public mixer contract (WS3 AC2). Reads
+    /// the SAME per-track header fader the #107 write path drives, via
+    /// `extractLogicMixerFaderValue`. Returns `0.0` (the pre-fix fabricated
+    /// default) when the fader or its value is unreadable.
+    private static func extractTrackHeaderVolume(
+        from header: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Double {
+        guard let fader = AXLogicProElements.findVolumeFader(in: header, runtime: runtime),
+              let contract = extractLogicMixerFaderValue(fader, runtime: runtime) else {
+            return 0.0
+        }
+        return contract
+    }
+
+    /// Real track-header pan as the public -1.0...1.0 contract (WS3 AC2). Uses
+    /// the same `headerPanContract` mapping as the #107 write-path readback.
+    /// Returns `0.0` (center — the pre-fix fabricated default) when the pan
+    /// slider, its range, or its value is unreadable.
+    private static func extractTrackHeaderPan(
+        from header: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Double {
+        guard let slider = AXLogicProElements.findPanControlInHeader(header, runtime: runtime),
+              let range = extractSliderRange(slider, runtime: runtime),
+              range.max > range.min,
+              let contract = headerPanContract(slider, range: range, runtime: runtime) else {
+            return 0.0
+        }
+        return contract
+    }
+
+    /// Real track-header automation mode (WS3 AC2). Scans the header for the
+    /// automation control — gated by `automationModeContext` so unrelated
+    /// "read"/"write" AX text cannot be misread — and maps its mode token to
+    /// `AutomationMode`. Returns `.off` (the pre-fix fabricated default) when no
+    /// automation control is found or its mode is unreadable; NO `.unknown` case
+    /// is introduced.
+    private static func extractTrackAutomationMode(
+        from header: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> AutomationMode {
+        let elements = [header] + AXHelpers.findAllDescendants(of: header, maxDepth: 4, runtime: runtime)
+        for element in elements {
+            let combined = [
+                AXHelpers.getDescription(element, runtime: runtime),
+                AXHelpers.getTitle(element, runtime: runtime),
+                extractTextValue(element, runtime: runtime),
+            ].compactMap { $0?.lowercased() }.joined(separator: " ")
+            guard AXLocalePolicy.automationModeContext.containsAny(in: combined) else { continue }
+            if AXLocalePolicy.automationModeWrite.containsAny(in: combined) { return .write }
+            if AXLocalePolicy.automationModeTrim.containsAny(in: combined) { return .trim }
+            if AXLocalePolicy.automationModeTouch.containsAny(in: combined) { return .touch }
+            if AXLocalePolicy.automationModeLatch.containsAny(in: combined) { return .latch }
+            if AXLocalePolicy.automationModeRead.containsAny(in: combined) { return .read }
+        }
+        return .off
     }
 
     /// Read transport bar elements and build a TransportState.
