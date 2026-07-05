@@ -324,9 +324,9 @@ enum LibraryDiskScanner {
             children: topChildren
         )
 
-        let counts = countNodes(rootNode)
+        let counts = rootNode.countNodes()
         let categories = topChildren.map(\.name)
-        let presetsByCategory = flattenPresetsByCategory(rootNode)
+        let presetsByCategory = rootNode.flattenPresetsByCategory()
         let durationMs = Int(Date().timeIntervalSince(start) * 1000)
 
         return LibraryRoot(
@@ -575,49 +575,4 @@ enum LibraryDiskScanner {
         return isDir.boolValue
     }
 
-    /// Tally total / leaves / folders across the tree, matching the
-    /// semantics of `LibraryAccessor.countNodes` used by the AX scan.
-    private static func countNodes(
-        _ node: LibraryNode
-    ) -> (total: Int, leaves: Int, folders: Int) {
-        var t = 1
-        var l = node.kind == .leaf ? 1 : 0
-        var f = node.kind == .folder ? 1 : 0
-        for c in node.children {
-            let r = countNodes(c)
-            t += r.total
-            l += r.leaves
-            f += r.folders
-        }
-        return (t, l, f)
-    }
-
-    /// Flatten every leaf descendant under each top-level category into
-    /// `presetsByCategory`. Mirrors `LibraryAccessor.flattenPresetsByCategory`
-    /// so the disk-scan output slots into the same schema contract.
-    private static func flattenPresetsByCategory(
-        _ root: LibraryNode
-    ) -> [String: [String]] {
-        var out: [String: [String]] = [:]
-        for topCat in root.children {
-            guard topCat.kind != .leaf else {
-                out[topCat.name] = []
-                continue
-            }
-            var leaves: [String] = []
-            collectLeaves(topCat, into: &leaves)
-            out[topCat.name] = leaves
-        }
-        return out
-    }
-
-    private static func collectLeaves(_ node: LibraryNode, into acc: inout [String]) {
-        if node.kind == .leaf {
-            acc.append(node.name)
-            return
-        }
-        for child in node.children {
-            collectLeaves(child, into: &acc)
-        }
-    }
 }

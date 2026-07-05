@@ -128,10 +128,10 @@ enum AXLogicProElements {
     /// Cancel-style button (which never saves or discards), then Escape; only
     /// names a different button when no cancel/escape path is exposed.
     private static func blockingDialogRecoveryAction(title: String, buttons: [String]) -> String {
-        let cancelMarkers = ["cancel", "취소"]
-        if let cancel = buttons.first(where: { name in
-            cancelMarkers.contains { name.lowercased().contains($0) }
-        }) {
+        // Cancel-marker tokens centralized in AXLocalePolicy.cancelButton
+        // (round-1 #8); `containsAny` is case-insensitive + diacritic-sensitive,
+        // matching the original lowercased substring scan.
+        if let cancel = buttons.first(where: { AXLocalePolicy.cancelButton.containsAny(in: $0) }) {
             return "Press \"\(cancel)\" to dismiss this dialog, then retry."
         }
         if !title.isEmpty {
@@ -1507,28 +1507,9 @@ enum AXLogicProElements {
     /// Returns nil if no such window is open. Window enumeration uses the
     /// `kAXWindowsAttribute` array on the application root; test doubles
     /// that don't implement that attribute correctly fall through to nil.
-    /// Title-suffix patterns for the Logic Marker List window across the
-    /// localisations Apple ships. Match by suffix because the window title
-    /// is `"<project name> - <localized 'Marker List'>"`. Extending this
-    /// array is the safe path when a new locale surfaces; matching is
-    /// `O(suffixes × windows)` so keep the list focused on actual Logic
-    /// localisations.
-    static let markerListWindowSuffixes: [String] = [
-        "- 마커 목록",          // Korean
-        "- Marker List",         // English
-        "- マーカーリスト",      // Japanese
-        "- マーカー一覧",        // Japanese (alt — older Logic)
-        "- Liste des marqueurs", // French
-        "- Markerliste",         // German
-        "- Lista de marcadores", // Spanish
-        "- Elenco marker",       // Italian
-        "- 标记列表",            // Chinese (Simplified)
-        "- 標記列表",            // Chinese (Traditional)
-        "- Список меток",        // Russian
-        "- Lista de marcadores", // Portuguese (PT/BR same form)
-        "- Lijst met markers"    // Dutch
-    ]
-
+    /// Matches by suffix because the window title is
+    /// `"<project name> - <localized 'Marker List'>"`; the localized suffix
+    /// table lives in `AXLocalePolicy.markerListWindowSuffixes` (round-1 #7).
     static func findMarkerListWindow(runtime: Runtime = .production) -> AXUIElement? {
         guard let app = appRoot(runtime: runtime) else { return nil }
         let windows: [AXUIElement] = AXHelpers.getAttribute(
@@ -1538,7 +1519,7 @@ enum AXLogicProElements {
             guard let title = AXHelpers.getTitle(window, runtime: runtime.ax) else {
                 return false
             }
-            return markerListWindowSuffixes.contains { title.hasSuffix($0) }
+            return AXLocalePolicy.markerListWindowSuffixes.contains { title.hasSuffix($0) }
         }
     }
 
@@ -1590,34 +1571,16 @@ enum AXLogicProElements {
         return markers
     }
 
-    /// `AXCell`s in Logic's Marker List Table carry a placeholder
-    /// AXDescription that's always the localized word for "cell". Skip
-    /// these when extracting the meaningful child content. Extending this
-    /// set is the safe path when a new locale surfaces.
-    static let markerCellPlaceholders: Set<String> = [
-        "셀",       // Korean
-        "Cell",     // English
-        "セル",     // Japanese
-        "Cellule",  // French
-        "Zelle",    // German
-        "Celda",    // Spanish (also "Célula" in some locales)
-        "Cella",    // Italian
-        "单元格",   // Chinese (Simplified)
-        "儲存格",   // Chinese (Traditional)
-        "Ячейка",   // Russian
-        "Célula",   // Portuguese
-        "Cel"       // Dutch
-    ]
-
     /// First non-empty `AXDescription` in `cell`'s direct children, skipping
     /// the localized placeholder ("셀" / "Cell" / "セル" / etc.) that
-    /// `AXCell`s carry by default. Falls through to the cell's own
-    /// description / value if no child carries a meaningful one.
+    /// `AXCell`s carry by default (table in `AXLocalePolicy.markerCellPlaceholders`,
+    /// round-1 #7). Falls through to the cell's own description / value if no
+    /// child carries a meaningful one.
     private static func firstChildDescription(
         of cell: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> String? {
-        let placeholder = markerCellPlaceholders
+        let placeholder = AXLocalePolicy.markerCellPlaceholders
         for child in AXHelpers.getChildren(cell, runtime: runtime) {
             if let desc = AXHelpers.getDescription(child, runtime: runtime),
                !desc.isEmpty,

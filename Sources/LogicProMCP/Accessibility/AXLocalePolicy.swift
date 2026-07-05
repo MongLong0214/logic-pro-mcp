@@ -370,6 +370,60 @@ enum AXLocalePolicy {
         rationale: "Last-resort marker-ruler container classifier; read-only keyword scan."
     )
 
+    /// Title-suffix patterns for the Logic Marker List window across the
+    /// localisations Apple ships. Relocated from AXLogicProElements (round-1 #7)
+    /// so the localized token tables live in one audited place. The window title
+    /// is `"<project name> - <localized 'Marker List'>"`, so the caller matches
+    /// by `hasSuffix` (a diacritic-sensitive, case-sensitive scalar comparison —
+    /// NOT a LabelSet match mode). Extending this array is the safe path when a
+    /// new locale surfaces.
+    static let markerListWindowSuffixes: [String] = [
+        "- 마커 목록",          // Korean
+        "- Marker List",         // English
+        "- マーカーリスト",      // Japanese
+        "- マーカー一覧",        // Japanese (alt — older Logic)
+        "- Liste des marqueurs", // French
+        "- Markerliste",         // German
+        "- Lista de marcadores", // Spanish
+        "- Elenco marker",       // Italian
+        "- 标记列表",            // Chinese (Simplified)
+        "- 標記列表",            // Chinese (Traditional)
+        "- Список меток",        // Russian
+        "- Lista de marcadores", // Portuguese (PT/BR same form)
+        "- Lijst met markers"    // Dutch
+    ]
+
+    /// Localized placeholder AXDescription that Logic's Marker List `AXCell`s
+    /// carry by default (the localized word for "cell"). Relocated from
+    /// AXLogicProElements (round-1 #7). The caller skips these via `Set.contains`
+    /// (a diacritic-sensitive, case-sensitive exact match — NOT a LabelSet match
+    /// mode) when extracting meaningful cell content.
+    static let markerCellPlaceholders: Set<String> = [
+        "셀",       // Korean
+        "Cell",     // English
+        "セル",     // Japanese
+        "Cellule",  // French
+        "Zelle",    // German
+        "Celda",    // Spanish (also "Célula" in some locales)
+        "Cella",    // Italian
+        "单元格",   // Chinese (Simplified)
+        "儲存格",   // Chinese (Traditional)
+        "Ячейка",   // Russian
+        "Célula",   // Portuguese
+        "Cel"       // Dutch
+    ]
+
+    /// Live Library panel/browser identifier (LibraryAccessor). Preserves the
+    /// original `desc == "라이브러리" || desc.lowercased() == "library"` locator
+    /// (round-1 #7): a whole-string, case-insensitive, DIACRITIC-SENSITIVE match
+    /// — use with `.exactStrict`. Read-only locator; the browser is otherwise
+    /// selected structurally, and a wrong match only widens/narrows a fallback.
+    static let libraryPanelLabel = LabelSet(
+        canonical: "library",
+        variants: ["라이브러리"],
+        rationale: "Identifies the Library panel/browser by whole-string description; read-only locator (structural fallback exists)."
+    )
+
     /// Control-bar / transport container metadata tokens (id/title/desc scan).
     static let transportContainerMetadata = LabelSet(
         canonical: "transport",
