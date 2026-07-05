@@ -70,3 +70,11 @@
 - WS8b 3 new files live-only; MCUProtocol deletion complete (0 live refs, 2 documentary comments). 2070 green re-confirmed.
 - Cosmetic-only (NOT a defect, deferred): CleanupExecutionTests redundant extra `!` on a #require result — compiles clean, live, intent preserved.
 - **WS8 FULLY VERIFIED. Phase C (source refactor) + Phase 2 (test integrity) COMPLETE.**
+
+## RELEASE GATE — boomer NO-GO (P1 MCU restart regression, 2026-07-05)
+- boomer (narrowed-scope codex, after 1 context-death) found a REAL WS6-introduced regression: production MCU restart drops all feedback.
+- Root cause CONFIRMED vs main: main's ProductionMCUTransport stored `private var onReceive` + CoreMIDI callback used `[weak self] → self?.onReceive?(event)` (INDIRECT ref, so start() updating the property kept the reused port's callback pointing at the live sink = restart-safe). WS6 replaced this with the onReceive VALUE captured directly in the callback (`onReceive(event)`) + removed the stored property → on stop()/start(), createBidirectionalPort reuses the existing dest (ports[name] guard) WITHOUT re-registering the callback → old callback yields into the finished first AsyncStream continuation → silent drop.
+- Test gap: MockMCUTransport.start overwrites onReceive each call (MCUChannelTests:408), so it never exercises the production callback-reuse-on-restart path.
+- Severity: P1 NO-GO. MCU-control-surface users lose verified feedback after a restart.
+- FIX (keep WS6's FIFO synchronous delivery AND restore main's restart-safety): reintroduce a thread-safe current-sink the callback dereferences (or update/recreate the bidirectional destination when the callback changes), + a production-style restart test with a fake VirtualPortManaging that reuses the first installed callback.
+- SIGPIPE / extractTrackState value-only / FailureError rawValues / split pure-moves / M1-M2 security = all PASS (no other blocker).
