@@ -517,6 +517,54 @@ enum AXLocalePolicy {
         rationale: "Negative-case table excluding non-insert channel-strip buttons from empty-slot enumeration; read-only."
     )
 
+    /// Track-type classification tokens (read-only; `inferTrackType`). Centralized
+    /// per round-1 #6 — the 오디오/악기 tokens were previously inline. Scanned with
+    /// `.containsAny` over the already-lowercased header aggregate, which is
+    /// diacritic-sensitive and case-insensitive — behavior-identical to the inline
+    /// lowercased `String.contains` they replaced. The CALLER preserves the exact
+    /// precedence order (GM Device wins over audio per #131). None gate a
+    /// State-A success.
+    static let trackTypeGMDevice = LabelSet(
+        canonical: "gm device",
+        variants: [],
+        rationale: "Classifies a GM Device external-MIDI strip; MUST win over .audio (#131 silent-bounce guard); read-only."
+    )
+    static let trackTypeAudio = LabelSet(
+        canonical: "audio",
+        variants: ["오디오"],
+        rationale: "Classifies an audio track by header aggregate; read-only classifier."
+    )
+    static let trackTypeInstrument = LabelSet(
+        canonical: "instrument",
+        variants: ["software", "악기"],
+        rationale: "Classifies a software-instrument track; read-only classifier."
+    )
+    static let trackTypeDrummer = LabelSet(
+        canonical: "drummer",
+        variants: [],
+        rationale: "Classifies a drummer track; read-only classifier."
+    )
+    static let trackTypeExternalMIDI = LabelSet(
+        canonical: "external",
+        variants: ["midi"],
+        rationale: "Classifies an external-MIDI track; read-only classifier."
+    )
+    static let trackTypeAux = LabelSet(
+        canonical: "aux",
+        variants: [],
+        rationale: "Classifies an aux track; read-only classifier."
+    )
+    static let trackTypeBus = LabelSet(
+        canonical: "bus",
+        variants: [],
+        rationale: "Classifies a bus track; read-only classifier."
+    )
+    static let trackTypeMaster = LabelSet(
+        canonical: "master",
+        variants: ["stereo out"],
+        rationale: "Classifies the master / stereo-out track; read-only classifier."
+    )
+
     /// Track-header pan slider locator (header-level).
     static let headerPanHint = LabelSet(
         canonical: "pan",

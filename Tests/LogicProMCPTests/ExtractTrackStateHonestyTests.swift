@@ -142,3 +142,20 @@ import Testing
 
     #expect(track.automationMode == .off)
 }
+
+/// WS3 AC3 — the track-type LabelSet migration (round-1 #6, 오디오/악기 hoisted
+/// into AXLocalePolicy) must preserve DIACRITIC sensitivity: a plain "Audio"
+/// header classifies as `.audio`, but an accented-Latin "áudio" header must NOT
+/// (folding accents would widen matching in non-EN/KO locales, the #60 hazard).
+@Test func testExtractTrackStateTrackTypeClassificationIsDiacriticSensitive() {
+    let builder = FakeAXRuntimeBuilder()
+    let plain = builder.element(1)
+    let accented = builder.element(2)
+    builder.setAttribute(plain, kAXTitleAttribute as String, "Audio 1")
+    builder.setAttribute(accented, kAXTitleAttribute as String, "áudio 1")
+
+    let runtime = builder.makeAXRuntime()
+
+    #expect(AXValueExtractors.extractTrackState(from: plain, index: 0, runtime: runtime).type == .audio)
+    #expect(AXValueExtractors.extractTrackState(from: accented, index: 1, runtime: runtime).type == .unknown)
+}

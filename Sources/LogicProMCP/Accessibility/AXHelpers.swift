@@ -37,15 +37,7 @@ enum AXHelpers {
                 guard status == .success, let value else {
                     return []
                 }
-                let children = unsafeDowncast(value, to: CFArray.self)
-
-                var collected: [AXUIElement] = []
-                for i in 0..<CFArrayGetCount(children) {
-                    let ptr = CFArrayGetValueAtIndex(children, i)
-                    let child = unsafeBitCast(ptr, to: AXUIElement.self)
-                    collected.append(child)
-                }
-                return collected
+                return AXHelpers.decodeChildrenArray(value)
             },
             performAction: { element, action in
                 AXUIElementPerformAction(element, action as CFString) == .success
@@ -85,6 +77,24 @@ enum AXHelpers {
     /// Get the children of an AX element.
     static func getChildren(_ element: AXUIElement, runtime: Runtime = .production) -> [AXUIElement] {
         runtime.children(element)
+    }
+
+    /// Decode a raw `kAXChildrenAttribute` value into `[AXUIElement]`, guarding
+    /// the `CFArray` downcast (H-6 parity with getPosition/getSize). A malformed
+    /// or mocked children attribute that is NOT a CFArray would make
+    /// `unsafeDowncast` undefined behavior (process crash); this returns an empty
+    /// list instead. Extracted from the production `children` closure so the
+    /// guard is unit-testable without a live AX element.
+    static func decodeChildrenArray(_ value: AnyObject) -> [AXUIElement] {
+        guard CFGetTypeID(value) == CFArrayGetTypeID() else { return [] }
+        let children = unsafeDowncast(value, to: CFArray.self)
+        var collected: [AXUIElement] = []
+        for i in 0..<CFArrayGetCount(children) {
+            let ptr = CFArrayGetValueAtIndex(children, i)
+            let child = unsafeBitCast(ptr, to: AXUIElement.self)
+            collected.append(child)
+        }
+        return collected
     }
 
     /// Perform a named action on an AX element (e.g. kAXPressAction).

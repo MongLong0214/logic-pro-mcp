@@ -126,7 +126,10 @@ enum AXValueExtractors {
         guard let value = extractSliderValue(element, runtime: runtime),
               let range = extractSliderRange(element, runtime: runtime),
               range.max > range.min else {
-            return extractSliderValue(element, runtime: runtime)
+            // Fail-closed to the 0.0...1.0 contract (audit #17): without a usable
+            // range we cannot normalize, so clamp the raw reading into the
+            // contract band rather than leaking an out-of-contract raw value.
+            return extractSliderValue(element, runtime: runtime).map { min(max($0, 0.0), 1.0) }
         }
         let normalized = (value - range.min) / (range.max - range.min)
         return min(max(normalized, 0.0), 1.0)
@@ -147,7 +150,11 @@ enum AXValueExtractors {
         }
         guard let range = extractSliderRange(element, runtime: runtime),
               range.max > range.min else {
-            return value
+            // Fail-closed to the 0.0...1.0 mixer-volume contract (audit #17): an
+            // already-normalized slider passes through unchanged (0.8 -> 0.8),
+            // but a rangeless raw reading is clamped instead of leaking out of
+            // contract.
+            return min(max(value, 0.0), 1.0)
         }
         let position = min(max((value - range.min) / (range.max - range.min), 0.0), 1.0)
         guard isLogicMixerRawFaderRange(range) else {
@@ -527,14 +534,14 @@ enum AXValueExtractors {
         // so this check MUST precede the `.audio` branch below or GM Device
         // strips get misclassified as audio tracks and the silent-bounce risk
         // is hidden before bounce. They are external-MIDI lanes, not audio.
-        if combined.contains("gm device") { return .externalMIDI }
-        if combined.contains("audio") || combined.contains("오디오") { return .audio }
-        if combined.contains("instrument") || combined.contains("software") || combined.contains("악기") { return .softwareInstrument }
-        if combined.contains("drummer") { return .drummer }
-        if combined.contains("external") || combined.contains("midi") { return .externalMIDI }
-        if combined.contains("aux") { return .aux }
-        if combined.contains("bus") { return .bus }
-        if combined.contains("master") || combined.contains("stereo out") { return .master }
+        if AXLocalePolicy.trackTypeGMDevice.containsAny(in: combined) { return .externalMIDI }
+        if AXLocalePolicy.trackTypeAudio.containsAny(in: combined) { return .audio }
+        if AXLocalePolicy.trackTypeInstrument.containsAny(in: combined) { return .softwareInstrument }
+        if AXLocalePolicy.trackTypeDrummer.containsAny(in: combined) { return .drummer }
+        if AXLocalePolicy.trackTypeExternalMIDI.containsAny(in: combined) { return .externalMIDI }
+        if AXLocalePolicy.trackTypeAux.containsAny(in: combined) { return .aux }
+        if AXLocalePolicy.trackTypeBus.containsAny(in: combined) { return .bus }
+        if AXLocalePolicy.trackTypeMaster.containsAny(in: combined) { return .master }
         return .unknown
     }
 
