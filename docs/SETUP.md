@@ -5,7 +5,7 @@ Minimal install and Logic Pro integration guide for Logic Pro MCP v3.7.4.
 ## Requirements
 
 - macOS 14+
-- Logic Pro 12.0.1+
+- Logic Pro — **latest release prioritized (currently 12.3)**; works down to the 12.0.1 floor on a best-effort basis. Logic Pro MCP targets and validates against the newest Logic Pro version first, since Logic's Accessibility tree changes between releases.
 - Claude Code, Claude Desktop, Cursor, or another MCP client
 - Homebrew, or Xcode/Swift if building from source
 
