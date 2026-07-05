@@ -43,3 +43,6 @@
 - Remaining: ws3 (AXLogicProElements split + honesty + policy — in progress), ws4 (SIGPIPE done + splits/dedup in progress), ws7 (Scripts/CI — awaiting slot).
 - WS6 AC5 follow-up → WS8: full HandshakeResult/parseDeviceResponse deletion + MCUProtocolTests removal (WS6 deleted only unconstructable .timeout; existing test blocks the rest).
 - audit adversarial finding: MIDIEngine.inboundMessages + MMC strict tier are production-dead but TEST-covered (audit missed test refs) → RETAINED (ws5 verified).
+
+## Cross-owner exception (adjudicated 2026-07-05)
+- WS4 AC5 (create_marker pre-poll) unavoidably changes testNavigateDispatcherRoutesMarkerAndZoomCommands's expected axOps (7→8, adds nav.get_markers). Approved option (a): WS4 updates ONLY that one expected-op-list entry (intended consequence of an approved P1 fix; scenario unchanged; count-delta tests already cover it). Not a dead-assertion edit → WS8 later touches OTHER lines of DispatcherTests for the assertion sweep (different lines/purpose, sequential Phase-2, no collision).
