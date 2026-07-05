@@ -35,3 +35,11 @@
 | B-tickets | 1 | HAS_ISSUES (5) | ownership collisions; folded: StateCache→WS6, per-WS test files, ledger→WS8, permission-tristate G6-a, WS8→8a/b/c |
 | B-tickets | 2 | HAS_ISSUES (1) | WS9 permission-tristate SECURITY/TROUBLESHOOTING doc AC missing → added |
 | B-tickets | 3 | **CONVERGED** | boomer final sign-off: PRD + WS1-9 ready for implementation |
+
+## Phase C integration log
+- Base test count: 2014 (fix-branch base; ws1 pure-move confirmed).
+- golden-baseline REFRESHED from pristine base binary (stale 18:39 build predated #234 merge → logic_tracks desc); now 0-diff vs base.
+- Integrated (sequential, full-suite gate each): ws1 (2014✓) → ws2+ws6 batch (2024✓) → ws5 (2042✓, golden diff=0 FailureError rawValue-preserved). All merges conflict-0.
+- Remaining: ws3 (AXLogicProElements split + honesty + policy — in progress), ws4 (SIGPIPE done + splits/dedup in progress), ws7 (Scripts/CI — awaiting slot).
+- WS6 AC5 follow-up → WS8: full HandshakeResult/parseDeviceResponse deletion + MCUProtocolTests removal (WS6 deleted only unconstructable .timeout; existing test blocks the rest).
+- audit adversarial finding: MIDIEngine.inboundMessages + MMC strict tier are production-dead but TEST-covered (audit missed test refs) → RETAINED (ws5 verified).
