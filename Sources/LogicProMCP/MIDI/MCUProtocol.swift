@@ -282,38 +282,16 @@ struct MCUProtocol {
 
     // MARK: - Handshake
 
-    // v3.8.0 (WS6 / AC5, audit #29) — `HandshakeResult` + `parseDeviceResponse`
-    // are unused by production code (Logic doesn't reliably emit a discrete
-    // Device Response; MCUChannel treats any well-formed feedback as
-    // registration). They are retained ONLY because MCUProtocolTests pins
-    // their decode contract. The unconstructable `.timeout` case (never
-    // returned by `parseDeviceResponse`) has been removed.
-    enum HandshakeResult: Sendable, Equatable {
-        case success(firmwareVersion: [UInt8])  // Device responded with version info
-        case failure(reason: String)             // Response received but malformed
-        case noResponse                          // No response
-    }
+    // v3.8.0 (WS6 follow-up / AC5, audit #29) — `HandshakeResult` +
+    // `parseDeviceResponse` were unused by production (Logic doesn't reliably
+    // emit a discrete Device Response; MCUChannel treats ANY well-formed feedback
+    // on the dedicated port as registration) and were retained only to pin a
+    // decode contract for a code path that never runs. Both are now deleted; the
+    // Device Query we still send on start is the only handshake artifact left.
 
     /// Encode MCU Device Query: F0 00 00 66 14 00 F7
     static func encodeDeviceQuery() -> [UInt8] {
         sysExHeader + [0x00, 0xF7]
-    }
-
-    /// Parse Device Response SysEx → HandshakeResult.
-    static func parseDeviceResponse(_ bytes: [UInt8]) -> HandshakeResult {
-        guard !bytes.isEmpty else { return .noResponse }
-        guard bytes.count >= 7,
-              bytes.starts(with: sysExHeader),
-              bytes.last == 0xF7
-        else { return .failure(reason: "Malformed SysEx: expected MCU header + F7") }
-
-        guard bytes[5] == 0x01 else {
-            return .failure(reason: "Unexpected sub-ID: 0x\(String(format: "%02X", bytes[5]))")
-        }
-
-        // Extract firmware version bytes (between sub-ID and F7)
-        let firmware = Array(bytes[6..<(bytes.count - 1)])
-        return .success(firmwareVersion: firmware)
     }
 
     // MARK: - LCD SysEx Decode
