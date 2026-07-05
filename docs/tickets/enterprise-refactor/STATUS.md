@@ -4,7 +4,7 @@
 **Findings**: REVIEW-FINDINGS.md (round 1, 5 reviewers) + AUDIT-ROUND2.md (round 2, security/concurrency/completeness)
 **Size**: XL | **Baseline**: main 7bb8bf3, v3.7.4, 1980 tests green, 0 open issues
 **Branch**: chore/enterprise-review-refactor-v3.8.0 (worktree logic-pro-mcp-refactor)
-**Current Phase**: B (tickets — boomer ticket-review gate)
+**Current Phase**: C (implementation — PRD+tickets CONVERGED, boomer signed off)
 **Rule**: NO implementation until PRD + tickets boomer(codex gpt-5.5 xhigh)-converged (Isaac). No main/default merge or direct push (Isaac) — PR only.
 
 ## Workstreams / Tickets (file-atomic, disjoint)
@@ -33,4 +33,5 @@
 | B-PRD | 3 | HAS_ISSUES (1) | sentinel = wire change → v0.4 value-only |
 | B-PRD | 4 | **CONVERGED** | value-only confirmed; ready for tickets |
 | B-tickets | 1 | HAS_ISSUES (5) | ownership collisions; folded: StateCache→WS6, per-WS test files, ledger→WS8, permission-tristate G6-a, WS8→8a/b/c |
-| B-tickets | 2 | (pending) | boomer re-review |
+| B-tickets | 2 | HAS_ISSUES (1) | WS9 permission-tristate SECURITY/TROUBLESHOOTING doc AC missing → added |
+| B-tickets | 3 | **CONVERGED** | boomer final sign-off: PRD + WS1-9 ready for implementation |
