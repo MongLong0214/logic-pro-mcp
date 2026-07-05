@@ -140,7 +140,7 @@ private func makeLibraryPanelFixture() -> (
     #expect(inventory?.currentCategory == "Bass")
     #expect(inventory?.currentPreset == "Sub")
     #expect(LibraryAccessor.currentPresets(runtime: fixture.runtime) == ["Sub", "Funky"])
-    #expect(LibraryAccessor.isLibraryPanelOpen(runtime: fixture.runtime) == true)
+    #expect(LibraryAccessor.isLibraryPanelOpen(runtime: fixture.runtime))
 }
 
 @Test func libraryAccessorEnumerateReadsRightmostSelectedPresetForDeepColumns() {
@@ -229,19 +229,19 @@ private func makeLibraryPanelFixture() -> (
         named: "Bass",
         runtime: fixture.runtime,
         library: fixture.library
-    ) == true)
+    ))
     #expect(LibraryAccessor.selectPreset(
         named: "Sub",
         runtime: fixture.runtime,
         library: fixture.library
-    ) == true)
+    ))
     #expect(LibraryAccessor.setInstrument(
         category: "Bass",
         preset: "Sub",
         settleDelay: 0,
         runtime: fixture.runtime,
         library: fixture.library
-    ) == true)
+    ))
 
     #expect(fixture.builder.setCalls.contains { $0.attribute == kAXSelectedChildrenAttribute as String })
     #expect(fixture.builder.actionCalls.contains { $0.action == kAXPressAction as String })
@@ -256,7 +256,7 @@ private func makeLibraryPanelFixture() -> (
         named: "Padded Sub",
         runtime: fixture.runtime,
         library: fixture.library
-    ) == true)
+    ))
 }
 
 @Test func libraryAccessorCategoryUsesNativeClickAfterAXSelection() {
@@ -274,7 +274,7 @@ private func makeLibraryPanelFixture() -> (
         named: "Bass",
         runtime: fixture.runtime,
         library: library
-    ) == true)
+    ))
     #expect(clicks.points().count == 1)
 }
 
@@ -291,7 +291,7 @@ private func makeLibraryPanelFixture() -> (
         named: "Bass",
         runtime: fixture.runtime,
         library: fixture.library
-    ) == true)
+    ))
     #expect(
         (fixture.builder.attributeValue(
             fixture.horizontalScrollBar,
@@ -313,7 +313,7 @@ private func makeLibraryPanelFixture() -> (
         named: "Bass",
         runtime: fixture.runtime,
         library: fixture.library
-    ) == true)
+    ))
     #expect(
         (fixture.builder.attributeValue(
             siblingScrollBar,
@@ -344,7 +344,7 @@ private func makeLibraryPanelFixture() -> (
         named: "Sub",
         runtime: runtime,
         library: library
-    ) == true)
+    ))
     #expect(doubleClicks.points().count == 1)
 }
 
@@ -363,7 +363,7 @@ private func makeLibraryPanelFixture() -> (
         named: "Sub",
         runtime: fixture.runtime,
         library: library
-    ) == true)
+    ))
     #expect(doubleClicks.points().count == 1)
 }
 
@@ -385,11 +385,11 @@ private func makeLibraryPanelFixture() -> (
         }
     )
 
-    #expect(LibraryAccessor.selectPreset(
+    #expect(!(LibraryAccessor.selectPreset(
         named: "Bass",
         runtime: fixture.runtime,
         library: library
-    ) == false)
+    )))
     #expect(clicks.points().isEmpty)
     #expect(doubleClicks.points().isEmpty)
 }
@@ -409,12 +409,12 @@ private func makeLibraryPanelFixture() -> (
         }
     )
 
-    #expect(LibraryAccessor.selectPreset(
+    #expect(!(LibraryAccessor.selectPreset(
         named: "Bass",
         commit: false,
         runtime: fixture.runtime,
         library: library
-    ) == false)
+    )))
     #expect(clicks.points().isEmpty)
     #expect(doubleClicks.points().isEmpty)
 }
@@ -469,7 +469,7 @@ private func makeLibraryPanelFixture() -> (
         named: "Festival Drop",
         runtime: runtime,
         library: library
-    ) == true)
+    ))
     #expect(events.events().contains("vertical-scroll"))
     #expect(doubleClicks.points().count == 1)
 }
@@ -490,7 +490,7 @@ private func makeLibraryPanelFixture() -> (
         commit: false,
         runtime: fixture.runtime,
         library: library
-    ) == true)
+    ))
     #expect(doubleClicks.points().isEmpty)
 }
 
@@ -513,7 +513,7 @@ private func makeLibraryPanelFixture() -> (
         commit: false,
         runtime: fixture.runtime,
         library: library
-    ) == true)
+    ))
     #expect(clicks.points().count == 1)
     #expect(doubleClicks.points().isEmpty)
 }
@@ -548,7 +548,7 @@ private func makeLibraryPanelFixture() -> (
         commit: false,
         runtime: runtime,
         library: library
-    ) == true)
+    ))
     #expect(clicks.points() == [CGPoint(x: 300, y: 110)])
 }
 
@@ -584,6 +584,6 @@ private func makeLibraryPanelFixture() -> (
         commit: false,
         runtime: runtime,
         library: library
-    ) == true)
+    ))
     #expect(events.events().first == "click")
 }

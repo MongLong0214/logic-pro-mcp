@@ -52,7 +52,8 @@ struct Issue108Tests {
         let result = await MIDIDispatcher.handle(
             command: "mmc_locate", params: ["bar": .int(5)], router: router, cache: StateCache()
         )
-        #expect(result.isError != true)
+        let resultIsError = result.isError ?? false
+        #expect(!resultIsError)
         let o = try #require(obj(result))
         #expect(try #require(o["verified"] as? Bool))
         #expect(o["verification_source"] as? String == "transport_state")
@@ -70,7 +71,8 @@ struct Issue108Tests {
         // Fail-closed mismatch is a State B envelope, so `verified` is present
         // and false (not absent) — require + negate is unambiguously effective.
         #expect(!(try #require(o["verified"] as? Bool)))
-        #expect(result.isError == true)
+        let resultIsError = result.isError ?? false
+        #expect(resultIsError)
     }
 
     @Test("mmc_locate rejects missing bar/time")
@@ -78,7 +80,8 @@ struct Issue108Tests {
         let result = await MIDIDispatcher.handle(
             command: "mmc_locate", params: [:], router: ChannelRouter(), cache: StateCache()
         )
-        #expect(result.isError == true)
+        let resultIsError = result.isError ?? false
+        #expect(resultIsError)
         #expect(text(result).contains("invalid_params") || text(result).contains("requires explicit"))
     }
 

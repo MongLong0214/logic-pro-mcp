@@ -338,7 +338,7 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
     // restart-safe (see testMIDIEngineRestartDeliversInbound). Only deinit
     // terminates the stream. Asserting via lifecycle state instead of a
     // would-block iterator read.
-    #expect(await engine.isActive == false)
+    #expect(!(await engine.isActive))
 }
 
 // T-H1 (P1-6) — start → stop → start must restore the inbound feedback path.

@@ -102,6 +102,6 @@ import Testing
         runtime: runtime
     )
     let actionResult = AXHelpers.performAction(detachedApp, kAXPressAction as String, runtime: runtime)
-    #expect(setResult == false)
-    #expect(actionResult == false)
+    #expect(!(setResult))
+    #expect(!(actionResult))
 }

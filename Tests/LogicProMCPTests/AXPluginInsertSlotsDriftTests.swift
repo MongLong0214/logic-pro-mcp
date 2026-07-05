@@ -81,8 +81,8 @@ private func addFramedButton(
     #expect(slots[1].index == 1, "physical index 1 must be preserved, not renumbered")
     #expect(slots[1].readStatus == .occupiedUnreadable)
     #expect(slots[1].name == nil)
-    #expect(slots[1].occupied == true)
-    #expect(slots[1].isEmpty == false, "AC21: occupied-unreadable is NOT write-safe")
+    #expect(slots[1].occupied)
+    #expect(!(slots[1].isEmpty), "AC21: occupied-unreadable is NOT write-safe")
 
     #expect(slots[2].index == 2, "the slot after an unreadable one keeps its physical index")
     #expect(slots[2].readStatus == .occupiedReadable)
@@ -100,8 +100,8 @@ private func addFramedButton(
     let slots = AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: builder.makeAXRuntime())
     #expect(slots.count == 1)
     #expect(slots[0].readStatus == .empty)
-    #expect(slots[0].isEmpty == true)
-    #expect(slots[0].occupied == false)
+    #expect(slots[0].isEmpty)
+    #expect(!(slots[0].occupied))
     #expect(slots[0].name == nil)
 }
 
@@ -133,7 +133,7 @@ private func addFramedButton(
     let slots = AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: builder.makeAXRuntime())
     #expect(slots.map(\.readStatus) == [.occupiedReadable, .empty, .occupiedUnreadable])
     #expect(slots.map(\.index) == [0, 1, 2])
-    #expect(slots[2].isEmpty == false, "an unreadable slot is never treated as the empty slot")
+    #expect(!(slots[2].isEmpty), "an unreadable slot is never treated as the empty slot")
 }
 
 @Test func testLanguageNeutralEmptySlotClusterIsRecognizedByGeometry() {

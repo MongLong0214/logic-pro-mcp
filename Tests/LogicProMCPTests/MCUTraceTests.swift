@@ -23,16 +23,16 @@ import Testing
 
     // AC-1.1/1.3 — gate off unless MCU_TRACE == "1".
     @Test func testGateOffByDefault() {
-        #expect(MCUTrace.shouldTrace([:]) == false)
+        #expect(!(MCUTrace.shouldTrace([:])))
     }
 
     @Test func testGateOffWhenZero() {
-        #expect(MCUTrace.shouldTrace(["MCU_TRACE": "0"]) == false)
-        #expect(MCUTrace.shouldTrace(["MCU_TRACE": "true"]) == false)
+        #expect(!(MCUTrace.shouldTrace(["MCU_TRACE": "0"])))
+        #expect(!(MCUTrace.shouldTrace(["MCU_TRACE": "true"])))
     }
 
     @Test func testGateOnWhenOne() {
-        #expect(MCUTrace.shouldTrace(["MCU_TRACE": "1"]) == true)
+        #expect(MCUTrace.shouldTrace(["MCU_TRACE": "1"]))
     }
 
     // AC-1.2 — when enabled, a line (with newline) is written to the provided

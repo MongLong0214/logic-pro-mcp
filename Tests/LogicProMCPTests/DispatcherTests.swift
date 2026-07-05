@@ -1114,7 +1114,8 @@ private func liveTransportJSON(
         cache: cache
     )
 
-    #expect(result.isError != true)
+    let resultIsError = result.isError ?? false
+    #expect(!resultIsError)
     if case .text(let text, _, _) = result.content.first {
         #expect(text.contains("\"confirmation_required\""))
         #expect(text.contains("\"command\":\"insert_plugin\""))
@@ -1175,7 +1176,8 @@ private func liveTransportJSON(
         cache: cache
     )
 
-    #expect(insertResult.isError != true)
+    let insertResultIsError = insertResult.isError ?? false
+    #expect(!insertResultIsError)
     let axOps = await ax.executedOps
     let mcuOps = await mcu.executedOps
     expectExecutedOps(axOps, equals: [
@@ -1898,7 +1900,7 @@ private actor TrackInsertingMockChannel: Channel {
     let ops = await ax.executedOps
     let importOps = ops.filter { $0.0 == "midi.import_file" }
     #expect(importOps.count == 1, "expected 1 midi.import_file call, got \(importOps.count)")
-    #expect(importOps[0].1["path"]?.hasPrefix(SMFWriter.temporaryDirectoryPrefix()) == true)
+    #expect((importOps[0].1["path"]?.hasPrefix(SMFWriter.temporaryDirectoryPrefix()))!)
 
     // Playhead must be reset to bar 1 BEFORE import (otherwise Logic anchors
     // the region at the current playhead, defeating bar positioning).
@@ -2477,7 +2479,7 @@ private actor SelectiveFailChannel: Channel {
     #expect(!((object["success"] as? Bool)!))
     #expect(object["error"] as? String == "export_readiness_blocked")
     #expect(object["failure_stage"] as? String == "pre_bounce_audit")
-    #expect((object["blockers"] as? [String])?.contains("external_midi_regions_bounce_risk") == true)
+    #expect(((object["blockers"] as? [String])?.contains("external_midi_regions_bounce_risk"))!)
 
     let routedOps = await keyCmd.executedOps
     #expect(routedOps.isEmpty)
@@ -2736,7 +2738,7 @@ private actor SelectiveFailChannel: Channel {
     let execution = await ProjectDispatcher.executeAppleScript("return 1")
 
     #expect(execution.executionError == nil)
-    #expect(execution.timedOut == false)
+    #expect(!(execution.timedOut))
     #expect(execution.terminationStatus == 0)
     #expect(execution.stderrOutput.isEmpty)
 }
@@ -2745,7 +2747,7 @@ private actor SelectiveFailChannel: Channel {
     let execution = await ProjectDispatcher.executeAppleScript("this is not valid AppleScript")
 
     #expect(execution.executionError == nil)
-    #expect(execution.timedOut == false)
+    #expect(!(execution.timedOut))
     #expect(execution.terminationStatus != 0)
     #expect(!execution.stderrOutput.isEmpty)
 }
@@ -2757,7 +2759,7 @@ private actor SelectiveFailChannel: Channel {
     )
 
     #expect(execution.executionError != nil)
-    #expect(execution.timedOut == false)
+    #expect(!(execution.timedOut))
     #expect(execution.terminationStatus == -1)
 }
 
@@ -2975,7 +2977,8 @@ private actor SelectiveFailChannel: Channel {
         cache: StateCache()
     )
 
-    #expect(result.isError != true)
+    let resultIsError = result.isError ?? false
+    #expect(!resultIsError)
     expectExecutedOps(await ax.executedOps, equals: [
         ("midi.import_file", ["path": expectedPath]),
     ])
@@ -3793,8 +3796,8 @@ private actor TransportStateSequenceChannel: Channel {
     #expect(await mcu.executedOps.map(\.0) == ["transport.stop"])
 
     let cached = await cache.getTransport()
-    #expect(cached.isPlaying == false)
-    #expect(cached.isRecording == false)
+    #expect(!(cached.isPlaying))
+    #expect(!(cached.isRecording))
     #expect(cached.position == "9.1.1.1")
 }
 
@@ -3883,7 +3886,7 @@ private actor TransportStateSequenceChannel: Channel {
     #expect(json["refresh_error"] as? String == "element_not_found")
     #expect(json["cached_source"] as? String == "cache")
     #expect((json["cache_age_sec"] as? Double ?? 0) > 0)
-    #expect((json["hint"] as? String)?.contains("refresh_cache") == true)
+    #expect(((json["hint"] as? String)?.contains("refresh_cache"))!)
 }
 
 @Test func testTransportDispatcherStopFailsClosedWhenLiveStateStillReportsPlayback() async {
@@ -3919,7 +3922,7 @@ private actor TransportStateSequenceChannel: Channel {
     #expect((json["safe_to_retry"] as? Bool)!)
 
     let cached = await cache.getTransport()
-    #expect(cached.isPlaying == true)
-    #expect(cached.isRecording == true)
+    #expect(cached.isPlaying)
+    #expect(cached.isRecording)
     #expect(cached.position == "96.1.1.1")
 }

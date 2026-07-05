@@ -101,8 +101,8 @@ struct Issue139TrackMutationOcclusionHonestTests {
         #expect(json["error"] as? String == "unsupported_state")
         #expect(json["operation"] as? String == "track.create_instrument")
         #expect(json["failure_stage"] as? String == "preflight_blocking_dialog")
-        #expect(json["blocking_dialog_present"] as? Bool == true)
-        #expect(json["write_attempted"] as? Bool == false)
+        #expect((json["blocking_dialog_present"] as? Bool)!)
+        #expect(!((json["write_attempted"] as? Bool)!))
         #expect(await ax.operations().isEmpty)
     }
 
@@ -182,7 +182,10 @@ struct Issue139TrackMutationOcclusionHonestTests {
         let success = try #require(json["success"] as? Bool)
         #expect(!success)
         #expect(json["error"] as? String == "dialog_not_found")
-        #expect((json["verified"] as? Bool) != true)
+        // v1 State C omits `verified` entirely (absent = not verified), so bind
+        // absent-as-false rather than force-unwrapping a key that isn't there.
+        let verified = (json["verified"] as? Bool) ?? false
+        #expect(!verified)
     }
 
     // MARK: - Positive control — the gate is meaningful, not vacuous

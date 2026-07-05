@@ -54,7 +54,7 @@ private func logicProInstalled() -> Bool {
     if let version {
         // Logic Pro 12.x is the supported minimum; a successful
         // lookup should return a string starting with a digit.
-        #expect(version.first?.isNumber == true, "version '\(version ?? "")' should start with a digit")
+        #expect((version.first?.isNumber)!, "version '\(version ?? "")' should start with a digit")
     }
 }
 

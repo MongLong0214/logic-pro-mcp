@@ -104,7 +104,7 @@ private func makeStatePollerAccessibilityRuntime(
     #expect(project.name == "Session A")
     #expect(project.sampleRate == 48000)
     #expect(project.trackCount == 18)
-    #expect(await poller.isRunning == false)
+    #expect(!(await poller.isRunning))
 }
 
 @Test func testStatePollerIgnoresInvalidProjectPayloadsAndChannelErrors() async throws {
@@ -187,7 +187,7 @@ private func makeStatePollerAccessibilityRuntime(
     #expect(transport.tempo == 123.5)
     #expect(tracks.count == 2)
     #expect(tracks.first?.name == "Audio 1")
-    #expect(tracks.first?.isSelected == true)
+    #expect((tracks.first?.isSelected)!)
     #expect(strips.count == 2)
     #expect(strips[1].pan == 0.2)
     #expect(project.name == "Session B")
@@ -216,9 +216,9 @@ private func makeStatePollerAccessibilityRuntime(
     // resource reads flap "no document open" during normal Logic UI motion.
     await poller.refreshNow()
     await poller.refreshNow()
-    #expect(await cache.getHasDocument() == true) // still trusts cache after 2 misses
+    #expect(await cache.getHasDocument()) // still trusts cache after 2 misses
     await poller.refreshNow()
-    #expect(await cache.getHasDocument() == false) // 3rd miss clears
+    #expect(!(await cache.getHasDocument())) // 3rd miss clears
 }
 
 @Test func testStatePollerPopulatesMarkerCache() async {
@@ -336,7 +336,7 @@ private func makeStatePollerAccessibilityRuntime(
     }
 
     #expect(try await waitUntil { await completion.isCompleted() })
-    #expect(await poller.isRunning == false)
+    #expect(!(await poller.isRunning))
 
     blocker.unblock()
     await stopTask.value

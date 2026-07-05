@@ -634,7 +634,7 @@ private func verifiedReadbackMismatchEnvelope() -> String {
 
     #expect(report.started.contains(.coreMIDI))
     #expect(report.failures[.appleScript] != nil)
-    #expect(report.hasFailures == true)
+    #expect(report.hasFailures)
 }
 
 @Test func testRouterStartAllTreatsOptionalStartupFailureAsDegraded() async {
@@ -645,8 +645,8 @@ private func verifiedReadbackMismatchEnvelope() -> String {
 
     #expect(report.failures.isEmpty)
     #expect(report.degraded[.accessibility] != nil)
-    #expect(report.hasFailures == false)
-    #expect(report.hasDegraded == true)
+    #expect(!(report.hasFailures))
+    #expect(report.hasDegraded)
 }
 
 @Test func testRouterStopAllCanSkipAccessibilityDuringForcedShutdown() async throws {
@@ -662,7 +662,7 @@ private func verifiedReadbackMismatchEnvelope() -> String {
     }
 
     #expect(try await waitUntil { await completion.isCompleted() })
-    #expect(probe.waitUntilStopCalled(timeout: .milliseconds(10)) == false)
+    #expect(!(probe.waitUntilStopCalled(timeout: .milliseconds(10))))
 
     probe.unblock()
     await stopTask.value

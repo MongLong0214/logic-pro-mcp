@@ -325,7 +325,7 @@ struct StockPluginCatalogTests {
         let manifested = try #require(snapshot.entries.first { $0.id == "logic.stock.effect.limiter" })
         #expect(manifested.availabilityState == .manifested)
         #expect(manifested.knownPresets == ["Drum Limiter", "Vocal Limiter"])
-        #expect(manifested.provenance.sourcePath?.hasSuffix("Plug-In Settings/Limiter") == true)
+        #expect((manifested.provenance.sourcePath?.hasSuffix("Plug-In Settings/Limiter"))!)
         #expect(manifested.provenance.evidence.contains("factory_plugin_settings_folder"))
         #expect(manifested.provenance.evidence.contains("factory_preset_filenames"))
     }
@@ -455,7 +455,7 @@ struct StockPluginResourceTests {
     func stockPluginResources() async throws {
         let list = try await stockPluginResourceObject("logic://stock-plugins")
         #expect(list["schema_version"] as? Int == 1)
-        #expect((list["entries"] as? [[String: Any]])?.isEmpty == false)
+        #expect(!(((list["entries"] as? [[String: Any]])?.isEmpty)!))
         #expect(((list["validation"] as? [String: Any])?["is_valid"] as? Bool)!)
 
         let detail = try await stockPluginResourceObject("logic://stock-plugins/logic.stock.effect.gain")
@@ -463,7 +463,7 @@ struct StockPluginResourceTests {
         #expect((detail["entry"] as? [String: Any])?["known_presets"] as? [String] != nil)
 
         let search = try await stockPluginResourceObject("logic://stock-plugins/search?query=gain")
-        #expect((search["entries"] as? [[String: Any]])?.contains { $0["id"] as? String == "logic.stock.effect.gain" } == true)
+        #expect(((search["entries"] as? [[String: Any]])?.contains { $0["id"] as? String == "logic.stock.effect.gain" })!)
 
         let census = try await stockPluginResourceObject("logic://stock-plugins/census")
         #expect(census["catalog_source"] as? String != nil)
@@ -471,11 +471,11 @@ struct StockPluginResourceTests {
         #expect((census["entries_by_state"] as? [String: Int]) != nil)
 
         let capabilities = try await stockPluginResourceObject("logic://stock-plugins/capabilities")
-        #expect((capabilities["truth_labels"] as? [String])?.contains("verified") == true)
-        #expect((capabilities["catalog_entry_fields"] as? [String])?.contains("known_presets") == true)
-        #expect((capabilities["resources"] as? [String])?.contains("logic://stock-plugins") == true)
+        #expect(((capabilities["truth_labels"] as? [String])?.contains("verified"))!)
+        #expect(((capabilities["catalog_entry_fields"] as? [String])?.contains("known_presets"))!)
+        #expect(((capabilities["resources"] as? [String])?.contains("logic://stock-plugins"))!)
         #expect((capabilities["production_reachable_states"] as? [String]) == ["inferred", "manifested"])
-        #expect((capabilities["census_injectable_states"] as? [String])?.contains("readback_mismatch") == true)
+        #expect(((capabilities["census_injectable_states"] as? [String])?.contains("readback_mismatch"))!)
         #expect(capabilities["preset_directory_entry_scan_cap"] as? Int == StockPluginCatalog.maxFactoryPresetDirectoryEntries)
     }
 

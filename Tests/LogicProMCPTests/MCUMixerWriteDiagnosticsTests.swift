@@ -56,7 +56,7 @@ private actor SlowSendMCUTransport: MCUTransportProtocol {
     #expect(result.isSuccess)
     let obj = decodeMixerJSON(result.message)
     #expect(!((obj["verified"] as? Bool)!))
-    #expect((obj["reason"] as? String)?.hasPrefix("echo_timeout_") == true)
+    #expect(((obj["reason"] as? String)?.hasPrefix("echo_timeout_"))!)
 
     // Issue #10/#11 diagnostic extras
     #expect(
@@ -306,7 +306,7 @@ private actor SlowSendMCUTransport: MCUTransportProtocol {
     #expect(result.isSuccess)
     let obj = decodeMixerJSON(result.message)
     #expect(!((obj["verified"] as? Bool)!))
-    #expect((obj["reason"] as? String)?.hasPrefix("echo_timeout_") == true)
+    #expect(((obj["reason"] as? String)?.hasPrefix("echo_timeout_"))!)
     // The smoking-gun shape from the reporter's environment:
     #expect((obj["mcu_connected"] as? Bool)!)
     #expect((obj["mcu_registered"] as? Bool)!)
@@ -336,7 +336,7 @@ private actor SlowSendMCUTransport: MCUTransportProtocol {
     #expect(result.isSuccess)
     let obj = decodeMixerJSON(result.message)
     #expect(!((obj["verified"] as? Bool)!))
-    #expect((obj["reason"] as? String)?.hasPrefix("echo_timeout_") == true)
+    #expect(((obj["reason"] as? String)?.hasPrefix("echo_timeout_"))!)
     #expect((obj["mcu_connected"] as? Bool)!)
     #expect((obj["mcu_registered"] as? Bool)!)
     if let ageMs = obj["mcu_last_feedback_age_ms"] as? Int {

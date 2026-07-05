@@ -119,7 +119,7 @@ import Testing
         let router = ChannelRouter()
         let result = try await ResourceHandlers.read(uri: "logic://mixer/9", cache: cache, router: router)
         let obj = sharedJSONObject(sharedResourceText(result))
-        #expect((obj?["success"] as? Bool)! == false)
+        #expect(!((obj?["success"] as? Bool)!))
         #expect(obj?["error"] as? String == "index_out_of_range")
         #expect(obj?["requested_index"] as? Int == 9)
         #expect(obj?["collection"] as? String == "channel strip")

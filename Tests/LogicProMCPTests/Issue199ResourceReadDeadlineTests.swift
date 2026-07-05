@@ -23,7 +23,7 @@ struct Issue199ResourceReadDeadlineTests {
         ) {
             ReadResource.Result(contents: [.text("{\"ok\":true}", uri: "logic://tracks", mimeType: "application/json")])
         }
-        #expect(json(result)?["ok"] as? Bool == true)
+        #expect((json(result)?["ok"] as? Bool)!)
     }
 
     @Test("a resource read that exceeds the deadline returns a typed operation_timeout body, not a hang")
@@ -36,7 +36,7 @@ struct Issue199ResourceReadDeadlineTests {
         }
         let obj = try #require(json(result))
         #expect(obj["error"] as? String == "operation_timeout")
-        #expect((obj["success"] as? Bool)! == false)
+        #expect(!((obj["success"] as? Bool)!))
         #expect(obj["uri"] as? String == uri)
         #expect(obj["timeout_sec"] as? Double == 0.15)
     }
@@ -69,7 +69,7 @@ struct Issue199ResourceReadDeadlineTests {
         let uri = "logic://tracks/0/regions"
         let result = LogicProServer.resourceReadTimeoutResult(uri: uri, seconds: 25)
         let obj = json(result)
-        #expect((obj?["success"] as? Bool)! == false)
+        #expect(!((obj?["success"] as? Bool)!))
         #expect(obj?["error"] as? String == "operation_timeout")
         #expect(obj?["uri"] as? String == uri)
         #expect(obj?["timeout_sec"] as? Double == 25)

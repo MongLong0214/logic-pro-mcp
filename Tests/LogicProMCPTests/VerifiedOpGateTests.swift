@@ -9,10 +9,10 @@ import Testing
 
 @Test func testVerifiedOpGateSerializesAcquisition() async {
     let gate = VerifiedOpGate()
-    #expect(gate.tryAcquire() == true, "first acquire succeeds")
-    #expect(gate.tryAcquire() == false, "second acquire is refused while held")
+    #expect(gate.tryAcquire(), "first acquire succeeds")
+    #expect(!(gate.tryAcquire()), "second acquire is refused while held")
     gate.release()
-    #expect(gate.tryAcquire() == true, "acquire succeeds again after release")
+    #expect(gate.tryAcquire(), "acquire succeeds again after release")
     gate.release()
 }
 
@@ -29,7 +29,7 @@ struct VerifiedOpGateSharedTests {
     // Release is synchronous so the shared singleton is clean before this test
     // returns.
     let acquired = VerifiedOpGate.shared.tryAcquire()
-    #expect(acquired == true)
+    #expect(acquired)
 
     let router = ChannelRouter()
     let result = await PluginsDispatcher.handle(
@@ -69,7 +69,7 @@ struct VerifiedOpGateSharedTests {
         cache: StateCache()
     )
 
-    #expect(VerifiedOpGate.shared.tryAcquire() == true)
+    #expect(VerifiedOpGate.shared.tryAcquire())
     VerifiedOpGate.shared.release()
 }
 
@@ -77,7 +77,7 @@ struct VerifiedOpGateSharedTests {
     // Even while the verified-op gate is held, get_inventory (read-only) must
     // still run — it is not a mutating verified op.
     let acquired = VerifiedOpGate.shared.tryAcquire()
-    #expect(acquired == true)
+    #expect(acquired)
 
     let router = ChannelRouter()
     let result = await PluginsDispatcher.handle(

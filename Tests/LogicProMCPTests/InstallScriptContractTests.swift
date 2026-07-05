@@ -270,7 +270,7 @@ import Testing
 @Test func testFormulaClaudeRegistrationCaveatIncludesShareDirEnv() throws {
     let formula = try scriptContents("Formula/logic-pro-mcp.rb")
 
-    #expect(formula.contains("claude mcp add --scope user logic-pro -e LOGIC_PRO_MCP_SHARE_DIR=\"#\\{pkgshare\\}\" -- LogicProMCP") == false)
+    #expect(!(formula.contains("claude mcp add --scope user logic-pro -e LOGIC_PRO_MCP_SHARE_DIR=\"#\\{pkgshare\\}\" -- LogicProMCP")))
     #expect(formula.contains("claude mcp add --scope user logic-pro -e LOGIC_PRO_MCP_SHARE_DIR=\"#{pkgshare}\" -- LogicProMCP"))
 }
 

@@ -286,7 +286,7 @@ private func recordSequenceJSONObject(_ result: CallTool.Result) -> [String: Any
     #expect(object["error"] as? String == "audibility_unverified")
     #expect(object["failure_stage"] as? String == "midi.import_file")
     #expect(object["import_reason"] as? String == "imported_as_gm_device")
-    #expect(object["audible"] as? Bool == false)
+    #expect(!((object["audible"] as? Bool)!))
     #expect(object["gm_device_lanes"] as? [String] == ["GM Device 1"])
     // No success-provenance leakage: region readback cannot override the
     // lower-level audible-routing downgrade.

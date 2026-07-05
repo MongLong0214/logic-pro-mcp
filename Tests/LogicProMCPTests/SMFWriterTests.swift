@@ -253,7 +253,7 @@ import Foundation
 
     #expect(!temp.fileURL.path.hasPrefix(legacyPath + "/"))
     #expect(FileManager.default.fileExists(atPath: temp.fileURL.path))
-    #expect((try? FileManager.default.contentsOfDirectory(atPath: attackTarget).isEmpty) == true)
+    #expect((try? FileManager.default.contentsOfDirectory(atPath: attackTarget).isEmpty)!)
 }
 
 // MARK: - Helpers

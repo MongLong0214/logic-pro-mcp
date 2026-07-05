@@ -137,7 +137,7 @@ import Testing
     builder.setAttribute(app, kAXWindowsAttribute as String, [dialog, arrange])
 
     let runtime = builder.makeLogicRuntime(appElement: app)
-    #expect(AXLogicProElements.dialogPresent(runtime: runtime) == true)
+    #expect(AXLogicProElements.dialogPresent(runtime: runtime))
 }
 
 @Test func testBlockingDialogInfoReportsIdentityAndCancelRecovery() {
@@ -190,7 +190,7 @@ import Testing
     builder.setAttribute(app, kAXWindowsAttribute as String, [arrange])
 
     let runtime = builder.makeLogicRuntime(appElement: app)
-    #expect(AXLogicProElements.dialogPresent(runtime: runtime) == false)
+    #expect(!(AXLogicProElements.dialogPresent(runtime: runtime)))
 }
 
 @Test func testDialogPresentIgnoresKeyboardLayoutOverlayDialog() {
@@ -207,7 +207,7 @@ import Testing
     builder.setAttribute(app, kAXWindowsAttribute as String, [dialog, arrange])
 
     let runtime = builder.makeLogicRuntime(appElement: app)
-    #expect(AXLogicProElements.dialogPresent(runtime: runtime) == false)
+    #expect(!(AXLogicProElements.dialogPresent(runtime: runtime)))
 }
 
 @Test func testDialogPresentReturnsFalseWhenNoWindowsExposed() {
@@ -215,7 +215,7 @@ import Testing
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(1)
     let runtime = builder.makeLogicRuntime(appElement: app)
-    #expect(AXLogicProElements.dialogPresent(runtime: runtime) == false)
+    #expect(!(AXLogicProElements.dialogPresent(runtime: runtime)))
 }
 
 // MARK: - #234 plugin-editor window classification
@@ -356,7 +356,7 @@ struct PartialChromeVariant: Sendable {
     builder.setAttribute(app, kAXWindowsAttribute as String, [editor, arrange])
 
     let runtime = builder.makeLogicRuntime(appElement: app)
-    // Direct boolean (never `== false`): `#expect(bool == false)` is a dead
+    // Direct boolean (never `== false`): `#expect(!(bool))` is a dead
     // assertion in this toolchain (repo issue #92).
     #expect(!AXLogicProElements.dialogPresent(runtime: runtime))
 }

@@ -20,8 +20,8 @@ import Testing
 
     #expect(AXValueExtractors.extractSliderValue(slider, runtime: runtime) == 0.75)
     #expect(AXValueExtractors.extractTextValue(text, runtime: runtime) == "128.5 BPM")
-    #expect(AXValueExtractors.extractButtonState(stringButton, runtime: runtime) == true)
-    #expect(AXValueExtractors.extractSelectedState(selected, runtime: runtime) == true)
+    #expect(AXValueExtractors.extractButtonState(stringButton, runtime: runtime)!)
+    #expect(AXValueExtractors.extractSelectedState(selected, runtime: runtime)!)
     #expect(AXValueExtractors.extractSliderRange(slider, runtime: runtime)?.min == -1.0)
     #expect(AXValueExtractors.extractSliderRange(slider, runtime: runtime)?.max == 1.0)
 }
@@ -189,7 +189,7 @@ import Testing
     #expect(AXValueExtractors.extractSliderValue(sliderString, runtime: runtime) == 0.25)
     #expect(AXValueExtractors.extractSliderValue(sliderInvalid, runtime: runtime) == nil)
     #expect(AXValueExtractors.extractTextValue(titledText, runtime: runtime) == "Fallback Title")
-    #expect(AXValueExtractors.extractButtonState(zeroButton, runtime: runtime) == false)
+    #expect(!(AXValueExtractors.extractButtonState(zeroButton, runtime: runtime)!))
     #expect(AXValueExtractors.extractSelectedState(selectedMissing, runtime: runtime) == nil)
     #expect(AXValueExtractors.extractSliderRange(sliderInvalid, runtime: runtime) == nil)
 }
@@ -327,7 +327,7 @@ import Testing
     let runtime = builder.makeAXRuntime()
     let state = AXValueExtractors.extractTransportState(from: transport, runtime: runtime)
 
-    #expect(state.isRecording == false)
+    #expect(!(state.isRecording))
     #expect(state.isCycleEnabled)
     #expect(state.isMetronomeEnabled)
     #expect(state.position == "17.2.1")

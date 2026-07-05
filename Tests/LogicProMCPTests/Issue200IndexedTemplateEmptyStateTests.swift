@@ -20,12 +20,12 @@ struct Issue200IndexedTemplateEmptyStateTests {
             uri: "logic://tracks/0", cache: StateCache(), router: ChannelRouter()
         )
         let o = obj(result)
-        #expect((o?["success"] as? Bool)! == false)
+        #expect(!((o?["success"] as? Bool)!))
         #expect(o?["error"] as? String == "index_out_of_range")
         #expect(o?["requested_index"] as? Int == 0)
         #expect(o?["available_count"] as? Int == 0)
         #expect(o?["collection"] as? String == "track")
-        #expect((o?["hint"] as? String)?.contains("parent collection") == true)
+        #expect(((o?["hint"] as? String)?.contains("parent collection"))!)
     }
 
     @Test("logic://mixer/{i} out of range returns a typed index_out_of_range body")
@@ -34,7 +34,7 @@ struct Issue200IndexedTemplateEmptyStateTests {
             uri: "logic://mixer/0", cache: StateCache(), router: ChannelRouter()
         )
         let o = obj(result)
-        #expect((o?["success"] as? Bool)! == false)
+        #expect(!((o?["success"] as? Bool)!))
         #expect(o?["error"] as? String == "index_out_of_range")
         #expect(o?["requested_index"] as? Int == 0)
         #expect(o?["collection"] as? String == "channel strip")

@@ -34,7 +34,7 @@ private func decodeJSON(_ s: String) -> [String: Any] {
     // Centre indicator bit (0x40) is preserved without affecting position.
     let withCenter = MCUProtocol.decodeVPotLEDRing(cc: 0x30, value: 0x46)
     #expect(withCenter?.position == 6)
-    #expect(withCenter?.center == true)
+    #expect((withCenter?.center)!)
 
     // Mode bits (0x10..0x30) are decoded for diagnostic completeness.
     #expect(MCUProtocol.decodeVPotLEDRing(cc: 0x30, value: 0x06)?.mode == .singleDot)

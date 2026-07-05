@@ -357,7 +357,7 @@ private func decodeEnvelope(_ message: String) -> [String: Any]? {
     #expect(envelope?["operation"] as? String == "midi.send_cc.keycmd")
     // Hint must propagate the channel's health detail so the agent gets an
     // actionable diagnostic (see T1 / ChannelRouter §4.1 step 7).
-    #expect((envelope?["hint"] as? String)?.isEmpty == false)
+    #expect(!(((envelope?["hint"] as? String)?.isEmpty)!))
 
     // The transport must NOT have received any bytes — bypass + unavailable
     // short-circuits before execute() is invoked.

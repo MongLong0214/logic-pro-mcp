@@ -36,7 +36,7 @@ import Testing
 
     let store = ManualValidationStore(fileURL: fileURL)
 
-    #expect(await store.isApproved(.scripter) == false)
+    #expect(!(await store.isApproved(.scripter)))
     #expect(await store.approval(for: .scripter) == nil)
     #expect(await store.list().isEmpty)
 }
@@ -117,7 +117,7 @@ private actor BlockingApprovalSaveProbe {
         try await secondStore.approve(.scripter, note: nil)
     }
 
-    #expect(try canAcquireExclusiveLockNonblocking(atPath: lockPath) == false)
+    #expect(!(try canAcquireExclusiveLockNonblocking(atPath: lockPath)))
 
     await probe.unblock()
     try await firstTask.value

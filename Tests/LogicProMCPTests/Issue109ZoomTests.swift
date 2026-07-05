@@ -37,7 +37,7 @@ struct Issue109ZoomTests {
         )
         #expect(result.isSuccess)
         let o = obj(result)
-        #expect(o?["verified"] as? Bool == true)
+        #expect((o?["verified"] as? Bool)!)
         #expect(o?["verify_source"] as? String == "ax_zoom_slider")
         // level 8 → (8-1)/9 = 0.777…
         #expect(abs((o?["observed"] as? Double ?? -9) - (7.0 / 9.0)) < 0.02)
@@ -77,7 +77,7 @@ struct Issue109ZoomTests {
     func routingIsAXFirst() {
         let chain = ChannelRouter.routingTable["nav.set_zoom_level"]
         #expect(chain?.first == .accessibility)
-        #expect(chain?.contains(.midiKeyCommands) == true)
+        #expect((chain?.contains(.midiKeyCommands))!)
     }
 
     @Test(

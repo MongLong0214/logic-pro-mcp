@@ -71,7 +71,7 @@ struct LibraryDiskScannerTests {
         #expect(root.folderCount == 4)
         // Node count = folders + leaves.
         #expect(root.nodeCount == root.folderCount + root.leafCount)
-        #expect(root.selectionRestored == false)
+        #expect(!(root.selectionRestored))
         #expect(root.truncatedBranches == 0)
         #expect(root.probeTimeouts == 0)
         #expect(root.cycleCount == 0)
@@ -461,7 +461,7 @@ struct LibraryDiskScannerTests {
                 in: root
             )
         )
-        #expect(templatePad.exists == false)
+        #expect(!(templatePad.exists))
         #expect(root.scanWarnings.contains { warning in
             warning.contains("Template/Empty Pad")
                 && warning.contains("no_panel_template_route")

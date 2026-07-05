@@ -47,13 +47,13 @@ private func makeCGEventRuntime(
     #expect(sequence != nil)
     #expect(sequence?.first?.keyCode == 44) // slash opens dialog
     #expect(sequence?.last?.keyCode == 36)  // return confirms
-    #expect(sequence?.contains(where: { $0.keyCode == 47 }) == true) // period
+    #expect((sequence?.contains(where: { $0.keyCode == 47 }))!) // period
 }
 
 @Test func testCGEventGotoPositionSequenceForTimecode() {
     let sequence = CGEventChannel.gotoPositionSequence(for: "01:02:03:04")
     #expect(sequence != nil)
-    #expect(sequence?.contains(where: { $0.keyCode == 41 && $0.flags.contains(.maskShift) }) == true)
+    #expect((sequence?.contains(where: { $0.keyCode == 41 && $0.flags.contains(.maskShift) }))!)
 }
 
 @Test func testCGEventGotoPositionSequenceRejectsUnsupportedCharacters() {
@@ -76,11 +76,11 @@ private func makeCGEventRuntime(
     let healthy = CGEventChannel(runtime: makeCGEventRuntime())
 
     let unavailable = await notRunning.healthCheck()
-    #expect(unavailable.available == false)
+    #expect(!(unavailable.available))
     #expect(unavailable.detail.contains("not running"))
 
     let missingPIDHealth = await missingPID.healthCheck()
-    #expect(missingPIDHealth.available == false)
+    #expect(!(missingPIDHealth.available))
     #expect(missingPIDHealth.detail.contains("Cannot determine"))
 
     let healthyState = await healthy.healthCheck()
@@ -216,9 +216,10 @@ private func makeCGEventRuntime(
     _ = runtime.isLogicProRunning()
     _ = runtime.logicProPID()
     runtime.sleepMicros(0)
-    let sent = runtime.postKeyEvent(0, [], getpid())
-
-    #expect(sent == true || sent == false)
+    // postKeyEvent's Bool result is environment-dependent (true only with a real
+    // event tap); this smoke test asserts the production runtime drives the full
+    // path without crashing.
+    _ = runtime.postKeyEvent(0, [], getpid())
 }
 
 // MARK: - T1: project.new via CGEvent Cmd+N
@@ -240,5 +241,5 @@ private func makeCGEventRuntime(
     let routes = ChannelRouter.v2RoutingTable["project.new"]
     #expect(routes != nil)
     #expect(routes?.first == .appleScript)
-    #expect(routes?.contains(.cgEvent) == true)
+    #expect((routes?.contains(.cgEvent))!)
 }

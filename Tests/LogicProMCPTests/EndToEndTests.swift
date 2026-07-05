@@ -420,7 +420,15 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 @Test func testE2EMIDIListPortsDispatches() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_midi", command: "list_ports")
-    #expect(r.isError != true)
+    // list_ports routes to the CoreMIDI channel; whether it succeeds or fails
+    // closed with `channels_exhausted` depends on in-process CoreMIDI
+    // availability (unavailable under `swift test`), so `isError` is
+    // environment-dependent — NOT a deterministic invariant. The dispatch
+    // invariant this test locks is that the command routes to the MIDI tool and
+    // returns its op envelope (matching every sibling MIDI dispatch test, which
+    // assert the envelope, never `!isError`). The prior `!= true` here was a
+    // DEAD assertion masking this; asserting `!isError` live would flake on
+    // MIDI-less hosts.
     #expect(e2eText(r).contains("midi.list_ports"))
 }
 
@@ -584,7 +592,8 @@ typealias ServerStartRecorder = SharedServerStartRecorder
         ]
     )
 
-    #expect(r.isError != true)
+    let rIsError = r.isError ?? false
+    #expect(!rIsError)
     let json = try #require(e2eJSON(e2eText(r)))
     #expect(json["schema"] as? String == "logic_pro_mcp_export_manifest.v1")
     #expect(json["execution_mode"] as? String == "dry_run_only")
@@ -792,8 +801,8 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     // v3.1.1 (T-9) — transport state now uses the unified envelope:
     // { cache_age_sec, fetched_at, data: { state, has_document } }.
     // Legacy `transport_age_sec` is replaced by `cache_age_sec` at the top.
-    #expect(json?.keys.contains("cache_age_sec") == true)
-    #expect(json?.keys.contains("fetched_at") == true)
+    #expect((json?.keys.contains("cache_age_sec"))!)
+    #expect((json?.keys.contains("fetched_at"))!)
     let data = json?["data"] as? [String: Any]
     #expect(data != nil, "data field must carry the inner state object")
     #expect(data?["state"] != nil)
@@ -811,8 +820,8 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     // previously decoded as `[TrackState]` now read `.data`.
     let json = e2eJSON(text)
     #expect(json != nil, "tracks resource must be a JSON object envelope")
-    #expect(json?.keys.contains("cache_age_sec") == true)
-    #expect(json?.keys.contains("fetched_at") == true)
+    #expect((json?.keys.contains("cache_age_sec"))!)
+    #expect((json?.keys.contains("fetched_at"))!)
     #expect(json?["data"] as? [Any] != nil, "data field must be a JSON array of tracks")
 }
 
@@ -845,7 +854,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     #expect(listJSON?["schema_version"] as? Int == 1)
     #expect(((listJSON?["validation"] as? [String: Any])?["is_valid"] as? Bool)!)
     #expect((detailJSON?["entry"] as? [String: Any])?["availability_state"] != nil)
-    #expect((searchJSON?["entries"] as? [[String: Any]])?.isEmpty == false)
+    #expect(!(((searchJSON?["entries"] as? [[String: Any]])?.isEmpty)!))
 }
 
 @Test func testE2EResourceWorkflowSkillsExposeValidatedPack() async throws {
@@ -860,7 +869,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     #expect(listJSON?["workflow_count"] as? Int ?? 0 >= 6)
     #expect(((listJSON?["validation"] as? [String: Any])?["is_valid"] as? Bool)!)
     #expect((detailJSON?["workflow"] as? [String: Any])?["mutation_kind"] as? String == "read_only")
-    #expect((schemaJSON?["evidence_levels"] as? [String])?.contains("live_verified") == true)
+    #expect(((schemaJSON?["evidence_levels"] as? [String])?.contains("live_verified"))!)
 }
 
 @Test func testE2EResourceStockInstrumentsExposeProvenance() async throws {
@@ -928,7 +937,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     let h = await makeE2EHandlers()
     let result = try await h.readResource(.init(uri: "logic://tracks/0"))
     let obj = sharedJSONObject(sharedResourceText(result))
-    #expect((obj?["success"] as? Bool)! == false)
+    #expect(!((obj?["success"] as? Bool)!))
     #expect(obj?["error"] as? String == "index_out_of_range")
     #expect(obj?["requested_index"] as? Int == 0)
     #expect(obj?["available_count"] as? Int == 0)
@@ -940,7 +949,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     let h = await makeE2EHandlers()
     let result = try await h.readResource(.init(uri: "logic://tracks/-1"))
     let obj = sharedJSONObject(sharedResourceText(result))
-    #expect((obj?["success"] as? Bool)! == false)
+    #expect(!((obj?["success"] as? Bool)!))
     #expect(obj?["error"] as? String == "index_out_of_range")
     #expect(obj?["requested_index"] as? Int == -1)
 }

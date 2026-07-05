@@ -158,6 +158,10 @@ struct ProjectExportExecutionGuardrailTests {
         let artifact = try #require(run.projects.first?.artifacts.first)
         #expect(artifact.state == "C")
         #expect(artifact.bounceFired)
-        #expect(artifact.error?.contains("unsafe_path") == true)
+        // The surfaced State-C error code is `artifact_path_unsafe:` (the
+        // internal reason `unsafe_path` is wrapped by the flow); assert the code
+        // the caller actually sees. Prior `unsafe_path` check was dead.
+        let artifactError = try #require(artifact.error)
+        #expect(artifactError.contains("artifact_path_unsafe"))
     }
 }

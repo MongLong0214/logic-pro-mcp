@@ -67,9 +67,10 @@ struct Issue105GotoNoteTests {
         let result = await TransportDispatcher.handle(
             command: "goto_position", params: ["bar": .int(1)], router: router, cache: StateCache()
         )
-        #expect(result.isError != true)
+        let resultIsError = result.isError ?? false
+        #expect(!resultIsError)
         let o = try #require(obj(result))
-        #expect((o["verified"] as? Bool) == true)
+        #expect((o["verified"] as? Bool)!)
         #expect(o["verification_source"] as? String == "transport_state")
         #expect(o["observed"] as? String == "1.1.1.1")
         #expect(o["note"] == nil, "verified envelope must not carry a 'not read back' note")
@@ -83,9 +84,10 @@ struct Issue105GotoNoteTests {
         let result = await NavigateDispatcher.handle(
             command: "goto_bar", params: ["bar": .int(17)], router: router, cache: StateCache()
         )
-        #expect(result.isError != true)
+        let resultIsError = result.isError ?? false
+        #expect(!resultIsError)
         let o = try #require(obj(result))
-        #expect((o["verified"] as? Bool) == true)
+        #expect((o["verified"] as? Bool)!)
         #expect(!text(result).contains("not read back"))
     }
 
@@ -98,8 +100,9 @@ struct Issue105GotoNoteTests {
             command: "goto_position", params: ["bar": .int(1)], router: router, cache: StateCache()
         )
         let o = try #require(obj(result))
-        #expect((o["verified"] as? Bool) != true)
+        #expect(!((o["verified"] as? Bool)!))
         #expect(o["observed"] as? String == "1.2.1.1")
-        #expect(result.isError == true)
+        let resultIsError = result.isError ?? false
+        #expect(resultIsError)
     }
 }

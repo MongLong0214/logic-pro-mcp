@@ -331,6 +331,6 @@ struct Issue125BouncePreconditionTests {
         let artifact = try #require(run.projects.first?.artifacts.first)
         #expect(artifact.state == "C")
         #expect(artifact.bounceFired)
-        #expect(artifact.error?.contains("bounce_helper_unexpected_artifact_path") == true)
+        #expect((artifact.error?.contains("bounce_helper_unexpected_artifact_path"))!)
     }
 }

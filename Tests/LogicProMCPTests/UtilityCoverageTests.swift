@@ -45,5 +45,5 @@ private struct FailingJSONValue: Encodable {
     #expect(intParamOrNil(params, "track") == 9)
     #expect(doubleParamOrNil(params, "tempo") == 128.5)
     #expect(stringParam(params, "name", default: "") == "Verse")
-    #expect(boolParamOrNil(params, "enabled") == false)
+    #expect(!(boolParamOrNil(params, "enabled")!))
 }

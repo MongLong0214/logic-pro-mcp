@@ -33,7 +33,7 @@ private func slot(
         slot(2, .occupiedUnreadable),
     ])
 
-    #expect(complete == false, "an unreadable slot makes the snapshot incomplete")
+    #expect(!(complete), "an unreadable slot makes the snapshot incomplete")
     #expect(items.count == 3)
 
     // Every item carries all six keys regardless of read_status (AC22).
@@ -71,7 +71,7 @@ private func slot(
     let (items, complete) = AccessibilityChannel.pluginInventoryItems(for: [
         slot(0, .occupiedReadable, name: "Drum Machine Designer", bypassed: true),
     ])
-    #expect(complete == true)
+    #expect(complete)
     #expect(items[0]["name"] as? String == "Drum Machine Designer")
     #expect(items[0]["plugin_id"] is NSNull)
     #expect((items[0]["bypassed"] as? Bool)!)
@@ -81,7 +81,7 @@ private func slot(
     let (items, complete) = AccessibilityChannel.pluginInventoryItems(for: [
         slot(0, .empty), slot(1, .empty),
     ])
-    #expect(complete == true)
+    #expect(complete)
     #expect(items.allSatisfy { ($0["read_status"] as? String) == "empty" })
 }
 
@@ -393,7 +393,7 @@ private func makeMixerFixture(
     #expect((obj["mixer_reveal_menu_item_found"] as? Bool)!)
     #expect((obj["mixer_reveal_menu_clicked"] as? Bool)!)
     #expect((obj["mixer_reveal_key_sent"] as? Bool)!)
-    #expect((obj["recovery_hint"] as? String)?.contains("Show Mixer") == true)
+    #expect(((obj["recovery_hint"] as? String)?.contains("Show Mixer"))!)
 }
 
 // MARK: - #234 zero-slot honesty gate (US-3 / AC-1..AC-4)

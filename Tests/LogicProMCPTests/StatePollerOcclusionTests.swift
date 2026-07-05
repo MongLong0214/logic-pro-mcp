@@ -57,9 +57,9 @@ private func seedCache(_ cache: StateCache) async {
 @Test func testPollerSurvivesPluginWindowOcclusion() async {
     let cache = StateCache()
     await seedCache(cache)
-    #expect(await cache.getHasDocument() == true)
+    #expect(await cache.getHasDocument())
     #expect(await cache.getTracks().count == 4)
-    #expect(await cache.getAXOccluded() == false)
+    #expect(!(await cache.getAXOccluded()))
 
     let channel = AccessibilityChannel(runtime: makeOccludedRuntime())
     let poller = StatePoller(
@@ -77,13 +77,13 @@ private func seedCache(_ cache: StateCache) async {
         await poller.refreshNow()
     }
 
-    #expect(await cache.getHasDocument() == true,
+    #expect(await cache.getHasDocument(),
             "occluded poll cycles must not clear hasDocument")
     #expect(await cache.getTracks().count == 4,
             "occluded poll cycles must not wipe seeded tracks")
     #expect(await cache.getProject().name == "Live Session",
             "occluded poll cycles must preserve project info")
-    #expect(await cache.getAXOccluded() == true,
+    #expect(await cache.getAXOccluded(),
             "axOccluded flag must be set during sustained occlusion")
 }
 
@@ -104,10 +104,10 @@ private func seedCache(_ cache: StateCache) async {
     // Single occluded poll is enough to flip the flag — clients should not
     // have to wait for a threshold to learn that data is stale-by-occlusion.
     await poller.refreshNow()
-    #expect(await cache.getAXOccluded() == true)
+    #expect(await cache.getAXOccluded())
     // hasDocument intentionally stays true so reads do not 4xx; staleness
     // is signalled via axOccluded + the existing cache_age_sec field.
-    #expect(await cache.getHasDocument() == true)
+    #expect(await cache.getHasDocument())
 }
 
 @Test func testPollerClearsOccludedFlagWhenAXRecovers() async {
@@ -125,7 +125,7 @@ private func seedCache(_ cache: StateCache) async {
         )
     )
     await occludedPoller.refreshNow()
-    #expect(await cache.getAXOccluded() == true)
+    #expect(await cache.getAXOccluded())
 
     // Second runtime — AX recovered, polls succeed.
     let recoveredProjectPayload = """
@@ -162,9 +162,9 @@ private func seedCache(_ cache: StateCache) async {
         )
     )
     await recoveredPoller.refreshNow()
-    #expect(await cache.getAXOccluded() == false,
+    #expect(!(await cache.getAXOccluded()),
             "axOccluded must clear once polls recover")
-    #expect(await cache.getHasDocument() == true)
+    #expect(await cache.getHasDocument())
 }
 
 /// #234 (AC-4.5 / D7): a plugin-editor window (Logic 12.3 tags it AXDialog,
@@ -243,12 +243,12 @@ private func seedCache(_ cache: StateCache) async {
 
     await poller.refreshNow()
     await poller.refreshNow()
-    #expect(await cache.getHasDocument() == true,
+    #expect(await cache.getHasDocument(),
             "first 2 misses must not clear (existing failureThreshold=3 contract)")
 
     await poller.refreshNow()
-    #expect(await cache.getHasDocument() == false,
+    #expect(!(await cache.getHasDocument()),
             "3rd consecutive miss without occlusion must clear, as before")
-    #expect(await cache.getAXOccluded() == false,
+    #expect(!(await cache.getAXOccluded()),
             "axOccluded must be false when document is genuinely closed")
 }

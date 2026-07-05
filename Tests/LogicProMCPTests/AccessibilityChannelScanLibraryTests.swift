@@ -78,7 +78,7 @@ struct AccessibilityChannelScanLibraryTests {
             settleDelayMs: 0
         )
         #expect(r != nil)
-        #expect(r!.selectionRestored == true)
+        #expect(r!.selectionRestored)
         let calls = await mock.restoreCalls
         #expect(calls.count == 1)
         #expect(calls[0] == ("A", "P"))
@@ -97,7 +97,7 @@ struct AccessibilityChannelScanLibraryTests {
             settleDelayMs: 0
         )
         #expect(r != nil)
-        #expect(r!.selectionRestored == false)
+        #expect(!(r!.selectionRestored))
         let calls = await mock.restoreCalls
         #expect(calls.count == 0)
     }
@@ -141,7 +141,7 @@ struct AccessibilityChannelScanLibraryTests {
         let mock = ChannelMock()
         await mock.setInProgress(true)
         let gateResult = await mock.getInProgress()
-        #expect(gateResult == true)   // simulates pre-check: scan already in progress
+        #expect(gateResult)   // simulates pre-check: scan already in progress
         // In the channel, execute would return .error("Library scan already in progress") here.
     }
 

@@ -329,11 +329,11 @@ private let toolText = sharedToolText
     #expect(result.isError!)
     let json = (try? JSONSerialization.jsonObject(with: Data(toolText(result).utf8))) as? [String: Any]
     #expect(json?["error"] as? String == "unknown_category")
-    #expect(json?["success"] as? Bool == false)
+    #expect(!((json?["success"] as? Bool)!))
     #expect(json?["requested_category"] as? String == "bogus")
     let valid = json?["valid_categories"] as? [String]
-    #expect(valid?.contains("transport") == true)
-    #expect(valid?.contains("all") == true)
+    #expect((valid?.contains("transport"))!)
+    #expect((valid?.contains("all"))!)
     // It must NOT leak the full help text on the error path.
     #expect(!toolText(result).contains("logic_transport  — Transport control"))
 }
@@ -433,7 +433,7 @@ private let toolText = sharedToolText
 
 @Test func testPermissionStatusSummaryListsMissingPermissions() {
     let status = PermissionChecker.PermissionStatus(accessibility: false, automationLogicPro: false)
-    #expect(status.allGranted == false)
+    #expect(!(status.allGranted))
     #expect(status.summary.contains("Accessibility: NOT GRANTED"))
     #expect(status.summary.contains("Automation (Logic Pro): NOT GRANTED"))
 }
@@ -443,7 +443,7 @@ private let toolText = sharedToolText
         accessibilityState: .granted,
         automationState: .notVerifiable
     )
-    #expect(status.automationLogicPro == false)
+    #expect(!(status.automationLogicPro))
     #expect(status.summary.contains("Automation (Logic Pro): NOT VERIFIABLE"))
     #expect(status.summary.contains("Launch Logic Pro once"))
 }
@@ -459,9 +459,9 @@ private let toolText = sharedToolText
         runtime: .fastTest
     )
     await poller.start()
-    #expect(await poller.isRunning == true)
+    #expect(await poller.isRunning)
     await poller.stop()
-    #expect(await poller.isRunning == false)
+    #expect(!(await poller.isRunning))
 }
 
 @Test func testCoreMIDIChannelAftertouchAcceptsValueAlias() async {
@@ -497,6 +497,6 @@ private let toolText = sharedToolText
 @Test func testCoreMIDIChannelHealthCheckInactive() async {
     let channel = CoreMIDIChannel(engine: MIDIEngine())
     let health = await channel.healthCheck()
-    #expect(health.available == false)
+    #expect(!(health.available))
     #expect(health.detail.contains("not initialized"))
 }

@@ -160,8 +160,8 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
         command: .install,
         runtime: lifecycleRuntime(installDirWritable: false)
     )
-    #expect(try #require(step(writable, "binary.install")).requiresSudo == false)
-    #expect(try #require(step(notWritable, "binary.install")).requiresSudo == true)
+    #expect(!(try #require(step(writable, "binary.install")).requiresSudo))
+    #expect(try #require(step(notWritable, "binary.install")).requiresSudo)
 }
 
 // MARK: - Uninstall plan (fully installed)
@@ -233,7 +233,7 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
     #expect(try #require(step(plan, "launch_agent.remove")).action == .skip)
 
     // A skipped binary removal needs no sudo regardless of dir writability.
-    #expect(try #require(step(plan, "binary.remove")).requiresSudo == false)
+    #expect(!(try #require(step(plan, "binary.remove")).requiresSudo))
 }
 
 @Test func testUninstallPlanDeletesApprovalsWhenOnlyLockSidecarExists() throws {

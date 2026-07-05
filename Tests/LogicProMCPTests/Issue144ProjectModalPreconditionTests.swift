@@ -77,7 +77,7 @@ struct Issue144ProjectModalPreconditionTests {
         #expect(json["error"] as? String == "unsupported_state")
         #expect(json["operation"] as? String == operation)
         #expect(json["failure_stage"] as? String == "preflight_blocking_dialog")
-        #expect(json["blocking_dialog_present"] as? Bool == true)
-        #expect(json["write_attempted"] as? Bool == false)
+        #expect((json["blocking_dialog_present"] as? Bool)!)
+        #expect(!((json["write_attempted"] as? Bool)!))
     }
 }

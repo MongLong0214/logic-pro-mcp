@@ -22,7 +22,7 @@ import Testing
         error: .portUnavailable,
         hint: "CoreMIDI virtual port not configured"
     )
-    #expect(HonestContract.isTerminalStateC(envelope) == true)
+    #expect(HonestContract.isTerminalStateC(envelope))
 }
 
 @Test func testEncodeStateCPortUnavailableEnvelopeShape() {

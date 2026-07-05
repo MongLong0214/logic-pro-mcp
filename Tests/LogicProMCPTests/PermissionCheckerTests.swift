@@ -65,7 +65,7 @@ private final class PermissionRuntimeHarness: @unchecked Sendable {
     let state = PermissionChecker.checkSystemEventsAutomationState(runtime: harness.runtime())
 
     #expect(state == .notVerifiable)
-    // Force/negation form, NOT `== false`: `#expect(bool == false)` is a DEAD no-op
+    // Force/negation form, NOT `== false`: `#expect(!(bool))` is a DEAD no-op
     // under this repo's pinned swift-testing (it passes even when flipped to `== true`).
     // `!expr` is the only reliable Bool form. This guards the honesty invariant that a
     // could-not-run probe is NOT advertised as granted (would poison allGranted / #188).
@@ -122,12 +122,12 @@ private final class PermissionRuntimeHarness: @unchecked Sendable {
 }
 
 @Test func testPermissionCheckerProductionWrapperFunctionsReturnStatuses() {
-    let accessibility = PermissionChecker.checkAccessibility(prompt: false)
-    let automation = PermissionChecker.checkAutomation()
+    // The Bool returns are environment-dependent (real TCC state), so no value
+    // assertion is possible; the deterministic invariant is that check() always
+    // returns a populated status summary. The wrapper calls are smoke coverage.
+    _ = PermissionChecker.checkAccessibility(prompt: false)
+    _ = PermissionChecker.checkAutomation()
     let status = PermissionChecker.check()
 
-    #expect(accessibility == true || accessibility == false)
-    #expect(automation == true || automation == false)
-    #expect(status.accessibility == true || status.accessibility == false)
-    #expect(status.automationLogicPro == true || status.automationLogicPro == false)
+    #expect(!status.summary.isEmpty)
 }

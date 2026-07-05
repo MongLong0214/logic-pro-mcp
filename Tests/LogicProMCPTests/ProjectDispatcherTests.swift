@@ -58,7 +58,7 @@ private func seedCacheWithStaleProject(_ cache: StateCache) async {
         router: router,
         cache: cache
     )
-    #expect(sharedToolText(result).isEmpty == false)
+    #expect(!(sharedToolText(result).isEmpty))
 
     let postTracks = await cache.getTracks().count
     let postRegions = await cache.getRegions().count
@@ -87,7 +87,7 @@ private func seedCacheWithStaleProject(_ cache: StateCache) async {
         router: router,
         cache: cache
     )
-    #expect(sharedToolText(result).isEmpty == false)
+    #expect(!(sharedToolText(result).isEmpty))
 
     let postTracks = await cache.getTracks().count
     #expect(postTracks == 0, "close must clear cache so resources don't lie about a closed project")

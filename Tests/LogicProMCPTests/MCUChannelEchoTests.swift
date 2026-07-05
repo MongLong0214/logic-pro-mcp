@@ -83,7 +83,7 @@ private func decodeJSON(_ s: String) -> [String: Any] {
     let obj = decodeJSON(result.message)
     #expect(!((obj["verified"] as? Bool)!))
     #expect(obj["track"] as? String == "master")
-    #expect((obj["reason"] as? String)?.hasPrefix("echo_timeout_") == true)
+    #expect(((obj["reason"] as? String)?.hasPrefix("echo_timeout_"))!)
 }
 
 // #142 — on echo timeout, set_master_volume must DISCLOSE that MCU echo is the
@@ -104,7 +104,7 @@ private func decodeJSON(_ s: String) -> [String: Any] {
     #expect(result.isSuccess)
     let obj = decodeJSON(result.message)
     #expect(!((obj["verified"] as? Bool)!))
-    #expect((obj["reason"] as? String)?.hasPrefix("echo_timeout_") == true)
+    #expect(((obj["reason"] as? String)?.hasPrefix("echo_timeout_"))!)
     #expect(obj["track"] as? String == "master")
     #expect(obj["readback_source"] as? String == "mcu_echo")
     #expect(obj["requested"] as? Double == 0.8)
@@ -228,7 +228,7 @@ private func decodeJSON(_ s: String) -> [String: Any] {
     #expect(result.isSuccess)
     let obj = decodeJSON(result.message)
     #expect(!((obj["verified"] as? Bool)!))
-    #expect((obj["reason"] as? String)?.hasPrefix("echo_timeout_") == true)
+    #expect(((obj["reason"] as? String)?.hasPrefix("echo_timeout_"))!)
 }
 
 @Test func testMCUEchoTimeoutEnvVarIsRespected() {

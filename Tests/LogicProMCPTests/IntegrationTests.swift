@@ -39,7 +39,7 @@ import Foundation
     await channel.handleFeedback(.noteOn(channel: 0, note: 0x13, velocity: 0x7F))
 
     let tracks = await cache.getTracks()
-    #expect(tracks[3].isMuted == true)
+    #expect(tracks[3].isMuted)
 }
 
 @Test func testMCUFeedbackSeedsTrackStateWithoutAXBootstrap() async {
@@ -51,7 +51,7 @@ import Foundation
 
     let tracks = await cache.getTracks()
     #expect(tracks.count >= 4)
-    #expect(tracks[3].isMuted == true)
+    #expect(tracks[3].isMuted)
     #expect(tracks[3].name == "Track 4")
 }
 

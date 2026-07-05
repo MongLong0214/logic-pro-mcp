@@ -83,8 +83,8 @@ private let serverResourceText = sharedResourceText
     }
     // The error message identifies the offending method + cursor.
     let err = LogicProServer.invalidCursorError("abc", method: "tools/list")
-    #expect(err?.errorDescription?.contains("tools/list") == true)
-    #expect(err?.errorDescription?.contains("abc") == true)
+    #expect((err?.errorDescription?.contains("tools/list"))!)
+    #expect((err?.errorDescription?.contains("abc"))!)
 }
 
 @Test func testLogicProServerHandlersDispatchToolNamesWithoutStartingServer() async {
@@ -125,10 +125,14 @@ private let serverResourceText = sharedResourceText
     let health = try await handlers.readResource(.init(uri: "logic://system/health"))
 
     let trackPayload = serverResourceText(tracks)
-    let trackJSON = try JSONSerialization.jsonObject(with: Data(trackPayload.utf8)) as? [[String: Any]]
+    // logic://tracks is a metadata envelope { source, data:[...], ... }; the rows
+    // live under `data` (the prior bare-array parse predated the envelope, so it
+    // decoded to nil and the dead `== true` never actually checked emptiness).
+    let trackEnvelope = try #require(sharedJSONObject(trackPayload))
+    let trackData = try #require(trackEnvelope["data"] as? [[String: Any]])
 
     #expect(serverResourceText(transport).contains("\"tempo\""))
-    #expect(trackJSON?.isEmpty == true)
+    #expect(trackData.isEmpty)
     #expect(serverResourceText(health).contains("\"logic_pro_running\""))
 }
 

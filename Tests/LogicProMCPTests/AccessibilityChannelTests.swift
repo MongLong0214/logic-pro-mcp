@@ -390,17 +390,17 @@ private func makeSetInstrumentFixture() -> (
     let missingRoot = AccessibilityChannel(runtime: makeAccessibilityRuntime(isTrusted: true, isRunning: true, appRoot: nil))
     let healthy = AccessibilityChannel(runtime: makeAccessibilityRuntime())
 
-    #expect(await untrusted.healthCheck().available == false)
+    #expect(!(await untrusted.healthCheck().available))
     #expect(await untrusted.healthCheck().detail.contains("Accessibility not trusted"))
 
-    #expect(await notRunning.healthCheck().available == false)
+    #expect(!(await notRunning.healthCheck().available))
     #expect(await notRunning.healthCheck().detail.contains("Logic Pro is not running"))
 
-    #expect(await missingRoot.healthCheck().available == false)
+    #expect(!(await missingRoot.healthCheck().available))
     #expect(await missingRoot.healthCheck().detail.contains("Cannot access Logic Pro AX element"))
 
     let healthyState = await healthy.healthCheck()
-    #expect(healthyState.available == true)
+    #expect(healthyState.available)
     #expect(healthyState.detail.contains("AX connected"))
 }
 
@@ -1025,7 +1025,7 @@ private func makeSetInstrumentFixture() -> (
     #expect(object["action"] as? String == "mouse-click")
     #expect(mouse.mouseEvents.map(\.type) == [.leftMouseDown, .leftMouseUp])
     #expect(builder.actionCalls.isEmpty)
-    #expect((builder.attributeValue(cycle, kAXValueAttribute as String) as? NSNumber)?.boolValue == true)
+    #expect(((builder.attributeValue(cycle, kAXValueAttribute as String) as? NSNumber)?.boolValue)!)
 }
 
 @Test func testAccessibilityChannelControlBarToggleDoesNotTrustNoopAXPress() async {
@@ -1053,7 +1053,7 @@ private func makeSetInstrumentFixture() -> (
     #expect(!result.isSuccess)
     #expect(object["error"] as? String == "readback_mismatch")
     #expect(builder.actionCalls.contains { $0.elementID == builder.elementID(cycle) && $0.action == kAXPressAction as String })
-    #expect((builder.attributeValue(cycle, kAXValueAttribute as String) as? NSNumber)?.boolValue == false)
+    #expect(!(((builder.attributeValue(cycle, kAXValueAttribute as String) as? NSNumber)?.boolValue)!))
 }
 
 @Test func testAccessibilityChannelControlBarToggleAcceptsAXPressOnlyAfterReadbackChanges() async {
@@ -1096,7 +1096,7 @@ private func makeSetInstrumentFixture() -> (
     #expect(result.isSuccess)
     #expect((object["verified"] as? Bool)!)
     #expect(object["action"] as? String == "axpress")
-    #expect((builder.attributeValue(cycle, kAXValueAttribute as String) as? NSNumber)?.boolValue == true)
+    #expect(((builder.attributeValue(cycle, kAXValueAttribute as String) as? NSNumber)?.boolValue)!)
 }
 
 @Test func testAccessibilityChannelAXBackedTransportErrorPaths() async {
@@ -1216,11 +1216,11 @@ private func makeSetInstrumentFixture() -> (
 
     #expect(!result.isSuccess)
     let obj = decodeAccessibilityJSON(result.message)
-    #expect((obj["success"] as? Bool)! == false)
+    #expect(!((obj["success"] as? Bool)!))
     #expect(obj["error"] as? String == "permission_denied")
     #expect(obj["permission"] as? String == "automation_system_events")
     #expect(obj["failure_stage"] as? String == "preflight_system_events_permission")
-    #expect((obj["write_attempted"] as? Bool)! == false)
+    #expect(!((obj["write_attempted"] as? Bool)!))
     #expect((obj["safe_to_retry"] as? Bool)!)
 }
 
@@ -1268,7 +1268,7 @@ private func makeTempoSliderFixture(
 
     #expect(!result.isSuccess)
     let obj = decodeAccessibilityJSON(result.message)
-    #expect((obj["success"] as? Bool)! == false)
+    #expect(!((obj["success"] as? Bool)!))
     #expect(obj["error"] as? String == "readback_mismatch")
     #expect(obj["via"] as? String == "slider-increment")
     #expect((obj["requested"] as? Double) == 96)
@@ -1617,7 +1617,7 @@ private func makeTempoSliderFixture(
     #expect(!((object["dialog_present"] as? Bool)!))
     #expect((object["transport_slider_descriptions"] as? [String]) == [])
     #expect((object["control_bar_checkbox_labels"] as? [String]) == [])
-    #expect(fallbackBox.called == false)
+    #expect(!(fallbackBox.called))
 }
 
 @Test func testAccessibilityChannelCreateInstrumentVerifiesTrackCountIncrease() async {
@@ -1961,7 +1961,7 @@ private func makeTempoSliderFixture(
     #expect(obj["via"] as? String == "track_menu")
     #expect(obj["observed"] as? String == "Track Alpha")
     #expect(builder.attributeValue(nameField, kAXDescriptionAttribute as String) as? String == "Track Alpha")
-    #expect((builder.attributeValue(header, kAXDescriptionAttribute as String) as? String)?.contains("Track Alpha") == true)
+    #expect(((builder.attributeValue(header, kAXDescriptionAttribute as String) as? String)?.contains("Track Alpha"))!)
     #expect(session.selectionCommitted)
     #expect(session.renamePressed)
     #expect(mouseRecorder.keyEvents.contains(0x24))
@@ -2414,8 +2414,8 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     #expect(obj["error"] as? String == "ax_write_failed")
     #expect(obj["precondition"] as? String == "library_nav_failed")
     // No-drift guarantee: the panel was re-staged and is left open.
-    #expect(obj["panel_restaged_after_failure"] as? Bool == true)
-    #expect(obj["panel_open_after_failure"] as? Bool == true)
+    #expect((obj["panel_restaged_after_failure"] as? Bool)!)
+    #expect((obj["panel_open_after_failure"] as? Bool)!)
     #expect(openCalls.count == 1)
 }
 
@@ -2450,8 +2450,8 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     #expect(!result.isSuccess)
     let obj = decodeAccessibilityJSON(result.message)
     #expect(obj["error"] as? String == "ax_write_failed")
-    #expect(obj["panel_restaged_after_failure"] as? Bool == false)
-    #expect(obj["panel_open_after_failure"] as? Bool == true)
+    #expect(!((obj["panel_restaged_after_failure"] as? Bool)!))
+    #expect((obj["panel_open_after_failure"] as? Bool)!)
     #expect(openCalls.count == 0, "must never re-toggle an already-open panel shut")
 }
 
@@ -2778,7 +2778,7 @@ private final class LockedFlag: @unchecked Sendable {
     #expect(strips[0].plugins.count == 1)
     #expect(strips[0].plugins[0].index == 0)
     #expect(strips[0].plugins[0].name == "Drum Machine Designer")
-    #expect(strips[0].plugins[0].isBypassed == false)
+    #expect(!(strips[0].plugins[0].isBypassed))
 }
 
 @Test func testAccessibilityChannelInsertPluginRejectsOccupiedSlotBeforeMenuSelection() async {

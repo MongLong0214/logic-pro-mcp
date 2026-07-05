@@ -75,12 +75,12 @@ private func decodeScripterJSON(_ s: String) -> [String: Any] {
     let channel = ScripterChannel(transport: transport, approvalStore: store)
 
     let beforeStart = await channel.healthCheck()
-    #expect(beforeStart.available == false)
+    #expect(!(beforeStart.available))
     #expect(beforeStart.verificationStatus == .unavailable)
 
     try await channel.start()
     let afterStart = await channel.healthCheck()
-    #expect(afterStart.available == true)
+    #expect(afterStart.available)
     #expect(afterStart.verificationStatus == .manualValidationRequired)
     #expect(afterStart.detail.contains("not verifiable"))
 }
@@ -92,12 +92,12 @@ private func decodeScripterJSON(_ s: String) -> [String: Any] {
 
     try await channel.start()
     let beforeApproval = await channel.healthCheck()
-    #expect(beforeApproval.ready == false)
+    #expect(!(beforeApproval.ready))
 
     try await store.approve(ManualValidationChannel.scripter, note: "validated in Logic Pro")
 
     let afterApproval = await channel.healthCheck()
-    #expect(afterApproval.ready == true)
+    #expect(afterApproval.ready)
     #expect(afterApproval.verificationStatus == ChannelVerificationStatus.runtimeReady)
     #expect(afterApproval.detail.contains("approved by operator"))
 }
@@ -111,7 +111,7 @@ private func decodeScripterJSON(_ s: String) -> [String: Any] {
     let obj = decodeScripterJSON(result.message)
     #expect(!((obj["success"] as? Bool)!))
     #expect(obj["error"] as? String == "not_implemented")
-    #expect((obj["hint"] as? String)?.contains("only handles plugin.set_param") == true)
+    #expect(((obj["hint"] as? String)?.contains("only handles plugin.set_param"))!)
 }
 
 @Test func testScripterExecuteSurfacesTransportSendFailure() async {
@@ -128,7 +128,7 @@ private func decodeScripterJSON(_ s: String) -> [String: Any] {
     let obj = decodeScripterJSON(result.message)
     #expect(!((obj["success"] as? Bool)!))
     #expect(obj["error"] as? String == "port_unavailable")
-    #expect((obj["hint"] as? String)?.contains("Failed to send Scripter param 1") == true)
+    #expect(((obj["hint"] as? String)?.contains("Failed to send Scripter param 1"))!)
 }
 
 @Test func testScripterRejectsUnsupportedInsertAndOutOfRangeParam() async {
@@ -142,7 +142,7 @@ private func decodeScripterJSON(_ s: String) -> [String: Any] {
     #expect(!badInsert.isSuccess)
     let badInsertObj = decodeScripterJSON(badInsert.message)
     #expect(badInsertObj["error"] as? String == "not_implemented")
-    #expect((badInsertObj["hint"] as? String)?.contains("insert 0") == true)
+    #expect(((badInsertObj["hint"] as? String)?.contains("insert 0"))!)
 
     let badParam = await channel.execute(
         operation: "plugin.set_param",
@@ -151,7 +151,7 @@ private func decodeScripterJSON(_ s: String) -> [String: Any] {
     #expect(!badParam.isSuccess)
     let badParamObj = decodeScripterJSON(badParam.message)
     #expect(badParamObj["error"] as? String == "invalid_params")
-    #expect((badParamObj["hint"] as? String)?.contains("out of range") == true)
+    #expect(((badParamObj["hint"] as? String)?.contains("out of range"))!)
 
     let sent = await transport.sentBytes
     #expect(sent.isEmpty)

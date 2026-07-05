@@ -74,7 +74,7 @@ struct LibraryAccessorResolvePathTests {
     @Test func testResolvePath_Depth1Leaf() async throws {
         let r = LibraryAccessor.resolvePath("Bass/Sub", in: sampleRoot())
         #expect(r != nil)
-        #expect(r!.exists == true)
+        #expect(r!.exists)
         #expect(r!.kind == .leaf)
         #expect(r!.matchedPath == "Bass/Sub")
     }
@@ -89,21 +89,21 @@ struct LibraryAccessorResolvePathTests {
     @Test func testResolvePath_MissingLeaf_NotExists() async throws {
         let r = LibraryAccessor.resolvePath("Bass/Nope", in: sampleRoot())
         #expect(r != nil)
-        #expect(r!.exists == false)
+        #expect(!(r!.exists))
         #expect(r!.kind == nil)
     }
 
     @Test func testResolvePath_EscapedSlash() async throws {
         let r = LibraryAccessor.resolvePath(#"Foo/Sub\/Thing"#, in: sampleRoot())
         #expect(r != nil)
-        #expect(r!.exists == true)
+        #expect(r!.exists)
         #expect(r!.kind == .leaf)
     }
 
     @Test func testResolvePath_DisambiguatedDuplicate() async throws {
         let r = LibraryAccessor.resolvePath("Synth/Pad[1]", in: sampleRoot())
         #expect(r != nil)
-        #expect(r!.exists == true)
+        #expect(r!.exists)
         #expect(r!.kind == .leaf)
         #expect(r!.matchedPath == "Synth/Pad[1]")
     }
@@ -111,7 +111,7 @@ struct LibraryAccessorResolvePathTests {
     @Test func testResolvePath_FolderPath_KindFolder() async throws {
         let r = LibraryAccessor.resolvePath("Orch", in: sampleRoot())
         #expect(r != nil)
-        #expect(r!.exists == true)
+        #expect(r!.exists)
         #expect(r!.kind == .folder)
         #expect((r!.children ?? []).contains("Strings"))
     }
@@ -119,19 +119,19 @@ struct LibraryAccessorResolvePathTests {
     @Test func testResolvePath_EmptyPath_NotExists() async throws {
         let r = LibraryAccessor.resolvePath("", in: sampleRoot())
         #expect(r != nil)
-        #expect(r!.exists == false)
+        #expect(!(r!.exists))
     }
 
     @Test func testResolvePath_EmptySegment_NotExists() async throws {
         let r = LibraryAccessor.resolvePath("A//C", in: sampleRoot())
         #expect(r != nil)
-        #expect(r!.exists == false)
+        #expect(!(r!.exists))
     }
 
     @Test func testResolvePath_TrailingSlash() async throws {
         let r = LibraryAccessor.resolvePath("Bass/", in: sampleRoot())
         #expect(r != nil)
-        #expect(r!.exists == true)
+        #expect(r!.exists)
         #expect(r!.kind == .folder)
     }
 

@@ -89,6 +89,6 @@ private func t7StartedChannel(tag: String) async throws -> ChannelHealth {
 
 @Test func testKeyCmdChannelAvailableReadyUnchanged() async throws {
     let health = try await t7StartedChannel(tag: "ar")
-    #expect(health.available == true)
-    #expect(health.ready == false)
+    #expect(health.available)
+    #expect(!(health.ready))
 }

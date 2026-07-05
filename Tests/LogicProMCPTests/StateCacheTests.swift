@@ -117,8 +117,8 @@ import Testing
 
     let transport = await cache.getTransport()
     let project = await cache.getProject()
-    #expect(transport.isPlaying == false)
-    #expect(transport.isRecording == false)
+    #expect(!(transport.isPlaying))
+    #expect(!(transport.isRecording))
     #expect(transport.position == "1.1.1.1")
     #expect(transport.tempo == 120.0)
     #expect(project.name == "")
@@ -133,8 +133,8 @@ import Testing
     await cache.selectOnly(trackAt: 1)
 
     let tracks = await cache.getTracks()
-    #expect(tracks[0].isSelected == false)
-    #expect(tracks[1].isSelected == true)
-    #expect(tracks[2].isSelected == false)
+    #expect(!(tracks[0].isSelected))
+    #expect(tracks[1].isSelected)
+    #expect(!(tracks[2].isSelected))
     #expect(await cache.getSelectedTrack()?.id == 1)
 }

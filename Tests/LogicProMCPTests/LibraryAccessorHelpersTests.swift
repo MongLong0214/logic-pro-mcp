@@ -37,7 +37,7 @@ struct LibraryAccessorHelpersTests {
         let leaf = LibraryNode(name: "Quick", path: "Quick", kind: .leaf, children: [])
         let root = buildRoot([leaf])
         let r = LibraryAccessor.resolvePath("Quick", in: root)
-        #expect(r?.exists == true)
+        #expect((r?.exists)!)
         #expect(r?.kind == .leaf)
     }
 

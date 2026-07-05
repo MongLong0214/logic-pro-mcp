@@ -50,7 +50,7 @@ import Testing
     #expect(result != nil)
     #expect(result?.function == .solo)
     #expect(result?.strip == 2)
-    #expect(result?.on == true)
+    #expect((result?.on)!)
 }
 
 // MARK: - Transport
@@ -163,8 +163,8 @@ import Testing
 // MARK: - Validation
 
 @Test func testSysExValidation() {
-    #expect(MCUProtocol.isValidSysEx([0xF0, 0x00, 0x01, 0x7F, 0xF7]) == true)
-    #expect(MCUProtocol.isValidSysEx([0xF0, 0x00, 0x80, 0x01, 0xF7]) == false)
-    #expect(MCUProtocol.isValidSysEx([0x00, 0x01, 0xF7]) == false)
-    #expect(MCUProtocol.isValidSysEx([0xF0, 0x00, 0x01]) == false)
+    #expect(MCUProtocol.isValidSysEx([0xF0, 0x00, 0x01, 0x7F, 0xF7]))
+    #expect(!(MCUProtocol.isValidSysEx([0xF0, 0x00, 0x80, 0x01, 0xF7])))
+    #expect(!(MCUProtocol.isValidSysEx([0x00, 0x01, 0xF7])))
+    #expect(!(MCUProtocol.isValidSysEx([0xF0, 0x00, 0x01])))
 }

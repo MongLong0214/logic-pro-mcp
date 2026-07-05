@@ -71,12 +71,12 @@ private func manualValidationStoreURL(prefix: String) -> URL {
     let channel = MIDIKeyCommandsChannel(transport: transport, approvalStore: store)
 
     let beforeStart = await channel.healthCheck()
-    #expect(beforeStart.available == false)
+    #expect(!(beforeStart.available))
     #expect(beforeStart.verificationStatus == .unavailable)
 
     try await channel.start()
     let afterStart = await channel.healthCheck()
-    #expect(afterStart.available == true)
+    #expect(afterStart.available)
     #expect(afterStart.verificationStatus == .manualValidationRequired)
     // T7 (v3.1.6): detail "not verifiable" → "Manual MIDI Learn required" (audited matrix + orphan ops)
     #expect(afterStart.detail.contains("Manual MIDI Learn required"))
@@ -89,12 +89,12 @@ private func manualValidationStoreURL(prefix: String) -> URL {
 
     try await channel.start()
     let beforeApproval = await channel.healthCheck()
-    #expect(beforeApproval.ready == false)
+    #expect(!(beforeApproval.ready))
 
     try await store.approve(ManualValidationChannel.midiKeyCommands, note: "validated in Logic Pro")
 
     let afterApproval = await channel.healthCheck()
-    #expect(afterApproval.ready == true)
+    #expect(afterApproval.ready)
     #expect(afterApproval.verificationStatus == ChannelVerificationStatus.runtimeReady)
     #expect(afterApproval.detail.contains("approved by operator"))
 }

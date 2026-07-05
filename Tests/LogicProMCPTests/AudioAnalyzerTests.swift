@@ -281,7 +281,7 @@ private func measureOnlyPolicy() -> AudioAnalyzer.AnalysisPolicy {
     #expect(oversized.exists)
     #expect(oversized.verification.status == .fail)
     #expect(oversized.verification.reasons == ["analysis_limit_exceeded"])
-    #expect(oversized.verification.detail?.contains("exceeds maximum") == true)
+    #expect((oversized.verification.detail?.contains("exceeds maximum"))!)
 
     let tone = try writeAudioFixture(named: "too-long.wav", durationSeconds: 0.2) { _ in 0.2 }
     var durationPolicy = measureOnlyPolicy()
@@ -289,7 +289,7 @@ private func measureOnlyPolicy() -> AudioAnalyzer.AnalysisPolicy {
     let tooLong = AudioAnalyzer.analyzeFile(path: tone.path, policy: durationPolicy)
     #expect(tooLong.verification.status == .fail)
     #expect(tooLong.verification.reasons == ["analysis_limit_exceeded"])
-    #expect(tooLong.verification.detail?.contains("duration") == true)
+    #expect((tooLong.verification.detail?.contains("duration"))!)
 }
 
 @Test func testAudioDispatcherAnalyzeFileReturnsJSONAndErrorsOnFailedVerification() throws {

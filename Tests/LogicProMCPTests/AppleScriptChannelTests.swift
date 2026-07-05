@@ -110,7 +110,7 @@ private func makeAppleScriptRuntime(
     #expect(healthy.detail == "AppleScript ready")
 
     let missing = await unavailable.healthCheck()
-    #expect(missing.available == false)
+    #expect(!(missing.available))
     #expect(missing.detail.contains("not running"))
 }
 
@@ -263,7 +263,7 @@ private func makeAppleScriptRuntime(
     ) as! [String: Any]
     #expect(!((obj["success"] as? Bool)!))
     #expect(obj["error"] as? String == "unsupported_state")
-    #expect((obj["hint"] as? String)?.contains("refusing to close") == true)
+    #expect(((obj["hint"] as? String)?.contains("refusing to close"))!)
     #expect(openRecorder.snapshot() == [path])
     let scripts = await recorder.snapshot()
     #expect(!scripts.contains(where: { $0.contains("close front document saving no") }))
@@ -498,7 +498,7 @@ private func makeAppleScriptRuntime(
     ) as! [String: Any]
     #expect(!((obj["success"] as? Bool)!))
     #expect(obj["error"] as? String == "readback_mismatch")
-    #expect((obj["hint"] as? String)?.contains("modification time did not advance") == true)
+    #expect(((obj["hint"] as? String)?.contains("modification time did not advance"))!)
     #expect(obj["observed"] as? String == "/tmp/export.logicx")
 }
 
@@ -803,7 +803,7 @@ private func makeAppleScriptRuntime(
     ) as! [String: Any]
     #expect(!((obj["success"] as? Bool)!))
     #expect(obj["error"] as? String == "readback_mismatch")
-    #expect((obj["hint"] as? String)?.contains("did not change") == true)
+    #expect(((obj["hint"] as? String)?.contains("did not change"))!)
 }
 
 /// newProjectExtras is the deterministic seam: a real name → observed_name; a

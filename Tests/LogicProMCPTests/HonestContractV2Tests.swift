@@ -108,19 +108,19 @@ private func decode(_ json: String) -> [String: Any] {
     // v2 State C carries verified:false, but the detector keys off
     // success:false + error — so it must still be recognized as an envelope.
     let json = HonestContract.encodeV2StateC(error: .targetPluginMismatch)
-    #expect(HonestContractEnvelopeDetector.isAlreadyEnvelope(json) == true)
+    #expect(HonestContractEnvelopeDetector.isAlreadyEnvelope(json))
 }
 
 @Test func testDetectorRecognizesV2StateAAndBAsEnvelope() {
-    #expect(HonestContractEnvelopeDetector.isAlreadyEnvelope(HonestContract.encodeV2StateA()) == true)
+    #expect(HonestContractEnvelopeDetector.isAlreadyEnvelope(HonestContract.encodeV2StateA()))
     #expect(HonestContractEnvelopeDetector.isAlreadyEnvelope(
-        HonestContract.encodeV2StateB(reason: .readbackUnavailable)) == true)
+        HonestContract.encodeV2StateB(reason: .readbackUnavailable)))
 }
 
 @Test func testV2StateCIsTerminalForVerifiedCodes() {
     // Every verified-path failure is terminal (AX-only, no fallback).
     let json = HonestContract.encodeV2StateC(error: .windowOpenFailed)
-    #expect(HonestContract.isTerminalStateC(json) == true)
+    #expect(HonestContract.isTerminalStateC(json))
     #expect(HonestContract.stateCErrorCode(json) == "window_open_failed")
 }
 
@@ -160,6 +160,6 @@ private func decode(_ json: String) -> [String: Any] {
 @Test func testReadbackMismatchNotAddedToTerminalCodes() {
     // readbackMismatch predates v2 and is shared with channels where fallback
     // is still legitimate — it must stay non-terminal.
-    #expect(HonestContract.terminalErrorCodes.contains(
-        HonestContract.FailureError.readbackMismatch.rawValue) == false)
+    #expect(!(HonestContract.terminalErrorCodes.contains(
+        HonestContract.FailureError.readbackMismatch.rawValue)))
 }

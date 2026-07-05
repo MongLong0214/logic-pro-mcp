@@ -40,9 +40,9 @@ struct Issue202SurfaceConsistencyTests {
             let o = obj(result)
             #expect(o?["error"] as? String == "command_not_exposed", "\(operation) should report command_not_exposed")
             #expect((o?["not_exposed"] as? Bool)!, "\(operation) must carry not_exposed:true")
-            #expect((o?["supported"] as? Bool)! == false, "\(operation) must carry supported:false")
+            #expect(!((o?["supported"] as? Bool)!), "\(operation) must carry supported:false")
             #expect(o?["operation"] as? String == operation)
-            #expect((o?["success"] as? Bool)! == false)
+            #expect(!((o?["success"] as? Bool)!))
             // The census stub-detection phrase must be preserved in the hint.
             let hint = (o?["hint"] as? String)!
             #expect(hint.contains("not exposed in the production MCP contract"))

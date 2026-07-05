@@ -24,7 +24,7 @@ import Testing
     await parser.handle(event)
 
     let tracks = await cache.getTracks()
-    #expect(tracks[2].isMuted == true)
+    #expect(tracks[2].isMuted)
 }
 
 @Test func testFeedbackParserUpdatesSoloState() async {
@@ -36,7 +36,7 @@ import Testing
     await parser.handle(event)
 
     let tracks = await cache.getTracks()
-    #expect(tracks[2].isSoloed == true)
+    #expect(tracks[2].isSoloed)
 }
 
 @Test func testFeedbackParserParsesLCD() async {
@@ -65,9 +65,9 @@ import Testing
     await parser.handle(event)
 
     let updated = await cache.getMCUConnection()
-    #expect(updated.isConnected == true)
+    #expect(updated.isConnected)
     #expect(updated.lastFeedbackAt != nil)
-    #expect(updated.registeredAsDevice == true)
+    #expect(updated.registeredAsDevice)
 }
 
 @Test func testFeedbackParserBankOffsetApplied() async {
@@ -83,8 +83,8 @@ import Testing
     await parser.handle(event)
 
     let tracks = await cache.getTracks()
-    #expect(tracks[0].isMuted == false) // track 0 untouched
-    #expect(tracks[8].isMuted == true)  // track 8 muted
+    #expect(!(tracks[0].isMuted)) // track 0 untouched
+    #expect(tracks[8].isMuted)  // track 8 muted
 }
 
 @Test func testFeedbackParserFaderBankOffset() async {
@@ -117,8 +117,8 @@ import Testing
     await parser.handle(.noteOff(channel: 0, note: 0x19, velocity: 0))
 
     let tracks = await cache.getTracks()
-    #expect(tracks[0].isArmed == false)
-    #expect(tracks[1].isSelected == false)
+    #expect(!(tracks[0].isArmed))
+    #expect(!(tracks[1].isSelected))
 }
 
 @Test func testFeedbackParserSelectOnEnforcesSingleSelection() async {
@@ -147,7 +147,7 @@ import Testing
     await parser.handle(.noteOn(channel: 0, note: 0x1D, velocity: 0x7F))
     let after = await cache.getTracks()
     #expect(after.filter { $0.isSelected }.count == 1)
-    #expect(after[5].isSelected == true)
+    #expect(after[5].isSelected)
 }
 
 @Test func testFeedbackParserIgnoresControlChangeAndDefaultEventsAfterUpdatingConnection() async {
@@ -163,9 +163,9 @@ import Testing
 
     let conn = await cache.getMCUConnection()
     let tracks = await cache.getTracks()
-    #expect(conn.isConnected == true)
+    #expect(conn.isConnected)
     #expect(conn.lastFeedbackAt != nil)
-    #expect(conn.registeredAsDevice == true)
-    #expect(tracks[0].isMuted == false)
-    #expect(tracks[0].isSoloed == false)
+    #expect(conn.registeredAsDevice)
+    #expect(!(tracks[0].isMuted))
+    #expect(!(tracks[0].isSoloed))
 }

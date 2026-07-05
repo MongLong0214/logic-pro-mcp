@@ -132,7 +132,8 @@ struct ProjectExportPlannerTests {
         let after = Set(try FileManager.default.contentsOfDirectory(atPath: outputRoot.path))
         #expect(before == after)
 
-        #expect(result.isError != true)
+        let resultIsError = result.isError ?? false
+        #expect(!resultIsError)
         let data = try #require(sharedToolText(result).data(using: .utf8))
         let plan = try JSONDecoder().decode(ProjectExportPlan.self, from: data)
         #expect(plan.schema == ProjectExportPlanner.schema)

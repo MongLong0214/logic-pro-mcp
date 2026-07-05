@@ -48,29 +48,29 @@ private final class AppleScriptOpenHarness: @unchecked Sendable {
 }
 
 @Test func testTransportWhitelist() {
-    #expect(AppleScriptSafety.isAllowedTransportAction("play") == true)
-    #expect(AppleScriptSafety.isAllowedTransportAction("stop") == true)
-    #expect(AppleScriptSafety.isAllowedTransportAction("record") == true)
-    #expect(AppleScriptSafety.isAllowedTransportAction("pause") == true)
-    #expect(AppleScriptSafety.isAllowedTransportAction("rm -rf") == false)
-    #expect(AppleScriptSafety.isAllowedTransportAction("\" & do shell script") == false)
+    #expect(AppleScriptSafety.isAllowedTransportAction("play"))
+    #expect(AppleScriptSafety.isAllowedTransportAction("stop"))
+    #expect(AppleScriptSafety.isAllowedTransportAction("record"))
+    #expect(AppleScriptSafety.isAllowedTransportAction("pause"))
+    #expect(!(AppleScriptSafety.isAllowedTransportAction("rm -rf")))
+    #expect(!(AppleScriptSafety.isAllowedTransportAction("\" & do shell script")))
 }
 
 @Test func testSaveAsPathValidation() {
-    #expect(AppleScriptSafety.isValidFilePath("/Users/test/song.logicx") == true)
-    #expect(AppleScriptSafety.isValidFilePath("") == false)
-    #expect(AppleScriptSafety.isValidFilePath("/dev/null") == false)
-    #expect(AppleScriptSafety.isValidFilePath("relative/song.logicx") == false)
-    #expect(AppleScriptSafety.isValidFilePath(" /tmp/song.logicx") == false)
-    #expect(AppleScriptSafety.isValidProjectPath("\n/tmp/song.logicx", requireExisting: false) == false)
-    #expect(AppleScriptSafety.isValidFilePath("/tmp/project/../song.logicx") == false)
-    #expect(AppleScriptSafety.isValidProjectPath("/Users/test/song.logicx", requireExisting: false) == true)
-    #expect(AppleScriptSafety.isValidProjectPath("/Users/test/song.txt", requireExisting: false) == false)
-    #expect(AppleScriptSafety.isValidProjectPath("/tmp/project/../song.logicx", requireExisting: false) == false)
+    #expect(AppleScriptSafety.isValidFilePath("/Users/test/song.logicx"))
+    #expect(!(AppleScriptSafety.isValidFilePath("")))
+    #expect(!(AppleScriptSafety.isValidFilePath("/dev/null")))
+    #expect(!(AppleScriptSafety.isValidFilePath("relative/song.logicx")))
+    #expect(!(AppleScriptSafety.isValidFilePath(" /tmp/song.logicx")))
+    #expect(!(AppleScriptSafety.isValidProjectPath("\n/tmp/song.logicx", requireExisting: false)))
+    #expect(!(AppleScriptSafety.isValidFilePath("/tmp/project/../song.logicx")))
+    #expect(AppleScriptSafety.isValidProjectPath("/Users/test/song.logicx", requireExisting: false))
+    #expect(!(AppleScriptSafety.isValidProjectPath("/Users/test/song.txt", requireExisting: false)))
+    #expect(!(AppleScriptSafety.isValidProjectPath("/tmp/project/../song.logicx", requireExisting: false)))
 }
 
 @Test func testAppleScriptSafetyRejectsControlCharactersAndMissingExistingProjects() {
-    #expect(AppleScriptSafety.isValidFilePath("/Users/test/song\n.logicx") == false)
+    #expect(!(AppleScriptSafety.isValidFilePath("/Users/test/song\n.logicx")))
 
     let missingPath = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString)
@@ -86,7 +86,7 @@ private final class AppleScriptOpenHarness: @unchecked Sendable {
         .appendingPathComponent(UUID().uuidString)
         .appendingPathExtension("logicx")
         .path
-    #expect(AppleScriptSafety.openFile(at: missingProject) == false)
+    #expect(!(AppleScriptSafety.openFile(at: missingProject)))
 
     let textFileURL = temporaryDirectory
         .appendingPathComponent(UUID().uuidString)
@@ -94,7 +94,7 @@ private final class AppleScriptOpenHarness: @unchecked Sendable {
     try Data().write(to: textFileURL)
     defer { try? FileManager.default.removeItem(at: textFileURL) }
 
-    #expect(AppleScriptSafety.openFile(at: textFileURL.path) == false)
+    #expect(!(AppleScriptSafety.openFile(at: textFileURL.path)))
 }
 
 @Test func testAppleScriptOpenFileRejectsMalformedLogicPackage() throws {
@@ -108,8 +108,8 @@ private final class AppleScriptOpenHarness: @unchecked Sendable {
     try FileManager.default.createDirectory(at: alternativesURL, withIntermediateDirectories: true)
     try Data("undo".utf8).write(to: alternativesURL.appendingPathComponent("Undo Data.nosync"))
 
-    #expect(AppleScriptSafety.openFile(at: malformedURL.path) == false)
-    #expect(AppleScriptSafety.isValidProjectPath(malformedURL.path, requireExisting: true) == false)
+    #expect(!(AppleScriptSafety.openFile(at: malformedURL.path)))
+    #expect(!(AppleScriptSafety.isValidProjectPath(malformedURL.path, requireExisting: true)))
 }
 
 private func makeExistingLogicProjectPackage() throws -> URL {
@@ -132,7 +132,7 @@ private func makeExistingLogicProjectPackage() throws -> URL {
 
     let opened = AppleScriptSafety.openFile(at: projectURL.path, runtime: harness.runtime())
 
-    #expect(opened == true)
+    #expect(opened)
     #expect(harness.openedURLs.count == 1)
     #expect(harness.openedURLs[0] == projectURL.standardizedFileURL)
 }
@@ -145,7 +145,7 @@ private func makeExistingLogicProjectPackage() throws -> URL {
 
     let opened = AppleScriptSafety.openFile(at: projectURL.path, runtime: harness.runtime())
 
-    #expect(opened == false)
+    #expect(!(opened))
     #expect(harness.openedURLs.count == 1)
 }
 
@@ -156,5 +156,5 @@ private func makeExistingLogicProjectPackage() throws -> URL {
 
     let opened = AppleScriptSafety.Runtime.production.openFileURL(url)
 
-    #expect(opened == false)
+    #expect(!(opened))
 }

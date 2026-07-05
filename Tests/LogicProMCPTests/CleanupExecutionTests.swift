@@ -140,7 +140,8 @@ struct CleanupExecutionTests {
         cleanupAuditFileReader: headlessCleanupAuditFileReader
     )
 
-    #expect(result.isError != true)
+    let resultIsError = result.isError ?? false
+    #expect(!resultIsError)
     let body = sharedToolText(result)
     let json = try #require(sharedJSONObject(body), "response must be a JSON object")
     #expect(try #require(json["success"] as? Bool))
@@ -176,7 +177,7 @@ struct CleanupExecutionTests {
 
     #expect(result.isError!)
     let json = try #require(sharedJSONObject(sharedToolText(result)))
-    #expect(try #require(json["success"] as? Bool) == false)
+    #expect(!((try #require(json["success"] as? Bool))!))
     // Fail-closed: NO rename was attempted.
     let calls = await channel.calls()
     #expect(calls.isEmpty)
@@ -201,7 +202,7 @@ struct CleanupExecutionTests {
 
     #expect(result.isError!)
     let json = try #require(sharedJSONObject(sharedToolText(result)))
-    #expect(try #require(json["success"] as? Bool) == false)
+    #expect(!((try #require(json["success"] as? Bool))!))
     let calls = await channel.calls()
     #expect(calls.isEmpty)
 }
@@ -226,7 +227,7 @@ struct CleanupExecutionTests {
 
     #expect(result.isError!)
     let json = try #require(sharedJSONObject(sharedToolText(result)))
-    #expect(try #require(json["success"] as? Bool) == false)
+    #expect(!((try #require(json["success"] as? Bool))!))
     #expect(json["error"] as? String == "element_not_found")
     let calls = await channel.calls()
     #expect(calls.isEmpty)
@@ -248,7 +249,7 @@ struct CleanupExecutionTests {
         plan.steps.first { $0.id == stepID },
         "expected empty-track review step"
     )
-    #expect(emptyStep.supportedByCurrentTools == false)
+    #expect(!(emptyStep.supportedByCurrentTools))
 
     await seedEmptyTrackReviewStep(cache)
     let result = await ProjectDispatcher.handle(
@@ -264,7 +265,7 @@ struct CleanupExecutionTests {
 
     #expect(result.isError!)
     let json = try #require(sharedJSONObject(sharedToolText(result)))
-    #expect(try #require(json["success"] as? Bool) == false)
+    #expect(!((try #require(json["success"] as? Bool))!))
     // A non-mutating step is caught by the mutates_project gate first.
     #expect(json["error"] as? String == "invalid_params")
     let calls = await channel.calls()
@@ -335,7 +336,7 @@ struct CleanupExecutionTests {
 
     #expect(result.isError!)
     let json = try #require(sharedJSONObject(sharedToolText(result)))
-    #expect(try #require(json["success"] as? Bool) == false)
+    #expect(!((try #require(json["success"] as? Bool))!))
     let calls = await channel.calls()
     #expect(calls.isEmpty)
 }
@@ -370,7 +371,7 @@ struct CleanupExecutionTests {
 
     #expect(result.isError!)
     let json = try #require(sharedJSONObject(sharedToolText(result)))
-    #expect(try #require(json["success"] as? Bool) == false)
+    #expect(!((try #require(json["success"] as? Bool))!))
     #expect(json["error"] as? String == "stale_snapshot")
     let calls = await channel.calls()
     #expect(calls.isEmpty)
@@ -402,10 +403,10 @@ struct CleanupExecutionTests {
 
     #expect(result.isError!)
     let json = try #require(sharedJSONObject(sharedToolText(result)))
-    #expect(try #require(json["success"] as? Bool) == false)
+    #expect(!((try #require(json["success"] as? Bool))!))
     // Some rename(s) were attempted; the failure surfaces the failed track.
     let calls = await channel.calls()
-    #expect(calls.isEmpty == false)
+    #expect(!(calls.isEmpty))
 }
 
 @Test func testCleanupApplyRefusesNameCountMismatch() async throws {
@@ -430,7 +431,7 @@ struct CleanupExecutionTests {
 
     #expect(result.isError!)
     let json = try #require(sharedJSONObject(sharedToolText(result)))
-    #expect(try #require(json["success"] as? Bool) == false)
+    #expect(!((try #require(json["success"] as? Bool))!))
     #expect(json["error"] as? String == "invalid_params")
     let calls = await channel.calls()
     #expect(calls.isEmpty)

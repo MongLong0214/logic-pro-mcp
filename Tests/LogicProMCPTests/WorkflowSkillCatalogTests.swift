@@ -304,26 +304,26 @@ struct WorkflowSkillCatalogTests {
 
         let stockSurfacePresent = WorkflowSkillCatalog.currentStaticResourceURIs().contains("logic://stock-plugins")
         let stock = snapshot.workflows.first { $0.id == "logic.workflow.plugins.stock_chain_plan" }
-        #expect(stock?.dependsOn.contains("logic://stock-plugins") == true)
+        #expect((stock?.dependsOn.contains("logic://stock-plugins"))!)
         #expect(stock?.mutationKind == .readOnly)
         #expect(stock?.dependenciesResolved == stockSurfacePresent,
                 "stock dependency honesty must follow the actual served resource surface")
         if stockSurfacePresent {
             #expect(stock?.unresolvedResources == nil)
         } else {
-            #expect(stock?.unresolvedResources?.allSatisfy { $0.hasPrefix("logic://stock-plugins") } == true)
+            #expect((stock?.unresolvedResources?.allSatisfy { $0.hasPrefix("logic://stock-plugins") })!)
         }
 
         let liveInsert = snapshot.workflows.first { $0.id == "logic.workflow.plugins.stock_insert_gain_live_verified" }
         #expect(liveInsert?.mutationKind == .guardedMutation)
         #expect(liveInsert?.evidenceLevel == .liveVerified)
-        #expect(liveInsert?.productionReady == true)
+        #expect((liveInsert?.productionReady)!)
         #expect(liveInsert?.dependenciesResolved == stockSurfacePresent)
         #expect(liveInsert?.verification.liveEvidenceFile == "CHANGELOG.md")
-        #expect(liveInsert?.requiredConfirmations.contains { $0.level == "L2" } == true)
+        #expect((liveInsert?.requiredConfirmations.contains { $0.level == "L2" })!)
 
         let readiness = snapshot.workflows.first { $0.id == "logic.workflow.readiness.project" }
-        #expect(readiness?.dependenciesResolved == true)
+        #expect((readiness?.dependenciesResolved)!)
         #expect(readiness?.unresolvedResources == nil)
 
         let exportPlan = try #require(snapshot.workflows.first { $0.id == "logic.workflow.export.batch_plan" })
@@ -395,7 +395,7 @@ struct WorkflowSkillCatalogTests {
                 let tool = try? #require(step.tool)
                 let command = try? #require(step.command)
                 if let tool, let command {
-                    #expect(WorkflowSkillCatalog.publicCommands[tool]?.contains(command) == true,
+                    #expect((WorkflowSkillCatalog.publicCommands[tool]?.contains(command))!,
                             "\(workflow.id) step \(step.id) references \(tool).\(command)")
                 }
             }
@@ -418,8 +418,8 @@ struct WorkflowSkillCatalogTests {
         let fields = schema["fields"] as? [String]
         #expect(fields == WorkflowSkill.CodingKeys.allCases.map(\.rawValue))
         #expect((schema["confirmation_levels"] as? [String]) == ["L1", "L2"])
-        #expect((schema["lint_rules"] as? [String])?.contains("unknown_command") == true)
-        #expect((schema["lint_rules"] as? [String])?.contains("invalid_dependency") == true)
+        #expect(((schema["lint_rules"] as? [String])?.contains("unknown_command"))!)
+        #expect(((schema["lint_rules"] as? [String])?.contains("invalid_dependency"))!)
     }
 }
 
@@ -589,7 +589,7 @@ struct WorkflowCommandCensusTests {
             for command in stubs.sorted() {
                 #expect(dispatcherLabels.contains(command),
                         "declared stub \(tool).\(command) is no longer an executable dispatcher label")
-                #expect(WorkflowSkillCatalog.publicCommands[tool]?.contains(command) != true,
+                #expect(!((WorkflowSkillCatalog.publicCommands[tool]?.contains(command))!),
                         "\(tool).\(command) returns a not-exposed error and must not be in the census")
             }
         }
@@ -629,16 +629,16 @@ struct WorkflowSkillResourceTests {
         if stockSurfacePresent {
             #expect((stockDetail["workflow"] as? [String: Any])?["unresolved_resources"] == nil)
         } else {
-            #expect(((stockDetail["workflow"] as? [String: Any])?["unresolved_resources"] as? [String])?.isEmpty == false)
+            #expect(!((((stockDetail["workflow"] as? [String: Any])?["unresolved_resources"] as? [String])?.isEmpty)!))
         }
 
         let search = try await workflowResourceObject("logic://workflow-skills/search?query=plugin")
-        #expect((search["workflows"] as? [[String: Any]])?.contains {
+        #expect(((search["workflows"] as? [[String: Any]])?.contains {
             $0["id"] as? String == "logic.workflow.plugins.stock_chain_plan"
-        } == true)
-        #expect((search["workflows"] as? [[String: Any]])?.contains {
+        })!)
+        #expect(((search["workflows"] as? [[String: Any]])?.contains {
             $0["id"] as? String == "logic.workflow.plugins.stock_insert_gain_live_verified"
-        } == true)
+        })!)
 
         let exportSearch = try await workflowResourceObject("logic://workflow-skills/search?query=export")
         let exportWorkflows = try #require(exportSearch["workflows"] as? [[String: Any]])
@@ -653,8 +653,8 @@ struct WorkflowSkillResourceTests {
         })
 
         let schema = try await workflowResourceObject("logic://workflow-skills/schema")
-        #expect((schema["fields"] as? [String])?.contains("state_checks") == true)
-        #expect((schema["evidence_levels"] as? [String])?.contains("live_verified") == true)
+        #expect(((schema["fields"] as? [String])?.contains("state_checks"))!)
+        #expect(((schema["evidence_levels"] as? [String])?.contains("live_verified"))!)
     }
 
     @Test("workflow skill URI routing fails closed on malformed inputs")

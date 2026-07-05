@@ -56,7 +56,7 @@ private func makeBundleURL(version: String) throws -> URL {
     // In a test environment without an active runloop, runAppKit may return nil
     // (deadlock guard) or true (if runloop happens to be active). Both are correct.
     if let result {
-        #expect(result == true)
+        #expect(result)
     }
 }
 
@@ -98,12 +98,12 @@ private func makeBundleURL(version: String) throws -> URL {
     let harness = ProcessRuntimeHarness()
 
     #expect(ProcessUtils.logicProPID(runtime: harness.runtime()) == nil)
-    #expect(ProcessUtils.isLogicProRunning(runtime: harness.runtime()) == false)
+    #expect(!(ProcessUtils.isLogicProRunning(runtime: harness.runtime())))
 
     harness.pid = 4242
 
     #expect(ProcessUtils.logicProPID(runtime: harness.runtime()) == 4242)
-    #expect(ProcessUtils.isLogicProRunning(runtime: harness.runtime()) == true)
+    #expect(ProcessUtils.isLogicProRunning(runtime: harness.runtime()))
 }
 
 @Test func testProcessUtilsFallsBackToSecondaryPIDSource() {
@@ -111,7 +111,7 @@ private func makeBundleURL(version: String) throws -> URL {
     harness.fallbackPID = 63416
 
     #expect(ProcessUtils.logicProPID(runtime: harness.runtime()) == 63416)
-    #expect(ProcessUtils.isLogicProRunning(runtime: harness.runtime()) == true)
+    #expect(ProcessUtils.isLogicProRunning(runtime: harness.runtime()))
 }
 
 @Test func testProcessUtilsParsesLogicProPIDFromProcessListOutput() {
@@ -197,7 +197,7 @@ private func makeBundleURL(version: String) throws -> URL {
 
     let activated = ProcessUtils.activateLogicPro(runtime: harness.runtime())
 
-    #expect(activated == false)
+    #expect(!(activated))
     #expect(harness.activateCalls == 1)
 }
 
@@ -216,7 +216,7 @@ private func makeBundleURL(version: String) throws -> URL {
         }
     )
 
-    #expect(activated == true)
+    #expect(activated)
     #expect(appKitCalls == 1)
     #expect(appleScriptCalls == 1)
 }
@@ -232,7 +232,7 @@ private func makeBundleURL(version: String) throws -> URL {
         }
     )
 
-    #expect(activated == true)
+    #expect(activated)
     #expect(appleScriptCalls == 1)
 }
 
@@ -251,15 +251,15 @@ private func makeBundleURL(version: String) throws -> URL {
         }
     )
 
-    #expect(activated == true)
+    #expect(activated)
     #expect(appKitCalls == 1)
     #expect(appleScriptCalls == 1)
 }
 
 @Test func testProcessUtilsProductionActivateWrapperReturnsWithoutCrash() {
-    let activated = ProcessUtils.activateLogicPro()
-
-    #expect(activated == true || activated == false)
+    // activateLogicPro's result is environment-dependent (needs a running Logic);
+    // this smoke test asserts the production wrapper runs without crashing.
+    _ = ProcessUtils.activateLogicPro()
 }
 
 @Test func testProcessUtilsLogicProVersionUsesInjectedBundleURL() throws {
@@ -286,19 +286,19 @@ private func makeBundleURL(version: String) throws -> URL {
         systemEventsAutomation: .granted
     )
 
-    #expect(status.allGranted == true)
+    #expect(status.allGranted)
     #expect(status.summary.contains("Accessibility: granted"))
     #expect(status.summary.contains("Automation (Logic Pro): granted"))
     #expect(status.summary.contains("Automation (System Events): granted"))
-    #expect(status.summary.contains("System Settings") == false)
+    #expect(!(status.summary.contains("System Settings")))
 }
 
 @Test func testPermissionStatusSummaryOnlyMentionsMissingAutomationGuidance() {
     let status = PermissionChecker.PermissionStatus(accessibility: true, automationLogicPro: false)
 
-    #expect(status.allGranted == false)
+    #expect(!(status.allGranted))
     #expect(status.summary.contains("Accessibility: granted"))
     #expect(status.summary.contains("Automation (Logic Pro): NOT GRANTED"))
-    #expect(status.summary.contains("Accessibility → add your terminal app") == false)
+    #expect(!(status.summary.contains("Accessibility → add your terminal app")))
     #expect(status.summary.contains("Automation → allow control of Logic Pro"))
 }

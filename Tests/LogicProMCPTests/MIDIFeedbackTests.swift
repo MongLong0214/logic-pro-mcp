@@ -73,10 +73,10 @@ private func withMIDIPacketList(_ packets: [[UInt8]], _ body: (MIDIPacketList) -
     let noF0: [UInt8] = [0x00, 0x01, 0xF7]
     let noF7: [UInt8] = [0xF0, 0x00, 0x01]
 
-    #expect(MCUProtocol.isValidSysEx(validSysEx) == true)
-    #expect(MCUProtocol.isValidSysEx(invalidMiddle) == false)
-    #expect(MCUProtocol.isValidSysEx(noF0) == false)
-    #expect(MCUProtocol.isValidSysEx(noF7) == false)
+    #expect(MCUProtocol.isValidSysEx(validSysEx))
+    #expect(!(MCUProtocol.isValidSysEx(invalidMiddle)))
+    #expect(!(MCUProtocol.isValidSysEx(noF0)))
+    #expect(!(MCUProtocol.isValidSysEx(noF7)))
 }
 
 @Test func testMIDIFeedbackParsesAdditionalChannelVoiceMessages() {

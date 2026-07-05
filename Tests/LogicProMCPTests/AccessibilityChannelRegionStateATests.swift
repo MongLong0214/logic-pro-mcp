@@ -204,7 +204,7 @@ private func makeRegionFixture(
     #expect(obj["reason"] as? String == "readback_mismatch")
     #expect(obj["pre_start_bar"] as? Int == 4)
     #expect(obj["post_start_bar"] as? Int == 4)
-    #expect((obj["note"] as? String)?.contains("no position change") == true)
+    #expect(((obj["note"] as? String)?.contains("no position change"))!)
 }
 
 @Test func testMoveToPlayheadReturnsStateBWhenNoSelectedRegion() async {

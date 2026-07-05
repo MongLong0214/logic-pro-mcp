@@ -202,7 +202,7 @@ struct ProjectExportBounceHelperContractTests {
             }
         )
         #expect(nonZeroSuccess.artifactPath == nil)
-        #expect(nonZeroSuccess.error?.contains("bounce_helper_exit_code_9") == true)
+        #expect((nonZeroSuccess.error?.contains("bounce_helper_exit_code_9"))!)
         #expect(nonZeroSuccess.bounceFired)
 
         let helperJsonError = await ProjectExportExecutor.runBounceHelper(

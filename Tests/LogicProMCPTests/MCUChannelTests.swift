@@ -62,7 +62,7 @@ import Testing
     await channel.handleFeedback(.noteOn(channel: 0, note: 0x5E, velocity: 0x7F))
 
     let conn = await cache.getMCUConnection()
-    #expect(conn.isConnected == true)
+    #expect(conn.isConnected)
 }
 
 @Test func testMCUChannelHealthCheck() async {
@@ -83,11 +83,11 @@ import Testing
     try await channel.start()
 
     let conn = await cache.getMCUConnection()
-    #expect(conn.isConnected == false)
-    #expect(conn.registeredAsDevice == false)
+    #expect(!(conn.isConnected))
+    #expect(!(conn.registeredAsDevice))
 
     let health = await channel.healthCheck()
-    #expect(health.available == false)
+    #expect(!(health.available))
     #expect(health.detail.contains("feedback not detected"))
 }
 
@@ -107,7 +107,7 @@ import Testing
     await channel.stop()
 
     let connAfterStop = await cache.getMCUConnection()
-    #expect(connAfterStop.isConnected == false)
+    #expect(!(connAfterStop.isConnected))
     #expect(await transport.stopCount == 1)
 }
 
@@ -119,9 +119,17 @@ import Testing
     try await channel.start()
     await transport.emit(.sysEx([0xF0, 0x00, 0x00, 0x66, 0x14, 0x01, 0x42, 0x00, 0x01, 0xF7]))
 
-    let conn = await cache.getMCUConnection()
-    #expect(conn.isConnected == true)
-    #expect(conn.registeredAsDevice == true)
+    // WS6: feedback is applied by the ordered consumer Task, so the cache update
+    // lands after `emit` returns. Poll until the registration is observed rather
+    // than reading before the drain runs (the prior `== true` was a dead
+    // assertion that hid this ordering gap).
+    var conn = await cache.getMCUConnection()
+    for _ in 0..<100 where !conn.isConnected {
+        try? await Task.sleep(nanoseconds: 5_000_000)  // 5ms
+        conn = await cache.getMCUConnection()
+    }
+    #expect(conn.isConnected)
+    #expect(conn.registeredAsDevice)
 }
 
 @Test func testMCUChannelTransportCommandsEmitExpectedBytes() async {
@@ -234,7 +242,7 @@ import Testing
     #expect(invalidAutomation.message.contains("Unknown automation mode"))
 
     let sent = await transport.sentBytes
-    #expect(sent.isEmpty == false)
+    #expect(!(sent.isEmpty))
 }
 
 @Test func testMCUChannelHealthReflectsHealthyAndStaleFeedbackModes() async {
@@ -305,11 +313,11 @@ private func decodeMCUJSON(_ s: String) -> [String: Any] {
         let result = await channel.execute(operation: item.operation, params: item.params)
         #expect(!result.isSuccess, "\(item.operation) should reject invalid params")
         let obj = decodeMCUJSON(result.message)
-        #expect(obj["success"] as? Bool == false)
+        #expect(!((obj["success"] as? Bool)!))
         #expect(obj["error"] as? String == "invalid_params")
         #expect(obj["operation"] as? String == item.operation)
         #expect(obj["channel"] as? String == "MCU")
-        #expect((obj["hint"] as? String)?.contains(item.hintFragment) == true)
+        #expect(((obj["hint"] as? String)?.contains(item.hintFragment))!)
     }
 
     let sent = await transport.sentBytes
@@ -365,7 +373,7 @@ private func decodeMCUJSON(_ s: String) -> [String: Any] {
             "\(op): expected readback_unavailable, got \(obj["reason"] ?? "nil")"
         )
         #expect(obj["function"] as? String == "transport")
-        #expect((obj["command"] as? String)?.isEmpty == false)
+        #expect(!(((obj["command"] as? String)?.isEmpty)!))
     }
 }
 

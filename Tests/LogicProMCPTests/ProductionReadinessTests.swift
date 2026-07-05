@@ -226,11 +226,11 @@ import Testing
 // MARK: - P2: AppleScript Escaping
 
 @Test func testAppleScriptSafetyRejectsNewlinesInPaths() {
-    #expect(AppleScriptSafety.isValidFilePath("/tmp/normal.logicx") == true)
-    #expect(AppleScriptSafety.isValidFilePath("/tmp/evil\n.logicx") == false)
-    #expect(AppleScriptSafety.isValidFilePath("/tmp/evil\r.logicx") == false)
-    #expect(AppleScriptSafety.isValidFilePath("/tmp/evil\t.logicx") == false)
-    #expect(AppleScriptSafety.isValidFilePath("/tmp/evil\0.logicx") == false)
+    #expect(AppleScriptSafety.isValidFilePath("/tmp/normal.logicx"))
+    #expect(!(AppleScriptSafety.isValidFilePath("/tmp/evil\n.logicx")))
+    #expect(!(AppleScriptSafety.isValidFilePath("/tmp/evil\r.logicx")))
+    #expect(!(AppleScriptSafety.isValidFilePath("/tmp/evil\t.logicx")))
+    #expect(!(AppleScriptSafety.isValidFilePath("/tmp/evil\0.logicx")))
 }
 
 @Test func testAppleScriptEscapeJSONHandlesSpecialCharacters() {
@@ -268,10 +268,10 @@ import Testing
     let poller = StatePoller(axChannel: axChannel, cache: cache)
 
     await poller.start()
-    #expect(await poller.isRunning == true)
+    #expect(await poller.isRunning)
 
     await poller.stop()
-    #expect(await poller.isRunning == false)
+    #expect(!(await poller.isRunning))
 }
 
 @Test func testStatePollerDoubleStopIsSafe() async {
@@ -282,7 +282,7 @@ import Testing
     await poller.start()
     await poller.stop()
     await poller.stop() // Should not crash
-    #expect(await poller.isRunning == false)
+    #expect(!(await poller.isRunning))
 }
 
 // MARK: - PermissionChecker: Direct osascript Usage
@@ -295,7 +295,7 @@ import Testing
         runAutomationProbe: { false },
         runSystemEventsAutomationProbe: { .notGranted }
     ))
-    #expect(status.accessibility == true)
+    #expect(status.accessibility)
     #expect(status.automationState == .notVerifiable)
     // #188: System Events automation is probed unconditionally (System Events is
     // always running), so a denied probe is reported as not_granted.
@@ -308,14 +308,14 @@ import Testing
         automationState: .granted,
         systemEventsAutomationState: .granted
     )
-    #expect(granted.allGranted == true)
+    #expect(granted.allGranted)
     #expect(granted.summary.contains("granted"))
 
     let notGranted = PermissionChecker.PermissionStatus(
         accessibilityState: .notGranted,
         automationState: .notGranted
     )
-    #expect(notGranted.allGranted == false)
+    #expect(!(notGranted.allGranted))
     #expect(notGranted.summary.contains("NOT GRANTED"))
     #expect(notGranted.summary.contains("System Settings"))
 }

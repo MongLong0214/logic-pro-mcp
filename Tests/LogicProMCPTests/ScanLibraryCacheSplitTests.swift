@@ -61,7 +61,7 @@ import Testing
     #expect(obj["source"] as? String == "panel")
     #expect(!((obj["loadable"] as? Bool)!))
     #expect(obj["reason"] as? String == "folder_path")
-    #expect((obj["warning"] as? String)?.contains("leaf preset paths") == true)
+    #expect(((obj["warning"] as? String)?.contains("leaf preset paths"))!)
 }
 
 @Test func testResolvePathReturnsDiskLeafAsLoadableCandidateWithoutPanelCache() async {

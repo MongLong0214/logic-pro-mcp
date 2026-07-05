@@ -28,7 +28,7 @@ struct Issue110SaveVerifyTests {
         )
         #expect(result.isSuccess)
         let o = obj(result)
-        #expect(o?["verified"] as? Bool == true)
+        #expect((o?["verified"] as? Bool)!)
         #expect(o?["verify_source"] as? String == "file_mtime")
         #expect(o?["document_path"] as? String == "/Users/x/Song.logicx")
     }
@@ -44,7 +44,7 @@ struct Issue110SaveVerifyTests {
             saveStartedAt: started
         )
         #expect(result.isSuccess)
-        #expect(obj(result)?["verified"] as? Bool == true)
+        #expect((obj(result)?["verified"] as? Bool)!)
     }
 
     @Test("errored script + no write surfaces the error verbatim (terminal)")
@@ -72,7 +72,7 @@ struct Issue110SaveVerifyTests {
             saveStartedAt: started
         )
         #expect(result.isSuccess)
-        #expect(obj(result)?["verified"] as? Bool == false)
+        #expect(!((obj(result)?["verified"] as? Bool)!))
     }
 
     @Test("untitled document (no path) stays an honest State B")
@@ -82,8 +82,8 @@ struct Issue110SaveVerifyTests {
         )
         #expect(result.isSuccess)
         let o = obj(result)
-        #expect(o?["verified"] as? Bool == false)
-        #expect((o?["reason_detail"] as? String)?.contains("untitled") == true)
+        #expect(!((o?["verified"] as? Bool)!))
+        #expect(((o?["reason_detail"] as? String)?.contains("untitled"))!)
     }
 
     // #144 — channel-level fail-fast: driving `project.save` end-to-end through

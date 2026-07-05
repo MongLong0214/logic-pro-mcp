@@ -48,7 +48,7 @@ func decodeV317TrackState_succeeds() throws {
     """
     let track = try JSONDecoder().decode(TrackState.self, from: Data(v317.utf8))
     #expect(track.name == "Audio 1")
-    #expect(track.isSelected == true)
+    #expect(track.isSelected)
     #expect(track.placeholder == nil)
 }
 

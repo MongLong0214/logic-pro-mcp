@@ -197,7 +197,7 @@ import Testing
     let runtime = builder.makeLogicRuntime(appElement: app)
 
     #expect(AXLogicProElements.mainWindow(runtime: runtime) == legacyMain)
-    #expect(AXLogicProElements.dialogPresent(runtime: runtime) == true)
+    #expect(AXLogicProElements.dialogPresent(runtime: runtime))
 }
 
 @Test func testAXLogicProElementsControlBarCheckboxesAndLocatorSliders() {
@@ -244,12 +244,12 @@ import Testing
         named: "녹음",
         englishName: "Record",
         runtime: runtime
-    ) == true)
-    #expect(AXLogicProElements.readControlBarCheckboxValue(
+    )!)
+    #expect(!(AXLogicProElements.readControlBarCheckboxValue(
         named: "사이클",
         englishName: "Cycle",
         runtime: runtime
-    ) == false)
+    )!))
     #expect(AXLogicProElements.findControlBarBarSlider(runtime: runtime) == barSlider)
     #expect(AXLogicProElements.findControlBarBeatSlider(runtime: runtime) == beatSlider)
 }

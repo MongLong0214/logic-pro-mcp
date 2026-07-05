@@ -119,8 +119,8 @@ struct Issue221MutationGateReleaseTests {
         }
         #expect(json(refused)?["error"] as? String == "mutating_operation_in_progress")
         #expect(json(refused)?["active_operation"] as? String == "logic_navigate.rename_marker")
-        #expect((json(refused)?["safe_to_retry"] as? Bool) == true)
-        #expect((json(refused)?["write_attempted"] as? Bool) == false)
+        #expect((json(refused)?["safe_to_retry"] as? Bool)!)
+        #expect(!((json(refused)?["write_attempted"] as? Bool)!))
 
         // A completes → gate frees → B's retry now succeeds (transient refusal).
         blocker.unblock()

@@ -188,9 +188,9 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect(state["tempo"] as? Double == 90.5)
     #expect((state["isCycleEnabled"] as? Bool)!)
     let cached = await cache.getTransport()
-    #expect(cached.isPlaying == false)
+    #expect(!(cached.isPlaying))
     #expect(cached.tempo == 90.5)
-    #expect(cached.isCycleEnabled == true)
+    #expect(cached.isCycleEnabled)
 }
 
 @Test func testTransportStateResourceMarksCachedFallbackAsUnverifiedWhenLiveRefreshFails() async {
@@ -219,7 +219,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect((envelope["unverified"] as? Bool)!)
     #expect((envelope["stale"] as? Bool)!)
     #expect(envelope["refresh_error"] as? String == "element_not_found")
-    #expect((envelope["recovery_hint"] as? String)?.contains("refresh_cache") == true)
+    #expect(((envelope["recovery_hint"] as? String)?.contains("refresh_cache"))!)
     #expect((envelope["cache_age_sec"] as? Double ?? 0) > 0)
     #expect((state["isPlaying"] as? Bool)!)
     #expect((state["isRecording"] as? Bool)!)
@@ -290,7 +290,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     // than a raw JSON-RPC -32602.
     let result = try await ResourceHandlers.read(uri: "logic://tracks/99", cache: cache, router: router)
     let obj = sharedJSONObject(sharedResourceText(result))
-    #expect((obj?["success"] as? Bool)! == false)
+    #expect(!((obj?["success"] as? Bool)!))
     #expect(obj?["error"] as? String == "index_out_of_range")
     #expect(obj?["requested_index"] as? Int == 99)
     #expect(obj?["available_count"] as? Int == 1)
@@ -306,7 +306,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     await cache.updateDocumentState(false)
 
     let tracks = try await ResourceHandlers.read(uri: "logic://tracks", cache: cache, router: router)
-    #expect(tracks.contents.first?.text?.contains("[") == true)
+    #expect((tracks.contents.first?.text?.contains("["))!)
 
     let project = try await ResourceHandlers.read(uri: "logic://project/info", cache: cache, router: router)
     #expect(project.contents.first?.text != nil)
@@ -332,8 +332,8 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     let registered = mcu["registered_as_device"] as? Bool
     let portName = mcu["port_name"] as? String
     let lastFeedbackAt = mcu["last_feedback_at"] as? String
-    #expect(connected == true)
-    #expect(registered == false)
+    #expect(connected!)
+    #expect(!(registered!))
     #expect(portName == "LogicProMCP-MCU-Internal")
     #expect(lastFeedbackAt != nil)
 }
@@ -434,8 +434,8 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     let mcu = (json["mcu"] as? [String: Any]) ?? [:]
     let connected = mcu["connected"] as? Bool
     let registered = mcu["registered_as_device"] as? Bool
-    #expect(connected == false)
-    #expect(registered == false)
+    #expect(!(connected!))
+    #expect(!(registered!))
 }
 
 @Test func testMCUDisplayState() async {

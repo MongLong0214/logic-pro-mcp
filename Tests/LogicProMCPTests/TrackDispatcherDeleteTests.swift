@@ -194,9 +194,9 @@ private actor StateBSelectMockChannel: Channel {
 
     let text = sharedToolText(result)
     let object = try? #require(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
-    #expect(object?["success"] as? Bool == false)
+    #expect(!((object?["success"] as? Bool)!))
     #expect(object?["error"] as? String == "readback_mismatch")
     let selectResponse = object?["select_response"] as? String
-    #expect(selectResponse?.contains("retry_exhausted") == true, "expected reason forwarded, got: \(text)")
-    #expect(selectResponse?.contains("\"verified\":false") == true, "expected envelope detail, got: \(text)")
+    #expect((selectResponse?.contains("retry_exhausted"))!, "expected reason forwarded, got: \(text)")
+    #expect((selectResponse?.contains("\"verified\":false"))!, "expected envelope detail, got: \(text)")
 }
