@@ -423,12 +423,12 @@ private func waitForFeedbackEvents(
         "logic://workflow-skills/search?query={query}",
     ]
     #expect(expectedTemplates.isSubset(of: Set(snapshot.templateURIs)))
-    #expect(snapshot.startupBanner == "Starting logic-pro-mcp v3.7.4 — 10 tools, \(snapshot.resourceURIs.count) resources, 4 channels")
+    #expect(snapshot.startupBanner == "Starting logic-pro-mcp v3.8.0 — 10 tools, \(snapshot.resourceURIs.count) resources, 4 channels")
 }
 
 @Test func testServerCatalogStartupBannerUsesProvidedChannelCount() {
     let banner = ServerCatalog.startupBanner(channelCount: 7)
-    #expect(banner == "Starting logic-pro-mcp v3.7.4 — 10 tools, \(ResourceProvider.resources.count) resources, 7 channels")
+    #expect(banner == "Starting logic-pro-mcp v3.8.0 — 10 tools, \(ResourceProvider.resources.count) resources, 7 channels")
 }
 
 @Test func testLogicProServerCompositionSnapshotMatchesExpectedOrder() async {
@@ -447,5 +447,5 @@ private func waitForFeedbackEvents(
     ])
     #expect(snapshot.toolNames.count == 10)
     #expect(snapshot.resourceURIs.contains("logic://system/health"))
-    #expect(snapshot.startupBanner == "Starting logic-pro-mcp v3.7.4 — 10 tools, \(ResourceProvider.resources.count) resources, 7 channels")
+    #expect(snapshot.startupBanner == "Starting logic-pro-mcp v3.8.0 — 10 tools, \(ResourceProvider.resources.count) resources, 7 channels")
 }
