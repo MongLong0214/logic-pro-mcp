@@ -44,24 +44,24 @@ enum HonestContract {
     }
 
     /// Hard-failure category. Stable string enum.
-    enum FailureError {
-        case axWriteFailed
-        case elementNotFound
-        case permissionDenied
-        case logicNotRunning
-        case invalidParams
-        case readbackUnavailable
-        case readbackMismatch
+    enum FailureError: String {
+        case axWriteFailed = "ax_write_failed"
+        case elementNotFound = "element_not_found"
+        case permissionDenied = "permission_denied"
+        case logicNotRunning = "logic_not_running"
+        case invalidParams = "invalid_params"
+        case readbackUnavailable = "readback_unavailable"
+        case readbackMismatch = "readback_mismatch"
         /// Operation explicitly not implemented via this channel / build of
         /// Logic. Distinct from `.elementNotFound` (target absent) and
         /// `.axWriteFailed` (write attempt rejected): the surface itself does
         /// not exist. Terminal — no other channel can do better. v3.1.2 P2-1.
-        case notImplemented
+        case notImplemented = "not_implemented"
         /// The requested transport/port for a channel is not configured or
         /// available (e.g. CoreMIDI virtual port absent, KeyCmd not yet
         /// published). Terminal — falling back to another channel cannot
         /// recover the missing port. v3.1.6 T1 (PRD Issue#1 R7).
-        case portUnavailable
+        case portUnavailable = "port_unavailable"
         /// The router walked the full channel chain for this operation and
         /// every channel reported `healthCheck.unavailable` (or its readiness
         /// gate failed). Terminal — the chain itself produced no usable
@@ -71,7 +71,7 @@ enum HonestContract {
         /// v3.4.5-rc5 (Boomer BOOMER-6 / U — fixes semantic overload where
         /// every router fallthrough was being mis-classified as
         /// `port_unavailable` regardless of root cause).
-        case channelsExhausted
+        case channelsExhausted = "channels_exhausted"
         /// `midi.import_file` clicked File → Import → MIDI File but the
         /// file-open sheet never appeared inside the bounded poll window, so the
         /// path keystroke was never issued (no side effect). Distinct from
@@ -79,28 +79,28 @@ enum HonestContract {
         /// ran but created no track): the dialog itself was never observed, which
         /// is the textbook occluded/unhealthy-session signature. Terminal — a
         /// different channel cannot conjure the missing sheet. v3.6.x (#140).
-        case dialogNotFound
+        case dialogNotFound = "dialog_not_found"
 
         // HC v2 (logic_plugins.* verified plugin path) — §4 error table.
         // These codes only originate from the verified-plugin surface; the
         // existing 8-tool surface never emits them, so adding them here is
         // additive and leaves every prior State C byte-identical.
-        case unsupportedMode
-        case projectPathRequired
-        case projectIdentityMismatch
-        case unknownPluginIdentity
-        case unsupportedParamReadback
-        case incompleteInventory
-        case targetPluginMismatch
-        case slotOccupied
-        case trackSelectionFailed
-        case staleSnapshot
-        case windowOpenFailed
-        case windowIdentityUnresolved
-        case paramControlNotFound
-        case readbackLostAfterWrite
-        case postInsertPluginMismatch
-        case postInsertReadbackUnavailable
+        case unsupportedMode = "unsupported_mode"
+        case projectPathRequired = "project_path_required"
+        case projectIdentityMismatch = "project_identity_mismatch"
+        case unknownPluginIdentity = "unknown_plugin_identity"
+        case unsupportedParamReadback = "unsupported_param_readback"
+        case incompleteInventory = "incomplete_inventory"
+        case targetPluginMismatch = "target_plugin_mismatch"
+        case slotOccupied = "slot_occupied"
+        case trackSelectionFailed = "track_selection_failed"
+        case staleSnapshot = "stale_snapshot"
+        case windowOpenFailed = "window_open_failed"
+        case windowIdentityUnresolved = "window_identity_unresolved"
+        case paramControlNotFound = "param_control_not_found"
+        case readbackLostAfterWrite = "readback_lost_after_write"
+        case postInsertPluginMismatch = "post_insert_plugin_mismatch"
+        case postInsertReadbackUnavailable = "post_insert_readback_unavailable"
         /// `logic_plugins.insert_verified` reached its live-write boundary with
         /// every deterministic gate passed, but the actual AX insert is not
         /// performable in this Logic build: the exact slot popup path completed
@@ -108,7 +108,7 @@ enum HonestContract {
         /// inventory. Honest-deferred terminal — no channel can do better in
         /// this verified path, so the op fails closed here rather than fabricating a State A.
         /// v3.5 T6. `set_param_verified` State A is unaffected.
-        case insertNotAxAutomatable
+        case insertNotAxAutomatable = "insert_not_ax_automatable"
         /// `logic_plugins.insert_verified` could not complete a TRANSIENT pre-mount
         /// setup step (the target slot popup was not clickable, the popup menu was
         /// not anchored to the target slot, or the exact plugin leaf was not found).
@@ -116,18 +116,18 @@ enum HonestContract {
         /// attempted; the caller can retry (`safe_to_retry:true`). Distinct from
         /// `insert_not_ax_automatable` (the exact popup selection committed but the plugin
         /// never mounted — permanent). v3.5 T6 (P2-3).
-        case insertSetupFailed
+        case insertSetupFailed = "insert_setup_failed"
         /// `logic_plugins.insert_verified` mounted the requested plugin, but the
         /// post-insert readback observed it at a DIFFERENT slot than requested.
         /// Rather than confirm a slot it did not target (false State A), the op
         /// fails closed and reports `observed_slot`; the stray mount is rolled
         /// back. This is a defensive guard for Logic UI drift, not the expected
         /// success path. v3.5 T6.
-        case insertLandedAtDifferentSlot
-        case rollbackFailed
-        case verifiedOpInProgress
-        case mutatingOperationInProgress
-        case operationTimeout
+        case insertLandedAtDifferentSlot = "insert_landed_at_different_slot"
+        case rollbackFailed = "rollback_failed"
+        case verifiedOpInProgress = "verified_op_in_progress"
+        case mutatingOperationInProgress = "mutating_operation_in_progress"
+        case operationTimeout = "operation_timeout"
         /// `track.set_instrument` could not stage the Logic Library panel: it
         /// was closed and the auto-open (⌘L / View > Show Library) did not make
         /// it appear before the bounded re-check. The patch was never attempted.
@@ -135,22 +135,22 @@ enum HonestContract {
         /// `.elementNotFound` (a specific row absent): the whole panel UI the
         /// op needs is not present. Recovery: open the Library (⌘L) in Logic
         /// Pro and retry. v3.6.x (#131/#135/#141 canonical hardening).
-        case libraryPanelUnavailable
+        case libraryPanelUnavailable = "library_panel_unavailable"
         /// `track.set_instrument` targeted a track whose channel-strip type
         /// cannot host a software-instrument patch (GM Device / External MIDI).
         /// Terminal for this op — loading a Library instrument patch onto an
         /// external-MIDI/GM-Device strip is not a supported operation. Recovery:
         /// target a Software Instrument track (or create one and copy the
         /// regions). v3.6.x (#131).
-        case unsupportedTrackType
+        case unsupportedTrackType = "unsupported_track_type"
         /// `track.set_instrument` pre-resolved the requested path against the
         /// cached Library inventory and the path does not exist. Terminal — the
         /// op is NOT attempted (no AX navigation), distinguishing a genuine
         /// "path does not exist" precondition from a transient "path exists but
         /// live AX nav failed" (which still surfaces as `.axWriteFailed`).
         /// Recovery: pick a path present in scan_library. v3.6.x (#135/#141).
-        case pathNotInLibrary
-        case folderNotPreset
+        case pathNotInLibrary = "path_not_in_library"
+        case folderNotPreset = "folder_not_preset"
         /// The requested operation cannot be performed in the front document's
         /// current state — e.g. `project.save` on an UNTITLED document that has
         /// no on-disk path. Firing `save front document` on such a document
@@ -158,67 +158,20 @@ enum HonestContract {
         /// dismissed, so the save path fails fast here instead. Terminal — no
         /// other channel can save an untitled document without a path; the
         /// caller must supply one via `project.save_as`. #144 (P3 hardening).
-        case unsupportedState
+        case unsupportedState = "unsupported_state"
         /// A command token the dispatcher recognises but that is deliberately
         /// NOT part of the production MCP contract (no deterministic / verified
         /// path exists yet). Distinct from `.notImplemented` (a surface that does
         /// not exist at all): these are catalogued not-exposed stubs, excluded
         /// from the workflow census, so a complete-surface harness can classify
         /// the response as expected rather than a malfunction. Terminal. #202.
-        case commandNotExposed
-        case indexOutOfRange
+        case commandNotExposed = "command_not_exposed"
+        case indexOutOfRange = "index_out_of_range"
         /// A `logic_system.help` category token that is not one of the known
         /// dispatcher categories. Distinct from `.invalidParams` so a client
         /// can tell a typo'd category apart from a missing required argument,
         /// and so an unknown category never silently returns full help. #219.
-        case unknownCategory
-
-        var rawValue: String {
-            switch self {
-            case .axWriteFailed: return "ax_write_failed"
-            case .elementNotFound: return "element_not_found"
-            case .permissionDenied: return "permission_denied"
-            case .logicNotRunning: return "logic_not_running"
-            case .invalidParams: return "invalid_params"
-            case .readbackUnavailable: return "readback_unavailable"
-            case .readbackMismatch: return "readback_mismatch"
-            case .notImplemented: return "not_implemented"
-            case .portUnavailable: return "port_unavailable"
-            case .channelsExhausted: return "channels_exhausted"
-            case .dialogNotFound: return "dialog_not_found"
-            case .unsupportedMode: return "unsupported_mode"
-            case .projectPathRequired: return "project_path_required"
-            case .projectIdentityMismatch: return "project_identity_mismatch"
-            case .unknownPluginIdentity: return "unknown_plugin_identity"
-            case .unsupportedParamReadback: return "unsupported_param_readback"
-            case .incompleteInventory: return "incomplete_inventory"
-            case .targetPluginMismatch: return "target_plugin_mismatch"
-            case .slotOccupied: return "slot_occupied"
-            case .trackSelectionFailed: return "track_selection_failed"
-            case .staleSnapshot: return "stale_snapshot"
-            case .windowOpenFailed: return "window_open_failed"
-            case .windowIdentityUnresolved: return "window_identity_unresolved"
-            case .paramControlNotFound: return "param_control_not_found"
-            case .readbackLostAfterWrite: return "readback_lost_after_write"
-            case .postInsertPluginMismatch: return "post_insert_plugin_mismatch"
-            case .postInsertReadbackUnavailable: return "post_insert_readback_unavailable"
-            case .insertNotAxAutomatable: return "insert_not_ax_automatable"
-            case .insertSetupFailed: return "insert_setup_failed"
-            case .insertLandedAtDifferentSlot: return "insert_landed_at_different_slot"
-            case .rollbackFailed: return "rollback_failed"
-            case .verifiedOpInProgress: return "verified_op_in_progress"
-            case .mutatingOperationInProgress: return "mutating_operation_in_progress"
-            case .operationTimeout: return "operation_timeout"
-            case .libraryPanelUnavailable: return "library_panel_unavailable"
-            case .unsupportedTrackType: return "unsupported_track_type"
-            case .pathNotInLibrary: return "path_not_in_library"
-            case .folderNotPreset: return "folder_not_preset"
-            case .unsupportedState: return "unsupported_state"
-            case .commandNotExposed: return "command_not_exposed"
-            case .indexOutOfRange: return "index_out_of_range"
-            case .unknownCategory: return "unknown_category"
-            }
-        }
+        case unknownCategory = "unknown_category"
     }
 
     // MARK: - Encoding primitives

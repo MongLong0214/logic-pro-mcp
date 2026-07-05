@@ -28,7 +28,15 @@ struct SMFWriter {
             guard e.velocity <= 127 else { throw SMFWriterError.invalidVelocity(e.velocity) }
         }
 
-        let barOffsetTicks = (bar - 1) * timeSignature.numerator * ticksPerQuarter
+        // A "beat" in SMF is the note value the denominator names, not a fixed
+        // quarter. ticksPerQuarter counts a quarter (denominator 4), so a beat
+        // is ticksPerQuarter * 4 / denominator (an 8th = tpq/2 in 6/8).
+        // Multiplying the bar offset by ticksPerQuarter directly assumed 4/4 and
+        // placed 6/8 bars 2× too far. Guard denominator ≤ 0 (invalid input would
+        // divide-by-zero) by falling back to 4, matching the meta-event default.
+        let denominator = timeSignature.denominator > 0 ? timeSignature.denominator : 4
+        let ticksPerBeat = ticksPerQuarter * 4 / denominator
+        let barOffsetTicks = (bar - 1) * timeSignature.numerator * ticksPerBeat
 
         var track = Data()
         track.append(tempoMetaEvent(bpm: tempo))
@@ -123,7 +131,11 @@ struct SMFWriter {
     }
 
     private static func tempoMetaEvent(bpm: Double) -> Data {
-        let microsPerQuarter = Int(60_000_000.0 / bpm)
+        // Guard bpm ≤ 0 / NaN / ∞: Int(60_000_000 / bpm) would trap (Int(∞) and
+        // Int(NaN) are runtime traps) on invalid input. Fall back to the MIDI
+        // default 120 BPM; valid tempos are unaffected (byte-identical output).
+        let safeBPM = (bpm.isFinite && bpm > 0) ? bpm : 120.0
+        let microsPerQuarter = Int(60_000_000.0 / safeBPM)
         var d = Data()
         d.append(contentsOf: encodeVLQ(0)) // delta time 0
         d.append(0xFF)
@@ -150,7 +162,7 @@ struct SMFWriter {
         d.append(0xFF)
         d.append(0x58)
         d.append(0x04)
-        d.append(UInt8(numerator))
+        d.append(UInt8(clamping: numerator))  // UInt8(numerator) traps for >255 / <0
         d.append(denomLog2)
         d.append(0x18) // 24 MIDI clocks per metronome click
         d.append(0x08) // 8 thirty-second notes per quarter

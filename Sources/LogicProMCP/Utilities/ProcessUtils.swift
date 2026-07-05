@@ -191,9 +191,7 @@ enum ProcessUtils {
     }
 
     private static func logicProPIDViaSystemEvents() -> pid_t? {
-        let escapedName = ServerConfig.logicProProcessName
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
+        let escapedName = AppleScriptSafety.escapeForScript(ServerConfig.logicProProcessName)
         let script = """
         tell application "System Events"
             try

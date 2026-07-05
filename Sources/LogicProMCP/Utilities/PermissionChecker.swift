@@ -28,7 +28,18 @@ enum PermissionChecker {
     struct Runtime: Sendable {
         let checkAccessibility: @Sendable (Bool) -> Bool
         let isLogicProRunning: @Sendable () -> Bool
+        // Legacy two-state Logic Pro automation seam. Retained so existing
+        // Runtime constructions (and injected test doubles) keep their exact
+        // Bool semantics; `runAutomationProbeState` carries the honest tri-state
+        // that `checkAutomationState` actually consumes.
         let runAutomationProbe: @Sendable () -> Bool
+        // Tri-state Logic Pro automation probe (P1 honesty, PRD §2.1 G6-a). A
+        // probe that RAN and was denied → .notGranted, but a probe that COULD
+        // NOT RUN (osascript timeout / spawn failure / unexpected output) →
+        // .notVerifiable. The pre-fix Bool seam collapsed the latter into a
+        // false "Automation NOT GRANTED" (#188), which this replaces — matching
+        // the System Events sibling below.
+        let runAutomationProbeState: @Sendable () -> CheckState
         // Automation → System Events is a SEPARATE TCC target from Automation →
         // Logic Pro. Multi-step paths (MIDI import, tempo dialog, project-state
         // probes) drive `tell application "System Events"`, so a host that has
@@ -42,18 +53,35 @@ enum PermissionChecker {
         // "denied" for an infrastructure failure — a false-RED the doctor must not emit.
         let runSystemEventsAutomationProbe: @Sendable () -> CheckState
 
+        /// `runAutomationProbeState` defaults to lifting the two-state
+        /// `runAutomationProbe` into a CheckState, so existing 4-argument
+        /// constructions compile unchanged with identical grant/deny behaviour;
+        /// the production runtime overrides it with the honest tri-state probe.
+        init(
+            checkAccessibility: @escaping @Sendable (Bool) -> Bool,
+            isLogicProRunning: @escaping @Sendable () -> Bool,
+            runAutomationProbe: @escaping @Sendable () -> Bool,
+            runSystemEventsAutomationProbe: @escaping @Sendable () -> CheckState,
+            runAutomationProbeState: (@Sendable () -> CheckState)? = nil
+        ) {
+            self.checkAccessibility = checkAccessibility
+            self.isLogicProRunning = isLogicProRunning
+            self.runAutomationProbe = runAutomationProbe
+            self.runSystemEventsAutomationProbe = runSystemEventsAutomationProbe
+            self.runAutomationProbeState = runAutomationProbeState ?? {
+                runAutomationProbe() ? .granted : .notGranted
+            }
+        }
+
         static let production = Runtime(
             checkAccessibility: { prompt in
                 let options = ["AXTrustedCheckOptionPrompt": prompt] as CFDictionary
                 return AXIsProcessTrustedWithOptions(options)
             },
             isLogicProRunning: { ProcessUtils.isLogicProRunning },
-            runAutomationProbe: {
-                runAutomationProbeViaShell()
-            },
-            runSystemEventsAutomationProbe: {
-                runSystemEventsAutomationProbeViaShell()
-            }
+            runAutomationProbe: { runAutomationProbeViaShell().isGranted },
+            runSystemEventsAutomationProbe: { runSystemEventsAutomationProbeViaShell() },
+            runAutomationProbeState: { runAutomationProbeViaShell() }
         )
     }
 
@@ -151,7 +179,7 @@ enum PermissionChecker {
         guard runtime.isLogicProRunning() else {
             return .notVerifiable
         }
-        return runtime.runAutomationProbe() ? .granted : .notGranted
+        return runtime.runAutomationProbeState()
     }
 
     /// Check if Automation permission for System Events is granted. Required by
@@ -184,41 +212,57 @@ enum PermissionChecker {
         )
     }
 
-    private static func runAutomationProbeViaShell() -> Bool {
-        let escapedBundleID = ServerConfig.logicProBundleID
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
+    private static func runAutomationProbeViaShell() -> CheckState {
+        // Tri-state (P1 honesty, G6-a): a timeout / spawn failure surfaces as
+        // .notVerifiable, not a false denial. See `probeState`.
+        let escapedBundleID = AppleScriptSafety.escapeForScript(ServerConfig.logicProBundleID)
         let script = "tell application id \"\(escapedBundleID)\" to return name"
-        guard case let .completed(output) = BoundedProcessRunner.run(
-            executable: "/usr/bin/osascript",
-            arguments: ["-e", script],
-            timeout: 1.0,
-            outputLimitBytes: 4 * 1024
-        ), output.exitCode == 0 else {
-            return false
-        }
-
-        let trimmed = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed == ServerConfig.logicProProcessName
+        return probeState(
+            from: BoundedProcessRunner.run(
+                executable: "/usr/bin/osascript",
+                arguments: ["-e", script],
+                timeout: 1.0,
+                outputLimitBytes: 4 * 1024
+            ),
+            expectedName: ServerConfig.logicProProcessName
+        )
     }
 
     private static func runSystemEventsAutomationProbeViaShell() -> CheckState {
-        // A no-op read against System Events. Distinguish three outcomes honestly:
-        //  - osascript ran, exit 0, returned "System Events"  → .granted
-        //  - osascript ran, exit != 0 (e.g. errAEEventNotPermitted -1743) → .notGranted (real denial)
-        //  - osascript could not run (timeout / spawn failure) or returned unexpected
-        //    output → .notVerifiable (an infrastructure failure is NOT a denial).
+        // A no-op read against System Events, mapped by the shared `probeState`.
         let script = "tell application \"System Events\" to return name"
-        switch BoundedProcessRunner.run(
-            executable: "/usr/bin/osascript",
-            arguments: ["-e", script],
-            timeout: 1.0,
-            outputLimitBytes: 4 * 1024
-        ) {
+        return probeState(
+            from: BoundedProcessRunner.run(
+                executable: "/usr/bin/osascript",
+                arguments: ["-e", script],
+                timeout: 1.0,
+                outputLimitBytes: 4 * 1024
+            ),
+            expectedName: "System Events"
+        )
+    }
+
+    /// Map an osascript automation-probe result to the honest tri-state. Shared
+    /// by the Logic Pro and System Events probes (#188 semantics):
+    ///  - completed, exit 0, expected app name → `.granted`
+    ///  - completed, exit 0, unexpected output → `.notVerifiable` (ran but
+    ///    produced no verifiable grant answer)
+    ///  - completed, non-zero exit (e.g. errAEEventNotPermitted -1743) →
+    ///    `.notGranted` (a real denial)
+    ///  - timed out / spawn failed → `.notVerifiable` (an infrastructure
+    ///    failure must NEVER be reported as a denial — the false-RED this fixes)
+    ///
+    /// Internal (not private) so `PermissionCheckerTriStateTests` can pin the
+    /// mapping without spawning a real osascript process.
+    static func probeState(
+        from result: BoundedProcessRunner.Result,
+        expectedName: String
+    ) -> CheckState {
+        switch result {
         case let .completed(output):
             if output.exitCode == 0 {
                 let trimmed = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed == "System Events" ? .granted : .notVerifiable
+                return trimmed == expectedName ? .granted : .notVerifiable
             }
             return .notGranted
         case .timedOut, .spawnFailed:

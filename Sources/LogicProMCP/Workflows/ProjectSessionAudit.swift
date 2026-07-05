@@ -436,8 +436,18 @@ enum ProjectSessionAudit {
         tracks: TrackEvidence,
         mixer: MixerEvidence
     ) -> [Finding] {
-        var findings: [Finding] = []
+        // Per-domain builders for readability. buildAudit id-sorts the
+        // concatenation (:382), so the concatenation order here does not
+        // affect the report — output is byte-identical to the inline form.
+        systemFindings(snapshot: snapshot, project: project)
+            + trackFindings(snapshot: snapshot, tracks: tracks)
+            + exportFindings(snapshot: snapshot, tracks: tracks)
+            + markerFindings(snapshot: snapshot)
+            + mixerFindings(mixer: mixer)
+    }
 
+    private static func systemFindings(snapshot: Snapshot, project: ProjectEvidence) -> [Finding] {
+        var findings: [Finding] = []
         if !snapshot.hasDocument {
             findings.append(finding(
                 "no_open_document",
@@ -486,6 +496,11 @@ enum ProjectSessionAudit {
                 "unavailable"
             ))
         }
+        return findings
+    }
+
+    private static func trackFindings(snapshot: Snapshot, tracks: TrackEvidence) -> [Finding] {
+        var findings: [Finding] = []
         // File vs AX cross-check: `snapshot.fileTrackCount` is the MetaData.plist
         // `NumberOfTracks` (same source `logic://tracks` uses to synthesise
         // placeholder rows), while `tracks.total` is the AX-derived count. When
@@ -554,7 +569,6 @@ enum ProjectSessionAudit {
                 tracks.freshness.provenance
             ))
         }
-
         let emptyTracks = emptyTrackIndices(snapshot)
         if snapshot.regionsFetchedAt <= .distantPast {
             findings.append(finding(
@@ -579,67 +593,6 @@ enum ProjectSessionAudit {
                 "cache_fresh"
             ))
         }
-
-        let externalMIDIRisks = externalMIDIRegionRisks(snapshot)
-        if !externalMIDIRisks.isEmpty {
-            findings.append(finding(
-                "external_midi_regions_bounce_risk",
-                .blocker,
-                "export",
-                "MIDI regions are placed on GM Device / External MIDI tracks; track and region readback do not prove audible Logic Bounce routing.",
-                "logic://tracks",
-                externalMIDIRisks.map { String($0.track.id) }.joined(separator: ","),
-                externalMIDIRisks.map {
-                    "track=\($0.track.id),name=\($0.track.name),regions=\($0.regionCount)"
-                } + ["risk=silent_logic_bounce"],
-                "ax_live"
-            ))
-        }
-
-        let softwareInstrumentAudibilityRisks = softwareInstrumentAudibilityRisks(snapshot)
-        if !softwareInstrumentAudibilityRisks.isEmpty {
-            findings.append(finding(
-                "software_instrument_regions_without_audible_plugin",
-                .blocker,
-                "export",
-                "Software Instrument tracks contain regions but have no readable instrument/plugin evidence; track and region readback alone do not prove audible Logic Bounce routing.",
-                "logic://mixer",
-                softwareInstrumentAudibilityRisks.map { String($0.track.id) }.joined(separator: ","),
-                softwareInstrumentAudibilityRisks.flatMap {
-                    [
-                        "track=\($0.track.id),name=\($0.track.name),regions=\($0.regionCount),plugins=\($0.pluginCount)",
-                        "track=\($0.track.id),plugins_source=\($0.pluginsSource),plugins_read_error=\($0.pluginsReadError)",
-                    ]
-                } + ["risk=silent_logic_bounce"],
-                "ax_live"
-            ))
-        }
-
-        if !tracks.soloedIndices.isEmpty {
-            findings.append(finding(
-                "soloed_tracks_present",
-                .warn,
-                "export",
-                "Soloed tracks can make exports omit unintended material.",
-                "logic://tracks",
-                tracks.soloedIndices.map(String.init).joined(separator: ","),
-                ["soloed_indices=\(tracks.soloedIndices.map(String.init).joined(separator: ","))"],
-                tracks.freshness.provenance
-            ))
-        }
-        if !tracks.armedIndices.isEmpty {
-            findings.append(finding(
-                "armed_tracks_present",
-                .warn,
-                "export",
-                "Record-armed tracks should be reviewed before cleanup or export.",
-                "logic://tracks",
-                tracks.armedIndices.map(String.init).joined(separator: ","),
-                ["armed_indices=\(tracks.armedIndices.map(String.init).joined(separator: ","))"],
-                tracks.freshness.provenance
-            ))
-        }
-
         let mutedSoloed = snapshot.tracks.filter { $0.isMuted && $0.isSoloed }.map(\.id)
         if !mutedSoloed.isEmpty {
             findings.append(finding(
@@ -666,7 +619,73 @@ enum ProjectSessionAudit {
                 tracks.freshness.provenance
             ))
         }
+        return findings
+    }
 
+    private static func exportFindings(snapshot: Snapshot, tracks: TrackEvidence) -> [Finding] {
+        var findings: [Finding] = []
+        let externalMIDIRisks = externalMIDIRegionRisks(snapshot)
+        if !externalMIDIRisks.isEmpty {
+            findings.append(finding(
+                "external_midi_regions_bounce_risk",
+                .blocker,
+                "export",
+                "MIDI regions are placed on GM Device / External MIDI tracks; track and region readback do not prove audible Logic Bounce routing.",
+                "logic://tracks",
+                externalMIDIRisks.map { String($0.track.id) }.joined(separator: ","),
+                externalMIDIRisks.map {
+                    "track=\($0.track.id),name=\($0.track.name),regions=\($0.regionCount)"
+                } + ["risk=silent_logic_bounce"],
+                "ax_live"
+            ))
+        }
+        let softwareInstrumentAudibilityRisks = softwareInstrumentAudibilityRisks(snapshot)
+        if !softwareInstrumentAudibilityRisks.isEmpty {
+            findings.append(finding(
+                "software_instrument_regions_without_audible_plugin",
+                .blocker,
+                "export",
+                "Software Instrument tracks contain regions but have no readable instrument/plugin evidence; track and region readback alone do not prove audible Logic Bounce routing.",
+                "logic://mixer",
+                softwareInstrumentAudibilityRisks.map { String($0.track.id) }.joined(separator: ","),
+                softwareInstrumentAudibilityRisks.flatMap {
+                    [
+                        "track=\($0.track.id),name=\($0.track.name),regions=\($0.regionCount),plugins=\($0.pluginCount)",
+                        "track=\($0.track.id),plugins_source=\($0.pluginsSource),plugins_read_error=\($0.pluginsReadError)",
+                    ]
+                } + ["risk=silent_logic_bounce"],
+                "ax_live"
+            ))
+        }
+        if !tracks.soloedIndices.isEmpty {
+            findings.append(finding(
+                "soloed_tracks_present",
+                .warn,
+                "export",
+                "Soloed tracks can make exports omit unintended material.",
+                "logic://tracks",
+                tracks.soloedIndices.map(String.init).joined(separator: ","),
+                ["soloed_indices=\(tracks.soloedIndices.map(String.init).joined(separator: ","))"],
+                tracks.freshness.provenance
+            ))
+        }
+        if !tracks.armedIndices.isEmpty {
+            findings.append(finding(
+                "armed_tracks_present",
+                .warn,
+                "export",
+                "Record-armed tracks should be reviewed before cleanup or export.",
+                "logic://tracks",
+                tracks.armedIndices.map(String.init).joined(separator: ","),
+                ["armed_indices=\(tracks.armedIndices.map(String.init).joined(separator: ","))"],
+                tracks.freshness.provenance
+            ))
+        }
+        return findings
+    }
+
+    private static func markerFindings(snapshot: Snapshot) -> [Finding] {
+        var findings: [Finding] = []
         if snapshot.markersFetchedAt <= .distantPast {
             findings.append(finding(
                 "marker_inventory_unread",
@@ -690,7 +709,11 @@ enum ProjectSessionAudit {
                 "cache_fresh"
             ))
         }
+        return findings
+    }
 
+    private static func mixerFindings(mixer: MixerEvidence) -> [Finding] {
+        var findings: [Finding] = []
         if mixer.dataSource == "mixer_not_visible" || mixer.dataSource == "cache_stale" {
             findings.append(finding(
                 "mixer_inventory_not_fresh",
@@ -727,7 +750,6 @@ enum ProjectSessionAudit {
                 mixer.freshness.provenance
             ))
         }
-
         return findings
     }
 
