@@ -88,11 +88,20 @@ enum BoundedProcessRunner {
         }
 
         if group.wait(timeout: .now() + timeout) == .timedOut {
+            let pid = process.processIdentifier
             if process.isRunning {
+                Log.warn(
+                    "'\(executable)' exceeded \(timeout)s timeout (pid \(pid)); sending SIGTERM",
+                    subsystem: "process"
+                )
                 process.terminate()
             }
             if group.wait(timeout: .now() + 0.2) == .timedOut, process.isRunning {
-                kill(process.processIdentifier, SIGKILL)
+                Log.error(
+                    "'\(executable)' (pid \(pid)) ignored SIGTERM after 0.2s; escalating to SIGKILL",
+                    subsystem: "process"
+                )
+                kill(pid, SIGKILL)
                 _ = group.wait(timeout: .now() + 0.5)
             }
             stdout.fileHandleForReading.readabilityHandler = nil
@@ -105,8 +114,13 @@ enum BoundedProcessRunner {
         return .completed(
             Output(
                 exitCode: process.terminationStatus,
-                stdout: String(data: stdoutSnapshot.data, encoding: .utf8) ?? "",
-                stderr: String(data: stderrSnapshot.data, encoding: .utf8) ?? "",
+                // Lenient decode: String(data:encoding:) returns nil when the
+                // output-limit cut a multibyte sequence mid-scalar, nilling the
+                // WHOLE buffer (dropped Korean/UTF-8 tails). String(decoding:as:)
+                // substitutes U+FFFD for the truncated tail and keeps the valid
+                // prefix. Valid UTF-8 is byte-identical.
+                stdout: String(decoding: stdoutSnapshot.data, as: UTF8.self),
+                stderr: String(decoding: stderrSnapshot.data, as: UTF8.self),
                 stdoutTruncated: stdoutSnapshot.truncated,
                 stderrTruncated: stderrSnapshot.truncated
             )

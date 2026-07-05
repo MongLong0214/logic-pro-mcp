@@ -38,13 +38,22 @@ enum DestructivePolicy {
 
     /// Generate confirmation response JSON for high-risk commands.
     /// Returns nil for commands that don't need confirmation.
+    ///
+    /// Serialized through the shared `HonestContract.jsonString` layer (sorted
+    /// keys + correct escaping) instead of hand-built string interpolation, so
+    /// the `command` value can never break the envelope. Keys are emitted
+    /// alphabetically; consumers/tests match on order-independent substrings.
     static func confirmationResponse(command: String) -> String? {
         let level = level(for: command)
         guard level >= .l2 else { return nil }
         let levelLabel = level == .l3 ? "L3" : "L2"
-        return """
-        {"status":"confirmation_required","command":"\(command)","level":"\(levelLabel)","message":"이 작업은 프로젝트 상태를 변경하거나 데이터 손실을 유발할 수 있습니다.","confirm_command":"logic_project(\\"\(command)\\", {confirmed: true})"}
-        """
+        return HonestContract.jsonString([
+            "status": "confirmation_required",
+            "command": command,
+            "level": levelLabel,
+            "message": "이 작업은 프로젝트 상태를 변경하거나 데이터 손실을 유발할 수 있습니다.",
+            "confirm_command": "logic_project(\"\(command)\", {confirmed: true})",
+        ])
     }
 
     /// Check if a command needs audit logging (L1+).
