@@ -494,85 +494,81 @@ public enum PluginInspector {
     /// Find the focused plugin window in Logic Pro's AX tree.
     /// Heuristic: any window whose title doesn't contain ".logicx" AND has an
     /// `AXPopUpButton` whose `value` contains "Preset"/"프리셋"/"Default" (the Setting dropdown).
-    public static func findFocusedPluginWindowAX(in app: AXUIElement) -> AXUIElement? {
-        var raw: AnyObject?
-        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &raw) == .success,
-              let windows = raw as? [AXUIElement]
-        else { return nil }
+    // Internal (was public): only in-module callers + @testable tests use these;
+    // an internal default `runtime` value cannot back a public signature.
+    static func findFocusedPluginWindowAX(
+        in app: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> AXUIElement? {
+        let windows: [AXUIElement] = AXHelpers.getAttribute(app, kAXWindowsAttribute as String, runtime: runtime) ?? []
         for w in windows {
-            var titleRaw: AnyObject?
-            AXUIElementCopyAttributeValue(w, kAXTitleAttribute as CFString, &titleRaw)
-            let title = (titleRaw as? String) ?? ""
+            let title = AXHelpers.getTitle(w, runtime: runtime) ?? ""
             if title.contains(".logicx") { continue }
-            if findSettingPopupAX(in: w) != nil { return w }
+            if findSettingPopupAX(in: w, runtime: runtime) != nil { return w }
         }
         return nil
     }
 
     /// Walk window children for the Setting `AXPopUpButton` (T0 v0.6: NOT AXMenuButton).
     /// Match by value containing "Preset"/"프리셋"/"Default".
-    public static func findSettingPopupAX(in element: AXUIElement, depth: Int = 0, max: Int = 8) -> AXUIElement? {
+    static func findSettingPopupAX(
+        in element: AXUIElement,
+        depth: Int = 0,
+        max: Int = 8,
+        runtime: AXHelpers.Runtime = .production
+    ) -> AXUIElement? {
         if depth > max { return nil }
-        var roleRaw: AnyObject?
-        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRaw)
-        let role = (roleRaw as? String) ?? ""
+        let role = AXHelpers.getRole(element, runtime: runtime) ?? ""
         if role == (kAXPopUpButtonRole as String) {
-            var valRaw: AnyObject?
-            AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valRaw)
-            let v = (valRaw as? String) ?? ""
+            let v = (AXHelpers.getValue(element, runtime: runtime) as? String) ?? ""
             // Verbatim (case-sensitive) substring match preserves the historical
             // locator; only the EN/KO Setting-dropdown tokens move into policy.
             if AXLocalePolicy.settingPopupValue.labels.contains(where: { v.contains($0) }) {
                 return element
             }
         }
-        var childrenRaw: AnyObject?
-        AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenRaw)
-        guard let children = childrenRaw as? [AXUIElement] else { return nil }
-        for c in children {
-            if let f = findSettingPopupAX(in: c, depth: depth + 1, max: max) { return f }
+        for c in AXHelpers.getChildren(element, runtime: runtime) {
+            if let f = findSettingPopupAX(in: c, depth: depth + 1, max: max, runtime: runtime) { return f }
         }
         return nil
     }
 
-    /// Read center-point of an AX element for CGEvent click.
-    public static func centerPoint(of element: AXUIElement) -> CGPoint? {
-        var posRaw: AnyObject?
-        var sizeRaw: AnyObject?
-        AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &posRaw)
-        AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeRaw)
-        guard let posVal = posRaw, CFGetTypeID(posVal) == AXValueGetTypeID(),
-              let sizeVal = sizeRaw, CFGetTypeID(sizeVal) == AXValueGetTypeID()
-        else { return nil }
-        var p = CGPoint.zero
-        var s = CGSize.zero
-        guard AXValueGetValue((posVal as! AXValue), .cgPoint, &p),
-              AXValueGetValue((sizeVal as! AXValue), .cgSize, &s)
+    /// Read center-point of an AX element for CGEvent click. Delegates to the
+    /// `CFGetTypeID`-guarded `AXHelpers.getPosition`/`getSize` (same guard this
+    /// used inline) so the read is injectable.
+    static func centerPoint(
+        of element: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> CGPoint? {
+        guard let p = AXHelpers.getPosition(element, runtime: runtime),
+              let s = AXHelpers.getSize(element, runtime: runtime)
         else { return nil }
         return CGPoint(x: p.x + s.width / 2, y: p.y + s.height / 2)
     }
 
     /// Find the currently-open Setting AXMenu in Logic's AX tree (it appears as
     /// a top-level AXMenu after the popup is opened via CGEvent click).
-    public static func findOpenSettingMenuAX(in app: AXUIElement, minChildren: Int = 5) -> AXUIElement? {
-        return findMenuRecursive(in: app, minChildren: minChildren, depth: 0, max: 5)
+    static func findOpenSettingMenuAX(
+        in app: AXUIElement,
+        minChildren: Int = 5,
+        runtime: AXHelpers.Runtime = .production
+    ) -> AXUIElement? {
+        return findMenuRecursive(in: app, minChildren: minChildren, depth: 0, max: 5, runtime: runtime)
     }
 
-    private static func findMenuRecursive(in element: AXUIElement, minChildren: Int, depth: Int, max: Int) -> AXUIElement? {
+    private static func findMenuRecursive(
+        in element: AXUIElement,
+        minChildren: Int,
+        depth: Int,
+        max: Int,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
         if depth > max { return nil }
-        var roleRaw: AnyObject?
-        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRaw)
-        if (roleRaw as? String) == (kAXMenuRole as String) {
-            var kidsRaw: AnyObject?
-            AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &kidsRaw)
-            let count = (kidsRaw as? [AXUIElement])?.count ?? 0
-            if count >= minChildren { return element }
+        if AXHelpers.getRole(element, runtime: runtime) == (kAXMenuRole as String) {
+            if AXHelpers.getChildren(element, runtime: runtime).count >= minChildren { return element }
         }
-        var childrenRaw: AnyObject?
-        AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenRaw)
-        guard let children = childrenRaw as? [AXUIElement] else { return nil }
-        for c in children {
-            if let f = findMenuRecursive(in: c, minChildren: minChildren, depth: depth + 1, max: max) { return f }
+        for c in AXHelpers.getChildren(element, runtime: runtime) {
+            if let f = findMenuRecursive(in: c, minChildren: minChildren, depth: depth + 1, max: max, runtime: runtime) { return f }
         }
         return nil
     }
@@ -582,36 +578,29 @@ public enum PluginInspector {
     /// - Important: T0 v0.6 — this probe does NOT use CGEvent for menu navigation;
     ///   only AXPress on AXMenuItem (which is reliable). The CGEvent click that
     ///   opened the popup is the caller's responsibility.
-    public static func liveMenuProbe(rootMenu: AXUIElement, settleMs: Int = 250) -> PluginPresetProbe {
+    static func liveMenuProbe(
+        rootMenu: AXUIElement,
+        settleMs: Int = 250,
+        runtime: AXHelpers.Runtime = .production
+    ) -> PluginPresetProbe {
         // Cache the AXMenu element by path for re-use during the walk.
         // Each walk path is a sequence of segment names; we navigate via AXChildren.
         let rootBox = AXUIElementSendable(rootMenu)
 
         let menuItemsAt: @Sendable ([String]) async -> [PluginMenuItemInfo]? = { path in
             // Find the menu node at the given path (root if empty)
-            guard let node = await navigateMenu(from: rootBox.element, path: path, settleMs: settleMs) else {
+            guard let node = await navigateMenu(from: rootBox.element, path: path, settleMs: settleMs, runtime: runtime) else {
                 return nil
             }
             // Read children; for each AXMenuItem, classify as folder/leaf/separator/action
-            var rawKidsObj: AnyObject?
-            AXUIElementCopyAttributeValue(node, kAXChildrenAttribute as CFString, &rawKidsObj)
-            guard let kids = rawKidsObj as? [AXUIElement] else { return [] }
+            let kids = AXHelpers.getChildren(node, runtime: runtime)
             return kids.compactMap { k in
-                var rRaw: AnyObject?
-                AXUIElementCopyAttributeValue(k, kAXRoleAttribute as CFString, &rRaw)
-                let role = (rRaw as? String) ?? ""
-                guard role == "AXMenuItem" else { return nil }
-                var nameRaw: AnyObject?
-                AXUIElementCopyAttributeValue(k, kAXTitleAttribute as CFString, &nameRaw)
-                let name = (nameRaw as? String) ?? ""
+                guard AXHelpers.getRole(k, runtime: runtime) == "AXMenuItem" else { return nil }
+                let name = AXHelpers.getTitle(k, runtime: runtime) ?? ""
                 // Probe for submenu by checking enabled + role + lazy-populate marker
                 // We can't tell submenu vs leaf without pressing; use AXChildren as quick check first
-                var kidsRaw: AnyObject?
-                AXUIElementCopyAttributeValue(k, kAXChildrenAttribute as CFString, &kidsRaw)
-                let hasSubmenu = ((kidsRaw as? [AXUIElement]) ?? []).contains(where: {
-                    var rr: AnyObject?
-                    AXUIElementCopyAttributeValue($0, kAXRoleAttribute as CFString, &rr)
-                    return (rr as? String) == (kAXMenuRole as String)
+                let hasSubmenu = AXHelpers.getChildren(k, runtime: runtime).contains(where: {
+                    AXHelpers.getRole($0, runtime: runtime) == (kAXMenuRole as String)
                 })
                 if name.trimmingCharacters(in: .whitespaces).isEmpty {
                     return PluginMenuItemInfo(name: name, kind: .separator, hasSubmenu: false)
@@ -624,11 +613,10 @@ public enum PluginInspector {
         }
 
         let pressMenuItem: @Sendable ([String]) async -> Bool = { path in
-            guard let node = await navigateMenu(from: rootBox.element, path: path, settleMs: settleMs) else {
+            guard let node = await navigateMenu(from: rootBox.element, path: path, settleMs: settleMs, runtime: runtime) else {
                 return false
             }
-            let r = AXUIElementPerformAction(node, kAXPressAction as CFString)
-            return r == .success
+            return AXHelpers.performAction(node, kAXPressAction as String, runtime: runtime)
         }
 
         return PluginPresetProbe(
@@ -645,19 +633,20 @@ public enum PluginInspector {
 
     /// Walk the AXMenu tree from `rootMenu` along the given path, pressing each
     /// AXMenuItem to populate its submenu lazily.
-    private static func navigateMenu(from root: AXUIElement, path: [String], settleMs: Int) async -> AXUIElement? {
+    private static func navigateMenu(
+        from root: AXUIElement,
+        path: [String],
+        settleMs: Int,
+        runtime: AXHelpers.Runtime
+    ) async -> AXUIElement? {
         var cursor = root
         for seg in path {
             // Find child AXMenuItem with matching name
-            var kidsRaw: AnyObject?
-            AXUIElementCopyAttributeValue(cursor, kAXChildrenAttribute as CFString, &kidsRaw)
-            guard let kids = kidsRaw as? [AXUIElement] else { return nil }
+            let kids = AXHelpers.getChildren(cursor, runtime: runtime)
             // Disambiguate "Name[i]" suffix
             let (baseName, dupIdx) = parseDisambigSuffix(seg)
             let matches = kids.enumerated().filter { (_, k) in
-                var nRaw: AnyObject?
-                AXUIElementCopyAttributeValue(k, kAXTitleAttribute as CFString, &nRaw)
-                let n = (nRaw as? String) ?? ""
+                let n = AXHelpers.getTitle(k, runtime: runtime) ?? ""
                 return n == seg || (dupIdx != nil && n == baseName)
             }
             guard !matches.isEmpty else { return nil }
@@ -668,16 +657,11 @@ public enum PluginInspector {
                 chosen = matches[0].element
             }
             // Press to expand submenu (AXPress lazy-populate)
-            _ = AXUIElementPerformAction(chosen, kAXPressAction as CFString)
+            _ = AXHelpers.performAction(chosen, kAXPressAction as String, runtime: runtime)
             try? await Task.sleep(nanoseconds: UInt64(settleMs) * 1_000_000)
             // Submenu appears as AXMenu child of pressed item
-            var subRaw: AnyObject?
-            AXUIElementCopyAttributeValue(chosen, kAXChildrenAttribute as CFString, &subRaw)
-            guard let subKids = subRaw as? [AXUIElement] else { return nil }
-            guard let menu = subKids.first(where: {
-                var rr: AnyObject?
-                AXUIElementCopyAttributeValue($0, kAXRoleAttribute as CFString, &rr)
-                return (rr as? String) == (kAXMenuRole as String)
+            guard let menu = AXHelpers.getChildren(chosen, runtime: runtime).first(where: {
+                AXHelpers.getRole($0, runtime: runtime) == (kAXMenuRole as String)
             }) else { return nil }
             cursor = menu
         }

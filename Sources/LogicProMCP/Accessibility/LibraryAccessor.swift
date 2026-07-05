@@ -234,11 +234,13 @@ enum LibraryAccessor {
                 usleep(120_000)
                 CGWarpMouseCursorPosition(point)
                 usleep(30_000)
-                if LibraryAccessor.postCliclick(command: "dc", at: point) {
+                // Prefer the native CGEvent double-click (audit #16): spawning
+                // cliclick per click is FD-leak-class. Fall back to cliclick only
+                // if the native post fails.
+                if AXMouseHelper.doubleClick(at: point) {
                     return true
                 }
-                AXMouseHelper.doubleClick(at: point)
-                return true
+                return LibraryAccessor.postCliclick(command: "dc", at: point)
             }
         )
     }
@@ -1354,10 +1356,13 @@ enum LibraryAccessor {
         usleep(120_000)
         CGWarpMouseCursorPosition(point)
         usleep(30_000)
-        if postCliclick(command: "c", at: point) {
+        // Prefer the native CGEvent click (audit #16): spawning cliclick per
+        // click is FD-leak-class. Fall back to cliclick only if the native
+        // post fails.
+        if AXMouseHelper.click(at: point) {
             return true
         }
-        return AXMouseHelper.click(at: point)
+        return postCliclick(command: "c", at: point)
     }
 
     private static func postCliclick(command: String, at point: CGPoint) -> Bool {
@@ -1383,12 +1388,27 @@ enum LibraryAccessor {
         return output.exitCode == 0
     }
 
+    /// Session-private debug-log file, created inside a `mkdtemp` directory
+    /// (0700, owner-only, unpredictable name) under the per-user temp dir —
+    /// instead of the world-writable, predictable
+    /// `/tmp/logic-library-click-debug.log` path (L2: symlink / pre-creation
+    /// risk). Lazily initialized so `mkdtemp` runs ONLY when debug logging is
+    /// actually enabled (the caller gates on the env var first).
+    private static let debugLogURL: URL? = {
+        let template = (NSTemporaryDirectory() as NSString)
+            .appendingPathComponent("logic-library-click-debug.XXXXXX")
+        var buffer = Array(template.utf8CString)
+        guard let resolved = mkdtemp(&buffer) else { return nil }
+        let directory = String(cString: resolved)
+        return URL(fileURLWithPath: directory).appendingPathComponent("click-debug.log")
+    }()
+
     private static func debugLibraryClick(_ message: String) {
-        guard ProcessInfo.processInfo.environment["LOGIC_LIBRARY_CLICK_DEBUG"] == "1" else {
+        guard ProcessInfo.processInfo.environment["LOGIC_LIBRARY_CLICK_DEBUG"] == "1",
+              let url = debugLogURL else {
             return
         }
         let line = "\(Date()) \(message)\n"
-        let url = URL(fileURLWithPath: "/tmp/logic-library-click-debug.log")
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil)
         }
