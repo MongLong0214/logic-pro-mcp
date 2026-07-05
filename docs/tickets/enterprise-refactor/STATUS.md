@@ -1,33 +1,35 @@
 # Pipeline Status: Enterprise Review & Refactor Sweep (v3.8.0)
 
-**PRD**: docs/prd/PRD-enterprise-review-refactor.md
-**Findings**: docs/tickets/enterprise-refactor/REVIEW-FINDINGS.md (5 reviewers, ~78 findings, 1 P0)
-**Size**: XL
-**Baseline**: main 7bb8bf3, v3.7.4, 1980 tests green, 0 open issues
-**Current Phase**: B (scope confirmation — boomer PRD convergence)
-**Rule**: NO code implementation until PRD + tickets are boomer(codex gpt-5.5 xhigh)-converged (Isaac directive 2026-07-05).
+**PRD**: docs/prd/PRD-enterprise-review-refactor.md v0.4 — APPROVED (boomer CONVERGED R4, 2026-07-05)
+**Findings**: REVIEW-FINDINGS.md (round 1, 5 reviewers) + AUDIT-ROUND2.md (round 2, security/concurrency/completeness)
+**Size**: XL | **Baseline**: main 7bb8bf3, v3.7.4, 1980 tests green, 0 open issues
+**Branch**: chore/enterprise-review-refactor-v3.8.0 (worktree logic-pro-mcp-refactor)
+**Current Phase**: B (tickets — boomer ticket-review gate)
+**Rule**: NO implementation until PRD + tickets boomer(codex gpt-5.5 xhigh)-converged (Isaac). No main/default merge or direct push (Isaac) — PR only.
 
-## Workstreams (directory-disjoint, parallel-safe)
+## Workstreams / Tickets (file-atomic, disjoint)
+| WS | File | Phase | Priority | Owns |
+|----|------|-------|----------|------|
+| WS1 | WS1-accessibilitychannel-split.md | 1 | P1 | Channels/AccessibilityChannel* |
+| WS2 | WS2-other-channels-dedup.md | 1 | P2 | Channels/{AppleScript,CoreMIDI,MIDIKeyCommands,Scripter,CGEvent,ChannelRouter,Channel}+RoutingTable |
+| WS3 | WS3-accessibility-ax-split-honesty.md | 1 | P1 | Accessibility/* + Resources/ResourceProvider + Plugins/* + Audio/* |
+| WS4 | WS4-dispatchers-server-sigpipe.md | 1 | P0 | Dispatchers/* + Resources/*(excl ResourceProvider) + State/* + Projects/* + Server/{ServerConfig,SerializedStdio} + entrypoints |
+| WS5 | WS5-utilities-workflows-midi.md | 1 | P1 | Utilities/* + Workflows/* + MIDI/(excl MCU 3 files) |
+| WS6 | WS6-mcu-pipeline-atomic.md | 1 | P1 | Channels/MCUChannel + Server/LogicProServer + MIDI/{MCUFeedbackParser,MIDIFeedback,MCUProtocol} |
+| WS7 | WS7-scripts-ci-security.md | 1 | P1 | Scripts/*.sh + .github/workflows/* + Formula/* |
+| WS8 | WS8-tests-dead-assertions.md | 2 (after Ph1) | P1 | Tests/* |
+| WS9 | WS9-docs.md | 3 (after Ph2) | P2 | *.md docs |
 
-| WS | Owner dirs | Scope | Phase |
-|----|-----------|-------|-------|
-| A | Channels/AccessibilityChannel* | 8-ext split + dead lastBothScan + scanInProgress split + encoder merge + State-C helper port | 1 |
-| B | Channels/{CoreMIDI,MCU,AppleScript,MIDIKeyCommands,Scripter,CGEvent,ChannelRouter} | MCU P0 race + fast-path race + CoreMIDI param Result + catch helpers + AppleScript dedup + RoutingTable split + CGEvent async | 1 |
-| C | Accessibility/*, Plugins/*, Audio/* | AXLogicProElements 6-ext split + del findTrackOutline + LibraryNode hoist + AXLocalePolicy bypasses + PluginInspector→AXHelpers + AnalysisPolicy.default | 1 |
-| D | Dispatchers/*, Resources/*, Server/*, State/* | ResourceHandlers split + record_sequence split + create_/toggle helpers + verified-parse helper + invalidParamsResult route + mutation-gate test + StatePoller generic | 1 |
-| E | Utilities/*, Workflows/*, MIDI/* | FailureError String-enum + deterministicFindings decompose + requireBinary + remediation dedup + SMFWriter denominator + bespoke-error→FailureError | 1 |
-| F | Scripts/*.sh | release.sh Formula-sha verify + validate_share_dir symmetry + no-op-commit guard | 1 |
-| G | Tests/* | dead-assertion sweep ~172 (safety-first, 5 transforms) + FakeAX helper promotion + JSON clone removal + BoundedProcessRunnerTests | 2 (after Ph1) |
-| H | *.md (README/CHANGELOG/CONTRIBUTING/SECURITY/docs) | doc staleness sync | 3 (overlap Ph2) |
+## Cross-WS sequencing notes (from boomer PRD reviews)
+- WS5 adds `AppleScriptSafety.escapeForScript`; WS2 defers its escape-dedup (avoid cross-edit).
+- No file owned by two WS (verified round-2). LogicProServer→WS6 only; ResourceProvider→WS3 only; entrypoints→WS4.
+- Golden-snapshot harness captured from v3.7.4 binary BEFORE Phase-1; diff=0 gate per wire-sensitive WS (WS4/WS6/WS2/WS5). logic://tracks value-only allowlist (WS3).
 
 ## Review History
 | Phase | Round | Verdict | Notes |
 |-------|-------|---------|-------|
-| B-PRD | 1 | (pending) | boomer codex gpt-5.5 xhigh |
-
-## Correctness defects (must-fix, not just cleanup)
-- P0 MCU Task{} feedback ordering race (MCUChannel:180) — probable MCU echo flake (PR #153) root cause. WS-B.
-- P2-latent SMFWriter denominator ignored (6/8 → 2× offset); unreachable today (caller hardcodes 4/4). WS-E.
-- ~172 dead assertions incl. safety-critical fail-closed/honesty guards passing unconditionally. WS-G.
-- release.sh Formula sha256 rewrite unverified (#22-class silent brew breakage). WS-F.
-- BoundedProcessRunner (SIGTERM→SIGKILL) zero direct tests. WS-G.
+| B-PRD | 1 | HAS_ISSUES (5) | boomer; all folded → v0.2 |
+| B-PRD | 2 | HAS_ISSUES (3) | extractTrackState exception + Projects ownership + MIDIFeedback tests → v0.3 |
+| B-PRD | 3 | HAS_ISSUES (1) | sentinel = wire change → v0.4 value-only |
+| B-PRD | 4 | **CONVERGED** | value-only confirmed; ready for tickets |
+| B-tickets | 1 | (pending) | boomer WS1-9 review |
