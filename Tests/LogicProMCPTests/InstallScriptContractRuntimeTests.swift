@@ -164,6 +164,32 @@ import Testing
     #expect(result.combinedOutput.contains("install_dir must not target a protected system path: /usr/bin"))
 }
 
+@Test func testInstallScriptRejectsCaseVariedProtectedInstallDirBeforeMutation() throws {
+    // On a case-insensitive filesystem (APFS default) a case-varied protected
+    // root with a non-existent intermediate survives normalize_path lexically
+    // (pwd -P cannot canonicalize a missing dir), so a case-SENSITIVE blocklist
+    // would let it slip through and then install into a world-writable system
+    // dir (/TMP -> /private/tmp, /ETC -> /private/etc). The blocklist now matches
+    // case-insensitively, so these are refused before any mutation.
+    for caseVaried in ["/TMP/logicpromcp-missing/x", "/ETC/logicpromcp-missing/x"] {
+        let result = try runShellScript(
+            "Scripts/install.sh",
+            environment: [
+                "LOGIC_PRO_MCP_VERSION": "v3.7.1",
+                "LOGIC_PRO_MCP_SHA256": "deadbeef",
+                "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
+                "LOGIC_PRO_MCP_INSTALL_DIR": caseVaried,
+                "LOGIC_PRO_MCP_SKIP_SUDO": "1",
+                "LOGIC_PRO_MCP_REGISTER_CLAUDE": "0",
+                "LOGIC_PRO_MCP_INSTALL_KEYCMDS": "0",
+            ]
+        )
+
+        #expect(result.exitCode != 0)
+        #expect(result.combinedOutput.contains("install_dir must not target a protected system path: \(caseVaried)"))
+    }
+}
+
 @Test func testUninstallScriptRejectsUnsafeEnvOverridesBeforeRemoval() throws {
     let sandbox = try makeInstallScriptTempDir("logicpromcp-uninstall-reject-\(UUID().uuidString)")
     let fakeBin = sandbox.appendingPathComponent("fake-bin", isDirectory: true)
