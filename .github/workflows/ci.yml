@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege: the build job only reads the repo. Declaring the scope here
+# (release.yml / publish-mcp.yml already pin theirs) drops the default token
+# from read/write to read-only for every job in this workflow.
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -15,7 +21,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Select Xcode
         # Xcode 16.4 ships Swift 6.2 — required by swift-sdk 0.11.0+ which
