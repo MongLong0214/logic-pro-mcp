@@ -62,3 +62,11 @@
 - WS8b 0890c80: MutationGateCompleteness + BoundedProcessRunner (SIGTERM→SIGKILL/64KB/timeout) + StateModelsCodable (new files, dead-pattern-free live forms).
 - WS6-followup 47504b8: HandshakeResult/parseDeviceResponse + 4 tests deleted (repo refs=0).
 - **2070 tests green.** RECONCILED: the "missing stash" was a false alarm — ws8 had `git stash pop`'d successfully (pop deletes the entry; stash list is worktree-shared, so it vanished from my main worktree view) then fixed the dead form + COMMITTED (0890c80/47504b8) in the refactor worktree. My independent `git stash apply 1ecad30` (the PRE-FIX snapshot) landed the same content because HEAD already carried ws8's fix. VERIFIED HEAD ce3b653: BoundedProcessRunnerTests uses the LIVE form (`guard case .completed(let out)` → `#expect(!out.stdoutTruncated)`, out non-optional) — NOT 1ecad30's dead `out?.stdoutTruncated == false`. 0 dead forms in the 3 new files (MutationGate's `?? false` are local-var unwraps, then asserted live). Zero work lost, no dead regression.
+
+## WS8 independent review (ws8b) — PASS, changed nothing (2026-07-05)
+- Ledger 573 rows CLEAN: R3-vs-R4 split principled (all 18 .isError→R4 bind; nil-must-fail→R3 force-unwrap; 0 misclassified). Optionality COMPILER-PROVEN (R1 #expect(x) fails if optional; R3 x! fails if non-optional; green suite ⇒ every label machine-correct). R2 26 response-contract force-unwraps, R5 6 tautologies→real/smoke.
+- Flip-test REPRODUCED: broke AXLogicProElements+PluginSlots.swift:50 isEmpty → AXPluginInsertSlotsDriftTests:85 (AC21 occupied-unreadable NOT write-safe) went RED; pre-sweep dead form would have missed it. Reverted.
+- Residual dead forms: 0 (4 grep hits all legitimately LIVE — .allSatisfy/.first closure predicates, != .none enum check).
+- WS8b 3 new files live-only; MCUProtocol deletion complete (0 live refs, 2 documentary comments). 2070 green re-confirmed.
+- Cosmetic-only (NOT a defect, deferred): CleanupExecutionTests redundant extra `!` on a #require result — compiles clean, live, intent preserved.
+- **WS8 FULLY VERIFIED. Phase C (source refactor) + Phase 2 (test integrity) COMPLETE.**
