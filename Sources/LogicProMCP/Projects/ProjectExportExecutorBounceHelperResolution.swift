@@ -92,9 +92,20 @@ extension ProjectExportExecutor {
     /// helper spawn used to fail with a misleading error. Falls back to
     /// `/usr/bin/python3` when PATH resolution finds nothing so behavior is
     /// unchanged on stock macOS.
+    ///
+    /// The resolved interpreter is EXECUTED, so — exactly like the
+    /// `LOGIC_PRO_MCP_BOUNCE_HELPER` script it runs — a PATH-resolved candidate
+    /// must also pass the ownership guard (regular file, owned by you or root,
+    /// not group/other-writable). Otherwise an operator whose `PATH` is
+    /// influenced by another local user (a world-writable dir on `PATH`, or a
+    /// planted `python3`) could substitute the interpreter and bypass every
+    /// check we apply to the script, since the malicious code would BE the
+    /// interpreter. An untrusted candidate is skipped; resolution continues down
+    /// PATH and ultimately falls back to the stock `/usr/bin/python3`.
     static func resolvePython3Path(
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        isExecutable: @Sendable (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+        isExecutable: @Sendable (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) },
+        ownershipTrusted: @Sendable (String) -> Bool = { bounceHelperOwnershipTrusted($0) }
     ) -> String {
         let searchPath = environment["PATH"] ?? "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         for entry in searchPath.split(separator: ":") {
@@ -102,7 +113,7 @@ extension ProjectExportExecutor {
             let candidate = URL(fileURLWithPath: String(entry), isDirectory: true)
                 .appendingPathComponent("python3", isDirectory: false)
                 .path
-            if isExecutable(candidate) {
+            if isExecutable(candidate) && ownershipTrusted(candidate) {
                 return candidate
             }
         }

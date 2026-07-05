@@ -18,6 +18,32 @@ struct ProjectExportBounceHelperContractTests {
         #expect(resolved == "/tmp/custom/share/logic-pro-mcp/logic_bounce.py")
     }
 
+    @Test("resolvePython3Path skips an executable-but-untrusted PATH candidate and falls back")
+    func resolvePython3SkipsUntrustedCandidate() {
+        // The resolved interpreter is EXECUTED, so a python3 that is executable
+        // but fails the ownership guard (e.g. planted in a world-writable PATH
+        // dir, or owned by another local user) must NOT be returned — otherwise
+        // it bypasses every check we apply to the helper script, since the
+        // malicious code would BE the interpreter. Resolution skips it and falls
+        // back to the stock /usr/bin/python3.
+        let resolved = ProjectExportExecutor.resolvePython3Path(
+            environment: ["PATH": "/evil/bin:/usr/bin"],
+            isExecutable: { $0 == "/evil/bin/python3" },
+            ownershipTrusted: { _ in false }
+        )
+        #expect(resolved == "/usr/bin/python3")
+    }
+
+    @Test("resolvePython3Path returns an executable AND ownership-trusted PATH candidate")
+    func resolvePython3ReturnsTrustedCandidate() {
+        let resolved = ProjectExportExecutor.resolvePython3Path(
+            environment: ["PATH": "/opt/homebrew/bin:/usr/bin"],
+            isExecutable: { $0 == "/opt/homebrew/bin/python3" },
+            ownershipTrusted: { $0 == "/opt/homebrew/bin/python3" }
+        )
+        #expect(resolved == "/opt/homebrew/bin/python3")
+    }
+
     @Test("bare PATH arg0 is ignored when no real executable path is available")
     func barePathNameArgvZeroIsIgnoredWithoutResolvedExecutablePath() {
         let effective = ProjectExportExecutor.effectiveExecutablePath(
