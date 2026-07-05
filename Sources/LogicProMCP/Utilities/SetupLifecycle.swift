@@ -31,19 +31,13 @@ enum SetupLifecycle {
         case skip
     }
 
-    /// Mirrors `SetupDoctor.RemediationType` so a step's remediation reads with
-    /// the same vocabulary and anchor scheme operators already know from doctor.
-    enum RemediationType: String, Codable, Sendable {
-        case command
-        case docs
-        case manual
-        case none
-    }
+    /// Shared with SetupDoctor — see `SetupRemediationType`. Was a hand-mirrored
+    /// copy kept in sync by comment; now aliased to the single source of truth.
+    /// The lifecycle planner still only emits command/docs/manual/none.
+    typealias RemediationType = SetupRemediationType
 
-    struct Remediation: Codable, Equatable, Sendable {
-        let type: RemediationType
-        let value: String
-    }
+    /// Shared with SetupDoctor — see `SetupRemediation`.
+    typealias Remediation = SetupRemediation
 
     struct Step: Codable, Equatable, Sendable {
         let id: String
@@ -115,7 +109,7 @@ enum SetupLifecycle {
 
         static let production = Runtime(
             installDir: {
-                ProcessInfo.processInfo.environment["LOGIC_PRO_MCP_INSTALL_DIR"] ?? "/usr/local/bin"
+                resolveInstallDir()
             },
             fileExists: { path in
                 FileManager.default.fileExists(atPath: path)
@@ -577,12 +571,65 @@ enum SetupLifecycle {
         switch type {
         case .none:
             return ""
-        case .command, .docs, .manual:
+        // `.systemSettings` is part of the shared type but never emitted by the
+        // lifecycle planner; handled here for exhaustiveness with the doc anchor.
+        case .command, .docs, .manual, .systemSettings:
             return remediationAnchorsByStepID[id] ?? "docs/SETUP.md#lifecycle"
         }
     }
 
     // MARK: - Production read helpers
+
+    /// The default binary install location used when no valid override is set.
+    static let defaultInstallDir = "/usr/local/bin"
+
+    /// Resolve `LOGIC_PRO_MCP_INSTALL_DIR` behind an L1 ownership + location
+    /// allowlist. `productionInstalledBinaryVersion` EXECUTES the binary at this
+    /// path (`--version`), so an unvalidated operator env value is an
+    /// arbitrary-code-execution vector. Mirroring the library-inventory
+    /// allowlist, an override is honored only when it standardizes to a path
+    /// that is (1) a known binary root or under the user's home (location) AND
+    /// (2) not world-writable (ownership); otherwise the safe default is used.
+    /// Missing / empty env → default (no override).
+    static func resolveInstallDir(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        fileManager: FileManager = .default
+    ) -> String {
+        guard let raw = environment["LOGIC_PRO_MCP_INSTALL_DIR"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty else {
+            return defaultInstallDir
+        }
+        let path = URL(fileURLWithPath: raw).standardizedFileURL.path
+
+        let allowedRoots: Set<String> = ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin"]
+        let homePath = homeDirectory.standardizedFileURL.path
+        let locationAllowed = allowedRoots.contains(path)
+            || path == homePath
+            || path.hasPrefix(homePath + "/")
+        guard locationAllowed else {
+            Log.warn(
+                "LOGIC_PRO_MCP_INSTALL_DIR '\(raw)' resolves outside the allowlisted install locations; using \(defaultInstallDir)",
+                subsystem: "lifecycle"
+            )
+            return defaultInstallDir
+        }
+
+        // Ownership: refuse a world-writable directory — any local user could
+        // swap the binary the version probe then executes. A not-yet-created
+        // dir is fine (nothing installed); group-writable (e.g. Homebrew's
+        // admin group) is allowed.
+        if let perms = (try? fileManager.attributesOfItem(atPath: path))?[.posixPermissions] as? NSNumber,
+           (perms.uint16Value & 0o002) != 0 {
+            Log.warn(
+                "LOGIC_PRO_MCP_INSTALL_DIR '\(path)' is world-writable; using \(defaultInstallDir)",
+                subsystem: "lifecycle"
+            )
+            return defaultInstallDir
+        }
+        return path
+    }
 
     private static func productionClaudeCLIAvailable() -> Bool {
         guard let result = SetupDoctor.runProductionCommandForTesting(
@@ -597,7 +644,7 @@ enum SetupLifecycle {
     }
 
     private static func productionInstalledBinaryVersion() -> String? {
-        let installDir = ProcessInfo.processInfo.environment["LOGIC_PRO_MCP_INSTALL_DIR"] ?? "/usr/local/bin"
+        let installDir = resolveInstallDir()
         let binaryPath = installDir + "/LogicProMCP"
         guard FileManager.default.isExecutableFile(atPath: binaryPath) else { return nil }
         guard let result = SetupDoctor.runProductionCommandForTesting(

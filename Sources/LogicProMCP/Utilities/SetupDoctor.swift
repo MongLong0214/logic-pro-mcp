@@ -24,13 +24,9 @@ enum SetupDoctor {
         case unknown
     }
 
-    enum RemediationType: String, Codable, Sendable {
-        case command
-        case docs
-        case systemSettings = "system_settings"
-        case manual
-        case none
-    }
+    /// Shared with SetupLifecycle — see `SetupRemediationType`. Aliased (not
+    /// redeclared) so both surfaces emit an identical `remediation` wire shape.
+    typealias RemediationType = SetupRemediationType
 
     /// Closed, typed taxonomy added in v2 (lazycodex-style `CheckCategory`).
     /// Parallel to the v1 free-string `domain`, which is retained for back-compat.
@@ -51,10 +47,8 @@ enum SetupDoctor {
         case info
     }
 
-    struct Remediation: Codable, Equatable, Sendable {
-        let type: RemediationType
-        let value: String
-    }
+    /// Shared with SetupLifecycle — see `SetupRemediation`.
+    typealias Remediation = SetupRemediation
 
     struct Check: Codable, Equatable, Sendable {
         let id: String
@@ -398,8 +392,17 @@ enum SetupDoctor {
         (!allGranted && status == .ok) ? .degraded : status
     }
 
+    /// Shared binary-resolve precondition for the binary/release checks: the
+    /// path must be present AND exist on disk. Returns the resolved path, or
+    /// nil so the caller can emit its own missing-binary Check. Dedups the
+    /// `guard let path, fileExists(path)` repeated across the four checks.
+    private static func requireBinary(_ executablePath: String?, runtime: Runtime) -> String? {
+        guard let executablePath, runtime.fileExists(executablePath) else { return nil }
+        return executablePath
+    }
+
     private static func binaryPathCheck(executablePath: String?, runtime: Runtime) -> Check {
-        guard let executablePath, runtime.fileExists(executablePath) else {
+        guard let executablePath = requireBinary(executablePath, runtime: runtime) else {
             return check(
                 id: "binary.path",
                 domain: "binary",
@@ -420,7 +423,7 @@ enum SetupDoctor {
     }
 
     private static func binaryExecutableCheck(executablePath: String?, runtime: Runtime) -> Check {
-        guard let executablePath, runtime.fileExists(executablePath) else {
+        guard let executablePath = requireBinary(executablePath, runtime: runtime) else {
             return check(
                 id: "binary.executable",
                 domain: "binary",
@@ -471,7 +474,7 @@ enum SetupDoctor {
     }
 
     private static func releaseSignatureCheck(executablePath: String?, runtime: Runtime) -> Check {
-        guard let executablePath, runtime.fileExists(executablePath) else {
+        guard let executablePath = requireBinary(executablePath, runtime: runtime) else {
             return check(
                 id: "release.signature",
                 domain: "release",
@@ -506,7 +509,7 @@ enum SetupDoctor {
     }
 
     private static func releaseQuarantineCheck(executablePath: String?, runtime: Runtime) -> Check {
-        guard let executablePath, runtime.fileExists(executablePath) else {
+        guard let executablePath = requireBinary(executablePath, runtime: runtime) else {
             return check(
                 id: "release.quarantine",
                 domain: "release",
