@@ -1,0 +1,242 @@
+{
+ "id": 3,
+ "jsonrpc": "2.0",
+ "result": {
+  "resources": [
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 1
+    },
+    "description": "Channel status, cache freshness, permission state",
+    "mimeType": "application/json",
+    "name": "System Health",
+    "uri": "logic://system/health"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.9
+    },
+    "description": "Current transport state: playing, recording, tempo, position, cycle, metronome",
+    "mimeType": "application/json",
+    "name": "Transport State",
+    "uri": "logic://transport/state"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.85
+    },
+    "description": "All tracks: name, type, index, mute/solo/arm states",
+    "mimeType": "application/json",
+    "name": "Tracks",
+    "uri": "logic://tracks"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.8
+    },
+    "description": "All channel strips: volume, pan, plugins, sends",
+    "mimeType": "application/json",
+    "name": "Mixer",
+    "uri": "logic://mixer"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.75
+    },
+    "description": "All project markers with bar positions and names",
+    "mimeType": "application/json",
+    "name": "Markers",
+    "uri": "logic://markers"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.7
+    },
+    "description": "Project name, sample rate, time signature, track count",
+    "mimeType": "application/json",
+    "name": "Project Info",
+    "uri": "logic://project/info"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.68
+    },
+    "description": "Read-only project/session audit with evidence-backed findings and cleanup plan",
+    "mimeType": "application/json",
+    "name": "Project Session Audit",
+    "uri": "logic://project/audit"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.67
+    },
+    "description": "Read-only serializable cleanup plan derived from the current project/session audit",
+    "mimeType": "application/json",
+    "name": "Project Cleanup Plan",
+    "uri": "logic://project/cleanup-plan"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.5
+    },
+    "description": "Available MIDI ports (system + virtual)",
+    "mimeType": "application/json",
+    "name": "MIDI Ports",
+    "uri": "logic://midi/ports"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.6
+    },
+    "description": "Mackie Control Universal connection, registration, and LCD display state",
+    "mimeType": "application/json",
+    "name": "MCU Control Surface State",
+    "uri": "logic://mcu/state"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.4
+    },
+    "description": "Cached Logic Pro Library tree (instruments, categories, presets) from the last scan",
+    "mimeType": "application/json",
+    "name": "Library Inventory",
+    "uri": "logic://library/inventory"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.45
+    },
+    "description": "Read-only Logic stock plugin catalog with truth labels, provenance, and limitations",
+    "mimeType": "application/json",
+    "name": "Stock Plugin Intelligence",
+    "uri": "logic://stock-plugins"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.35
+    },
+    "description": "Current-machine stock plugin catalog census metadata and validation state",
+    "mimeType": "application/json",
+    "name": "Stock Plugin Census",
+    "uri": "logic://stock-plugins/census"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.35
+    },
+    "description": "Stock plugin catalog schema capabilities, truth labels, and read-only contract",
+    "mimeType": "application/json",
+    "name": "Stock Plugin Capabilities",
+    "uri": "logic://stock-plugins/capabilities"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.42
+    },
+    "description": "Read-only Logic stock instrument catalog with provenance, roles, and explicit limitations",
+    "mimeType": "application/json",
+    "name": "Stock Instrument Intelligence",
+    "uri": "logic://stock-instruments"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.41
+    },
+    "description": "Read-only Logic Session Player and Drummer catalog with documented provenance and unsupported actions",
+    "mimeType": "application/json",
+    "name": "Session Player Intelligence",
+    "uri": "logic://session-players"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.43
+    },
+    "description": "Validated read-only Logic Pro MCP workflow skill pack",
+    "mimeType": "application/json",
+    "name": "Workflow Skills",
+    "uri": "logic://workflow-skills"
+   },
+   {
+    "annotations": {
+     "audience": [
+      "assistant"
+     ],
+     "lastModified": "2026-06-23T00:00:00Z",
+     "priority": 0.34
+    },
+    "description": "Workflow skill schema, evidence levels, and validation rules",
+    "mimeType": "application/json",
+    "name": "Workflow Skills Schema",
+    "uri": "logic://workflow-skills/schema"
+   }
+  ]
+ }
+}

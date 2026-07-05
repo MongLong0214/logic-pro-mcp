@@ -1,0 +1,11 @@
+{
+ "error": {
+  "code": -32602,
+  "data": {
+   "detail": "Missing required argument 'command' for tool 'logic_audio'"
+  },
+  "message": "Invalid params: Missing required argument 'command' for tool 'logic_audio'"
+ },
+ "id": 25,
+ "jsonrpc": "2.0"
+}

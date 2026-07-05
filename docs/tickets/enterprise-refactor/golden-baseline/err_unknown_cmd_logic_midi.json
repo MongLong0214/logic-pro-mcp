@@ -1,0 +1,13 @@
+{
+ "id": 22,
+ "jsonrpc": "2.0",
+ "result": {
+  "content": [
+   {
+    "text": "Unknown MIDI command: zzz_unknown_command. Available: send_note, send_chord, send_cc, send_program_change, send_pitch_bend, send_aftertouch, send_sysex, play_sequence, import_file, list_ports, create_virtual_port, step_input, mmc_play, mmc_stop, mmc_record, mmc_locate",
+    "type": "text"
+   }
+  ],
+  "isError": true
+ }
+}

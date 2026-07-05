@@ -1,0 +1,13 @@
+{
+ "id": 28,
+ "jsonrpc": "2.0",
+ "result": {
+  "content": [
+   {
+    "text": "{\"error\":\"invalid_params\",\"hint\":\"rename requires explicit 'index' (Int ≥ 0)\",\"operation\":\"track.rename\",\"success\":false}",
+    "type": "text"
+   }
+  ],
+  "isError": true
+ }
+}

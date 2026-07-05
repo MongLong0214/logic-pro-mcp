@@ -1,0 +1,13 @@
+{
+ "id": 16,
+ "jsonrpc": "2.0",
+ "result": {
+  "content": [
+   {
+    "text": "{\"error\":\"invalid_params\",\"hint\":\"Unknown project command: zzz_unknown_command. Available: new, open, save, save_as, close, bounce, is_running, launch, quit, get_regions, export_plan, export_run, export_resume, audit, cleanup_plan, cleanup_apply\",\"operation\":\"project.zzz_unknown_command\",\"success\":false}",
+    "type": "text"
+   }
+  ],
+  "isError": true
+ }
+}

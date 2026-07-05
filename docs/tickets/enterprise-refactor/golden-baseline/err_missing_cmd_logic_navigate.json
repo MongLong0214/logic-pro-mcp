@@ -1,0 +1,11 @@
+{
+ "error": {
+  "code": -32602,
+  "data": {
+   "detail": "Missing required argument 'command' for tool 'logic_navigate'"
+  },
+  "message": "Invalid params: Missing required argument 'command' for tool 'logic_navigate'"
+ },
+ "id": 13,
+ "jsonrpc": "2.0"
+}

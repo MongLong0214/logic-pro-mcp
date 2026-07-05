@@ -1,0 +1,13 @@
+{
+ "id": 26,
+ "jsonrpc": "2.0",
+ "result": {
+  "content": [
+   {
+    "text": "Unknown audio command: zzz_unknown_command. Available: analyze_file",
+    "type": "text"
+   }
+  ],
+  "isError": true
+ }
+}

@@ -1,0 +1,11 @@
+{
+ "error": {
+  "code": -32602,
+  "data": {
+   "detail": "Unknown tool: logic_nonexistent"
+  },
+  "message": "Invalid params: Unknown tool: logic_nonexistent"
+ },
+ "id": 5,
+ "jsonrpc": "2.0"
+}

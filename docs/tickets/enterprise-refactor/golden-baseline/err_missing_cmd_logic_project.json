@@ -1,0 +1,11 @@
+{
+ "error": {
+  "code": -32602,
+  "data": {
+   "detail": "Missing required argument 'command' for tool 'logic_project'"
+  },
+  "message": "Invalid params: Missing required argument 'command' for tool 'logic_project'"
+ },
+ "id": 15,
+ "jsonrpc": "2.0"
+}

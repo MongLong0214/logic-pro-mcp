@@ -1,0 +1,13 @@
+{
+ "id": 24,
+ "jsonrpc": "2.0",
+ "result": {
+  "content": [
+   {
+    "text": "Unknown plugins command: zzz_unknown_command. Available: get_inventory, set_param_verified, insert_verified",
+    "type": "text"
+   }
+  ],
+  "isError": true
+ }
+}

@@ -1,0 +1,13 @@
+{
+ "id": 12,
+ "jsonrpc": "2.0",
+ "result": {
+  "content": [
+   {
+    "text": "{\"error\":\"invalid_params\",\"hint\":\"Unknown mixer command: zzz_unknown_command. Available: set_volume, set_pan, set_master_volume, set_plugin_param, insert_plugin\",\"operation\":\"mixer.zzz_unknown_command\",\"success\":false}",
+    "type": "text"
+   }
+  ],
+  "isError": true
+ }
+}

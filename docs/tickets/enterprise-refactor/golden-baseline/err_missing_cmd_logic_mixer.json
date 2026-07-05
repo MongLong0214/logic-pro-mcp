@@ -1,0 +1,11 @@
+{
+ "error": {
+  "code": -32602,
+  "data": {
+   "detail": "Missing required argument 'command' for tool 'logic_mixer'"
+  },
+  "message": "Invalid params: Missing required argument 'command' for tool 'logic_mixer'"
+ },
+ "id": 11,
+ "jsonrpc": "2.0"
+}

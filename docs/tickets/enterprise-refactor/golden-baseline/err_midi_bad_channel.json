@@ -1,0 +1,13 @@
+{
+ "id": 29,
+ "jsonrpc": "2.0",
+ "result": {
+  "content": [
+   {
+    "text": "{\"error\":\"invalid_params\",\"hint\":\"channel must be integer 1..16 (1-based)\",\"success\":false}",
+    "type": "text"
+   }
+  ],
+  "isError": true
+ }
+}

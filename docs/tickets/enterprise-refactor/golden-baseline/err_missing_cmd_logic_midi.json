@@ -1,0 +1,11 @@
+{
+ "error": {
+  "code": -32602,
+  "data": {
+   "detail": "Missing required argument 'command' for tool 'logic_midi'"
+  },
+  "message": "Invalid params: Missing required argument 'command' for tool 'logic_midi'"
+ },
+ "id": 21,
+ "jsonrpc": "2.0"
+}

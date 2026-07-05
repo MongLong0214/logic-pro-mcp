@@ -1,0 +1,208 @@
+{
+ "id": 2,
+ "jsonrpc": "2.0",
+ "result": {
+  "tools": [
+   {
+    "description": "Control Logic Pro transport. Commands: play, stop, record, pause, rewind, fast_forward, toggle_cycle, toggle_metronome, set_tempo, goto_position, set_cycle_range, toggle_count_in. Params: set_tempo -> { tempo: Float } (5.0-999.0); goto_position -> { bar: Int (1..9999) } or { position: String } where String is bar.beat.sub.tick (e.g. \"9.1.1.1\") or HH:MM:SS:FF SMPTE (e.g. \"00:00:08:12\"); set_cycle_range -> { start: Int, end: Int } (UNSUPPORTED/best-effort: Logic 12.x exposes no numeric cycle-locator fields, so this fails closed with State C not_implemented and CANNOT verify a write); others -> {}.",
+    "inputSchema": {
+     "properties": {
+      "command": {
+       "description": "Transport command to execute",
+       "type": "string"
+      },
+      "params": {
+       "description": "Command-specific parameters",
+       "type": "object"
+      }
+     },
+     "required": [
+      "command"
+     ],
+     "type": "object"
+    },
+    "name": "logic_transport"
+   },
+   {
+    "description": "Track actions in Logic Pro. Commands: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets. Params: select -> { index: Int } or { name: String }; rename/mute/solo/arm/arm_only/set_automation/set_instrument ALL require explicit { index: Int (≥0) }; mute/solo/arm -> also { enabled: Bool }; arm_only disarms all others + arms target, returns error on partial disarm failure; record_sequence -> { bar?: Int (default 1), notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\" (BREAKING since v3.1.6: optional `ch` field is 1-based, range 1..16 — pre-v3.1.6 was 0-based; whole-parse-fail on any invalid segment; SMF end <= 3,600,000 ms), tempo?: Float } SMF-import path: generates a Standard MIDI File server-side, forces playhead to bar 1, imports via AX menu — byte-exact timing, creates a new track each call, then verifies the imported region by AX readback. Successful responses include `created_track`, `target_track_index`, `target_track_name`, `region_name`, `start_bar`, `end_bar`, `note_count`, and `verify_source`; structured error JSON distinguishes `import_failure`, `audibility_unverified`, `import_unverified`, `wrong_track_import`, `timing_mismatch`, and `unreadable_readback`. If Logic imports GM Device / External MIDI lanes, record_sequence fails closed instead of promoting region readback to audible success. v3.0.8 REMOVED the internal instrument auto-load: response always carries `\"instrument\":\"not-attempted\"`; callers that want a specific patch must follow up with explicit `set_instrument` on a Software Instrument track. The legacy `instrument_path` param is accepted for wire compat but ignored (surfaces as `\"ignored:<path>\"` in the response) — see CHANGELOG v3.0.8 for why the inline auto-load was unsafe (could load the wrong track's patch, corrupting a pre-existing track); create_* -> {}; delete/duplicate -> { index: Int }; set_automation -> { mode: read|write|touch|latch|trim|off }; set_instrument -> { path: String } or { category: String, preset: String } — path mode preferred; scan_library -> { mode?: \"ax\"|\"disk\"|\"both\" } (default disk — reads ~/Music/Logic Pro Library.bundle for 5,400+ leaves with Panel-taxonomy remap; ax is the legacy live Library Panel scan; both returns diff summary); resolve_path -> { path: String } cache-backed read-only; scan_plugin_presets -> { submenuOpenDelayMs?: Int }.",
+    "inputSchema": {
+     "properties": {
+      "command": {
+       "description": "Track command to execute",
+       "type": "string"
+      },
+      "params": {
+       "description": "Command-specific parameters",
+       "type": "object"
+      }
+     },
+     "required": [
+      "command"
+     ],
+     "type": "object"
+    },
+    "name": "logic_tracks"
+   },
+   {
+    "description": "Mixer actions in Logic Pro. Commands: set_volume, set_pan, set_master_volume, set_plugin_param, insert_plugin. BREAKING since v3.3.0: every mutating command requires explicit `track` (Int ≥ 0) — pre-v3.3.0 missing `track` defaulted to 0 and silently mutated the first track; this now returns an error. Params: set_volume -> { track: Int (required, ≥ 0), value: Float (0.0..1.0) } verified against the visible mixer strip via AX readback; set_pan -> { track: Int (required, ≥ 0), value: Float (-1.0..1.0) } verified against the visible mixer strip via AX readback; set_master_volume -> { value: Float (0.0..1.0) } — the master fader has no AX track-header equivalent, so MCU echo is the ONLY readback: State A only when a fresh echo lands, otherwise honest State B echo_timeout with readback_source:mcu_echo + a surface_limitation note (non-deterministic, not a recoverable failure); set_plugin_param -> { track: Int (required, ≥ 0), insert: Int (required, currently only 0), param: Int (required, ≥ 0), value: Float (required) } on the selected track via Scripter; insert_plugin -> { track: Int, slot: Int, plugin_name: Gain|Compressor|Channel EQ, confirmed: true } via AX mixer slot with readback.",
+    "inputSchema": {
+     "properties": {
+      "command": {
+       "description": "Mixer command to execute",
+       "type": "string"
+      },
+      "params": {
+       "description": "Command-specific parameters",
+       "type": "object"
+      }
+     },
+     "required": [
+      "command"
+     ],
+     "type": "object"
+    },
+    "name": "logic_mixer"
+   },
+   {
+    "description": "MIDI operations in Logic Pro. Commands: send_note, send_chord, send_cc, send_program_change, send_pitch_bend, send_aftertouch, send_sysex, play_sequence, import_file, list_ports, create_virtual_port, step_input, mmc_play, mmc_stop, mmc_record, mmc_locate. Params: send_note/send_chord -> MIDI note payloads; send_cc/program_change/pitch_bend/aftertouch -> controller payloads; send_sysex -> { bytes: [Int] } or { data: String } (≤1024 bytes); play_sequence -> { notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\" } (≤256 events, tight server-side timing); import_file -> { path: server-managed LogicProMCP temp .mid } and wait for verified:true before issuing the next import; list_ports -> {} (same data as logic://midi/ports; prefer the resource for polling); mmc_locate -> { bar: Int } or { time: \"HH:MM:SS:FF\" }; create_virtual_port -> { name: String }. The 7 send-style ops (send_note, send_chord, send_cc, send_program_change, send_pitch_bend, send_aftertouch, play_sequence) accept an optional { port: \"midi\"|\"keycmd\" } selector — default \"midi\" routes to the CoreMIDI virtual port; \"keycmd\" routes to the MIDIKeyCommands KeyCmd virtual port (requires one-time MIDI Learn in Logic). Channel is 1-based (1..16). All other ops reject `port` with invalid_params.",
+    "inputSchema": {
+     "properties": {
+      "command": {
+       "description": "MIDI command to execute",
+       "type": "string"
+      },
+      "params": {
+       "description": "Command-specific parameters",
+       "type": "object"
+      }
+     },
+     "required": [
+      "command"
+     ],
+     "type": "object"
+    },
+    "name": "logic_midi"
+   },
+   {
+    "description": "Editing actions in Logic Pro. Commands: undo, redo, cut, copy, paste, delete, select_all, split, join, quantize, bounce_in_place, normalize, duplicate, toggle_step_input. Params by command: quantize -> { value: String } (\"1/4\", \"1/8\", \"1/16\", etc.); Most others -> {} (operate on current selection)",
+    "inputSchema": {
+     "properties": {
+      "command": {
+       "description": "Edit command to execute",
+       "type": "string"
+      },
+      "params": {
+       "description": "Command-specific parameters",
+       "type": "object"
+      }
+     },
+     "required": [
+      "command"
+     ],
+     "type": "object"
+    },
+    "name": "logic_edit"
+   },
+   {
+    "description": "Navigation and markers in Logic Pro. Commands: goto_bar, goto_marker, create_marker, delete_marker, rename_marker, zoom_to_fit, set_zoom, toggle_view. UNSUPPORTED: rename_marker is NOT implemented — there is no verified AX write path on Logic 12.x, so it always fails closed with State C error=not_implemented; to rename, delete_marker the target then create_marker with the new name. BREAKING since v3.3.0: delete_marker / rename_marker require explicit `index` (Int ≥ 0) — pre-v3.3.0 missing `index` defaulted to 0 and silently mutated marker 0; rename_marker now also rejects empty `name`. Params: goto_bar -> { bar: Int }; goto_marker -> { index: Int } or { name: String }; create_marker -> { name: String }; rename_marker -> { index: Int (required, ≥ 0), name: String (required, non-empty) } (not implemented: returns not_implemented); delete_marker -> { index: Int (required, ≥ 0) }; set_zoom -> { level: String } (in|out|fit); toggle_view -> { view: String } (mixer|piano_roll|score|step_editor|library|inspector|automation).",
+    "inputSchema": {
+     "properties": {
+      "command": {
+       "description": "Navigation command to execute",
+       "type": "string"
+      },
+      "params": {
+       "description": "Command-specific parameters",
+       "type": "object"
+      }
+     },
+     "required": [
+      "command"
+     ],
+     "type": "object"
+    },
+    "name": "logic_navigate"
+   },
+   {
+    "description": "Project lifecycle + read-only project state in Logic Pro. Commands: new, open, save, save_as, close, bounce, launch, quit, get_regions, export_plan, export_run, export_resume, audit, cleanup_plan, cleanup_apply. Params: open -> { path: String }; save_as -> { path: String }; close -> { saving?: \"yes\"|\"no\"|\"ask\" }; bounce/launch/quit -> {}; bounce requires confirmation and runs a pre-bounce project audit, returning `export_readiness_blocked` before opening the Bounce dialog if blockers such as `external_midi_regions_bounce_risk` are present; get_regions -> {} (returns JSON array of { name, trackIndex, startBar, endBar, kind, rawHelp } parsed from Logic's arrange area via AX); export_plan -> { projects: [absolute .logicx], output_root: String, artifacts?: [bounce|stem|preview|variant], collision_policy?: fail_if_exists|skip_existing } dry-run only; export_run -> { ...same as export_plan, confirmed: Bool } GUARDED execution (re-plans, opens, verifies project identity by readback, bounces, verifies each artifact on disk via logic_audio, records logic_pro_mcp_export_run.v1 with HC State A/B/C; never overwrites under fail_if_exists); export_resume -> { ...same as export_run } idempotent resume (skips already-present+verified artifacts, produces the rest); audit -> read-only project/session audit JSON; cleanup_plan -> read-only serializable cleanup plan JSON; cleanup_apply -> { step_id: String, confirmed: Bool, names?: \"newA,newB\" (CSV aligned to the step's target track indices) | new_name?: String (single target) } executes ONE supported mutating cleanup-plan step (currently rename_* only) through the existing track.rename path so it inherits AX readback + Honest Contract State A/B/C. Fails closed (State C) when confirmed!=true, the step is unknown/unsupported/non-mutating, the audit shows stale/occluded inventory or a track readback gap, or rename names are missing/mismatched. Deletion steps are unsupported by construction and are always refused; others -> {}.",
+    "inputSchema": {
+     "properties": {
+      "command": {
+       "description": "Project command to execute",
+       "type": "string"
+      },
+      "params": {
+       "description": "Command-specific parameters",
+       "type": "object"
+      }
+     },
+     "required": [
+      "command"
+     ],
+     "type": "object"
+    },
+    "name": "logic_project"
+   },
+   {
+    "description": "Read-only audio artifact analysis for post-bounce/export verification. Commands: analyze_file. Params: analyze_file -> { path: absolute audio file path, output_root?: absolute allowlist root, min_duration_seconds?: number, expected_duration_seconds?: number, max_duration_drift_seconds?: number, min_file_size_bytes?: int, max_input_file_size_bytes?: int, max_input_duration_seconds?: number, max_decoded_frames?: int, max_peak_dbfs?: number, near_silence_dbfs?: number, max_silence_ratio?: number, expected_sample_rate?: int, expected_channel_count?: int }. Returns schema logic_pro_mcp_audio_analysis.v1 and never mutates files or Logic Pro.",
+    "inputSchema": {
+     "properties": {
+      "command": {
+       "description": "Audio command to execute",
+       "type": "string"
+      },
+      "params": {
+       "description": "Command-specific parameters",
+       "type": "object"
+      }
+     },
+     "required": [
+      "command"
+     ],
+     "type": "object"
+    },
+    "name": "logic_audio"
+   },
+   {
+    "description": "Diagnostics and help for the Logic Pro MCP server. Commands: health, permissions, refresh_cache, help. Params by command: help -> { category: String } (returns full param docs for a dispatcher); refresh_cache -> {} (force AX re-poll); Others -> {}",
+    "inputSchema": {
+     "properties": {
+      "command": {
+       "description": "System command to execute",
+       "type": "string"
+      },
+      "params": {
+       "description": "Command-specific parameters",
+       "type": "object"
+      }
+     },
+     "required": [
+      "command"
+     ],
+     "type": "object"
+    },
+    "name": "logic_system"
+   },
+   {
+    "description": "Verified plugin apply-back for Logic Pro (logic_plugins.*). Commands: get_inventory, set_param_verified, insert_verified. Unlike legacy logic_mixer.set_plugin_param (Scripter, unverified State B), this surface identifies the target track/insert/plugin/param via AX, writes, and reads back — State A only when the observed value matches within tolerance. get_inventory -> { track: Int (required, >= 0) } returns a drift-safe insert chain (physical slot index, read_status ok|empty|unreadable, complete). set_param_verified -> { track: Int, insert: Int, plugin: canonical logic.stock.* id or alias, param: key (e.g. gain_db), value: Float, unit: String, mode: \"duplicate_applyback\", project_expected_path: String (required) }. insert_verified -> { track: Int, insert: Int, plugin: Gain|Channel EQ|Compressor, mode: \"duplicate_applyback\", project_expected_path: String (required) }. mode confirmed_live is not supported in Release 1 (State C unsupported_mode).",
+    "inputSchema": {
+     "properties": {
+      "command": {
+       "description": "Verified plugin command to execute",
+       "type": "string"
+      },
+      "params": {
+       "description": "Command-specific parameters",
+       "type": "object"
+      }
+     },
+     "required": [
+      "command"
+     ],
+     "type": "object"
+    },
+    "name": "logic_plugins"
+   }
+  ]
+ }
+}

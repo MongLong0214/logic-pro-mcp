@@ -1,0 +1,11 @@
+{
+ "error": {
+  "code": -32602,
+  "data": {
+   "detail": "Invalid pagination cursor for resources/list: \"BOGUS_CURSOR\". This server returns all results in a single page and never issues a nextCursor, so no cursor value is valid."
+  },
+  "message": "Invalid params: Invalid pagination cursor for resources/list: \"BOGUS_CURSOR\". This server returns all results in a single page and never issues a nextCursor, so no cursor value is valid."
+ },
+ "id": 6,
+ "jsonrpc": "2.0"
+}

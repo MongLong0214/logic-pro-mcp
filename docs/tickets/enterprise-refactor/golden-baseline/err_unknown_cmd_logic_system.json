@@ -1,0 +1,13 @@
+{
+ "id": 18,
+ "jsonrpc": "2.0",
+ "result": {
+  "content": [
+   {
+    "text": "Unknown system command: zzz_unknown_command. Available: health, permissions, refresh_cache, help",
+    "type": "text"
+   }
+  ],
+  "isError": true
+ }
+}

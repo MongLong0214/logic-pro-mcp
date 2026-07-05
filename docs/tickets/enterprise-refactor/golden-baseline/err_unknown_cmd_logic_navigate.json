@@ -1,0 +1,13 @@
+{
+ "id": 14,
+ "jsonrpc": "2.0",
+ "result": {
+  "content": [
+   {
+    "text": "{\"error\":\"invalid_params\",\"hint\":\"Unknown navigate command: zzz_unknown_command. Available: goto_bar, goto_marker, create_marker, delete_marker, rename_marker, zoom_to_fit, set_zoom, toggle_view\",\"operation\":\"nav.zzz_unknown_command\",\"success\":false}",
+    "type": "text"
+   }
+  ],
+  "isError": true
+ }
+}

@@ -1,0 +1,13 @@
+{
+ "id": 20,
+ "jsonrpc": "2.0",
+ "result": {
+  "content": [
+   {
+    "text": "Unknown edit command: zzz_unknown_command. Available: undo, redo, cut, copy, paste, delete, select_all, split, join, quantize, bounce_in_place, normalize, duplicate, toggle_step_input",
+    "type": "text"
+   }
+  ],
+  "isError": true
+ }
+}

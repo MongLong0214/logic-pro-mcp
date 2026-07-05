@@ -1,0 +1,13 @@
+{
+ "id": 10,
+ "jsonrpc": "2.0",
+ "result": {
+  "content": [
+   {
+    "text": "{\"error\":\"invalid_params\",\"hint\":\"Unknown track command: zzz_unknown_command. Available: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets\",\"operation\":\"track.zzz_unknown_command\",\"success\":false}",
+    "type": "text"
+   }
+  ],
+  "isError": true
+ }
+}

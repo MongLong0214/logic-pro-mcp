@@ -1,0 +1,13 @@
+{
+ "id": 27,
+ "jsonrpc": "2.0",
+ "result": {
+  "content": [
+   {
+    "text": "{\"error\":\"unknown_category\",\"hint\":\"Unknown help category 'bogus'. Valid categories: all, transport, tracks, mixer, midi, edit, navigate, project, system.\",\"requested_category\":\"bogus\",\"success\":false,\"valid_categories\":[\"all\",\"transport\",\"tracks\",\"mixer\",\"midi\",\"edit\",\"navigate\",\"project\",\"system\"]}",
+    "type": "text"
+   }
+  ],
+  "isError": true
+ }
+}

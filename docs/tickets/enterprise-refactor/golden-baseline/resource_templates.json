@@ -1,0 +1,74 @@
+{
+ "id": 4,
+ "jsonrpc": "2.0",
+ "result": {
+  "resourceTemplates": [
+   {
+    "description": "Single track detail by index (including automation mode)",
+    "mimeType": "application/json",
+    "name": "Track Detail",
+    "uriTemplate": "logic://tracks/{index}"
+   },
+   {
+    "description": "Regions on a single track by track index",
+    "mimeType": "application/json",
+    "name": "Track Regions",
+    "uriTemplate": "logic://tracks/{index}/regions"
+   },
+   {
+    "description": "Single channel strip by index (volume, pan, plugin chain)",
+    "mimeType": "application/json",
+    "name": "Channel Strip Detail",
+    "uriTemplate": "logic://mixer/{strip}"
+   },
+   {
+    "description": "Single stock plugin catalog entry by stable ID",
+    "mimeType": "application/json",
+    "name": "Stock Plugin Detail",
+    "uriTemplate": "logic://stock-plugins/{id}"
+   },
+   {
+    "description": "Search stock plugin catalog entries by query",
+    "mimeType": "application/json",
+    "name": "Stock Plugin Search",
+    "uriTemplate": "logic://stock-plugins/search?query={query}"
+   },
+   {
+    "description": "Single stock instrument catalog entry by stable ID",
+    "mimeType": "application/json",
+    "name": "Stock Instrument Detail",
+    "uriTemplate": "logic://stock-instruments/{id}"
+   },
+   {
+    "description": "Search stock instrument catalog entries by query",
+    "mimeType": "application/json",
+    "name": "Stock Instrument Search",
+    "uriTemplate": "logic://stock-instruments/search?query={query}"
+   },
+   {
+    "description": "Single Session Player or Drummer catalog entry by stable ID",
+    "mimeType": "application/json",
+    "name": "Session Player Detail",
+    "uriTemplate": "logic://session-players/{id}"
+   },
+   {
+    "description": "Planning-only composition/session workflow plan from a natural-language musical prompt",
+    "mimeType": "application/json",
+    "name": "Session Plan Dry Run",
+    "uriTemplate": "logic://workflow-plans/session?prompt={prompt}"
+   },
+   {
+    "description": "Single workflow skill by stable ID",
+    "mimeType": "application/json",
+    "name": "Workflow Skill Detail",
+    "uriTemplate": "logic://workflow-skills/{id}"
+   },
+   {
+    "description": "Search workflow skills by query",
+    "mimeType": "application/json",
+    "name": "Workflow Skill Search",
+    "uriTemplate": "logic://workflow-skills/search?query={query}"
+   }
+  ]
+ }
+}
