@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [3.8.0] — 2026-07-05
 
-Enterprise review-and-refactor sweep. A read-only A–Z review (5 reviewers) plus a second-round security/concurrency/completeness audit drove a behavior-preserving internal refactor, a small set of correctness/honesty fixes, and security hardening. **No public tool/resource/template surface change (10 tools / 18 resources / 11 templates unchanged).** Also carries the already-merged Logic Pro 12.3 insert-slot enumeration recovery (#234). `swift test --no-parallel` → 2076 passed; strict fresh live Logic Pro 12.3 E2E → 372 passed / 1 skipped / 373 total.
+Enterprise review-and-refactor sweep. A read-only A–Z review (5 reviewers) plus a second-round security/concurrency/completeness audit drove a behavior-preserving internal refactor, a small set of correctness/honesty fixes, and security hardening. **No public tool/resource/template surface change (10 tools / 18 resources / 11 templates unchanged).** Also carries the already-merged Logic Pro 12.3 insert-slot enumeration recovery (#234). `swift test --no-parallel` → 2077 passed; strict fresh live Logic Pro 12.3 E2E → 372 passed / 1 skipped / 373 total.
 
 ### Fixed
 

@@ -105,6 +105,7 @@ extension ProjectExportExecutor {
     static func resolvePython3Path(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         isExecutable: @Sendable (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) },
+        resolveSymlinks: @Sendable (String) -> String = { ($0 as NSString).resolvingSymlinksInPath },
         ownershipTrusted: @Sendable (String) -> Bool = { bounceHelperOwnershipTrusted($0) }
     ) -> String {
         let searchPath = environment["PATH"] ?? "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -113,7 +114,14 @@ extension ProjectExportExecutor {
             let candidate = URL(fileURLWithPath: String(entry), isDirectory: true)
                 .appendingPathComponent("python3", isDirectory: false)
                 .path
-            if isExecutable(candidate) && ownershipTrusted(candidate) {
+            // Ownership must be checked on the symlink-RESOLVED target.
+            // `bounceHelperOwnershipTrusted` uses `attributesOfItem` (does NOT
+            // follow symlinks) and requires a regular file, but the common
+            // Homebrew `python3` is itself a symlink into the Cellar — validating
+            // the raw candidate would reject trusted Homebrew Python and defeat
+            // this PATH-resolution path. Resolve first, then validate the real
+            // target; a symlink pointing at an untrusted file still fails.
+            if isExecutable(candidate) && ownershipTrusted(resolveSymlinks(candidate)) {
                 return candidate
             }
         }

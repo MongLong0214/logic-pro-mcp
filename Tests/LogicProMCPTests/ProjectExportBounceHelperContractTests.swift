@@ -36,10 +36,33 @@ struct ProjectExportBounceHelperContractTests {
 
     @Test("resolvePython3Path returns an executable AND ownership-trusted PATH candidate")
     func resolvePython3ReturnsTrustedCandidate() {
+        // Inject identity symlink resolution so the test is deterministic and
+        // host-independent (the default resolver would resolve a real Homebrew
+        // /opt/homebrew/bin/python3 symlink into the Cellar on dev machines).
         let resolved = ProjectExportExecutor.resolvePython3Path(
             environment: ["PATH": "/opt/homebrew/bin:/usr/bin"],
             isExecutable: { $0 == "/opt/homebrew/bin/python3" },
+            resolveSymlinks: { $0 },
             ownershipTrusted: { $0 == "/opt/homebrew/bin/python3" }
+        )
+        #expect(resolved == "/opt/homebrew/bin/python3")
+    }
+
+    @Test("resolvePython3Path validates the symlink-resolved target, not the raw symlink (Homebrew python3)")
+    func resolvePython3ValidatesSymlinkResolvedTarget() {
+        // Homebrew's /opt/homebrew/bin/python3 is a SYMLINK into the Cellar, and
+        // bounceHelperOwnershipTrusted requires a regular file (no symlink
+        // follow). Ownership must therefore be checked on the RESOLVED target,
+        // or trusted Homebrew Python is wrongly skipped and the resolver
+        // regresses to /usr/bin/python3. Here ownership trusts ONLY the resolved
+        // Cellar path — so a correct resolver must resolve the symlink before
+        // validating, and still return the PATH candidate we execute.
+        let cellar = "/opt/homebrew/Cellar/python@3.12/3.12.0/bin/python3"
+        let resolved = ProjectExportExecutor.resolvePython3Path(
+            environment: ["PATH": "/opt/homebrew/bin:/usr/bin"],
+            isExecutable: { $0 == "/opt/homebrew/bin/python3" },
+            resolveSymlinks: { $0 == "/opt/homebrew/bin/python3" ? cellar : $0 },
+            ownershipTrusted: { $0 == cellar }
         )
         #expect(resolved == "/opt/homebrew/bin/python3")
     }

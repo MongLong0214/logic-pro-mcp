@@ -14,7 +14,7 @@
   <a href="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml"><img src="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
   <a href="https://discord.gg/4M3s79DBzz"><img src="https://img.shields.io/badge/Discord-Community-5865F2.svg?style=flat-square&logo=discord&logoColor=white" /></a>
-  <img src="https://img.shields.io/badge/tests-2076_passing-brightgreen.svg?style=flat-square" />
+  <img src="https://img.shields.io/badge/tests-2077_passing-brightgreen.svg?style=flat-square" />
   <img src="https://img.shields.io/badge/stable-v3.7.4-blue.svg?style=flat-square" />
 </p>
 
@@ -58,7 +58,7 @@ Logic Pro MCP: region imported, instrument routed, readback exposed through reso
 | Resource templates | 11 templates for track, region, mixer-strip, stock plugin detail/search, stock instrument detail/search, Session Player detail, session-plan dry run, and workflow detail/search lookup |
 | Control channels | MCU, Accessibility, AppleScript, CoreMIDI, CGEvent, Scripter, MIDI Key Commands |
 | Supported Logic Pro | **Latest Logic Pro first.** The current latest release (Logic Pro 12.3) is the first-class, actively-validated target; new Logic Pro versions are prioritized as they ship. Older versions down to the 12.0.1 floor may work but are best-effort and not actively validated, because Logic's Accessibility tree changes between releases |
-| Verification line | Current source tree (v3.8.0 development line): `2076` Swift tests, release build, and strict fresh live Logic E2E `372/373` (372 passed / 1 skipped) |
+| Verification line | Current source tree (v3.8.0 development line): `2077` Swift tests, release build, and strict fresh live Logic E2E `372/373` (372 passed / 1 skipped) |
 | Release state | Published stable `v3.7.4`; previous stable `v3.7.3` remains available for pinned installs |
 | Community layer | Official Discord for setup support, release notes, reproducible bug triage, product requests, demos, and contributor discussion |
 
@@ -233,7 +233,7 @@ The public docs tree is intentionally scoped: setup, API, troubleshooting, READM
 
 | Gate | Current evidence |
 |------|------------------|
-| Full deterministic suite | Current source tree: `swift test --no-parallel` -> `2076` passed, `0` failed |
+| Full deterministic suite | Current source tree: `swift test --no-parallel` -> `2077` passed, `0` failed |
 | Release build | Current source tree: `swift build -c release` passed |
 | Python E2E syntax | PR #24 verification: `python3 -m py_compile Scripts/live-e2e-test.py` passed |
 | Targeted live plugin proof | Logic Pro 12.2: `logic_plugins.insert_verified track=6 insert=6 plugin=Gain` returned State A with `observed_slot:6`, `write_source:"ax_exact_slot_popup"`, and independent `get_inventory` readback |
