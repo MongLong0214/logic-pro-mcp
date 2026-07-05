@@ -3110,6 +3110,11 @@ private actor SelectiveFailChannel: Channel {
         // using the marker's `position` string (chorus at 17.1.1.1).
         ("transport.goto_position", ["position": "17.1.1.1"]),
         ("transport.goto_position", ["position": "17.1.1.1"]),
+        // AC5 — create_marker now pre-polls the marker list (nav.get_markers)
+        // BEFORE the mutating route so its count-delta verify has a true
+        // pre-mutation baseline. Test scenario unchanged; only this expected
+        // op-list entry was stale.
+        ("nav.get_markers", [:]),
         ("nav.rename_marker", ["index": "2", "name": "Big Chorus"]),
         // #109 — set_zoom is now AX-first (writable Horizontal-Zoom slider);
         // zoom_to_fit stays on the key-command path (no slider equivalent).

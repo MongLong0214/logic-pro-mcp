@@ -260,6 +260,13 @@ struct NavigateDispatcher {
         cache: StateCache
     ) async -> CallTool.Result {
         let routedName = requestedName ?? "Marker"
+        // audit P1 #8: snapshot the marker list BEFORE the mutating route so the
+        // count-delta verify reflects the +1 this create adds. Pre-fix both the
+        // "before" and "after" reads ran AFTER nav.create_marker, so their
+        // counts were equal on success → every verified-by-readback create fell
+        // to the State-B readback-mismatch path. Still fail-closed: a nil/short
+        // readback below returns State B.
+        let beforeMarkers = await liveMarkers(router: router, cache: cache)
         let routeResult = await router.route(
             operation: "nav.create_marker",
             params: ["name": routedName]
@@ -270,7 +277,6 @@ struct NavigateDispatcher {
         guard channelResultIsUnverified(routeResult) else {
             return toolTextResult(routeResult)
         }
-        let beforeMarkers = await liveMarkers(router: router, cache: cache)
         guard let beforeMarkers else {
             return toolTextResult(
                 HonestContract.addExtras(
