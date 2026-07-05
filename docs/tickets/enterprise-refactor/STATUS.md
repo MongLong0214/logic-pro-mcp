@@ -4,7 +4,7 @@
 **Findings**: REVIEW-FINDINGS.md (round 1, 5 reviewers) + AUDIT-ROUND2.md (round 2, security/concurrency/completeness)
 **Size**: XL | **Baseline**: main 7bb8bf3, v3.7.4, 1980 tests green, 0 open issues
 **Branch**: chore/enterprise-review-refactor-v3.8.0 (worktree logic-pro-mcp-refactor)
-**Current Phase**: C (implementation — PRD+tickets CONVERGED, boomer signed off)
+**Current Phase**: C→2 (Phase-1 source COMPLETE 7/7 integrated 2052 green; entering WS8 test-integrity)
 **Rule**: NO implementation until PRD + tickets boomer(codex gpt-5.5 xhigh)-converged (Isaac). No main/default merge or direct push (Isaac) — PR only.
 
 ## Workstreams / Tickets (file-atomic, disjoint)
@@ -46,3 +46,6 @@
 
 ## Cross-owner exception (adjudicated 2026-07-05)
 - WS4 AC5 (create_marker pre-poll) unavoidably changes testNavigateDispatcherRoutesMarkerAndZoomCommands's expected axOps (7→8, adds nav.get_markers). Approved option (a): WS4 updates ONLY that one expected-op-list entry (intended consequence of an approved P1 fix; scenario unchanged; count-delta tests already cover it). Not a dead-assertion edit → WS8 later touches OTHER lines of DispatcherTests for the assertion sweep (different lines/purpose, sequential Phase-2, no collision).
+
+- **PHASE-1 COMPLETE: 7/7 integrated** (ws1/2/3/4/5/6/7), fix branch 2052 green, all merges conflict-0. Final WS4 (SIGPIPE P0 + ResourceHandlers/record_sequence splits + AC5 marker pre-poll).
+- Next: WS8 (test integrity, sequential 8c→8a→8b) + WS6 follow-up (HandshakeResult/parseDeviceResponse + MCUProtocolTests deletion). Then WS9 docs → boomer final full-diff review → v3.8.0 release.
