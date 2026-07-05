@@ -67,19 +67,36 @@ require_absolute_path() {
     esac
 }
 
+# Reject protected system paths for either install_dir or share_dir. The
+# blocklist is evaluated on the REALPATH: install.sh/uninstall.sh run
+# normalize_path (which resolves symlinks via `pwd -P`) before calling the
+# validators. On macOS the top-level /etc and /tmp are symlinks into /private,
+# so a value like `/etc` arrives here already rewritten to `/private/etc` —
+# the /private mirrors below are what actually close that sudo-mv/rm-rf bypass
+# (the bare spellings stay as belt-and-suspenders for paths normalize_path
+# cannot resolve). /private/var is NOT blanket-denied because the macOS
+# per-user temp dir lives under /private/var/folders; only the sensitive
+# /private/var/db subtree is listed.
+reject_protected_system_path() {
+    local label="$1"
+    local path="$2"
+    case "$path" in
+        /|/System|/System/*|/etc|/etc/*|/private/etc|/private/etc/*|/tmp|/tmp/*|/private/tmp|/private/tmp/*|/private/var/db|/private/var/db/*|/bin|/bin/*|/sbin|/sbin/*|/usr/bin|/usr/bin/*|/usr/sbin|/usr/sbin/*)
+            fail_path_validation "$label must not target a protected system path: $path"
+            ;;
+    esac
+}
+
 validate_install_dir() {
     local path="$1"
     require_absolute_path "install_dir" "$path"
-    case "$path" in
-        /|/System|/System/*|/private/var/db|/private/var/db/*|/etc|/etc/*|/bin|/bin/*|/sbin|/sbin/*|/usr/bin|/usr/bin/*|/usr/sbin|/usr/sbin/*)
-            fail_path_validation "install_dir must not target a protected system path: $path"
-            ;;
-    esac
+    reject_protected_system_path "install_dir" "$path"
 }
 
 validate_share_dir() {
     local path="$1"
     require_absolute_path "share_dir" "$path"
+    reject_protected_system_path "share_dir" "$path"
     case "$path" in
         */share/logic-pro-mcp) ;;
         *) fail_path_validation "share_dir must end with /share/logic-pro-mcp: $path" ;;
