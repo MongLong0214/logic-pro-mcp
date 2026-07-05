@@ -1,6 +1,6 @@
 # Setup
 
-Minimal install and Logic Pro integration guide for Logic Pro MCP v3.7.4.
+Minimal install and Logic Pro integration guide for Logic Pro MCP v3.8.0.
 
 ## Requirements
 
@@ -30,8 +30,8 @@ swift build -c release
 Pinned shell installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.7.4/Scripts/install.sh -o install.sh
-# inspect install.sh, then copy pins from the v3.7.4 release:
+curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.8.0/Scripts/install.sh -o install.sh
+# inspect install.sh, then copy pins from the v3.8.0 release:
 LOGIC_PRO_MCP_SHA256=<sha256 for LogicProMCP-macOS-universal.tar.gz entry> LOGIC_PRO_MCP_TEAM_ID=<team_id> bash install.sh
 ```
 
