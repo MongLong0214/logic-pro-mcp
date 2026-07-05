@@ -76,8 +76,9 @@ actor SerializedStdioTransport: Transport {
     }
 
     func send(_ data: Data) async throws {
-        var frame = data
-        frame.append(UInt8(ascii: "\n"))
+        var mutableFrame = data
+        mutableFrame.append(UInt8(ascii: "\n"))
+        let frame = mutableFrame  // immutable snapshot ⇒ compiler-provable Sendable capture
         let fd = outputFD
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Swift.Error>) in
             // Serial queue + blocking write ⇒ each frame is flushed atomically,
