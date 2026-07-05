@@ -17,18 +17,18 @@ struct NavigateDispatcher {
         switch command {
         case "goto_bar":
             guard params["bar"] != nil else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "goto_bar requires explicit 'bar'"
+                return toolInvalidParamsResult(
+                    "goto_bar requires explicit 'bar'"
                 )
             }
             guard let bar = intParamOrNil(params, "bar") else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "goto_bar 'bar' must be an integer in 1..9999"
+                return toolInvalidParamsResult(
+                    "goto_bar 'bar' must be an integer in 1..9999"
                 )
             }
             guard (1...9999).contains(bar) else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "goto_bar 'bar' must be in 1..9999 (got \(bar))"
+                return toolInvalidParamsResult(
+                    "goto_bar 'bar' must be in 1..9999 (got \(bar))"
                 )
             }
             let result = await router.route(
@@ -87,8 +87,8 @@ struct NavigateDispatcher {
             // failure. No silent wrong-target navigation.
             if params["index"] != nil {
                 guard let index = intParamOrNil(params, "index"), index >= 0 else {
-                    return MIDIDispatcher.invalidParamsResult(
-                        hint: "goto_marker 'index' must be an integer >= 0"
+                    return toolInvalidParamsResult(
+                        "goto_marker 'index' must be an integer >= 0"
                     )
                 }
                 if let target = markers.first(where: { $0.id == index }) {
@@ -186,8 +186,8 @@ struct NavigateDispatcher {
             // a misnamed param was the class of bug that hid 100% false-positive
             // test coverage earlier in the hardening loop.
             guard params["level"] != nil || params["direction"] != nil else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "set_zoom requires explicit 'level' or 'direction'"
+                return toolInvalidParamsResult(
+                    "set_zoom requires explicit 'level' or 'direction'"
                 )
             }
             let level = stringParam(params, "level", "direction", default: "fit")
@@ -210,8 +210,8 @@ struct NavigateDispatcher {
             default:
                 guard let numericLevel = Int(level),
                       (1...10).contains(numericLevel) else {
-                    return MIDIDispatcher.invalidParamsResult(
-                        hint: "set_zoom 'level' must be one of: in, out, fit, or integer 1..10"
+                    return toolInvalidParamsResult(
+                        "set_zoom 'level' must be one of: in, out, fit, or integer 1..10"
                     )
                 }
                 let result = await router.route(
@@ -223,8 +223,8 @@ struct NavigateDispatcher {
 
         case "toggle_view":
             guard params["view"] != nil else {
-                return MIDIDispatcher.invalidParamsResult(
-                    hint: "toggle_view requires explicit 'view'"
+                return toolInvalidParamsResult(
+                    "toggle_view requires explicit 'view'"
                 )
             }
             let view = stringParam(params, "view", default: "mixer")
@@ -260,6 +260,13 @@ struct NavigateDispatcher {
         cache: StateCache
     ) async -> CallTool.Result {
         let routedName = requestedName ?? "Marker"
+        // audit P1 #8: snapshot the marker list BEFORE the mutating route so the
+        // count-delta verify reflects the +1 this create adds. Pre-fix both the
+        // "before" and "after" reads ran AFTER nav.create_marker, so their
+        // counts were equal on success → every verified-by-readback create fell
+        // to the State-B readback-mismatch path. Still fail-closed: a nil/short
+        // readback below returns State B.
+        let beforeMarkers = await liveMarkers(router: router, cache: cache)
         let routeResult = await router.route(
             operation: "nav.create_marker",
             params: ["name": routedName]
@@ -270,7 +277,6 @@ struct NavigateDispatcher {
         guard channelResultIsUnverified(routeResult) else {
             return toolTextResult(routeResult)
         }
-        let beforeMarkers = await liveMarkers(router: router, cache: cache)
         guard let beforeMarkers else {
             return toolTextResult(
                 HonestContract.addExtras(

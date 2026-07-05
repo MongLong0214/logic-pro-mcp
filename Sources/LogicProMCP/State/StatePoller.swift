@@ -152,8 +152,14 @@ actor StatePoller {
         }
         consecutiveWindowMisses = 0
 
-        let projectReady = await pollProjectInfo(axChannel: axChannel, cache: cache)
-        let tracksReady = await pollTracks(axChannel: axChannel, cache: cache)
+        let projectReady = await poll(
+            operation: "project.get_info", label: "ProjectInfo",
+            axChannel: axChannel, cache: cache, as: ProjectInfo.self
+        ) { cache, info in await cache.updateProject(info) }
+        let tracksReady = await poll(
+            operation: "track.get_tracks", label: "Track",
+            axChannel: axChannel, cache: cache, as: [TrackState].self
+        ) { cache, tracks in await cache.updateTracks(tracks) }
         let hasDocument = projectReady || tracksReady
         if hasDocument {
             consecutivePollMisses = 0
@@ -190,12 +196,21 @@ actor StatePoller {
 
         guard hasDocument else { return }
 
-        await pollTransport(axChannel: axChannel, cache: cache)
-        await pollMixer(axChannel: axChannel, cache: cache)
+        await poll(
+            operation: "transport.get_state", label: "Transport",
+            axChannel: axChannel, cache: cache, as: TransportState.self
+        ) { cache, state in await cache.updateTransport(state) }
+        await poll(
+            operation: "mixer.get_state", label: "Mixer",
+            axChannel: axChannel, cache: cache, as: [ChannelStripState].self
+        ) { cache, strips in await cache.updateChannelStrips(strips) }
         markerPollTick += 1
         if markerPollTick >= Self.markerPollInterval {
             markerPollTick = 0
-            await pollMarkers(axChannel: axChannel, cache: cache)
+            await poll(
+                operation: "nav.get_markers", label: "Marker",
+                axChannel: axChannel, cache: cache, as: [MarkerState].self
+            ) { cache, markers in await cache.updateMarkers(markers) }
         }
     }
 
@@ -214,72 +229,35 @@ actor StatePoller {
         return d
     }()
 
-    private func pollProjectInfo(axChannel: AccessibilityChannel, cache: StateCache) async -> Bool {
-        // v3.1.8 (Issue #7) — `cached_tempo` / `cached_track_count` params
-        // dropped (the AppleScript-primary helper that consumed them is
-        // removed). The AX path now returns name-only ProjectInfo; the
-        // tempo / time-signature / track-count merge happens in
-        // `ResourceHandlers.readProjectInfo` against `MetaData.plist`.
-        let result = await axChannel.execute(operation: "project.get_info", params: [:])
+    /// Generic AX poll (replaces 5 near-identical poll* helpers). Executes
+    /// `operation`, decodes the success payload as `T`, and hands it to
+    /// `update` for caching. Returns true when a fresh value was decoded and
+    /// cached; false on any AX failure or decode error (logged under `label`).
+    /// `@discardableResult` so the transport/mixer/markers callers can ignore
+    /// the readiness flag while project/tracks consume it.
+    ///
+    /// project.get_info note (v3.1.8, Issue #7): the AX path returns name-only
+    /// ProjectInfo; the tempo / time-signature / track-count merge happens in
+    /// `ResourceHandlers.readProjectInfo` against `MetaData.plist`.
+    @discardableResult
+    private func poll<T: Decodable & Sendable>(
+        operation: String,
+        label: String,
+        axChannel: AccessibilityChannel,
+        cache: StateCache,
+        as type: T.Type,
+        update: (StateCache, T) async -> Void
+    ) async -> Bool {
+        let result = await axChannel.execute(operation: operation, params: [:])
         guard case .success(let json) = result else { return false }
         guard let data = json.data(using: .utf8) else { return false }
         do {
-            let info = try Self.iso8601Decoder.decode(ProjectInfo.self, from: data)
-            await cache.updateProject(info)
+            let value = try Self.iso8601Decoder.decode(T.self, from: data)
+            await update(cache, value)
             return true
         } catch {
-            Log.debug("ProjectInfo poll failed: \(error)", subsystem: "poller")
+            Log.debug("\(label) poll failed: \(error)", subsystem: "poller")
             return false
-        }
-    }
-
-    private func pollTransport(axChannel: AccessibilityChannel, cache: StateCache) async {
-        let result = await axChannel.execute(operation: "transport.get_state", params: [:])
-        guard case .success(let json) = result else { return }
-        guard let data = json.data(using: .utf8) else { return }
-        do {
-            let state = try Self.iso8601Decoder.decode(TransportState.self, from: data)
-            await cache.updateTransport(state)
-        } catch {
-            Log.debug("Transport poll failed: \(error)", subsystem: "poller")
-        }
-    }
-
-    private func pollTracks(axChannel: AccessibilityChannel, cache: StateCache) async -> Bool {
-        let result = await axChannel.execute(operation: "track.get_tracks", params: [:])
-        guard case .success(let json) = result else { return false }
-        guard let data = json.data(using: .utf8) else { return false }
-        do {
-            let tracks = try Self.iso8601Decoder.decode([TrackState].self, from: data)
-            await cache.updateTracks(tracks)
-            return true
-        } catch {
-            Log.debug("Track poll failed: \(error)", subsystem: "poller")
-            return false
-        }
-    }
-
-    private func pollMixer(axChannel: AccessibilityChannel, cache: StateCache) async {
-        let result = await axChannel.execute(operation: "mixer.get_state", params: [:])
-        guard case .success(let json) = result else { return }
-        guard let data = json.data(using: .utf8) else { return }
-        do {
-            let strips = try Self.iso8601Decoder.decode([ChannelStripState].self, from: data)
-            await cache.updateChannelStrips(strips)
-        } catch {
-            Log.debug("Mixer poll failed: \(error)", subsystem: "poller")
-        }
-    }
-
-    private func pollMarkers(axChannel: AccessibilityChannel, cache: StateCache) async {
-        let result = await axChannel.execute(operation: "nav.get_markers", params: [:])
-        guard case .success(let json) = result else { return }
-        guard let data = json.data(using: .utf8) else { return }
-        do {
-            let markers = try Self.iso8601Decoder.decode([MarkerState].self, from: data)
-            await cache.updateMarkers(markers)
-        } catch {
-            Log.debug("Marker poll failed: \(error)", subsystem: "poller")
         }
     }
 

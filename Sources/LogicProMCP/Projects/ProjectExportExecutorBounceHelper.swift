@@ -73,7 +73,7 @@ extension ProjectExportExecutor {
             return .failure("bounce_helper_missing: \(helper)")
         }
         let result = runProcess(
-            "/usr/bin/python3",
+            resolvePython3Path(environment: environment),
             [helper, "--target-path", artifactPath],
             timeout
         )

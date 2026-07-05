@@ -139,7 +139,9 @@ struct PluginsDispatcher {
         for key in keys {
             guard let raw = params[key]?.stringValue else { continue }
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty { return raw }
+            // audit P2 #20: return the TRIMMED value, not the padded `raw` — the
+            // doc promises a trimmed token and forwarding padding drifts the wire.
+            if !trimmed.isEmpty { return trimmed }
         }
         return nil
     }
