@@ -12,17 +12,19 @@ import Foundation
 ///      the verified public key (R5: "구현 전에 `gain -> gain_db` alias를 명시").
 ///   3. write/readback capability — does the resolved plugin/param actually
 ///      have a write method AND a display-readback parser? (R6 step 5 preflight;
-///      Gain currently has neither — `writeMethod:nil, readbackMethod:nil` — so
-///      this returns `.unsupported`, which is the honest State C
-///      `unsupported_param_readback` until T0 evidence fills the methods in.)
+///      Compressor `threshold` is the first verified-writable parameter
+///      (`writeMethod`/`readbackMethod` both `ax_slider_axvalue`) → `.writeReadback`,
+///      while Gain still has neither — `writeMethod:nil, readbackMethod:nil` — so
+///      it stays the honest State C `unsupported_param_readback`.)
 ///
 /// This module is deterministic and contains NO live AX interaction.
 enum VerifiedPluginCatalog {
 
     /// Display-name / alias → canonical `logic.stock.*` id table.
     ///
-    /// MVP scope (R5): the four allowlisted stock plugins. Only Gain is a
-    /// parameter-write target; the others are identity/insert only. Display
+    /// MVP scope (R5): the four allowlisted stock plugins. Compressor `threshold`
+    /// is the first verified parameter-write target (audit #28); the others
+    /// (including Gain) are identity/insert only. Display
     /// names are accepted as user-facing aliases but never become the identity
     /// themselves (requirements §5.2 "display name은 identity가 아니라 alias").
     private static let pluginAliases: [String: String] = [
@@ -92,8 +94,8 @@ enum VerifiedPluginCatalog {
         /// `unsupported_param_readback` BEFORE any write (R6, AC10).
         case unsupported
         /// Parameter has both a write method and a readback parser. Eligible for
-        /// a verified State A write. (No MVP parameter reaches this until T0
-        /// evidence fills Gain's methods in — see `StockPluginCatalog`.)
+        /// a verified State A write. (Compressor `threshold` is the first MVP
+        /// parameter to reach this — see `StockPluginCatalog`; Gain does not.)
         case writeReadback
     }
 

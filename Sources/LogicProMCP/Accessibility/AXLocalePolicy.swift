@@ -305,6 +305,47 @@ enum AXLocalePolicy {
         rationale: "Locates the per-track record-enable AXCheckBox; verbatim description match; read-only locator."
     )
 
+    // --- Track-header automation-mode read (WS3 AC2, value-only honesty fix) ---
+    //
+    // `logic://tracks` previously fabricated `automationMode = .off`. These label
+    // sets classify the mode carried on the track-header automation control's
+    // description/value. `automationModeContext` GATES the read so unrelated
+    // "read"/"write" AX text elsewhere in the header cannot be misread as an
+    // automation mode. Read-only classifiers — none gate a State-A success; on
+    // no match the caller RETAINS the pre-fix `.off` default. English canonical
+    // is the only live-confirmed locale (OQ-1 per #234); Korean variants are
+    // best-effort and, when absent, degrade safely to the unchanged `.off`.
+    static let automationModeContext = LabelSet(
+        canonical: "automation",
+        variants: ["오토메이션"],
+        rationale: "Gates the track-header automation-mode read to the automation control; read-only classifier."
+    )
+    static let automationModeWrite = LabelSet(
+        canonical: "write",
+        variants: ["쓰기"],
+        rationale: "Classifies the track-header automation mode as Write; read-only classifier."
+    )
+    static let automationModeTrim = LabelSet(
+        canonical: "trim",
+        variants: ["트림"],
+        rationale: "Classifies the track-header automation mode as Trim; read-only classifier."
+    )
+    static let automationModeTouch = LabelSet(
+        canonical: "touch",
+        variants: ["터치"],
+        rationale: "Classifies the track-header automation mode as Touch; read-only classifier."
+    )
+    static let automationModeLatch = LabelSet(
+        canonical: "latch",
+        variants: ["래치"],
+        rationale: "Classifies the track-header automation mode as Latch; read-only classifier."
+    )
+    static let automationModeRead = LabelSet(
+        canonical: "read",
+        variants: ["읽기"],
+        rationale: "Classifies the track-header automation mode as Read; read-only classifier."
+    )
+
     // --- Plugin Setting popup locator (read-only, `.contains`) ---
 
     static let settingPopupValue = LabelSet(
@@ -327,6 +368,60 @@ enum AXLocalePolicy {
         canonical: "marker",
         variants: ["마커"],
         rationale: "Last-resort marker-ruler container classifier; read-only keyword scan."
+    )
+
+    /// Title-suffix patterns for the Logic Marker List window across the
+    /// localisations Apple ships. Relocated from AXLogicProElements (round-1 #7)
+    /// so the localized token tables live in one audited place. The window title
+    /// is `"<project name> - <localized 'Marker List'>"`, so the caller matches
+    /// by `hasSuffix` (a diacritic-sensitive, case-sensitive scalar comparison —
+    /// NOT a LabelSet match mode). Extending this array is the safe path when a
+    /// new locale surfaces.
+    static let markerListWindowSuffixes: [String] = [
+        "- 마커 목록",          // Korean
+        "- Marker List",         // English
+        "- マーカーリスト",      // Japanese
+        "- マーカー一覧",        // Japanese (alt — older Logic)
+        "- Liste des marqueurs", // French
+        "- Markerliste",         // German
+        "- Lista de marcadores", // Spanish
+        "- Elenco marker",       // Italian
+        "- 标记列表",            // Chinese (Simplified)
+        "- 標記列表",            // Chinese (Traditional)
+        "- Список меток",        // Russian
+        "- Lista de marcadores", // Portuguese (PT/BR same form)
+        "- Lijst met markers"    // Dutch
+    ]
+
+    /// Localized placeholder AXDescription that Logic's Marker List `AXCell`s
+    /// carry by default (the localized word for "cell"). Relocated from
+    /// AXLogicProElements (round-1 #7). The caller skips these via `Set.contains`
+    /// (a diacritic-sensitive, case-sensitive exact match — NOT a LabelSet match
+    /// mode) when extracting meaningful cell content.
+    static let markerCellPlaceholders: Set<String> = [
+        "셀",       // Korean
+        "Cell",     // English
+        "セル",     // Japanese
+        "Cellule",  // French
+        "Zelle",    // German
+        "Celda",    // Spanish (also "Célula" in some locales)
+        "Cella",    // Italian
+        "单元格",   // Chinese (Simplified)
+        "儲存格",   // Chinese (Traditional)
+        "Ячейка",   // Russian
+        "Célula",   // Portuguese
+        "Cel"       // Dutch
+    ]
+
+    /// Live Library panel/browser identifier (LibraryAccessor). Preserves the
+    /// original `desc == "라이브러리" || desc.lowercased() == "library"` locator
+    /// (round-1 #7): a whole-string, case-insensitive, DIACRITIC-SENSITIVE match
+    /// — use with `.exactStrict`. Read-only locator; the browser is otherwise
+    /// selected structurally, and a wrong match only widens/narrows a fallback.
+    static let libraryPanelLabel = LabelSet(
+        canonical: "library",
+        variants: ["라이브러리"],
+        rationale: "Identifies the Library panel/browser by whole-string description; read-only locator (structural fallback exists)."
     )
 
     /// Control-bar / transport container metadata tokens (id/title/desc scan).
@@ -474,6 +569,54 @@ enum AXLocalePolicy {
             "pan", "패닝", "밸런스",
         ],
         rationale: "Negative-case table excluding non-insert channel-strip buttons from empty-slot enumeration; read-only."
+    )
+
+    /// Track-type classification tokens (read-only; `inferTrackType`). Centralized
+    /// per round-1 #6 — the 오디오/악기 tokens were previously inline. Scanned with
+    /// `.containsAny` over the already-lowercased header aggregate, which is
+    /// diacritic-sensitive and case-insensitive — behavior-identical to the inline
+    /// lowercased `String.contains` they replaced. The CALLER preserves the exact
+    /// precedence order (GM Device wins over audio per #131). None gate a
+    /// State-A success.
+    static let trackTypeGMDevice = LabelSet(
+        canonical: "gm device",
+        variants: [],
+        rationale: "Classifies a GM Device external-MIDI strip; MUST win over .audio (#131 silent-bounce guard); read-only."
+    )
+    static let trackTypeAudio = LabelSet(
+        canonical: "audio",
+        variants: ["오디오"],
+        rationale: "Classifies an audio track by header aggregate; read-only classifier."
+    )
+    static let trackTypeInstrument = LabelSet(
+        canonical: "instrument",
+        variants: ["software", "악기"],
+        rationale: "Classifies a software-instrument track; read-only classifier."
+    )
+    static let trackTypeDrummer = LabelSet(
+        canonical: "drummer",
+        variants: [],
+        rationale: "Classifies a drummer track; read-only classifier."
+    )
+    static let trackTypeExternalMIDI = LabelSet(
+        canonical: "external",
+        variants: ["midi"],
+        rationale: "Classifies an external-MIDI track; read-only classifier."
+    )
+    static let trackTypeAux = LabelSet(
+        canonical: "aux",
+        variants: [],
+        rationale: "Classifies an aux track; read-only classifier."
+    )
+    static let trackTypeBus = LabelSet(
+        canonical: "bus",
+        variants: [],
+        rationale: "Classifies a bus track; read-only classifier."
+    )
+    static let trackTypeMaster = LabelSet(
+        canonical: "master",
+        variants: ["stereo out"],
+        rationale: "Classifies the master / stereo-out track; read-only classifier."
     )
 
     /// Track-header pan slider locator (header-level).

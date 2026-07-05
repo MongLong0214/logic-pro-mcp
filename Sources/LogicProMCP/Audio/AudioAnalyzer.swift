@@ -136,21 +136,9 @@ enum AudioAnalyzer {
             self.outputRoot = outputRoot
         }
 
-        static let `default` = AnalysisPolicy(
-            minimumDurationSeconds: nil,
-            maximumDurationDriftSeconds: nil,
-            expectedDurationSeconds: nil,
-            minimumFileSizeBytes: nil,
-            maximumInputFileSizeBytes: AudioAnalyzer.defaultMaximumInputFileSizeBytes,
-            maximumInputDurationSeconds: AudioAnalyzer.defaultMaximumInputDurationSeconds,
-            maximumDecodedFrames: AudioAnalyzer.defaultMaximumDecodedFrames,
-            maximumPeakDbfs: nil,
-            nearSilenceThresholdDbfs: -60.0,
-            maximumSilenceRatio: 0.98,
-            expectedSampleRate: nil,
-            expectedChannelCount: nil,
-            outputRoot: nil
-        )
+        /// Every argument in the previous explicit form equalled `init`'s own
+        /// default, so `.default` is exactly `AnalysisPolicy()` (round-1 #11).
+        static let `default` = AnalysisPolicy()
     }
 
     struct Result: Codable, Equatable, Sendable {

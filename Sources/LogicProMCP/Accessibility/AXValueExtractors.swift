@@ -41,23 +41,6 @@ enum AXValueExtractors {
         AXHelpers.setAttribute(element, kAXValueAttribute, NSNumber(value: value), runtime: runtime)
     }
 
-    /// Set a normalized 0.0...1.0 slider value by converting it into the
-    /// element's live AX range when one is exposed.
-    @discardableResult
-    static func setNormalizedSliderValue(
-        _ element: AXUIElement,
-        _ normalized: Double,
-        runtime: AXHelpers.Runtime = .production
-    ) -> Bool {
-        let clamped = min(max(normalized, 0.0), 1.0)
-        guard let range = extractSliderRange(element, runtime: runtime),
-              range.max > range.min else {
-            return setSliderValue(element, clamped, runtime: runtime)
-        }
-        let raw = range.min + clamped * (range.max - range.min)
-        return setSliderValue(element, raw, runtime: runtime)
-    }
-
     /// Extract a text value from a static text or text field element.
     /// Used for tempo display, position readout, track names, etc.
     static func extractTextValue(_ element: AXUIElement, runtime: AXHelpers.Runtime = .production) -> String? {
@@ -126,7 +109,14 @@ enum AXValueExtractors {
         guard let value = extractSliderValue(element, runtime: runtime),
               let range = extractSliderRange(element, runtime: runtime),
               range.max > range.min else {
-            return extractSliderValue(element, runtime: runtime)
+            // Fail-closed (audit #17): without a usable range we cannot normalize,
+            // so BOUND the raw reading to the widest valid slider contract this
+            // primitive serves — [-1, 1] — instead of leaking an unbounded raw
+            // value. This is the fallback for the bipolar `extractCenteredSliderValue`
+            // (a rangeless pan slider reports its value already in the -1...1 pan
+            // contract), so the bound MUST admit negatives; a [0, 1] clamp here
+            // silently zeroed real left-pan readings.
+            return extractSliderValue(element, runtime: runtime).map { min(max($0, -1.0), 1.0) }
         }
         let normalized = (value - range.min) / (range.max - range.min)
         return min(max(normalized, 0.0), 1.0)
@@ -147,7 +137,11 @@ enum AXValueExtractors {
         }
         guard let range = extractSliderRange(element, runtime: runtime),
               range.max > range.min else {
-            return value
+            // Fail-closed to the 0.0...1.0 mixer-volume contract (audit #17): an
+            // already-normalized slider passes through unchanged (0.8 -> 0.8),
+            // but a rangeless raw reading is clamped instead of leaking out of
+            // contract.
+            return min(max(value, 0.0), 1.0)
         }
         let position = min(max((value - range.min) / (range.max - range.min), 0.0), 1.0)
         guard isLogicMixerRawFaderRange(range) else {
@@ -254,6 +248,17 @@ enum AXValueExtractors {
 
 
     /// Read a track header and extract its basic state.
+    ///
+    /// WS3 AC2 (value-only honesty fix): `volume`/`pan`/`automationMode` now
+    /// report the REAL track-header values instead of the fabricated
+    /// `0.0`/`0.0`/`.off`. The `TrackState` type is UNCHANGED — the fields stay
+    /// non-optional `Double`/`Double`/`AutomationMode` with no sentinel, no
+    /// nullable, and no new enum case. On a rare AX-read failure each reader
+    /// returns the SAME default the resource fabricated before this fix, so no
+    /// new unreadable representation is introduced (the resource's existing
+    /// `source`/`ax_occluded` fields already flag degraded reads). `volume`/`pan`
+    /// use the identical header-fader readback the #107 write path uses, so
+    /// `logic://tracks` and the mixer speak the same contract units.
     static func extractTrackState(
         from header: AXUIElement,
         index: Int,
@@ -274,10 +279,70 @@ enum AXValueExtractors {
             isSoloed: soloed,
             isArmed: armed,
             isSelected: selected,
-            volume: 0.0,
-            pan: 0.0,
+            volume: extractTrackHeaderVolume(from: header, runtime: runtime),
+            pan: extractTrackHeaderPan(from: header, runtime: runtime),
+            automationMode: extractTrackAutomationMode(from: header, runtime: runtime),
             color: extractTrackColor(from: header, runtime: runtime)
         )
+    }
+
+    /// Real track-header volume as the public mixer contract (WS3 AC2). Reads
+    /// the SAME per-track header fader the #107 write path drives, via
+    /// `extractLogicMixerFaderValue`. Returns `0.0` (the pre-fix fabricated
+    /// default) when the fader or its value is unreadable.
+    private static func extractTrackHeaderVolume(
+        from header: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Double {
+        guard let fader = AXLogicProElements.findVolumeFader(in: header, runtime: runtime),
+              let contract = extractLogicMixerFaderValue(fader, runtime: runtime) else {
+            return 0.0
+        }
+        return contract
+    }
+
+    /// Real track-header pan as the public -1.0...1.0 contract (WS3 AC2). Uses
+    /// the same `headerPanContract` mapping as the #107 write-path readback.
+    /// Returns `0.0` (center — the pre-fix fabricated default) when the pan
+    /// slider, its range, or its value is unreadable.
+    private static func extractTrackHeaderPan(
+        from header: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Double {
+        guard let slider = AXLogicProElements.findPanControlInHeader(header, runtime: runtime),
+              let range = extractSliderRange(slider, runtime: runtime),
+              range.max > range.min,
+              let contract = headerPanContract(slider, range: range, runtime: runtime) else {
+            return 0.0
+        }
+        return contract
+    }
+
+    /// Real track-header automation mode (WS3 AC2). Scans the header for the
+    /// automation control — gated by `automationModeContext` so unrelated
+    /// "read"/"write" AX text cannot be misread — and maps its mode token to
+    /// `AutomationMode`. Returns `.off` (the pre-fix fabricated default) when no
+    /// automation control is found or its mode is unreadable; NO `.unknown` case
+    /// is introduced.
+    private static func extractTrackAutomationMode(
+        from header: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> AutomationMode {
+        let elements = [header] + AXHelpers.findAllDescendants(of: header, maxDepth: 4, runtime: runtime)
+        for element in elements {
+            let combined = [
+                AXHelpers.getDescription(element, runtime: runtime),
+                AXHelpers.getTitle(element, runtime: runtime),
+                extractTextValue(element, runtime: runtime),
+            ].compactMap { $0?.lowercased() }.joined(separator: " ")
+            guard AXLocalePolicy.automationModeContext.containsAny(in: combined) else { continue }
+            if AXLocalePolicy.automationModeWrite.containsAny(in: combined) { return .write }
+            if AXLocalePolicy.automationModeTrim.containsAny(in: combined) { return .trim }
+            if AXLocalePolicy.automationModeTouch.containsAny(in: combined) { return .touch }
+            if AXLocalePolicy.automationModeLatch.containsAny(in: combined) { return .latch }
+            if AXLocalePolicy.automationModeRead.containsAny(in: combined) { return .read }
+        }
+        return .off
     }
 
     /// Read transport bar elements and build a TransportState.
@@ -456,14 +521,14 @@ enum AXValueExtractors {
         // so this check MUST precede the `.audio` branch below or GM Device
         // strips get misclassified as audio tracks and the silent-bounce risk
         // is hidden before bounce. They are external-MIDI lanes, not audio.
-        if combined.contains("gm device") { return .externalMIDI }
-        if combined.contains("audio") || combined.contains("오디오") { return .audio }
-        if combined.contains("instrument") || combined.contains("software") || combined.contains("악기") { return .softwareInstrument }
-        if combined.contains("drummer") { return .drummer }
-        if combined.contains("external") || combined.contains("midi") { return .externalMIDI }
-        if combined.contains("aux") { return .aux }
-        if combined.contains("bus") { return .bus }
-        if combined.contains("master") || combined.contains("stereo out") { return .master }
+        if AXLocalePolicy.trackTypeGMDevice.containsAny(in: combined) { return .externalMIDI }
+        if AXLocalePolicy.trackTypeAudio.containsAny(in: combined) { return .audio }
+        if AXLocalePolicy.trackTypeInstrument.containsAny(in: combined) { return .softwareInstrument }
+        if AXLocalePolicy.trackTypeDrummer.containsAny(in: combined) { return .drummer }
+        if AXLocalePolicy.trackTypeExternalMIDI.containsAny(in: combined) { return .externalMIDI }
+        if AXLocalePolicy.trackTypeAux.containsAny(in: combined) { return .aux }
+        if AXLocalePolicy.trackTypeBus.containsAny(in: combined) { return .bus }
+        if AXLocalePolicy.trackTypeMaster.containsAny(in: combined) { return .master }
         return .unknown
     }
 

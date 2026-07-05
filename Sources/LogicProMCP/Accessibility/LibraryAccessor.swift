@@ -37,6 +37,53 @@ public struct LibraryNode: Codable, Sendable, Equatable {
     }
 }
 
+extension LibraryNode {
+    /// Tree-shape helpers shared by the AX scan (`LibraryAccessor`) and the disk
+    /// scan (`LibraryDiskScanner`). Hoisted from two byte-identical private copies
+    /// (round-1 #3) so both emit the same inventory schema from one definition.
+
+    /// Flatten every leaf descendant under each top-level category into a
+    /// `presetsByCategory` map, keyed by the category (top-level child) name.
+    func flattenPresetsByCategory() -> [String: [String]] {
+        var out: [String: [String]] = [:]
+        for topCat in children {
+            guard topCat.kind != .leaf else {
+                out[topCat.name] = []
+                continue
+            }
+            var leaves: [String] = []
+            topCat.collectLeaves(into: &leaves)
+            out[topCat.name] = leaves
+        }
+        return out
+    }
+
+    /// Append the names of all leaf descendants (self included when it is a leaf).
+    func collectLeaves(into acc: inout [String]) {
+        if kind == .leaf {
+            acc.append(name)
+            return
+        }
+        for child in children {
+            child.collectLeaves(into: &acc)
+        }
+    }
+
+    /// Tally total / leaves / folders across the subtree rooted at self.
+    func countNodes() -> (total: Int, leaves: Int, folders: Int) {
+        var t = 1
+        var l = kind == .leaf ? 1 : 0
+        var f = kind == .folder ? 1 : 0
+        for c in children {
+            let r = c.countNodes()
+            t += r.total
+            l += r.leaves
+            f += r.folders
+        }
+        return (t, l, f)
+    }
+}
+
 /// Injectable probe abstraction for `enumerateTree`.
 ///
 /// Real production: wraps live AX reads + AX-native selection (AXSelectedChildren
@@ -187,11 +234,13 @@ enum LibraryAccessor {
                 usleep(120_000)
                 CGWarpMouseCursorPosition(point)
                 usleep(30_000)
-                if LibraryAccessor.postCliclick(command: "dc", at: point) {
+                // Prefer the native CGEvent double-click (audit #16): spawning
+                // cliclick per click is FD-leak-class. Fall back to cliclick only
+                // if the native post fails.
+                if AXMouseHelper.doubleClick(at: point) {
                     return true
                 }
-                AXMouseHelper.doubleClick(at: point)
-                return true
+                return LibraryAccessor.postCliclick(command: "dc", at: point)
             }
         )
     }
@@ -408,8 +457,8 @@ enum LibraryAccessor {
         let rootNode = LibraryNode(
             name: "(library-root)", path: "", kind: .folder, children: topChildren
         )
-        let flat = flattenPresetsByCategory(rootNode)
-        let counts = countNodes(rootNode)
+        let flat = rootNode.flattenPresetsByCategory()
+        let counts = rootNode.countNodes()
         let durationMs = Int(Date().timeIntervalSince(start) * 1000)
 
         return LibraryRoot(
@@ -515,43 +564,6 @@ enum LibraryAccessor {
             }
         }
         return result
-    }
-
-    /// Flatten all leaf descendants under each top-level category into presetsByCategory.
-    private static func flattenPresetsByCategory(_ root: LibraryNode) -> [String: [String]] {
-        var out: [String: [String]] = [:]
-        for topCat in root.children {
-            guard topCat.kind != .leaf else {
-                out[topCat.name] = []; continue
-            }
-            var leaves: [String] = []
-            collectLeaves(topCat, into: &leaves)
-            out[topCat.name] = leaves
-        }
-        return out
-    }
-
-    private static func collectLeaves(_ node: LibraryNode, into acc: inout [String]) {
-        if node.kind == .leaf {
-            acc.append(node.name)
-            return
-        }
-        for child in node.children {
-            collectLeaves(child, into: &acc)
-        }
-    }
-
-    private static func countNodes(_ n: LibraryNode) -> (total: Int, leaves: Int, folders: Int) {
-        var t = 1
-        var l = n.kind == .leaf ? 1 : 0
-        var f = n.kind == .folder ? 1 : 0
-        for c in n.children {
-            let r = countNodes(c)
-            t += r.total
-            l += r.leaves
-            f += r.folders
-        }
-        return (t, l, f)
     }
 
     /// Enumerate the currently-visible Library: categories + presets of the
@@ -1163,7 +1175,7 @@ enum LibraryAccessor {
         )
         for b in browsers {
             let desc = AXHelpers.getDescription(b, runtime: runtime.ax) ?? ""
-            if desc == "라이브러리" || desc.lowercased() == "library" {
+            if AXLocalePolicy.libraryPanelLabel.matches(desc, mode: .exactStrict) {
                 return true
             }
         }
@@ -1179,7 +1191,7 @@ enum LibraryAccessor {
         )
         for b in browsers {
             let desc = AXHelpers.getDescription(b, runtime: runtime.ax) ?? ""
-            if desc == "라이브러리" || desc.lowercased() == "library" {
+            if AXLocalePolicy.libraryPanelLabel.matches(desc, mode: .exactStrict) {
                 return b
             }
         }
@@ -1344,10 +1356,13 @@ enum LibraryAccessor {
         usleep(120_000)
         CGWarpMouseCursorPosition(point)
         usleep(30_000)
-        if postCliclick(command: "c", at: point) {
+        // Prefer the native CGEvent click (audit #16): spawning cliclick per
+        // click is FD-leak-class. Fall back to cliclick only if the native
+        // post fails.
+        if AXMouseHelper.click(at: point) {
             return true
         }
-        return AXMouseHelper.click(at: point)
+        return postCliclick(command: "c", at: point)
     }
 
     private static func postCliclick(command: String, at point: CGPoint) -> Bool {
@@ -1373,12 +1388,27 @@ enum LibraryAccessor {
         return output.exitCode == 0
     }
 
+    /// Session-private debug-log file, created inside a `mkdtemp` directory
+    /// (0700, owner-only, unpredictable name) under the per-user temp dir —
+    /// instead of the world-writable, predictable
+    /// `/tmp/logic-library-click-debug.log` path (L2: symlink / pre-creation
+    /// risk). Lazily initialized so `mkdtemp` runs ONLY when debug logging is
+    /// actually enabled (the caller gates on the env var first).
+    private static let debugLogURL: URL? = {
+        let template = (NSTemporaryDirectory() as NSString)
+            .appendingPathComponent("logic-library-click-debug.XXXXXX")
+        var buffer = Array(template.utf8CString)
+        guard let resolved = mkdtemp(&buffer) else { return nil }
+        let directory = String(cString: resolved)
+        return URL(fileURLWithPath: directory).appendingPathComponent("click-debug.log")
+    }()
+
     private static func debugLibraryClick(_ message: String) {
-        guard ProcessInfo.processInfo.environment["LOGIC_LIBRARY_CLICK_DEBUG"] == "1" else {
+        guard ProcessInfo.processInfo.environment["LOGIC_LIBRARY_CLICK_DEBUG"] == "1",
+              let url = debugLogURL else {
             return
         }
         let line = "\(Date()) \(message)\n"
-        let url = URL(fileURLWithPath: "/tmp/logic-library-click-debug.log")
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil)
         }

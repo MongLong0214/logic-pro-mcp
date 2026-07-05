@@ -62,17 +62,20 @@ enum AXMouseHelper {
     /// Post a native double-click at the screen point. The two down/up
     /// pairs carry `clickCount = 2` on the second pair so macOS recognises
     /// the sequence as a double-click (single-clicks repeated quickly are
-    /// NOT the same thing).
-    static func doubleClick(at point: CGPoint, runtime: Runtime = .production) {
-        post(.leftMouseDown, at: point, clickCount: 1, runtime: runtime)
-        post(.leftMouseUp, at: point, clickCount: 1, runtime: runtime)
+    /// NOT the same thing). Returns true when every down/up event posted, so
+    /// callers can fall back to another injector on failure.
+    @discardableResult
+    static func doubleClick(at point: CGPoint, runtime: Runtime = .production) -> Bool {
+        let down1 = runtime.postMouseEvent(.leftMouseDown, point, 1)
+        let up1 = runtime.postMouseEvent(.leftMouseUp, point, 1)
 
         // Inter-click pause must stay well under macOS's system-wide
         // double-click interval (default ~500 ms) — 40 ms is reliable.
         runtime.sleepMicros(40_000)
 
-        post(.leftMouseDown, at: point, clickCount: 2, runtime: runtime)
-        post(.leftMouseUp, at: point, clickCount: 2, runtime: runtime)
+        let down2 = runtime.postMouseEvent(.leftMouseDown, point, 2)
+        let up2 = runtime.postMouseEvent(.leftMouseUp, point, 2)
+        return down1 && up1 && down2 && up2
     }
 
     /// Post a single native left-click at the screen point.
@@ -82,15 +85,6 @@ enum AXMouseHelper {
         runtime.sleepMicros(20_000)
         let up = runtime.postMouseEvent(.leftMouseUp, point, 1)
         return down && up
-    }
-
-    private static func post(
-        _ type: CGEventType,
-        at point: CGPoint,
-        clickCount: Int64,
-        runtime: Runtime
-    ) {
-        _ = runtime.postMouseEvent(type, point, clickCount)
     }
 
     /// Post a sequence of keystrokes representing the given string. Only
@@ -114,12 +108,6 @@ enum AXMouseHelper {
     /// Post a Return key tap.
     static func pressReturn(runtime: Runtime = .production) {
         postKey(0x24, runtime: runtime)   // kVK_Return = 0x24
-    }
-
-    /// Post a Delete/Backspace key tap. Used by inline text-edit flows after
-    /// the target control selects its existing contents on double-click.
-    static func pressDelete(runtime: Runtime = .production) {
-        postKey(0x33, runtime: runtime)   // kVK_Delete = 0x33
     }
 
     /// Post an Escape key tap (used to dismiss unwanted popups on error).
