@@ -109,10 +109,14 @@ enum AXValueExtractors {
         guard let value = extractSliderValue(element, runtime: runtime),
               let range = extractSliderRange(element, runtime: runtime),
               range.max > range.min else {
-            // Fail-closed to the 0.0...1.0 contract (audit #17): without a usable
-            // range we cannot normalize, so clamp the raw reading into the
-            // contract band rather than leaking an out-of-contract raw value.
-            return extractSliderValue(element, runtime: runtime).map { min(max($0, 0.0), 1.0) }
+            // Fail-closed (audit #17): without a usable range we cannot normalize,
+            // so BOUND the raw reading to the widest valid slider contract this
+            // primitive serves — [-1, 1] — instead of leaking an unbounded raw
+            // value. This is the fallback for the bipolar `extractCenteredSliderValue`
+            // (a rangeless pan slider reports its value already in the -1...1 pan
+            // contract), so the bound MUST admit negatives; a [0, 1] clamp here
+            // silently zeroed real left-pan readings.
+            return extractSliderValue(element, runtime: runtime).map { min(max($0, -1.0), 1.0) }
         }
         let normalized = (value - range.min) / (range.max - range.min)
         return min(max(normalized, 0.0), 1.0)
