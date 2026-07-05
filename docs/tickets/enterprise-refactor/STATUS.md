@@ -40,7 +40,7 @@
 - Base test count: 2014 (fix-branch base; ws1 pure-move confirmed).
 - golden-baseline REFRESHED from pristine base binary (stale 18:39 build predated #234 merge → logic_tracks desc); now 0-diff vs base.
 - Integrated (sequential, full-suite gate each): ws1 (2014✓) → ws2+ws6 batch (2024✓) → ws5 (2042✓, golden diff=0 FailureError rawValue-preserved). All merges conflict-0.
-- Integrated: +ws7 (Scripts/CI/security M1/M2, install-contract 31/31 green, 2042). 5/7 done (ws1/2/5/6/7). Remaining: ws3 (split done, verify), ws4 (SIGPIPE+splits+dedup+AC5 done, AC6 finishing).
+- Integrated: +ws7 (2042), +ws3 (AXLogicProElements 6-ext + extractTrackState value-only + policy, 2051 green, golden static identical). 6/7 done (ws1/2/3/5/6/7). Remaining: ws4 (SIGPIPE+splits+dedup+AC5 done, AC6 finishing).
 - WS6 AC5 follow-up → WS8: full HandshakeResult/parseDeviceResponse deletion + MCUProtocolTests removal (WS6 deleted only unconstructable .timeout; existing test blocks the rest).
 - audit adversarial finding: MIDIEngine.inboundMessages + MMC strict tier are production-dead but TEST-covered (audit missed test refs) → RETAINED (ws5 verified).
 
