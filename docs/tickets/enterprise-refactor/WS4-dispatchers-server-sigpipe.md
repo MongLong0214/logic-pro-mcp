@@ -2,7 +2,7 @@
 
 **PRD**: G1/G2/G3, §3.2 WS4
 **Priority**: P0 (SIGPIPE) | **Size**: L | **Risk**: mixed (SIGPIPE L; splits L; dedup L-M)
-**Owns (EXCLUSIVE)**: `Sources/LogicProMCP/{Dispatchers/*, State/*, Projects/*}` + `Resources/*` EXCEPT `ResourceProvider.swift` (→ WS3) + `Server/{ServerConfig.swift, SerializedStdioTransport.swift}` + `main.swift` + `MainEntrypoint.swift`. MUST NOT touch `Server/LogicProServer.swift` (→ WS6) or `ResourceProvider.swift` (→ WS3).
+**Owns (EXCLUSIVE)**: `Sources/LogicProMCP/{Dispatchers/*, Projects/*}` + `State/{StatePoller.swift, StateModels.swift}` (**NOT StateCache.swift → WS6**, boomer ticket-R1 #1) + `Resources/*` EXCEPT `ResourceProvider.swift` (→ WS3) + `Server/{ServerConfig.swift, SerializedStdioTransport.swift}` + `main.swift` + `MainEntrypoint.swift` + new test file `Tests/LogicProMCPTests/SIGPIPERegressionTests.swift` (WS4-created, excluded from WS8). MUST NOT touch `Server/LogicProServer.swift` (→ WS6), `ResourceProvider.swift` (→ WS3), `State/StateCache.swift` (→ WS6), or existing test files.
 **Parallel-safe with**: WS1/2/3/5/6/7.
 
 ## 1. Objective

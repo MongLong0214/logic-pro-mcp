@@ -13,11 +13,11 @@
 | WS1 | WS1-accessibilitychannel-split.md | 1 | P1 | Channels/AccessibilityChannel* |
 | WS2 | WS2-other-channels-dedup.md | 1 | P2 | Channels/{AppleScript,CoreMIDI,MIDIKeyCommands,Scripter,CGEvent,ChannelRouter,Channel}+RoutingTable |
 | WS3 | WS3-accessibility-ax-split-honesty.md | 1 | P1 | Accessibility/* + Resources/ResourceProvider + Plugins/* + Audio/* |
-| WS4 | WS4-dispatchers-server-sigpipe.md | 1 | P0 | Dispatchers/* + Resources/*(excl ResourceProvider) + State/* + Projects/* + Server/{ServerConfig,SerializedStdio} + entrypoints |
+| WS4 | WS4-dispatchers-server-sigpipe.md | 1 | P0 | Dispatchers/* + Resources/*(excl ResourceProvider) + State/{StatePoller,StateModels} (NOT StateCache) + Projects/* + Server/{ServerConfig,SerializedStdio} + entrypoints + SIGPIPERegressionTests |
 | WS5 | WS5-utilities-workflows-midi.md | 1 | P1 | Utilities/* + Workflows/* + MIDI/(excl MCU 3 files) |
-| WS6 | WS6-mcu-pipeline-atomic.md | 1 | P1 | Channels/MCUChannel + Server/LogicProServer + MIDI/{MCUFeedbackParser,MIDIFeedback,MCUProtocol} |
+| WS6 | WS6-mcu-pipeline-atomic.md | 1 | P1 | Channels/MCUChannel + Server/LogicProServer + MIDI/{MCUFeedbackParser,MIDIFeedback,MCUProtocol} + State/StateCache + MCU/MIDIFeedback test files |
 | WS7 | WS7-scripts-ci-security.md | 1 | P1 | Scripts/*.sh + .github/workflows/* + Formula/* |
-| WS8 | WS8-tests-dead-assertions.md | 2 (after Ph1) | P1 | Tests/* |
+| WS8 | WS8-tests-dead-assertions.md | 2 (after Ph1) | P1 | existing Tests/* (excl 7 Phase-1 files) + ledger; sub-units 8c→8a→8b sequential |
 | WS9 | WS9-docs.md | 3 (after Ph2) | P2 | *.md docs |
 
 ## Cross-WS sequencing notes (from boomer PRD reviews)
@@ -32,4 +32,5 @@
 | B-PRD | 2 | HAS_ISSUES (3) | extractTrackState exception + Projects ownership + MIDIFeedback tests → v0.3 |
 | B-PRD | 3 | HAS_ISSUES (1) | sentinel = wire change → v0.4 value-only |
 | B-PRD | 4 | **CONVERGED** | value-only confirmed; ready for tickets |
-| B-tickets | 1 | (pending) | boomer WS1-9 review |
+| B-tickets | 1 | HAS_ISSUES (5) | ownership collisions; folded: StateCache→WS6, per-WS test files, ledger→WS8, permission-tristate G6-a, WS8→8a/b/c |
+| B-tickets | 2 | (pending) | boomer re-review |

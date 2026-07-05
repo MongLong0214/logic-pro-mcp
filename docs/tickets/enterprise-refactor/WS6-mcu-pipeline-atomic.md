@@ -2,7 +2,7 @@
 
 **PRD**: G1, §3.2 WS6, §4 E5/E5b
 **Priority**: P1 (concurrency correctness) | **Size**: M | **Risk**: L-M
-**Owns (EXCLUSIVE)**: `Channels/MCUChannel.swift` + `Server/LogicProServer.swift` (MCU fan-out only — WS6 owns ALL of this file so WS4 never touches it) + `MIDI/{MCUFeedbackParser.swift, MIDIFeedback.swift, MCUProtocol.swift}`. MUST NOT touch other MIDI/ files (→ WS5) or other Channels (→ WS1/WS2).
+**Owns (EXCLUSIVE)**: `Channels/MCUChannel.swift` + `Server/LogicProServer.swift` (MCU fan-out only — WS6 owns ALL of this file so WS4 never touches it) + `MIDI/{MCUFeedbackParser.swift, MIDIFeedback.swift, MCUProtocol.swift}` + `State/StateCache.swift` (boomer ticket-R1 #1 — AC3 adds `updateMCUConnection(mutator:)`; **WS4 MUST NOT touch StateCache.swift**) + new test files `Tests/LogicProMCPTests/{MCUFeedbackOrderingTests,MIDIFeedbackStatusByteTests}.swift` (WS6-created, excluded from WS8). MUST NOT touch other MIDI/ files (→ WS5), other Channels (→ WS1/WS2), or existing test files.
 **Parallel-safe with**: WS1/2/3/4/5/7 (LogicProServer & the 3 MIDI files are WS6-exclusive).
 
 ## 1. Objective

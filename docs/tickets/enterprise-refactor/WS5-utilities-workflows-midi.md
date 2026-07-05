@@ -2,7 +2,7 @@
 
 **PRD**: G1/G3, §3.2 WS5
 **Priority**: P1 (tri-state honesty) | **Size**: M | **Risk**: L-M
-**Owns (EXCLUSIVE)**: `Utilities/*` + `Workflows/*` + `MIDI/{SMFWriter, SMFWriter+TemporaryFiles, NoteSequenceParser, MIDIEngine, MIDIPortManager, MMCCommands, MCUTrace}.swift`. MUST NOT touch `MIDI/{MCUFeedbackParser, MIDIFeedback, MCUProtocol}` (WS6) or HonestContract callers in dispatchers.
+**Owns (EXCLUSIVE)**: `Utilities/*` + `Workflows/*` + `MIDI/{SMFWriter, SMFWriter+TemporaryFiles, NoteSequenceParser, MIDIEngine, MIDIPortManager, MMCCommands, MCUTrace}.swift` + new test files `Tests/LogicProMCPTests/{PermissionCheckerTriStateTests,SMFWriterDenominatorTests}.swift` (WS5-created, excluded from WS8). MUST NOT touch `MIDI/{MCUFeedbackParser, MIDIFeedback, MCUProtocol}` (WS6), HonestContract callers in dispatchers, or existing test files.
 **Parallel-safe with**: WS1/2/3/4/6/7.
 
 ## 1. Objective
@@ -15,7 +15,7 @@ String-back the 45-case FailureError, fix the PermissionChecker tri-state honest
 - AC4: ProjectSessionAudit `deterministicFindings` (:433-732, ~300 lines) → extract systemFindings/trackFindings/exportFindings/markerFindings/mixerFindings → concat → existing id-sort:382. Pure extraction (order-normalized by id-sort).
 - AC5: SetupDoctor `requireBinary()` helper (dedup the ×4 binary-resolve guard :402/423/474/509). SetupDoctor↔SetupLifecycle remediation infra (RemediationType/Remediation/anchors) → shared type (SetupDoctor has extra `systemSettings` case — preserve both JSON shapes). INSTALL_DIR env L1 ownership+location allowlist (SetupLifecycle:599, matching library-inventory pattern).
 - AC6: BoundedProcessRunner `String(data:.utf8)` → `String(decoding:as:UTF8.self)` (:108, was nilling whole buffer on mid-multibyte cut → dropped Korean). Add escalation logging (:90-101, SIGTERM→SIGKILL currently silent). Shared `AppleScriptSafety.escapeForScript` (dedup the `\`/`"` escape at ProcessUtils:194/PermissionChecker:188/AppleScriptChannel:765/794 — WS5 defines it in Utilities; AppleScriptChannel is WS2 — **coordinate: WS5 adds the shared fn, WS2 call-sites reference it → sequence WS5 before WS2's escape dedup, OR WS2 leaves its escape as-is this sweep**). DestructivePolicy raw-JSON → shared layer. Delete unconsumed MIDIEngine.inboundMessages (audit concurrency #3) or wire it; delete dead MMC strict-locate tier if truly unreachable (audit #22 — verify).
-- AC7: `swift test --no-parallel` green; golden-snapshot diff = 0 (FailureError rawValues, HC envelopes — the String-enum must produce identical error tokens).
+- AC7: `swift test --no-parallel` green; golden-snapshot diff = 0 for FailureError rawValues + HC envelopes (String-enum produces identical tokens). **EXCEPTION (boomer ticket-R1 #4, G6-a)**: the PermissionChecker tri-state fix (AC2) is an intended observable honesty correction to `--check-permissions`/`logic_system health`/doctor output for the probe-FAILURE case only (grant/deny unchanged) — a constrained doctor/health/permissions snapshot allowlist permits that field's change; grant/deny paths must still diff = 0. Documented by WS9 in CHANGELOG + SECURITY/TROUBLESHOOTING.
 
 ## 3. TDD / Verification
 - FailureError: HonestContractTests must stay green (they pin every rawValue string); golden HC State C envelopes diff = 0.

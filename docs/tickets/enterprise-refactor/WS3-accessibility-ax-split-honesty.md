@@ -2,7 +2,7 @@
 
 **PRD**: G1/G2/G3/G6, §3.2 WS3, §4 E9
 **Priority**: P1 (honesty) | **Size**: L | **Risk**: L-M
-**Owns (EXCLUSIVE)**: `Accessibility/{AXLogicProElements, AXHelpers, AXValueExtractors, AXLocalePolicy, PluginInspector, LibraryAccessor, LibraryDiskScanner, AXMouseHelper}.swift` + `Resources/ResourceProvider.swift` (extractTrackState caller — WS3-exclusive, excluded from WS4) + `Plugins/{StockPluginCatalog, VerifiedPluginCatalog}.swift` + `Audio/AudioAnalyzer.swift`. MUST NOT touch other Resources/ (WS4) or Channels.
+**Owns (EXCLUSIVE)**: `Accessibility/{AXLogicProElements, AXHelpers, AXValueExtractors, AXLocalePolicy, PluginInspector, LibraryAccessor, LibraryDiskScanner, AXMouseHelper}.swift` + `Resources/ResourceProvider.swift` (extractTrackState caller — WS3-exclusive, excluded from WS4) + `Plugins/{StockPluginCatalog, VerifiedPluginCatalog}.swift` + `Audio/AudioAnalyzer.swift` + new test files `Tests/LogicProMCPTests/{ExtractTrackStateHonestyTests,AXHelpersDowncastGuardTests}.swift` (WS3-created, excluded from WS8). MUST NOT touch other Resources/ (WS4), Channels, or existing test files.
 **Parallel-safe with**: WS1/2/4/5/6/7.
 
 ## 1. Objective
