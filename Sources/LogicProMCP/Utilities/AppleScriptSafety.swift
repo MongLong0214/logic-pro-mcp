@@ -32,6 +32,19 @@ enum AppleScriptSafety {
         allowedTransportActions.contains(action)
     }
 
+    /// Escape a string for safe interpolation inside an AppleScript
+    /// double-quoted literal. Backslash MUST be escaped first (otherwise the
+    /// backslashes we introduce for the quote escape would themselves be
+    /// doubled), then the double-quote. Shared by the osascript probe/command
+    /// builders (`PermissionChecker`, `ProcessUtils`) so the escaping lives in
+    /// one place. WS2's AppleScriptChannel call-sites defer to this in a later
+    /// sweep; this sweep only wires the Utilities-owned builders.
+    static func escapeForScript(_ raw: String) -> String {
+        raw
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
     /// Validate a file path is non-empty and usable.
     static func isValidFilePath(_ path: String) -> Bool {
         validatedFilePath(path) != nil
