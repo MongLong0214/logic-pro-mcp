@@ -52,7 +52,7 @@ git clone https://github.com/MongLong0214/logic-pro-mcp.git
 cd logic-pro-mcp
 
 swift build              # debug
-swift test               # 1846 unit + integration tests on the current source tree
+swift test               # 2070 unit + integration tests on the current source tree
 swift build -c release   # release binary at .build/release/LogicProMCP
 ```
 
@@ -95,7 +95,7 @@ Sources/LogicProMCP/
 ├── Server/            LogicProServer + ServerConfig
 └── Utilities/         DestructivePolicy, AppleScriptSafety, Logger, PermissionChecker
 
-Tests/LogicProMCPTests/  1846 tests across the Swift test target on the current source tree
+Tests/LogicProMCPTests/  2070 tests across the Swift test target on the current source tree
 Scripts/                 install / uninstall / live E2E / Scripter JS
 docs/                    public setup, API, troubleshooting, README media, and public issue PRDs/tickets
 artifacts/               generated local artifacts; only explicitly published fixtures belong in git
@@ -115,7 +115,7 @@ When adding a new operation, assign it to the channel with the best protocol sup
 |----------|---------|---------|
 | 1 | **CoreMIDI** | Any operation that has a documented MIDI protocol (MMC locate, virtual port send, Scripter CC) |
 | 2 | **AppleScript** | Project lifecycle (`open`, `close`, `save`). Logic's scripting dictionary is narrow but stable for these. |
-| 3 | **MCU** | Mixer writes (fader/pan/send). 14-bit, bidirectional. No fallback. |
+| 3 | **MCU** | Master volume (`set_master_volume`) and mixer state feedback. 14-bit, bidirectional. No fallback. Fader/pan writes now route to Accessibility (since #83); `set_send` is not exposed. |
 | 4 | **MIDIKeyCommands** | Edit menu shortcuts (undo, quantize, split, etc.) via virtual MIDI CC. |
 | 5 | **Scripter** | Plugin parameter control via a user-installed JS insert. |
 | 6 | **Accessibility** | Last-resort UI queries (track enumeration, marker reading, region probing). |
@@ -158,7 +158,7 @@ If you cannot run a required gate, say so in the PR and explain why. Do not mark
 ## Pull Request Checklist
 
 - [ ] `swift build` clean
-- [ ] `swift test` green (all 1846 tests on the current source tree)
+- [ ] `swift test` green (all 2070 tests on the current source tree)
 - [ ] New behavior covered by at least one unit test
 - [ ] Changed production code keeps the global coverage floor green (`region >=70%`, `line >=78%`); high-risk Logic-facing changes target about 90% line coverage on the touched surface or document the live/manual evidence that substitutes for direct measurement
 - [ ] Public API change → `CHANGELOG.md` entry under `[Unreleased]`; new MCP tools also require README and `docs/API.md` updates

@@ -1,6 +1,6 @@
 # API Reference
 
-Current stable surface: Logic Pro MCP v3.7.4 exposes 10 tools, 18 static resources, and 11 resource templates.
+Current surface: Logic Pro MCP exposes 10 tools, 18 static resources, and 11 resource templates. The published stable release is v3.7.4; the upcoming v3.8.0 line keeps this exact surface (a behavior-preserving internal refactor plus honesty and security fixes — no tool/resource/template added or removed).
 
 Use tools for actions. Use resources for state. Treat every mutating result as one of:
 
@@ -53,6 +53,12 @@ Use tools for actions. Use resources for state. Treat every mutating result as o
 `logic://stock-instruments/{id}`, `logic://stock-instruments/search?query={query}`,
 `logic://session-players/{id}`, `logic://workflow-plans/session?prompt={prompt}`,
 `logic://workflow-skills/{id}`, `logic://workflow-skills/search?query={query}`.
+
+### Track state values (`logic://tracks`)
+
+Since v3.8.0, `logic://tracks` reports each track's `volume`, `pan`, and `automationMode` as REAL values read from the live track header (the same AX fader the mixer write path drives). These three were previously fabricated (`0.0` / `0.0` / `off`) by the production builder. The correction is **value-only** — the `TrackState` keys and types are unchanged (no new field, sentinel, or nullable), so existing parsers are unaffected. On a rare AX-read failure a field falls back to its former default, and the envelope's `source` / `ax_occluded` fields already flag degraded reads.
+
+Track objects do **not** carry a sample rate. Sample rate is a project/transport-level value exposed on `logic://project/info`, which still falls back to a fabricated `44100` default when a live transport sample-rate is unavailable (documented limitation).
 
 ## Command Notes
 
