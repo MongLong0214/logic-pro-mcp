@@ -14,12 +14,11 @@ protocol KeyCmdTransportProtocol: Actor {
 
 /// MIDI Key Commands channel: triggers Logic Pro key commands via MIDI CC on Channel 16.
 /// Each operation maps to a specific CC# (§4.11 mapping table).
-actor MIDIKeyCommandsChannel: Channel {
+actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
     nonisolated let id = ChannelID.midiKeyCommands
 
-    private let transport: any KeyCmdTransportProtocol
-    private let approvalStore: any ManualValidationStoring
-    private static let midiChannel: UInt8 = 15 // 0-indexed, = channel 16
+    let transport: any KeyCmdTransportProtocol
+    let approvalStore: any ManualValidationStoring
 
     init(
         transport: any KeyCmdTransportProtocol,
@@ -108,8 +107,7 @@ actor MIDIKeyCommandsChannel: Channel {
     ]
 
     func start() async throws {
-        try await transport.prepare()
-        let readiness = await transport.readiness()
+        let readiness = try await prepareTransportForStart()
         Log.info(
             "MIDIKeyCommands channel started (\(Self.mappingTable.count) commands mapped) — \(readiness.detail)",
             subsystem: "keycmd"
@@ -216,6 +214,34 @@ actor MIDIKeyCommandsChannel: Channel {
         [0x80 | (channel & 0x0F), note, 0]
     }
 
+    // MARK: Send helpers
+
+    /// Shared State C envelope for a KeyCmd transport send failure. Every
+    /// direct-send op emits the byte-identical `ax_write_failed` code + hint,
+    /// so the pinned string lives here once.
+    private func failSend(operation: String, error: any Error) -> ChannelResult {
+        .error(HonestContract.encodeStateC(
+            error: .axWriteFailed,
+            hint: "KeyCmd transport send failed: \(error)",
+            extras: ["operation": operation]
+        ))
+    }
+
+    /// Run a transport send, returning `nil` on success or a `failSend`
+    /// envelope on throw. Collapses the repeated do/catch around a single send
+    /// into a `guard`.
+    private func runValidated(
+        operation: String,
+        _ body: () async throws -> Void
+    ) async -> ChannelResult? {
+        do {
+            try await body()
+            return nil
+        } catch {
+            return failSend(operation: operation, error: error)
+        }
+    }
+
     // MARK: Per-op handlers
 
     private func sendCCDirect(params: [String: String]) async -> ChannelResult {
@@ -229,14 +255,8 @@ actor MIDIKeyCommandsChannel: Channel {
             ))
         }
         let bytes = buildCCBytes(channel: channel, controller: controller, value: value)
-        do {
-            try await transport.send(bytes)
-        } catch {
-            return .error(HonestContract.encodeStateC(
-                error: .axWriteFailed,
-                hint: "KeyCmd transport send failed: \(error)",
-                extras: ["operation": "midi.send_cc.keycmd"]
-            ))
+        if let failure = await runValidated(operation: "midi.send_cc.keycmd", { try await transport.send(bytes) }) {
+            return failure
         }
         return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: [
             "operation": "midi.send_cc.keycmd",
@@ -259,14 +279,10 @@ actor MIDIKeyCommandsChannel: Channel {
         }
         // duration_ms is capped at 30s to match CoreMIDIChannel send_note.
         let durationMs = min(params["duration_ms"].flatMap(UInt64.init) ?? 250, 30_000)
-        do {
+        if let failure = await runValidated(operation: "midi.send_note.keycmd", {
             try await transport.send(buildNoteOnBytes(channel: channel, note: note, velocity: velocity))
-        } catch {
-            return .error(HonestContract.encodeStateC(
-                error: .axWriteFailed,
-                hint: "KeyCmd transport send failed: \(error)",
-                extras: ["operation": "midi.send_note.keycmd"]
-            ))
+        }) {
+            return failure
         }
         try? await Task.sleep(nanoseconds: durationMs * 1_000_000)
         do {
@@ -319,16 +335,12 @@ actor MIDIKeyCommandsChannel: Channel {
         }
         let durationMs = min(params["duration_ms"].flatMap(UInt64.init) ?? 500, 30_000)
         let notes = parsed.map { UInt8($0) }
-        do {
+        if let failure = await runValidated(operation: "midi.send_chord.keycmd", {
             for n in notes {
                 try await transport.send(buildNoteOnBytes(channel: channel, note: n, velocity: velocity))
             }
-        } catch {
-            return .error(HonestContract.encodeStateC(
-                error: .axWriteFailed,
-                hint: "KeyCmd transport send failed: \(error)",
-                extras: ["operation": "midi.send_chord.keycmd"]
-            ))
+        }) {
+            return failure
         }
         try? await Task.sleep(nanoseconds: durationMs * 1_000_000)
         if let failure = await sendKeyCmdNoteOffs(notes, channel: channel) {
@@ -369,14 +381,8 @@ actor MIDIKeyCommandsChannel: Channel {
         }
         // Program Change is 2 bytes: status (0xC0|ch), program.
         let bytes: [UInt8] = [0xC0 | (channel & 0x0F), program]
-        do {
-            try await transport.send(bytes)
-        } catch {
-            return .error(HonestContract.encodeStateC(
-                error: .axWriteFailed,
-                hint: "KeyCmd transport send failed: \(error)",
-                extras: ["operation": "midi.send_program_change.keycmd"]
-            ))
+        if let failure = await runValidated(operation: "midi.send_program_change.keycmd", { try await transport.send(bytes) }) {
+            return failure
         }
         return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: [
             "operation": "midi.send_program_change.keycmd",
@@ -400,14 +406,8 @@ actor MIDIKeyCommandsChannel: Channel {
         let lsb = UInt8(raw & 0x7F)
         let msb = UInt8((raw >> 7) & 0x7F)
         let bytes: [UInt8] = [0xE0 | (channel & 0x0F), lsb, msb]
-        do {
-            try await transport.send(bytes)
-        } catch {
-            return .error(HonestContract.encodeStateC(
-                error: .axWriteFailed,
-                hint: "KeyCmd transport send failed: \(error)",
-                extras: ["operation": "midi.send_pitch_bend.keycmd"]
-            ))
+        if let failure = await runValidated(operation: "midi.send_pitch_bend.keycmd", { try await transport.send(bytes) }) {
+            return failure
         }
         return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: [
             "operation": "midi.send_pitch_bend.keycmd",
@@ -429,14 +429,8 @@ actor MIDIKeyCommandsChannel: Channel {
             ))
         }
         let bytes: [UInt8] = [0xD0 | (channel & 0x0F), pressure]
-        do {
-            try await transport.send(bytes)
-        } catch {
-            return .error(HonestContract.encodeStateC(
-                error: .axWriteFailed,
-                hint: "KeyCmd transport send failed: \(error)",
-                extras: ["operation": "midi.send_aftertouch.keycmd"]
-            ))
+        if let failure = await runValidated(operation: "midi.send_aftertouch.keycmd", { try await transport.send(bytes) }) {
+            return failure
         }
         return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: [
             "operation": "midi.send_aftertouch.keycmd",
@@ -508,11 +502,7 @@ actor MIDIKeyCommandsChannel: Channel {
                 try await transport.send(onBytes)
             } catch {
                 await drainKeyCmdNoteOffTasks(noteOffTasks)
-                return .error(HonestContract.encodeStateC(
-                    error: .axWriteFailed,
-                    hint: "KeyCmd transport send failed: \(error)",
-                    extras: ["operation": "midi.play_sequence.keycmd"]
-                ))
+                return failSend(operation: "midi.play_sequence.keycmd", error: error)
             }
             let pitch = event.pitch
             let ch = event.channel
@@ -550,22 +540,13 @@ actor MIDIKeyCommandsChannel: Channel {
     }
 
     func healthCheck() async -> ChannelHealth {
-        let readiness = await transport.readiness()
-        guard readiness.available else {
-            return .unavailable(readiness.detail)
-        }
-        if await approvalStore.isApproved(.midiKeyCommands) {
-            return .healthy(
-                detail: "\(readiness.detail). Logic Key Commands preset approved by operator",
-                verificationStatus: .runtimeReady
-            )
-        }
         // Honest health detail: virtual port status, manual MIDI Learn
         // requirement, audited coverage matrix pointer, effectively keycmd-only
         // ops, and orphan ops in mappingTable. Total length must stay < 1 KB.
-        return .healthy(
-            detail: "Port: LogicProMCP-KeyCmd-Internal — \(readiness.detail). \(Self.manualValidationDetailSuffix)",
-            verificationStatus: .manualValidationRequired
+        await manualValidationHealth(
+            approval: .midiKeyCommands,
+            approvedDetail: { "\($0.detail). Logic Key Commands preset approved by operator" },
+            unapprovedDetail: { "Port: LogicProMCP-KeyCmd-Internal — \($0.detail). \(Self.manualValidationDetailSuffix)" }
         )
     }
 

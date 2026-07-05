@@ -44,6 +44,30 @@ actor CoreMIDIChannel: Channel {
         return UInt8(v)
     }
 
+    /// Parse an optional `channel` param into a wire byte (0-15), defaulting to
+    /// 0 when absent. Returns `.failure` (NOT throw): the `execute` catch that
+    /// wraps `MIDIEngineError` into a State C envelope would re-wrap a thrown
+    /// validation miss too, but these misses are test-pinned plain `.error`
+    /// strings, so the caller maps `.failure` straight to `.error(message)`.
+    private static func parseChannel(_ raw: String?, label: String) -> Result<UInt8, ValidationFailure> {
+        guard let raw else { return .success(0) }
+        guard let parsed = midiChannel(raw) else {
+            return .failure(ValidationFailure(message: "\(label) 'channel' must be a wire byte in 0-15"))
+        }
+        return .success(parsed)
+    }
+
+    /// Parse an optional `velocity` param into a 7-bit value (0-127), defaulting
+    /// to `defaultValue` when absent. Returns `.failure` (NOT throw) for the same
+    /// reason as `parseChannel`.
+    private static func parseVelocity(_ raw: String?, label: String, default defaultValue: UInt8) -> Result<UInt8, ValidationFailure> {
+        guard let raw else { return .success(defaultValue) }
+        guard let parsed = midiData7(raw) else {
+            return .failure(ValidationFailure(message: "\(label) 'velocity' must be in 0-127"))
+        }
+        return .success(parsed)
+    }
+
     private static func durationMs(_ s: String?, default defaultValue: UInt64) -> UInt64? {
         guard let s else { return defaultValue }
         guard let value = UInt64(s), (1...30_000).contains(value) else { return nil }
@@ -150,19 +174,15 @@ actor CoreMIDIChannel: Channel {
                 return .error("send_note requires 'note' in 0-127")
             }
             let velocity: UInt8
-            if let v = params["velocity"] {
-                guard let parsed = Self.midiData7(v) else {
-                    return .error("send_note 'velocity' must be in 0-127")
-                }
-                velocity = parsed
-            } else { velocity = 100 }
+            switch Self.parseVelocity(params["velocity"], label: "send_note", default: 100) {
+            case .success(let parsed): velocity = parsed
+            case .failure(let failure): return .error(failure.message)
+            }
             let channel: UInt8
-            if let c = params["channel"] {
-                guard let parsed = Self.midiChannel(c) else {
-                    return .error("send_note 'channel' must be a wire byte in 0-15")
-                }
-                channel = parsed
-            } else { channel = 0 }
+            switch Self.parseChannel(params["channel"], label: "send_note") {
+            case .success(let parsed): channel = parsed
+            case .failure(let failure): return .error(failure.message)
+            }
             guard let durationMs = Self.durationMs(params["duration_ms"], default: 500) else {
                 return .error("send_note 'duration_ms' must be in 1-30000")
             }
@@ -186,19 +206,15 @@ actor CoreMIDIChannel: Channel {
                 return .error("note_on requires 'note' in 0-127")
             }
             let velocity: UInt8
-            if let v = params["velocity"] {
-                guard let parsed = Self.midiData7(v) else {
-                    return .error("note_on 'velocity' must be in 0-127")
-                }
-                velocity = parsed
-            } else { velocity = 100 }
+            switch Self.parseVelocity(params["velocity"], label: "note_on", default: 100) {
+            case .success(let parsed): velocity = parsed
+            case .failure(let failure): return .error(failure.message)
+            }
             let channel: UInt8
-            if let c = params["channel"] {
-                guard let parsed = Self.midiChannel(c) else {
-                    return .error("note_on 'channel' must be a wire byte in 0-15")
-                }
-                channel = parsed
-            } else { channel = 0 }
+            switch Self.parseChannel(params["channel"], label: "note_on") {
+            case .success(let parsed): channel = parsed
+            case .failure(let failure): return .error(failure.message)
+            }
             try await engine.sendNoteOn(channel: channel, note: note, velocity: velocity)
             return .success("Note on \(note) ch \(channel) vel \(velocity)")
 
@@ -207,12 +223,10 @@ actor CoreMIDIChannel: Channel {
                 return .error("note_off requires 'note' in 0-127")
             }
             let channel: UInt8
-            if let c = params["channel"] {
-                guard let parsed = Self.midiChannel(c) else {
-                    return .error("note_off 'channel' must be a wire byte in 0-15")
-                }
-                channel = parsed
-            } else { channel = 0 }
+            switch Self.parseChannel(params["channel"], label: "note_off") {
+            case .success(let parsed): channel = parsed
+            case .failure(let failure): return .error(failure.message)
+            }
             try await engine.sendNoteOff(channel: channel, note: note, velocity: 0)
             return .success("Note off \(note) ch \(channel)")
 
@@ -226,12 +240,10 @@ actor CoreMIDIChannel: Channel {
                 return .error("send_cc requires 'controller' and 'value' — 'value' must be in 0-127")
             }
             let channel: UInt8
-            if let c = params["channel"] {
-                guard let parsed = Self.midiChannel(c) else {
-                    return .error("send_cc 'channel' must be a wire byte in 0-15")
-                }
-                channel = parsed
-            } else { channel = 0 }
+            switch Self.parseChannel(params["channel"], label: "send_cc") {
+            case .success(let parsed): channel = parsed
+            case .failure(let failure): return .error(failure.message)
+            }
             try await engine.sendCC(channel: channel, controller: controller, value: value)
             return .success("CC \(controller)=\(value) on ch \(channel)")
 
@@ -242,12 +254,10 @@ actor CoreMIDIChannel: Channel {
                 return .error("program_change requires 'program' in 0-127")
             }
             let channel: UInt8
-            if let c = params["channel"] {
-                guard let parsed = Self.midiChannel(c) else {
-                    return .error("program_change 'channel' must be a wire byte in 0-15")
-                }
-                channel = parsed
-            } else { channel = 0 }
+            switch Self.parseChannel(params["channel"], label: "program_change") {
+            case .success(let parsed): channel = parsed
+            case .failure(let failure): return .error(failure.message)
+            }
             try await engine.sendProgramChange(channel: channel, program: program)
             return .success("Program change \(program) on ch \(channel)")
 
@@ -260,12 +270,10 @@ actor CoreMIDIChannel: Channel {
                 return .error("pitch_bend requires 'value' (0-16383, center=8192)")
             }
             let channel: UInt8
-            if let c = params["channel"] {
-                guard let parsed = Self.midiChannel(c) else {
-                    return .error("pitch_bend 'channel' must be a wire byte in 0-15")
-                }
-                channel = parsed
-            } else { channel = 0 }
+            switch Self.parseChannel(params["channel"], label: "pitch_bend") {
+            case .success(let parsed): channel = parsed
+            case .failure(let failure): return .error(failure.message)
+            }
             try await engine.sendPitchBend(channel: channel, value: value)
             return .success("Pitch bend \(value) on ch \(channel)")
 
@@ -276,12 +284,10 @@ actor CoreMIDIChannel: Channel {
                 return .error("aftertouch requires 'pressure' (0-127)")
             }
             let channel: UInt8
-            if let c = params["channel"] {
-                guard let parsed = Self.midiChannel(c) else {
-                    return .error("aftertouch 'channel' must be a wire byte in 0-15")
-                }
-                channel = parsed
-            } else { channel = 0 }
+            switch Self.parseChannel(params["channel"], label: "aftertouch") {
+            case .success(let parsed): channel = parsed
+            case .failure(let failure): return .error(failure.message)
+            }
             try await engine.sendAftertouch(channel: channel, pressure: pressure)
             return .success("Aftertouch \(pressure) on ch \(channel)")
 
@@ -321,19 +327,15 @@ actor CoreMIDIChannel: Channel {
                 return .error("send_chord 'notes' must contain 1..24 MIDI notes, each integer 0..127")
             }
             let vel: UInt8
-            if let v = params["velocity"] {
-                guard let parsed = Self.midiData7(v) else {
-                    return .error("send_chord 'velocity' must be in 0-127")
-                }
-                vel = parsed
-            } else { vel = 80 }
+            switch Self.parseVelocity(params["velocity"], label: "send_chord", default: 80) {
+            case .success(let parsed): vel = parsed
+            case .failure(let failure): return .error(failure.message)
+            }
             let ch: UInt8
-            if let c = params["channel"] {
-                guard let parsed = Self.midiChannel(c) else {
-                    return .error("send_chord 'channel' must be a wire byte in 0-15")
-                }
-                ch = parsed
-            } else { ch = 0 }
+            switch Self.parseChannel(params["channel"], label: "send_chord") {
+            case .success(let parsed): ch = parsed
+            case .failure(let failure): return .error(failure.message)
+            }
             guard let durMs = Self.durationMs(params["duration_ms"], default: 500) else {
                 return .error("send_chord 'duration_ms' must be in 1-30000")
             }

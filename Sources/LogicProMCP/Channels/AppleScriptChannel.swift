@@ -445,8 +445,19 @@ actor AppleScriptChannel: Channel {
         path.hasSuffix(".logicx") ? [path] : [path, path + ".logicx"]
     }
 
+    // Hoisted out of `iso8601String` (audit P3 / round-1 #19): a fresh
+    // ISO8601DateFormatter per call is wasteful. Reuse one instance guarded by a
+    // lock — mirrors Utilities/JSONHelper.swift, whose formatter is not
+    // documented thread-safe for concurrent callers. `nonisolated(unsafe)` is
+    // required because ISO8601DateFormatter is not Sendable; the lock supplies
+    // the actual safety. Default options → identical output to the prior code.
+    private nonisolated(unsafe) static let iso8601Formatter = ISO8601DateFormatter()
+    private static let iso8601FormatterLock = NSLock()
+
     private static func iso8601String(_ date: Date) -> String {
-        ISO8601DateFormatter().string(from: date)
+        iso8601FormatterLock.lock()
+        defer { iso8601FormatterLock.unlock() }
+        return iso8601Formatter.string(from: date)
     }
 
     func healthCheck() async -> ChannelHealth {
@@ -703,21 +714,11 @@ actor AppleScriptChannel: Channel {
         return Self.parseCurrentDocumentIdentity(from: result)
     }
 
+    /// Instance shim over the static comparison so the open/save lifecycle and
+    /// the verified project-identity gate (R10, AC15) share one implementation.
+    /// Byte-identical to the former instance body (which duplicated the static).
     private func projectPathsMatch(_ lhs: String, _ rhs: String) -> Bool {
-        let left = normalizedProjectPath(lhs)
-        let right = normalizedProjectPath(rhs)
-        if left == right { return true }
-        if left.hasPrefix("/private"), String(left.dropFirst(8)) == right { return true }
-        if right.hasPrefix("/private"), left == String(right.dropFirst(8)) { return true }
-        return false
-    }
-
-    private func normalizedProjectPath(_ path: String) -> String {
-        let normalized = URL(fileURLWithPath: path).resolvingSymlinksInPath().path
-        if normalized.hasSuffix("/") {
-            return String(normalized.dropLast())
-        }
-        return normalized
+        Self.projectPathsMatch(lhs, rhs)
     }
 
     static func appleScriptResultText(from result: ChannelResult) -> String? {
