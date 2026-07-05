@@ -55,3 +55,10 @@
 - extractTrackState honesty (WS3 AC2 live-verify, was deferred): logic://tracks track 0 reports REAL header values volume=0.758, pan=0.0079, automationMode=off (NOT fabricated 0.0/0.0/off — pan≠0 proves live AX read). Value-only, TrackState shape unchanged.
 - permission tri-state (WS5 G6-a): host is genuinely granted → granted shown; notVerifiable/notGranted paths unit-pinned (PermissionCheckerTriStateTests). No false NOT-GRANTED.
 - Conclusion: behavior-preserving proven live (strict suite parity) + both intended honesty corrections verified on the real app.
+
+## Phase-2 WS8 COMPLETE (2026-07-05)
+- WS8c 70d7936 (FakeAX helpers + JSON clone .resource fix).
+- WS8a 30d6188: **386 dead #expect(Bool==Bool) → live** (rules: 233 non-opt-bare, 26 as?Bool force-unwrap, 103 Bool?-must-fail, 18 isError nil-valid bind, 6 tautology). LEDGER + 4 safety-critical flip-tests (all FAIL-when-broken). **5 assertions went RED when made live — all ground-truthed as LATENT TEST DEFECTS (0 production bugs): logic://tracks envelope parse, HC-v1 verified omission, list_ports env-dependent, MCU async ordered-consumer race, export-guardrail substring. None papered over.**
+- WS8b 0890c80: MutationGateCompleteness + BoundedProcessRunner (SIGTERM→SIGKILL/64KB/timeout) + StateModelsCodable (new files, dead-pattern-free live forms).
+- WS6-followup 47504b8: HandshakeResult/parseDeviceResponse + 4 tests deleted (repo refs=0).
+- **2070 tests green.** RECOVERY NOTE: WS8b+WS6 WIP stash was dropped from the list; recovered from dangling commit 1ecad30 via `git stash apply`, verified 2070 green, committed. Zero work lost.
