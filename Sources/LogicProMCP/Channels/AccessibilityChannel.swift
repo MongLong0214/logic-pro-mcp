@@ -319,8 +319,11 @@ actor AccessibilityChannel: Channel {
         case "library.list":
             return AccessibilityChannel.listLibrary(runtime: runtime.logicRuntime)
         case "library.scan_all":
-            // E15: atomic check-and-set within actor step (no suspension points)
-            if libraryScanInProgress {
+            // E15: atomic check-and-set within actor step (no suspension points).
+            // Library and plugin AX scans are mutually exclusive — either one in
+            // flight rejects the other so we never run two concurrent AX-tree
+            // traversals of Logic. Each scan still clears only its OWN flag.
+            if libraryScanInProgress || pluginScanInProgress {
                 return .error("Library scan already in progress")
             }
             libraryScanInProgress = true
@@ -350,7 +353,9 @@ actor AccessibilityChannel: Channel {
             // F2 minimal scan handler — relies on currently-focused plugin window.
             // Full T6 (cache, persistence, axScanInProgress rename, AC-1.5b trackIndex
             // precedence) is follow-up. This handler delivers live menu enumeration.
-            if pluginScanInProgress {
+            // E15: mutually exclusive with library.scan_all — either AX-tree scan
+            // in flight rejects the other. Each scan still clears only its OWN flag.
+            if libraryScanInProgress || pluginScanInProgress {
                 return .error("AX scan already in progress")
             }
             pluginScanInProgress = true
