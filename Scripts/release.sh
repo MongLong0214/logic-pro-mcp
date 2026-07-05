@@ -170,10 +170,24 @@ if [ "$DRY_RUN" != "1" ]; then
         { print }
     ' Formula/logic-pro-mcp.rb > Formula/logic-pro-mcp.rb.tmp
     mv Formula/logic-pro-mcp.rb.tmp Formula/logic-pro-mcp.rb
+
+    # Fail closed if the awk rewrite did not actually land the published
+    # tarball sha256 on the Formula (e.g. the sha256 literal format drifted so
+    # sub() matched nothing). A stale hash tags a Formula whose `brew install`
+    # fails checksum verification for every user (#22-class regression), so
+    # refuse to continue rather than push a tag that resolves to a bad hash.
+    grep -Fq "$TARBALL_SHA" Formula/logic-pro-mcp.rb || {
+        echo "Error: Formula/logic-pro-mcp.rb does not contain the published tarball sha256 after sync."
+        echo "  expected: $TARBALL_SHA"
+        echo "  The sha256 line format may have drifted; refusing to tag a release with a stale Formula hash."
+        exit 1
+    }
 fi
 
 run "git add Formula/logic-pro-mcp.rb"
-run "git commit -m 'release: $VERSION Formula sha256 sync
+# Guard the commit so a re-run (Formula already at the correct sha, nothing
+# staged) is a no-op instead of aborting the whole script under `set -e`.
+run "git diff --cached --quiet || git commit -m 'release: $VERSION Formula sha256 sync
 
 Pre-tag Formula update so \`git checkout $VERSION\` resolves to the
 published universal tarball SHA.
