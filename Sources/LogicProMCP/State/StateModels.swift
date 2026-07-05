@@ -164,7 +164,9 @@ enum AutomationMode: String, Sendable, Codable {
 }
 
 /// MCU connection state.
-struct MCUConnectionState: Sendable {
+/// Codable (audit P2 #25) so `ResourceHandlers.readMCUState` can serialize it
+/// directly instead of hand-mapping into a duplicate wire DTO.
+struct MCUConnectionState: Sendable, Codable {
     var isConnected: Bool = false
     var registeredAsDevice: Bool = false
     var lastFeedbackAt: Date? = nil
@@ -185,7 +187,8 @@ extension MCUConnectionState {
 }
 
 /// MCU LCD display state.
-struct MCUDisplayState: Sendable {
+/// Codable (audit P2 #25) — see `MCUConnectionState`.
+struct MCUDisplayState: Sendable, Codable {
     var upperRow: String = String(repeating: " ", count: 56)  // 56 chars
     var lowerRow: String = String(repeating: " ", count: 56)
 }

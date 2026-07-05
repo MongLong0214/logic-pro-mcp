@@ -50,24 +50,37 @@ func doubleParamOrNil(_ params: [String: Value], _ keys: String...) -> Double? {
 }
 
 func stringParam(_ params: [String: Value], _ keys: String..., default defaultValue: String = "") -> String {
+    var selected: String?
     for key in keys {
-        if let value = params[key]?.stringValue {
-            return value
-        }
         // Coerce adjacent primitive shapes — callers may send numeric or boolean
         // values for string-typed params (e.g. `{"name": 42}`) and silently
-        // losing them to the default mask bugs in production.
-        if let value = params[key]?.intValue {
-            return String(value)
+        // losing them to the default mask bugs in production. Order preserved:
+        // string > int > double > bool.
+        let resolved: String?
+        if let value = params[key]?.stringValue {
+            resolved = value
+        } else if let value = params[key]?.intValue {
+            resolved = String(value)
+        } else if let value = params[key]?.doubleValue {
+            resolved = String(value)
+        } else if let value = params[key]?.boolValue {
+            resolved = value ? "true" : "false"
+        } else {
+            resolved = nil
         }
-        if let value = params[key]?.doubleValue {
-            return String(value)
-        }
-        if let value = params[key]?.boolValue {
-            return value ? "true" : "false"
+        guard let resolved else { continue }
+        if let selected {
+            // audit P2 #21: alias-conflict fail-closed, matching
+            // intParamOrNil/doubleParamOrNil. Two provided aliases that disagree
+            // are ambiguous → return the default so the caller's empty/default
+            // guard rejects the request instead of silently binding whichever
+            // alias iterated first.
+            guard selected == resolved else { return defaultValue }
+        } else {
+            selected = resolved
         }
     }
-    return defaultValue
+    return selected ?? defaultValue
 }
 
 func boolParamOrNil(_ params: [String: Value], _ keys: String...) -> Bool? {

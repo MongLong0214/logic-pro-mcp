@@ -570,38 +570,23 @@ extension ResourceHandlers {
         )
     }
 
-    /// Wire-format DTO for `logic://mcu/state`. MCU LCD bytes can carry raw
+    /// Wire-format wrapper for `logic://mcu/state`. MCU LCD bytes can carry raw
     /// control characters straight from hardware SysEx decode; routing the
     /// payload through `JSONEncoder` guarantees RFC 8259-valid escaping for
-    /// `\n`, `\r`, `\t`, and U+0000-U+001F — which the previous hand-rolled
-    /// emitter missed and which could have produced unparseable JSON.
+    /// `\n`, `\r`, `\t`, and U+0000-U+001F — which a hand-rolled emitter missed
+    /// and which could have produced unparseable JSON. The members are the
+    /// Codable StateModels structs directly (audit P2 #25 — no hand-mapping).
+    /// `encodeJSON` sorts keys, so the wire shape is byte-identical to the prior
+    /// hand-mapped DTO (same field set, same custom date strategy).
     private struct MCUStateDTO: Encodable {
-        struct Connection: Encodable {
-            let isConnected: Bool
-            let registeredAsDevice: Bool
-            let portName: String
-            let lastFeedbackAt: Date?
-        }
-        struct Display: Encodable {
-            let upperRow: String
-            let lowerRow: String
-        }
-        let connection: Connection
-        let display: Display
+        let connection: MCUConnectionState
+        let display: MCUDisplayState
     }
 
     static func readMCUState(cache: StateCache, uri: String) async throws -> ReadResource.Result {
         let conn = await cache.getMCUConnection()
         let display = await cache.getMCUDisplay()
-        let dto = MCUStateDTO(
-            connection: .init(
-                isConnected: conn.isConnected,
-                registeredAsDevice: conn.registeredAsDevice,
-                portName: conn.portName,
-                lastFeedbackAt: conn.lastFeedbackAt
-            ),
-            display: .init(upperRow: display.upperRow, lowerRow: display.lowerRow)
-        )
+        let dto = MCUStateDTO(connection: conn, display: display)
         let json = encodeJSON(dto, compact: true)
         return ReadResource.Result(
             contents: [.text(json, uri: uri, mimeType: "application/json")]

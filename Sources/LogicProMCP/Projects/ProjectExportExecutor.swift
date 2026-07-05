@@ -81,6 +81,10 @@ enum ProjectExportExecutor {
         /// Live path-directed bounce. nil keeps the legacy router-bounce seam so
         /// the deterministic unit tests never shell out to the UI helper.
         var bounceToPath: BounceToPath?
+        /// Blocking-dialog preflight for the per-project batch open (audit P2 #18).
+        /// Defaults to `{ false }` so hermetic unit tests never trip the preflight;
+        /// `.live()` wires it to the real AX dialog probe.
+        var dialogPresent: @Sendable () -> Bool = { false }
 
         static func live() -> Options {
             Options(
@@ -91,7 +95,8 @@ enum ProjectExportExecutor {
                 pollIntervalNanos: defaultPollIntervalNanos,
                 sleep: { try? await Task.sleep(nanoseconds: $0) },
                 minimumDurationSeconds: 0.05,
-                bounceToPath: { artifactPath in await ProjectExportExecutor.runBounceHelper(artifactPath: artifactPath) }
+                bounceToPath: { artifactPath in await ProjectExportExecutor.runBounceHelper(artifactPath: artifactPath) },
+                dialogPresent: { AXLogicProElements.dialogPresent() }
             )
         }
     }
@@ -193,6 +198,32 @@ enum ProjectExportExecutor {
                 identityVerified: false,
                 opened: false,
                 artifacts: preflightArtifacts.compactMap(\.self)
+            )
+        }
+
+        // (3a-pre) audit P2 #18 — dialog preflight for the per-project batch open.
+        // The dispatcher checks once before the batch, but a modal (a prior
+        // project's save/bounce sheet, a crash dialog) can appear mid-batch;
+        // driving `project.open` through it is unsafe. Fail closed for every
+        // pending artifact instead — mirrors the project_invalid / open_failed
+        // fail-closed shape below.
+        if options.dialogPresent() {
+            let arts = zip(project.expectedArtifacts, preflightArtifacts).map { pair -> RunArtifact in
+                let (artifact, preflight) = pair
+                if let preflight { return preflight }
+                return failedArtifact(
+                    artifact,
+                    error: "blocking_dialog_present: refused project.open while a modal Logic dialog/sheet is present"
+                )
+            }
+            return RunProject(
+                index: project.index,
+                projectPath: project.projectPath,
+                displayName: project.displayName,
+                observedProjectPath: nil,
+                identityVerified: false,
+                opened: false,
+                artifacts: arts
             )
         }
 
