@@ -49,3 +49,9 @@
 
 - **PHASE-1 COMPLETE: 7/7 integrated** (ws1/2/3/4/5/6/7), fix branch 2052 green, all merges conflict-0. Final WS4 (SIGPIPE P0 + ResourceHandlers/record_sequence splits + AC5 marker pre-poll).
 - Next: WS8 (test integrity, sequential 8c→8a→8b) + WS6 follow-up (HandshakeResult/parseDeviceResponse + MCUProtocolTests deletion). Then WS9 docs → boomer final full-diff review → v3.8.0 release.
+
+## LIVE E2E (fix-branch binary, all 7 WS integrated, Logic 12.3) — 2026-07-05
+- strict live suite (Scripts/live-e2e-test.sh, LOGIC_PRO_MCP_STRICT_LIVE=1): **372 passed, 1 skipped, 373 total — ALL PASS** (baseline 369/370; 0 regression). First run hit an environmental fresh-bootstrap transient (stale blocking dialog); clean re-run all-green.
+- extractTrackState honesty (WS3 AC2 live-verify, was deferred): logic://tracks track 0 reports REAL header values volume=0.758, pan=0.0079, automationMode=off (NOT fabricated 0.0/0.0/off — pan≠0 proves live AX read). Value-only, TrackState shape unchanged.
+- permission tri-state (WS5 G6-a): host is genuinely granted → granted shown; notVerifiable/notGranted paths unit-pinned (PermissionCheckerTriStateTests). No false NOT-GRANTED.
+- Conclusion: behavior-preserving proven live (strict suite parity) + both intended honesty corrections verified on the real app.

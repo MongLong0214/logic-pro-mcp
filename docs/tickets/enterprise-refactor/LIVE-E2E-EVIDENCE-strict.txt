@@ -1,0 +1,40 @@
+  [0;32m✔[0m send chord (4 notes) completes
+
+[0;33m§17b Fresh Record Modal Guard[0m
+  [bootstrap] closing current Logic document without saving
+  [bootstrap] creating a fresh Logic document
+  [bootstrap] creating one fresh software-instrument track
+  [bootstrap] system.health unavailable: None
+  [0;32m✔[0m fresh record bootstrap detected
+  [0;32m✔[0m controller assignments Learn Mode guard is clear before fresh MIDI record
+  [0;32m✔[0m free tempo modal policy is recorded for fresh record flow
+  [0;32m✔[0m free tempo modal preflight is absent or dismissed
+  [0;32m✔[0m track 0 arms for fresh MIDI record pass
+  [0;32m✔[0m fresh MIDI record pass dispatches
+  [0;32m✔[0m free tempo modal is dismissed or absent after fresh record pass
+  [0;32m✔[0m fresh record final modal check is clear and policy provenance is explicit
+  [0;32m✔[0m fresh record flow clears modal handling and disarms track 0
+
+[0;33m§18 Performance[0m
+  [0;32m✔[0m health call < 3s (0.215s)
+  [0;32m✔[0m health call (cached) < 2s (0.216s)
+  [0;32m✔[0m tools/list < 0.5s (0.055s)
+  [0;32m✔[0m resource read < 2s (0.055s)
+  [0;32m✔[0m MIDI CC send < 0.5s (0.055s)
+
+[0;33m§19 Memory & Stability[0m
+  [0;32m✔[0m memory stable after 50 calls (95.4→95.5MB)
+  [0;32m✔[0m Logic Pro still running at end
+  [0;32m✔[0m server responsive at end
+
+[0;33m§20 Final Verification[0m
+  [0;32m✔[0m final health: all permissions granted
+  [0;32m✔[0m final health: channels report started
+
+══════════════════════════════════════════════════════
+ [0;32m✔ All executed tests passed[0m — 372 passed, 1 skipped, 373 total
+
+Skipped live-gated checks:
+  [0;36m↷[0m pipelined concurrent large reads (#220) — popen transport only
+══════════════════════════════════════════════════════
+
