@@ -1008,7 +1008,6 @@ actor ProductionMCUTransport: MCUTransportProtocol {
     private let portManager: any VirtualPortManaging
     private let packetSink: @Sendable (MIDIEndpointRef, [UInt8]) -> Void
     private var port: MIDIPortManager.MIDIPortPair?
-    private var onReceive: (@Sendable (MIDIFeedback.Event) -> Void)?
 
     init(
         portManager: any VirtualPortManaging,
@@ -1028,10 +1027,8 @@ actor ProductionMCUTransport: MCUTransportProtocol {
     }
 
     func start(onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void) async throws {
-        self.onReceive = onReceive
         do {
-            port = try await portManager.createBidirectionalPort(name: "LogicProMCP-MCU-Internal") { [weak self] eventList, _ in
-                guard let self else { return }
+            port = try await portManager.createBidirectionalPort(name: "LogicProMCP-MCU-Internal") { eventList, _ in
                 // Parse UMP event list → MIDI 1.0 bytes → MIDIFeedback.Event
                 // Use original eventList pointer (not a stack copy) for safe traversal
                 let numPackets = Int(eventList.pointee.numPackets)
@@ -1046,9 +1043,17 @@ actor ProductionMCUTransport: MCUTransportProtocol {
                             Array(raw.prefix(wordCount * 4))
                         }
                         MCUTrace.emit(.rx, bytes)
-                        let events = MIDIFeedback.parseBytes(bytes)
-                        for event in events {
-                            Task { [weak self] in await self?.onReceive?(event) }
+                        // v3.8.0 (WS6 / AC1) — deliver each parsed event to the
+                        // sink SYNCHRONOUSLY in arrival order. The previous
+                        // per-event `Task { self.onReceive?(event) }` hop
+                        // admitted events out of order (the 2-site race). The
+                        // sink is the MCU channel's AsyncStream yield — Sendable
+                        // and safe to call from this real-time callback. Late
+                        // packets after stop() are dropped by the channel
+                        // finishing its stream, so no local receive-gate is
+                        // needed here.
+                        for event in MIDIFeedback.parseBytes(bytes) {
+                            onReceive(event)
                         }
                     }
                     packetPtr = UnsafePointer(MIDIEventPacketNext(packetPtr))
@@ -1062,11 +1067,6 @@ actor ProductionMCUTransport: MCUTransportProtocol {
 
     func stop() async {
         port = nil
-        // Phase 6 P2: drop the receive sink so a late inbound packet (the
-        // MIDIPortManager destination callback can outlive `port = nil` until
-        // portManager teardown) cannot deliver feedback into the cache after
-        // the channel has stopped.
-        onReceive = nil
     }
 }
 

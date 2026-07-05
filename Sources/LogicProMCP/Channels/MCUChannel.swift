@@ -36,6 +36,15 @@ actor MCUChannel: Channel {
     private var bankingQueue: [CheckedContinuation<Void, Never>] = []
     private var isBanking: Bool = false
 
+    // v3.8.0 (WS6 / AC1) — the single ordered feedback consumer. Feedback is
+    // yielded synchronously (FIFO) into `feedbackContinuation` by the
+    // transport's receive callback and drained in arrival order by exactly one
+    // long-lived `feedbackTask` created in start() and cancelled in stop().
+    // This replaces the two per-event `Task {}` fan-outs (this channel +
+    // ProductionMCUTransport) that let an actor admit events out of order.
+    private var feedbackContinuation: AsyncStream<MIDIFeedback.Event>.Continuation?
+    private var feedbackTask: Task<Void, Never>?
+
     // v3.1.0 (T4) — configurable echo-timeout for fader/V-Pot read-back.
     // MCU feedback timing varies by project load + Logic build; 500ms is
     // the empirical default. Override via `MCU_ECHO_TIMEOUT_MS` (250/500/1000).
@@ -170,35 +179,66 @@ actor MCUChannel: Channel {
     }
 
     func start() async throws {
+        // Defensively tear down any prior session so start-stop-start (and an
+        // accidental double-start) always runs on a fresh ordered stream.
+        feedbackContinuation?.finish()
+        feedbackTask?.cancel()
+
         // Pass bank offset getter to feedback parser
         await feedbackParser.setBankOffsetProvider { [weak self] in
             await self?.currentBank ?? 0
         }
 
-        try await transport.start { [weak self] event in
-            guard let self else { return }
-            Task { await self.receiveFeedback(event) }
+        // v3.8.0 (WS6 / AC1) — one ordered, single-consumer AsyncStream
+        // replaces the two per-event `Task {}` fan-outs. `.unbounded` so no
+        // echo is dropped under a burst; the drain task processes events
+        // strictly in arrival order. Mirrors MIDIEngine.inboundMessages.
+        let (stream, continuation) = AsyncStream<MIDIFeedback.Event>.makeStream(
+            bufferingPolicy: .unbounded
+        )
+        feedbackContinuation = continuation
+        feedbackTask = Task { [weak self] in
+            for await event in stream {
+                await self?.receiveFeedback(event)
+            }
+        }
+
+        // The transport hands each parsed event to this sink synchronously in
+        // arrival order — a plain `continuation.yield` with NO per-event Task,
+        // so FIFO is preserved end-to-end. `continuation` is captured by value;
+        // once stop() finishes it, any late yield is a no-op (post-stop
+        // feedback is dropped rather than mutating the cache).
+        try await transport.start { event in
+            continuation.yield(event)
         }
 
         // Handshake: send Device Query
         let query = MCUProtocol.encodeDeviceQuery()
         await transport.send(query)
 
-        var conn = await cache.getMCUConnection()
-        conn.isConnected = false
-        conn.registeredAsDevice = false
-        conn.lastFeedbackAt = nil
-        conn.portName = "LogicProMCP-MCU-Internal"
-        await cache.updateMCUConnection(conn)
+        await cache.updateMCUConnection { conn in
+            conn.isConnected = false
+            conn.registeredAsDevice = false
+            conn.lastFeedbackAt = nil
+            conn.portName = "LogicProMCP-MCU-Internal"
+        }
 
         Log.info("MCU Channel started, handshake query sent; waiting for feedback", subsystem: "mcu")
     }
 
     func stop() async {
         await transport.stop()
-        var conn = await cache.getMCUConnection()
-        conn.isConnected = false
-        await cache.updateMCUConnection(conn)
+        // Tear down the ordered consumer. Finishing the continuation ends the
+        // drain loop once its buffer empties; cancel() stops it promptly and
+        // guarantees any feedback arriving after stop() is dropped, not
+        // applied to the cache.
+        feedbackContinuation?.finish()
+        feedbackTask?.cancel()
+        feedbackContinuation = nil
+        feedbackTask = nil
+        await cache.updateMCUConnection { conn in
+            conn.isConnected = false
+        }
         Log.info("MCU Channel stopped", subsystem: "mcu")
     }
 
