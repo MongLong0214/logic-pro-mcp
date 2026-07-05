@@ -67,6 +67,14 @@ Enable Accessibility for the launcher app in **System Settings -> Privacy & Secu
 
 Launch Logic Pro once, then grant Automation access for the launcher app under **Privacy & Security -> Automation -> Logic Pro**.
 
+`--check-permissions`, `logic_system health`, and `doctor` report Automation as one of three states — read them differently:
+
+- **`not_granted`**: the probe ran and macOS denied it. Grant Automation as above.
+- **`not_verifiable`**: the probe itself could not complete (it timed out or failed to spawn). This is an infrastructure failure, **not** a denial — do not assume the permission is missing. Re-run the check on a responsive session; if it persists, investigate what is blocking the probe (a wedged Logic UI, a stuck modal, or a sandbox that prevents spawning `osascript`) rather than re-granting an already-correct permission.
+- **`granted`**: verified working.
+
+(Before v3.8.0 a `not_verifiable` outcome was mis-reported as a false "Automation NOT GRANTED".)
+
 ## Logic Pro State
 
 ### Health says Logic is not ready
@@ -97,7 +105,7 @@ Logic accepted the host write path but did not echo enough feedback for MCU veri
 
 ### Mixer values do not update
 
-Read `logic://mixer` after the write. `set_volume` and `set_pan` use visible-strip AX readback; master/send-style MCU paths depend on MCU feedback.
+Read `logic://mixer` after the write. `set_volume` and `set_pan` use visible-strip AX readback; `set_master_volume` depends on MCU feedback. `set_send` is not exposed (State C `command_not_exposed`), so there is no send write to verify.
 
 ## MIDI
 

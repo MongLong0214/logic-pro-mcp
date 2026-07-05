@@ -14,7 +14,7 @@
   <a href="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml"><img src="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
   <a href="https://discord.gg/4M3s79DBzz"><img src="https://img.shields.io/badge/Discord-Community-5865F2.svg?style=flat-square&logo=discord&logoColor=white" /></a>
-  <img src="https://img.shields.io/badge/tests-1933_passing-brightgreen.svg?style=flat-square" />
+  <img src="https://img.shields.io/badge/tests-2070_passing-brightgreen.svg?style=flat-square" />
   <img src="https://img.shields.io/badge/stable-v3.7.4-blue.svg?style=flat-square" />
 </p>
 
@@ -57,7 +57,7 @@ Logic Pro MCP: region imported, instrument routed, readback exposed through reso
 | Read resources | 18 static resources for health, transport, tracks, mixer, markers, project metadata, project audit/cleanup planning, MIDI ports, MCU state, library inventory, stock plugin/instrument intelligence, Session Players, and workflow skills |
 | Resource templates | 11 templates for track, region, mixer-strip, stock plugin detail/search, stock instrument detail/search, Session Player detail, session-plan dry run, and workflow detail/search lookup |
 | Control channels | MCU, Accessibility, AppleScript, CoreMIDI, CGEvent, Scripter, MIDI Key Commands |
-| Verification line | Current source tree: `1933` Swift tests, release build, and strict fresh live Logic E2E `352/352` |
+| Verification line | Current source tree (v3.8.0 development line): `2070` Swift tests, release build, and strict fresh live Logic E2E `372/373` (372 passed / 1 skipped) |
 | Release state | Published stable `v3.7.4`; previous stable `v3.7.3` remains available for pinned installs |
 | Community layer | Official Discord for setup support, release notes, reproducible bug triage, product requests, demos, and contributor discussion |
 
@@ -88,7 +88,7 @@ Logic Pro MCP uses a different model. It routes each operation to the strongest 
 | Transport | Play, stop, record, locate, cycle, metronome, tempo | CoreMIDI/AX routing with live `logic://transport/state` readback |
 | Tracks | Create, delete, duplicate, select, rename, mute, solo, arm, set instruments | Mutating targets require explicit index/name; uncertain selection fails closed before writes |
 | MIDI composition | Generate SMF server-side, import MIDI, send notes/CC/MMC, create virtual ports | `.mid` imports are constrained to server-managed temp files and must create a live track |
-| Mixer | Volume, pan, plugin snapshots, guarded stock plugin insertion | AX writes with same-surface readback for volume/pan (since #83); MCU writes for master/send; occupied plugin slots refuse replacement |
+| Mixer | Volume, pan, plugin snapshots, guarded stock plugin insertion | AX writes with same-surface readback for volume/pan (since #83); `set_master_volume` uses MCU echo; `set_send` is not exposed (State C `command_not_exposed`); occupied plugin slots refuse replacement |
 | Library | Scan Logic's instrument library and load patches by path | Disk/AX inventory is cached; disk scan dedupes user/app-bundle `.patch` candidates and `resolve_path` classifies kind/source/loadable before `set_instrument` |
 | Navigation | Bars, markers, zoom, view toggles | Marker navigation is target-faithful; cold-cache misses return failure instead of "next marker" |
 | Project lifecycle | New, open, save, save-as, close, bounce, export plan, quit | Destructive operations require confirmation; dry-run export plans do not open Logic or write artifacts |
@@ -230,12 +230,12 @@ The public docs tree is intentionally scoped: setup, API, troubleshooting, READM
 
 | Gate | Current evidence |
 |------|------------------|
-| Full deterministic suite | Current source tree: `swift test` -> `1933` passed, `0` failed |
+| Full deterministic suite | Current source tree: `swift test --no-parallel` -> `2070` passed, `0` failed |
 | Release build | Current source tree: `swift build -c release` passed |
 | Python E2E syntax | PR #24 verification: `python3 -m py_compile Scripts/live-e2e-test.py` passed |
 | Targeted live plugin proof | Logic Pro 12.2: `logic_plugins.insert_verified track=6 insert=6 plugin=Gain` returned State A with `observed_slot:6`, `write_source:"ax_exact_slot_popup"`, and independent `get_inventory` readback |
 | Track/transport readback proof | Logic Pro 12.2: `logic://tracks` returned `source:"ax_live"`, real names, `placeholder_count:0`, `unknown_type_count:0`; cycle toggle/resource roundtrip reflected live UI state |
-| Strict live Logic Pro 12.2 | Current source tree strict fresh live E2E: `352` passed / `0` skipped / `0` failed |
+| Strict live Logic Pro 12.3 | Current source tree strict fresh live E2E: `372` passed / `1` skipped / `0` failed (`373` total) |
 | README media | Actual Logic Pro 12.2 capture derivatives are published under `docs/media/` |
 | v3.7.4 release evidence | GitHub Release, Actions logs, and [CHANGELOG.md](CHANGELOG.md) |
 

@@ -96,7 +96,7 @@ Destructive project operations (`quit`, `close`, `open`, `save_as`, `bounce`) re
 
 ### Verified plugin apply-back gate
 
-`logic_plugins` is the v3.6.0+ verified apply-back surface and remains unchanged as a security boundary in v3.7.0. Its mutating commands (`insert_verified`, `set_param_verified`) are scoped to `mode:"duplicate_applyback"` and require an explicit `project_expected_path`. The server reads the live front Logic project path at call time and returns State C `project_identity_mismatch` before any write if the document changed.
+`logic_plugins` is the v3.6.0+ verified apply-back surface and remains unchanged as a security boundary in v3.8.0. Its mutating commands (`insert_verified`, `set_param_verified`) are scoped to `mode:"duplicate_applyback"` and require an explicit `project_expected_path`. The server reads the live front Logic project path at call time and returns State C `project_identity_mismatch` before any write if the document changed.
 
 The insert path is fail-closed:
 
@@ -118,6 +118,10 @@ LogicProMCP --approve-channel Scripter
 ```
 
 Approvals are persisted in `~/Library/Application Support/LogicProMCP/operator-approvals.json`. Without approval, `ChannelRouter` skips those channels (they report `manual_validation_required`) and falls back.
+
+### Permission verification honesty (tri-state)
+
+`--check-permissions`, `logic_system health`, and `doctor` report each TCC grant as a **three-state** value — `granted`, `not_granted`, or `not_verifiable` — rather than a Bool. This is a deliberate fail-closed-vs-honest distinction: a probe that *ran and was denied* reports `not_granted`, but a probe that could not complete (it timed out or failed to spawn) reports `not_verifiable` — an infrastructure failure is **not** the same as a denial. Collapsing the latter into a false "Automation NOT GRANTED" (the pre-v3.8.0 behavior) would have misdirected an operator into re-granting an already-correct permission while hiding the real fault. Security posture: the readiness gate still refuses to report green for a capability the server cannot use, but it never fabricates a denial it did not observe.
 
 ### Graceful shutdown
 
@@ -220,6 +224,10 @@ bash Scripts/install.sh
 ```
 
 For the strongest guarantee, enterprise deployments should pin the hash in a configuration management system (Jamf profile, Ansible vault, MDM), not trust the GitHub-hosted `SHA256SUMS.txt` as the root of trust.
+
+### Notarization posture (M3)
+
+An ADHOC release gives **integrity, not authenticity**. `codesign --verify --strict` plus the pinned SHA256 prove the binary was not altered after signing or in transit, but an adhoc signature (`codesign --sign -`) carries no Apple-verified identity — anyone can produce one, so it does not attest *who* built the artifact. Therefore, on the ADHOC line, the only enterprise-grade install is an **out-of-band-pinned** one: supply `LOGIC_PRO_MCP_SHA256` and `LOGIC_PRO_MCP_TEAM_ID` from a trusted second channel (Homebrew tap, corporate vault, MDM profile) so the root of trust is not the same GitHub release surface being verified. A notarized path exists in the release workflow and is used automatically when Apple Developer ID credentials are configured; when they are absent the project ships ADHOC by design. (The release-signing decision may be revisited in a future release-preparation pass.)
 
 ---
 
