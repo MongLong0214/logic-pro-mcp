@@ -42,16 +42,6 @@ private func addOccupiedSlot(_ b: FakeAXRuntimeBuilder, _ id: Int, name: String?
     return group
 }
 
-private func axPoint(_ x: CGFloat, _ y: CGFloat) -> AXValue {
-    var point = CGPoint(x: x, y: y)
-    return AXValueCreate(.cgPoint, &point)!
-}
-
-private func axSize(_ width: CGFloat, _ height: CGFloat) -> AXValue {
-    var size = CGSize(width: width, height: height)
-    return AXValueCreate(.cgSize, &size)!
-}
-
 private func addMenu(_ b: FakeAXRuntimeBuilder, _ id: Int, children: [AXUIElement] = []) -> AXUIElement {
     let menu = b.element(id)
     b.setAttribute(menu, kAXRoleAttribute as String, kAXMenuRole as String)

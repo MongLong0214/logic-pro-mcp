@@ -75,13 +75,11 @@ struct Issue112CommandDeadlineTests {
     }
 
     private func text(_ result: CallTool.Result) -> String {
-        if case .text(let t, _, _) = result.content.first { return t }
-        return ""
+        sharedToolText(result)
     }
 
     private func json(_ result: CallTool.Result) -> [String: Any]? {
-        guard let data = text(result).data(using: .utf8) else { return nil }
-        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        sharedJSONObject(text(result))
     }
 
     @Test("fast work passes through unchanged")

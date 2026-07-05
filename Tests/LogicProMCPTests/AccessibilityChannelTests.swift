@@ -36,16 +36,6 @@ private func midiRegionForImport(trackIndex: Int) -> RegionInfo {
     )
 }
 
-private func axPoint(_ x: CGFloat, _ y: CGFloat) -> AXValue {
-    var point = CGPoint(x: x, y: y)
-    return AXValueCreate(.cgPoint, &point)!
-}
-
-private func axSize(_ width: CGFloat, _ height: CGFloat) -> AXValue {
-    var size = CGSize(width: width, height: height)
-    return AXValueCreate(.cgSize, &size)!
-}
-
 private final class AccessibilityRuntimeRecorder: @unchecked Sendable {
     var transportButtons: [String] = []
     var tempoParams: [[String: String]] = []
@@ -626,16 +616,6 @@ private func makeSetInstrumentFixture() -> (
 }
 
 @Test func testAccessibilityChannelAXBackedRegionReadReturnsParsedRegions() async throws {
-    func axPoint(_ x: CGFloat, _ y: CGFloat) -> AXValue {
-        var point = CGPoint(x: x, y: y)
-        return AXValueCreate(.cgPoint, &point)!
-    }
-
-    func axSize(_ width: CGFloat, _ height: CGFloat) -> AXValue {
-        var size = CGSize(width: width, height: height)
-        return AXValueCreate(.cgSize, &size)!
-    }
-
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(800)
     let window = builder.element(801)

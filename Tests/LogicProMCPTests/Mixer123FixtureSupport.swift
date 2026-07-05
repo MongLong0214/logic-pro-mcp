@@ -21,71 +21,6 @@ struct Mixer123Fixture {
     let toolbar: AXUIElement?
 }
 
-private func axPoint(_ x: CGFloat, _ y: CGFloat) -> AXValue {
-    var point = CGPoint(x: x, y: y)
-    return AXValueCreate(.cgPoint, &point)!
-}
-
-private func axSize(_ width: CGFloat, _ height: CGFloat) -> AXValue {
-    var size = CGSize(width: width, height: height)
-    return AXValueCreate(.cgSize, &size)!
-}
-
-private func setFrame(
-    _ builder: FakeAXRuntimeBuilder,
-    _ element: AXUIElement,
-    x: CGFloat,
-    y: CGFloat,
-    width: CGFloat,
-    height: CGFloat
-) {
-    builder.setAttribute(element, kAXPositionAttribute as String, axPoint(x, y))
-    builder.setAttribute(element, kAXSizeAttribute as String, axSize(width, height))
-}
-
-private func setRole(
-    _ builder: FakeAXRuntimeBuilder,
-    _ element: AXUIElement,
-    _ role: String
-) {
-    builder.setAttribute(element, kAXRoleAttribute as String, role)
-}
-
-private func setNamedContainer(
-    _ builder: FakeAXRuntimeBuilder,
-    _ element: AXUIElement,
-    role: String,
-    description: String,
-    x: CGFloat,
-    y: CGFloat,
-    width: CGFloat,
-    height: CGFloat
-) {
-    setRole(builder, element, role)
-    builder.setAttribute(element, kAXDescriptionAttribute as String, description)
-    setFrame(builder, element, x: x, y: y, width: width, height: height)
-}
-
-private func setButton(
-    _ builder: FakeAXRuntimeBuilder,
-    _ element: AXUIElement,
-    description: String? = nil,
-    title: String? = nil,
-    help: String? = nil,
-    value: Any? = nil,
-    x: CGFloat,
-    y: CGFloat,
-    width: CGFloat,
-    height: CGFloat
-) {
-    setRole(builder, element, kAXButtonRole as String)
-    if let description { builder.setAttribute(element, kAXDescriptionAttribute as String, description) }
-    if let title { builder.setAttribute(element, kAXTitleAttribute as String, title) }
-    if let help { builder.setAttribute(element, kAXHelpAttribute as String, help) }
-    if let value { builder.setAttribute(element, kAXValueAttribute as String, value) }
-    setFrame(builder, element, x: x, y: y, width: width, height: height)
-}
-
 private func makeToolbar(
     _ builder: FakeAXRuntimeBuilder,
     baseID: Int,
@@ -101,8 +36,7 @@ private func makeToolbar(
     let filter = builder.element(baseID + 13)
     let widthMode = builder.element(baseID + 22)
 
-    setNamedContainer(
-        builder,
+    builder.setNamedContainer(
         toolbar,
         role: kAXGroupRole as String,
         description: mixerDescription,
@@ -111,8 +45,7 @@ private func makeToolbar(
         width: 1317,
         height: 37
     )
-    setButton(
-        builder,
+    builder.setButton(
         leaveFolder,
         description: "Leave Folder",
         help: "Leave Folder",
@@ -122,19 +55,19 @@ private func makeToolbar(
         height: 23
     )
 
-    setRole(builder, segments, kAXGroupRole as String)
-    setFrame(builder, segments, x: 653, y: 413, width: 213, height: 23)
+    builder.setRole(segments, kAXGroupRole as String)
+    builder.setFrame(segments, x: 653, y: 413, width: 213, height: 23)
     let segmentButtons = (0..<3).map { builder.element(baseID + 3 + $0) }
     for (button, title) in zip(segmentButtons, ["Edit", "Options", "View"]) {
-        setButton(builder, button, title: title, x: 653, y: 413, width: 71, height: 23)
+        builder.setButton(button, title: title, x: 653, y: 413, width: 71, height: 23)
     }
     builder.setChildren(segments, segmentButtons)
 
-    setRole(builder, staticText, kAXStaticTextRole as String)
+    builder.setRole(staticText, kAXStaticTextRole as String)
     builder.setAttribute(staticText, kAXValueAttribute as String, "Sends on Faders:")
-    setFrame(builder, staticText, x: 873, y: 413, width: 107, height: 25)
+    builder.setFrame(staticText, x: 873, y: 413, width: 107, height: 25)
 
-    setRole(builder, sendsOnFaders, kAXCheckBoxRole as String)
+    builder.setRole(sendsOnFaders, kAXCheckBoxRole as String)
     builder.setAttribute(sendsOnFaders, kAXTitleAttribute as String, "Sends on Faders:")
     builder.setAttribute(
         sendsOnFaders,
@@ -142,38 +75,38 @@ private func makeToolbar(
         "Sends on Faders - On/Off. Swaps the Pan knob and Fader on channel strips."
     )
     builder.setAttribute(sendsOnFaders, kAXValueAttribute as String, 0)
-    setFrame(builder, sendsOnFaders, x: 981, y: 413, width: 32, height: 23)
+    builder.setFrame(sendsOnFaders, x: 981, y: 413, width: 32, height: 23)
 
-    setRole(builder, popup, kAXPopUpButtonRole as String)
+    builder.setRole(popup, kAXPopUpButtonRole as String)
     builder.setAttribute(
         popup,
         kAXHelpAttribute as String,
         "Off, Sends on Faders pop-up menu. Assigns the Pan knob and Fader on channel strips."
     )
     builder.setAttribute(popup, kAXValueAttribute as String, "Off")
-    setFrame(builder, popup, x: 1013, y: 413, width: 118, height: 23)
+    builder.setFrame(popup, x: 1013, y: 413, width: 118, height: 23)
 
-    setRole(builder, viewMode, kAXRadioGroupRole as String)
-    setFrame(builder, viewMode, x: 1175, y: 413, width: 172, height: 23)
+    builder.setRole(viewMode, kAXRadioGroupRole as String)
+    builder.setFrame(viewMode, x: 1175, y: 413, width: 172, height: 23)
     let viewButtons = (0..<3).map { builder.element(baseID + 10 + $0) }
     for (button, title) in zip(viewButtons, ["Single", "Tracks", "All"]) {
-        setButton(builder, button, title: title, x: 1175, y: 413, width: 57, height: 23)
+        builder.setButton(button, title: title, x: 1175, y: 413, width: 57, height: 23)
     }
     builder.setChildren(viewMode, viewButtons)
 
-    setRole(builder, filter, kAXGroupRole as String)
-    setFrame(builder, filter, x: 1359, y: 412, width: 481, height: 23)
+    builder.setRole(filter, kAXGroupRole as String)
+    builder.setFrame(filter, x: 1359, y: 412, width: 481, height: 23)
     let filterButtons = (0..<8).map { builder.element(baseID + 14 + $0) }
     for (offset, button) in filterButtons.enumerated() {
-        setButton(builder, button, title: "Filter \(offset + 1)", x: 1359, y: 412, width: 60, height: 23)
+        builder.setButton(button, title: "Filter \(offset + 1)", x: 1359, y: 412, width: 60, height: 23)
     }
     builder.setChildren(filter, filterButtons)
 
-    setRole(builder, widthMode, kAXRadioGroupRole as String)
-    setFrame(builder, widthMode, x: 1845, y: 412, width: 67, height: 23)
+    builder.setRole(widthMode, kAXRadioGroupRole as String)
+    builder.setFrame(widthMode, x: 1845, y: 412, width: 67, height: 23)
     let widthButtons = (0..<2).map { builder.element(baseID + 23 + $0) }
     for (button, title) in zip(widthButtons, ["Narrow", "Wide"]) {
-        setButton(builder, button, title: title, x: 1845, y: 412, width: 33, height: 23)
+        builder.setButton(button, title: title, x: 1845, y: 412, width: 33, height: 23)
     }
     builder.setChildren(widthMode, widthButtons)
 
@@ -197,9 +130,9 @@ private func makeSimpleStrip(
     x: CGFloat
 ) -> AXUIElement {
     let strip = builder.element(id)
-    setRole(builder, strip, kAXLayoutItemRole as String)
+    builder.setRole(strip, kAXLayoutItemRole as String)
     builder.setAttribute(strip, kAXDescriptionAttribute as String, name)
-    setFrame(builder, strip, x: x, y: 442, width: 67, height: 623)
+    builder.setFrame(strip, x: x, y: 442, width: 67, height: 623)
     return strip
 }
 
@@ -218,11 +151,10 @@ func make123MixerFixture(
     let toolbar = makeToolbar(builder, baseID: 100, mixerDescription: mixerDescription)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
-    setRole(builder, window, kAXWindowRole as String)
+    builder.setRole(window, kAXWindowRole as String)
     builder.setChildren(window, [outer])
 
-    setNamedContainer(
-        builder,
+    builder.setNamedContainer(
         outer,
         role: kAXGroupRole as String,
         description: mixerDescription,
@@ -231,11 +163,10 @@ func make123MixerFixture(
         width: 1317,
         height: 675
     )
-    setRole(builder, content, kAXGroupRole as String)
-    setFrame(builder, content, x: 603, y: 442, width: 1317, height: 638)
+    builder.setRole(content, kAXGroupRole as String)
+    builder.setFrame(content, x: 603, y: 442, width: 1317, height: 638)
 
-    setNamedContainer(
-        builder,
+    builder.setNamedContainer(
         layoutArea,
         role: axLayoutAreaRole,
         description: mixerDescription,
@@ -277,10 +208,9 @@ func make122MixerFixture(stripCount: Int = 3) -> Mixer123Fixture {
     let layoutArea = builder.element(23)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
-    setRole(builder, window, kAXWindowRole as String)
+    builder.setRole(window, kAXWindowRole as String)
     builder.setChildren(window, [mixerGroup])
-    setNamedContainer(
-        builder,
+    builder.setNamedContainer(
         mixerGroup,
         role: kAXGroupRole as String,
         description: "Mixer",
@@ -289,8 +219,7 @@ func make122MixerFixture(stripCount: Int = 3) -> Mixer123Fixture {
         width: 1317,
         height: 675
     )
-    setNamedContainer(
-        builder,
+    builder.setNamedContainer(
         layoutArea,
         role: axLayoutAreaRole,
         description: "Mixer",
@@ -326,10 +255,9 @@ func makeInspectorOnly123Runtime() -> AXLogicProElements.Runtime {
     ]
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
-    setRole(builder, window, kAXWindowRole as String)
+    builder.setRole(window, kAXWindowRole as String)
     builder.setChildren(window, [inspector])
-    setNamedContainer(
-        builder,
+    builder.setNamedContainer(
         inspector,
         role: kAXGroupRole as String,
         description: "Inspector",
@@ -338,8 +266,7 @@ func makeInspectorOnly123Runtime() -> AXLogicProElements.Runtime {
         width: 603,
         height: 1080
     )
-    setNamedContainer(
-        builder,
+    builder.setNamedContainer(
         inspectorWrapper,
         role: kAXGroupRole as String,
         description: "Mixer",
@@ -348,8 +275,7 @@ func makeInspectorOnly123Runtime() -> AXLogicProElements.Runtime {
         width: 235,
         height: 685
     )
-    setNamedContainer(
-        builder,
+    builder.setNamedContainer(
         inspectorLayout,
         role: axLayoutAreaRole,
         description: "Mixer",
@@ -392,76 +318,75 @@ func makeLiveDumpStrip(_ builder: FakeAXRuntimeBuilder, id: Int) -> AXUIElement 
     let gainReduction = builder.element(id + 23)
     let setting = builder.element(id + 24)
 
-    setRole(builder, strip, kAXLayoutItemRole as String)
+    builder.setRole(strip, kAXLayoutItemRole as String)
     builder.setAttribute(strip, kAXDescriptionAttribute as String, "Deluxe Classic")
-    setFrame(builder, strip, x: 695, y: 442, width: 67, height: 623)
+    builder.setFrame(strip, x: 695, y: 442, width: 67, height: 623)
 
-    setRole(builder, name, kAXTextFieldRole as String)
+    builder.setRole(name, kAXTextFieldRole as String)
     builder.setAttribute(name, kAXDescriptionAttribute as String, "name")
     builder.setAttribute(name, kAXHelpAttribute as String, "Name field. Double-click to rename the channel strip. ")
     builder.setAttribute(name, kAXValueAttribute as String, "Deluxe Classic")
-    setFrame(builder, name, x: 695, y: 1029, width: 66, height: 24)
+    builder.setFrame(name, x: 695, y: 1029, width: 66, height: 24)
 
-    setButton(builder, mute, description: "mute", help: "Mute button. Silence a channel strip so it’s no longer audible.", value: "off", x: 699, y: 1006, width: 28, height: 18)
+    builder.setButton(mute, description: "mute", help: "Mute button. Silence a channel strip so it’s no longer audible.", value: "off", x: 699, y: 1006, width: 28, height: 18)
     builder.setAttribute(mute, kAXSubroleAttribute as String, kAXSwitchSubrole as String)
-    setButton(builder, solo, description: "solo", help: "Solo button. Isolate a channel strip’s signal so that it can be heard.", value: "off", x: 729, y: 1006, width: 28, height: 18)
+    builder.setButton(solo, description: "solo", help: "Solo button. Isolate a channel strip’s signal so that it can be heard.", value: "off", x: 729, y: 1006, width: 28, height: 18)
     builder.setAttribute(solo, kAXSubroleAttribute as String, kAXSwitchSubrole as String)
 
-    setRole(builder, fader, kAXSliderRole as String)
+    builder.setRole(fader, kAXSliderRole as String)
     builder.setAttribute(fader, kAXDescriptionAttribute as String, "volume fader")
     builder.setAttribute(fader, kAXHelpAttribute as String, "Volume fader. Set a track’s playback volume.")
     builder.setAttribute(fader, kAXValueAttribute as String, 173)
-    setFrame(builder, fader, x: 702, y: 824, width: 20, height: 180)
-    setRole(builder, faderKnob, kAXValueIndicatorRole as String)
+    builder.setFrame(fader, x: 702, y: 824, width: 20, height: 180)
+    builder.setRole(faderKnob, kAXValueIndicatorRole as String)
     builder.setAttribute(faderKnob, kAXDescriptionAttribute as String, "fader knob")
-    setFrame(builder, faderKnob, x: 701, y: 858, width: 22, height: 46)
+    builder.setFrame(faderKnob, x: 701, y: 858, width: 22, height: 46)
     builder.setChildren(fader, [faderKnob])
 
-    setRole(builder, faderLevel, kAXTextFieldRole as String)
+    builder.setRole(faderLevel, kAXTextFieldRole as String)
     builder.setAttribute(faderLevel, kAXDescriptionAttribute as String, "volume fader level")
     builder.setAttribute(faderLevel, kAXTitleAttribute as String, "volume fader level, 0.0 dB")
-    setFrame(builder, faderLevel, x: 700, y: 805, width: 27, height: 18)
+    builder.setFrame(faderLevel, x: 700, y: 805, width: 27, height: 18)
 
-    setButton(builder, peak, description: "peak level meter", title: "peak level meter", help: "Peak Level display. Shows the signal peak during playback.", value: "signal clipping off", x: 729, y: 805, width: 27, height: 18)
+    builder.setButton(peak, description: "peak level meter", title: "peak level meter", help: "Peak Level display. Shows the signal peak during playback.", value: "signal clipping off", x: 729, y: 805, width: 27, height: 18)
 
-    setRole(builder, pan, kAXSliderRole as String)
+    builder.setRole(pan, kAXSliderRole as String)
     builder.setAttribute(pan, kAXDescriptionAttribute as String, "pan")
     builder.setAttribute(pan, kAXHelpAttribute as String, "Pan/Balance knob. Drag vertically to position the channel strip signal.")
     builder.setAttribute(pan, kAXValueAttribute as String, 0)
-    setFrame(builder, pan, x: 710, y: 763, width: 37, height: 37)
-    setRole(builder, panReadout, kAXStaticTextRole as String)
+    builder.setFrame(pan, x: 710, y: 763, width: 37, height: 37)
+    builder.setRole(panReadout, kAXStaticTextRole as String)
     builder.setAttribute(panReadout, kAXDescriptionAttribute as String, "knob readout")
-    setFrame(builder, panReadout, x: 710, y: 763, width: 37, height: 37)
+    builder.setFrame(panReadout, x: 710, y: 763, width: 37, height: 37)
     builder.setChildren(pan, [panReadout])
 
-    setNamedContainer(builder, automation, role: kAXGroupRole as String, description: "Read, automation enabled", x: 699, y: 701, width: 58, height: 18)
-    setRole(builder, automationCheck, kAXCheckBoxRole as String)
+    builder.setNamedContainer(automation, role: kAXGroupRole as String, description: "Read, automation enabled", x: 699, y: 701, width: 58, height: 18)
+    builder.setRole(automationCheck, kAXCheckBoxRole as String)
     builder.setAttribute(automationCheck, kAXDescriptionAttribute as String, "automation")
     builder.setAttribute(automationCheck, kAXValueAttribute as String, 1)
-    setFrame(builder, automationCheck, x: 699, y: 701, width: 20, height: 18)
-    setButton(builder, automationList, description: "list", x: 719, y: 701, width: 38, height: 18)
+    builder.setFrame(automationCheck, x: 699, y: 701, width: 20, height: 18)
+    builder.setButton(automationList, description: "list", x: 719, y: 701, width: 38, height: 18)
     builder.setChildren(automation, [automationCheck, automationList])
 
-    setRole(builder, group, kAXPopUpButtonRole as String)
+    builder.setRole(group, kAXPopUpButtonRole as String)
     builder.setAttribute(group, kAXDescriptionAttribute as String, "group")
     builder.setAttribute(group, kAXTitleAttribute as String, "group")
     builder.setAttribute(group, kAXHelpAttribute as String, "Group slot. Add the channel strip to a group.")
-    setFrame(builder, group, x: 700, y: 678, width: 56, height: 18)
+    builder.setFrame(group, x: 700, y: 678, width: 56, height: 18)
 
-    setButton(builder, output, description: "Stereo Output", help: "Output slot. Click and hold to choose the channel strip output destination.", x: 699, y: 655, width: 58, height: 18)
-    setButton(builder, send, description: "send button", help: "Send slot. Route the signal to an aux channel strip.", x: 699, y: 629, width: 40, height: 18)
+    builder.setButton(output, description: "Stereo Output", help: "Output slot. Click and hold to choose the channel strip output destination.", x: 699, y: 655, width: 58, height: 18)
+    builder.setButton(send, description: "send button", help: "Send slot. Route the signal to an aux channel strip.", x: 699, y: 629, width: 40, height: 18)
 
-    setNamedContainer(builder, occupied, role: kAXGroupRole as String, description: "Gain", x: 699, y: 559, width: 58, height: 18)
-    setRole(builder, bypass, kAXCheckBoxRole as String)
+    builder.setNamedContainer(occupied, role: kAXGroupRole as String, description: "Gain", x: 699, y: 559, width: 58, height: 18)
+    builder.setRole(bypass, kAXCheckBoxRole as String)
     builder.setAttribute(bypass, kAXDescriptionAttribute as String, "bypass")
     builder.setAttribute(bypass, kAXValueAttribute as String, 0)
-    setFrame(builder, bypass, x: 699, y: 559, width: 20, height: 18)
-    setButton(builder, open, description: "open", x: 719, y: 559, width: 21, height: 18)
-    setButton(builder, list, description: "list", x: 740, y: 559, width: 17, height: 18)
+    builder.setFrame(bypass, x: 699, y: 559, width: 20, height: 18)
+    builder.setButton(open, description: "open", x: 719, y: 559, width: 21, height: 18)
+    builder.setButton(list, description: "list", x: 740, y: 559, width: 17, height: 18)
     builder.setChildren(occupied, [bypass, open, list])
 
-    setButton(
-        builder,
+    builder.setButton(
         emptyAudioPlugin,
         description: "audio plug-in",
         help: "Audio Effect slot. Insert an audio effect. Click an occupied slot to open the plug-in.",
@@ -470,11 +395,11 @@ func makeLiveDumpStrip(_ builder: FakeAXRuntimeBuilder, id: Int) -> AXUIElement 
         width: 58,
         height: 18
     )
-    setButton(builder, midiPlugin, description: "MIDI plug-in", help: "MIDI Effect slot. Insert a MIDI effect. Click an occupied slot to open the plug-in.", x: 699, y: 533, width: 58, height: 18)
-    setButton(builder, eq, description: "EQ", help: "EQ display. Click to add a Channel EQ or open an inserted Channel or Linear Phase EQ.", value: "off", x: 699, y: 499, width: 58, height: 29)
-    setButton(builder, gainReduction, description: "gain reduction meter", help: "Gain reduction meter. Shows the gain reduction of the first Compressor.", value: "off", x: 699, y: 486, width: 58, height: 9)
+    builder.setButton(midiPlugin, description: "MIDI plug-in", help: "MIDI Effect slot. Insert a MIDI effect. Click an occupied slot to open the plug-in.", x: 699, y: 533, width: 58, height: 18)
+    builder.setButton(eq, description: "EQ", help: "EQ display. Click to add a Channel EQ or open an inserted Channel or Linear Phase EQ.", value: "off", x: 699, y: 499, width: 58, height: 29)
+    builder.setButton(gainReduction, description: "gain reduction meter", help: "Gain reduction meter. Shows the gain reduction of the first Compressor.", value: "off", x: 699, y: 486, width: 58, height: 9)
     builder.setAttribute(gainReduction, kAXSubroleAttribute as String, kAXSwitchSubrole as String)
-    setButton(builder, setting, description: "Deluxe Classic", help: "Setting button. Load and save channel strip settings, which contain settings for all plug-ins.", x: 699, y: 464, width: 58, height: 18)
+    builder.setButton(setting, description: "Deluxe Classic", help: "Setting button. Load and save channel strip settings, which contain settings for all plug-ins.", x: 699, y: 464, width: 58, height: 18)
 
     builder.setChildren(strip, [
         name,
@@ -506,31 +431,31 @@ func makeLiveDumpStrip(_ builder: FakeAXRuntimeBuilder, id: Int) -> AXUIElement 
 /// real insert section always exposes is absent (#234 honesty gate, EC-1/E2).
 func masterShapedStripChildren(_ builder: FakeAXRuntimeBuilder, base: Int) -> [AXUIElement] {
     let name = builder.element(base)
-    setRole(builder, name, kAXTextFieldRole as String)
+    builder.setRole(name, kAXTextFieldRole as String)
     builder.setAttribute(name, kAXDescriptionAttribute as String, "name")
 
     let mute = builder.element(base + 1)
-    setRole(builder, mute, kAXButtonRole as String)
+    builder.setRole(mute, kAXButtonRole as String)
     builder.setAttribute(mute, kAXDescriptionAttribute as String, "mute")
     builder.setAttribute(mute, kAXSubroleAttribute as String, kAXSwitchSubrole as String)
 
     let fader = builder.element(base + 2)
-    setRole(builder, fader, kAXSliderRole as String)
+    builder.setRole(fader, kAXSliderRole as String)
     builder.setAttribute(fader, kAXDescriptionAttribute as String, "volume fader")
 
     let automation = builder.element(base + 3)
     let automationCheck = builder.element(base + 4)
     let automationList = builder.element(base + 5)
-    setRole(builder, automation, kAXGroupRole as String)
+    builder.setRole(automation, kAXGroupRole as String)
     builder.setAttribute(automation, kAXDescriptionAttribute as String, "Read, automation enabled")
-    setRole(builder, automationCheck, kAXCheckBoxRole as String)
+    builder.setRole(automationCheck, kAXCheckBoxRole as String)
     builder.setAttribute(automationCheck, kAXDescriptionAttribute as String, "automation")
-    setRole(builder, automationList, kAXButtonRole as String)
+    builder.setRole(automationList, kAXButtonRole as String)
     builder.setAttribute(automationList, kAXDescriptionAttribute as String, "list")
     builder.setChildren(automation, [automationCheck, automationList])
 
     let group = builder.element(base + 6)
-    setRole(builder, group, kAXPopUpButtonRole as String)
+    builder.setRole(group, kAXPopUpButtonRole as String)
     builder.setAttribute(group, kAXDescriptionAttribute as String, "group")
 
     return [name, mute, fader, automation, group]

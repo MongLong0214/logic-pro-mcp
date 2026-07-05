@@ -13,16 +13,6 @@ import Testing
 
 // MARK: - Helpers
 
-private func axPoint(_ x: CGFloat, _ y: CGFloat) -> AXValue {
-    var p = CGPoint(x: x, y: y)
-    return AXValueCreate(.cgPoint, &p)!
-}
-
-private func axSize(_ w: CGFloat, _ h: CGFloat) -> AXValue {
-    var s = CGSize(width: w, height: h)
-    return AXValueCreate(.cgSize, &s)!
-}
-
 private func decodeJSON(_ s: String) -> [String: Any] {
     (try? JSONSerialization.jsonObject(with: Data(s.utf8))) as? [String: Any] ?? [:]
 }

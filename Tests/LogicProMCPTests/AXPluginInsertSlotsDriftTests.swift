@@ -40,16 +40,6 @@ private func addFader(_ builder: FakeAXRuntimeBuilder, _ id: Int) -> AXUIElement
     return el
 }
 
-private func axPoint(_ x: CGFloat, _ y: CGFloat) -> AXValue {
-    var point = CGPoint(x: x, y: y)
-    return AXValueCreate(.cgPoint, &point)!
-}
-
-private func axSize(_ width: CGFloat, _ height: CGFloat) -> AXValue {
-    var size = CGSize(width: width, height: height)
-    return AXValueCreate(.cgSize, &size)!
-}
-
 private func addFramedButton(
     _ builder: FakeAXRuntimeBuilder,
     _ id: Int,

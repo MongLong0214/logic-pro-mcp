@@ -50,11 +50,10 @@ struct Issue136GotoDriftHonestTests {
     }
 
     private func text(_ r: CallTool.Result) -> String {
-        if case .text(let t, _, _) = r.content.first { return t }
-        return ""
+        sharedToolText(r)
     }
     private func obj(_ r: CallTool.Result) -> [String: Any]? {
-        (try? JSONSerialization.jsonObject(with: Data(text(r).utf8))) as? [String: Any]
+        sharedJSONObject(text(r))
     }
 
     /// The dialog channel's real "keystroke sent; not read back" State B — the

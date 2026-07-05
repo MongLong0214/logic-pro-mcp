@@ -39,11 +39,10 @@ struct Issue108Tests {
     }
 
     private func text(_ r: CallTool.Result) -> String {
-        if case .text(let t, _, _) = r.content.first { return t }
-        return ""
+        sharedToolText(r)
     }
     private func obj(_ r: CallTool.Result) -> [String: Any]? {
-        (try? JSONSerialization.jsonObject(with: Data(text(r).utf8))) as? [String: Any]
+        sharedJSONObject(text(r))
     }
 
     @Test("mmc_locate(bar) verifies the playhead via transport-state read-back")
