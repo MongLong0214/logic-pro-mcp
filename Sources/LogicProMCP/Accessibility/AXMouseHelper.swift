@@ -116,12 +116,6 @@ enum AXMouseHelper {
         postKey(0x24, runtime: runtime)   // kVK_Return = 0x24
     }
 
-    /// Post a Delete/Backspace key tap. Used by inline text-edit flows after
-    /// the target control selects its existing contents on double-click.
-    static func pressDelete(runtime: Runtime = .production) {
-        postKey(0x33, runtime: runtime)   // kVK_Delete = 0x33
-    }
-
     /// Post an Escape key tap (used to dismiss unwanted popups on error).
     static func pressEscape(runtime: Runtime = .production) {
         postKey(0x35, runtime: runtime)   // kVK_Escape = 0x35

@@ -537,30 +537,6 @@ enum AXLogicProElements {
     }
 
     /// Find a track header at a specific index (0-based).
-    /// Locate the AXOutline containing the track list. v3.0.3 — used by
-    /// set_instrument for AX-native track selection (bypasses the coordinate-
-    /// based track header click which fails for off-viewport tracks).
-    static func findTrackOutline(runtime: Runtime = .production) -> AXUIElement? {
-        guard let window = mainWindow(runtime: runtime) else { return nil }
-        let outlines = AXHelpers.findAllDescendants(
-            of: window, role: "AXOutline", maxDepth: 12, runtime: runtime.ax
-        )
-        for o in outlines {
-            var rowsRaw: AnyObject?
-            _ = AXUIElementCopyAttributeValue(o, "AXRows" as CFString, &rowsRaw)
-            if let rows = rowsRaw as? [AXUIElement], !rows.isEmpty {
-                // Pick the outline whose rows expose AXDisclosureLevel (track list
-                // hallmark — other outlines like Library browser don't).
-                var attrs: CFArray?
-                AXUIElementCopyAttributeNames(rows[0], &attrs)
-                if (attrs as? [String])?.contains("AXDisclosureLevel") == true {
-                    return o
-                }
-            }
-        }
-        return nil
-    }
-
     static func findTrackHeader(at index: Int, runtime: Runtime = .production) -> AXUIElement? {
         let rows = allTrackHeaders(runtime: runtime)
         guard index >= 0 && index < rows.count else { return nil }

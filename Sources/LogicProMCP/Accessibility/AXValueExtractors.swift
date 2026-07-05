@@ -41,23 +41,6 @@ enum AXValueExtractors {
         AXHelpers.setAttribute(element, kAXValueAttribute, NSNumber(value: value), runtime: runtime)
     }
 
-    /// Set a normalized 0.0...1.0 slider value by converting it into the
-    /// element's live AX range when one is exposed.
-    @discardableResult
-    static func setNormalizedSliderValue(
-        _ element: AXUIElement,
-        _ normalized: Double,
-        runtime: AXHelpers.Runtime = .production
-    ) -> Bool {
-        let clamped = min(max(normalized, 0.0), 1.0)
-        guard let range = extractSliderRange(element, runtime: runtime),
-              range.max > range.min else {
-            return setSliderValue(element, clamped, runtime: runtime)
-        }
-        let raw = range.min + clamped * (range.max - range.min)
-        return setSliderValue(element, raw, runtime: runtime)
-    }
-
     /// Extract a text value from a static text or text field element.
     /// Used for tempo display, position readout, track names, etc.
     static func extractTextValue(_ element: AXUIElement, runtime: AXHelpers.Runtime = .production) -> String? {
