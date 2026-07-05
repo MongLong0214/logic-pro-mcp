@@ -90,3 +90,45 @@ protocol Channel: Actor {
     /// Check if this channel is currently functional.
     func healthCheck() async -> ChannelHealth
 }
+
+/// Shared surface for the two send-only "MIDI CC on channel 16" channels
+/// (`ScripterChannel` + `MIDIKeyCommandsChannel`). Both push bytes through a
+/// `KeyCmdTransportProtocol` and gate `runtime_ready` health behind an operator
+/// approval. The channel-specific Log / health *strings* stay in the concrete
+/// channels (RoutingAuditInvariantTests + the health tests pin them); only the
+/// channel-agnostic skeleton lives here.
+protocol KeyCmdCCChannel: Channel {
+    nonisolated var transport: any KeyCmdTransportProtocol { get }
+    nonisolated var approvalStore: any ManualValidationStoring { get }
+}
+
+extension KeyCmdCCChannel {
+    /// Zero-indexed MIDI channel 16 (wire nibble 0x0F) shared by both
+    /// send-only CC channels.
+    static var midiChannel: UInt8 { 15 }
+
+    /// Shared `prepare()` → `readiness()` startup. The concrete channel folds
+    /// the returned readiness into its own pinned start-log line.
+    func prepareTransportForStart() async throws -> KeyCmdTransportReadiness {
+        try await transport.prepare()
+        return await transport.readiness()
+    }
+
+    /// Shared readiness-guard → approval-branch health skeleton. The concrete
+    /// channel injects its pinned approved / unapproved detail strings and the
+    /// approval identity, so the wire/health text stays byte-identical.
+    func manualValidationHealth(
+        approval channel: ManualValidationChannel,
+        approvedDetail: @Sendable (KeyCmdTransportReadiness) -> String,
+        unapprovedDetail: @Sendable (KeyCmdTransportReadiness) -> String
+    ) async -> ChannelHealth {
+        let readiness = await transport.readiness()
+        guard readiness.available else {
+            return .unavailable(readiness.detail)
+        }
+        if await approvalStore.isApproved(channel) {
+            return .healthy(detail: approvedDetail(readiness), verificationStatus: .runtimeReady)
+        }
+        return .healthy(detail: unapprovedDetail(readiness), verificationStatus: .manualValidationRequired)
+    }
+}

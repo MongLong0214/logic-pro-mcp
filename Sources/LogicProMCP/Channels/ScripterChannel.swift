@@ -2,12 +2,11 @@ import Foundation
 
 /// Scripter MIDI FX channel: sends CC 102-119 on Channel 16 to control plugin parameters
 /// via Logic Pro's Scripter MIDI FX plugin (§4.7).
-actor ScripterChannel: Channel {
+actor ScripterChannel: KeyCmdCCChannel {
     nonisolated let id = ChannelID.scripter
 
-    private let transport: any KeyCmdTransportProtocol
-    private let approvalStore: any ManualValidationStoring
-    private static let midiChannel: UInt8 = 15 // zero-indexed = channel 16
+    let transport: any KeyCmdTransportProtocol
+    let approvalStore: any ManualValidationStoring
     private static let ccBase: UInt8 = 102      // CC 102-119 = param 0-17
 
     init(
@@ -30,8 +29,7 @@ actor ScripterChannel: Channel {
     }
 
     func start() async throws {
-        try await transport.prepare()
-        let readiness = await transport.readiness()
+        let readiness = try await prepareTransportForStart()
         Log.info(
             "Scripter channel started (CC \(Self.ccBase)-\(Self.ccBase + 17) on CH 16) — \(readiness.detail)",
             subsystem: "scripter"
@@ -143,19 +141,10 @@ actor ScripterChannel: Channel {
     }
 
     func healthCheck() async -> ChannelHealth {
-        let readiness = await transport.readiness()
-        guard readiness.available else {
-            return .unavailable(readiness.detail)
-        }
-        if await approvalStore.isApproved(.scripter) {
-            return .healthy(
-                detail: "\(readiness.detail). Scripter insertion approved by operator",
-                verificationStatus: .runtimeReady
-            )
-        }
-        return .healthy(
-            detail: "\(readiness.detail). Scripter insertion is not verifiable programmatically. Run `LogicProMCP --approve-channel Scripter` after manual validation",
-            verificationStatus: .manualValidationRequired
+        await manualValidationHealth(
+            approval: .scripter,
+            approvedDetail: { "\($0.detail). Scripter insertion approved by operator" },
+            unapprovedDetail: { "\($0.detail). Scripter insertion is not verifiable programmatically. Run `LogicProMCP --approve-channel Scripter` after manual validation" }
         )
     }
 }
