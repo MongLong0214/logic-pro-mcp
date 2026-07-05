@@ -187,6 +187,7 @@ enum MainEntrypoint {
         let intSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: signalQueue)
         signal(SIGTERM, SIG_IGN)
         signal(SIGINT, SIG_IGN)
+        ignoreBrokenPipeSignal()
 
         let shutdownTimeout = DispatchTimeInterval.seconds(3)
         let shutdown: @Sendable () -> Void = { [server] in
@@ -242,6 +243,16 @@ enum MainEntrypoint {
 
         With no arguments the binary runs as an MCP stdio server. See docs/SETUP.md for setup.
         """
+
+    /// Ignore SIGPIPE (set disposition to `SIG_IGN`) so a client that closes the
+    /// read end of our stdout mid-frame turns the raw `Darwin.write` in
+    /// `SerializedStdioTransport` into an EPIPE the write loop already handles —
+    /// NOT a default-disposition process kill. Without this the server dies
+    /// (signal 13) the instant a peer hangs up. Extracted so the regression test
+    /// can install the exact production guard (see `SIGPIPERegressionTests`).
+    static func ignoreBrokenPipeSignal() {
+        signal(SIGPIPE, SIG_IGN)
+    }
 
     /// True when a terminal global flag (`--version`, `--help`, …) appears
     /// anywhere in the user-supplied arguments (the program path at index 0 is
