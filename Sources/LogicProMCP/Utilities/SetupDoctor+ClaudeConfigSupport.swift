@@ -1,27 +1,21 @@
 import Foundation
 
 extension SetupDoctor {
+    private enum ClaudeConfigLoadResult {
+        case loaded([String: Any])
+        case unavailable(String)
+    }
+
     static func readProductionClaudeRegistration(
         configURL: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude.json")
     ) -> ClaudeRegistration {
-        guard FileManager.default.fileExists(atPath: configURL.path) else {
-            return .configUnavailable(reason: "config_absent")
-        }
-        let data: Data
-        do {
-            data = try Data(contentsOf: configURL)
-        } catch {
-            return .configUnavailable(reason: "config_unreadable")
-        }
-        let root: Any
-        do {
-            root = try JSONSerialization.jsonObject(with: data)
-        } catch {
-            return .configUnavailable(reason: "config_unreadable")
-        }
-        guard let object = root as? [String: Any] else {
-            return .configUnavailable(reason: "config_unreadable")
+        let object: [String: Any]
+        switch loadClaudeConfigObject(at: configURL) {
+        case let .loaded(config):
+            object = config
+        case let .unavailable(reason):
+            return .configUnavailable(reason: reason)
         }
 
         var serverScopes: [[String: Any]] = []
@@ -57,23 +51,14 @@ extension SetupDoctor {
         configURL: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Claude/claude_desktop_config.json")
     ) -> ClaudeRegistration {
-        guard FileManager.default.fileExists(atPath: configURL.path) else {
-            return .configUnavailable(reason: "config_absent")
+        let object: [String: Any]
+        switch loadClaudeConfigObject(at: configURL) {
+        case let .loaded(config):
+            object = config
+        case let .unavailable(reason):
+            return .configUnavailable(reason: reason)
         }
-        let data: Data
-        do {
-            data = try Data(contentsOf: configURL)
-        } catch {
-            return .configUnavailable(reason: "config_unreadable")
-        }
-        let root: Any
-        do {
-            root = try JSONSerialization.jsonObject(with: data)
-        } catch {
-            return .configUnavailable(reason: "config_unreadable")
-        }
-        guard let object = root as? [String: Any],
-              let servers = object["mcpServers"] as? [String: Any] else {
+        guard let servers = object["mcpServers"] as? [String: Any] else {
             return .configUnavailable(reason: "config_unreadable")
         }
         for (name, rawEntry) in servers {
@@ -91,6 +76,28 @@ extension SetupDoctor {
 
     static func readClaudeRegistrationForTesting(configURL: URL) -> ClaudeRegistration {
         readProductionClaudeRegistration(configURL: configURL)
+    }
+
+    private static func loadClaudeConfigObject(at configURL: URL) -> ClaudeConfigLoadResult {
+        guard FileManager.default.fileExists(atPath: configURL.path) else {
+            return .unavailable("config_absent")
+        }
+        let data: Data
+        do {
+            data = try Data(contentsOf: configURL)
+        } catch {
+            return .unavailable("config_unreadable")
+        }
+        let root: Any
+        do {
+            root = try JSONSerialization.jsonObject(with: data)
+        } catch {
+            return .unavailable("config_unreadable")
+        }
+        guard let object = root as? [String: Any] else {
+            return .unavailable("config_unreadable")
+        }
+        return .loaded(object)
     }
 
 }

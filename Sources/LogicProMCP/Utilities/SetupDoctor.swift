@@ -69,6 +69,7 @@ enum SetupDoctor {
         // keeping v3 a strict superset a v1/v2 decoder never trips over. Set only at
         // construction via the `check(...)` factory (no post-construction mutation, R9).
         var blockedBy: String?
+        let optional: Bool
 
         // Explicit CodingKeys enumerate EVERY key — the six v1 keys keep their
         // exact wire names so a v2 payload stays a strict field-superset of v1,
@@ -84,6 +85,7 @@ enum SetupDoctor {
             case severity
             case durationMs = "duration_ms"
             case blockedBy = "blocked_by"
+            case optional
         }
     }
 
@@ -313,6 +315,18 @@ enum SetupDoctor {
     ) -> Report {
         let executablePath = runtime.resolveExecutablePath(arguments.first)
         let installSource = detectInstallSource(executablePath: executablePath, runtime: runtime)
+        let claudeRegistration = runtime.readClaudeRegistration()
+        let logicApps = runtime.logicApps()
+        var staticVersionCache: [String: StaticVersionResult] = [:]
+
+        func staticVersionForPath(_ path: String) -> StaticVersionResult {
+            let key = standardized(path)
+            if let cached = staticVersionCache[key] { return cached }
+            let strings = runtime.runCommand("/usr/bin/strings", ["-a", path])?.stdout ?? ""
+            let result = Self.staticVersion(fromStringsOutput: strings)
+            staticVersionCache[key] = result
+            return result
+        }
 
         // Per-check monotonic timing. Each check runs once, in declared order
         // (sequential — no concurrency), wrapped to stamp `duration_ms`. Checks
@@ -333,12 +347,26 @@ enum SetupDoctor {
         checks.append(timed { binaryExecutableCheck(executablePath: executablePath, runtime: runtime) })
         checks.append(timed { binaryVersionCheck() })
         checks.append(timed { installSourceCheck(installSource: installSource, executablePath: executablePath) })
-        checks.append(timed { installBinaryInventoryCheck(executablePath: executablePath, runtime: runtime) })
+        checks.append(timed {
+            installBinaryInventoryCheck(
+                executablePath: executablePath,
+                runtime: runtime,
+                claudeRegistration: claudeRegistration,
+                staticVersionForPath: staticVersionForPath
+            )
+        })
         checks.append(timed { installShareDirCheck(runtime: runtime) })
         checks.append(timed { releaseSignatureCheck(executablePath: executablePath, runtime: runtime) })
         checks.append(timed { releaseQuarantineCheck(executablePath: executablePath, runtime: runtime) })
-        checks.append(timed { claudeRegistrationCheck(runtime: runtime) })
-        checks.append(timed { mcpRegistrationTargetCheck(runtime: runtime, checks: checks) })
+        checks.append(timed { claudeRegistrationCheck(registration: claudeRegistration) })
+        checks.append(timed {
+            mcpRegistrationTargetCheck(
+                registration: claudeRegistration,
+                runtime: runtime,
+                checks: checks,
+                staticVersionForPath: staticVersionForPath
+            )
+        })
         checks.append(timed { claudeDesktopRegistrationCheck(runtime: runtime) })
         checks.append(timed { accessibilityPermissionCheck(permissionStatus) })
         checks.append(timed { automationPermissionCheck(permissionStatus) })
@@ -347,8 +375,8 @@ enum SetupDoctor {
         checks.append(timed { launchContextCheck(runtime: runtime) })
         checks.append(timed { tccCrossContextCheck(runtime: runtime) })
         checks.append(timed { macOSVersionCheck(runtime: runtime) })
-        checks.append(timed { logicInstallationCheck(runtime: runtime) })
-        checks.append(timed { logicVersionSupportCheck(runtime: runtime, checks: checks) })
+        checks.append(timed { logicInstallationCheck(logicApps: logicApps) })
+        checks.append(timed { logicVersionSupportCheck(logicApps: logicApps, checks: checks) })
         checks.append(timed { logicApplicationStateCheck(runtime: runtime) })
         checks.append(timed { logicBlockingDialogCheck(runtime: runtime, checks: checks) })
         checks.append(timed { manualValidationCheck(approvals: approvals) })
@@ -394,6 +422,7 @@ enum SetupDoctor {
         evidence: [String: String],
         remediationType: RemediationType,
         remediationValueOverride: String? = nil,
+        optional: Bool = false,
         blockedBy: String? = nil
     ) -> Check {
         let value = remediationValueOverride ?? defaultRemediationValue(for: id, type: remediationType)
@@ -412,7 +441,8 @@ enum SetupDoctor {
             category: category(forDomain: domain),
             severity: severity(for: status),
             durationMs: 0,
-            blockedBy: blockedBy
+            blockedBy: blockedBy,
+            optional: optional
         )
     }
 
@@ -563,28 +593,4 @@ enum SetupDoctor {
         }
     }
 
-    /// Test-only bridge to the private `check(...)` construction chokepoint, so the
-    /// `blockedBy` threading (AC-5) is unit-covered without widening the factory's
-    /// visibility (it must stay the single private construction site).
-    static func makeCheckForTesting(
-        id: String,
-        domain: String,
-        status: CheckStatus,
-        summary: String,
-        evidence: [String: String],
-        remediationType: RemediationType,
-        remediationValueOverride: String? = nil,
-        blockedBy: String? = nil
-    ) -> Check {
-        check(
-            id: id,
-            domain: domain,
-            status: status,
-            summary: summary,
-            evidence: evidence,
-            remediationType: remediationType,
-            remediationValueOverride: remediationValueOverride,
-            blockedBy: blockedBy
-        )
-    }
 }

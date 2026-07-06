@@ -106,7 +106,15 @@ extension SetupDoctor {
                 remediationType: .systemSettings
             )
         case let .skipped(reason):
-            let readable = reason == "full_disk_access_unavailable" ? "false" : "true"
+            let readable: String
+            switch reason {
+            case "full_disk_access_unavailable":
+                readable = "false"
+            case "tcc_query_unavailable":
+                readable = "unknown"
+            default:
+                readable = "true"
+            }
             return check(
                 id: "permissions.tcc_cross_context",
                 domain: "permissions",

@@ -134,7 +134,7 @@ extension SetupDoctor {
         if checks.contains(where: { $0.status == .manual }) {
             return .manualActionRequired
         }
-        if checks.contains(where: { $0.status == .warn || $0.status == .skipped }) {
+        if checks.contains(where: { $0.status == .warn || ($0.status == .skipped && !$0.optional) }) {
             return .degraded
         }
         return .ok

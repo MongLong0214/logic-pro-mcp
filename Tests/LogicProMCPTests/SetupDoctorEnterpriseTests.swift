@@ -18,6 +18,10 @@ private func enterpriseRuntime(
         runCommand: { executable, arguments in
             if executable == "/usr/bin/codesign" { return .init(exitCode: 0, stdout: "", stderr: "") }
             if executable == "/usr/bin/xattr" { return .init(exitCode: 1, stdout: "", stderr: "No such xattr") }
+            if executable == "/usr/bin/lipo" { return .init(exitCode: 0, stdout: "arm64\n", stderr: "") }
+            if executable == "/usr/bin/strings", arguments.count == 2 {
+                return .init(exitCode: 0, stdout: "\(ServerConfig.serverVersion)\n", stderr: "")
+            }
             if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
                arguments == ["list", "--versions", "logic-pro-mcp"] {
                 return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.4\n", stderr: "")
@@ -151,6 +155,39 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
     #expect(report.summary.skipped == 0)
 }
 
+@Test func test_t1_optional_skip_does_not_degrade_aggregate() {
+    let optionalSkip = SetupDoctor.check(
+        id: "mcp.claude_desktop_registration",
+        domain: "mcp",
+        status: .skipped,
+        summary: "optional",
+        evidence: [:],
+        remediationType: .none,
+        optional: true
+    )
+    let capabilitySkip = SetupDoctor.check(
+        id: "system.macos_version",
+        domain: "system",
+        status: .skipped,
+        summary: "capability",
+        evidence: [:],
+        remediationType: .docs
+    )
+    #expect(SetupDoctor.aggregateStatus([optionalSkip]) == .ok)
+    #expect(SetupDoctor.aggregateStatus([capabilitySkip]) == .degraded)
+}
+
+@Test func test_t1_claude_desktop_absent_is_optional_skip() throws {
+    var runtime = enterpriseRuntime()
+    runtime.readClaudeDesktopRegistration = { .configUnavailable(reason: "config_absent") }
+    let report = makeReport(runtime: runtime)
+    let c = try #require(check(report, "mcp.claude_desktop_registration"))
+    #expect(c.status == .skipped)
+    #expect(c.optional)
+    #expect(report.summary.skipped == 1)
+    #expect(report.status == .ok)
+}
+
 @Test func test_t1_summary_duration_is_sum_of_per_check() {
     // Deterministic monotonic clock: 0,1,2,3,... Each check = 2 calls (start,end),
     // delta 1ms. 13 checks (no update check) → summary == 13.0, and >= max per-check.
@@ -214,6 +251,8 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
     #expect(first["category"] != nil)
     #expect(first["severity"] != nil)
     #expect(first["duration_ms"] != nil)
+    let optional = try #require(first["optional"] as? Bool)
+    #expect(optional == false)
 }
 
 private struct FrozenV1Remediation: Codable { let type: String; let value: String }
@@ -635,7 +674,7 @@ private func runEntrypoint(
 // Case 3
 @Test func test_t1v3_blocked_by_present_when_set() throws {
     // A check built with a non-nil `blockedBy` emits the wire key `blocked_by`.
-    let c = SetupDoctor.makeCheckForTesting(
+    let c = SetupDoctor.check(
         id: "logic.blocking_dialog",
         domain: "logic",
         status: .skipped,
@@ -711,7 +750,7 @@ private func runEntrypoint(
 
 // Case 9
 @Test func test_t1v3_check_factory_threads_blocked_by() {
-    let withBB = SetupDoctor.makeCheckForTesting(
+    let withBB = SetupDoctor.check(
         id: "logic.version_support",
         domain: "logic",
         status: .skipped,
@@ -721,7 +760,7 @@ private func runEntrypoint(
         blockedBy: "logic.installation"
     )
     #expect(withBB.blockedBy == "logic.installation")
-    let withoutBB = SetupDoctor.makeCheckForTesting(
+    let withoutBB = SetupDoctor.check(
         id: "logic.version_support",
         domain: "logic",
         status: .pass,

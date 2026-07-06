@@ -20,6 +20,7 @@ private func doctorV3Approvals() -> [ManualValidationChannel: ManualValidationAp
 private func doctorV3Runtime(
     resolvedExecutablePath: String? = "/opt/homebrew/bin/LogicProMCP",
     registration: SetupDoctor.ClaudeRegistration = .registered(command: "/opt/homebrew/bin/LogicProMCP"),
+    readClaudeRegistration: (() -> SetupDoctor.ClaudeRegistration)? = nil,
     exists: @escaping (String) -> Bool = { _ in true },
     executable: @escaping (String) -> Bool = { _ in true },
     regular: @escaping (String) -> Bool = { _ in true },
@@ -47,7 +48,7 @@ private func doctorV3Runtime(
         logicProRunning: { true },
         logicProHasVisibleWindow: { true },
         runCommand: commandHandler,
-        readClaudeRegistration: { registration }
+        readClaudeRegistration: readClaudeRegistration ?? { registration }
     )
     runtime.logicApps = logicApps
     runtime.shareDirProbe = { .complete(path: "/opt/homebrew/share/logic-pro-mcp", source: "brew_pkgshare") }
@@ -93,8 +94,55 @@ private func doctorV3Check(_ report: SetupDoctor.Report, _ id: String) throws ->
     let check = try doctorV3Check(doctorV3Report(runtime), "install.binary_inventory")
     #expect(check.status == .warn)
     #expect(check.evidence["stale"] == "true")
-    #expect(check.evidence["candidates"]?.contains(":3.5.0") == true)
+    let candidates = try #require(check.evidence["candidates"])
+    #expect(candidates.contains(":3.5.0"))
     #expect(check.evidence["indeterminate"] == nil)
+    #expect(check.summary == "A canonical LogicProMCP binary has a different static version than the running doctor.")
+}
+
+@Test func testDoctorV3BinaryInventoryWarnsWhenCanonicalVersionIsIndeterminate() throws {
+    let runtime = doctorV3Runtime(
+        resolvedExecutablePath: "/tmp/build/LogicProMCP",
+        regular: { $0 == "/opt/homebrew/bin/LogicProMCP" },
+        commandHandler: { executable, arguments in
+            if executable == "/usr/bin/codesign" { return .init(exitCode: 0, stdout: "", stderr: "") }
+            if executable == "/usr/bin/xattr" { return .init(exitCode: 1, stdout: "No such xattr", stderr: "") }
+            if executable == "/usr/bin/lipo" { return .init(exitCode: 0, stdout: "arm64\n", stderr: "") }
+            if executable == "/usr/bin/strings", arguments == ["-a", "/opt/homebrew/bin/LogicProMCP"] {
+                return .init(exitCode: 0, stdout: "\(ServerConfig.serverVersion)\n3.40.1\n", stderr: "")
+            }
+            return nil
+        }
+    )
+    let check = try doctorV3Check(doctorV3Report(runtime), "install.binary_inventory")
+    #expect(check.status == .warn)
+    #expect(check.evidence["stale"] == nil)
+    let indeterminate = try #require(check.evidence["indeterminate"])
+    #expect(indeterminate.contains("/opt/homebrew/bin/LogicProMCP"))
+    #expect(indeterminate.contains("3.40.1"))
+    #expect(check.summary.contains("staleness cannot be ruled out"))
+}
+
+@Test func testDoctorV3BinaryInventoryAllowsIndeterminateRunningExecutable() throws {
+    let runtime = doctorV3Runtime(
+        resolvedExecutablePath: "/opt/homebrew/bin/LogicProMCP",
+        regular: { $0 == "/opt/homebrew/bin/LogicProMCP" },
+        commandHandler: { executable, arguments in
+            if executable == "/usr/bin/codesign" { return .init(exitCode: 0, stdout: "", stderr: "") }
+            if executable == "/usr/bin/xattr" { return .init(exitCode: 1, stdout: "No such xattr", stderr: "") }
+            if executable == "/usr/bin/lipo" { return .init(exitCode: 0, stdout: "arm64\n", stderr: "") }
+            if executable == "/usr/bin/strings", arguments == ["-a", "/opt/homebrew/bin/LogicProMCP"] {
+                return .init(exitCode: 0, stdout: "\(ServerConfig.serverVersion)\n3.40.1\n", stderr: "")
+            }
+            return nil
+        }
+    )
+    let check = try doctorV3Check(doctorV3Report(runtime), "install.binary_inventory")
+    #expect(check.status == .pass)
+    #expect(check.evidence["stale"] == nil)
+    let indeterminate = try #require(check.evidence["indeterminate"])
+    #expect(indeterminate.contains("/opt/homebrew/bin/LogicProMCP"))
+    #expect(check.summary == "Canonical LogicProMCP binary inventory found no stale installed binary.")
 }
 
 @Test func testDoctorV3RelativeRegisteredCommandIsSkippedNotWarn() throws {
@@ -199,9 +247,27 @@ private func doctorV3Check(_ report: SetupDoctor.Report, _ id: String) throws ->
     #expect(SetupDoctor.mapTCCQueryOutcome(.fullDiskAccessUnavailable) == .skipped(reason: "full_disk_access_unavailable"))
 }
 
+@Test func testDoctorV3TCCSkippedEvidenceMatchesProbeReason() throws {
+    let cases: [(reason: String, readable: String)] = [
+        ("full_disk_access_unavailable", "false"),
+        ("tcc_query_unavailable", "unknown"),
+        ("tcc_schema_mismatch", "true"),
+        ("principal_not_found", "true"),
+    ]
+    for item in cases {
+        var runtime = doctorV3Runtime()
+        runtime.tccCrossContextProbe = { .skipped(reason: item.reason) }
+        let check = try doctorV3Check(doctorV3Report(runtime), "permissions.tcc_cross_context")
+        #expect(check.status == .skipped)
+        #expect(check.evidence["reason"] == item.reason)
+        #expect(check.evidence["tcc_db_readable"] == item.readable)
+        #expect(check.evidence["full_disk_access"] == item.readable)
+    }
+}
+
 @Test func testDoctorV3EvidenceSanitizesStderrAndHomePath() {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
-    let check = SetupDoctor.makeCheckForTesting(
+    let check = SetupDoctor.check(
         id: "release.signature",
         domain: "release",
         status: .warn,
@@ -227,4 +293,48 @@ private func doctorV3Check(_ report: SetupDoctor.Report, _ id: String) throws ->
         SetupDoctor.readClaudeRegistrationForTesting(configURL: configURL)
             == .registered(command: "/opt/homebrew/bin/LogicProMCP", environment: ["LOGIC_PRO_MCP_SHARE_DIR": "/tmp/share"])
     )
+}
+
+@Test func testDoctorV3GenerateReusesClaudeRegistrationAndLogicApps() {
+    var claudeReads = 0
+    var logicReads = 0
+    let runtime = doctorV3Runtime(
+        readClaudeRegistration: {
+            claudeReads += 1
+            return .registered(command: "/opt/homebrew/bin/LogicProMCP")
+        },
+        logicApps: {
+            logicReads += 1
+            return [
+                SetupDoctor.LogicAppInfo(
+                    path: "/Applications/Logic Pro.app",
+                    version: LogicProSupport.latestValidatedLogicVersion,
+                    bundleID: ServerConfig.logicProBundleID,
+                    readable: true
+                ),
+            ]
+        }
+    )
+    _ = doctorV3Report(runtime)
+    #expect(claudeReads == 1)
+    #expect(logicReads == 1)
+}
+
+@Test func testDoctorV3GenerateReusesStaticVersionScanForRegisteredCandidate() {
+    var stringsCalls: [String: Int] = [:]
+    let runtime = doctorV3Runtime(commandHandler: { executable, arguments in
+        if executable == "/usr/bin/codesign" { return .init(exitCode: 0, stdout: "", stderr: "") }
+        if executable == "/usr/bin/xattr" { return .init(exitCode: 1, stdout: "No such xattr", stderr: "") }
+        if executable == "/usr/bin/lipo" { return .init(exitCode: 0, stdout: "arm64\n", stderr: "") }
+        if executable == "/usr/bin/strings", arguments.count == 2 {
+            stringsCalls[arguments[1], default: 0] += 1
+            return .init(exitCode: 0, stdout: "\(ServerConfig.serverVersion)\n", stderr: "")
+        }
+        if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew" {
+            return .init(exitCode: 0, stdout: "logic-pro-mcp \(ServerConfig.serverVersion)\n", stderr: "")
+        }
+        return nil
+    })
+    _ = doctorV3Report(runtime)
+    #expect(stringsCalls["/opt/homebrew/bin/LogicProMCP"] == 1)
 }

@@ -14,27 +14,41 @@ extension SetupDoctor {
     }
 
 
-    static func installBinaryInventoryCheck(executablePath: String?, runtime: Runtime) -> Check {
+    static func installBinaryInventoryCheck(
+        executablePath: String?,
+        runtime: Runtime,
+        claudeRegistration: ClaudeRegistration,
+        staticVersionForPath: (String) -> StaticVersionResult
+    ) -> Check {
         let runningVersion = ServerConfig.serverVersion
-        let candidates = binaryInventoryCandidates(executablePath: executablePath, runtime: runtime)
+        let candidates = binaryInventoryCandidates(
+            executablePath: executablePath,
+            runtime: runtime,
+            claudeRegistration: claudeRegistration
+        )
         var rendered: [String] = []
         var stale = false
+        var indeterminateStaleRisk = false
         var indeterminate: [String] = []
         for path in candidates {
             let arch = runtime.runCommand("/usr/bin/lipo", ["-archs", path])?.stdout
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let strings = runtime.runCommand("/usr/bin/strings", ["-a", path])?.stdout ?? ""
-            switch Self.staticVersion(fromStringsOutput: strings) {
+            let isRunningExecutable = standardized(path) == standardized(executablePath ?? "")
+            switch staticVersionForPath(path) {
             case let .version(version):
                 rendered.append("\(path):\(arch?.isEmpty == false ? arch! : "unknown"):\(version)")
-                if standardized(path) != standardized(executablePath ?? ""), version != runningVersion {
+                if !isRunningExecutable, version != runningVersion {
                     stale = true
                 }
             case let .indeterminate(versions):
                 rendered.append("\(path):\(arch?.isEmpty == false ? arch! : "unknown"):indeterminate")
                 indeterminate.append(versions.isEmpty ? path : "\(path)(\(versions.joined(separator: ",")))")
+                if !isRunningExecutable {
+                    indeterminateStaleRisk = true
+                }
             }
         }
+        let warn = stale || indeterminateStaleRisk
         var evidence = [
             "running_version": runningVersion,
             "candidates": rendered.isEmpty ? "none" : rendered.joined(separator: " | "),
@@ -44,14 +58,23 @@ extension SetupDoctor {
         return check(
             id: "install.binary_inventory",
             domain: "install",
-            status: stale ? .warn : .pass,
-            summary: stale
-                ? "A canonical LogicProMCP binary has a different static version than the running doctor."
-                : "Canonical LogicProMCP binary inventory is consistent or indeterminate.",
+            status: warn ? .warn : .pass,
+            summary: binaryInventorySummary(stale: stale, indeterminateStaleRisk: indeterminateStaleRisk),
             evidence: evidence,
-            remediationType: stale ? .command : .none,
-            remediationValueOverride: stale ? "brew upgrade logic-pro-mcp" : nil
+            remediationType: warn ? .command : .none,
+            remediationValueOverride: warn ? "brew upgrade logic-pro-mcp" : nil
         )
+    }
+
+
+    static func binaryInventorySummary(stale: Bool, indeterminateStaleRisk: Bool) -> String {
+        if stale {
+            return "A canonical LogicProMCP binary has a different static version than the running doctor."
+        }
+        if indeterminateStaleRisk {
+            return "A canonical LogicProMCP binary's static version could not be determined; staleness cannot be ruled out."
+        }
+        return "Canonical LogicProMCP binary inventory found no stale installed binary."
     }
 
 
@@ -151,9 +174,13 @@ extension SetupDoctor {
     }
 
 
-    static func binaryInventoryCandidates(executablePath: String?, runtime: Runtime) -> [String] {
+    static func binaryInventoryCandidates(
+        executablePath: String?,
+        runtime: Runtime,
+        claudeRegistration: ClaudeRegistration
+    ) -> [String] {
         var paths = ["/opt/homebrew/bin/LogicProMCP", "/usr/local/bin/LogicProMCP"]
-        if case let .registered(command, _) = runtime.readClaudeRegistration(), command.hasPrefix("/") {
+        if case let .registered(command, _) = claudeRegistration, command.hasPrefix("/") {
             paths.append(command)
         }
         var seen: Set<String> = []

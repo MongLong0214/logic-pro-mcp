@@ -1,7 +1,7 @@
 import Foundation
 
 extension SetupDoctor {
-    static func claudeRegistrationCheck(runtime: Runtime) -> Check {
+    static func claudeRegistrationCheck(registration: ClaudeRegistration) -> Check {
         // Read-only registration detection: inspect the Claude Code config file
         // directly instead of shelling out to `claude mcp list`. `claude mcp list`
         // health-checks every registered MCP server, which spawns the registered
@@ -9,7 +9,7 @@ extension SetupDoctor {
         // pollers) — a real side effect that violates the doctor's documented
         // "read-only / run-before-startup" contract, and one the old 1.5s SIGKILL
         // could orphan. Reading the config is fast, non-mutating, and spawns nothing.
-        switch runtime.readClaudeRegistration() {
+        switch registration {
         case let .registered(command, _):
             return check(
                 id: "mcp.claude_code_registration",
@@ -42,7 +42,12 @@ extension SetupDoctor {
     }
 
 
-    static func mcpRegistrationTargetCheck(runtime: Runtime, checks: [Check]) -> Check {
+    static func mcpRegistrationTargetCheck(
+        registration: ClaudeRegistration,
+        runtime: Runtime,
+        checks: [Check],
+        staticVersionForPath: (String) -> StaticVersionResult
+    ) -> Check {
         if let cause = blockingCause(for: "mcp.registration_target", checks: checks) {
             return check(
                 id: "mcp.registration_target",
@@ -54,7 +59,7 @@ extension SetupDoctor {
                 blockedBy: cause
             )
         }
-        guard case let .registered(command, environment) = runtime.readClaudeRegistration() else {
+        guard case let .registered(command, environment) = registration else {
             return check(
                 id: "mcp.registration_target",
                 domain: "mcp",
@@ -79,7 +84,6 @@ extension SetupDoctor {
         let exists = runtime.fileExistsAtPath(command)
         let regular = exists && runtime.isRegularFile(command)
         let executable = regular && runtime.isExecutableFile(command)
-        let strings = executable ? (runtime.runCommand("/usr/bin/strings", ["-a", command])?.stdout ?? "") : ""
         var evidence = [
             "command_path": command,
             "regular_file": String(regular),
@@ -93,7 +97,7 @@ extension SetupDoctor {
             shareDirMissing = !valid
         }
         var versionMismatch = false
-        if case let .version(version) = Self.staticVersion(fromStringsOutput: strings) {
+        if executable, case let .version(version) = staticVersionForPath(command) {
             evidence["registered_version"] = version
             evidence["version_match"] = String(version == ServerConfig.serverVersion)
             versionMismatch = version != ServerConfig.serverVersion
@@ -145,7 +149,8 @@ extension SetupDoctor {
                     ? "Claude Desktop not configured (optional)."
                     : "Claude Desktop config could not be read.",
                 evidence: ["config_present": absent ? "false" : "true", "reason": reason],
-                remediationType: absent ? .none : .manual
+                remediationType: absent ? .none : .manual,
+                optional: absent
             )
         }
     }

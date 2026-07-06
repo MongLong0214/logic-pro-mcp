@@ -10,8 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 
-- **Doctor v3 diagnostic surface.** `LogicProMCP doctor` now emits schema `logic_pro_mcp_doctor.v3` with `fix_plan`, `blocked_by`, 26 default checks, and 27 checks when `--check-updates` is enabled. A higher `skipped` count is expected on hosts where a diagnostic capability is unavailable; v3 reports those capability gaps instead of hiding them.
-- **Strict doctor exit routing.** `doctor --strict` uses `0=ok`, `1=failed`, `2=manual_action_required`, and `3=degraded`. Codes `2` and `3` are status codes, not usage errors.
+- **Doctor v3 diagnostic surface.** `LogicProMCP doctor` now emits schema `logic_pro_mcp_doctor.v3` with `fix_plan`, per-check `optional`, `blocked_by`, 26 default checks, and 27 checks when `--check-updates` is enabled. A higher `skipped` count is expected on hosts where a diagnostic capability is unavailable; v3 reports those capability gaps instead of hiding them.
+- **Strict doctor exit routing.** `doctor --strict` uses `0=ok`, `1=failed`, `2=manual_action_required`, and `3=degraded`. Codes `2` and `3` are status codes, not usage errors. Optional-by-design skips, currently an absent Claude Desktop config, remain visible in skipped counts without degrading an otherwise healthy report.
 
 ### Fixed
 

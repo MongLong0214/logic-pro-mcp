@@ -35,8 +35,7 @@ extension SetupDoctor {
     }
 
 
-    static func logicInstallationCheck(runtime: Runtime) -> Check {
-        let apps = runtime.logicApps()
+    static func logicInstallationCheck(logicApps apps: [LogicAppInfo]) -> Check {
         guard !apps.isEmpty else {
             return check(
                 id: "logic.installation",
@@ -74,7 +73,7 @@ extension SetupDoctor {
     }
 
 
-    static func logicVersionSupportCheck(runtime: Runtime, checks: [Check]) -> Check {
+    static func logicVersionSupportCheck(logicApps: [LogicAppInfo], checks: [Check]) -> Check {
         if let cause = blockingCause(for: "logic.version_support", checks: checks) {
             return check(
                 id: "logic.version_support",
@@ -86,7 +85,7 @@ extension SetupDoctor {
                 blockedBy: cause
             )
         }
-        let version = Self.preferredReadableLogicApp(runtime.logicApps())?.version ?? ""
+        let version = Self.preferredReadableLogicApp(logicApps)?.version ?? ""
         let minimum = LogicProSupport.minimumSupportedLogicVersion
         let latest = LogicProSupport.latestValidatedLogicVersion
         let status: CheckStatus

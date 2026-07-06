@@ -76,6 +76,7 @@ class LogicProMcp < Formula
     output = shell_output("#{bin}/LogicProMCP --check-permissions 2>&1; echo \"exit=$?\"")
     assert_match(/Accessibility/, output)
     assert_match(/Automation/, output)
+    assert_match(/PostEvent/, output)
     assert_match(/exit=[01]/, output, "exit code should be 0 (granted) or 1 (missing)")
   end
 end
