@@ -2,7 +2,7 @@
 
 **PRD**: docs/prd/PRD-doctor-v3.md (v0.2, Size L)
 **Size**: L
-**Current Phase**: 4 (ticket review)
+**Current Phase**: 5 (TDD implementation) — Phase 4 gate CONVERGED 2026-07-06
 
 ## Ticket Status 정의
 - **Pending**: Phase 4 리뷰 대기 (미착수)
@@ -16,15 +16,15 @@
 
 | Ticket | Title | Status | Review | Notes |
 |--------|-------|--------|--------|-------|
-| T1 | Data-Spine — `blocked_by`/`fix_plan`/schema v3/dep-table/`DoctorTool` allowlist (D10) | Pending | - | Size M · Depends: None · foundation for all |
-| T2 | Honesty-Spine — PostEvent (N1)/`allGranted` fold/clamp/fixture migration | Pending | - | Size M · Depends: T1 · closes F1 false-green |
-| T3 | Logic-Chain — `LogicProSupport` consts + N2/N3/N4 | Pending | - | Size M · Depends: T2 · array +3 |
-| T4 | Install-Chain — N7 `strings`-ranking + N8 ship-list/Formula drift | Pending | - | Size M · Depends: T2 · array +2 · highest-leverage |
-| T5 | MCP-Chain — N5 registration_target + N6 claude_desktop_registration | Pending | - | Size M · Depends: T2 · array +2 |
-| T6 | Channels-Deps — N11 keycmd + N12 mcu_wiring_hint + click_fallback | Pending | - | Size M · Depends: T2 · array +3 |
-| T7 | TCC-Context — N9 launch_context + N10 tcc_cross_context | Pending | - | Size M · Depends: T1 (T2 posture) · array +2 |
-| T8 | CLI-UX — `--strict` matrix + Fix Plan human render + usage text | Pending | - | Size M · Depends: T1 (final render after T3–T7) |
-| T9 | Docs + E2E — SETUP/TROUBLESHOOTING/CHANGELOG + CI-honesty + live E2E + 26-id lock | Pending | - | Size M · Depends: T1–T8 · release gate |
+| T1 | Data-Spine — `blocked_by`/`fix_plan`/schema v3/dep-table/`DoctorTool` allowlist (D10) | Todo | PASS | Size M · Depends: None · foundation for all |
+| T2 | Honesty-Spine — PostEvent (N1)/`allGranted` fold/clamp/fixture migration | Todo | PASS | Size M · Depends: T1 · closes F1 false-green |
+| T3 | Logic-Chain — `LogicProSupport` consts + N2/N3/N4 | Todo | PASS | Size M · Depends: T2 · array +3 |
+| T4 | Install-Chain — N7 `strings`-ranking + N8 ship-list/Formula drift | Todo | PASS | Size M · Depends: T2 · array +2 · highest-leverage |
+| T5 | MCP-Chain — N5 registration_target + N6 claude_desktop_registration | Todo | PASS | Size M · Depends: T2 · array +2 |
+| T6 | Channels-Deps — N11 keycmd + N12 mcu_wiring_hint + click_fallback | Todo | PASS | Size M · Depends: T2 · array +3 |
+| T7 | TCC-Context — N9 launch_context + N10 tcc_cross_context | Todo | PASS | Size M · Depends: T1 (T2 posture) · array +2 |
+| T8 | CLI-UX — `--strict` matrix + Fix Plan human render + usage text | Todo | PASS | Size M · Depends: T1 (final render after T3–T7) |
+| T9 | Docs + E2E — SETUP/TROUBLESHOOTING/CHANGELOG + CI-honesty + live E2E + 26-id lock | Todo | PASS | Size M · Depends: T1–T8 · release gate |
 
 ## Dependency Graph & Execution Order
 
@@ -32,10 +32,10 @@
 T1 (foundation)
  └─ T2 (honesty-spine)
      ├─ T3  ┐
-     ├─ T4  │  parallel-capable (each depends on T2; distinct check inserts,
+     ├─ T4  │  semantically independent (each depends on T2; distinct check inserts,
      ├─ T5  │  stable insertion anchors → converge to §4.3 26-id order)
-     ├─ T6  │
-     └─ T7  ┘  (T7 semantically T2-independent; sequenced for fixture posture)
+     ├─ T6  │  **랜딩은 순차 필수 (OBJ-E)**: exact-id 배열 리터럴·count 단언·SetupDoctor.swift
+     └─ T7  ┘  동일 지점을 매 티켓이 편집 → 병렬 랜딩 시 충돌 확정. (T7은 T2 이후: 픽스처 자세 상속)
            └─ T8 (renders T1 fix_plan; final render validated once T3–T7 land)
                  └─ T9 (docs + CI-honesty + live E2E + final 26/27 id lock)
 ```
@@ -48,5 +48,5 @@ T1 (foundation)
 
 | Phase | Round | Verdict | P0 | P1 | P2 | Notes |
 |-------|-------|---------|----|----|-----|-------|
-| 4     | 1     |         |    |    |     | ticket review (pending) |
+| 4     | 1     | HAS ISSUE→CONVERGED | 0  | 1  | 3   | TR1-TR4 + OBJ-A~E (orchestrator direct gate; boomer=codex 401·opus killed → 연속성 지침) — 전건 반영, review-tickets-boomer-sub.md |
 | 6     | 1     |         |    |    |     | code review (pending) |
