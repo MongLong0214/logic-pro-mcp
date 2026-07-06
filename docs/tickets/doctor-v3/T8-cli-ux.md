@@ -43,7 +43,7 @@ Make the report scriptable and legible: add `--strict` mapping the aggregate to 
 | 11 | `test_t8_fix_plan_honors_color` | Unit | R8 | `useColor:true` ⇒ ANSI in the fix-plan lines; `useColor:false` ⇒ none |
 | 12 | `test_t8_fix_plan_absent_when_empty` | Unit | AC-4 | all-good ⇒ no `Fix plan:` section |
 | 13 | `test_t8_fix_plan_not_in_json` | Contract | AC-4 human-only | `--json` bytes contain the `fix_plan` array key but **no** `"Fix plan:"` human string |
-| 14 | `test_t8_usage_has_strict_and_lifecycle` | Unit | AC-5 | `MainEntrypoint.usageText` contains `[--strict]` on the doctor line AND `lifecycle <install|update|uninstall> [--json]` |
+| 14 | `test_t8_usage_has_strict_and_lifecycle` | Unit | AC-5 | `MainEntrypoint.usageText` contains `[--strict]` on the doctor line AND `lifecycle <install|update|uninstall> [--json]`. **TR4 폴백**: `usageText`가 private이면 심볼 직접 단언 대신 `runEntrypoint(["LogicProMCP","--help"])` stdout 단언으로 대체 |
 
 ### 3.2 Test File Location
 - `Tests/LogicProMCPTests/SetupDoctorEnterpriseTests.swift` — cases 1–13 (reuse `runEntrypoint` + `renderHuman`).
