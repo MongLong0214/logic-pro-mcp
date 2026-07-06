@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.MongLong0214/logic-pro-mcp",
   "title": "Logic Pro MCP",
-  "description": "Local MCP server for stateful, fail-closed Logic Pro control and live project readback.",
+  "description": "Logic Pro MCP server for stateful DAW control, live readback, MIDI, plugins, and safety gates.",
   "websiteUrl": "https://github.com/MongLong0214/logic-pro-mcp#readme",
   "repository": {
     "url": "https://github.com/MongLong0214/logic-pro-mcp",
@@ -17,7 +17,7 @@
       ]
     }
   ],
-  "version": "3.7.4",
+  "version": "3.8.0",
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
       "distribution": {
@@ -31,7 +31,11 @@
             "brew install logic-pro-mcp"
           ]
         },
-        "release": "https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.7.4"
+        "release": "https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.8.0",
+        "directories": {
+          "lobeHub": "https://lobehub.com/mcp/monglong0214-logic-pro-mcp",
+          "pulseMCP": "https://www.pulsemcp.com/servers/monglong-logic-pro"
+        }
       },
       "discovery": {
         "categories": [
@@ -44,16 +48,24 @@
         "tags": [
           "logic-pro",
           "music-production",
+          "audio-production",
           "daw",
+          "daw-automation",
           "macos",
           "swift",
           "mcp",
           "model-context-protocol",
           "ai-agents",
+          "ai-music",
           "automation",
           "app-automation",
           "desktop-automation",
+          "logic-pro-x",
+          "claude",
+          "claude-code",
+          "cursor",
           "midi",
+          "mcp-server",
           "music-tech"
         ]
       },
@@ -69,8 +81,8 @@
         }
       },
       "requirements": {
-        "platform": "macOS 14+",
-        "logicPro": "12.0.1+",
+        "platform": "macOS 14+ for the MCP server; Logic Pro 12.3 requires macOS 15.6+",
+        "logicPro": "12.3 first-class validation target; 12.0.1+ best-effort floor",
         "permissions": [
           "Accessibility",
           "Automation"

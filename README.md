@@ -57,7 +57,7 @@ Logic Pro MCP: region imported, instrument routed, readback exposed through reso
 | Read resources | 18 static resources for health, transport, tracks, mixer, markers, project metadata, project audit/cleanup planning, MIDI ports, MCU state, library inventory, stock plugin/instrument intelligence, Session Players, and workflow skills |
 | Resource templates | 11 templates for track, region, mixer-strip, stock plugin detail/search, stock instrument detail/search, Session Player detail, session-plan dry run, and workflow detail/search lookup |
 | Control channels | MCU, Accessibility, AppleScript, CoreMIDI, CGEvent, Scripter, MIDI Key Commands |
-| Supported Logic Pro | **Latest Logic Pro first.** The current latest release (Logic Pro 12.3) is the first-class, actively-validated target; new Logic Pro versions are prioritized as they ship. Older versions down to the 12.0.1 floor may work but are best-effort and not actively validated, because Logic's Accessibility tree changes between releases |
+| Supported Logic Pro | **Latest Logic Pro first.** The current latest release is Logic Pro 12.3, and Apple lists macOS 15.6+ for that Logic release. Logic Pro 12.3 is the first-class, actively-validated target; new Logic Pro versions are prioritized as they ship. Older versions down to the 12.0.1 floor may work but are best-effort and not actively validated, because Logic's Accessibility tree changes between releases |
 | Verification line | Current source tree (v3.8.0 development line): `2077` Swift tests, release build, and strict fresh live Logic E2E `372/373` (372 passed / 1 skipped) |
 | Release state | Published stable `v3.8.0`; previous stable `v3.7.4` remains available for pinned installs |
 | Community layer | Official Discord for setup support, release notes, reproducible bug triage, product requests, demos, and contributor discussion |
@@ -71,6 +71,20 @@ Want to contribute? Start with the [Contributing Guide](CONTRIBUTING.md) and the
 Join the official Logic Pro MCP Discord: [https://discord.gg/4M3s79DBzz](https://discord.gg/4M3s79DBzz).
 
 Discord is the real-time community layer for setup help, release discussion, bug triage, product requests, demos, and contributor coordination. GitHub Issues remain the canonical tracker for reproducible bugs, feature requests, and decisions that need to stay searchable.
+
+## Canonical Links
+
+GitHub is the source of truth for releases, setup, security posture, and issue tracking. Directory listings should point back to the same canonical project:
+
+| Surface | Link |
+|---------|------|
+| Repository | [github.com/MongLong0214/logic-pro-mcp](https://github.com/MongLong0214/logic-pro-mcp) |
+| Stable release | [v3.8.0](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.8.0) |
+| Homebrew install | `brew tap MongLong0214/logic-pro-mcp https://github.com/MongLong0214/logic-pro-mcp` then `brew install logic-pro-mcp` |
+| MCP Registry metadata | [`server.json`](server.json) |
+| LobeHub directory | [monglong0214-logic-pro-mcp](https://lobehub.com/mcp/monglong0214-logic-pro-mcp) |
+| PulseMCP directory | [monglong-logic-pro](https://www.pulsemcp.com/servers/monglong-logic-pro) |
+| Community | [Discord](https://discord.gg/4M3s79DBzz) |
 
 ## Why It Exists
 
@@ -114,7 +128,7 @@ Logic Pro MCP uses a different model. It routes each operation to the strongest 
 
 ## Quick Start
 
-**Prerequisites**: macOS 14+, Logic Pro (latest release prioritized — currently **12.3**; works down to the 12.0.1 floor on a best-effort basis), and an MCP client that can launch a stdio server. Published GitHub Actions/Homebrew assets are universal (`arm64` + `x86_64`) and do not require Xcode. Bounce/export uses the bundled native CGEvent helper with no third-party click binary.
+**Prerequisites**: macOS 14+ for the MCP server, Logic Pro (latest release prioritized — currently **12.3**, which Apple lists as requiring macOS 15.6+; older Logic versions down to the 12.0.1 floor are best-effort), and an MCP client that can launch a stdio server. Published GitHub Actions/Homebrew assets are universal (`arm64` + `x86_64`) and do not require Xcode. Bounce/export uses the bundled native CGEvent helper with no third-party click binary.
 
 > **Logic Pro version policy.** Logic Pro MCP tracks the **latest Logic Pro release as its first-class target** and validates against it (the strict live E2E runs on Logic Pro 12.3). When Apple ships a new Logic Pro version, supporting it is the top priority — the Accessibility/UI tree shifts between releases, so the newest version is where fixes land first. Older versions above the 12.0.1 floor remain best-effort and may lose parity as those UI surfaces change.
 
@@ -227,7 +241,7 @@ The public docs tree is intentionally scoped: setup, API, troubleshooting, READM
 
 **Published stable**: `v3.8.0` is available as a GitHub Release and Homebrew install. It carries the accumulated v3.6.0 -> v3.7.4 set, then adds the enterprise review-and-refactor sweep: a behavior-preserving internal refactor (verified by a zero golden static-wire diff across tools/resources/templates and error envelopes), correctness and honesty fixes (P0 SIGPIPE crash guard, MCU feedback FIFO ordering plus restart-safe feedback, real `logic://tracks` volume/pan/automation values, and tri-state permission honesty), and security hardening (CI release-tag injection closed, installer protected-path blocklist bypasses closed on case-insensitive filesystems, and ownership validation of the PATH-resolved bounce interpreter). Published metadata remains `team_id:"ADHOC"` / `signing:"adhoc"` when Developer ID credentials are absent, with universal `x86_64` + `arm64` artifacts produced by GitHub Actions.
 
-**Previous stable**: `v3.7.3` remains available as the issue-backlog bug-fix release; `v3.7.2` remains available as the production-readiness hardening release, `v3.7.1` as the public documentation/runtime-surface correction release, `v3.7.0` as the full workflow/demo hardening release, and `v3.6.0` for clients that need the verified plugin apply-back surface without the larger v3.7.x set.
+**Previous stable**: `v3.7.4` remains available as the issue-backlog bug-fix release; `v3.7.3`, `v3.7.2`, `v3.7.1`, and `v3.7.0` remain available for pinned v3.7.x installs, and `v3.6.0` for clients that need the verified plugin apply-back surface without the larger v3.7.x set.
 
 ## Verification
 
@@ -267,7 +281,7 @@ Per-release detail lives in [CHANGELOG.md](CHANGELOG.md). Security and installer
 
 ## Registry Metadata
 
-The repository ships `server.json` for the official MCP Registry metadata path. The record is metadata-only because the registry package schema does not yet model Homebrew formulas or GitHub release tarballs as first-class package types. The install authority remains the pinned GitHub Release/Homebrew path above.
+The repository ships `server.json` for the official MCP Registry metadata path. It is pinned to the current stable release (`v3.8.0`) and carries discovery tags for Logic Pro, DAW automation, MIDI, Claude/Cursor MCP clients, and music-production agents. The record is metadata-only because the registry package schema does not yet model Homebrew formulas or GitHub release tarballs as first-class package types. The install authority remains the pinned GitHub Release/Homebrew path above.
 
 ## Known Limitations
 

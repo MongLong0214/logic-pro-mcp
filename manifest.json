@@ -1,7 +1,7 @@
 {
   "name": "logic-pro-mcp",
   "display_name": "Logic Pro MCP Server",
-  "description": "Bidirectional, stateful control of Logic Pro from AI assistants. 10 tools + 18 resources + 11 templates across 7 native macOS channels (MCU, MIDI Key Commands, CoreMIDI, Scripter, Accessibility, CGEvent, AppleScript). GitHub Actions release assets are universal (`arm64` + `x86_64`); historical local ADHOC prerelease cuts should be audited via RELEASE-METADATA.json.",
+  "description": "Production-oriented MCP server for Logic Pro. Gives Claude, Cursor, and custom MCP agents stateful DAW control, live project readback, MIDI composition, mixer/plugin operations, and fail-closed safety gates across 10 tools + 18 resources + 11 templates.",
   "version": "3.8.0",
   "author": "Isaac (MongLong0214)",
   "license": "MIT",
@@ -11,6 +11,31 @@
   "supported_architectures": ["arm64", "x86_64"],
   "runtime": "native",
   "min_logic_pro_version": "12.0.1",
+  "latest_logic_pro_version": "12.3",
+  "latest_logic_pro_requires_macos": "15.6",
+  "keywords": [
+    "logic-pro",
+    "logic-pro-x",
+    "music-production",
+    "audio-production",
+    "daw",
+    "daw-automation",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "claude",
+    "claude-code",
+    "cursor",
+    "ai-agents",
+    "ai-music",
+    "midi",
+    "macos",
+    "swift"
+  ],
+  "directories": {
+    "lobehub": "https://lobehub.com/mcp/monglong0214-logic-pro-mcp",
+    "pulsemcp": "https://www.pulsemcp.com/servers/monglong-logic-pro"
+  },
   "installation": {
     "macos": {
       "command": "LogicProMCP",
