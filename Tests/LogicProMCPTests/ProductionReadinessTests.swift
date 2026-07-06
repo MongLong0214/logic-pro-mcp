@@ -306,7 +306,8 @@ import Testing
     let granted = PermissionChecker.PermissionStatus(
         accessibilityState: .granted,
         automationState: .granted,
-        systemEventsAutomationState: .granted
+        systemEventsAutomationState: .granted,
+        postEventAccessState: .granted
     )
     #expect(granted.allGranted)
     #expect(granted.summary.contains("granted"))

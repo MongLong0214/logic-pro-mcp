@@ -29,6 +29,18 @@ private func enterpriseRuntime(
     runtime.macOSVersion = { macOSVersion }
     runtime.monotonicNowMs = monotonicNowMs
     runtime.latestReleaseLookup = latestReleaseLookup
+    runtime.logicApps = {
+        [SetupDoctor.LogicAppInfo(path: "/Applications/Logic Pro.app", version: LogicProSupport.latestValidatedLogicVersion, bundleID: ServerConfig.logicProBundleID, readable: true)]
+    }
+    runtime.shareDirProbe = { .complete(path: "/opt/homebrew/share/logic-pro-mcp", source: "brew_pkgshare") }
+    runtime.readClaudeDesktopRegistration = { .registered(command: "/Applications/Claude.app/Contents/MacOS/Claude") }
+    runtime.keyCommandsPresetStaged = { true }
+    runtime.mcuPortReferenceFound = { true }
+    runtime.launchContext = { SetupDoctor.LaunchContextInfo(context: "terminal", responsibleHint: "Terminal") }
+    runtime.tccCrossContextProbe = { .granted("terminal:accessibility=granted") }
+    runtime.blockingDialogInfo = { nil }
+    runtime.fileExistsAtPath = { _ in true }
+    runtime.isRegularFile = { _ in true }
     return runtime
 }
 
@@ -40,7 +52,8 @@ private func granted(
     .init(
         accessibilityState: accessibility ? .granted : .notGranted,
         automationState: automationLogicPro ? .granted : .notGranted,
-        systemEventsAutomationState: systemEvents
+        systemEventsAutomationState: systemEvents,
+        postEventAccessState: .granted
     )
 }
 
@@ -69,8 +82,8 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
 
 // MARK: - T1: v2 model framework
 
-@Test func test_t1_schema_is_v2() {
-    #expect(makeReport().schema == "logic_pro_mcp_doctor.v2")
+@Test func test_t1_schema_is_v3() {
+    #expect(makeReport().schema == "logic_pro_mcp_doctor.v3")
 }
 
 @Test func test_t1_each_check_has_category_severity_duration() throws {
@@ -149,10 +162,10 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
             return value
         })
     )
-    #expect(report.checks.count == 13)
+    #expect(report.checks.count == 26)
     let perCheckSum = report.checks.reduce(0.0) { $0 + $1.durationMs }
     #expect(report.summary.durationMs == perCheckSum)
-    #expect(report.summary.durationMs == 13.0)
+    #expect(report.summary.durationMs == 26.0)
     let maxPerCheck = report.checks.map(\.durationMs).max() ?? 0
     #expect(report.summary.durationMs >= maxPerCheck)
     #expect(report.summary.durationMs >= 0)
@@ -229,7 +242,7 @@ private struct FrozenV1Report: Codable {
     let json = encodeJSON(makeReport())
     // A frozen v1-shaped consumer must still decode v2 output (additive superset).
     let frozen: FrozenV1Report = try decodeJSON(json)
-    #expect(frozen.schema == "logic_pro_mcp_doctor.v2")
+    #expect(frozen.schema == "logic_pro_mcp_doctor.v3")
     let ids = Set(frozen.checks.map(\.id))
     // Every original v1 check id must survive (a dropped v1 check would fail this).
     let v1Ids = [
@@ -273,7 +286,8 @@ private struct FrozenV1Report: Codable {
     let permission = PermissionChecker.PermissionStatus(
         accessibilityState: .granted,
         automationState: .notVerifiable,
-        systemEventsAutomationState: .granted
+        systemEventsAutomationState: .granted,
+        postEventAccessState: .granted
     )
     let report = makeReport(permission: permission)
     let logicAutomation = try #require(check(report, "permissions.automation_logic_pro"))
@@ -572,9 +586,9 @@ private func runEntrypoint(
 @Test func test_t1_summary_counts_invariant_with_update_check_14() {
     // boomer-B2-3: invariant must hold with the opt-in update check present (14 checks).
     let report = makeReport(runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: ServerConfig.serverVersion) }))
-    #expect(report.checks.count == 14)
+    #expect(report.checks.count == 27)
     let s = report.summary
-    #expect(s.total == 14)
+    #expect(s.total == 27)
     #expect(s.passed + s.failed + s.warnings + s.manual + s.skipped == s.total)
 }
 
@@ -597,4 +611,217 @@ private func runEntrypoint(
         #expect(c.durationMs == c.durationMs.rounded())
     }
     #expect(report.summary.durationMs == report.summary.durationMs.rounded())
+}
+
+// MARK: - T1 (doctor-v3): data-spine — blocked_by / fix_plan / schema v3 / dep-table
+
+// Case 1
+@Test func test_t1v3_schema_is_v3() {
+    #expect(makeReport().schema == "logic_pro_mcp_doctor.v3")
+}
+
+// Case 2
+@Test func test_t1v3_blocked_by_omitted_when_nil() throws {
+    // D9: with no dependency set, the `blocked_by` key must be ABSENT from every
+    // per-check object (synthesized `encodeIfPresent`, no hand-written encode(to:)).
+    let json = encodeJSON(makeReport())
+    let object = try #require(sharedJSONObject(json))
+    let checks = try #require(object["checks"] as? [[String: Any]])
+    for c in checks {
+        #expect(c["blocked_by"] == nil, "blocked_by must be omitted for \(c["id"] ?? "?")")
+    }
+}
+
+// Case 3
+@Test func test_t1v3_blocked_by_present_when_set() throws {
+    // A check built with a non-nil `blockedBy` emits the wire key `blocked_by`.
+    let c = SetupDoctor.makeCheckForTesting(
+        id: "logic.blocking_dialog",
+        domain: "logic",
+        status: .skipped,
+        summary: "blocked",
+        evidence: [:],
+        remediationType: .docs,
+        blockedBy: "logic.application_state"
+    )
+    let object = try #require(sharedJSONObject(encodeJSON(c)))
+    #expect(object["blocked_by"] as? String == "logic.application_state")
+}
+
+// Case 4
+@Test func test_t1v3_fix_plan_membership_excludes_pass_and_skipped() {
+    // All-good ⇒ empty plan. A lone skipped/info check (macOS unreadable) is NOT a member.
+    #expect(makeReport().fixPlan == [])
+    #expect(makeReport(runtime: enterpriseRuntime(macOSVersion: nil)).fixPlan == [])
+}
+
+// Case 5
+@Test func test_t1v3_fix_plan_includes_fail_warn_manual() {
+    // Force a fail (accessibility), a warn (update behind), and a manual (channels).
+    let report = makeReport(
+        runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: "v99.0.0") }),
+        permission: granted(accessibility: false),
+        approvals: [:]
+    )
+    #expect(report.fixPlan.contains("permissions.accessibility"))   // fail → error
+    #expect(report.fixPlan.contains("updates.latest_release"))      // warn → warning
+    #expect(report.fixPlan.contains("channels.manual_validation"))  // manual → warning (INCLUDED)
+}
+
+// Case 6
+@Test func test_t1v3_fix_plan_order_two_tier_and_headline_agree() {
+    // (a) fail present ⇒ fail-ids first, then warn/manual in declared order (co-equal tier).
+    let mixed = makeReport(
+        runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: "v99.0.0") }),
+        permission: granted(accessibility: false),
+        approvals: [:]
+    )
+    // Declared order: permissions.accessibility(#8,fail) < channels.manual_validation(#13,manual)
+    // < updates.latest_release(#14,warn). Errors tier first, then warning tier declared-order.
+    #expect(mixed.fixPlan == [
+        "permissions.accessibility",
+        "channels.manual_validation",
+        "updates.latest_release",
+    ])
+    // (b) OBJ-A counterexample: a MANUAL declared BEFORE a WARN, no fail. 2-tier keeps them
+    // co-equal so declared order wins ⇒ the earlier manual leads, and headline embeds it.
+    let counter = makeReport(
+        runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: "v99.0.0") }),
+        approvals: [:]
+    )
+    // channels.manual_validation(#13,manual) declared before updates.latest_release(#14,warn).
+    #expect(counter.fixPlan == ["channels.manual_validation", "updates.latest_release"])
+    #expect(counter.headline.contains("[channels.manual_validation]"))
+}
+
+// Case 7
+@Test func test_t1v3_headline_id_equals_fix_plan_first() {
+    // AC-4: the id EMBEDDED in headline equals fix_plan[0] (id-extraction, never literal ==).
+    let report = makeReport(permission: granted(accessibility: false))
+    #expect(report.fixPlan.first == "permissions.accessibility")
+    #expect(report.headline.contains("[\(report.fixPlan[0])]"))
+}
+
+// Case 8
+@Test func test_t1v3_headline_healthy_when_fix_plan_empty() {
+    let report = makeReport()
+    #expect(report.fixPlan == [])
+    #expect(report.headline == "Logic Pro MCP install is healthy.")
+}
+
+// Case 9
+@Test func test_t1v3_check_factory_threads_blocked_by() {
+    let withBB = SetupDoctor.makeCheckForTesting(
+        id: "logic.version_support",
+        domain: "logic",
+        status: .skipped,
+        summary: "s",
+        evidence: [:],
+        remediationType: .docs,
+        blockedBy: "logic.installation"
+    )
+    #expect(withBB.blockedBy == "logic.installation")
+    let withoutBB = SetupDoctor.makeCheckForTesting(
+        id: "logic.version_support",
+        domain: "logic",
+        status: .pass,
+        summary: "s",
+        evidence: [:],
+        remediationType: .none
+    )
+    #expect(withoutBB.blockedBy == nil)
+}
+
+// Case 10
+@Test func test_t1v3_dependency_table_and_status_resolver() throws {
+    // OBJ-B: table typed [String: [String]] — array order = precedence.
+    let table = SetupDoctor.blockedByDependencies
+    #expect(table["mcp.registration_target"] == ["mcp.claude_code_registration"])
+    #expect(table["logic.version_support"] == ["logic.installation"])
+    #expect(table["logic.blocking_dialog"] == ["logic.application_state", "permissions.accessibility"])
+    // status(of:in:) resolves a cause's status from a checks array; missing id ⇒ nil.
+    let report = makeReport(permission: granted(accessibility: false))
+    let resolved = try #require(SetupDoctor.status(of: "permissions.accessibility", in: report.checks))
+    #expect(resolved == .fail)
+    #expect(SetupDoctor.status(of: "no.such.check", in: report.checks) == nil)
+}
+
+// Case 14
+@Test func test_t1v3_frozen_v1_still_decodes_from_v3() throws {
+    // G5: v3 output still decodes into a frozen v1-shaped consumer (strict superset).
+    let json = encodeJSON(makeReport())
+    let frozen: FrozenV1Report = try decodeJSON(json)
+    #expect(frozen.schema == "logic_pro_mcp_doctor.v3")
+    let ids = Set(frozen.checks.map(\.id))
+    let v1Ids = [
+        "binary.path", "binary.executable", "binary.version", "install.source",
+        "release.signature", "release.quarantine", "mcp.claude_code_registration",
+        "permissions.accessibility", "permissions.automation_logic_pro",
+        "logic.application_state", "channels.manual_validation",
+    ]
+    for id in v1Ids {
+        #expect(ids.contains(id), "v1 check id \(id) missing from v3 output")
+    }
+}
+
+// Case 15
+@Test func test_t1v3_frozen_v2_decodes_from_v3() throws {
+    // AC-7: a frozen v2-shaped consumer decodes v3 output; category/severity/duration_ms
+    // survive; the new fix_plan/blocked_by keys are absent from the struct and ignored.
+    let json = encodeJSON(makeReport(permission: granted(accessibility: false)))
+    let frozen: FrozenV2Report = try decodeJSON(json)
+    #expect(frozen.schema == "logic_pro_mcp_doctor.v3")
+    let accessibility = try #require(frozen.checks.first { $0.id == "permissions.accessibility" })
+    #expect(accessibility.status == "fail")
+    #expect(accessibility.category == "permissions")
+    #expect(accessibility.severity == "error")
+    #expect(accessibility.durationMs >= 0)
+    #expect(frozen.summary.total == frozen.checks.count)
+    #expect(!frozen.headline.isEmpty)
+}
+
+// v2-shaped frozen consumer (superset decode target for case 15). Deliberately OMITS
+// `fix_plan`/`blocked_by` so the test proves those additive keys are ignored, not required.
+private struct FrozenV2Remediation: Codable { let type: String; let value: String }
+private struct FrozenV2Check: Codable {
+    let id: String
+    let domain: String
+    let status: String
+    let summary: String
+    let evidence: [String: String]
+    let remediation: FrozenV2Remediation
+    let category: String
+    let severity: String
+    let durationMs: Double
+    enum CodingKeys: String, CodingKey {
+        case id, domain, status, summary, evidence, remediation, category, severity
+        case durationMs = "duration_ms"
+    }
+}
+private struct FrozenV2Summary: Codable {
+    let total: Int
+    let passed: Int
+    let failed: Int
+    let warnings: Int
+    let manual: Int
+    let skipped: Int
+    let durationMs: Double
+    enum CodingKeys: String, CodingKey {
+        case total, passed, failed, warnings, manual, skipped
+        case durationMs = "duration_ms"
+    }
+}
+private struct FrozenV2Report: Codable {
+    let schema: String
+    let status: String
+    let version: String
+    let installSource: String
+    let checks: [FrozenV2Check]
+    let summary: FrozenV2Summary
+    let headline: String
+    enum CodingKeys: String, CodingKey {
+        case schema, status, version
+        case installSource = "install_source"
+        case checks, summary, headline
+    }
 }

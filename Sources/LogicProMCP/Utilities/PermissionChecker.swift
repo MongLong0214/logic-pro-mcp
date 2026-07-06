@@ -52,6 +52,7 @@ enum PermissionChecker {
         // output) → .notVerifiable. Collapsing the latter to .notGranted would report
         // "denied" for an infrastructure failure — a false-RED the doctor must not emit.
         let runSystemEventsAutomationProbe: @Sendable () -> CheckState
+        let postEventPreflight: @Sendable () -> Bool
 
         /// `runAutomationProbeState` defaults to lifting the two-state
         /// `runAutomationProbe` into a CheckState, so existing 4-argument
@@ -62,12 +63,14 @@ enum PermissionChecker {
             isLogicProRunning: @escaping @Sendable () -> Bool,
             runAutomationProbe: @escaping @Sendable () -> Bool,
             runSystemEventsAutomationProbe: @escaping @Sendable () -> CheckState,
-            runAutomationProbeState: (@Sendable () -> CheckState)? = nil
+            runAutomationProbeState: (@Sendable () -> CheckState)? = nil,
+            postEventPreflight: @escaping @Sendable () -> Bool = { false }
         ) {
             self.checkAccessibility = checkAccessibility
             self.isLogicProRunning = isLogicProRunning
             self.runAutomationProbe = runAutomationProbe
             self.runSystemEventsAutomationProbe = runSystemEventsAutomationProbe
+            self.postEventPreflight = postEventPreflight
             self.runAutomationProbeState = runAutomationProbeState ?? {
                 runAutomationProbe() ? .granted : .notGranted
             }
@@ -81,7 +84,8 @@ enum PermissionChecker {
             isLogicProRunning: { ProcessUtils.isLogicProRunning },
             runAutomationProbe: { runAutomationProbeViaShell().isGranted },
             runSystemEventsAutomationProbe: { runSystemEventsAutomationProbeViaShell() },
-            runAutomationProbeState: { runAutomationProbeViaShell() }
+            runAutomationProbeState: { runAutomationProbeViaShell() },
+            postEventPreflight: { CGPreflightPostEventAccess() }
         )
     }
 
@@ -89,27 +93,37 @@ enum PermissionChecker {
         let accessibilityState: CheckState
         let automationState: CheckState
         let systemEventsAutomationState: CheckState
+        let postEventAccessState: CheckState
 
-        init(accessibility: Bool, automationLogicPro: Bool, systemEventsAutomation: CheckState = .notVerifiable) {
+        init(
+            accessibility: Bool,
+            automationLogicPro: Bool,
+            systemEventsAutomation: CheckState = .notVerifiable,
+            postEventAccess: Bool = false
+        ) {
             self.accessibilityState = accessibility ? .granted : .notGranted
             self.automationState = automationLogicPro ? .granted : .notGranted
             self.systemEventsAutomationState = systemEventsAutomation
+            self.postEventAccessState = postEventAccess ? .granted : .notGranted
         }
 
         init(
             accessibilityState: CheckState,
             automationState: CheckState,
-            systemEventsAutomationState: CheckState = .notVerifiable
+            systemEventsAutomationState: CheckState = .notVerifiable,
+            postEventAccessState: CheckState = .notGranted
         ) {
             self.accessibilityState = accessibilityState
             self.automationState = automationState
             self.systemEventsAutomationState = systemEventsAutomationState
+            self.postEventAccessState = postEventAccessState
         }
 
         var accessibility: Bool { accessibilityState.isGranted }
         var automationLogicPro: Bool { automationState.isGranted }
         var automationVerifiable: Bool { automationState != .notVerifiable }
         var automationSystemEvents: Bool { systemEventsAutomationState.isGranted }
+        var postEventAccess: Bool { postEventAccessState.isGranted }
 
         // System Events automation is a hard requirement, not optional: MIDI
         // import, the tempo dialog, and project-state probes all drive
@@ -118,7 +132,7 @@ enum PermissionChecker {
         // an Apple Events denial — the exact #188 false-green. The production
         // probe is unconditional (System Events is always running), so a denied
         // target is reported truthfully here rather than advertised as ready.
-        var allGranted: Bool { accessibility && automationLogicPro && automationSystemEvents }
+        var allGranted: Bool { accessibility && automationLogicPro && automationSystemEvents && postEventAccess }
 
         var summary: String {
             var lines: [String] = []
@@ -130,6 +144,7 @@ enum PermissionChecker {
                 lines.append("Automation (Logic Pro): NOT VERIFIABLE (Logic Pro not running)")
             }
             lines.append("Automation (System Events): \(systemEventsAutomationState.summaryLabel)")
+            lines.append("PostEvent (CGEvent): \(postEventAccessState.summaryLabel)")
             if accessibilityState == .notGranted {
                 lines.append("  → System Settings > Privacy & Security > Accessibility → add your terminal app")
             }
@@ -146,6 +161,9 @@ enum PermissionChecker {
             // line never hides a denied System Events target (#188).
             if systemEventsAutomationState == .notGranted {
                 lines.append("  → System Settings > Privacy & Security > Automation → allow control of System Events")
+            }
+            if postEventAccessState == .notGranted {
+                lines.append("  → System Settings > Privacy & Security > Accessibility → grant PostEvent access to the host app")
             }
             return lines.joined(separator: "\n")
         }
@@ -208,7 +226,8 @@ enum PermissionChecker {
         PermissionStatus(
             accessibilityState: checkAccessibilityState(runtime: runtime),
             automationState: checkAutomationState(runtime: runtime),
-            systemEventsAutomationState: checkSystemEventsAutomationState(runtime: runtime)
+            systemEventsAutomationState: checkSystemEventsAutomationState(runtime: runtime),
+            postEventAccessState: runtime.postEventPreflight() ? .granted : .notGranted
         )
     }
 

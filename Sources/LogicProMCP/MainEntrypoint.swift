@@ -79,7 +79,9 @@ enum MainEntrypoint {
                 let useColor = isStdoutTTY() && doctorEnvironment["NO_COLOR"] == nil
                 writeStdout(SetupDoctor.renderHuman(report, mode: mode, useColor: useColor) + "\n")
             }
-            return SetupDoctor.shouldExitWithFailure(report) ? 1 : 0
+            return arguments.contains("--strict")
+                ? SetupDoctor.strictExitCode(report)
+                : (SetupDoctor.shouldExitWithFailure(report) ? 1 : 0)
         }
 
         if isLifecycleSubcommand(arguments) {
@@ -230,8 +232,10 @@ enum MainEntrypoint {
           LogicProMCP                          Start the MCP server over stdio (default; used by an MCP client)
           LogicProMCP --help, -h               Print this help and exit
           LogicProMCP --version, -V            Print the version and exit
-          LogicProMCP doctor [--json] [--verbose|--quiet] [--check-updates]
+          LogicProMCP doctor [--json] [--verbose|--quiet] [--check-updates] [--strict]
                                                Print a diagnostic report and exit
+          LogicProMCP lifecycle <install|update|uninstall> [--json]
+                                               Print a read-only lifecycle plan and exit
           LogicProMCP <install|update|uninstall> --dry-run [--json]
                                                Print a read-only lifecycle plan and exit
           LogicProMCP --check-permissions      Print macOS permission status and exit (non-zero if not ready)

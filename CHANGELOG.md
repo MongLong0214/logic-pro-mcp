@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Doctor v3 diagnostic surface.** `LogicProMCP doctor` now emits schema `logic_pro_mcp_doctor.v3` with `fix_plan`, `blocked_by`, 26 default checks, and 27 checks when `--check-updates` is enabled. A higher `skipped` count is expected on hosts where a diagnostic capability is unavailable; v3 reports those capability gaps instead of hiding them.
+- **Strict doctor exit routing.** `doctor --strict` uses `0=ok`, `1=failed`, `2=manual_action_required`, and `3=degraded`. Codes `2` and `3` are status codes, not usage errors.
+
+### Fixed
+
+- **PostEvent permission folded into readiness.** `--check-permissions` now exits non-zero when Accessibility and Automation are granted but PostEvent is denied. This is the intended false-green correction for CGEvent fallback paths.
+- **Doctor privacy and causal checks.** The doctor now treats relative MCP registration commands as unverifiable instead of warning, validates registered share-dir envs and regular-file targets, classifies launch context with ancestry precedence, and redacts TCC findings to service/principal/state summaries.
+
 ## [3.8.0] — 2026-07-05
 
 Enterprise review-and-refactor sweep. A read-only A–Z review (5 reviewers) plus a second-round security/concurrency/completeness audit drove a behavior-preserving internal refactor, a small set of correctness/honesty fixes, and security hardening. **No public tool/resource/template surface change (10 tools / 18 resources / 11 templates unchanged).** Also carries the already-merged Logic Pro 12.3 insert-slot enumeration recovery (#234). `swift test --no-parallel` → 2077 passed; strict fresh live Logic Pro 12.3 E2E → 372 passed / 1 skipped / 373 total.

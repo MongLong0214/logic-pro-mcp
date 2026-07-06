@@ -122,7 +122,7 @@ From your MCP client:
 
 Fully configured hosts should show Accessibility, AppleScript, CoreMIDI, MCU, MIDIKeyCommands, Scripter, and CGEvent as available. Skipping Key Commands or Scripter is valid when you do not need those paths.
 
-## Doctor (`logic_pro_mcp_doctor.v2`)
+## Doctor (`logic_pro_mcp_doctor.v3`)
 
 `doctor` is read-only and safe to run before starting the server. Flags:
 
@@ -133,10 +133,37 @@ Fully configured hosts should show Accessibility, AppleScript, CoreMIDI, MCU, MI
 | `--quiet` | Headline + summary + failing/non-pass checks only. |
 | `--json` | Machine report. Identical bytes regardless of `--verbose`/`--quiet`/color. |
 | `--check-updates` | Opt-in: adds an `updates.latest_release` check (unauthenticated GitHub releases read). The default run never touches the network. |
+| `--strict` | Scripted exit codes: `ok=0`, `failed=1`, `manual_action_required=2`, `degraded=3`. |
 
 Color and unicode symbols are emitted only when stdout is a TTY and `NO_COLOR` is unset; otherwise output is plain ASCII (`[pass]`-style), so pipes and CI logs stay clean.
 
-The `v2` report is a **field-superset** of `v1`: every v1 key keeps its name, semantics, and value. New fields are additive — a top-level `summary` block (`total`, `passed`, `failed`, `warnings`, `manual`, `skipped`, `duration_ms`) and `headline`, plus per-check `category`, `severity`, and `duration_ms`. The `schema` string changes `v1`→`v2`; consumers should prefix-match `logic_pro_mcp_doctor.`, not exact-equal a version. Exit code is unchanged: `failed` → 1, otherwise 0.
+The `v3` report is a **field-superset** of `v1`/`v2`: every prior key keeps its name, semantics, and value. New fields are additive — top-level `fix_plan` and optional per-check `blocked_by`. Consumers should prefix-match `logic_pro_mcp_doctor.`, not exact-equal a version. Default exit code is unchanged: `failed` → 1, otherwise 0.
+
+Strict exit codes `2` and `3` are doctor status codes, not usage errors, and intentionally sit below the `sysexits.h` 64-78 range. For a boolean gate, test non-zero; for routing, branch on the exact code. With `set -e`, capture the code before branching:
+
+```bash
+set +e
+LogicProMCP doctor --strict --json > doctor.json
+rc=$?
+set -e
+
+case "$rc" in
+  0) echo "doctor ok" ;;
+  1) echo "doctor failed"; exit 1 ;;
+  2) echo "manual action required"; exit 1 ;;
+  3) echo "doctor degraded"; exit 1 ;;
+  *) echo "unexpected doctor exit: $rc"; exit "$rc" ;;
+esac
+```
+
+Consumer compatibility notes:
+
+| Consumer type | Upgrade note |
+|---------------|--------------|
+| Exact 13-check arrays | Switch to ID-based lookup; Doctor v3 emits 26 base checks and 27 with `--check-updates`. |
+| Strict schema validators | Allow additive top-level `fix_plan` and per-check `blocked_by`. |
+| Skipped-count alarms | Expect a higher baseline; v3 reports diagnostic-capability gaps instead of hiding them. |
+| UIs unaware of `fix_plan` | Continue rendering checks normally; `fix_plan` only orders the next actions. |
 
 ## Doctor Remediation Anchors
 
@@ -154,6 +181,14 @@ Run `chmod +x /path/to/LogicProMCP`.
 ### `install.source`
 Prefer the Homebrew install. For source builds, launch `.build/release/LogicProMCP` by absolute path.
 
+<a id="doctor-installbinary-inventory"></a>
+### `install.binary_inventory`
+Reinstall or upgrade when a canonical installed binary has a stale static version.
+
+<a id="doctor-installshare-dir"></a>
+### `install.share_dir`
+Run `brew reinstall logic-pro-mcp` when packaged helper assets are missing.
+
 <a id="doctor-releasesignature"></a>
 ### `release.signature`
 Reinstall from the pinned release artifact, or ad-hoc sign a local source build with `codesign --force --sign - /path/to/LogicProMCP`.
@@ -165,6 +200,14 @@ After verifying SHA256 and signature, remove quarantine with `xattr -d com.apple
 <a id="doctor-mcpclaude-code-registration"></a>
 ### `mcp.claude_code_registration`
 Register with `claude mcp add --scope user logic-pro -- LogicProMCP`. If config parsing fails, fix `~/.claude.json` and rerun doctor.
+
+<a id="doctor-mcpregistration-target"></a>
+### `mcp.registration_target`
+Refresh the Claude Code MCP registration when its command is missing, relative, not executable, or stale.
+
+<a id="doctor-mcpclaude-desktop-registration"></a>
+### `mcp.claude_desktop_registration`
+Optional Claude Desktop registration. If configured but unregistered, edit `claude_desktop_config.json`.
 
 <a id="doctor-permissionsaccessibility"></a>
 ### `permissions.accessibility`
@@ -178,6 +221,18 @@ Grant Automation access for Logic Pro. If status is `not_verifiable`, launch Log
 ### `permissions.automation_system_events`
 Grant Automation access for **System Events** (System Settings > Privacy & Security > Automation → System Events). This is a separate TCC target from Logic Pro automation and is required by MIDI import / tempo-dialog / project-state paths (#188). If status is `manual` (`not_verifiable`), the probe could not run — rerun doctor.
 
+<a id="doctor-permissionspost-event-access"></a>
+### `permissions.post_event_access`
+Grant Accessibility/PostEvent access to the app that launches LogicProMCP; CGEvent fallback operations need it.
+
+<a id="doctor-permissionslaunch-context"></a>
+### `permissions.launch_context`
+Informational. Re-run doctor from the same app that will launch the server when cross-context TCC is in doubt.
+
+<a id="doctor-permissionstcc-cross-context"></a>
+### `permissions.tcc_cross_context`
+Cross-context TCC enrichment. If skipped, live permission probes remain authoritative.
+
 <a id="doctor-systemmacos-version"></a>
 ### `system.macos_version`
 Logic Pro MCP requires macOS 14 or newer. Upgrade macOS if this check fails.
@@ -190,9 +245,33 @@ Shown only with `doctor --check-updates`. If a newer release exists, `brew upgra
 ### `logic.application_state`
 Launch Logic Pro and open or create a project.
 
+<a id="doctor-logicinstallation"></a>
+### `logic.installation`
+Install Logic Pro in `/Applications` or `~/Applications`.
+
+<a id="doctor-logicversion-support"></a>
+### `logic.version_support`
+Use Logic Pro 12.0.1 or newer; 12.3 is the latest validated target.
+
+<a id="doctor-logicblocking-dialog"></a>
+### `logic.blocking_dialog`
+Dismiss blocking Logic Pro modal dialogs before retrying.
+
 <a id="doctor-channelsmanual-validation"></a>
 ### `channels.manual_validation`
 Approve MIDIKeyCommands or Scripter only after completing the matching Logic-side setup.
+
+<a id="doctor-channelskeycmd-reference"></a>
+### `channels.keycmd_reference`
+Run `install-keycmds.sh` if you use MIDIKeyCommands-only operations.
+
+<a id="doctor-channelsmcu-wiring-hint"></a>
+### `channels.mcu_wiring_hint`
+Wire the LogicProMCP MCU port in Logic Pro Control Surfaces if you use MCU-only operations.
+
+<a id="doctor-dependenciesclick-fallback"></a>
+### `dependencies.click_fallback`
+Install `cliclick` only if PostEvent is denied and you still need fallback click paths.
 
 ## Lifecycle Anchors
 

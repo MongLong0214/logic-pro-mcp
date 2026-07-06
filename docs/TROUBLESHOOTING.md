@@ -75,6 +75,33 @@ Launch Logic Pro once, then grant Automation access for the launcher app under *
 
 (Before v3.8.0 a `not_verifiable` outcome was mis-reported as a false "Automation NOT GRANTED".)
 
+### PostEvent denied
+
+`permissions.post_event_access=fail` means CGEvent-family operations cannot post trusted keyboard or click events from the current launcher app. Grant Accessibility to the same app that launches LogicProMCP, then rerun:
+
+```bash
+LogicProMCP --check-permissions
+LogicProMCP doctor --json
+```
+
+### Permissions look granted but another client still fails
+
+TCC permissions belong to the parent app that launches the server. A Terminal-run doctor can pass while Claude Desktop, Claude Code, launchd, or another wrapper still lacks the same grants. Check `permissions.launch_context` and `permissions.tcc_cross_context` in `LogicProMCP doctor --json`, then rerun doctor from the app that will actually spawn the server.
+
+If `permissions.tcc_cross_context` is `skipped`, the live permission probes remain authoritative. The skipped `reason` tells you why the database enrichment could not answer: `full_disk_access_unavailable`, `tcc_query_unavailable`, `tcc_schema_mismatch`, or `principal_not_found`.
+
+### Stale installed binary or helper assets
+
+If `install.binary_inventory=warn`, a canonical installed `LogicProMCP` binary has a different static version from the running doctor. Reinstall or upgrade the package and refresh the MCP registration:
+
+```bash
+brew update
+brew reinstall logic-pro-mcp
+claude mcp add --scope user logic-pro -- LogicProMCP
+```
+
+If `install.share_dir=warn`, packaged helper assets are missing from the resolved share directory. Reinstall the package; source-build runs may show `share_dir_unresolved`, which is expected unless you set `LOGIC_PRO_MCP_SHARE_DIR`.
+
 ## Logic Pro State
 
 ### Health says Logic is not ready

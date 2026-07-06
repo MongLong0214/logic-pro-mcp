@@ -283,7 +283,8 @@ private func makeBundleURL(version: String) throws -> URL {
     let status = PermissionChecker.PermissionStatus(
         accessibility: true,
         automationLogicPro: true,
-        systemEventsAutomation: .granted
+        systemEventsAutomation: .granted,
+        postEventAccess: true
     )
 
     #expect(status.allGranted)

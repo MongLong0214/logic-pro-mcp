@@ -50,3 +50,8 @@ struct ServerConfig: Sendable {
         .scripter,
     ]
 }
+
+struct LogicProSupport: Sendable {
+    static let minimumSupportedLogicVersion = "12.0.1"
+    static let latestValidatedLogicVersion = "12.3"
+}

@@ -114,7 +114,12 @@ private actor MockMainServer: ServerStarting {
     let exitCode = await MainEntrypoint.run(
         arguments: ["LogicProMCP", "--check-permissions"],
         permissionCheck: {
-            .init(accessibility: true, automationLogicPro: true, systemEventsAutomation: .granted)
+            .init(
+                accessibility: true,
+                automationLogicPro: true,
+                systemEventsAutomation: .granted,
+                postEventAccess: true
+            )
         },
         serverFactory: {
             Issue.record("Server should not be created when checking permissions")
@@ -127,6 +132,7 @@ private actor MockMainServer: ServerStarting {
     #expect(stderr.contains("Accessibility: granted"))
     #expect(stderr.contains("Automation (Logic Pro): granted"))
     #expect(stderr.contains("Automation (System Events): granted"))
+    #expect(stderr.contains("PostEvent (CGEvent): granted"))
 }
 
 @Test func testMainEntrypointReturnsFailureWhenSystemEventsAutomationDenied() async {

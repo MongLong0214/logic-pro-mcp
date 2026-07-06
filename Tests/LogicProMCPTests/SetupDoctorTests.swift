@@ -44,6 +44,18 @@ private func doctorRuntime(
     runtime.macOSVersion = { macOSVersion }
     runtime.monotonicNowMs = monotonicNowMs
     runtime.latestReleaseLookup = latestReleaseLookup
+    runtime.logicApps = {
+        [SetupDoctor.LogicAppInfo(path: "/Applications/Logic Pro.app", version: LogicProSupport.latestValidatedLogicVersion, bundleID: ServerConfig.logicProBundleID, readable: true)]
+    }
+    runtime.shareDirProbe = { .complete(path: "/opt/homebrew/share/logic-pro-mcp", source: "brew_pkgshare") }
+    runtime.readClaudeDesktopRegistration = { .registered(command: "/Applications/Claude.app/Contents/MacOS/Claude") }
+    runtime.keyCommandsPresetStaged = { true }
+    runtime.mcuPortReferenceFound = { true }
+    runtime.launchContext = { SetupDoctor.LaunchContextInfo(context: "terminal", responsibleHint: "Terminal") }
+    runtime.tccCrossContextProbe = { .granted("terminal:accessibility=granted") }
+    runtime.blockingDialogInfo = { nil }
+    runtime.fileExistsAtPath = { _ in exists }
+    runtime.isRegularFile = { _ in exists }
     return runtime
 }
 
@@ -51,7 +63,7 @@ private func doctorRuntime(
 /// that expect a healthy `.ok` aggregate. The 2-arg PermissionStatus init defaults
 /// systemEvents to `.notVerifiable`, which (correctly) makes the report non-ok.
 private func grantedPermissionStatus() -> PermissionChecker.PermissionStatus {
-    .init(accessibility: true, automationLogicPro: true, systemEventsAutomation: .granted)
+    .init(accessibility: true, automationLogicPro: true, systemEventsAutomation: .granted, postEventAccess: true)
 }
 
 private func allApprovals() -> [ManualValidationChannel: ManualValidationApproval] {
@@ -75,7 +87,7 @@ private func issue26RepositoryRootURL() -> URL {
         runtime: doctorRuntime()
     )
 
-    #expect(report.schema == "logic_pro_mcp_doctor.v2")
+    #expect(report.schema == "logic_pro_mcp_doctor.v3")
     #expect(report.status == .ok)
     #expect(report.installSource == .homebrew)
 
@@ -85,20 +97,33 @@ private func issue26RepositoryRootURL() -> URL {
         "binary.executable",
         "binary.version",
         "install.source",
+        "install.binary_inventory",
+        "install.share_dir",
         "release.signature",
         "release.quarantine",
         "mcp.claude_code_registration",
+        "mcp.registration_target",
+        "mcp.claude_desktop_registration",
         "permissions.accessibility",
         "permissions.automation_logic_pro",
         "permissions.automation_system_events",
+        "permissions.post_event_access",
+        "permissions.launch_context",
+        "permissions.tcc_cross_context",
         "system.macos_version",
+        "logic.installation",
+        "logic.version_support",
         "logic.application_state",
+        "logic.blocking_dialog",
         "channels.manual_validation",
+        "channels.keycmd_reference",
+        "channels.mcu_wiring_hint",
+        "dependencies.click_fallback",
     ])
 
     let json = encodeJSON(report)
     let object = try #require(sharedJSONObject(json))
-    #expect(object["schema"] as? String == "logic_pro_mcp_doctor.v2")
+    #expect(object["schema"] as? String == "logic_pro_mcp_doctor.v3")
     #expect(object["status"] as? String == "ok")
     #expect(object["install_source"] as? String == "homebrew")
     #expect(object["version"] as? String == ServerConfig.serverVersion)
@@ -169,7 +194,7 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(exitCode == 0)
     #expect(stderr.isEmpty)
     let json = try #require(sharedJSONObject(stdout))
-    #expect(json["schema"] as? String == "logic_pro_mcp_doctor.v2")
+    #expect(json["schema"] as? String == "logic_pro_mcp_doctor.v3")
     #expect(json["status"] as? String == "ok")
 }
 
@@ -177,7 +202,7 @@ private func issue26RepositoryRootURL() -> URL {
     var stdout = ""
     let exitCode = await MainEntrypoint.run(
         arguments: ["LogicProMCP", "doctor"],
-        permissionCheck: { .init(accessibility: true, automationLogicPro: true) },
+        permissionCheck: { grantedPermissionStatus() },
         serverFactory: {
             Issue.record("Server should not start for doctor")
             return DoctorMockMainServer()
@@ -218,7 +243,7 @@ private func issue26RepositoryRootURL() -> URL {
     // .build path component must win over a succeeding brew probe (precedence pin).
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: .init(accessibility: true, automationLogicPro: true),
+        permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(executablePath: "/Users/x/proj/.build/release/LogicProMCP")
     )
@@ -231,7 +256,7 @@ private func issue26RepositoryRootURL() -> URL {
 @Test func testSetupDoctorClassifiesReleaseBinaryWhenBrewProbeFails() {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: .init(accessibility: true, automationLogicPro: true),
+        permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(
             executablePath: "/opt/homebrew/bin/LogicProMCP",
@@ -248,7 +273,7 @@ private func issue26RepositoryRootURL() -> URL {
 @Test func testSetupDoctorClassifiesUnknownWhenNoSignalMatches() throws {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: .init(accessibility: true, automationLogicPro: true),
+        permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(
             executablePath: "/Users/x/bin/LogicProMCP",
@@ -267,7 +292,7 @@ private func issue26RepositoryRootURL() -> URL {
     // component) must NOT be classified as source_build.
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: .init(accessibility: true, automationLogicPro: true),
+        permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(
             executablePath: "/Users/x/my.build/release/LogicProMCP",
@@ -284,7 +309,7 @@ private func issue26RepositoryRootURL() -> URL {
     // absolute path — doctor must still classify .homebrew.
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: .init(accessibility: true, automationLogicPro: true),
+        permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(
             executablePath: "/opt/homebrew/bin/LogicProMCP",
@@ -306,7 +331,7 @@ private func issue26RepositoryRootURL() -> URL {
 @Test func testReleaseQuarantineReportsPassOnlyWhenAttributeAbsent() throws {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: .init(accessibility: true, automationLogicPro: true),
+        permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(commandHandler: { executable, arguments in
             if executable == "/usr/bin/codesign" {
@@ -329,7 +354,7 @@ private func issue26RepositoryRootURL() -> URL {
 @Test func testReleaseQuarantineReportsWarnWhenAttributePresent() throws {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: .init(accessibility: true, automationLogicPro: true),
+        permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(commandHandler: { executable, _ in
             if executable == "/usr/bin/codesign" {
@@ -355,7 +380,7 @@ private func issue26RepositoryRootURL() -> URL {
     // as a clean pass — it conflates "not quarantined" with "could not determine".
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: .init(accessibility: true, automationLogicPro: true),
+        permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(commandHandler: { executable, _ in
             if executable == "/usr/bin/codesign" {
@@ -381,7 +406,7 @@ private func issue26RepositoryRootURL() -> URL {
 @Test func testClaudeRegistrationPassWhenConfigHasMatchingEntry() throws {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: .init(accessibility: true, automationLogicPro: true),
+        permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(registration: .registered(command: "/usr/local/bin/some-wrapper/LogicProMCP"))
     )
@@ -393,7 +418,7 @@ private func issue26RepositoryRootURL() -> URL {
 @Test func testClaudeRegistrationWarnWhenConfigHasNoMatchingEntry() throws {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: .init(accessibility: true, automationLogicPro: true),
+        permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(registration: .notRegistered)
     )
@@ -408,7 +433,7 @@ private func issue26RepositoryRootURL() -> URL {
     // the Claude CLI was unavailable.
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: .init(accessibility: true, automationLogicPro: true),
+        permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(registration: .configUnavailable(reason: "config file not found at /x/.claude.json"))
     )
@@ -535,7 +560,7 @@ private func issue26RepositoryRootURL() -> URL {
     var stdout = ""
     let exitCode = await MainEntrypoint.run(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionCheck: { .init(accessibility: true, automationLogicPro: true) },
+        permissionCheck: { grantedPermissionStatus() },
         serverFactory: {
             Issue.record("Server should not start for doctor")
             return DoctorMockMainServer()
@@ -604,7 +629,7 @@ private func issue26RepositoryRootURL() -> URL {
     // .signature warn. manual must win.
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: .init(accessibility: true, automationLogicPro: true),
+        permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(
             logicRunning: false,
