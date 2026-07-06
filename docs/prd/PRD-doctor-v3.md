@@ -3,11 +3,13 @@
 **Version**: 0.2
 **Author**: strategist (dev-pipeline)
 **Date**: 2026-07-06
-**Status**: Draft
+**Status**: Approved
 **Size**: L
 
 **Changelog**
+- v0.2 approved (2026-07-06): Phase 2 gate closed — R1–R15 applied, boomer converged over 3 rounds, `file`-tool mention removed. Orchestrator verdict ALL PASS (guardian/strategist R1–R9 reflected + boomer convergence).
 - v0.2 (2026-07-06): Round-1 review reflected (R1–R15). fix_plan/headline invariant restated (id-embedded `==`, single canonical definition in §4.3) + coupling invariant; PostEvent honest-default (denied) + `PermissionChecker.Runtime` postEvent seam + §8.2 fixture-migration subsection; TCC.db `?immutable=1` mandatory; malformed-input branch matrix (N2/N5/N6/N7/N8) + §5 edits; N10 `principal_not_found`; CI-honesty fixture permission posture + AC-5.5 scope; `strings` ranking algorithm; Fix-Plan human-render modes; new decisions **D10** (typed-tool allowlist, structural E4 guard) + **D11** (3-tier fix-plan sort/status-tags); §7 subprocess-budget table; §9.1 consumer-compat matrix; `--strict` exit conventions; §10.2 R2 → Med + 3-way TCC skipped reasons; §12 OQ sign-off recorded.
+- v0.2 (micro, 2026-07-06): Removed `file` from the executable metadata-tool mentions (§4.3 N7, §4.5 read-only contract) — arch discrimination is `lipo -archs` only; `file` is not in the D10 allowlist (boomer consistency fix).
 - v0.1 (2026-07-06): Initial draft.
 
 > Binding requirements input: `scratchpad/doctor-v3-requirements-decision.md` (Orchestrator, 2026-07-06).
@@ -252,7 +254,7 @@ Existing-13 relative order preserved: positions `1,2,3,4,7,8,9,12,13,14,18,21,23
   5. **≥ 2 distinct** semvers remain (e.g. a dependency's version embedded alongside the binary's own; `strings` emits in file-offset order so "first match" is arbitrary) → **`indeterminate`**: emit **no** version-mismatch `warn`; evidence lists all survivors.
   6. **Zero** remain → `indeterminate` (non-Mach-O wrapper / stripped binary — R4).
 - **Status**: `warn` if any candidate's **determinate** static version ≠ running version (live-proven 3.5.0 vs 3.8.0); `pass` if consistent, indeterminate, or zero candidates (source build — evidence notes it). Indeterminate never produces a false `warn` (keeps false-red at 0).
-- **Never executes any candidate (C4/NG7).** `lipo`/`file`/`strings`/`codesign`/`xattr` via `BoundedProcessRunner` (timeout 1.5s) are metadata-only and safe (E4 §A4).
+- **Never executes any candidate (C4/NG7).** `lipo`/`strings`/`codesign`/`xattr` via `BoundedProcessRunner` (timeout 1.5s) are metadata-only and safe (E4 §A4). Arch discrimination is `lipo -archs` alone (no `file` tool — not in the D10 allowlist).
 - **evidence**: `{running_version, candidates:"path:arch:version | …", stale:"true"|<omitted>, indeterminate:"path,…"|<omitted>}`. **remediation**: `command` (`brew upgrade`/reinstall). **bb**: none.
 
 #### N8 `install.share_dir` — install/installation
@@ -362,7 +364,7 @@ This closes the E4 incident structurally: an old `/opt/homebrew/bin/LogicProMCP`
 1. **False-green = 0.** No check reports `pass` for something it did not verify. Every "cannot verify" path emits `manual` or `skipped` **plus an enumerated `reason`** from the closed set: `config_absent` / `config_unreadable` / `bundle_unreadable` / `share_dir_unresolved` / `share_dir_invalid` / `relative_command` / `full_disk_access_unavailable` / `tcc_query_unavailable` / `tcc_schema_mismatch` / `principal_not_found`. The `binary.version` self-admission ("never fails", `SetupDoctor.swift:449-453`) is the anti-pattern this PRD closes with `install.binary_inventory`.
 2. **False-red = 0.** `fail` is reserved for "confirmed broken" (missing binary, denied Accessibility/PostEvent, Logic not installed, macOS < 14). Environmental capability gaps (no FDA, no brew, source build, Logic not running) degrade to `skipped`/`manual`, mirroring the existing `system.macos_version` unreadable→`skipped` template (`SetupDoctorEnterpriseTests.swift:553-560`).
 3. **Never execute arbitrary on-disk binaries (C4/NG7) — enforced structurally, not by prose (D10).** The E4 incident (running `/opt/homebrew/bin/LogicProMCP --version` on a v3.5.0 binary started the full 7-channel server for ~1.7s and touched `com.apple.logic.pro.cs` mtime; no lasting binding — 0 MCU-port occurrences) is the concrete reason. Version discovery is static `strings` only. **Enforcement (D10):** production `runCommand` routes through the typed `DoctorTool` allowlist (fixed absolute paths; fail-closed nil on anything else, pinned by a unit test) **plus** a source-grep lint test forbidding `Process`/`posix_spawn` outside `BoundedProcessRunner`.
-4. **Read-only contract, precisely (C3).** Doctor never spawns another LogicProMCP/MCP session, never creates a CoreMIDI client/port, and never mutates system state. It runs only well-known Apple metadata tools bounded (`codesign`/`xattr`/`file`/`lipo`/`strings`/`plutil`/`sqlite3` read-only SELECT) via `BoundedProcessRunner` (timeouts 1.0–3.5s). TCC.db is opened with the **`file:…?immutable=1` URI (mandatory, R3)** so no `-wal`/`-shm` sidecar is ever created. `com.apple.logic.pro.cs` is **never** parsed with `plutil` (FORM/IFF binary, C6) — positive-only `strings` scan.
+4. **Read-only contract, precisely (C3).** Doctor never spawns another LogicProMCP/MCP session, never creates a CoreMIDI client/port, and never mutates system state. It runs only well-known Apple metadata tools bounded (`codesign`/`xattr`/`lipo`/`strings`/`plutil`/`sqlite3` read-only SELECT) via `BoundedProcessRunner` (timeouts 1.0–3.5s). TCC.db is opened with the **`file:…?immutable=1` URI (mandatory, R3)** so no `-wal`/`-shm` sidecar is ever created. `com.apple.logic.pro.cs` is **never** parsed with `plutil` (FORM/IFF binary, C6) — positive-only `strings` scan.
 5. **Evidence egress (C7).** Only bundle ids / enums / bools / version strings leave the process. Full paths under `$HOME` are `~`-abbreviated; TCC blobs, `auth_reason`, other apps' human names, and user document paths are never emitted.
 6. **Live-probe authority.** The TCC.db layer is explicitly labeled enrichment; where it and a live probe could disagree, the summary states the live probe (same-context) is authoritative (E3 §C7, deliverable (ii)).
 
