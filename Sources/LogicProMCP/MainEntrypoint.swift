@@ -232,7 +232,7 @@ enum MainEntrypoint {
           LogicProMCP                          Start the MCP server over stdio (default; used by an MCP client)
           LogicProMCP --help, -h               Print this help and exit
           LogicProMCP --version, -V            Print the version and exit
-          LogicProMCP doctor [--json] [--verbose|--quiet] [--check-updates] [--strict]
+          LogicProMCP doctor [--json] [--verbose|--quiet] [--profile <profile>] [--client <client>] [--check-updates] [--strict]
                                                Print a diagnostic report and exit
           LogicProMCP lifecycle <install|update|uninstall> [--json]
                                                Print a read-only lifecycle plan and exit

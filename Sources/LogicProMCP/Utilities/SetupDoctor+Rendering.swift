@@ -23,6 +23,15 @@ extension SetupDoctor {
         lines.append("status: \(report.status.rawValue)")
         lines.append("version: \(report.version)")
         lines.append("install_source: \(report.installSource.rawValue)")
+        lines.append(
+            "profile: \(report.profile.effective.rawValue) "
+                + "(requested: \(report.profile.requested.rawValue), basis: \(report.profile.basis))"
+        )
+        lines.append(
+            "client: \(report.client.effective.rawValue) "
+                + "(requested: \(report.client.requested.rawValue), basis: \(report.client.basis))"
+        )
+        appendCapabilitySummary(report, to: &lines)
         appendFixPlan(report, to: &lines, useColor: useColor)
         lines.append("")
         for check in report.checks {
@@ -37,10 +46,27 @@ extension SetupDoctor {
                 for key in check.evidence.keys.sorted() {
                     lines.append("    \(key)=\(check.evidence[key] ?? "")")
                 }
+                if let skipReason = check.skipReason {
+                    lines.append("    skip_reason: \(skipReason.rawValue)")
+                }
                 lines.append("    duration_ms: \(formatDuration(check.durationMs))")
             }
         }
         return lines.joined(separator: "\n")
+    }
+
+    private static func appendCapabilitySummary(_ report: Report, to lines: inout [String]) {
+        let blocked = report.capabilities
+            .filter { _, readiness in readiness.status == .notReady || readiness.status == .unknownLiveVerifyRequired }
+            .sorted { $0.key < $1.key }
+        guard !blocked.isEmpty else {
+            lines.append("capabilities: all selected capability groups ready")
+            return
+        }
+        let rendered = blocked.map { key, readiness in
+            "\(key)=\(readiness.status.rawValue)"
+        }
+        lines.append("capabilities: \(rendered.joined(separator: ", "))")
     }
 
     private static func appendFixPlan(_ report: Report, to lines: inout [String], useColor: Bool) {

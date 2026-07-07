@@ -49,6 +49,21 @@ extension SetupDoctor {
         if value.localizedCaseInsensitiveContains("claude") {
             return LaunchContextInfo(context: "claude_code", responsibleHint: pathBasenameOrValue(value))
         }
+        if value.localizedCaseInsensitiveContains("cursor") {
+            return LaunchContextInfo(context: "cursor", responsibleHint: pathBasenameOrValue(value))
+        }
+        if value.localizedCaseInsensitiveContains("visualstudiocode")
+            || value.localizedCaseInsensitiveContains("visual studio code")
+            || value.localizedCaseInsensitiveContains("vscode")
+            || value.localizedCaseInsensitiveContains("com.microsoft.vscode") {
+            return LaunchContextInfo(context: "vscode", responsibleHint: pathBasenameOrValue(value))
+        }
+        if value.localizedCaseInsensitiveContains("windsurf") {
+            return LaunchContextInfo(context: "custom", responsibleHint: pathBasenameOrValue(value))
+        }
+        if value.localizedCaseInsensitiveContains("zed") {
+            return LaunchContextInfo(context: "custom", responsibleHint: pathBasenameOrValue(value))
+        }
         if value.localizedCaseInsensitiveContains("Terminal")
             || value.localizedCaseInsensitiveContains("iTerm") {
             return LaunchContextInfo(context: "terminal", responsibleHint: pathBasenameOrValue(value))

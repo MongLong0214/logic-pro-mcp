@@ -87,7 +87,7 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
 // MARK: - T1: v2 model framework
 
 @Test func test_t1_schema_is_v3() {
-    #expect(makeReport().schema == "logic_pro_mcp_doctor.v3")
+    #expect(makeReport().schema == "logic_pro_mcp_doctor.v4")
 }
 
 @Test func test_t1_each_check_has_category_severity_duration() throws {
@@ -281,7 +281,7 @@ private struct FrozenV1Report: Codable {
     let json = encodeJSON(makeReport())
     // A frozen v1-shaped consumer must still decode v2 output (additive superset).
     let frozen: FrozenV1Report = try decodeJSON(json)
-    #expect(frozen.schema == "logic_pro_mcp_doctor.v3")
+    #expect(frozen.schema == "logic_pro_mcp_doctor.v4")
     let ids = Set(frozen.checks.map(\.id))
     // Every original v1 check id must survive (a dropped v1 check would fail this).
     let v1Ids = [
@@ -656,7 +656,7 @@ private func runEntrypoint(
 
 // Case 1
 @Test func test_t1v3_schema_is_v3() {
-    #expect(makeReport().schema == "logic_pro_mcp_doctor.v3")
+    #expect(makeReport().schema == "logic_pro_mcp_doctor.v4")
 }
 
 // Case 2
@@ -790,7 +790,7 @@ private func runEntrypoint(
     // G5: v3 output still decodes into a frozen v1-shaped consumer (strict superset).
     let json = encodeJSON(makeReport())
     let frozen: FrozenV1Report = try decodeJSON(json)
-    #expect(frozen.schema == "logic_pro_mcp_doctor.v3")
+    #expect(frozen.schema == "logic_pro_mcp_doctor.v4")
     let ids = Set(frozen.checks.map(\.id))
     let v1Ids = [
         "binary.path", "binary.executable", "binary.version", "install.source",
@@ -809,7 +809,7 @@ private func runEntrypoint(
     // survive; the new fix_plan/blocked_by keys are absent from the struct and ignored.
     let json = encodeJSON(makeReport(permission: granted(accessibility: false)))
     let frozen: FrozenV2Report = try decodeJSON(json)
-    #expect(frozen.schema == "logic_pro_mcp_doctor.v3")
+    #expect(frozen.schema == "logic_pro_mcp_doctor.v4")
     let accessibility = try #require(frozen.checks.first { $0.id == "permissions.accessibility" })
     #expect(accessibility.status == "fail")
     #expect(accessibility.category == "permissions")

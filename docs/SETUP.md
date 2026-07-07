@@ -122,7 +122,7 @@ From your MCP client:
 
 Fully configured hosts should show Accessibility, AppleScript, CoreMIDI, MCU, MIDIKeyCommands, Scripter, and CGEvent as available. Skipping Key Commands or Scripter is valid when you do not need those paths.
 
-## Doctor (`logic_pro_mcp_doctor.v3`)
+## Doctor (`logic_pro_mcp_doctor.v4`)
 
 `doctor` is read-only and safe to run before starting the server. Flags:
 
@@ -132,12 +132,16 @@ Fully configured hosts should show Accessibility, AppleScript, CoreMIDI, MCU, MI
 | `--verbose` | Adds each check's evidence and `duration_ms`. |
 | `--quiet` | Headline + summary + failing/non-pass checks only. |
 | `--json` | Machine report. Identical bytes regardless of `--verbose`/`--quiet`/color. |
+| `--profile <auto|core|mixer|keycmd|legacy-scripter|full>` | Evaluate readiness for a declared capability scope. Omitted keeps the v3-compatible full setup contract. |
+| `--client <auto|claude-code|claude-desktop|cursor|vscode|terminal|custom>` | Evaluate MCP registration checks for the selected client. Omitted keeps the v3-compatible registration contract. |
 | `--check-updates` | Opt-in: adds an `updates.latest_release` check (unauthenticated GitHub releases read). The default run never touches the network. |
 | `--strict` | Scripted exit codes: `ok=0`, `failed=1`, `manual_action_required=2`, `degraded=3`. |
 
 Color and unicode symbols are emitted only when stdout is a TTY and `NO_COLOR` is unset; otherwise output is plain ASCII (`[pass]`-style), so pipes and CI logs stay clean.
 
-The `v3` report is a **field-superset** of `v1`/`v2`: every prior key keeps its name, semantics, and value. New fields are additive — top-level `fix_plan`, per-check `optional`, and optional per-check `blocked_by`. Consumers should prefix-match `logic_pro_mcp_doctor.`, not exact-equal a version. Default exit code is unchanged: `failed` → 1, otherwise 0.
+The `v4` report is a **field-superset** of `v1`/`v2`/`v3`: every prior key keeps its name, semantics, and value. New fields are additive — top-level `profile`, `client`, `capabilities`, and optional per-check `skip_reason`. Consumers should prefix-match `logic_pro_mcp_doctor.`, not exact-equal a version. Default exit code is unchanged: `failed` → 1, otherwise 0.
+
+Compatibility note: an omitted `--profile`/`--client` keeps v3-style full-scope readiness so existing scripts do not silently lose required checks. Explicit profile/client flags opt into scoped v4 readiness; skipped checks then carry either `blocked_by` or `skip_reason`.
 
 Strict exit codes `2` and `3` are doctor status codes, not usage errors, and intentionally sit below the `sysexits.h` 64-78 range. Capability-gap skips still degrade to code `3`; optional skips such as an absent Claude Desktop config remain counted as skipped but do not degrade the aggregate status. For a boolean gate, test non-zero; for routing, branch on the exact code. With `set -e`, capture the code before branching:
 

@@ -93,7 +93,7 @@ private func issue26RepositoryRootURL() -> URL {
         runtime: doctorRuntime()
     )
 
-    #expect(report.schema == "logic_pro_mcp_doctor.v3")
+    #expect(report.schema == "logic_pro_mcp_doctor.v4")
     #expect(report.status == .ok)
     #expect(report.installSource == .homebrew)
 
@@ -129,7 +129,7 @@ private func issue26RepositoryRootURL() -> URL {
 
     let json = encodeJSON(report)
     let object = try #require(sharedJSONObject(json))
-    #expect(object["schema"] as? String == "logic_pro_mcp_doctor.v3")
+    #expect(object["schema"] as? String == "logic_pro_mcp_doctor.v4")
     #expect(object["status"] as? String == "ok")
     #expect(object["install_source"] as? String == "homebrew")
     #expect(object["version"] as? String == ServerConfig.serverVersion)
@@ -149,6 +149,45 @@ private func issue26RepositoryRootURL() -> URL {
     let remediationType = try #require(remediation["type"] as? String)
     #expect(remediationType == "none")
     #expect(remediation["value"] as? String != nil)
+}
+
+@Test func testDoctorV4DefaultKeepsV3CompatibleFullScope() throws {
+    let report = SetupDoctor.generate(
+        arguments: ["LogicProMCP", "doctor", "--json"],
+        permissionStatus: grantedPermissionStatus(),
+        approvals: allApprovals(),
+        runtime: doctorRuntime()
+    )
+
+    #expect(report.schema == "logic_pro_mcp_doctor.v4")
+    #expect(report.profile.effective == .full)
+    #expect(report.profile.basis == "default_v3_compat")
+    #expect(report.checks.allSatisfy { $0.skipReason == nil })
+    let json = try #require(sharedJSONObject(encodeJSON(report)))
+    #expect(json["profile"] as? [String: Any] != nil)
+    #expect(json["client"] as? [String: Any] != nil)
+    #expect((json["capabilities"] as? [String: Any])?.keys.count == 9)
+}
+
+@Test func testDoctorV4ExplicitCoreProfileScopesManualChannels() throws {
+    let report = SetupDoctor.generate(
+        arguments: ["LogicProMCP", "doctor", "--json", "--profile", "core", "--client", "terminal"],
+        permissionStatus: grantedPermissionStatus(),
+        approvals: [:],
+        runtime: doctorRuntime()
+    )
+
+    #expect(report.profile.effective == .core)
+    #expect(report.client.effective == .terminal)
+    let manual = try #require(report.checks.first { $0.id == "channels.manual_validation" })
+    #expect(manual.status == .skipped)
+    #expect(manual.skipReason == .profileNotRequired)
+    let claudeCode = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
+    #expect(claudeCode.status == .skipped)
+    #expect(claudeCode.skipReason == .clientNotSelected)
+    let capabilities = report.capabilities
+    #expect(capabilities["core_transport"]?.status == .ready)
+    #expect(capabilities["keycmd_only_ops"]?.status == .notInProfile)
 }
 
 @Test func testSetupDoctorReportsActionableRemediationForNonPassStates() {
@@ -200,7 +239,7 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(exitCode == 0)
     #expect(stderr.isEmpty)
     let json = try #require(sharedJSONObject(stdout))
-    #expect(json["schema"] as? String == "logic_pro_mcp_doctor.v3")
+    #expect(json["schema"] as? String == "logic_pro_mcp_doctor.v4")
     #expect(json["status"] as? String == "ok")
 }
 
