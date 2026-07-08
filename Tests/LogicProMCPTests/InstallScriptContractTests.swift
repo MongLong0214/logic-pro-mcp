@@ -159,12 +159,13 @@ import Testing
     )
 }
 
-@Test func testCommunityDiscordLinkIsDiscoverableAcrossDocs() throws {
-    // #178: the official Discord community must be discoverable from every help
-    // entry point — not just the README badge — so users land on real-time
-    // support from setup, troubleshooting, and contributor docs alike.
+@Test func testDiscordLinkStaysOutOfReadmeButRemainsInSupportDocs() throws {
     let discord = "https://discord.gg/4M3s79DBzz"
-    for path in ["README.md", "docs/SETUP.md", "docs/TROUBLESHOOTING.md", "CONTRIBUTING.md"] {
+    let readme = try scriptContents("README.md")
+
+    #expect(!readme.contains(discord), "README.md should not carry the Discord community link")
+
+    for path in ["docs/SETUP.md", "docs/TROUBLESHOOTING.md", "CONTRIBUTING.md"] {
         #expect(try scriptContents(path).contains(discord), "\(path) must link the official Discord (\(discord))")
     }
 }
