@@ -1,10 +1,12 @@
+# Logic Pro MCP Server for Claude, Cursor, and AI Agents
+
 <p align="center">
   <img src="https://img.shields.io/badge/Logic_Pro-MCP_Server-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Logic Pro MCP Server" />
 </p>
 
 <p align="center">
-  <strong>The missing agent control plane for Logic Pro.</strong><br/>
-  A production-oriented MCP server that lets Claude, Cursor, and custom MCP agents operate Logic Pro with state, provenance, and fail-closed safety gates.
+  <strong>Control Logic Pro from Claude Code, Cursor, and any MCP client.</strong><br/>
+  A local Model Context Protocol (MCP) server for AI music production: create tracks, write MIDI, control transport and mixer state, and automate Logic Pro with fail-closed safety gates.
 </p>
 
 <p align="center">
@@ -31,7 +33,7 @@
 
 ---
 
-Logic Pro does not ship a first-party API for agentic composition, session setup, mixer operations, or live project readback. Logic Pro MCP fills that gap by combining **7 native macOS control channels** behind one MCP interface, then wrapping every high-risk operation in explicit state, confirmation, and verification contracts.
+Logic Pro MCP Server gives Claude, Cursor, and custom AI agents a structured way to control Logic Pro without brittle keyboard macros. Logic Pro does not ship a first-party API for agentic composition, session setup, mixer operations, or live project readback, so Logic Pro MCP fills that gap by combining **7 native macOS control channels** behind one MCP interface, then wrapping every high-risk operation in explicit state, confirmation, and verification contracts.
 
 The result is not "screen automation with prompts." It is a structured server for DAW agents: tools mutate, resources read, evidence is labeled, and uncertain outcomes stay uncertain instead of being reported as success.
 
