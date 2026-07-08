@@ -1,12 +1,11 @@
 # Logic Pro MCP Server for Claude, Cursor, and AI Agents
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Logic_Pro-MCP_Server-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Logic Pro MCP Server" />
-</p>
+A local Model Context Protocol (MCP) server that lets Claude Code, Claude Desktop, Cursor, VS Code, and custom AI agents control Logic Pro for AI music production: create tracks, write MIDI, operate transport and mixer state, inspect live project data, and verify results.
+
+[Install](#1-install) · [Watch demo](docs/media/logic-pro-mcp-demo.mp4) · [What it controls](#what-it-controls) · [Discord](https://discord.gg/4M3s79DBzz)
 
 <p align="center">
-  <strong>Control Logic Pro from Claude Code, Cursor, and any MCP client.</strong><br/>
-  A local Model Context Protocol (MCP) server for AI music production: create tracks, write MIDI, control transport and mixer state, and automate Logic Pro with fail-closed safety gates.
+  <img src="https://img.shields.io/badge/Logic_Pro-MCP_Server-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Logic Pro MCP Server" />
 </p>
 
 <p align="center">
