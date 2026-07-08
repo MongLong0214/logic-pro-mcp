@@ -1,10 +1,11 @@
-<p align="center">
-  <img src="https://img.shields.io/badge/Logic_Pro-MCP_Server-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Logic Pro MCP Server" />
-</p>
+# Logic Pro MCP Server for Claude, Cursor, and AI Agents
+
+A local Model Context Protocol (MCP) server that lets Claude Code, Claude Desktop, Cursor, VS Code, and custom AI agents control Logic Pro for AI music production: create tracks, write MIDI, operate transport and mixer state, inspect live project data, and verify results.
+
+[Install](#1-install) · [Watch demo](docs/media/logic-pro-mcp-demo.mp4) · [What it controls](#what-it-controls)
 
 <p align="center">
-  <strong>The missing agent control plane for Logic Pro.</strong><br/>
-  A production-oriented MCP server that lets Claude, Cursor, and custom MCP agents operate Logic Pro with state, provenance, and fail-closed safety gates.
+  <img src="https://img.shields.io/badge/Logic_Pro-MCP_Server-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Logic Pro MCP Server" />
 </p>
 
 <p align="center">
@@ -13,7 +14,6 @@
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-0.10-blue.svg?style=flat-square" /></a>
   <a href="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml"><img src="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
-  <a href="https://discord.gg/4M3s79DBzz"><img src="https://img.shields.io/badge/Discord-Community-5865F2.svg?style=flat-square&logo=discord&logoColor=white" /></a>
   <img src="https://img.shields.io/badge/tests-2229_passing-brightgreen.svg?style=flat-square" />
   <img src="https://img.shields.io/badge/stable-v3.10.0-blue.svg?style=flat-square" />
 </p>
@@ -31,7 +31,7 @@
 
 ---
 
-Logic Pro does not ship a first-party API for agentic composition, session setup, mixer operations, or live project readback. Logic Pro MCP fills that gap by combining **7 native macOS control channels** behind one MCP interface, then wrapping every high-risk operation in explicit state, confirmation, and verification contracts.
+Logic Pro MCP Server gives Claude, Cursor, and custom AI agents a structured way to control Logic Pro without brittle keyboard macros. Logic Pro does not ship a first-party API for agentic composition, session setup, mixer operations, or live project readback, so Logic Pro MCP fills that gap by combining **7 native macOS control channels** behind one MCP interface, then wrapping every high-risk operation in explicit state, confirmation, and verification contracts.
 
 The result is not "screen automation with prompts." It is a structured server for DAW agents: tools mutate, resources read, evidence is labeled, and uncertain outcomes stay uncertain instead of being reported as success.
 
@@ -59,32 +59,11 @@ Logic Pro MCP: region imported, instrument routed, readback exposed through reso
 | Control channels | MCU, Accessibility, AppleScript, CoreMIDI, CGEvent, Scripter, MIDI Key Commands |
 | Supported Logic Pro | **Latest Logic Pro first** — desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`) and Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`). Same MCP server controls both; bundle ID and process name differ. Set `LOGIC_PRO_BUNDLE_ID` to force a variant when both are installed. Logic Pro 12.3 is the first-class, actively-validated target (macOS 15.6+); older versions down to 12.0.1 are best-effort |
 | Verification line | Current source tree (v3.10.0): `2229` Swift tests + release build. The last full strict live Logic E2E ran on the v3.8.0 line (`372/373`); v3.9.0's two live-only surfaces (MIDI export read-back, Channel EQ verified params) were spike-tested against live Logic 12.3 and **honestly deferred** — see the CHANGELOG **Deferred** section. v3.10.0 adds Creator Studio target-resolution coverage on top of the v3.9.2 live A/B proof for `set_param_verified` opening a closed Compressor plugin window |
-| Release state | Published stable `v3.10.0`; previous stable `v3.9.2` remains available for pinned installs |
-| Community layer | Official Discord for setup support, release notes, reproducible bug triage, product requests, demos, and contributor discussion |
+| Release state | Published stable [v3.10.0](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.10.0); previous stable `v3.9.2` remains available for pinned installs |
 
 If this project helps you make music with Claude, Cursor, or any MCP client, star the repo. It helps the project reach more Logic Pro users and maintainers.
 
 Want to contribute? Start with the [Contributing Guide](CONTRIBUTING.md) and the [open issues](https://github.com/MongLong0214/logic-pro-mcp/issues?q=is%3Aissue%20is%3Aopen). Many docs, examples, validation tests, and CLI-message improvements do not require Logic Pro.
-
-## Community
-
-Join the official Logic Pro MCP Discord: [https://discord.gg/4M3s79DBzz](https://discord.gg/4M3s79DBzz).
-
-Discord is the real-time community layer for setup help, release discussion, bug triage, product requests, demos, and contributor coordination. GitHub Issues remain the canonical tracker for reproducible bugs, feature requests, and decisions that need to stay searchable.
-
-## Canonical Links
-
-GitHub is the source of truth for releases, setup, security posture, and issue tracking. Directory listings should point back to the same canonical project:
-
-| Surface | Link |
-|---------|------|
-| Repository | [github.com/MongLong0214/logic-pro-mcp](https://github.com/MongLong0214/logic-pro-mcp) |
-| Stable release | [v3.10.0](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.10.0) |
-| Homebrew install | `brew tap MongLong0214/logic-pro-mcp https://github.com/MongLong0214/logic-pro-mcp` then `brew install logic-pro-mcp` |
-| MCP Registry metadata | [`server.json`](server.json) |
-| LobeHub directory | [monglong0214-logic-pro-mcp](https://lobehub.com/mcp/monglong0214-logic-pro-mcp) |
-| PulseMCP directory | [monglong-logic-pro](https://www.pulsemcp.com/servers/monglong-logic-pro) |
-| Community | [Discord](https://discord.gg/4M3s79DBzz) |
 
 ## Why It Exists
 
