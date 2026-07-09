@@ -214,7 +214,7 @@ extension SetupDoctor {
                 return RegisteredCommandResolution(path: candidate, basis: "canonical_path")
             }
         }
-        guard let output = runtime.runCommand("/usr/bin/which", [command]),
+        guard let output = runtime.runCommand("/usr/bin/which", [command]).output,
               output.exitCode == 0 else {
             return RegisteredCommandResolution(path: nil, basis: "doctor_path")
         }

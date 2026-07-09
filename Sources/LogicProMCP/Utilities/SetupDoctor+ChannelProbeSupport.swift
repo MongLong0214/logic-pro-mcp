@@ -18,7 +18,7 @@ extension SetupDoctor {
             executable: "/usr/bin/strings",
             arguments: [path],
             timeout: 1.5
-        )?.output?.stdout ?? ""
+        ).output?.stdout ?? ""
         return output.contains("LogicProMCP-MCU-Internal")
     }
 

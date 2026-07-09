@@ -632,11 +632,12 @@ enum SetupLifecycle {
     }
 
     private static func productionClaudeCLIAvailable() -> Bool {
-        guard let result = SetupDoctor.runProductionCommandForTesting(
+        let result = SetupDoctor.runProductionCommandForTesting(
             executable: "/usr/bin/which",
             arguments: ["claude"],
             timeout: 1.0
-        ), let output = result.output else {
+        )
+        guard let output = result.output else {
             return false
         }
         return output.exitCode == 0
@@ -647,11 +648,12 @@ enum SetupLifecycle {
         let installDir = resolveInstallDir()
         let binaryPath = installDir + "/LogicProMCP"
         guard FileManager.default.isExecutableFile(atPath: binaryPath) else { return nil }
-        guard let result = SetupDoctor.runProductionCommandForTesting(
+        let result = SetupDoctor.runProductionCommandForTesting(
             executable: binaryPath,
             arguments: ["--version"],
             timeout: 1.5
-        ), let output = result.output, output.exitCode == 0 else {
+        )
+        guard let output = result.output, output.exitCode == 0 else {
             return nil
         }
         let trimmed = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)

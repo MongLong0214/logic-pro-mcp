@@ -47,7 +47,10 @@ private func doctorV3Runtime(
         isExecutableFile: executable,
         logicProRunning: { true },
         logicProHasVisibleWindow: { true },
-        runCommand: commandHandler,
+        runCommand: { executable, arguments in
+            commandHandler(executable, arguments).map(SetupDoctor.CommandResult.completed)
+                ?? .spawnFailed("test_command_unavailable")
+        },
         readClaudeRegistration: readClaudeRegistration ?? { registration }
     )
     runtime.logicApps = logicApps

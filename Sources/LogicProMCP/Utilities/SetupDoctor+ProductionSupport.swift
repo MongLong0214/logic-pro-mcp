@@ -20,22 +20,11 @@ extension SetupDoctor {
             executable: "/usr/bin/which",
             arguments: [raw],
             timeout: 1.0
-        )?.output, output.exitCode == 0 else {
+        ).output, output.exitCode == 0 else {
             return nil
         }
         let path = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         return path.isEmpty ? nil : path
-    }
-
-    enum ProductionCommandResult: Equatable, Sendable {
-        case completed(CommandOutput)
-        case timedOut
-        case spawnFailed(String)
-
-        var output: CommandOutput? {
-            if case let .completed(value) = self { return value }
-            return nil
-        }
     }
 
     static func runProductionCommand(
@@ -43,9 +32,9 @@ extension SetupDoctor {
         arguments: [String],
         timeout: TimeInterval,
         enforceAllowlist: Bool = true
-    ) -> ProductionCommandResult? {
+    ) -> CommandResult {
         if enforceAllowlist, DoctorTool.resolve(executable) == nil {
-            return .spawnFailed("doctor_tool_not_allowlisted")
+            return .notAllowlisted
         }
         switch BoundedProcessRunner.run(executable: executable, arguments: arguments, timeout: timeout) {
         case let .completed(output):
@@ -63,7 +52,7 @@ extension SetupDoctor {
         executable: String,
         arguments: [String],
         timeout: TimeInterval
-    ) -> ProductionCommandResult? {
+    ) -> CommandResult {
         runProductionCommand(executable: executable, arguments: arguments, timeout: timeout, enforceAllowlist: false)
     }
 

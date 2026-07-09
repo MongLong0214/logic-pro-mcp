@@ -28,7 +28,7 @@ extension SetupDoctor {
                 executable: "/usr/bin/sqlite3",
                 arguments: ["file:\(db)?immutable=1", sql],
                 timeout: 1.5
-            )?.output else {
+            ).output else {
                 return .queryUnavailable
             }
             if output.exitCode != 0 {
