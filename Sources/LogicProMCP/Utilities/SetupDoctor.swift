@@ -153,6 +153,35 @@ enum SetupDoctor {
         let stderr: String
     }
 
+    enum CommandResult: Equatable, Sendable {
+        case completed(CommandOutput)
+        case timedOut
+        case spawnFailed(String)
+        case notAllowlisted
+
+        var output: CommandOutput? {
+            if case let .completed(value) = self { return value }
+            return nil
+        }
+
+        var failureReason: String? {
+            switch self {
+            case let .completed(output):
+                return output.exitCode == 0 ? nil : "non_zero_exit"
+            case .timedOut:
+                return "timeout"
+            case .spawnFailed:
+                return "spawn_failed"
+            case .notAllowlisted:
+                return "allowlist_rejected"
+            }
+        }
+
+        var commandStatus: String {
+            failureReason ?? "success"
+        }
+    }
+
     /// Result of inspecting the Claude Code config for a logic-pro registration.
     /// This is a pure config read — it never spawns the registered server, so the
     /// doctor's read-only / run-before-startup contract is honored (no CoreMIDI
@@ -217,7 +246,7 @@ enum SetupDoctor {
         let isExecutableFile: (String) -> Bool
         let logicProRunning: () -> Bool
         let logicProHasVisibleWindow: () -> Bool
-        let runCommand: (String, [String]) -> CommandOutput?
+        let runCommand: (String, [String]) -> CommandResult
         let readClaudeRegistration: () -> ClaudeRegistration
         // v2 seams. Defaults keep every existing `Runtime(...)` construction site
         // compiling; `.production` and the test helper supply real/fake impls.
@@ -267,8 +296,11 @@ enum SetupDoctor {
                 ProcessUtils.hasVisibleWindow()
             },
             runCommand: { executable, arguments in
-                guard DoctorTool.resolve(executable) != nil else { return nil }
-                return SetupDoctor.runProductionCommand(executable: executable, arguments: arguments, timeout: 1.5)?.output
+                SetupDoctor.runProductionCommand(
+                    executable: executable,
+                    arguments: arguments,
+                    timeout: 1.5
+                )
             },
             readClaudeRegistration: {
                 SetupDoctor.readProductionClaudeRegistration()
@@ -322,7 +354,7 @@ enum SetupDoctor {
         func staticVersionForPath(_ path: String) -> StaticVersionResult {
             let key = standardized(path)
             if let cached = staticVersionCache[key] { return cached }
-            let strings = runtime.runCommand("/usr/bin/strings", ["-a", path])?.stdout ?? ""
+            let strings = runtime.runCommand("/usr/bin/strings", ["-a", path]).output?.stdout ?? ""
             let result = Self.staticVersion(fromStringsOutput: strings)
             staticVersionCache[key] = result
             return result
@@ -644,14 +676,44 @@ enum SetupDoctor {
         path: String,
         output: CommandOutput
     ) -> [String: String] {
-        [
+        var evidence = [
             "path": path,
             "exit_code": String(output.exitCode),
+            "command_status": output.exitCode == 0 ? "success" : "non_zero_exit",
             "stdout": streamSummary(output.stdout),
             "stdout_truncated": streamTruncated(output.stdout),
             "stderr": streamSummary(output.stderr),
             "stderr_truncated": streamTruncated(output.stderr),
         ]
+        if output.exitCode != 0 {
+            evidence["command_failure_reason"] = "non_zero_exit"
+        }
+        return evidence
+    }
+
+    static func commandFailureEvidence(path: String, result: CommandResult) -> [String: String] {
+        var evidence = [
+            "path": path,
+            "command_status": result.commandStatus,
+            "command_failure_reason": result.failureReason ?? "unknown",
+        ]
+        if case let .spawnFailed(message) = result {
+            evidence["spawn_error"] = streamSummary(message)
+        }
+        return evidence
+    }
+
+    static func commandFailureSummary(command: String, result: CommandResult) -> String {
+        switch result {
+        case .timedOut:
+            return "\(command) verification timed out. Retry and verify the tool is not blocked."
+        case .spawnFailed:
+            return "\(command) verification could not be started. Verify the tool exists and is executable."
+        case .notAllowlisted:
+            return "\(command) verification was blocked by the Doctor command allowlist. Use an allowlisted tool."
+        case .completed:
+            return "\(command) verification failed."
+        }
     }
 
     private static func streamSummary(_ value: String) -> String {

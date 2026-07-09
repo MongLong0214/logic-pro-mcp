@@ -44,7 +44,10 @@ private func doctorRuntime(
         isExecutableFile: { _ in executable },
         logicProRunning: { logicRunning },
         logicProHasVisibleWindow: { visibleWindow },
-        runCommand: commandHandler,
+        runCommand: { executable, arguments in
+            commandHandler(executable, arguments).map(SetupDoctor.CommandResult.completed)
+                ?? .spawnFailed("test_command_unavailable")
+        },
         readClaudeRegistration: { registration }
     )
     runtime.macOSVersion = { macOSVersion }
@@ -624,8 +627,7 @@ private func issue26RepositoryRootURL() -> URL {
         arguments: ["-c", "head -c \(byteCount) /dev/zero | tr '\\0' 'a'"],
         timeout: 10.0
     )
-    let unwrapped = try #require(result)
-    let output = try #require(unwrapped.output)
+    let output = try #require(result.output)
     #expect(output.stdout.count == byteCount)
     #expect(output.exitCode == 0)
 }
@@ -636,12 +638,11 @@ private func issue26RepositoryRootURL() -> URL {
         arguments: [],
         timeout: 2.0
     )
-    let unwrapped = try #require(result)
-    guard case .spawnFailed = unwrapped else {
-        Issue.record("Expected spawnFailed, got \(unwrapped)")
+    guard case .spawnFailed = result else {
+        Issue.record("Expected spawnFailed, got \(result)")
         return
     }
-    #expect(unwrapped.output == nil)
+    #expect(result.output == nil)
 }
 
 @Test func testProductionCommandReportsTimeoutForSlowChild() throws {
@@ -650,9 +651,8 @@ private func issue26RepositoryRootURL() -> URL {
         arguments: ["-c", "sleep 5"],
         timeout: 0.3
     )
-    let unwrapped = try #require(result)
-    #expect(unwrapped == .timedOut)
-    #expect(unwrapped.output == nil)
+    #expect(result == .timedOut)
+    #expect(result.output == nil)
 }
 
 // MARK: - Entrypoint exit-code contract

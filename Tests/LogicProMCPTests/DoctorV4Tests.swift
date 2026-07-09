@@ -34,7 +34,10 @@ private func doctorV4Runtime(
         isExecutableFile: { _ in true },
         logicProRunning: { true },
         logicProHasVisibleWindow: { true },
-        runCommand: commandHandler,
+        runCommand: { executable, arguments in
+            commandHandler(executable, arguments).map(SetupDoctor.CommandResult.completed)
+                ?? .spawnFailed("test_command_unavailable")
+        },
         readClaudeRegistration: { registration }
     )
     runtime.macOSVersion = { macOSVersion }

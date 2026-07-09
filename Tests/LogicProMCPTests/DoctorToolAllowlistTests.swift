@@ -35,10 +35,9 @@ private func doctorSourceFilesForProcessLint() throws -> [(String, String)] {
 // Case 11
 @Test func test_t1v3_doctor_tool_allowlist_rejects_arbitrary_binary() {
     // AC-6 fail-closed. `/bin/echo` EXISTS but is NOT allowlisted → the production
-    // runCommand must return nil WITHOUT spawning it (side-effect-free proof).
     // TR1: never pass a real LogicProMCP path here — only /bin/echo + a nonexistent path.
-    #expect(SetupDoctor.Runtime.production.runCommand("/bin/echo", ["harmless"]) == nil)
-    #expect(SetupDoctor.Runtime.production.runCommand("/tmp/nonexistent-doctor-tool", []) == nil)
+    #expect(SetupDoctor.Runtime.production.runCommand("/bin/echo", ["harmless"]) == .notAllowlisted)
+    #expect(SetupDoctor.Runtime.production.runCommand("/tmp/nonexistent-doctor-tool", []) == .notAllowlisted)
 }
 
 // Case 12

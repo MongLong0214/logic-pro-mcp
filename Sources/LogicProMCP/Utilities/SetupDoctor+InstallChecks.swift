@@ -32,7 +32,7 @@ extension SetupDoctor {
         var indeterminateStaleRisk = false
         var indeterminate: [String] = []
         for path in candidates {
-            let arch = runtime.runCommand("/usr/bin/lipo", ["-archs", path])?.stdout
+            let arch = runtime.runCommand("/usr/bin/lipo", ["-archs", path]).output?.stdout
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let isRunningExecutable = standardized(path) == standardized(executablePath ?? "")
             switch staticVersionForPath(path) {
@@ -181,7 +181,7 @@ extension SetupDoctor {
         // /opt/homebrew/bin, which would otherwise make a genuine Homebrew install
         // fall through to .releaseBinary based purely on ambient PATH.
         for brewPath in ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"] {
-            if let brew = runtime.runCommand(brewPath, ["list", "--versions", "logic-pro-mcp"]),
+            if let brew = runtime.runCommand(brewPath, ["list", "--versions", "logic-pro-mcp"]).output,
                brew.exitCode == 0,
                brew.stdout.contains("logic-pro-mcp") {
                 return .homebrew

@@ -83,13 +83,14 @@ extension SetupDoctor {
                 skipReason: "binary_path_missing"
             )
         }
-        guard let output = runtime.runCommand("/usr/bin/codesign", ["--verify", "--strict", "--verbose=2", executablePath]) else {
+        let result = runtime.runCommand("/usr/bin/codesign", ["--verify", "--strict", "--verbose=2", executablePath])
+        guard let output = result.output else {
             return check(
                 id: "release.signature",
                 domain: "release",
                 status: .warn,
-                summary: "codesign verification could not be executed.",
-                evidence: ["path": executablePath],
+                summary: commandFailureSummary(command: "codesign", result: result),
+                evidence: commandFailureEvidence(path: executablePath, result: result),
                 remediationType: .docs
             )
         }
@@ -116,13 +117,14 @@ extension SetupDoctor {
                 skipReason: "binary_path_missing"
             )
         }
-        guard let output = runtime.runCommand("/usr/bin/xattr", ["-p", "com.apple.quarantine", executablePath]) else {
+        let result = runtime.runCommand("/usr/bin/xattr", ["-p", "com.apple.quarantine", executablePath])
+        guard let output = result.output else {
             return check(
                 id: "release.quarantine",
                 domain: "release",
                 status: .warn,
-                summary: "xattr quarantine check could not be executed.",
-                evidence: ["path": executablePath],
+                summary: commandFailureSummary(command: "xattr quarantine", result: result),
+                evidence: commandFailureEvidence(path: executablePath, result: result),
                 remediationType: .docs
             )
         }

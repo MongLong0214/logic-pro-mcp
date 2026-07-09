@@ -16,17 +16,17 @@ private func enterpriseRuntime(
         logicProRunning: { true },
         logicProHasVisibleWindow: { true },
         runCommand: { executable, arguments in
-            if executable == "/usr/bin/codesign" { return .init(exitCode: 0, stdout: "", stderr: "") }
-            if executable == "/usr/bin/xattr" { return .init(exitCode: 1, stdout: "", stderr: "No such xattr") }
-            if executable == "/usr/bin/lipo" { return .init(exitCode: 0, stdout: "arm64\n", stderr: "") }
+            if executable == "/usr/bin/codesign" { return .completed(.init(exitCode: 0, stdout: "", stderr: "")) }
+            if executable == "/usr/bin/xattr" { return .completed(.init(exitCode: 1, stdout: "", stderr: "No such xattr")) }
+            if executable == "/usr/bin/lipo" { return .completed(.init(exitCode: 0, stdout: "arm64\n", stderr: "")) }
             if executable == "/usr/bin/strings", arguments.count == 2 {
-                return .init(exitCode: 0, stdout: "\(ServerConfig.serverVersion)\n", stderr: "")
+                return .completed(.init(exitCode: 0, stdout: "\(ServerConfig.serverVersion)\n", stderr: ""))
             }
             if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
                arguments == ["list", "--versions", "logic-pro-mcp"] {
-                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.4\n", stderr: "")
+                return .completed(.init(exitCode: 0, stdout: "logic-pro-mcp 3.7.4\n", stderr: ""))
             }
-            return nil
+            return .spawnFailed("test_command_unavailable")
         },
         readClaudeRegistration: { .registered(command: "/opt/homebrew/bin/LogicProMCP") }
     )
