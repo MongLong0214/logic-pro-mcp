@@ -85,7 +85,7 @@ private func doctorV4Report(
     let report = doctorV4Report()
     #expect(report.schema == "logic_pro_mcp_doctor.v4")
     #expect(report.doctorProfile == .full)
-    #expect(report.clientProfile == .terminal)
+    #expect(report.clientProfile == .claudeCode)
     #expect(Set(report.capabilities.keys) == Set([
         "core_transport",
         "track_management",
@@ -100,8 +100,70 @@ private func doctorV4Report(
 
     let object = try #require(sharedJSONObject(encodeJSON(report)))
     #expect(object["doctor_profile"] as? String == "full")
-    #expect(object["client_profile"] as? String == "terminal")
+    #expect(object["client_profile"] as? String == "claude-code")
+    #expect(object["client_profile_basis"] as? String == "registration_config")
     #expect(object["capabilities"] as? [String: Any] != nil)
+}
+
+@Test func doctorV4TerminalInfersClaudeCodeFromRegistrationConfig() throws {
+    let report = doctorV4Report(
+        runtime: doctorV4Runtime(
+            registration: .registered(command: "/opt/homebrew/bin/LogicProMCP"),
+            desktopRegistration: .notRegistered
+        )
+    )
+    let registration = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
+
+    #expect(report.clientProfile == .claudeCode)
+    #expect(report.clientProfileBasis == "registration_config")
+    #expect(registration.status == .pass)
+    #expect(registration.skipReason == nil)
+}
+
+@Test func doctorV4TerminalDefaultsToClaudeCodeWhenRegistrationIsMissing() throws {
+    let report = doctorV4Report(
+        runtime: doctorV4Runtime(
+            registration: .notRegistered,
+            desktopRegistration: .notRegistered
+        )
+    )
+    let registration = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
+    let object = try #require(sharedJSONObject(encodeJSON(report)))
+
+    #expect(report.clientProfile == .claudeCode)
+    #expect(report.clientProfileBasis == "default_claude_code")
+    #expect(registration.status == .warn)
+    #expect(registration.skipReason == nil)
+    #expect(object["client_profile_basis"] as? String == "default_claude_code")
+}
+
+@Test func doctorV4UnknownContextDefaultsToClaudeCodeWhenRegistrationIsMissing() throws {
+    let report = doctorV4Report(
+        runtime: doctorV4Runtime(
+            registration: .notRegistered,
+            desktopRegistration: .notRegistered,
+            launchContext: .init(context: "unknown", responsibleHint: "unknown")
+        )
+    )
+    let registration = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
+
+    #expect(report.clientProfile == .claudeCode)
+    #expect(report.clientProfileBasis == "default_claude_code")
+    #expect(registration.status == .warn)
+    #expect(registration.skipReason == nil)
+}
+
+@Test func doctorV4ExplicitTerminalClientStillOverridesInference() throws {
+    let report = doctorV4Report(
+        arguments: ["LogicProMCP", "doctor", "--json", "--client", "terminal"],
+        runtime: doctorV4Runtime(registration: .registered(command: "/opt/homebrew/bin/LogicProMCP"))
+    )
+    let registration = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
+
+    #expect(report.clientProfile == .terminal)
+    #expect(report.clientProfileBasis == "explicit_flag")
+    #expect(registration.status == .skipped)
+    #expect(registration.skipReason == "client_not_selected")
 }
 
 @Test func doctorV4SkippedChecksRequireBlockedByOrSkipReason() {

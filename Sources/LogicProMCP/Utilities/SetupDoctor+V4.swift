@@ -174,7 +174,6 @@ extension SetupDoctor {
         case "claude_desktop": return (.claudeDesktop, "launch_context")
         case "cursor": return (.cursor, "launch_context")
         case "vscode": return (.vscode, "launch_context")
-        case "terminal": return (.terminal, "launch_context")
         default: break
         }
         if case .registered = claudeRegistration {
@@ -184,7 +183,7 @@ extension SetupDoctor {
         case .registered:
             return (.claudeDesktop, "registration_config")
         case .notRegistered, .configUnavailable:
-            return (.custom, "fallback_custom")
+            return (.claudeCode, "default_claude_code")
         }
     }
 
