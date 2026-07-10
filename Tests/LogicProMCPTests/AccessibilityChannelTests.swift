@@ -651,7 +651,7 @@ private func makeSetInstrumentFixture() -> (
 
     #expect(result.isSuccess)
 
-    let regions = try JSONDecoder().decode([RegionInfo].self, from: Data(result.message.utf8))
+    let regions = try RegionInfo.decodeToolPayload(result.message)
     #expect(regions.count == 1)
     #expect(regions[0].name == "Deluxe Classic")
     #expect(regions[0].trackIndex == 0)
@@ -660,7 +660,7 @@ private func makeSetInstrumentFixture() -> (
     #expect(regions[0].kind == "midi")
 }
 
-@Test func testAccessibilityChannelAXBackedRegionsRecognizeTracksContentsAndFilterOffscreen() async throws {
+@Test func testAccessibilityChannelAXBackedRegionsMarkViewportSubsetIncomplete() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(900)
     let window = builder.element(901)
@@ -716,7 +716,16 @@ private func makeSetInstrumentFixture() -> (
 
     #expect(result.isSuccess)
 
-    let regions = try JSONDecoder().decode([RegionInfo].self, from: Data(result.message.utf8))
+    let payload = try #require(
+        JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+    )
+    #expect(payload["complete"] as? Bool == false)
+    #expect(payload["scope"] as? String == "visible_arrange_area")
+    #expect(payload["reason"] as? String == "logic_ax_viewport_only")
+    #expect(payload["returned_count"] as? Int == 2)
+    let regionValue = try #require(payload["regions"])
+    let regionData = try JSONSerialization.data(withJSONObject: regionValue)
+    let regions = try JSONDecoder().decode([RegionInfo].self, from: regionData)
     #expect(regions.count == 2)
     #expect(regions[0].name == "MIDI Region")
     #expect(regions[0].trackIndex == 0)
@@ -790,7 +799,7 @@ private func makeSetInstrumentFixture() -> (
 
     #expect(result.isSuccess)
 
-    let regions = try JSONDecoder().decode([RegionInfo].self, from: Data(result.message.utf8))
+    let regions = try RegionInfo.decodeToolPayload(result.message)
     #expect(regions.count == 1)
     #expect(regions[0].name == "Imported Idea")
     #expect(regions[0].trackIndex == 0)
@@ -838,7 +847,7 @@ private func makeSetInstrumentFixture() -> (
 
     #expect(result.isSuccess)
 
-    let regions = try JSONDecoder().decode([RegionInfo].self, from: Data(result.message.utf8))
+    let regions = try RegionInfo.decodeToolPayload(result.message)
     #expect(regions.count == 1)
     #expect(regions[0].name == "Imported Idea")
     #expect(regions[0].trackIndex == 0)

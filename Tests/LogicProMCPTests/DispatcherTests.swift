@@ -2516,7 +2516,7 @@ private actor SelectiveFailChannel: Channel {
             endPosition: "5 1 1 1",
             length: "4 0 0 0"
         ),
-    ])
+    ], complete: true)
 
     let result = await ProjectDispatcher.handle(
         command: "bounce",

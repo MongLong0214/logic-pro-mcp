@@ -75,7 +75,7 @@ private func makeRegionRefreshFixture() -> (builder: FakeAXRuntimeBuilder, app: 
             endPosition: "100 1 1 1",
             length: "1 0 0 0"
         )
-    ])
+    ], complete: true)
 
     let result = await ProjectDispatcher.handle(
         command: "get_regions",
@@ -85,7 +85,7 @@ private func makeRegionRefreshFixture() -> (builder: FakeAXRuntimeBuilder, app: 
     )
 
     let text = sharedToolText(result)
-    let toolRegions = try JSONDecoder().decode([RegionInfo].self, from: Data(text.utf8))
+    let toolRegions = try RegionInfo.decodeToolPayload(text)
     #expect(toolRegions.count == 1)
     #expect(toolRegions[0].name == "Live Region")
     #expect(toolRegions[0].trackIndex == 0)
@@ -95,6 +95,7 @@ private func makeRegionRefreshFixture() -> (builder: FakeAXRuntimeBuilder, app: 
     #expect(cached[0].name == "Live Region")
     #expect(cached[0].startPosition == "1 1 1 1")
     #expect(cached[0].endPosition == "2 1 1 1")
+    #expect(!(await cache.getRegionsComplete()))
 }
 
 @Test func testTrackRegionsResourceRefreshesLiveScanWhenCacheIsStale() async throws {
@@ -112,7 +113,7 @@ private func makeRegionRefreshFixture() -> (builder: FakeAXRuntimeBuilder, app: 
             endPosition: "100 1 1 1",
             length: "1 0 0 0"
         )
-    ])
+    ], complete: true)
 
     let result = try await ResourceHandlers.read(
         uri: "logic://tracks/0/regions",
@@ -129,4 +130,5 @@ private func makeRegionRefreshFixture() -> (builder: FakeAXRuntimeBuilder, app: 
     let cached = await cache.getRegions()
     #expect(cached.count == 1)
     #expect(cached[0].name == "Live Region")
+    #expect(!(await cache.getRegionsComplete()))
 }

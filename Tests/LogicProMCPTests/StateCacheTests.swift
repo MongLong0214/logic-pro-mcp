@@ -48,7 +48,7 @@ import Testing
     let project = ProjectInfo(name: "Enterprise Mix", trackCount: 24)
 
     await cache.updateTransport(transport)
-    await cache.updateRegions(regions)
+    await cache.updateRegions(regions, complete: true)
     await cache.updateMarkers(markers)
     await cache.updateProject(project)
 
