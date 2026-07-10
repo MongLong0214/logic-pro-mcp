@@ -107,7 +107,6 @@ Manual binding is only needed for remaining keycmd-only/channel-only paths:
 
 - `edit.duplicate`
 - `edit.normalize`
-- `edit.toggle_step_input`
 - `nav.goto_marker`
 - `nav.delete_marker`
 - `transport.capture_recording`

@@ -37,7 +37,6 @@ struct RoutingAuditInvariantTests {
         // path that fires these on Logic 12.2.
         "edit.duplicate",                 // logic_edit.duplicate
         "edit.normalize",                 // logic_edit.normalize
-        "edit.toggle_step_input",         // logic_edit.toggle_step_input
         "nav.goto_marker",                // logic_navigate.goto_marker (with index)
         "nav.delete_marker",              // logic_navigate.delete_marker
         // Channel-only router op — no public MCP tool command exposes it, but

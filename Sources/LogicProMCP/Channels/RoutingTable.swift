@@ -188,7 +188,7 @@ extension ChannelRouter {
         "edit.quantize":              [.midiKeyCommands, .cgEvent],
         "edit.bounce_in_place":       [.midiKeyCommands, .cgEvent],
         "edit.normalize":             [.midiKeyCommands, .cgEvent],
-        "edit.toggle_step_input":     [.midiKeyCommands, .cgEvent],  // §4.3.1 new command
+        "edit.toggle_step_input":     [.accessibility, .midiKeyCommands, .cgEvent],
         "edit.duplicate":             [.midiKeyCommands, .cgEvent],
 
         "project.new":                [.appleScript, .cgEvent],

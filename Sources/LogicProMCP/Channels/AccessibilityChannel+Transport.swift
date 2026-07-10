@@ -45,7 +45,7 @@ extension AccessibilityChannel {
         let controlBarMapping: [String: (korean: String, english: String, desired: Bool?)] = [
             "Cycle":      ("사이클",        "Cycle",     nil),
             "Metronome":  ("메트로놈 클릭",  "Metronome", nil),
-            "CountIn":    ("카운트 인",     "Count-in",  nil),
+            "CountIn":    ("카운트 인",     "Count In",  nil),
             "Play":       ("재생",          "Play",      true),
             "Stop":       ("재생",          "Play",      false),
             "Record":     ("녹음",          "Record",    true),
