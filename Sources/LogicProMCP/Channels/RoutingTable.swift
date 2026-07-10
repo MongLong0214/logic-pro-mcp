@@ -163,7 +163,8 @@ extension ChannelRouter {
         // primary `logic_navigate` tool surface this entry is now dead
         // weight by design.
         "nav.goto_marker":            [.midiKeyCommands, .cgEvent],
-        "nav.create_marker":          [.midiKeyCommands, .cgEvent],
+        "nav.open_marker_list":       [.accessibility],
+        "nav.create_marker":          [.accessibility],
         "nav.delete_marker":          [.midiKeyCommands, .cgEvent],
         "nav.rename_marker":          [.accessibility],
         "nav.get_markers":            [.accessibility],

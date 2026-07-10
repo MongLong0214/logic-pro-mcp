@@ -267,27 +267,23 @@ extension AccessibilityChannel {
     /// | arrange area | marker list window | strategy |
     /// |--------------|--------------------|----------|
     /// | non-nil      | open / closed      | `enumerateMarkers(in: area)` runs all 3 strategies |
-    /// | nil (12.2)   | open               | `enumerateMarkersFromListWindow` direct |
-    /// | nil          | closed             | empty (honest, cache stamped) |
-    ///
-    /// The "empty as success" return on the no-surface case is intentional:
-    /// it lets `StatePoller` write `[]` into the cache so resource handlers
-    /// report `source: "ax_live"` rather than `source: "default"` — telling
-    /// callers the poll ran and observed nothing rather than the poll
-    /// never having run.
     static func defaultGetMarkers(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
-        if let area = AXLogicProElements.getArrangementArea(runtime: runtime) {
-            return encodeResult(AXLogicProElements.enumerateMarkers(in: area, runtime: runtime))
-        }
-        // Logic 12.2 commonly has no arrangement area identifier; fall
-        // straight to the marker list window scrape without re-walking
-        // strategies that require an arrange-area root.
         if let listWindow = AXLogicProElements.findMarkerListWindow(runtime: runtime) {
             return encodeResult(AXLogicProElements.enumerateMarkersFromListWindow(
                 listWindow, runtime: runtime.ax
             ))
         }
-        return encodeResult([MarkerState]())
+        if let area = AXLogicProElements.getArrangementArea(runtime: runtime) {
+            let legacyMarkers = AXLogicProElements.enumerateMarkers(in: area, runtime: runtime)
+            if !legacyMarkers.isEmpty {
+                return encodeResult(legacyMarkers)
+            }
+        }
+        return .error(HonestContract.encodeStateC(
+            error: .elementNotFound,
+            hint: "Open Navigate > Open Marker List so Logic Pro can expose marker rows to Accessibility.",
+            extras: ["reason": "marker_list_not_open"]
+        ))
     }
 
 }

@@ -100,6 +100,8 @@ actor AccessibilityChannel: Channel {
         let setMixerValue: @Sendable ([String: String], MixerTarget) -> ChannelResult
         let projectInfo: @Sendable () -> ChannelResult
         let markers: @Sendable () -> ChannelResult
+        let openMarkerList: @Sendable () async -> ChannelResult
+        let createMarker: @Sendable ([String: String]) async -> ChannelResult
         let importMIDIFile: @Sendable (String) async -> ChannelResult
         // v3.1.5 AppleScript-primary helpers (markersAppleScript /
         // projectInfoAppleScript / tracksAppleScript) removed in v3.1.8 —
@@ -127,6 +129,8 @@ actor AccessibilityChannel: Channel {
             setMixerValue: @escaping @Sendable ([String: String], MixerTarget) -> ChannelResult,
             projectInfo: @escaping @Sendable () -> ChannelResult,
             markers: @escaping @Sendable () -> ChannelResult = { .success("[]") },
+            openMarkerList: @escaping @Sendable () async -> ChannelResult = { .error("openMarkerList not wired") },
+            createMarker: @escaping @Sendable ([String: String]) async -> ChannelResult = { _ in .error("createMarker not wired") },
             importMIDIFile: @escaping @Sendable (String) async -> ChannelResult = { _ in .error("importMIDIFile not wired") },
             logicRuntime: AXLogicProElements.Runtime = .production
         ) {
@@ -148,6 +152,8 @@ actor AccessibilityChannel: Channel {
             self.setMixerValue = setMixerValue
             self.projectInfo = projectInfo
             self.markers = markers
+            self.openMarkerList = openMarkerList
+            self.createMarker = createMarker
             self.importMIDIFile = importMIDIFile
             self.logicRuntime = logicRuntime
         }
@@ -203,6 +209,13 @@ actor AccessibilityChannel: Channel {
                 setMixerValue: { AccessibilityChannel.defaultSetMixerValue(params: $0, target: $1, runtime: logicRuntime) },
                 projectInfo: { AccessibilityChannel.defaultGetProjectInfo(runtime: logicRuntime) },
                 markers: { AccessibilityChannel.defaultGetMarkers(runtime: logicRuntime) },
+                openMarkerList: { await AccessibilityChannel.defaultOpenMarkerList(runtime: logicRuntime) },
+                createMarker: {
+                    await AccessibilityChannel.defaultCreateMarker(
+                        params: $0,
+                        runtime: logicRuntime
+                    )
+                },
                 importMIDIFile: { await AccessibilityChannel.defaultImportMIDIFile(path: $0, runtime: logicRuntime) },
                 logicRuntime: logicRuntime
             )
@@ -530,6 +543,10 @@ actor AccessibilityChannel: Channel {
             // for Logic 10.x. See PRD-issue7-logic12-read-paths.md for
             // the strategy hierarchy.
             return runtime.markers()
+        case "nav.open_marker_list":
+            return await runtime.openMarkerList()
+        case "nav.create_marker":
+            return await runtime.createMarker(params)
         case "nav.rename_marker":
             // Issue #143 — marker renaming has no verified AX write path on
             // Logic 12.x (the Marker List table cells are not settable via

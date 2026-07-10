@@ -323,14 +323,20 @@ private actor SequencedMarkersChannel: Channel {
 
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
         executedOps.append((operation, params))
-        guard operation == "nav.get_markers" else {
+        switch operation {
+        case "nav.open_marker_list":
+            return .success(HonestContract.encodeStateA())
+        case "nav.create_marker":
+            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable))
+        case "nav.get_markers":
+            guard !markerSnapshots.isEmpty else {
+                return .error("missing marker snapshot")
+            }
+            let next = markerSnapshots.removeFirst()
+            return .success(encodeDispatcherJSON(next))
+        default:
             return .error("unexpected operation: \(operation)")
         }
-        guard !markerSnapshots.isEmpty else {
-            return .error("missing marker snapshot")
-        }
-        let next = markerSnapshots.removeFirst()
-        return .success(encodeDispatcherJSON(next))
     }
 
     func healthCheck() async -> ChannelHealth {
@@ -3165,11 +3171,9 @@ private actor SelectiveFailChannel: Channel {
         // using the marker's `position` string (chorus at 17.1.1.1).
         ("transport.goto_position", ["position": "17.1.1.1"]),
         ("transport.goto_position", ["position": "17.1.1.1"]),
-        // AC5 — create_marker now pre-polls the marker list (nav.get_markers)
-        // BEFORE the mutating route so its count-delta verify has a true
-        // pre-mutation baseline. Test scenario unchanged; only this expected
-        // op-list entry was stale.
+        ("nav.open_marker_list", [:]),
         ("nav.get_markers", [:]),
+        ("nav.create_marker", ["name": "Bridge"]),
         ("nav.rename_marker", ["index": "2", "name": "Big Chorus"]),
         // #109 — set_zoom is now AX-first (writable Horizontal-Zoom slider);
         // zoom_to_fit stays on the key-command path (no slider equivalent).
@@ -3181,7 +3185,6 @@ private actor SelectiveFailChannel: Channel {
         // v3.1.10 — `nav.goto_marker` keycmd path is reserved for the
         // cold-cache fallback (cache empty, index supplied). Cached path
         // routes to AX `transport.goto_position` (see axOps above).
-        ("nav.create_marker", ["name": "Bridge"]),
         ("nav.delete_marker", ["index": "1"]),
         ("nav.zoom_to_fit", [:]),
     ])
@@ -3255,6 +3258,9 @@ private actor SelectiveFailChannel: Channel {
     #expect(object["marker_count_after"] as? Int == 2)
     #expect(object["observed_marker_name"] as? String == "Marker 1")
     #expect(await cache.getMarkers().count == 2)
+    #expect(await markersAX.executedOps.map(\.0) == [
+        "nav.open_marker_list", "nav.get_markers", "nav.create_marker", "nav.get_markers",
+    ])
 }
 
 @Test func testNavigateDispatcherCreateMarkerReturnsErrorWhenObservedNameDoesNotMatch() async throws {
@@ -3291,6 +3297,35 @@ private actor SelectiveFailChannel: Channel {
     #expect(object["reason"] as? String == "readback_mismatch")
     #expect(object["requested_name"] as? String == "Bridge")
     #expect(object["observed_marker_name"] as? String == "Marker 2")
+}
+
+@Test func testNavigateDispatcherCreateMarkerDetectsMiddleInsertionDespiteShiftedIDs() async throws {
+    let router = ChannelRouter()
+    let markersAX = SequencedMarkersChannel(markerSnapshots: [
+        [
+            MarkerState(id: 0, name: "Intro", position: "1.1.1.1", positionSource: .parser),
+            MarkerState(id: 1, name: "Outro", position: "17.1.1.1", positionSource: .parser),
+        ],
+        [
+            MarkerState(id: 0, name: "Intro", position: "1.1.1.1", positionSource: .parser),
+            MarkerState(id: 1, name: "Bridge", position: "9.1.1.1", positionSource: .parser),
+            MarkerState(id: 2, name: "Outro", position: "17.1.1.1", positionSource: .parser),
+        ],
+    ])
+    await router.register(markersAX)
+
+    let result = await NavigateDispatcher.handle(
+        command: "create_marker",
+        params: ["name": .string("Bridge")],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(!result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["observed_marker_id"] as? Int == 1)
+    #expect(object["observed_marker_name"] as? String == "Bridge")
+    #expect(object["observed_marker_position"] as? String == "9.1.1.1")
 }
 
 @Test func testNavigateDispatcherZoomCommandsTreatUnverifiedStateBAsError() async {

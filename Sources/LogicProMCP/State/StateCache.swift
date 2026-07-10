@@ -9,6 +9,7 @@ actor StateCache {
     private(set) var regions: [RegionState] = []
     private(set) var regionsComplete = false
     private(set) var markers: [MarkerState] = []
+    private(set) var markersReadable: Bool = false
     private(set) var project = ProjectInfo()
     private(set) var mcuConnection = MCUConnectionState()
     private(set) var mcuDisplay = MCUDisplayState()
@@ -88,6 +89,7 @@ actor StateCache {
     func getRegions() -> [RegionState] { regions }
     func getRegionsComplete() -> Bool { regionsComplete }
     func getMarkers() -> [MarkerState] { markers }
+    func getMarkersReadable() -> Bool { markersReadable }
     func getProject() -> ProjectInfo { project }
     func getMCUConnection() -> MCUConnectionState { mcuConnection }
     func getMCUDisplay() -> MCUDisplayState { mcuDisplay }
@@ -162,6 +164,7 @@ actor StateCache {
         regions = []
         regionsComplete = false
         markers = []
+        markersReadable = false
         // Re-initialising transport picks up its default `lastUpdated =
         // .distantPast`, which is how snapshot() signals "stale" to readers
         // (transport_age_sec becomes astronomically large). Clients can
@@ -271,9 +274,14 @@ actor StateCache {
         // assignment is still guarded so listeners that diff
         // `cache.markers` directly don't see redundant publishes.
         markersFetchedAt = Date()
+        markersReadable = true
         if markers != newMarkers {
             markers = newMarkers
         }
+    }
+
+    func markMarkersUnreadable() {
+        markersReadable = false
     }
 
     func updateProject(_ info: ProjectInfo) {
