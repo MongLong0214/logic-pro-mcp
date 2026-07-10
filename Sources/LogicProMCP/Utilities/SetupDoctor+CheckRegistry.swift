@@ -31,9 +31,15 @@ extension SetupDoctor {
         case updatesLatestRelease = "updates.latest_release"
     }
 
+    enum DoctorCheckInclusionRule: Equatable, Sendable {
+        case always
+        case latestReleaseLookupAvailable
+    }
+
     struct DoctorCheckDefinition: Equatable, Sendable {
         let id: DoctorCheckID
         let dependencies: [DoctorCheckID]
+        let inclusionRule: DoctorCheckInclusionRule
         let optionalByDefault: Bool
         let capabilityGroups: [String]
         let remediationAnchor: String?
@@ -43,6 +49,7 @@ extension SetupDoctor {
         init(
             _ id: DoctorCheckID,
             dependencies: [DoctorCheckID] = [],
+            inclusionRule: DoctorCheckInclusionRule = .always,
             optionalByDefault: Bool = false,
             capabilityGroups: [String] = [],
             remediationAnchor: String? = nil,
@@ -51,6 +58,7 @@ extension SetupDoctor {
         ) {
             self.id = id
             self.dependencies = dependencies
+            self.inclusionRule = inclusionRule
             self.optionalByDefault = optionalByDefault
             self.capabilityGroups = capabilityGroups
             self.remediationAnchor = remediationAnchor
@@ -110,7 +118,12 @@ extension SetupDoctor {
         .init(.channelsKeycmdReference, capabilityGroups: ["keycmd_only_ops"], remediationAnchor: "docs/SETUP.md#doctor-channelskeycmd-reference", profileRule: "keycmd|full"),
         .init(.channelsMCUWiringHint, capabilityGroups: ["mixer_mcu"], remediationAnchor: "docs/SETUP.md#doctor-channelsmcu-wiring-hint", profileRule: "full"),
         .init(.dependenciesClickFallback, remediationAnchor: "docs/SETUP.md#doctor-dependenciesclick-fallback"),
-        .init(.updatesLatestRelease, optionalByDefault: true, remediationAnchor: "docs/SETUP.md#doctor-updateslatest-release"),
+        .init(
+            .updatesLatestRelease,
+            inclusionRule: .latestReleaseLookupAvailable,
+            optionalByDefault: true,
+            remediationAnchor: "docs/SETUP.md#doctor-updateslatest-release"
+        ),
     ]
 
     static let checkDefinitionByID: [String: DoctorCheckDefinition] = Dictionary(

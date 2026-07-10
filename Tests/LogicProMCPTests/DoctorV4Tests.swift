@@ -396,19 +396,43 @@ private func doctorV4Report(
     #expect(Set(ids) == Set(SetupDoctor.DoctorCheckID.allCases.map(\.rawValue)))
     #expect(Set(SetupDoctor.remediationAnchorsByCheckID.keys).isSubset(of: Set(ids)))
     #expect(SetupDoctor.checkDefinitionByID["updates.latest_release"]?.optionalByDefault == true)
+    #expect(
+        SetupDoctor.checkDefinitionByID["updates.latest_release"]?.inclusionRule
+            == .latestReleaseLookupAvailable
+    )
 }
 
 @Test func doctorV4CheckRegistryCoversRenderedChecksAndOrder() {
+    let reportWithoutUpdate = doctorV4Report()
+    #expect(
+        reportWithoutUpdate.checks.map(\.id)
+            == SetupDoctor.orderedCheckIDs.filter { $0 != "updates.latest_release" }
+    )
+
     var runtime = doctorV4Runtime()
     runtime.latestReleaseLookup = { .found(version: ServerConfig.serverVersion) }
 
     let report = doctorV4Report(runtime: runtime)
     let reportIDs = report.checks.map(\.id)
     let registryIDs = Set(SetupDoctor.orderedCheckIDs)
-    let orderedRenderedIDs = SetupDoctor.orderedCheckIDs.filter { Set(reportIDs).contains($0) }
 
     #expect(Set(reportIDs).isSubset(of: registryIDs))
-    #expect(reportIDs == orderedRenderedIDs)
+    #expect(reportIDs == SetupDoctor.orderedCheckIDs)
+}
+
+@Test func doctorV4RegistryRunnerPreservesProfileAndDependencyResults() throws {
+    let report = doctorV4Report(
+        arguments: ["LogicProMCP", "doctor", "--json", "--profile", "core", "--client", "claude-code"],
+        runtime: doctorV4Runtime(registration: .notRegistered),
+        approvals: [:]
+    )
+    let manual = try #require(report.checks.first { $0.id == "channels.manual_validation" })
+    let target = try #require(report.checks.first { $0.id == "mcp.registration_target" })
+
+    #expect(manual.status == .skipped)
+    #expect(manual.skipReason == .profileNotRequired)
+    #expect(target.status == .skipped)
+    #expect(target.blockedBy == "mcp.claude_code_registration")
 }
 
 @Test func doctorV4DroppedRequiredCheckIsSynthesizedAsFailure() throws {
