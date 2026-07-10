@@ -34,7 +34,7 @@ struct ResourceProvider {
 
     /// Stable release timestamp stamped into every resource's `lastModified`.
     /// Lets caching clients invalidate their local mirror on server upgrade.
-    private static let versionReleaseTimestamp: String = "2026-07-08T00:00:00Z"
+    private static let versionReleaseTimestamp: String = "2026-07-10T00:00:00Z"
 
     private static let baseResources: [Resource] = [
         Resource(

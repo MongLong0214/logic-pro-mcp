@@ -25,15 +25,15 @@ Send-only or cgevent ops that correctly report "sent, unverified": all `midi.sen
 ## Honest walls (State C, correctly fail-closed — NOT bugs)
 `transport.set_cycle_range` (no numeric cycle locator on 12.x), `navigate.rename_marker` (documented not_implemented), `transport.toggle_autopunch` (Autopunch not in Control Bar — with recovery hint), `mixer.set_plugin_param` (Scripter not installed on this host).
 
-## 🐛 Bugs filed (4)
+## Bugs filed and fixed by v3.11.0 (4)
 | # | Issue | Severity | Summary |
 |---|-------|----------|---------|
-| [#253](https://github.com/MongLong0214/logic-pro-mcp/issues/253) | help category gap | p3 | `logic_system.help audio` / `plugins` → `unknown_category` though both are real tools |
-| [#254](https://github.com/MongLong0214/logic-pro-mcp/issues/254) | marker surface | p2 | `create_marker` no-ops (cgevent; native menu works) **and** `logic://markers` reads empty even when a marker exists → goto/delete unusable |
-| [#255](https://github.com/MongLong0214/logic-pro-mcp/issues/255) | keycmd routing | p3 | `toggle_count_in` / `toggle_step_input` → `channels_exhausted` despite a working Control-Bar/menu path |
-| [#256](https://github.com/MongLong0214/logic-pro-mcp/issues/256) | bounce routing | p2 | Fixed in source: `project.bounce` now prefers the native File menu and verifies that the Bounce dialog opened. |
+| [#253](https://github.com/MongLong0214/logic-pro-mcp/issues/253) | help category gap | p3 | Fixed in v3.11.0: `logic_system.help` accepts the real `audio` and `plugins` categories and reports them in the valid-category list. |
+| [#254](https://github.com/MongLong0214/logic-pro-mcp/issues/254) | marker surface | p2 | Fixed in v3.11.0: `create_marker` uses Logic's native Navigate menu and `logic://markers` preserves unreadable/cache state instead of promoting a false empty list. |
+| [#255](https://github.com/MongLong0214/logic-pro-mcp/issues/255) | keycmd routing | p3 | Fixed in v3.11.0: `toggle_count_in` and `toggle_step_input` use native Control-Bar/menu paths with readback where available. |
+| [#256](https://github.com/MongLong0214/logic-pro-mcp/issues/256) | bounce routing | p2 | Fixed in v3.11.0: `project.bounce` prefers the native File menu and verifies that the Bounce dialog opened. |
 
-Root theme for #254/#255: several commands route only through an unbound Logic key command and fail with `channels_exhausted` instead of using the available menu/Control-Bar path.
+Root theme for #254/#255/#256 was that several commands routed only through an unbound Logic key command and failed with `channels_exhausted` instead of using the available native menu/Control-Bar path. v3.11.0 resolves the shipped paths with deterministic native UI routes; `navigate.rename_marker` remains a separate `not_implemented` honest wall.
 
 ## Demo composition (what's on screen)
 82 BPM, D minor lofi. `record_sequence` × 3 → **Chords** (Dm7–B♭maj7–Gm7–A7), **Bass** (D–B♭–G–A roots), **Lead** (D-pentatonic motif), all Studio Grand piano; **Drummer** (SoCal). Piano roll opened on Chords; real-time playback. Audio bed = Logic's own bounce of this loop (11.7 s, 48 kHz/24-bit, −0.1 dBFS peak).
