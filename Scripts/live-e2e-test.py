@@ -1605,13 +1605,10 @@ def main():
             and set_tempo_128_json.get("error") in ("element_not_found", "readback_unavailable")
             and has_tempo_landmarks(set_tempo_128_json)
         ) or (
-            # #189: the slider-increment fallback fails closed (State C) when it
-            # cannot land the requested tempo — it must NEVER report success on a
-            # readback mismatch. Honest evidence: observed tempo + fallback method.
             isinstance(set_tempo_128_json, dict)
             and set_tempo_128_json.get("success") is False
             and set_tempo_128_json.get("error") == "readback_mismatch"
-            and set_tempo_128_json.get("via") == "slider-increment"
+            and set_tempo_128_json.get("via") == "slider-value-nudge"
             and approx_equal(set_tempo_128_json.get("requested"), 128.0)
             and isinstance(set_tempo_128_json.get("observed"), (int, float))
         ),

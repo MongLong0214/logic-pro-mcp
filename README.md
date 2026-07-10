@@ -304,7 +304,7 @@ The repository ships `server.json` for the official MCP Registry metadata path. 
 
 ## Known Limitations
 
-- **Tempo typing**: `transport.set_tempo` falls back to slider increments when Logic's tempo display cannot accept text input; sub-10-BPM precision may require setting tempo manually once in Logic.
+- **Tempo typing**: `transport.set_tempo` uses bounded coarse and exact AX slider fallbacks when Logic's inline tempo input does not commit, and fails closed if exact readback still cannot be verified.
 - **MIDI region padding**: `record_sequence` regions start at bar 1 and extend to the target bar using inaudible padding; note timing inside the region is exact, but the region can look longer than the phrase.
 - **External MIDI bounce readiness**: MIDI regions on GM Device / External MIDI tracks are not accepted as audible-bounce evidence by project audit or `logic_project.bounce`. Move or recreate the material on Software Instrument tracks before claiming a verified Logic Bounce.
 - **MIDI Key Commands**: Logic 12.2 does not accept the legacy `.plist` Key Commands import; manual MIDI Learn remains required for keycmd-only operations.

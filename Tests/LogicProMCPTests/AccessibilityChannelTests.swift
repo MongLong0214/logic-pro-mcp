@@ -1396,9 +1396,16 @@ private func makeTempoSliderFixture(
     // State C `readback_mismatch` — NEVER report success on a readback mismatch.
     let builder = FakeAXRuntimeBuilder()
     let fixture = makeTempoSliderFixture(builder: builder, tempoValue: 120.0)
-    // Default fake performAction is a no-op, so the increment never moves the
-    // slider; observed stays 120 while 96 was requested.
-    let channel = makeAXBackedAccessibilityChannel(builder: builder, app: fixture.app)
+    let runtime = builder.makeLogicRuntime(
+        appElement: fixture.app,
+        setAttributeHandler: { _, _, _ in false },
+        performActionHandler: { _, _ in true }
+    )
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: fixture.app,
+        logicRuntime: runtime
+    )
 
     let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "96"])
 
@@ -1406,7 +1413,7 @@ private func makeTempoSliderFixture(
     let obj = decodeAccessibilityJSON(result.message)
     #expect(!((obj["success"] as? Bool)!))
     #expect(obj["error"] as? String == "readback_mismatch")
-    #expect(obj["via"] as? String == "slider-increment")
+    #expect(obj["via"] as? String == "slider-value-nudge")
     #expect((obj["requested"] as? Double) == 96)
     #expect((obj["observed"] as? Double) == 120)
     #expect((obj["safe_to_retry"] as? Bool)!)
@@ -1436,6 +1443,43 @@ private func makeTempoSliderFixture(
     #expect((obj["requested"] as? Double) == 130)
     #expect((obj["observed"] as? Double) == 130)
     #expect(obj["error"] == nil)
+}
+
+@Test func testSetTempoValueNudgeLandsBelowTenBPMDetent() async {
+    let builder = FakeAXRuntimeBuilder()
+    let fixture = makeTempoSliderFixture(builder: builder, tempoValue: 130.0)
+    let runtime = builder.makeLogicRuntime(
+        appElement: fixture.app,
+        setAttributeHandler: { element, attribute, value in
+            guard element == fixture.slider,
+                  attribute == kAXValueAttribute as String,
+                  let target = value as? NSNumber,
+                  let current = builder.attributeValue(element, attribute) as? NSNumber
+            else { return true }
+            let direction = target.doubleValue < current.doubleValue ? -1.0 : 1.0
+            builder.setAttribute(
+                element,
+                attribute,
+                NSNumber(value: current.doubleValue + direction)
+            )
+            return true
+        },
+        performActionHandler: nil
+    )
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: fixture.app,
+        logicRuntime: runtime
+    )
+
+    let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "128"])
+
+    #expect(result.isSuccess)
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect((obj["verified"] as? Bool)!)
+    #expect(obj["via"] as? String == "slider-value-nudge")
+    #expect((obj["requested"] as? Double) == 128)
+    #expect((obj["observed"] as? Double) == 128)
 }
 
 @Test func testAccessibilityChannelImportMIDIFileReturnsErrorWhenTrackCountDoesNotIncrease() async throws {
