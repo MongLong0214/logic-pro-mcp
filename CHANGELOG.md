@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
+## [3.11.0] — 2026-07-10
+
+Minor release for Doctor readiness, native UI routing fixes, and the full-surface QA bug batch after v3.10.0. The public MCP surface remains **10 tools / 18 resources / 11 templates**.
+
+### Fixed
+
+- **Setup Doctor evidence is more actionable and less ambiguous.** Doctor command probes now preserve typed outcomes (`success`, `non_zero_exit`, `timeout`, `spawn_failed`, `allowlist_rejected`), unknown client context defaults to the Claude Code registration check instead of silently skipping it, install/update remediation is tailored to Homebrew/source/release/custom install sources, skip reasons are emitted from a single typed taxonomy, Claude registration match confidence distinguishes none/name-only/command-only/full matches, and Cursor/VS Code/Windsurf/Zed/Claude Desktop TCC principals are recognized without leaking raw local paths. ([#260](https://github.com/MongLong0214/logic-pro-mcp/issues/260), [#261](https://github.com/MongLong0214/logic-pro-mcp/issues/261), [#262](https://github.com/MongLong0214/logic-pro-mcp/issues/262), [#263](https://github.com/MongLong0214/logic-pro-mcp/issues/263), [#264](https://github.com/MongLong0214/logic-pro-mcp/issues/264), [#265](https://github.com/MongLong0214/logic-pro-mcp/issues/265), [#280](https://github.com/MongLong0214/logic-pro-mcp/pull/280), [#281](https://github.com/MongLong0214/logic-pro-mcp/pull/281), [#282](https://github.com/MongLong0214/logic-pro-mcp/pull/282), [#283](https://github.com/MongLong0214/logic-pro-mcp/pull/283), [#294](https://github.com/MongLong0214/logic-pro-mcp/pull/294), [#295](https://github.com/MongLong0214/logic-pro-mcp/pull/295))
+- **Doctor execution is registry-driven and capability readiness is easier to scan.** The v4 Doctor runner now executes through the typed check registry, conditionally includes the update check through a registry rule, preserves stable ordering/timing/dependency behavior, and renders a grouped readiness line for core plus the selected profile without changing the JSON schema. ([#266](https://github.com/MongLong0214/logic-pro-mcp/issues/266), [#267](https://github.com/MongLong0214/logic-pro-mcp/issues/267), [#296](https://github.com/MongLong0214/logic-pro-mcp/pull/296), [#297](https://github.com/MongLong0214/logic-pro-mcp/pull/297))
+- **Tempo, Bounce, markers, Count In, Step Input, region inventory, and help categories now use the strongest native paths available on Logic Pro 12.3.** `transport.set_tempo` can finish sub-10-BPM fallback deltas with bounded numeric AX value nudges; `logic_project.bounce` opens and verifies the native File > Bounce dialog; `logic_navigate.create_marker` uses the native Navigate > Create Marker path and preserves readable marker cache instead of overwriting it with a false empty list; `transport.toggle_count_in` matches the real `Count In` Control Bar title; `edit.toggle_step_input` uses the native Window > Show Step Input Keyboard menu with window readback; `project.get_regions` now returns completeness metadata for the visible-arrange-area limitation; and `logic_system.help` accepts the real `audio` and `plugins` categories. ([#253](https://github.com/MongLong0214/logic-pro-mcp/issues/253), [#254](https://github.com/MongLong0214/logic-pro-mcp/issues/254), [#255](https://github.com/MongLong0214/logic-pro-mcp/issues/255), [#256](https://github.com/MongLong0214/logic-pro-mcp/issues/256), [#278](https://github.com/MongLong0214/logic-pro-mcp/issues/278), [#279](https://github.com/MongLong0214/logic-pro-mcp/issues/279), [#298](https://github.com/MongLong0214/logic-pro-mcp/pull/298), [#307](https://github.com/MongLong0214/logic-pro-mcp/pull/307), [#309](https://github.com/MongLong0214/logic-pro-mcp/pull/309), [#310](https://github.com/MongLong0214/logic-pro-mcp/pull/310), [#311](https://github.com/MongLong0214/logic-pro-mcp/pull/311), [#312](https://github.com/MongLong0214/logic-pro-mcp/pull/312))
+
 ## [3.10.0] — 2026-07-08
 
 Feature release for Logic Pro Creator Studio support. The public MCP surface remains **10 tools / 18 resources / 11 templates**.
@@ -39,12 +49,12 @@ Docs + demo release. **No functional or runtime changes from v3.9.0** — the 10
 
 - **`docs/demo/FEATURE-COVERAGE.md`.** A full-surface MCP exercise run during demo production — 10 tools, 18 resources, ~90 commands, with hang/crash detection (0 crashes, 0 hangs) — and the classification of every result as verified / attempted-unverified / honest-wall.
 
-### Known issues (filed during demo QA, deferred to a follow-up)
+### Known issues at release time (fixed in v3.11.0)
 
-- [#253](https://github.com/MongLong0214/logic-pro-mcp/issues/253) — `logic_system.help` rejects the `audio` and `plugins` categories though both are real tools.
-- [#254](https://github.com/MongLong0214/logic-pro-mcp/issues/254) — marker surface: `create_marker` no-ops and `logic://markers` reads empty even when a marker exists.
-- [#255](https://github.com/MongLong0214/logic-pro-mcp/issues/255) — `transport.toggle_count_in` / `edit.toggle_step_input` fail with `channels_exhausted` despite a working menu / Control-Bar path.
-- [#256](https://github.com/MongLong0214/logic-pro-mcp/issues/256) — `project.bounce` fails with `channels_exhausted`; the native `File ▸ Bounce` menu works.
+- [#253](https://github.com/MongLong0214/logic-pro-mcp/issues/253) — `logic_system.help` rejected the `audio` and `plugins` categories though both are real tools.
+- [#254](https://github.com/MongLong0214/logic-pro-mcp/issues/254) — marker surface: `create_marker` no-oped and `logic://markers` read empty even when a marker existed.
+- [#255](https://github.com/MongLong0214/logic-pro-mcp/issues/255) — `transport.toggle_count_in` / `edit.toggle_step_input` failed with `channels_exhausted` despite a working menu / Control-Bar path.
+- [#256](https://github.com/MongLong0214/logic-pro-mcp/issues/256) — `project.bounce` failed with `channels_exhausted`; the native `File > Bounce` menu worked.
 
 ## [3.9.0] — 2026-07-07
 

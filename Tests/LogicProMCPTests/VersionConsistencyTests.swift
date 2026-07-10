@@ -47,7 +47,7 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
 @Test func testServerVersionMatchesPackagingArtefacts() throws {
     let sourceVersion = ServerConfig.serverVersion
     #expect(
-        sourceVersion == "3.10.0",
+        sourceVersion == "3.11.0",
         "version surfaces must match the published stable release — bump all packaging artefacts together"
     )
 
@@ -77,7 +77,7 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
 @Test func versionReleaseTimestamp_matches_latest_changelog_release_date() throws {
     let latestRelease = try #require(
         try latestChangelogReleaseHeading(),
-        "CHANGELOG.md must contain a release heading like '## [3.10.0] — 2026-07-08'"
+        "CHANGELOG.md must contain a release heading like '## [3.11.0] — 2026-07-10'"
     )
     #expect(latestRelease.version == ServerConfig.serverVersion)
 
