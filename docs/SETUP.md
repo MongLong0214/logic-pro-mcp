@@ -211,7 +211,7 @@ Reinstall or upgrade when a canonical installed binary has a stale static versio
 
 <a id="doctor-installshare-dir"></a>
 ### `install.share_dir`
-Run `brew reinstall logic-pro-mcp` when packaged helper assets are missing.
+When helper assets are missing, Homebrew installs use `brew reinstall logic-pro-mcp`; source builds restore the checkout and rebuild; release installs replace the pinned package. Unknown/custom installs should follow this section rather than a package-manager command.
 
 <a id="doctor-releasesignature"></a>
 ### `release.signature`
@@ -263,7 +263,7 @@ Logic Pro MCP requires macOS 14 or newer. Upgrade macOS if this check fails.
 
 <a id="doctor-updateslatest-release"></a>
 ### `updates.latest_release`
-Shown only with `doctor --check-updates`. If a newer release exists, `brew upgrade logic-pro-mcp` (or reinstall from the target release). A `skipped` status means the check could not reach the release source (offline / unavailable) — it never blocks.
+Shown only with `doctor --check-updates`. If a newer release exists, Homebrew installs use `brew upgrade logic-pro-mcp`, source builds pull and rebuild, and release installs replace the pinned asset. Unknown/custom installs receive this docs link instead of a package-manager command. A `skipped` status means the check could not reach the release source (offline / unavailable) — it never blocks.
 
 <a id="doctor-logicapplication-state"></a>
 ### `logic.application_state`

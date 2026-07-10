@@ -1,7 +1,7 @@
 import Foundation
 
 extension SetupDoctor {
-    static func updateCheck(outcome: UpdateOutcome) -> Check {
+    static func updateCheck(outcome: UpdateOutcome, installSource: InstallSource) -> Check {
         let installed = ServerConfig.serverVersion
         switch outcome {
         case let .found(rawLatest):
@@ -37,8 +37,8 @@ extension SetupDoctor {
                 status: .warn,
                 summary: "A newer release is available: \(latest) (installed \(installed)).",
                 evidence: ["installed": installed, "latest": latest],
-                remediationType: .command,
-                remediationValueOverride: "brew upgrade logic-pro-mcp"
+                remediationType: installSourceRemediationType(installSource),
+                remediationValueOverride: updateRemediation(installSource: installSource)
             )
         case .offline, .sourceUnavailable, .parseError, .httpError, .timeout:
             // Redaction (AC-6.4): evidence carries ONLY an enumerated reason — never

@@ -62,7 +62,7 @@ extension SetupDoctor {
             status: warn ? .warn : .pass,
             summary: binaryInventorySummary(stale: stale, indeterminateStaleRisk: indeterminateStaleRisk),
             evidence: evidence,
-            remediationType: warn ? binaryInventoryRemediationType(installSource: installSource) : .none,
+            remediationType: warn ? installSourceRemediationType(installSource) : .none,
             remediationValueOverride: warn ? binaryInventoryRemediation(installSource: installSource) : nil
         )
     }
@@ -79,7 +79,7 @@ extension SetupDoctor {
     }
 
 
-    static func binaryInventoryRemediationType(installSource: InstallSource) -> RemediationType {
+    static func installSourceRemediationType(_ installSource: InstallSource) -> RemediationType {
         switch installSource {
         case .homebrew, .sourceBuild:
             return .command
@@ -89,7 +89,7 @@ extension SetupDoctor {
     }
 
 
-    static func binaryInventoryRemediation(installSource: InstallSource) -> String {
+    static func updateRemediation(installSource: InstallSource) -> String {
         switch installSource {
         case .homebrew:
             return "brew upgrade logic-pro-mcp"
@@ -98,12 +98,34 @@ extension SetupDoctor {
         case .releaseBinary:
             return "Download and replace the pinned LogicProMCP release binary."
         case .unknown:
-            return remediationAnchorsByCheckID["install.binary_inventory"] ?? "docs/SETUP.md#doctor"
+            return remediationAnchorsByCheckID["updates.latest_release"] ?? "docs/SETUP.md#doctor"
         }
     }
 
 
-    static func installShareDirCheck(runtime: Runtime) -> Check {
+    static func binaryInventoryRemediation(installSource: InstallSource) -> String {
+        if installSource == .unknown {
+            return remediationAnchorsByCheckID["install.binary_inventory"] ?? "docs/SETUP.md#doctor"
+        }
+        return updateRemediation(installSource: installSource)
+    }
+
+
+    static func shareDirRemediation(installSource: InstallSource) -> String {
+        switch installSource {
+        case .homebrew:
+            return "brew reinstall logic-pro-mcp"
+        case .sourceBuild:
+            return "git pull && swift build -c release"
+        case .releaseBinary:
+            return "Reinstall from the pinned LogicProMCP release package to restore helper assets."
+        case .unknown:
+            return remediationAnchorsByCheckID["install.share_dir"] ?? "docs/SETUP.md#doctor"
+        }
+    }
+
+
+    static func installShareDirCheck(runtime: Runtime, installSource: InstallSource) -> Check {
         switch runtime.shareDirProbe() {
         case let .complete(path, source):
             return check(
@@ -121,8 +143,8 @@ extension SetupDoctor {
                 status: .warn,
                 summary: "Installed share directory is missing helper assets.",
                 evidence: shareDirEvidence(path: path, source: source, extra: ["missing_files": files.joined(separator: ",")]),
-                remediationType: .command,
-                remediationValueOverride: "brew reinstall logic-pro-mcp"
+                remediationType: installSourceRemediationType(installSource),
+                remediationValueOverride: shareDirRemediation(installSource: installSource)
             )
         case .unresolved:
             return check(

@@ -388,7 +388,7 @@ enum SetupDoctor {
                 staticVersionForPath: staticVersionForPath
             )
         })
-        checks.append(timed { installShareDirCheck(runtime: runtime) })
+        checks.append(timed { installShareDirCheck(runtime: runtime, installSource: installSource) })
         checks.append(timed { releaseSignatureCheck(executablePath: executablePath, runtime: runtime) })
         checks.append(timed { releaseQuarantineCheck(executablePath: executablePath, runtime: runtime) })
         checks.append(timed { claudeRegistrationCheck(registration: claudeRegistration, clientProfile: clientProfile) })
@@ -425,7 +425,7 @@ enum SetupDoctor {
         checks.append(timed { clickFallbackCheck(runtime: runtime, permissionStatus: permissionStatus) })
         // Opt-in update check: emitted only when `--check-updates` armed the lookup seam.
         if let lookup = runtime.latestReleaseLookup {
-            checks.append(timed { updateCheck(outcome: lookup()) })
+            checks.append(timed { updateCheck(outcome: lookup(), installSource: installSource) })
         }
 
         // Honesty chokepoint (G1/AC-1.5): the report can never claim `ok` while a

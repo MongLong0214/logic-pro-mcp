@@ -248,6 +248,100 @@ private func issue26RepositoryRootURL() -> URL {
 
 // MARK: - Install-source classification
 
+@Test func testDoctorUpdateAndShareDirRemediationUsesInstallSource() throws {
+    let cases: [(
+        source: SetupDoctor.InstallSource,
+        executablePath: String,
+        updateType: SetupDoctor.RemediationType,
+        updateValue: String,
+        shareType: SetupDoctor.RemediationType,
+        shareValue: String
+    )] = [
+        (
+            .homebrew,
+            "/opt/homebrew/bin/LogicProMCP",
+            .command,
+            "brew upgrade logic-pro-mcp",
+            .command,
+            "brew reinstall logic-pro-mcp"
+        ),
+        (
+            .sourceBuild,
+            "/Users/x/logic-pro-mcp/.build/release/LogicProMCP",
+            .command,
+            "git pull && swift build -c release",
+            .command,
+            "git pull && swift build -c release"
+        ),
+        (
+            .releaseBinary,
+            "/usr/local/bin/LogicProMCP",
+            .docs,
+            "Download and replace the pinned LogicProMCP release binary.",
+            .docs,
+            "Reinstall from the pinned LogicProMCP release package to restore helper assets."
+        ),
+        (
+            .unknown,
+            "/Users/x/bin/LogicProMCP",
+            .docs,
+            "docs/SETUP.md#doctor-updateslatest-release",
+            .docs,
+            "docs/SETUP.md#doctor-installshare-dir"
+        ),
+    ]
+
+    for testCase in cases {
+        var runtime = doctorRuntime(
+            executablePath: testCase.executablePath,
+            latestReleaseLookup: { .found(version: "v99.0.0") },
+            commandHandler: { executable, arguments in
+                if testCase.source == .homebrew,
+                   (executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew"),
+                   arguments == ["list", "--versions", "logic-pro-mcp"] {
+                    return .init(exitCode: 0, stdout: "logic-pro-mcp \(ServerConfig.serverVersion)\n", stderr: "")
+                }
+                return nil
+            }
+        )
+        runtime.shareDirProbe = {
+            .missing(path: "/tmp/logic-pro-mcp-share", source: "registered_env", files: ["logic_bounce.py"])
+        }
+        let report = SetupDoctor.generate(
+            arguments: ["LogicProMCP", "doctor", "--json", "--check-updates", "--client", "claude-code"],
+            permissionStatus: grantedPermissionStatus(),
+            approvals: allApprovals(),
+            runtime: runtime
+        )
+        let update = try #require(report.checks.first { $0.id == "updates.latest_release" })
+        let share = try #require(report.checks.first { $0.id == "install.share_dir" })
+        let json = encodeJSON(report)
+        let object = try #require(sharedJSONObject(json))
+        let encodedChecks = try #require(object["checks"] as? [[String: Any]])
+        let encodedUpdate = try #require(encodedChecks.first { $0["id"] as? String == "updates.latest_release" })
+        let encodedShare = try #require(encodedChecks.first { $0["id"] as? String == "install.share_dir" })
+        let encodedUpdateRemediation = try #require(encodedUpdate["remediation"] as? [String: Any])
+        let encodedShareRemediation = try #require(encodedShare["remediation"] as? [String: Any])
+        let human = SetupDoctor.renderHuman(report, useColor: false)
+
+        #expect(report.installSource == testCase.source)
+        #expect(update.remediation.type == testCase.updateType)
+        #expect(update.remediation.value == testCase.updateValue)
+        #expect(share.remediation.type == testCase.shareType)
+        #expect(share.remediation.value == testCase.shareValue)
+        #expect(report.fixPlan.contains("updates.latest_release"))
+        #expect(report.fixPlan.contains("install.share_dir"))
+        #expect(encodedUpdateRemediation["value"] as? String == testCase.updateValue)
+        #expect(encodedShareRemediation["value"] as? String == testCase.shareValue)
+        #expect(human.contains(testCase.updateValue))
+        #expect(human.contains(testCase.shareValue))
+        if testCase.source != .homebrew {
+            #expect(!update.remediation.value.contains("brew "))
+            #expect(!share.remediation.value.contains("brew "))
+        }
+    }
+}
+
 @Test func testSetupDoctorClassifiesSourceBuildEvenWhenBrewProbeSucceeds() throws {
     // .build path component must win over a succeeding brew probe (precedence pin).
     let report = SetupDoctor.generate(
