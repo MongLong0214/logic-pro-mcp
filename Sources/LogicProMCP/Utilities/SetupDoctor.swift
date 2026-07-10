@@ -381,73 +381,20 @@ enum SetupDoctor {
             return result
         }
 
-        // Per-check monotonic timing. Each check runs once, in declared order
-        // (sequential — no concurrency), wrapped to stamp `duration_ms`. Checks
-        // are non-throwing, so no exception isolation is required.
-        func timed(_ make: () -> Check) -> Check {
-            let start = runtime.monotonicNowMs()
-            var result = make()
-            // Round to whole milliseconds so the JSON machine contract matches the
-            // human renderer's `formatDuration` precision and sub-millisecond timing
-            // jitter doesn't churn the `--json` bytes run-to-run (sub-ms checks → 0).
-            result.durationMs = (max(0, runtime.monotonicNowMs() - start)).rounded()
-            return result
-        }
-
-        var checks: [Check] = []
-
-        checks.append(timed { binaryPathCheck(executablePath: executablePath, runtime: runtime) })
-        checks.append(timed { binaryExecutableCheck(executablePath: executablePath, runtime: runtime) })
-        checks.append(timed { binaryVersionCheck() })
-        checks.append(timed { installSourceCheck(installSource: installSource, executablePath: executablePath) })
-        checks.append(timed {
-            installBinaryInventoryCheck(
-                executablePath: executablePath,
-                installSource: installSource,
-                runtime: runtime,
-                claudeRegistration: claudeRegistration,
-                staticVersionForPath: staticVersionForPath
-            )
-        })
-        checks.append(timed { installShareDirCheck(runtime: runtime, installSource: installSource) })
-        checks.append(timed { releaseSignatureCheck(executablePath: executablePath, runtime: runtime) })
-        checks.append(timed { releaseQuarantineCheck(executablePath: executablePath, runtime: runtime) })
-        checks.append(timed { claudeRegistrationCheck(registration: claudeRegistration, clientProfile: clientProfile) })
-        checks.append(timed {
-            mcpRegistrationTargetCheck(
-                registration: claudeRegistration,
-                runtime: runtime,
-                checks: checks,
-                staticVersionForPath: staticVersionForPath,
-                clientProfile: clientProfile
-            )
-        })
-        checks.append(timed { claudeDesktopRegistrationCheck(runtime: runtime, clientProfile: clientProfile) })
-        checks.append(timed { accessibilityPermissionCheck(permissionStatus) })
-        checks.append(timed { automationPermissionCheck(permissionStatus) })
-        checks.append(timed { systemEventsAutomationCheck(permissionStatus) })
-        checks.append(timed { postEventAccessCheck(permissionStatus) })
-        checks.append(timed { launchContextCheck(runtime: runtime) })
-        checks.append(timed { tccCrossContextCheck(runtime: runtime) })
-        checks.append(timed { macOSVersionCheck(runtime: runtime) })
-        checks.append(timed { logicInstallationCheck(logicApps: logicApps) })
-        checks.append(timed { logicVersionSupportCheck(logicApps: logicApps, checks: checks) })
-        checks.append(timed { logicApplicationStateCheck(runtime: runtime) })
-        checks.append(timed { logicBlockingDialogCheck(runtime: runtime, checks: checks) })
-        checks.append(timed {
-            manualValidationCheck(
-                approvals: approvals,
-                profile: doctorProfile,
-                storeHealth: manualStoreHealth
-            )
-        })
-        checks.append(timed { keycmdReferenceCheck(runtime: runtime, profile: doctorProfile) })
-        checks.append(timed { mcuWiringHintCheck(runtime: runtime, profile: doctorProfile) })
-        checks.append(timed { clickFallbackCheck(runtime: runtime, permissionStatus: permissionStatus) })
-        // Opt-in update check: emitted only when `--check-updates` armed the lookup seam.
-        if let lookup = runtime.latestReleaseLookup {
-            checks.append(timed { updateCheck(outcome: lookup(), installSource: installSource) })
-        }
+        let runContext = DoctorCheckRunContext(
+            executablePath: executablePath,
+            installSource: installSource,
+            claudeRegistration: claudeRegistration,
+            doctorProfile: doctorProfile,
+            clientProfile: clientProfile,
+            permissionStatus: permissionStatus,
+            approvals: approvals,
+            runtime: runtime,
+            manualStoreHealth: manualStoreHealth,
+            logicApps: logicApps,
+            staticVersionForPath: staticVersionForPath
+        )
+        var checks = runRegisteredChecks(context: runContext)
 
         // Honesty chokepoint (G1/AC-1.5): the report can never claim `ok` while a
         // required permission is ungranted. Extracted to a pure helper so the invariant
