@@ -229,12 +229,6 @@ extension AccessibilityChannel {
                 }
             }
             if let afterIncrement = AXHelpers.getValue(slider, runtime: runtime.ax) as? Double {
-                // Honest Contract (#189): the slider-increment fallback steps in
-                // 10-BPM granularity, so it only reaches the requested tempo by
-                // coincidence. Report success ONLY when the observed value matches
-                // the request within tolerance; ANY readback mismatch fails closed
-                // with State C — a write path must never report success when the
-                // observed tempo differs from the requested tempo.
                 if abs(afterIncrement - tempoValue) < 1.0 {
                     return .success(HonestContract.encodeStateA(
                         extras: baseExtras.merging([
@@ -243,12 +237,37 @@ extension AccessibilityChannel {
                         ]) { _, new in new }
                     ))
                 }
+
+                // Logic treats a numeric AXValue write as a one-BPM nudge. The
+                // coarse step leaves at most five BPM, so ten writes are bounded.
+                var observed = afterIncrement
+                for _ in 0..<10 {
+                    let previous = observed
+                    guard AXHelpers.setAttribute(
+                        slider,
+                        kAXValueAttribute,
+                        NSNumber(value: tempoValue),
+                        runtime: runtime.ax
+                    ) else { break }
+                    Thread.sleep(forTimeInterval: 0.02)
+                    guard let next = AXHelpers.getValue(slider, runtime: runtime.ax) as? Double else { break }
+                    observed = next
+                    if abs(observed - tempoValue) < 1.0 {
+                        return .success(HonestContract.encodeStateA(
+                            extras: baseExtras.merging([
+                                "observed": observed,
+                                "via": "slider-value-nudge"
+                            ]) { _, new in new }
+                        ))
+                    }
+                    if observed == previous { break }
+                }
                 return .error(HonestContract.encodeStateC(
                     error: .readbackMismatch,
-                    hint: "tempo write fell back to a 10-BPM increment step that did not land on the requested value (typed entry didn't commit); the slider cannot represent this exact tempo via increment",
+                    hint: "typed tempo entry did not commit and the slider's coarse and exact value fallbacks did not converge",
                     extras: baseExtras.merging([
-                        "observed": afterIncrement,
-                        "via": "slider-increment",
+                        "observed": observed,
+                        "via": "slider-value-nudge",
                         "write_attempted": true,
                         "safe_to_retry": true
                     ]) { _, new in new }
