@@ -20,14 +20,18 @@ extension AccessibilityChannel {
         case .failure(let err):
             return .error(err.message)
         case .success(let result):
-            // When the array is empty, surface traversal counters so we can tell
-            // "no regions exist" from "parser missed them" without re-running a probe.
-            if result.regions.isEmpty {
-                return .success("{\"regions\":[],\"_debug\":{\"layoutItems\":\(result.layoutItemCount),\"nonRegion\":\(result.nonRegionCount)}}")
-            }
-            // Tuple-element keypath inference fails in some Swift versions; map
-            // explicitly to the RegionInfo array instead of `\.info`.
-            return encodeResult(result.regions.map { $0.info })
+            let regions = result.regions.map { $0.info }
+            return encodeResult(RegionInventoryPayload(
+                regions: regions,
+                complete: false,
+                scope: "visible_arrange_area",
+                reason: "logic_ax_viewport_only",
+                returnedCount: regions.count,
+                debug: RegionInventoryPayload.Debug(
+                    layoutItems: result.layoutItemCount,
+                    nonRegion: result.nonRegionCount
+                )
+            ))
         }
     }
 

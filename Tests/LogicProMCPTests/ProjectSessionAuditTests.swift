@@ -14,6 +14,7 @@ private func makeAuditSnapshot(
     transport: TransportState? = nil,
     tracks: [TrackState],
     regions: [RegionState] = [],
+    regionsComplete: Bool = true,
     markers: [MarkerState] = [],
     channelStrips: [ChannelStripState] = [],
     fileTrackCount: Int? = nil
@@ -41,12 +42,41 @@ private func makeAuditSnapshot(
         tracksFetchedAt: now,
         regions: regions,
         regionsFetchedAt: now,
+        regionsComplete: regionsComplete,
         markers: markers,
         markersFetchedAt: now,
         channelStrips: channelStrips,
         mixerFetchedAt: now,
         fileTrackCount: fileTrackCount
     )
+}
+
+@Test func testProjectAuditMarksPartialRegionInventoryWithoutEmptyTrackClaims() throws {
+    let tracks = [
+        TrackState(id: 0, name: "Top Lane", type: .softwareInstrument),
+        TrackState(id: 1, name: "Visible Lane", type: .softwareInstrument),
+    ]
+    let regions = [
+        RegionState(
+            id: "1:1:5:Visible",
+            name: "Visible",
+            trackIndex: 1,
+            startPosition: "1 1 1 1",
+            endPosition: "5 1 1 1",
+            length: "4 0 0 0"
+        ),
+    ]
+    let report = ProjectSessionAudit.buildAudit(snapshot: makeAuditSnapshot(
+        tracks: tracks,
+        regions: regions,
+        regionsComplete: false
+    ))
+
+    let partial = try #require(report.findings.first { $0.id == "region_inventory_partial" })
+    #expect(partial.severity == .warn)
+    #expect(partial.provenance == "ax_visible_subset")
+    #expect(report.evidence.exportReadiness.warnings.contains("region_inventory_partial"))
+    #expect(!report.findings.contains { $0.id == "empty_tracks_detected" })
 }
 
 private func messySnapshot(

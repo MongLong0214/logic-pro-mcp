@@ -31,7 +31,7 @@ private func seedCacheWithStaleProject(_ cache: StateCache) async {
             endPosition: "4 1 1 1",
             length: "3 0 0 0"
         )
-    ])
+    ], complete: true)
     await cache.updateMarkers([
         MarkerState(id: 0, name: "leftover marker", position: "1.1.1.1")
     ])

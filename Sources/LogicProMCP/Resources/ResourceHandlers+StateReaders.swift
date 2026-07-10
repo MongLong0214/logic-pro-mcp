@@ -470,8 +470,11 @@ extension ResourceHandlers {
         // header isn't in the track array, so track_count is not a reliable
         // existence proxy here.
         if case .success(let payload) = await router.route(operation: "region.get_regions"),
-           let liveRegions = try? RegionInfo.decodeToolPayload(payload) {
-            await cache.updateRegions(liveRegions.map { $0.asRegionState() })
+           let inventory = try? RegionInfo.decodeInventoryPayload(payload) {
+            await cache.updateRegions(
+                inventory.regions.map { $0.asRegionState() },
+                complete: inventory.isComplete
+            )
         }
         let regions = await cache.getRegions().filter { $0.trackIndex == index }
         let json = encodeJSON(regions)

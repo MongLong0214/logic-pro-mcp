@@ -468,7 +468,7 @@ struct HCGlobalInvariantTests {
                 endPosition: "5 1 1 1",
                 length: "4 0 0 0"
             ),
-        ])
+        ], complete: true)
     }
 
     private static func hcEnvelopeRouter() async -> ChannelRouter {

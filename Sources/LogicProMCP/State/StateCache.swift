@@ -7,6 +7,7 @@ actor StateCache {
     private(set) var tracks: [TrackState] = []
     private(set) var channelStrips: [ChannelStripState] = []
     private(set) var regions: [RegionState] = []
+    private(set) var regionsComplete = false
     private(set) var markers: [MarkerState] = []
     private(set) var project = ProjectInfo()
     private(set) var mcuConnection = MCUConnectionState()
@@ -85,6 +86,7 @@ actor StateCache {
         channelStrips.first(where: { $0.trackIndex == index })
     }
     func getRegions() -> [RegionState] { regions }
+    func getRegionsComplete() -> Bool { regionsComplete }
     func getMarkers() -> [MarkerState] { markers }
     func getProject() -> ProjectInfo { project }
     func getMCUConnection() -> MCUConnectionState { mcuConnection }
@@ -114,6 +116,7 @@ actor StateCache {
         tracksFetchedAt: Date,
         regions: [RegionState],
         regionsFetchedAt: Date,
+        regionsComplete: Bool,
         markers: [MarkerState],
         markersFetchedAt: Date,
         channelStrips: [ChannelStripState],
@@ -129,6 +132,7 @@ actor StateCache {
             tracksFetchedAt: tracksFetchedAt,
             regions: regions,
             regionsFetchedAt: regionsFetchedAt,
+            regionsComplete: regionsComplete,
             markers: markers,
             markersFetchedAt: markersFetchedAt,
             channelStrips: channelStrips,
@@ -156,6 +160,7 @@ actor StateCache {
         tracks = []
         channelStrips = []
         regions = []
+        regionsComplete = false
         markers = []
         // Re-initialising transport picks up its default `lastUpdated =
         // .distantPast`, which is how snapshot() signals "stale" to readers
@@ -249,8 +254,9 @@ actor StateCache {
         mixerFetchedAt = Date()
     }
 
-    func updateRegions(_ newRegions: [RegionState]) {
+    func updateRegions(_ newRegions: [RegionState], complete: Bool) {
         regions = newRegions
+        regionsComplete = complete
         regionsFetchedAt = Date()
     }
 

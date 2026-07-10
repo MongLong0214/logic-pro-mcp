@@ -261,6 +261,7 @@ enum ProjectSessionAudit {
         let tracksFetchedAt: Date
         let regions: [RegionState]
         let regionsFetchedAt: Date
+        let regionsComplete: Bool
         let markers: [MarkerState]
         let markersFetchedAt: Date
         let channelStrips: [ChannelStripState]
@@ -297,6 +298,7 @@ enum ProjectSessionAudit {
             tracksFetchedAt: s.tracksFetchedAt,
             regions: s.regions,
             regionsFetchedAt: s.regionsFetchedAt,
+            regionsComplete: s.regionsComplete,
             markers: s.markers,
             markersFetchedAt: s.markersFetchedAt,
             channelStrips: s.channelStrips,
@@ -416,7 +418,11 @@ enum ProjectSessionAudit {
                 tracks: tracksEvidence,
                 regions: CountEvidence(
                     count: snapshot.regions.count,
-                    freshness: freshness(fetchedAt: snapshot.regionsFetchedAt, fallbackProvenance: "ax_live", now: snapshot.now)
+                    freshness: freshness(
+                        fetchedAt: snapshot.regionsFetchedAt,
+                        fallbackProvenance: snapshot.regionsComplete ? "ax_live" : "ax_visible_subset",
+                        now: snapshot.now
+                    )
                 ),
                 markers: CountEvidence(
                     count: snapshot.markers.count,
@@ -580,6 +586,17 @@ enum ProjectSessionAudit {
                 nil,
                 ["regions_fetched_at=<none>"],
                 "unavailable"
+            ))
+        } else if !snapshot.regionsComplete {
+            findings.append(finding(
+                "region_inventory_partial",
+                .warn,
+                "export",
+                "Region inventory covers only the visible arrange area; hidden or scrolled lanes may contain additional regions.",
+                "logic://project/audit",
+                nil,
+                ["complete=false", "scope=visible_arrange_area", "visible_region_count=\(snapshot.regions.count)"],
+                "ax_visible_subset"
             ))
         } else if !emptyTracks.isEmpty {
             findings.append(finding(
@@ -942,7 +959,7 @@ enum ProjectSessionAudit {
     }
 
     private static func emptyTrackIndices(_ snapshot: Snapshot) -> [Int] {
-        guard snapshot.regionsFetchedAt > .distantPast else { return [] }
+        guard snapshot.regionsFetchedAt > .distantPast, snapshot.regionsComplete else { return [] }
         let tracksWithRegions = Set(snapshot.regions.map(\.trackIndex))
         return snapshot.tracks
             .filter { !tracksWithRegions.contains($0.id) }

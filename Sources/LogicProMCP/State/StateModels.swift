@@ -227,17 +227,48 @@ struct RegionInfo: Sendable, Codable {
     var rawHelp: String?  // raw AXHelp text — preserved for debugging parser misses
 }
 
-private struct RegionToolPayload: Decodable {
+struct RegionInventoryPayload: Codable, Sendable {
+    struct Debug: Codable, Sendable {
+        let layoutItems: Int
+        let nonRegion: Int
+    }
+
     let regions: [RegionInfo]
+    let complete: Bool?
+    let scope: String?
+    let reason: String?
+    let returnedCount: Int?
+    let debug: Debug?
+
+    var isComplete: Bool { complete ?? true }
+
+    enum CodingKeys: String, CodingKey {
+        case regions
+        case complete
+        case scope
+        case reason
+        case returnedCount = "returned_count"
+        case debug = "_debug"
+    }
 }
 
 extension RegionInfo {
-    static func decodeToolPayload(_ text: String) throws -> [RegionInfo] {
+    static func decodeInventoryPayload(_ text: String) throws -> RegionInventoryPayload {
         if let direct: [RegionInfo] = try? decodeJSON(text) {
-            return direct
+            return RegionInventoryPayload(
+                regions: direct,
+                complete: true,
+                scope: "project",
+                reason: nil,
+                returnedCount: direct.count,
+                debug: nil
+            )
         }
-        let wrapped: RegionToolPayload = try decodeJSON(text)
-        return wrapped.regions
+        return try decodeJSON(text)
+    }
+
+    static func decodeToolPayload(_ text: String) throws -> [RegionInfo] {
+        try decodeInventoryPayload(text).regions
     }
 
     func asRegionState() -> RegionState {

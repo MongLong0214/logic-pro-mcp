@@ -420,7 +420,7 @@ struct SystemDispatcher {
                   close             -> {} — Close project
                   bounce            -> {} — Open bounce dialog after audit preflight;
                                        export blockers return export_readiness_blocked
-                  get_regions       -> {} — Read arrange regions
+                  get_regions       -> {} — Read visible arrange regions with complete=false scope metadata
                   export_plan       -> { projects, output_root, artifacts? } — Dry-run export manifest plan
                   launch            -> {} — Launch Logic Pro
                   quit              -> {} — Quit Logic Pro
