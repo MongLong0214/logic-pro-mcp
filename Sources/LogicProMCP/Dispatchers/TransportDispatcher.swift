@@ -16,30 +16,50 @@ struct TransportDispatcher {
         sleep: @escaping (UInt64) async -> Void = { try? await Task.sleep(nanoseconds: $0) },
         dialogPresent: @escaping @Sendable () -> Bool = { false }
     ) async -> CallTool.Result {
+        let traceID = await startTraceIfEnabled(command: command)
         if let operation = modalGuardedTransportOperation(for: command), dialogPresent() {
-            return blockingLogicDialogResult(operation: operation)
+            return await finalizeTrace(
+                blockingLogicDialogResult(operation: operation),
+                traceID: traceID
+            )
         }
 
         switch command {
         case "play":
-            return await handleVerifiedTransportCommand(
+            let result = await handleVerifiedTransportCommand(
                 action: .play,
                 router: router,
-                sleep: sleep
+                sleep: sleep,
+                traceID: traceID
             )
+            return await finalizeTrace(result, traceID: traceID)
 
         case "stop":
-            return await verifiedStopResult(router: router, cache: cache, sleep: sleep)
+            let result = await verifiedStopResult(
+                router: router,
+                cache: cache,
+                sleep: sleep,
+                traceID: traceID
+            )
+            return await finalizeTrace(result, traceID: traceID)
 
         case "record":
-            return await handleVerifiedTransportCommand(
+            let result = await handleVerifiedTransportCommand(
                 action: .record,
                 router: router,
-                sleep: sleep
+                sleep: sleep,
+                traceID: traceID
             )
+            return await finalizeTrace(result, traceID: traceID)
 
         case "pause":
-            return await verifiedPauseResult(router: router, cache: cache, sleep: sleep)
+            let result = await verifiedPauseResult(
+                router: router,
+                cache: cache,
+                sleep: sleep,
+                traceID: traceID
+            )
+            return await finalizeTrace(result, traceID: traceID)
 
         case "rewind":
             let result = await router.route(operation: "transport.rewind")
@@ -196,6 +216,66 @@ struct TransportDispatcher {
         }
     }
 
+    private static func startTraceIfEnabled(command: String) async -> TraceID? {
+        guard FeatureFlags.adr005OperationTrace,
+              let spec = OperationRegistry.spec(tool: tool.name, command: command) else {
+            return nil
+        }
+        switch spec.id {
+        case .transportPlay, .transportStop, .transportRecord, .transportPause:
+            let id = await OperationTraceStore.shared.start(operationID: spec.id.rawValue)
+            await OperationTraceStore.shared.record(id, phase: .requestReceived, attributes: [
+                "operation_id": spec.id.rawValue,
+                "command": command,
+            ])
+            return id
+        default:
+            return nil
+        }
+    }
+
+    private static func recordWriteBoundary(_ traceID: TraceID?) async {
+        guard let traceID else { return }
+        await OperationTraceStore.shared.record(traceID, phase: .writeBoundaryCrossed)
+    }
+
+    private static func finalizeTrace(
+        _ result: CallTool.Result,
+        traceID: TraceID?
+    ) async -> CallTool.Result {
+        guard let traceID else { return result }
+        guard case .text(let raw, _, _) = result.content.first else {
+            await OperationTraceStore.shared.record(
+                traceID,
+                phase: .verificationCompleted,
+                attributes: ["readback_state": result.isError == true ? "C" : "A"]
+            )
+            await OperationTraceStore.shared.record(traceID, phase: .resultEmitted)
+            await OperationTraceStore.shared.complete(traceID)
+            return result
+        }
+
+        let object = decodedJSONObject(raw)
+        var attributes = [
+            "readback_state": object?["state"] as? String
+                ?? (result.isError == true ? "C" : "A"),
+        ]
+        if let errorCode = object?["error"] as? String {
+            attributes["error_code"] = errorCode
+        }
+        await OperationTraceStore.shared.record(
+            traceID,
+            phase: .verificationCompleted,
+            attributes: attributes
+        )
+        await OperationTraceStore.shared.record(traceID, phase: .resultEmitted)
+        await OperationTraceStore.shared.complete(traceID)
+
+        let merged = HonestContract.addExtras(["trace_id": traceID.rawValue], into: raw)
+        guard merged != raw else { return result }
+        return toolTextResult(merged, isError: result.isError == true)
+    }
+
     private static func modalGuardedTransportOperation(for command: String) -> String? {
         switch command {
         case "play": return "transport.play"
@@ -218,7 +298,8 @@ struct TransportDispatcher {
     private static func verifiedStopResult(
         router: ChannelRouter,
         cache: StateCache,
-        sleep: @escaping (UInt64) async -> Void
+        sleep: @escaping (UInt64) async -> Void,
+        traceID: TraceID?
     ) async -> CallTool.Result {
         if let beforeState = await readTransportState(router: router),
            beforeState.isPlaying == false,
@@ -240,6 +321,7 @@ struct TransportDispatcher {
             )))
         }
 
+        await recordWriteBoundary(traceID)
         let writeResult = await router.route(operation: "transport.stop")
         guard writeResult.isSuccess else {
             return toolTextResult(writeResult)
@@ -310,7 +392,8 @@ struct TransportDispatcher {
     private static func verifiedPauseResult(
         router: ChannelRouter,
         cache: StateCache,
-        sleep: @escaping (UInt64) async -> Void
+        sleep: @escaping (UInt64) async -> Void,
+        traceID: TraceID?
     ) async -> CallTool.Result {
         if let beforeState = await readTransportState(router: router),
            beforeState.isPlaying == false {
@@ -327,6 +410,7 @@ struct TransportDispatcher {
             )))
         }
 
+        await recordWriteBoundary(traceID)
         let writeResult = await router.route(operation: "transport.pause")
         let writePayload = jsonValue(from: writeResult.message)
 
@@ -577,7 +661,8 @@ struct TransportDispatcher {
     private static func handleVerifiedTransportCommand(
         action: VerifiedTransportAction,
         router: ChannelRouter,
-        sleep: @escaping (UInt64) async -> Void
+        sleep: @escaping (UInt64) async -> Void,
+        traceID: TraceID?
     ) async -> CallTool.Result {
         let beforeState = await readTransportState(router: router)
         if let beforeState, action.matches(beforeState) {
@@ -593,6 +678,7 @@ struct TransportDispatcher {
             )))
         }
 
+        await recordWriteBoundary(traceID)
         let writeResult = await router.route(operation: action.operation)
         let writePayload = jsonValue(from: writeResult.message)
         var attempts = 0

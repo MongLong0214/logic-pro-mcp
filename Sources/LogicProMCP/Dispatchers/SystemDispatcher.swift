@@ -159,6 +159,11 @@ struct SystemDispatcher {
         cache: StateCache,
         poller: StatePoller? = nil
     ) async -> CallTool.Result {
+        if FeatureFlags.adr005OperationTrace,
+           let traceResult = await handleTraceCommand(command: command, params: params) {
+            return traceResult
+        }
+
         switch command {
         case "health":
             let report = await router.healthReport()
@@ -269,10 +274,79 @@ struct SystemDispatcher {
             return toolTextResult(helpText)
 
         default:
-            return toolTextResult(
-                "Unknown system command: \(command). Available: health, permissions, refresh_cache, help",
-                isError: true
-            )
+            return unknownCommandResult(command)
+        }
+    }
+
+    private static func unknownCommandResult(_ command: String) -> CallTool.Result {
+        toolTextResult(
+            "Unknown system command: \(command). Available: health, permissions, refresh_cache, help",
+            isError: true
+        )
+    }
+
+    private static func handleTraceCommand(
+        command: String,
+        params: [String: Value]
+    ) async -> CallTool.Result? {
+        switch command {
+        case "list_recent_traces":
+            let limit: Int
+            if params["limit"] == nil {
+                limit = OperationTraceStore.defaultMaximumTraceCount
+            } else if let requested = intParamOrNil(params, "limit") {
+                limit = min(max(0, requested), OperationTraceStore.defaultMaximumTraceCount)
+            } else {
+                return toolInvalidParamsResult("list_recent_traces 'limit' must be an integer")
+            }
+            let traces = await OperationTraceStore.shared.recent(limit: limit)
+            let summaries: [[String: Any]] = traces.map { trace in
+                var summary: [String: Any] = [
+                    "trace_id": trace.traceID.rawValue,
+                    "operation_id": trace.operationID,
+                    "phase_count": trace.events.count,
+                ]
+                if let state = trace.events.reversed().compactMap({
+                    $0.attributes["readback_state"]
+                }).first {
+                    summary["readback_state"] = state
+                }
+                return summary
+            }
+            return toolTextResult(HonestContract.jsonString(["traces": summaries]))
+
+        case "get_trace":
+            guard let rawID = params["trace_id"]?.stringValue else {
+                return toolInvalidParamsResult("get_trace requires string 'trace_id'")
+            }
+            guard TraceID.isValid(rawID) else {
+                return toolInvalidParamsResult("get_trace 'trace_id' is malformed")
+            }
+            guard let trace = await OperationTraceStore.shared.trace(TraceID(rawValue: rawID)) else {
+                return toolStateCResult(
+                    .elementNotFound,
+                    hint: "No operation trace exists for the requested trace_id"
+                )
+            }
+            let events: [[String: Any]] = trace.events.map { event in
+                [
+                    "phase": event.phase.rawValue,
+                    "timestamp": String(describing: event.timestamp),
+                    "attributes": event.attributes,
+                ]
+            }
+            return toolTextResult(HonestContract.jsonString([
+                "trace_id": trace.traceID.rawValue,
+                "operation_id": trace.operationID,
+                "events": events,
+            ]))
+
+        case "clear_traces":
+            await OperationTraceStore.shared.clear()
+            return toolTextResult(HonestContract.jsonString(["success": true]))
+
+        default:
+            return nil
         }
     }
 
