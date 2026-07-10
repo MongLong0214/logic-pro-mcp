@@ -258,6 +258,47 @@ private func doctorV4Report(
     #expect(output.contains("skip_reason: version_unreadable"))
 }
 
+@Test func doctorV4CapabilityReadinessSummaryGroupsReadyIncompleteAndBlocked() {
+    let readiness: (SetupDoctor.CapabilityStatus) -> SetupDoctor.CapabilityReadiness = { status in
+        SetupDoctor.CapabilityReadiness(status: status, checks: [], liveVerification: nil)
+    }
+
+    #expect(
+        SetupDoctor.renderCapabilityReadinessSummary([
+            "core_transport": readiness(.ready),
+        ]) == "readiness: core ready; selected profile ready"
+    )
+    #expect(
+        SetupDoctor.renderCapabilityReadinessSummary([
+            "core_transport": readiness(.ready),
+            "mixer_mcu": readiness(.unknownLiveVerifyRequired),
+        ]) == "readiness: core ready; selected profile incomplete; incomplete: mixer_mcu"
+    )
+    #expect(
+        SetupDoctor.renderCapabilityReadinessSummary([
+            "core_transport": readiness(.notReady),
+            "midi_import": readiness(.notInProfile),
+            "mixer_mcu": readiness(.unknownLiveVerifyRequired),
+        ])
+            == "readiness: core blocked; selected profile blocked; blocked: core_transport; incomplete: mixer_mcu; not in selected profile: midi_import"
+    )
+}
+
+@Test func doctorV4HumanReadinessSummaryIsAdditiveAndLeavesJSONStable() throws {
+    let report = doctorV4Report(
+        arguments: ["LogicProMCP", "doctor", "--json", "--profile", "core"]
+    )
+    let jsonBefore = encodeJSON(report)
+    let output = SetupDoctor.renderHuman(report, useColor: false)
+    let lines = output.split(separator: "\n").map(String.init)
+    let readinessIndex = try #require(lines.firstIndex(where: { $0.hasPrefix("readiness: ") }))
+    let capabilitiesIndex = try #require(lines.firstIndex(where: { $0.hasPrefix("capabilities: ") }))
+
+    #expect(lines[readinessIndex] == "readiness: core ready; selected profile ready; not in selected profile: midi_import, mixer_ax, mixer_mcu, keycmd_only_ops, legacy_scripter, verified_plugin_applyback")
+    #expect(readinessIndex < capabilitiesIndex)
+    #expect(encodeJSON(report) == jsonBefore)
+}
+
 @Test func doctorV4CoreProfileDoesNotRequireManualChannels() throws {
     let report = doctorV4Report(
         arguments: ["LogicProMCP", "doctor", "--json", "--profile", "core"],
