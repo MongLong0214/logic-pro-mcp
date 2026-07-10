@@ -434,6 +434,8 @@ actor AccessibilityChannel: Channel {
                 return .error("Missing 'path' parameter for project.save_as")
             }
             return await AccessibilityChannel.saveAsViaAXDialog(path: path, runtime: runtime.logicRuntime)
+        case "project.bounce":
+            return await AccessibilityChannel.openBounceDialogViaMenu()
 
         // MARK: - Track creation via menu click
         case "track.create_instrument":

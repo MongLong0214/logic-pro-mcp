@@ -110,6 +110,117 @@ extension AccessibilityChannel {
         ))
     }
 
+    static func openBounceDialogViaMenu(
+        systemEventsAuthorized: @Sendable () -> Bool = { PermissionChecker.checkSystemEventsAutomation() },
+        executeScript: @escaping @Sendable (String) async -> ChannelResult = {
+            await AppleScriptChannel.executeAppleScript($0)
+        }
+    ) async -> ChannelResult {
+        guard systemEventsAuthorized() else {
+            return .error(HonestContract.encodeStateC(
+                error: .systemEventsAutomationDenied,
+                hint: AppleScriptErrorClassifier.systemEventsAutomationDeniedHint,
+                extras: [
+                    "operation": "project.bounce",
+                    "failure_stage": "preflight_system_events_permission",
+                    "write_attempted": false,
+                    "safe_to_retry": false,
+                ]
+            ))
+        }
+
+        let processTarget = LogicProTarget.appleScriptTarget().systemEventsProcessTarget
+        let script = """
+        tell application "System Events"
+            tell \(processTarget)
+                set frontmost to true
+                set menuClicked to false
+                repeat with targetName in {"프로젝트 또는 섹션…", "프로젝트 또는 섹션...", "Project or Section…", "Project or Section..."}
+                    if menuClicked is false then
+                        try
+                            click menu item (targetName as text) of menu 1 of menu item "바운스" of menu 1 of menu bar item "파일" of menu bar 1
+                            set menuClicked to true
+                        on error
+                            try
+                                click menu item (targetName as text) of menu 1 of menu item "Bounce" of menu 1 of menu bar item "File" of menu bar 1
+                                set menuClicked to true
+                            end try
+                        end try
+                    end if
+                end repeat
+                if menuClicked is false then return "BOUNCE_MENU_ITEM_NOT_FOUND"
+                repeat 10 times
+                    set bounceName to ""
+                    try
+                        set bounceName to name of front window
+                    end try
+                    try
+                        set bounceName to bounceName & " " & name of sheet 1 of front window
+                    end try
+                    if bounceName contains "Bounce" or bounceName contains "바운스" then
+                        return "BOUNCE_DIALOG_OPENED"
+                    end if
+                    delay 0.2
+                end repeat
+                return "BOUNCE_DIALOG_NOT_FOUND"
+            end tell
+        end tell
+        """
+
+        let result = await executeScript(script)
+        guard result.isSuccess else {
+            if HonestContract.stateCErrorCode(result.message)
+                == HonestContract.FailureError.systemEventsAutomationDenied.rawValue {
+                return result
+            }
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "File > Bounce menu execution failed",
+                extras: [
+                    "operation": "project.bounce",
+                    "failure_stage": "open_bounce_menu",
+                    "write_attempted": true,
+                    "safe_to_retry": true,
+                    "cause": result.message,
+                ]
+            ))
+        }
+
+        if result.message.contains("BOUNCE_DIALOG_OPENED") {
+            return .success(HonestContract.encodeStateA(extras: [
+                "operation": "project.bounce",
+                "requested": "bounce_dialog_open",
+                "observed": "bounce_dialog_open",
+                "dialog_opened": true,
+                "bounce_fired": false,
+                "via": "file-menu",
+                "next_action": "Review the Bounce settings in Logic, then confirm and choose the destination.",
+            ]))
+        }
+        if result.message.contains("BOUNCE_MENU_ITEM_NOT_FOUND") {
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "File > Bounce > Project or Section menu item was not found",
+                extras: [
+                    "operation": "project.bounce",
+                    "failure_stage": "locate_bounce_menu_item",
+                    "write_attempted": false,
+                    "safe_to_retry": true,
+                ]
+            ))
+        }
+        return .error(HonestContract.encodeStateC(
+            error: .dialogNotFound,
+            hint: "File > Bounce menu was clicked but the Bounce dialog did not appear within 2 seconds",
+            extras: [
+                "operation": "project.bounce",
+                "failure_stage": "verify_bounce_dialog",
+                "write_attempted": true,
+                "safe_to_retry": true,
+            ]
+        ))
+    }
+
     private static func clickMenuItem(
         _ itemTitle: String,
         menuName: String,

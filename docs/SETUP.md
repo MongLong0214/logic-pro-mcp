@@ -110,7 +110,6 @@ Manual binding is only needed for remaining keycmd-only/channel-only paths:
 - `edit.toggle_step_input`
 - `nav.goto_marker`
 - `nav.delete_marker`
-- `project.bounce`
 - `transport.capture_recording`
 
 Most normal tool calls route through Accessibility, AppleScript, MCU, CoreMIDI, or CGEvent without manual MIDI Learn.

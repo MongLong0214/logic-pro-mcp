@@ -8,6 +8,7 @@ from unittest import mock
 
 import logic_bounce
 from logic_bounce import click_bounce_settings_confirm
+from logic_bounce_ui import open_bounce_dialog_via_menu
 
 
 def _completed_jxa_snapshot(snapshot) -> subprocess.CompletedProcess[str]:
@@ -164,6 +165,18 @@ class LogicBounceUITests(unittest.TestCase):
         self.assertTrue(opened)
         self.assertEqual(strategies, ["key_command", "file_menu"])
         self.assertEqual(state["strategies"], ["key_command", "file_menu"])
+
+    def test_open_bounce_dialog_via_menu_targets_project_or_section(self):
+        scripts = []
+
+        def fake_osa(script, timeout=logic_bounce.OSA_TIMEOUT_SEC):
+            scripts.append(script)
+            return "ok"
+
+        self.assertTrue(open_bounce_dialog_via_menu(run_osa=fake_osa))
+        self.assertIn('"Project or Section…"', scripts[0])
+        self.assertIn('"프로젝트 또는 섹션…"', scripts[0])
+        self.assertNotIn("menu item 1", scripts[0])
 
     def test_save_panel_present_detects_bounce_save_panel_snapshot(self):
         snapshot = {
