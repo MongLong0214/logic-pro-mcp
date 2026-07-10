@@ -140,6 +140,18 @@ enum AXLocalePolicy {
         rationale: "Best-effort cleanup so stale plugin windows do not steal later menu focus."
     )
 
+    static let showStepInputKeyboardMenuItem = LabelSet(
+        canonical: "Show Step Input Keyboard",
+        variants: ["스텝 입력 키보드 보기"],
+        rationale: "Native Window-menu toggle used with independent window-state readback."
+    )
+
+    static let stepInputKeyboardWindowTitle = LabelSet(
+        canonical: "Step Input Keyboard",
+        variants: ["스텝 입력 키보드"],
+        rationale: "Verifies the Step Input Keyboard window opened or closed after the menu action."
+    )
+
     static let editMenuBar = LabelSet(
         canonical: "Edit",
         variants: ["편집"],
@@ -691,6 +703,10 @@ enum AXLocalePolicy {
 
     static let showMixerMenuPath = MenuPath(bar: viewMenuBar, item: showMixerMenuItem)
     static let hidePluginWindowsMenuPath = MenuPath(bar: windowMenuBar, item: hideAllPluginWindowsMenuItem)
+    static let showStepInputKeyboardMenuPath = MenuPath(
+        bar: windowMenuBar,
+        item: showStepInputKeyboardMenuItem
+    )
     static let editUndoMenuPath = MenuPath(bar: editMenuBar, item: undoMenuItemPrefix, itemMode: .prefix)
 
     static func elementMatches(

@@ -88,6 +88,7 @@ actor AccessibilityChannel: Channel {
         let appRoot: @Sendable () -> AXUIElement?
         let transportState: @Sendable () -> ChannelResult
         let toggleTransportButton: @Sendable (String) -> ChannelResult
+        let toggleStepInputKeyboard: @Sendable () -> ChannelResult
         let setTempo: @Sendable ([String: String]) -> ChannelResult
         let setCycleRange: @Sendable ([String: String]) -> ChannelResult
         let tracks: @Sendable () -> ChannelResult
@@ -117,6 +118,7 @@ actor AccessibilityChannel: Channel {
             appRoot: @escaping @Sendable () -> AXUIElement?,
             transportState: @escaping @Sendable () -> ChannelResult,
             toggleTransportButton: @escaping @Sendable (String) -> ChannelResult,
+            toggleStepInputKeyboard: @escaping @Sendable () -> ChannelResult = { .error("toggleStepInputKeyboard not wired") },
             setTempo: @escaping @Sendable ([String: String]) -> ChannelResult,
             setCycleRange: @escaping @Sendable ([String: String]) -> ChannelResult,
             tracks: @escaping @Sendable () -> ChannelResult,
@@ -140,6 +142,7 @@ actor AccessibilityChannel: Channel {
             self.appRoot = appRoot
             self.transportState = transportState
             self.toggleTransportButton = toggleTransportButton
+            self.toggleStepInputKeyboard = toggleStepInputKeyboard
             self.setTempo = setTempo
             self.setCycleRange = setCycleRange
             self.tracks = tracks
@@ -182,6 +185,9 @@ actor AccessibilityChannel: Channel {
                         runtime: logicRuntime,
                         mouseRuntime: controlBarMouseRuntime
                     )
+                },
+                toggleStepInputKeyboard: {
+                    AccessibilityChannel.defaultToggleStepInputKeyboard(runtime: logicRuntime)
                 },
                 setTempo: {
                     AccessibilityChannel.defaultSetTempo(
@@ -265,6 +271,9 @@ actor AccessibilityChannel: Channel {
             return runtime.toggleTransportButton("CountIn")
         case "transport.toggle_autopunch":
             return runtime.toggleTransportButton("AutoPunch")
+
+        case "edit.toggle_step_input":
+            return runtime.toggleStepInputKeyboard()
 
         case "transport.play":
             return runtime.toggleTransportButton("Play")
