@@ -473,6 +473,11 @@ actor LogicProServer {
     /// normal op can never false-trip; only a wedged/occluded Logic session
     /// that would otherwise hang the stdio loop is bounded.
     static func commandDeadlineSeconds(tool: String, command: String) -> Double {
+        if FeatureFlags.adr003OperationRegistry,
+           tool == ToolID.logicTransport.rawValue,
+           let seconds = OperationRegistry.deadlineSeconds(tool: tool, command: command) {
+            return seconds
+        }
         if longRunningCommands.contains(command) { return 300 }
         if mediumRunningCommands.contains(command) { return 90 }
         return 25
@@ -712,7 +717,12 @@ actor LogicProServer {
     ]
 
     static func isMutatingCommand(tool: String, command: String) -> Bool {
-        mutatingCommandsByTool[tool]?.contains(command) == true
+        if FeatureFlags.adr003OperationRegistry,
+           tool == ToolID.logicTransport.rawValue,
+           let spec = OperationRegistry.spec(tool: tool, command: command) {
+            return spec.mutability == Mutability.`mutating`
+        }
+        return mutatingCommandsByTool[tool]?.contains(command) == true
     }
 
     private static func operationName(tool: String, command: String) -> String {
