@@ -165,6 +165,49 @@ private func doctorV4Report(
     #expect(object["client_profile_basis"] as? String == "default_claude_code")
 }
 
+@Test func doctorV4PartialClaudeRegistrationsExposeTargetedGuidance() throws {
+    let cases: [(
+        registration: SetupDoctor.ClaudeRegistration,
+        matchKind: String,
+        summaryFragment: String,
+        remediationFragment: String
+    )] = [
+        (
+            .nameOnly(name: "logic-pro-old", command: "/usr/bin/other"),
+            "name_only",
+            "name matches, but its command does not target LogicProMCP",
+            "remove 'logic-pro-old'"
+        ),
+        (
+            .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP"),
+            "command_only",
+            "targets LogicProMCP, but its server name does not match logic-pro",
+            "remove 'studio-tools'"
+        ),
+    ]
+
+    for item in cases {
+        let report = doctorV4Report(
+            runtime: doctorV4Runtime(registration: item.registration)
+        )
+        let check = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
+        let object = try #require(sharedJSONObject(encodeJSON(report)))
+        let checks = try #require(object["checks"] as? [[String: Any]])
+        let encoded = try #require(checks.first { $0["id"] as? String == check.id })
+        let output = SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
+
+        #expect(check.status == .warn)
+        #expect(report.clientProfile == .claudeCode)
+        #expect(report.clientProfileBasis == "registration_config")
+        let evidence = try #require(encoded["evidence"] as? [String: Any])
+        #expect(evidence["match_kind"] as? String == item.matchKind)
+        #expect(check.evidence["match_kind"] == item.matchKind)
+        #expect(check.summary.contains(item.summaryFragment))
+        #expect(check.remediation.value.contains(item.remediationFragment))
+        #expect(output.contains(item.summaryFragment))
+    }
+}
+
 @Test func doctorV4UnknownContextDefaultsToClaudeCodeWhenRegistrationIsMissing() throws {
     let report = doctorV4Report(
         runtime: doctorV4Runtime(

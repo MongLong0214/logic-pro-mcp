@@ -207,14 +207,38 @@ enum SetupDoctor {
     /// This is a pure config read — it never spawns the registered server, so the
     /// doctor's read-only / run-before-startup contract is honored (no CoreMIDI
     /// ports, no health sweep, no SIGKILL of an indirectly-spawned server).
+    enum ClaudeRegistrationMatchKind: String, Equatable, Sendable {
+        case none
+        case nameOnly = "name_only"
+        case commandOnly = "command_only"
+        case nameAndCommand = "name_and_command"
+    }
+
     enum ClaudeRegistration: Equatable, Sendable {
         /// A logic-pro-style MCP entry resolving to a LogicProMCP binary was found.
         case registered(command: String, environment: [String: String] = [:])
+        case nameOnly(name: String, command: String)
+        case commandOnly(name: String, command: String)
         /// The config was read successfully but no matching registration exists.
         case notRegistered
         /// The config file is absent / unreadable / not valid JSON.
         /// `reason` is a short human-readable explanation for the evidence dict.
         case configUnavailable(reason: String)
+
+        var matchKind: ClaudeRegistrationMatchKind? {
+            switch self {
+            case .registered:
+                return .nameAndCommand
+            case .nameOnly:
+                return .nameOnly
+            case .commandOnly:
+                return .commandOnly
+            case .notRegistered:
+                return ClaudeRegistrationMatchKind.none
+            case .configUnavailable:
+                return nil
+            }
+        }
     }
 
     struct LogicAppInfo: Equatable, Sendable {

@@ -23,27 +23,15 @@ extension SetupDoctor {
             serverScopes.append(top)
         }
         if let projects = object["projects"] as? [String: Any] {
-            for case let project as [String: Any] in projects.values {
+            for projectKey in projects.keys.sorted() {
+                guard let project = projects[projectKey] as? [String: Any] else { continue }
                 if let scoped = project["mcpServers"] as? [String: Any] {
                     serverScopes.append(scoped)
                 }
             }
         }
 
-        for scope in serverScopes {
-            for (name, rawEntry) in scope {
-                guard let entry = rawEntry as? [String: Any] else { continue }
-                let nameMatches = name.localizedCaseInsensitiveContains("logic-pro")
-                let command = (entry["command"] as? String) ?? ""
-                let commandMatches = command
-                    .localizedCaseInsensitiveContains("LogicProMCP")
-                if nameMatches && commandMatches {
-                    let environment = entry["env"] as? [String: String] ?? [:]
-                    return .registered(command: command, environment: environment)
-                }
-            }
-        }
-        return .notRegistered
+        return matchClaudeRegistration(in: serverScopes)
     }
 
 
@@ -61,21 +49,36 @@ extension SetupDoctor {
         guard let servers = object["mcpServers"] as? [String: Any] else {
             return .configUnavailable(reason: "config_unreadable")
         }
-        for (name, rawEntry) in servers {
-            guard let entry = rawEntry as? [String: Any] else { continue }
-            let command = (entry["command"] as? String) ?? ""
-            if name.localizedCaseInsensitiveContains("logic-pro")
-                && command.localizedCaseInsensitiveContains("LogicProMCP") {
-                let environment = entry["env"] as? [String: String] ?? [:]
-                return .registered(command: command, environment: environment)
-            }
-        }
-        return .notRegistered
+        return matchClaudeRegistration(in: [servers])
     }
 
 
     static func readClaudeRegistrationForTesting(configURL: URL) -> ClaudeRegistration {
         readProductionClaudeRegistration(configURL: configURL)
+    }
+
+    private static func matchClaudeRegistration(in serverScopes: [[String: Any]]) -> ClaudeRegistration {
+        var nameOnlyMatch: ClaudeRegistration?
+        var commandOnlyMatch: ClaudeRegistration?
+
+        for scope in serverScopes {
+            for name in scope.keys.sorted() {
+                guard let entry = scope[name] as? [String: Any] else { continue }
+                let command = (entry["command"] as? String) ?? ""
+                let nameMatches = name.localizedCaseInsensitiveContains("logic-pro")
+                let commandMatches = command.localizedCaseInsensitiveContains("LogicProMCP")
+                if nameMatches && commandMatches {
+                    let environment = entry["env"] as? [String: String] ?? [:]
+                    return .registered(command: command, environment: environment)
+                }
+                if nameMatches, nameOnlyMatch == nil {
+                    nameOnlyMatch = .nameOnly(name: name, command: command)
+                } else if commandMatches, commandOnlyMatch == nil {
+                    commandOnlyMatch = .commandOnly(name: name, command: command)
+                }
+            }
+        }
+        return nameOnlyMatch ?? commandOnlyMatch ?? .notRegistered
     }
 
     private static func loadClaudeConfigObject(at configURL: URL) -> ClaudeConfigLoadResult {

@@ -283,20 +283,41 @@ private func doctorV3Check(_ report: SetupDoctor.Report, _ id: String) throws ->
     #expect(check.evidence["path"] == "~/bin/LogicProMCP")
 }
 
-@Test func testDoctorV3ClaudeRegistrationCapturesShareDirEnv() {
-    let json = """
-    {"mcpServers":{"logic-pro":{"command":"/opt/homebrew/bin/LogicProMCP","env":{"LOGIC_PRO_MCP_SHARE_DIR":"/tmp/share"}}}}
-    """
+@Test func testDoctorV3ClaudeRegistrationReportsMatchKindTaxonomy() throws {
+    let cases: [(json: String, expected: SetupDoctor.ClaudeRegistration, matchKind: String)] = [
+        (
+            "{\"mcpServers\":{\"unrelated\":{\"command\":\"/usr/bin/other\"}}}",
+            .notRegistered,
+            "none"
+        ),
+        (
+            "{\"mcpServers\":{\"logic-pro-old\":{\"command\":\"/usr/bin/other\"}}}",
+            .nameOnly(name: "logic-pro-old", command: "/usr/bin/other"),
+            "name_only"
+        ),
+        (
+            "{\"mcpServers\":{\"studio-tools\":{\"command\":\"/opt/homebrew/bin/LogicProMCP\"}}}",
+            .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP"),
+            "command_only"
+        ),
+        (
+            "{\"mcpServers\":{\"a-logic-pro-old\":{\"command\":\"/usr/bin/other\"},\"logic-pro\":{\"command\":\"/opt/homebrew/bin/LogicProMCP\",\"env\":{\"LOGIC_PRO_MCP_SHARE_DIR\":\"/tmp/share\"}}}}",
+            .registered(command: "/opt/homebrew/bin/LogicProMCP", environment: ["LOGIC_PRO_MCP_SHARE_DIR": "/tmp/share"]),
+            "name_and_command"
+        ),
+    ]
     let dir = FileManager.default.temporaryDirectory
         .appendingPathComponent("doctor-v3-config-\(UUID().uuidString)", isDirectory: true)
-    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let configURL = dir.appendingPathComponent(".claude.json")
-    try? Data(json.utf8).write(to: configURL)
     defer { try? FileManager.default.removeItem(at: dir) }
-    #expect(
-        SetupDoctor.readClaudeRegistrationForTesting(configURL: configURL)
-            == .registered(command: "/opt/homebrew/bin/LogicProMCP", environment: ["LOGIC_PRO_MCP_SHARE_DIR": "/tmp/share"])
-    )
+
+    for item in cases {
+        try Data(item.json.utf8).write(to: configURL)
+        let result = SetupDoctor.readClaudeRegistrationForTesting(configURL: configURL)
+        #expect(result == item.expected)
+        #expect(result.matchKind?.rawValue == item.matchKind)
+    }
 }
 
 @Test func testDoctorV3GenerateReusesClaudeRegistrationAndLogicApps() {

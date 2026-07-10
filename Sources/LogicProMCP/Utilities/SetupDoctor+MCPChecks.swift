@@ -28,8 +28,26 @@ extension SetupDoctor {
                 domain: "mcp",
                 status: .pass,
                 summary: "Claude Code MCP registration found.",
-                evidence: ["registered": "true", "command": command],
+                evidence: [
+                    "registered": "true",
+                    "command": command,
+                    "match_kind": ClaudeRegistrationMatchKind.nameAndCommand.rawValue,
+                ],
                 remediationType: .none
+            )
+        case let .nameOnly(name, command):
+            return partialClaudeRegistrationCheck(
+                name: name,
+                command: command,
+                matchKind: .nameOnly,
+                summary: "Claude Code MCP registration name matches, but its command does not target LogicProMCP."
+            )
+        case let .commandOnly(name, command):
+            return partialClaudeRegistrationCheck(
+                name: name,
+                command: command,
+                matchKind: .commandOnly,
+                summary: "A Claude Code MCP entry targets LogicProMCP, but its server name does not match logic-pro."
             )
         case .notRegistered:
             return check(
@@ -37,7 +55,7 @@ extension SetupDoctor {
                 domain: "mcp",
                 status: .warn,
                 summary: "Claude Code MCP registration was not found.",
-                evidence: ["registered": "false"],
+                evidence: ["registered": "false", "match_kind": ClaudeRegistrationMatchKind.none.rawValue],
                 remediationType: .command,
                 remediationValueOverride: "claude mcp add --scope user logic-pro -- LogicProMCP"
             )
@@ -51,6 +69,28 @@ extension SetupDoctor {
                 remediationType: .manual
             )
         }
+    }
+
+    static func partialClaudeRegistrationCheck(
+        name: String,
+        command: String,
+        matchKind: ClaudeRegistrationMatchKind,
+        summary: String
+    ) -> Check {
+        check(
+            id: "mcp.claude_code_registration",
+            domain: "mcp",
+            status: .warn,
+            summary: summary,
+            evidence: [
+                "registered": "false",
+                "match_kind": matchKind.rawValue,
+                "server_name": name,
+                "command": command,
+            ],
+            remediationType: .command,
+            remediationValueOverride: "claude mcp remove \(shellQuote(name)) && claude mcp add --scope user logic-pro -- LogicProMCP"
+        )
     }
 
 
@@ -169,8 +209,26 @@ extension SetupDoctor {
                 domain: "mcp",
                 status: .pass,
                 summary: "Claude Desktop MCP registration found.",
-                evidence: ["config_present": "true", "registered": "true"],
+                evidence: [
+                    "config_present": "true",
+                    "registered": "true",
+                    "match_kind": ClaudeRegistrationMatchKind.nameAndCommand.rawValue,
+                ],
                 remediationType: .none
+            )
+        case let .nameOnly(name, command):
+            return partialClaudeDesktopRegistrationCheck(
+                name: name,
+                command: command,
+                matchKind: .nameOnly,
+                summary: "Claude Desktop registration name matches, but its command does not target LogicProMCP."
+            )
+        case let .commandOnly(name, command):
+            return partialClaudeDesktopRegistrationCheck(
+                name: name,
+                command: command,
+                matchKind: .commandOnly,
+                summary: "A Claude Desktop entry targets LogicProMCP, but its server name does not match logic-pro."
             )
         case .notRegistered:
             return check(
@@ -178,7 +236,11 @@ extension SetupDoctor {
                 domain: "mcp",
                 status: .warn,
                 summary: "Claude Desktop config exists but LogicProMCP is not registered.",
-                evidence: ["config_present": "true", "registered": "false"],
+                evidence: [
+                    "config_present": "true",
+                    "registered": "false",
+                    "match_kind": ClaudeRegistrationMatchKind.none.rawValue,
+                ],
                 remediationType: .manual
             )
         case let .configUnavailable(reason):
@@ -194,6 +256,28 @@ extension SetupDoctor {
                 remediationType: .manual
             )
         }
+    }
+
+    static func partialClaudeDesktopRegistrationCheck(
+        name: String,
+        command: String,
+        matchKind: ClaudeRegistrationMatchKind,
+        summary: String
+    ) -> Check {
+        check(
+            id: "mcp.claude_desktop_registration",
+            domain: "mcp",
+            status: .warn,
+            summary: summary,
+            evidence: [
+                "config_present": "true",
+                "registered": "false",
+                "match_kind": matchKind.rawValue,
+                "server_name": name,
+                "command": command,
+            ],
+            remediationType: .manual
+        )
     }
 
     struct RegisteredCommandResolution: Equatable, Sendable {
