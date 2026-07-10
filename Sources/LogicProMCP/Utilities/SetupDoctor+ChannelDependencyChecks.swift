@@ -27,7 +27,7 @@ extension SetupDoctor {
                 evidence: ["profile": profile.rawValue],
                 remediationType: .none,
                 optional: true,
-                skipReason: "profile_not_required"
+                skipReason: .profileNotRequired
             )
         }
 
@@ -49,7 +49,7 @@ extension SetupDoctor {
                 summary: "Manual-validation channels were explicitly skipped by the operator; live readiness is not claimed for those channels.",
                 evidence: evidence,
                 remediationType: .none,
-                skipReason: "intentionally_skipped"
+                skipReason: .intentionallySkipped
             )
         }
         return check(
@@ -76,7 +76,7 @@ extension SetupDoctor {
                 evidence: ["profile": profile.rawValue],
                 remediationType: .none,
                 optional: true,
-                skipReason: "profile_not_required"
+                skipReason: .profileNotRequired
             )
         }
         let staged = runtime.keyCommandsPresetStaged()
@@ -104,7 +104,7 @@ extension SetupDoctor {
                 evidence: ["profile": profile.rawValue],
                 remediationType: .none,
                 optional: true,
-                skipReason: "profile_not_required"
+                skipReason: .profileNotRequired
             )
         }
         let found = runtime.mcuPortReferenceFound()

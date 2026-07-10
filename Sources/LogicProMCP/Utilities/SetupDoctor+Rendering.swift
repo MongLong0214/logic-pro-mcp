@@ -41,7 +41,7 @@ extension SetupDoctor {
                     lines.append("    \(key)=\(check.evidence[key] ?? "")")
                 }
                 if let skipReason = check.skipReason {
-                    lines.append("    skip_reason: \(skipReason)")
+                    lines.append("    skip_reason: \(skipReason.rawValue)")
                 }
                 lines.append("    duration_ms: \(formatDuration(check.durationMs))")
             }

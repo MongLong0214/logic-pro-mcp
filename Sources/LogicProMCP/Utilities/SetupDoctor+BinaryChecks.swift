@@ -38,7 +38,7 @@ extension SetupDoctor {
                 summary: "Executable bit could not be checked because the binary path is missing.",
                 evidence: [:],
                 remediationType: .docs,
-                skipReason: "binary_path_missing"
+                skipReason: .binaryPathMissing
             )
         }
         let executable = runtime.isExecutableFile(executablePath)
@@ -80,7 +80,7 @@ extension SetupDoctor {
                 summary: "Signature verification skipped because the binary path is missing.",
                 evidence: [:],
                 remediationType: .docs,
-                skipReason: "binary_path_missing"
+                skipReason: .binaryPathMissing
             )
         }
         let result = runtime.runCommand("/usr/bin/codesign", ["--verify", "--strict", "--verbose=2", executablePath])
@@ -114,7 +114,7 @@ extension SetupDoctor {
                 summary: "Quarantine check skipped because the binary path is missing.",
                 evidence: [:],
                 remediationType: .docs,
-                skipReason: "binary_path_missing"
+                skipReason: .binaryPathMissing
             )
         }
         let result = runtime.runCommand("/usr/bin/xattr", ["-p", "com.apple.quarantine", executablePath])

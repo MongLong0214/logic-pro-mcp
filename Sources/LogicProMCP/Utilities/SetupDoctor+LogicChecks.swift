@@ -11,7 +11,7 @@ extension SetupDoctor {
                 summary: "macOS version could not be determined.",
                 evidence: ["reason": "version_unreadable"],
                 remediationType: .docs,
-                skipReason: "version_unreadable"
+                skipReason: .versionUnreadable
             )
         }
         let versionString = "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
@@ -56,7 +56,7 @@ extension SetupDoctor {
                 summary: "Logic Pro.app exists but its version could not be read.",
                 evidence: ["reason": "bundle_unreadable", "path": supported.map(\.path).joined(separator: ",")],
                 remediationType: .docs,
-                skipReason: "bundle_unreadable"
+                skipReason: .bundleUnreadable
             )
         }
         var evidence = [

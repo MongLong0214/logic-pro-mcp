@@ -84,6 +84,31 @@ private func doctorV4Report(
     )
 }
 
+@Test func doctorV4SkipReasonRawValuesAreStable() {
+    let expected = Set([
+        "binary_path_missing",
+        "bundle_unreadable",
+        "client_not_selected",
+        "full_disk_access_unavailable",
+        "http_error",
+        "intentionally_skipped",
+        "offline",
+        "parse_error",
+        "path_dependent_unresolved",
+        "principal_not_found",
+        "profile_not_required",
+        "share_dir_invalid",
+        "source_build_no_share_dir",
+        "source_unavailable",
+        "tcc_query_unavailable",
+        "tcc_schema_mismatch",
+        "timeout",
+        "version_unreadable",
+    ])
+
+    #expect(Set(SetupDoctor.DoctorSkipReason.allCases.map(\.rawValue)) == expected)
+}
+
 @Test func doctorV4SchemaProfilesAndCapabilitiesAreInJSON() throws {
     let report = doctorV4Report()
     #expect(report.schema == "logic_pro_mcp_doctor.v4")
@@ -166,7 +191,7 @@ private func doctorV4Report(
     #expect(report.clientProfile == .terminal)
     #expect(report.clientProfileBasis == "explicit_flag")
     #expect(registration.status == .skipped)
-    #expect(registration.skipReason == "client_not_selected")
+    #expect(registration.skipReason == .clientNotSelected)
 }
 
 @Test func doctorV4SkippedChecksRequireBlockedByOrSkipReason() {
@@ -187,7 +212,7 @@ private func doctorV4Report(
         runtime: doctorV4Runtime(macOSVersion: nil)
     )
     let output = SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
-    #expect(output.contains("skip_reason:"))
+    #expect(output.contains("skip_reason: version_unreadable"))
 }
 
 @Test func doctorV4CoreProfileDoesNotRequireManualChannels() throws {
@@ -196,9 +221,13 @@ private func doctorV4Report(
         approvals: [:]
     )
     let manual = try #require(report.checks.first { $0.id == "channels.manual_validation" })
+    let object = try #require(sharedJSONObject(encodeJSON(report)))
+    let checks = try #require(object["checks"] as? [[String: Any]])
+    let encodedManual = try #require(checks.first { $0["id"] as? String == "channels.manual_validation" })
     #expect(manual.status == .skipped)
     #expect(manual.optional)
-    #expect(manual.skipReason == "profile_not_required")
+    #expect(manual.skipReason == .profileNotRequired)
+    #expect(encodedManual["skip_reason"] as? String == "profile_not_required")
     #expect(report.status == .ok)
 }
 
@@ -227,7 +256,7 @@ private func doctorV4Report(
 
     let manual = try #require(report.checks.first { $0.id == "channels.manual_validation" })
     #expect(manual.status == .skipped)
-    #expect(manual.skipReason == "intentionally_skipped")
+    #expect(manual.skipReason == .intentionallySkipped)
     #expect(!manual.optional)
     #expect(report.status == .degraded)
     #expect(report.capabilities["keycmd_only_ops"]?.status == .unknownLiveVerifyRequired)
@@ -241,7 +270,7 @@ private func doctorV4Report(
     let claude = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
     #expect(claude.status == .skipped)
     #expect(claude.optional)
-    #expect(claude.skipReason == "client_not_selected")
+    #expect(claude.skipReason == .clientNotSelected)
     #expect(report.clientProfile == .cursor)
 }
 
@@ -258,7 +287,7 @@ private func doctorV4Report(
     let isOptional = desktop.optional
     #expect(desktop.status == .warn || desktop.status == .manual)
     #expect(isOptional == false)
-    #expect(desktop.skipReason != "client_not_selected")
+    #expect(desktop.skipReason != .clientNotSelected)
     #expect(report.status != .ok)
 }
 

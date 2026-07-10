@@ -11,7 +11,7 @@ extension SetupDoctor {
                 evidence: ["client_profile": clientProfile.rawValue],
                 remediationType: .none,
                 optional: true,
-                skipReason: "client_not_selected"
+                skipReason: .clientNotSelected
             )
         }
         // Read-only registration detection: inspect the Claude Code config file
@@ -71,7 +71,7 @@ extension SetupDoctor {
                 evidence: ["client_profile": clientProfile.rawValue],
                 remediationType: .none,
                 optional: true,
-                skipReason: "client_not_selected"
+                skipReason: .clientNotSelected
             )
         }
         if let cause = blockingCause(for: "mcp.registration_target", checks: checks) {
@@ -106,7 +106,7 @@ extension SetupDoctor {
                 evidence: ["command_path": command, "reason": "path_dependent_unresolved"],
                 remediationType: .command,
                 remediationValueOverride: "claude mcp add --scope user logic-pro -- LogicProMCP",
-                skipReason: "path_dependent_unresolved"
+                skipReason: .pathDependentUnresolved
             )
         }
         let exists = runtime.fileExistsAtPath(resolvedCommand)
@@ -159,7 +159,7 @@ extension SetupDoctor {
                 evidence: ["client_profile": clientProfile.rawValue],
                 remediationType: .none,
                 optional: true,
-                skipReason: "client_not_selected"
+                skipReason: .clientNotSelected
             )
         }
         switch runtime.readClaudeDesktopRegistration() {

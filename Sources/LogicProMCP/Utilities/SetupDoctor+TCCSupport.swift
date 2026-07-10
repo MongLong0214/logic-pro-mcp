@@ -3,7 +3,7 @@ import Foundation
 extension SetupDoctor {
     static func productionTCCCrossContextProbe() -> TCCCrossContextProbe {
         guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sqlite3") else {
-            return .skipped(reason: "tcc_query_unavailable")
+            return .skipped(reason: .tccQueryUnavailable)
         }
         return mapTCCQueryOutcome(productionTCCRows())
     }
@@ -61,21 +61,21 @@ extension SetupDoctor {
     static func mapTCCQueryOutcome(_ outcome: TCCQueryOutcome) -> TCCCrossContextProbe {
         switch outcome {
         case .fullDiskAccessUnavailable:
-            return .skipped(reason: "full_disk_access_unavailable")
+            return .skipped(reason: .fullDiskAccessUnavailable)
         case .queryUnavailable:
-            return .skipped(reason: "tcc_query_unavailable")
+            return .skipped(reason: .tccQueryUnavailable)
         case .schemaMismatch:
-            return .skipped(reason: "tcc_schema_mismatch")
+            return .skipped(reason: .tccSchemaMismatch)
         case let .rows(rows):
             let findings = tccFindings(rows)
-            guard !findings.isEmpty else { return .skipped(reason: "principal_not_found") }
+            guard !findings.isEmpty else { return .skipped(reason: .principalNotFound) }
             if findings.contains(where: { $0.contains("state=denied") }) {
                 return .denied(findings.joined(separator: ","))
             }
             if findings.contains(where: { $0.contains("state=granted") }) {
                 return .granted(findings.joined(separator: ","))
             }
-            return .skipped(reason: "principal_not_found")
+            return .skipped(reason: .principalNotFound)
         }
     }
 

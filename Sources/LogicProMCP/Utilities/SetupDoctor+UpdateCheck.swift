@@ -17,7 +17,7 @@ extension SetupDoctor {
                     summary: "Could not parse the latest release version.",
                     evidence: ["reason": "parse_error"],
                     remediationType: .docs,
-                    skipReason: "parse_error"
+                    skipReason: .parseError
                 )
             }
             let order = Self.compareVersions(installed, latest)
@@ -40,38 +40,28 @@ extension SetupDoctor {
                 remediationType: installSourceRemediationType(installSource),
                 remediationValueOverride: updateRemediation(installSource: installSource)
             )
-        case .offline, .sourceUnavailable, .parseError, .httpError, .timeout:
-            // Redaction (AC-6.4): evidence carries ONLY an enumerated reason — never
-            // stderr, env, tokened URLs, or headers. The lookup is unauthenticated.
-            return check(
-                id: "updates.latest_release",
-                domain: "updates",
-                status: .skipped,
-                summary: "Could not check for the latest release.",
-                evidence: ["reason": updateReason(outcome)],
-                remediationType: .docs,
-                skipReason: updateReason(outcome)
-            )
-        }
-    }
-
-
-    static func updateReason(_ outcome: UpdateOutcome) -> String {
-        switch outcome {
-        case .found:
-            return "found"
         case .offline:
-            return "offline"
+            return skippedUpdateCheck(reason: .offline)
         case .sourceUnavailable:
-            return "source_unavailable"
+            return skippedUpdateCheck(reason: .sourceUnavailable)
         case .parseError:
-            return "parse_error"
+            return skippedUpdateCheck(reason: .parseError)
         case .httpError:
-            return "http_error"
+            return skippedUpdateCheck(reason: .httpError)
         case .timeout:
-            return "timeout"
+            return skippedUpdateCheck(reason: .timeout)
         }
     }
 
-
+    static func skippedUpdateCheck(reason: DoctorSkipReason) -> Check {
+        check(
+            id: "updates.latest_release",
+            domain: "updates",
+            status: .skipped,
+            summary: "Could not check for the latest release.",
+            evidence: ["reason": reason.rawValue],
+            remediationType: .docs,
+            skipReason: reason
+        )
+    }
 }
