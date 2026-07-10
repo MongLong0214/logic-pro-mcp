@@ -244,26 +244,26 @@ private func doctorV3Check(_ report: SetupDoctor.Report, _ id: String) throws ->
         authValue: 1,
         indirectObjectIdentifier: ""
     )
-    #expect(SetupDoctor.mapTCCQueryOutcome(.rows([unknown])) == .skipped(reason: "principal_not_found"))
-    #expect(SetupDoctor.mapTCCQueryOutcome(.rows([])) == .skipped(reason: "principal_not_found"))
-    #expect(SetupDoctor.mapTCCQueryOutcome(.queryUnavailable) == .skipped(reason: "tcc_query_unavailable"))
-    #expect(SetupDoctor.mapTCCQueryOutcome(.schemaMismatch) == .skipped(reason: "tcc_schema_mismatch"))
-    #expect(SetupDoctor.mapTCCQueryOutcome(.fullDiskAccessUnavailable) == .skipped(reason: "full_disk_access_unavailable"))
+    #expect(SetupDoctor.mapTCCQueryOutcome(.rows([unknown])) == .skipped(reason: .principalNotFound))
+    #expect(SetupDoctor.mapTCCQueryOutcome(.rows([])) == .skipped(reason: .principalNotFound))
+    #expect(SetupDoctor.mapTCCQueryOutcome(.queryUnavailable) == .skipped(reason: .tccQueryUnavailable))
+    #expect(SetupDoctor.mapTCCQueryOutcome(.schemaMismatch) == .skipped(reason: .tccSchemaMismatch))
+    #expect(SetupDoctor.mapTCCQueryOutcome(.fullDiskAccessUnavailable) == .skipped(reason: .fullDiskAccessUnavailable))
 }
 
 @Test func testDoctorV3TCCSkippedEvidenceMatchesProbeReason() throws {
-    let cases: [(reason: String, readable: String)] = [
-        ("full_disk_access_unavailable", "false"),
-        ("tcc_query_unavailable", "unknown"),
-        ("tcc_schema_mismatch", "true"),
-        ("principal_not_found", "true"),
+    let cases: [(reason: SetupDoctor.DoctorSkipReason, readable: String)] = [
+        (.fullDiskAccessUnavailable, "false"),
+        (.tccQueryUnavailable, "unknown"),
+        (.tccSchemaMismatch, "true"),
+        (.principalNotFound, "true"),
     ]
     for item in cases {
         var runtime = doctorV3Runtime()
         runtime.tccCrossContextProbe = { .skipped(reason: item.reason) }
         let check = try doctorV3Check(doctorV3Report(runtime), "permissions.tcc_cross_context")
         #expect(check.status == .skipped)
-        #expect(check.evidence["reason"] == item.reason)
+        #expect(check.evidence["reason"] == item.reason.rawValue)
         #expect(check.evidence["tcc_db_readable"] == item.readable)
         #expect(check.evidence["full_disk_access"] == item.readable)
     }

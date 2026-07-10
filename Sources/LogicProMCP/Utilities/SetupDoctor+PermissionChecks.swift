@@ -111,9 +111,9 @@ extension SetupDoctor {
         case let .skipped(reason):
             let readable: String
             switch reason {
-            case "full_disk_access_unavailable":
+            case .fullDiskAccessUnavailable:
                 readable = "false"
-            case "tcc_query_unavailable":
+            case .tccQueryUnavailable:
                 readable = "unknown"
             default:
                 readable = "true"
@@ -123,7 +123,7 @@ extension SetupDoctor {
                 domain: "permissions",
                 status: .skipped,
                 summary: "Cross-context TCC enrichment could not answer; live permission probes remain authoritative.",
-                evidence: ["tcc_db_readable": readable, "full_disk_access": readable, "reason": reason],
+                evidence: ["tcc_db_readable": readable, "full_disk_access": readable, "reason": reason.rawValue],
                 remediationType: .docs,
                 skipReason: reason
             )

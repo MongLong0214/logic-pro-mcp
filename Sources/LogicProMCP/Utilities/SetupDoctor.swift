@@ -17,6 +17,27 @@ enum SetupDoctor {
         case manualActionRequired = "manual_action_required"
     }
 
+    enum DoctorSkipReason: String, Codable, Sendable, CaseIterable {
+        case binaryPathMissing = "binary_path_missing"
+        case bundleUnreadable = "bundle_unreadable"
+        case clientNotSelected = "client_not_selected"
+        case fullDiskAccessUnavailable = "full_disk_access_unavailable"
+        case httpError = "http_error"
+        case intentionallySkipped = "intentionally_skipped"
+        case offline
+        case parseError = "parse_error"
+        case pathDependentUnresolved = "path_dependent_unresolved"
+        case principalNotFound = "principal_not_found"
+        case profileNotRequired = "profile_not_required"
+        case shareDirInvalid = "share_dir_invalid"
+        case sourceBuildNoShareDir = "source_build_no_share_dir"
+        case sourceUnavailable = "source_unavailable"
+        case tccQueryUnavailable = "tcc_query_unavailable"
+        case tccSchemaMismatch = "tcc_schema_mismatch"
+        case timeout
+        case versionUnreadable = "version_unreadable"
+    }
+
     enum InstallSource: String, Codable, Sendable {
         case homebrew
         case releaseBinary = "release_binary"
@@ -69,7 +90,7 @@ enum SetupDoctor {
         // keeping v3 a strict superset a v1/v2 decoder never trips over. Set only at
         // construction via the `check(...)` factory (no post-construction mutation, R9).
         var blockedBy: String?
-        var skipReason: String?
+        var skipReason: DoctorSkipReason?
         let optional: Bool
 
         // Explicit CodingKeys enumerate EVERY key — the six v1 keys keep their
@@ -218,7 +239,7 @@ enum SetupDoctor {
     enum TCCCrossContextProbe: Equatable, Sendable {
         case granted(String)
         case denied(String)
-        case skipped(reason: String)
+        case skipped(reason: DoctorSkipReason)
     }
 
     struct TCCRow: Equatable, Sendable {
@@ -478,7 +499,7 @@ enum SetupDoctor {
         remediationValueOverride: String? = nil,
         optional: Bool = false,
         blockedBy: String? = nil,
-        skipReason: String? = nil
+        skipReason: DoctorSkipReason? = nil
     ) -> Check {
         let value = remediationValueOverride ?? defaultRemediationValue(for: id, type: remediationType)
         // category/severity are DERIVED here (single chokepoint) so no check can be
