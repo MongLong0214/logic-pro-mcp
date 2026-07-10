@@ -976,7 +976,7 @@ enum WorkflowSkillCatalog {
             evidenceLevel: .deterministic,
             productionReady: true,
             dependsOn: [],
-            limitations: ["Does not perform a bounce/export; project.bounce is keycmd-only on Logic 12.2."],
+            limitations: ["Does not perform a bounce/export."],
             mutationKind: .readOnly
         )
     }

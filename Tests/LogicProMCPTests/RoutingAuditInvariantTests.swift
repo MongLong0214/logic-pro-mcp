@@ -40,8 +40,6 @@ struct RoutingAuditInvariantTests {
         "edit.toggle_step_input",         // logic_edit.toggle_step_input
         "nav.goto_marker",                // logic_navigate.goto_marker (with index)
         "nav.delete_marker",              // logic_navigate.delete_marker
-        "project.bounce",                 // logic_project.bounce
-
         // Channel-only router op — no public MCP tool command exposes it, but
         // it remains a real mappingTable/routingTable path if a future surface
         // promotes it.

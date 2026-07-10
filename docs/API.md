@@ -190,7 +190,7 @@ Common commands: `goto_bar`, `goto_marker`, `create_marker`, `delete_marker`, `r
 
 Common commands: `new`, `open`, `save`, `save_as`, `close`, `bounce`, `is_running`, `launch`, `quit`, `get_regions`, `export_plan`, `export_run`, `export_resume`, `audit`, `cleanup_plan`, `cleanup_apply`.
 
-Destructive or file-writing paths require confirmation. `save_as` verifies the resulting `.logicx` package. `audit` marks GM Device / External MIDI tracks with MIDI regions as `external_midi_regions_bounce_risk` export blockers. `bounce` runs that preflight and returns `export_readiness_blocked` before opening the Bounce dialog when blockers are present. `export_plan` is read-only; `export_run` and `export_resume` re-plan, open, verify project identity, bounce, and verify artifacts via `logic_audio`.
+Destructive or file-writing paths require confirmation. `save_as` verifies the resulting `.logicx` package. `audit` marks GM Device / External MIDI tracks with MIDI regions as `external_midi_regions_bounce_risk` export blockers. `bounce` runs that preflight, then opens and verifies Logic's native File > Bounce dialog; the caller completes the settings and destination in Logic. It returns `export_readiness_blocked` before opening the dialog when blockers are present. `export_plan` is read-only; `export_run` and `export_resume` re-plan, open, verify project identity, bounce, and verify artifacts via `logic_audio`.
 
 ### `logic_audio`
 

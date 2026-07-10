@@ -17,7 +17,7 @@
 - `navigate.goto_bar`, `set_zoom`
 - `transport.record` / `stop`, `project.save` (AppleScript), `audio.analyze_file` (loudness/peak/duration)
 - `midi.mmc_locate`
-- **Bounce:** `File ▸ Bounce ▸ Project or Section…` renders a valid AIFF (used for the demo audio) — see bug #256 for the MCP-command gap.
+- **Bounce:** `logic_project.bounce {confirmed:true}` opens the verified native `File ▸ Bounce ▸ Project or Section…` dialog; that path rendered the valid AIFF used for the demo audio.
 
 ## Honest State-B (attempted, readback-unavailable — not failures)
 Send-only or cgevent ops that correctly report "sent, unverified": all `midi.send_*` / `play_sequence` / `step_input` / `mmc_*`, `edit.*` (undo/redo/cut/copy/paste/split/join/quantize/select_all/bounce_in_place), `navigate.toggle_view` / `zoom_to_fit`, `tracks.duplicate` / `set_automation`, `transport.rewind` / `fast_forward` / `toggle_metronome`, `mixer.set_master_volume` (MCU, no readback). `logic://mixer` returns `ax_poll` strips **after `refresh_cache`** (the read-only resource reflects the poller cache; `mixer_not_visible` before a poll is expected).
@@ -31,9 +31,9 @@ Send-only or cgevent ops that correctly report "sent, unverified": all `midi.sen
 | [#253](https://github.com/MongLong0214/logic-pro-mcp/issues/253) | help category gap | p3 | `logic_system.help audio` / `plugins` → `unknown_category` though both are real tools |
 | [#254](https://github.com/MongLong0214/logic-pro-mcp/issues/254) | marker surface | p2 | `create_marker` no-ops (cgevent; native menu works) **and** `logic://markers` reads empty even when a marker exists → goto/delete unusable |
 | [#255](https://github.com/MongLong0214/logic-pro-mcp/issues/255) | keycmd routing | p3 | `toggle_count_in` / `toggle_step_input` → `channels_exhausted` despite a working Control-Bar/menu path |
-| [#256](https://github.com/MongLong0214/logic-pro-mcp/issues/256) | bounce routing | p2 | `project.bounce` → `channels_exhausted` (no key mapping); native `File ▸ Bounce` works — export non-functional via MCP |
+| [#256](https://github.com/MongLong0214/logic-pro-mcp/issues/256) | bounce routing | p2 | Fixed in source: `project.bounce` now prefers the native File menu and verifies that the Bounce dialog opened. |
 
-Root theme for #254/#255/#256: several commands route only through an unbound Logic key command and fail with `channels_exhausted` instead of using the available menu/Control-Bar path.
+Root theme for #254/#255: several commands route only through an unbound Logic key command and fail with `channels_exhausted` instead of using the available menu/Control-Bar path.
 
 ## Demo composition (what's on screen)
 82 BPM, D minor lofi. `record_sequence` × 3 → **Chords** (Dm7–B♭maj7–Gm7–A7), **Bass** (D–B♭–G–A roots), **Lead** (D-pentatonic motif), all Studio Grand piano; **Drummer** (SoCal). Piano roll opened on Chords; real-time playback. Audio bed = Logic's own bounce of this loop (11.7 s, 48 kHz/24-bit, −0.1 dBFS peak).

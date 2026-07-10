@@ -299,6 +299,13 @@ private func waitUntil(
     #expect(result.isSuccess)
 }
 
+@Test func testProjectBouncePrefersNativeAccessibilityMenu() throws {
+    let chain = try #require(ChannelRouter.routingTable["project.bounce"])
+
+    #expect(chain.first == .accessibility)
+    #expect(chain.contains(.midiKeyCommands))
+}
+
 @Test func testRouterAllOperationsHaveChannel() async {
     let table = ChannelRouter.v2RoutingTable
     let systemOps = ["system.health", "system.cache_state", "system.refresh", "system.permissions", "project.is_running"]

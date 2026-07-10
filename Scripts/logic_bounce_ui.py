@@ -424,17 +424,18 @@ def wait_for_bounce_dialog(run_osa: RunOsa = osa, sleep_fn: Callable[[float], No
 def open_bounce_dialog_via_menu(run_osa: RunOsa = osa) -> bool:
     result = _process_body(
         """set frontmost to true
-try
-    click menu item 1 of menu 1 of menu item "바운스" of menu 1 of menu bar item "파일" of menu bar 1
-    return "ok"
-on error
+repeat with targetName in {"프로젝트 또는 섹션…", "프로젝트 또는 섹션...", "Project or Section…", "Project or Section..."}
     try
-        click menu item 1 of menu 1 of menu item "Bounce" of menu 1 of menu bar item "File" of menu bar 1
+        click menu item (targetName as text) of menu 1 of menu item "바운스" of menu 1 of menu bar item "파일" of menu bar 1
         return "ok"
     on error
-        return ""
+        try
+            click menu item (targetName as text) of menu 1 of menu item "Bounce" of menu 1 of menu bar item "File" of menu bar 1
+            return "ok"
+        end try
     end try
-end try""",
+end repeat
+return """"",
         run_osa=run_osa,
     )
     return result == "ok"

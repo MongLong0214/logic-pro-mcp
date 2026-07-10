@@ -190,7 +190,6 @@ extension ChannelRouter {
         "edit.toggle_step_input":     [.midiKeyCommands, .cgEvent],  // §4.3.1 new command
         "edit.duplicate":             [.midiKeyCommands, .cgEvent],
 
-        // Project — AppleScript primary for new/open/close lifecycle, KeyCmd for save/bounce
         "project.new":                [.appleScript, .cgEvent],
         "project.open":               [.appleScript],
         // #110: AppleScript-first — the direct `save front document` is the
@@ -201,7 +200,7 @@ extension ChannelRouter {
         "project.save_as":            [.accessibility, .appleScript],
         "project.close":              [.appleScript, .cgEvent],
         "project.get_info":           [.accessibility],
-        "project.bounce":             [.midiKeyCommands, .cgEvent],
+        "project.bounce":             [.accessibility, .midiKeyCommands, .cgEvent],
         "project.is_running":         [],
         "project.launch":             [.appleScript],
         "project.quit":               [.appleScript],
