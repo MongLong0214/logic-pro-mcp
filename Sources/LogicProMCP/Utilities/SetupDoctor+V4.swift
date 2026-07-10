@@ -176,11 +176,14 @@ extension SetupDoctor {
         case "vscode": return (.vscode, "launch_context")
         default: break
         }
-        if case .registered = claudeRegistration {
+        switch claudeRegistration {
+        case .registered, .nameOnly, .commandOnly:
             return (.claudeCode, "registration_config")
+        case .notRegistered, .configUnavailable:
+            break
         }
         switch runtime.readClaudeDesktopRegistration() {
-        case .registered:
+        case .registered, .nameOnly, .commandOnly:
             return (.claudeDesktop, "registration_config")
         case .notRegistered, .configUnavailable:
             return (.claudeCode, "default_claude_code")

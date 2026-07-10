@@ -553,6 +553,7 @@ private func issue26RepositoryRootURL() -> URL {
     let registration = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
     #expect(registration.status == .pass)
     #expect(registration.evidence["command"] == "/usr/local/bin/some-wrapper/LogicProMCP")
+    #expect(registration.evidence["match_kind"] == "name_and_command")
 }
 
 @Test func testClaudeRegistrationWarnWhenConfigHasNoMatchingEntry() throws {
@@ -564,6 +565,7 @@ private func issue26RepositoryRootURL() -> URL {
     )
     let registration = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
     #expect(registration.status == .warn)
+    #expect(registration.evidence["match_kind"] == "none")
     #expect(registration.remediation.type == .command)
     #expect(!registration.remediation.value.isEmpty)
 }
@@ -600,12 +602,12 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(result == .registered(command: "/opt/homebrew/bin/LogicProMCP"))
 }
 
-@Test func testProductionClaudeRegistrationNotRegisteredWhenCommandDoesNotResolve() {
+@Test func testProductionClaudeRegistrationReportsNameOnlyWhenCommandDoesNotMatch() {
     let json = """
     {"mcpServers":{"logic-pro":{"command":"/usr/bin/other-tool"},"context7":{"command":"npx"}}}
     """
     let result = registrationFromTemporaryConfig(json)
-    #expect(result == .notRegistered)
+    #expect(result == .nameOnly(name: "logic-pro", command: "/usr/bin/other-tool"))
 }
 
 @Test func testProductionClaudeRegistrationConfigUnavailableOnGarbage() {

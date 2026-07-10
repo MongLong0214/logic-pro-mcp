@@ -380,7 +380,7 @@ enum SetupLifecycle {
         switch runtime.claudeRegistration() {
         case .registered:
             registered = true
-        case .notRegistered, .configUnavailable:
+        case .nameOnly, .commandOnly, .notRegistered, .configUnavailable:
             registered = false
         }
         let cliAvailable = runtime.claudeCLIAvailable()
