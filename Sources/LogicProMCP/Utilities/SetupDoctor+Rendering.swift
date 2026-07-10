@@ -56,7 +56,51 @@ extension SetupDoctor {
             return "\(id)=\(capability.status.rawValue)"
         }
         guard !rendered.isEmpty else { return }
+        if let readiness = renderCapabilityReadinessSummary(report.capabilities) {
+            lines.append(readiness)
+        }
         lines.append("capabilities: \(rendered.joined(separator: ", "))")
+    }
+
+    static func renderCapabilityReadinessSummary(
+        _ capabilities: [String: CapabilityReadiness]
+    ) -> String? {
+        guard let coreStatus = capabilities["core_transport"]?.status else { return nil }
+        let coreSummary: String
+        switch coreStatus {
+        case .ready:
+            coreSummary = "core ready"
+        case .notReady:
+            coreSummary = "core blocked"
+        case .unknownLiveVerifyRequired:
+            coreSummary = "core incomplete"
+        case .notInProfile:
+            coreSummary = "core not in selected profile"
+        }
+
+        let ordered = capabilityDefinitions.map(\.id)
+        let blocked = ordered.filter { capabilities[$0]?.status == .notReady }
+        let incomplete = ordered.filter { capabilities[$0]?.status == .unknownLiveVerifyRequired }
+        let notInProfile = ordered.filter { capabilities[$0]?.status == .notInProfile }
+        let selectedProfileSummary: String
+        if !blocked.isEmpty {
+            selectedProfileSummary = "selected profile blocked"
+        } else if !incomplete.isEmpty {
+            selectedProfileSummary = "selected profile incomplete"
+        } else {
+            selectedProfileSummary = "selected profile ready"
+        }
+        var groups = [coreSummary, selectedProfileSummary]
+        if !blocked.isEmpty {
+            groups.append("blocked: \(blocked.joined(separator: ", "))")
+        }
+        if !incomplete.isEmpty {
+            groups.append("incomplete: \(incomplete.joined(separator: ", "))")
+        }
+        if !notInProfile.isEmpty {
+            groups.append("not in selected profile: \(notInProfile.joined(separator: ", "))")
+        }
+        return "readiness: \(groups.joined(separator: "; "))"
     }
 
     private static func appendFixPlan(_ report: Report, to lines: inout [String], useColor: Bool) {
