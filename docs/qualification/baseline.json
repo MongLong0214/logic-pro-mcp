@@ -1,0 +1,7 @@
+{
+  "stable_release_tag": "v3.11.0",
+  "source_commit": "95ba1ea25af53ec7306d84369e9b8f50b68ecf10",
+  "test_count": 2267,
+  "test_command": "swift test --no-parallel",
+  "notes": "Phase 0 baseline snapshot per ADR-001~018 implementation guide (#308). No live-Logic qualification performed for ADR work in this snapshot — this is a pre-ADR baseline only."
+}
