@@ -46,6 +46,8 @@ private final class AccessibilityRuntimeRecorder: @unchecked Sendable {
     var channelStripParams: [[String: String]] = []
     var mixerValueCalls: [([String: String], AccessibilityChannel.MixerTarget)] = []
     var importedMIDIPaths: [String] = []
+    var markerListOpenCount = 0
+    var createMarkerParams: [[String: String]] = []
 }
 
 private final class ControlBarMouseRecorder: @unchecked Sendable {
@@ -202,6 +204,14 @@ private func makeAccessibilityRuntime(
         },
         projectInfo: { .success("{\"project\":true}") },
         markers: { .success("[{\"name\":\"Intro\"}]") },
+        openMarkerList: {
+            recorder.markerListOpenCount += 1
+            return .success("{\"opened\":true}")
+        },
+        createMarker: { params in
+            recorder.createMarkerParams.append(params)
+            return .success("{\"created\":true}")
+        },
         importMIDIFile: { path in
             recorder.importedMIDIPaths.append(path)
             return .success("{\"imported\":\"\(path)\"}")
@@ -490,6 +500,8 @@ private func makeSetInstrumentFixture() -> (
         ("mixer.set_volume", ["index": "2", "value": "0.75"]),
         ("mixer.set_pan", ["index": "2", "value": "-0.2"]),
         ("nav.get_markers", [:]),
+        ("nav.open_marker_list", [:]),
+        ("nav.create_marker", ["name": "Intro"]),
         ("project.get_info", [:]),
     ]
 
@@ -504,6 +516,8 @@ private func makeSetInstrumentFixture() -> (
     #expect(recorder.selectParams == [["index": "4"]])
     #expect(recorder.renameParams == [["index": "5", "name": "Bass"]])
     #expect(recorder.channelStripParams == [["index": "2"]])
+    #expect(recorder.markerListOpenCount == 1)
+    #expect(recorder.createMarkerParams == [["name": "Intro"]])
 
     #expect(recorder.trackToggleCalls.count == 3)
     #expect(recorder.trackToggleCalls[0].1 == "Mute")

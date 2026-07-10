@@ -552,21 +552,22 @@ extension ResourceHandlers {
         let markers = await cache.getMarkers()
         let fetchedAt = await cache.getMarkersFetchedAt()
         let axOccluded = await cache.getAXOccluded()
+        let readable = await cache.getMarkersReadable()
         let body = encodeMarkersWire(markers)
-        let source: String
-        if !markers.isEmpty {
-            source = "ax_live"
-        } else if fetchedAt > .distantPast {
-            // Poller has run, came up empty — could be no markers OR occluded.
-            source = axOccluded ? "cache" : "ax_live"
-        } else {
-            source = "default"
+        let source = readable ? "ax_live" : (markers.isEmpty ? "unreadable" : "cache")
+        var extras: [String: Any] = [
+            "source": source,
+            "readable": readable,
+            "verified_empty": readable && markers.isEmpty,
+        ]
+        if !readable {
+            extras["reason"] = "marker_list_not_open"
         }
         let envelope = wrapWithCacheEnvelope(
             bodyJSON: body,
             fetchedAt: fetchedAt,
             axOccluded: axOccluded,
-            extras: ["source": source]
+            extras: extras
         )
         return ReadResource.Result(
             contents: [.text(envelope, uri: uri, mimeType: "application/json")]

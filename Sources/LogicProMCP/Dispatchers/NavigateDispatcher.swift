@@ -131,6 +131,13 @@ struct NavigateDispatcher {
 
         case "create_marker":
             let providedName = stringParam(params, "name")
+            if providedName.count > 250
+                || providedName.rangeOfCharacter(from: .controlCharacters) != nil {
+                return toolInvalidParamsResult(
+                    "create_marker 'name' must be at most 250 characters and contain no control characters",
+                    extras: ["operation": "nav.create_marker"]
+                )
+            }
             return await finalizeCreateMarkerResult(
                 requestedName: providedName.isEmpty ? nil : providedName,
                 router: router,
@@ -259,17 +266,24 @@ struct NavigateDispatcher {
         router: ChannelRouter,
         cache: StateCache
     ) async -> CallTool.Result {
-        let routedName = requestedName ?? "Marker"
         // audit P1 #8: snapshot the marker list BEFORE the mutating route so the
         // count-delta verify reflects the +1 this create adds. Pre-fix both the
         // "before" and "after" reads ran AFTER nav.create_marker, so their
         // counts were equal on success → every verified-by-readback create fell
         // to the State-B readback-mismatch path. Still fail-closed: a nil/short
         // readback below returns State B.
+        let openResult = await router.route(operation: "nav.open_marker_list")
+        guard openResult.isSuccess else {
+            return toolTextResult(openResult)
+        }
         let beforeMarkers = await liveMarkers(router: router, cache: cache)
+        var routeParams: [String: String] = [:]
+        if let requestedName {
+            routeParams["name"] = requestedName
+        }
         let routeResult = await router.route(
             operation: "nav.create_marker",
-            params: ["name": routedName]
+            params: routeParams
         )
         guard routeResult.isSuccess else {
             return toolTextResult(routeResult)
@@ -346,9 +360,19 @@ struct NavigateDispatcher {
         after afterMarkers: [MarkerState],
         before beforeMarkers: [MarkerState]
     ) -> MarkerState? {
-        return afterMarkers.last(where: { candidate in
-            !beforeMarkers.contains(candidate)
-        })
+        var unmatchedBefore = beforeMarkers
+        for candidate in afterMarkers {
+            if let index = unmatchedBefore.firstIndex(where: {
+                $0.name == candidate.name
+                    && $0.position == candidate.position
+                    && $0.positionSource == candidate.positionSource
+            }) {
+                unmatchedBefore.remove(at: index)
+            } else {
+                return candidate
+            }
+        }
+        return nil
     }
 
     /// goto_marker 응답에 marker provenance uncertainty 를 surface — State A/B

@@ -230,7 +230,11 @@ actor StatePoller {
                 operation: "nav.get_markers", label: "Marker",
                 axChannel: axChannel, cache: cache, as: [MarkerState].self
             ) { cache, markers in await cache.updateMarkers(markers) }
-            if markersReady { cacheKeys.append(.markers) }
+            if markersReady {
+                cacheKeys.append(.markers)
+            } else {
+                await cache.markMarkersUnreadable()
+            }
         }
         if !cacheKeys.isEmpty { await postPoll(cacheKeys) }
     }
