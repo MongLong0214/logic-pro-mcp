@@ -284,7 +284,8 @@ struct SystemDispatcher {
     /// `testValidHelpCategoriesStayInLockstepWithHelpText` so a new dispatcher
     /// section can't drift out of the accepted set.
     static let validHelpCategories = [
-        "all", "transport", "tracks", "mixer", "midi", "edit", "navigate", "project", "system",
+        "all", "transport", "tracks", "mixer", "midi", "edit", "navigate", "project",
+        "audio", "plugins", "system",
     ]
 
     private static func helpText(for category: String) -> String {
@@ -428,6 +429,41 @@ struct SystemDispatcher {
                 Read project info via resource: logic://project/info
                 """
 
+        case "audio":
+            return """
+                logic_audio commands:
+                  analyze_file      -> { path: String, output_root?: String,
+                                         min_duration_seconds?: Float,
+                                         expected_duration_seconds?: Float,
+                                         max_duration_drift_seconds?: Float,
+                                         min_file_size_bytes?: Int,
+                                         max_input_file_size_bytes?: Int,
+                                         max_input_duration_seconds?: Float,
+                                         max_decoded_frames?: Int,
+                                         max_peak_dbfs?: Float,
+                                         near_silence_dbfs?: Float,
+                                         max_silence_ratio?: Float,
+                                         expected_sample_rate?: Int,
+                                         expected_channel_count?: Int }
+                                       Read-only analysis of an absolute audio artifact path.
+                """
+
+        case "plugins":
+            return """
+                logic_plugins commands:
+                  get_inventory     -> { track: Int } — Read a drift-safe insert chain
+                  set_param_verified -> { track: Int, insert: Int, plugin: String,
+                                          param: String, value: Float, unit: String,
+                                          mode: "duplicate_applyback",
+                                          project_expected_path: String }
+                  insert_verified   -> { track: Int, insert: Int,
+                                         plugin: "Gain"|"Channel EQ"|"Compressor",
+                                         mode: "duplicate_applyback",
+                                         project_expected_path: String }
+
+                Verified writes return State A only after AX readback matches.
+                """
+
         case "system":
             return """
                 logic_system commands:
@@ -436,7 +472,7 @@ struct SystemDispatcher {
                   refresh_cache     -> {} — Force AX re-poll
                   help              -> { category: String } — Param docs per category
 
-                Categories: transport, tracks, mixer, midi, edit, navigate, project, system
+                Categories: transport, tracks, mixer, midi, edit, navigate, project, audio, plugins, system
 
                 Read health via resource: logic://system/health
 
