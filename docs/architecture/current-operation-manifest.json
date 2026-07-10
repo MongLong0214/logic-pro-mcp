@@ -1,0 +1,365 @@
+{
+  "generated_at": "2026-07-10T15:21:34Z",
+  "source_commit": "95ba1ea25af53ec7306d84369e9b8f50b68ecf10",
+  "tools": {
+    "logic_transport": {
+      "commands": [
+        "play",
+        "stop",
+        "record",
+        "pause",
+        "rewind",
+        "fast_forward",
+        "toggle_cycle",
+        "toggle_metronome",
+        "set_tempo",
+        "goto_position",
+        "set_cycle_range",
+        "toggle_count_in",
+        "toggle_autopunch"
+      ],
+      "mutating": [
+        "play",
+        "stop",
+        "record",
+        "pause",
+        "rewind",
+        "fast_forward",
+        "toggle_cycle",
+        "toggle_metronome",
+        "set_tempo",
+        "goto_position",
+        "set_cycle_range",
+        "toggle_count_in",
+        "toggle_autopunch"
+      ],
+      "deadline_seconds": {
+        "play": 25,
+        "stop": 25,
+        "record": 25,
+        "pause": 25,
+        "rewind": 25,
+        "fast_forward": 25,
+        "toggle_cycle": 25,
+        "toggle_metronome": 25,
+        "set_tempo": 25,
+        "goto_position": 25,
+        "set_cycle_range": 25,
+        "toggle_count_in": 25,
+        "toggle_autopunch": 25
+      }
+    },
+    "logic_tracks": {
+      "commands": [
+        "select",
+        "create_audio",
+        "create_instrument",
+        "create_drummer",
+        "create_external_midi",
+        "delete",
+        "duplicate",
+        "rename",
+        "mute",
+        "solo",
+        "arm",
+        "arm_only",
+        "record_sequence",
+        "set_automation",
+        "set_instrument",
+        "list_library",
+        "scan_library",
+        "resolve_path",
+        "scan_plugin_presets"
+      ],
+      "mutating": [
+        "select",
+        "create_audio",
+        "create_instrument",
+        "create_drummer",
+        "create_external_midi",
+        "delete",
+        "duplicate",
+        "rename",
+        "mute",
+        "solo",
+        "arm",
+        "arm_only",
+        "record_sequence",
+        "set_automation",
+        "set_instrument"
+      ],
+      "deadline_seconds": {
+        "select": 25,
+        "create_audio": 25,
+        "create_instrument": 25,
+        "create_drummer": 25,
+        "create_external_midi": 25,
+        "delete": 25,
+        "duplicate": 25,
+        "rename": 25,
+        "mute": 25,
+        "solo": 25,
+        "arm": 25,
+        "arm_only": 25,
+        "record_sequence": 300,
+        "set_automation": 25,
+        "set_instrument": 90,
+        "list_library": 300,
+        "scan_library": 300,
+        "resolve_path": 25,
+        "scan_plugin_presets": 300
+      }
+    },
+    "logic_mixer": {
+      "commands": [
+        "set_volume",
+        "set_pan",
+        "set_master_volume",
+        "set_plugin_param",
+        "insert_plugin"
+      ],
+      "mutating": [
+        "set_volume",
+        "set_pan",
+        "set_master_volume",
+        "set_plugin_param",
+        "insert_plugin"
+      ],
+      "deadline_seconds": {
+        "set_volume": 25,
+        "set_pan": 25,
+        "set_master_volume": 25,
+        "set_plugin_param": 25,
+        "insert_plugin": 25
+      }
+    },
+    "logic_midi": {
+      "commands": [
+        "send_note",
+        "send_chord",
+        "send_cc",
+        "send_program_change",
+        "send_pitch_bend",
+        "send_aftertouch",
+        "send_sysex",
+        "play_sequence",
+        "import_file",
+        "list_ports",
+        "create_virtual_port",
+        "step_input",
+        "mmc_play",
+        "mmc_stop",
+        "mmc_record",
+        "mmc_locate"
+      ],
+      "mutating": [
+        "send_note",
+        "send_chord",
+        "send_cc",
+        "send_program_change",
+        "send_pitch_bend",
+        "send_aftertouch",
+        "send_sysex",
+        "play_sequence",
+        "import_file",
+        "create_virtual_port",
+        "step_input",
+        "mmc_play",
+        "mmc_stop",
+        "mmc_record",
+        "mmc_locate"
+      ],
+      "deadline_seconds": {
+        "send_note": 25,
+        "send_chord": 25,
+        "send_cc": 25,
+        "send_program_change": 25,
+        "send_pitch_bend": 25,
+        "send_aftertouch": 25,
+        "send_sysex": 25,
+        "play_sequence": 90,
+        "import_file": 300,
+        "list_ports": 25,
+        "create_virtual_port": 25,
+        "step_input": 25,
+        "mmc_play": 25,
+        "mmc_stop": 25,
+        "mmc_record": 25,
+        "mmc_locate": 25
+      }
+    },
+    "logic_edit": {
+      "commands": [
+        "undo",
+        "redo",
+        "cut",
+        "copy",
+        "paste",
+        "delete",
+        "select_all",
+        "split",
+        "join",
+        "quantize",
+        "bounce_in_place",
+        "normalize",
+        "duplicate",
+        "toggle_step_input"
+      ],
+      "mutating": [
+        "undo",
+        "redo",
+        "cut",
+        "copy",
+        "paste",
+        "delete",
+        "select_all",
+        "split",
+        "join",
+        "quantize",
+        "bounce_in_place",
+        "normalize",
+        "duplicate",
+        "toggle_step_input"
+      ],
+      "deadline_seconds": {
+        "undo": 25,
+        "redo": 25,
+        "cut": 25,
+        "copy": 25,
+        "paste": 25,
+        "delete": 25,
+        "select_all": 25,
+        "split": 25,
+        "join": 25,
+        "quantize": 25,
+        "bounce_in_place": 25,
+        "normalize": 25,
+        "duplicate": 25,
+        "toggle_step_input": 25
+      }
+    },
+    "logic_navigate": {
+      "commands": [
+        "goto_bar",
+        "goto_marker",
+        "create_marker",
+        "delete_marker",
+        "rename_marker",
+        "zoom_to_fit",
+        "set_zoom",
+        "toggle_view"
+      ],
+      "mutating": [
+        "goto_bar",
+        "goto_marker",
+        "create_marker",
+        "delete_marker",
+        "rename_marker",
+        "zoom_to_fit",
+        "set_zoom",
+        "toggle_view"
+      ],
+      "deadline_seconds": {
+        "goto_bar": 25,
+        "goto_marker": 25,
+        "create_marker": 25,
+        "delete_marker": 25,
+        "rename_marker": 25,
+        "zoom_to_fit": 25,
+        "set_zoom": 25,
+        "toggle_view": 25
+      }
+    },
+    "logic_project": {
+      "commands": [
+        "new",
+        "open",
+        "save",
+        "save_as",
+        "close",
+        "bounce",
+        "is_running",
+        "launch",
+        "quit",
+        "get_regions",
+        "export_plan",
+        "export_run",
+        "export_resume",
+        "audit",
+        "cleanup_plan",
+        "cleanup_apply"
+      ],
+      "mutating": [
+        "new",
+        "open",
+        "save",
+        "save_as",
+        "close",
+        "bounce",
+        "launch",
+        "quit",
+        "export_run",
+        "export_resume",
+        "cleanup_apply"
+      ],
+      "deadline_seconds": {
+        "new": 90,
+        "open": 300,
+        "save": 90,
+        "save_as": 300,
+        "close": 90,
+        "bounce": 300,
+        "is_running": 25,
+        "launch": 25,
+        "quit": 90,
+        "get_regions": 25,
+        "export_plan": 25,
+        "export_run": 300,
+        "export_resume": 300,
+        "audit": 25,
+        "cleanup_plan": 25,
+        "cleanup_apply": 90
+      }
+    },
+    "logic_audio": {
+      "commands": [
+        "analyze_file"
+      ],
+      "mutating": [],
+      "deadline_seconds": {
+        "analyze_file": 25
+      }
+    },
+    "logic_system": {
+      "commands": [
+        "health",
+        "permissions",
+        "refresh_cache",
+        "help"
+      ],
+      "mutating": [],
+      "deadline_seconds": {
+        "health": 25,
+        "permissions": 25,
+        "refresh_cache": 25,
+        "help": 25
+      }
+    },
+    "logic_plugins": {
+      "commands": [
+        "get_inventory",
+        "set_param_verified",
+        "insert_verified"
+      ],
+      "mutating": [
+        "set_param_verified",
+        "insert_verified"
+      ],
+      "deadline_seconds": {
+        "get_inventory": 25,
+        "set_param_verified": 90,
+        "insert_verified": 90
+      }
+    }
+  }
+}
