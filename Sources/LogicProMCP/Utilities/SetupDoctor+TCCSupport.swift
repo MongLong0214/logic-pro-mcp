@@ -1,6 +1,24 @@
 import Foundation
 
 extension SetupDoctor {
+    private static let relevantTCCBundleIDs: Set<String> = [
+        "com.anthropic.claudefordesktop",
+        "com.exafunction.windsurf",
+        "com.microsoft.vscode",
+        "com.microsoft.vscodeinsiders",
+        "com.todesktop.230313mzl4w4u92",
+        "dev.zed.zed",
+    ]
+
+    private static let relevantTCCAppNames: Set<String> = [
+        "claude desktop",
+        "cursor",
+        "visual studio code",
+        "vs code",
+        "windsurf",
+        "zed",
+    ]
+
     static func productionTCCCrossContextProbe() -> TCCCrossContextProbe {
         guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sqlite3") else {
             return .skipped(reason: .tccQueryUnavailable)
@@ -99,10 +117,19 @@ extension SetupDoctor {
 
 
     private static func isRelevantTCCPrincipal(_ client: String) -> Bool {
-        client.localizedCaseInsensitiveContains("claude")
-            || client.localizedCaseInsensitiveContains("terminal")
-            || client.localizedCaseInsensitiveContains("iterm")
-            || client.localizedCaseInsensitiveContains("LogicProMCP")
+        let normalizedClient = client.lowercased()
+        if relevantTCCBundleIDs.contains(normalizedClient) { return true }
+
+        let basename = client.contains("/") ? URL(fileURLWithPath: client).lastPathComponent : client
+        let normalizedName = basename.lowercased().hasSuffix(".app")
+            ? String(basename.dropLast(4)).lowercased()
+            : basename.lowercased()
+        if relevantTCCAppNames.contains(normalizedName) { return true }
+
+        return normalizedClient.contains("claude")
+            || normalizedClient.contains("terminal")
+            || normalizedClient.contains("iterm")
+            || normalizedClient.contains("logicpromcp")
     }
 
 

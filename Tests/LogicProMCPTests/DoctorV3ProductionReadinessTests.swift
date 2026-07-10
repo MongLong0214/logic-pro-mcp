@@ -237,6 +237,45 @@ private func doctorV3Check(_ report: SetupDoctor.Report, _ id: String) throws ->
     #expect(result == .denied("service=appleevents:logic10;principal_hint=Claude.app;state=denied"))
 }
 
+@Test func testDoctorV3TCCRecognizesAgentAndEditorPrincipals() {
+    let cases: [(client: String, principalHint: String)] = [
+        ("/Users/example/Applications/Cursor.app", "Cursor.app"),
+        ("com.todesktop.230313mzl4w4u92", "com.todesktop.230313mzl4w4u92"),
+        ("/Applications/Visual Studio Code.app", "Visual Studio Code.app"),
+        ("com.microsoft.VSCode", "com.microsoft.VSCode"),
+        ("com.microsoft.VSCodeInsiders", "com.microsoft.VSCodeInsiders"),
+        ("/Applications/Windsurf.app", "Windsurf.app"),
+        ("com.exafunction.windsurf", "com.exafunction.windsurf"),
+        ("/Applications/Zed.app", "Zed.app"),
+        ("dev.zed.Zed", "dev.zed.Zed"),
+        ("/Applications/Claude Desktop.app", "Claude Desktop.app"),
+        ("com.anthropic.claudefordesktop", "com.anthropic.claudefordesktop"),
+    ]
+    let rows = cases.map {
+        SetupDoctor.TCCRow(
+            service: "kTCCServiceAccessibility",
+            client: $0.client,
+            authValue: 2,
+            indirectObjectIdentifier: ""
+        )
+    } + [
+        SetupDoctor.TCCRow(
+            service: "kTCCServiceAccessibility",
+            client: "com.example.authorized",
+            authValue: 2,
+            indirectObjectIdentifier: ""
+        ),
+    ]
+
+    let findings = SetupDoctor.tccFindings(rows)
+    #expect(findings.count == cases.count)
+    for item in cases {
+        #expect(findings.contains("service=accessibility;principal_hint=\(item.principalHint);state=granted"))
+    }
+    #expect(findings.allSatisfy { !$0.contains("/Users/example") })
+    #expect(findings.allSatisfy { !$0.contains("authorized") })
+}
+
 @Test func testDoctorV3TCCNoGrantDoesNotPass() {
     let unknown = SetupDoctor.TCCRow(
         service: "kTCCServicePostEvent",
