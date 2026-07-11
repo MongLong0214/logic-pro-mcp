@@ -44,4 +44,8 @@ enum FeatureFlags: Sendable {
     static var adr008RoutingGraph: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR008_ROUTING_GRAPH"] == "1"
     }
+
+    static var adr009PluginCapabilities: Bool {
+        ProcessInfo.processInfo.environment["LOGIC_MCP_ADR009_PLUGIN_CAPABILITIES"] == "1"
+    }
 }
