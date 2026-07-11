@@ -54,7 +54,8 @@ struct OperationRegistryTests {
 
     private static let smallToolCount = 8 // logic_audio(1) + logic_system(4) + logic_plugins(3)
     private static let expectedRegistryCount =
-        commands.count + mixerCommands.count + navigateCommands.count + smallToolCount + editCommands.count
+        commands.count + mixerCommands.count + navigateCommands.count + smallToolCount
+            + editCommands.count + projectCommands.count
 
     private func withRegistryFlag(_ value: String?, body: () -> Void) {
         let key = "LOGIC_MCP_ADR003_OPERATION_REGISTRY"
@@ -555,9 +556,9 @@ struct OperationRegistryTests {
         #expect(editSpecs.count == Self.editCommands.count)
         #expect(Set(editSpecs.map(\.command)) == Set(Self.editCommands.map(\.command)))
         #expect(Set(editSpecs.map(\.id.rawValue)) == Set(Self.editCommands.map(\.id)))
-        #expect(OperationRegistry.specs.count == 48)
-        #expect(Set(OperationRegistry.specs.map(\.id)).count == 48)
-        #expect(Set(OperationRegistry.specs.map { "\($0.tool.rawValue):\($0.command)" }).count == 48)
+        #expect(OperationRegistry.specs.count == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map(\.id)).count == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map { "\($0.tool.rawValue):\($0.command)" }).count == Self.expectedRegistryCount)
         #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
         #expect(OperationRegistry.validationErrors().isEmpty)
 
@@ -618,6 +619,158 @@ struct OperationRegistryTests {
             }
             #expect(!LogicProServer.isMutatingCommand(tool: "logic_edit", command: "play"))
             #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_edit", command: "play") == 25)
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
+        }
+    }
+
+    private static let projectCommands: [(
+        id: String,
+        command: String,
+        mutability: Mutability,
+        deadline: DeadlineClass,
+        verification: VerificationPolicy
+    )] = [
+        ("project.new", "new", .mutating, .medium, .readbackRequired),
+        ("project.open", "open", .mutating, .long, .readbackRequired),
+        ("project.save", "save", .mutating, .medium, .readbackRequired),
+        ("project.save_as", "save_as", .mutating, .long, .readbackRequired),
+        ("project.close", "close", .mutating, .medium, .none),
+        ("project.bounce", "bounce", .mutating, .long, .readbackRequired),
+        ("project.is_running", "is_running", .readOnly, .short, .none),
+        ("project.launch", "launch", .mutating, .short, .readbackRequired),
+        ("project.quit", "quit", .mutating, .medium, .readbackRequired),
+        ("project.get_regions", "get_regions", .readOnly, .short, .none),
+        ("project.export_plan", "export_plan", .readOnly, .short, .none),
+        ("project.export_run", "export_run", .mutating, .long, .readbackRequired),
+        ("project.export_resume", "export_resume", .mutating, .long, .readbackRequired),
+        ("project.audit", "audit", .readOnly, .short, .none),
+        ("project.cleanup_plan", "cleanup_plan", .readOnly, .short, .none),
+        ("project.cleanup_apply", "cleanup_apply", .mutating, .medium, .readbackRequired),
+    ]
+
+    private static func confirmationPolicy(for command: String) -> ConfirmationPolicy {
+        switch DestructivePolicy.level(for: command) {
+        case .l0: .none
+        case .l1: .l1
+        case .l2: .l2
+        case .l3: .l3
+        }
+    }
+
+    @Test("project registry is exact and globally unique")
+    func projectCompletenessAndUniqueness() throws {
+        let tool = try #require(ToolID(rawValue: "logic_project"))
+        let projectSpecs = OperationRegistry.specs.filter { $0.tool == tool }
+        #expect(projectSpecs.count == Self.projectCommands.count)
+        #expect(Set(projectSpecs.map(\.command)) == Set(Self.projectCommands.map(\.command)))
+        #expect(Set(projectSpecs.map(\.id.rawValue)) == Set(Self.projectCommands.map(\.id)))
+        #expect(OperationRegistry.specs.count == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map(\.id)).count == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map { "\($0.tool.rawValue):\($0.command)" }).count == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
+        #expect(OperationRegistry.validationErrors().isEmpty)
+    }
+
+    @Test("all project metadata matches dispatcher and manifest truth")
+    func projectMetadata() throws {
+        let tool = try #require(ToolID(rawValue: "logic_project"))
+
+        for entry in Self.projectCommands {
+            let id = try #require(OperationID(rawValue: entry.id))
+            let spec = try #require(OperationRegistry.spec(tool: tool.rawValue, command: entry.command))
+            #expect(spec.id == id)
+            #expect(spec.tool == tool)
+            #expect(spec.command == entry.command)
+            #expect(spec.mutability == entry.mutability)
+            #expect(spec.target == .none)
+            #expect(spec.verification == entry.verification)
+            #expect(spec.retry == .neverAutomatic)
+            #expect(spec.deadline == entry.deadline)
+            #expect(spec.availability == .defaultInstall)
+            #expect(spec.capability.rawValue == entry.id)
+        }
+    }
+
+    @Test("project mutations exactly match unchanged legacy behavior")
+    func projectLegacyMutationParity() throws {
+        let tool = try #require(ToolID(rawValue: "logic_project"))
+        let expected = Set(Self.projectCommands
+            .filter { $0.mutability == Mutability.`mutating` }
+            .map(\.command))
+        #expect(expected == Set([
+            "new", "open", "save", "save_as", "close", "bounce", "launch", "quit",
+            "export_run", "export_resume", "cleanup_apply",
+        ]))
+        #expect(OperationRegistry.mutatingCommands(tool: tool) == expected)
+        #expect(expected == LogicProServer.mutatingCommandsByTool[tool.rawValue])
+    }
+
+    @Test("project deadlines exactly match legacy short medium and long tiers")
+    func projectDeadlineParity() {
+        #expect(Self.projectCommands.filter { $0.deadline == .short }.count == 6)
+        #expect(Self.projectCommands.filter { $0.deadline == .medium }.count == 5)
+        #expect(Self.projectCommands.filter { $0.deadline == .long }.count == 5)
+
+        for entry in Self.projectCommands {
+            #expect(OperationRegistry.deadlineSeconds(tool: "logic_project", command: entry.command)
+                == entry.deadline.seconds)
+        }
+        withRegistryFlag(nil) {
+            for entry in Self.projectCommands {
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: entry.command)
+                    == entry.deadline.seconds)
+            }
+        }
+        withRegistryFlag("1") {
+            for entry in Self.projectCommands {
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: entry.command)
+                    == entry.deadline.seconds)
+            }
+        }
+    }
+
+    @Test("project confirmation metadata cannot drift from DestructivePolicy")
+    func projectConfirmationPolicyParity() throws {
+        for entry in Self.projectCommands {
+            let spec = try #require(OperationRegistry.spec(
+                tool: "logic_project",
+                command: entry.command
+            ))
+            #expect(spec.confirmation == Self.confirmationPolicy(for: entry.command))
+        }
+    }
+
+    @Test("flag off preserves all legacy project decisions")
+    func projectFlagOff() {
+        withRegistryFlag(nil) {
+            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_project"))
+            for entry in Self.projectCommands {
+                #expect(LogicProServer.isMutatingCommand(tool: "logic_project", command: entry.command)
+                    == (entry.mutability == Mutability.`mutating`))
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: entry.command)
+                    == entry.deadline.seconds)
+            }
+        }
+    }
+
+    @Test("project flag gate remains cross-tool isolated with legacy fallbacks")
+    func projectFlagGateAndCrossToolIsolation() {
+        #expect(OperationRegistry.spec(tool: "logic_project", command: "play") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_transport", command: "new") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_audio", command: "open") == nil)
+
+        withRegistryFlag("1") {
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_project"))
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_transport"))
+            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_midi"))
+            for entry in Self.projectCommands {
+                #expect(LogicProServer.isMutatingCommand(tool: "logic_project", command: entry.command)
+                    == (entry.mutability == Mutability.`mutating`))
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: entry.command)
+                    == entry.deadline.seconds)
+            }
+            #expect(!LogicProServer.isMutatingCommand(tool: "logic_project", command: "import_file"))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: "import_file") == 300)
             #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
         }
     }
