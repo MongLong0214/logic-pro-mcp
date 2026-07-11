@@ -52,7 +52,9 @@ struct OperationRegistryTests {
         "rename_marker": .unsupported,
     ]
 
-    private static let expectedRegistryCount = commands.count + mixerCommands.count + navigateCommands.count
+    private static let smallToolCount = 8 // logic_audio(1) + logic_system(4) + logic_plugins(3)
+    private static let expectedRegistryCount =
+        commands.count + mixerCommands.count + navigateCommands.count + smallToolCount
 
     private func withRegistryFlag(_ value: String?, body: () -> Void) {
         let key = "LOGIC_MCP_ADR003_OPERATION_REGISTRY"
@@ -256,7 +258,9 @@ struct OperationRegistryTests {
     func deadlineParity() {
         withRegistryFlag(nil) {
             #expect(FeatureFlags.adr003OperationRegistry == false)
-            for spec in OperationRegistry.specs {
+            for spec in OperationRegistry.specs where [
+                ToolID.logicTransport, .logicMixer, .logicNavigate,
+            ].contains(spec.tool) {
                 #expect(spec.deadline.seconds == 25)
                 #expect(OperationRegistry.deadlineSeconds(tool: spec.tool.rawValue, command: spec.command) == 25)
                 #expect(LogicProServer.commandDeadlineSeconds(tool: spec.tool.rawValue, command: spec.command) == 25)
@@ -282,7 +286,9 @@ struct OperationRegistryTests {
     func flagOn() {
         withRegistryFlag("1") {
             #expect(FeatureFlags.adr003OperationRegistry)
-            for spec in OperationRegistry.specs {
+            for spec in OperationRegistry.specs where [
+                ToolID.logicTransport, .logicMixer, .logicNavigate,
+            ].contains(spec.tool) {
                 #expect(LogicProServer.isMutatingCommand(tool: spec.tool.rawValue, command: spec.command))
                 #expect(LogicProServer.commandDeadlineSeconds(tool: spec.tool.rawValue, command: spec.command) == 25)
             }
@@ -375,6 +381,147 @@ struct OperationRegistryTests {
             }
             #expect(!LogicProServer.isMutatingCommand(tool: "logic_navigate", command: "play"))
             #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_navigate", command: "import_file") == 300)
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
+        }
+    }
+
+    private static let smallToolCommands: [(
+        tool: String,
+        id: String,
+        command: String,
+        mutability: Mutability,
+        deadline: DeadlineClass,
+        verification: VerificationPolicy
+    )] = [
+        ("logic_audio", "audio.analyze_file", "analyze_file", .readOnly, .short, .none),
+        ("logic_system", "system.health", "health", .readOnly, .short, .none),
+        ("logic_system", "system.permissions", "permissions", .readOnly, .short, .none),
+        ("logic_system", "system.refresh_cache", "refresh_cache", .readOnly, .short, .none),
+        ("logic_system", "system.help", "help", .readOnly, .short, .none),
+        ("logic_plugins", "plugins.get_inventory", "get_inventory", .readOnly, .short, .none),
+        ("logic_plugins", "plugins.set_param_verified", "set_param_verified", .mutating, .medium, .readbackRequired),
+        ("logic_plugins", "plugins.insert_verified", "insert_verified", .mutating, .medium, .readbackRequired),
+    ]
+
+    @Test("small-tool registries are exact, unique, and isolated")
+    func smallToolCompletenessAndIsolation() throws {
+        #expect(OperationRegistry.specs.count == 34)
+        #expect(Set(OperationRegistry.specs.map(\.id)).count == 34)
+        #expect(Set(OperationRegistry.specs.map { "\($0.tool.rawValue):\($0.command)" }).count == 34)
+        #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
+        #expect(OperationRegistry.validationErrors().isEmpty)
+
+        for toolRawValue in ["logic_audio", "logic_system", "logic_plugins"] {
+            let tool = try #require(ToolID(rawValue: toolRawValue))
+            let expected = Self.smallToolCommands.filter { $0.tool == toolRawValue }
+            let actual = OperationRegistry.specs.filter { $0.tool == tool }
+            #expect(Set(actual.map(\.command)) == Set(expected.map(\.command)))
+            #expect(Set(actual.map(\.id.rawValue)) == Set(expected.map(\.id)))
+        }
+
+        #expect(OperationRegistry.spec(tool: "logic_audio", command: "health") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_system", command: "analyze_file") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_plugins", command: "refresh_cache") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_system", command: "list_recent_traces") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_system", command: "get_trace") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_system", command: "clear_traces") == nil)
+    }
+
+    @Test("all small-tool metadata matches current runtime truth")
+    func smallToolMetadata() throws {
+        for entry in Self.smallToolCommands {
+            let tool = try #require(ToolID(rawValue: entry.tool))
+            let id = try #require(OperationID(rawValue: entry.id))
+            let spec = try #require(OperationRegistry.spec(tool: entry.tool, command: entry.command))
+            #expect(spec.id == id)
+            #expect(spec.tool == tool)
+            #expect(spec.command == entry.command)
+            #expect(spec.mutability == entry.mutability)
+            #expect(spec.confirmation == .none)
+            #expect(spec.target == .none)
+            #expect(spec.verification == entry.verification)
+            #expect(spec.retry == .neverAutomatic)
+            #expect(spec.deadline == entry.deadline)
+            #expect(spec.availability == .defaultInstall)
+            #expect(spec.capability.rawValue == entry.id)
+        }
+    }
+
+    @Test("derived small-tool mutations equal unchanged legacy behavior")
+    func smallToolLegacyMutationParity() throws {
+        for toolRawValue in ["logic_audio", "logic_system", "logic_plugins"] {
+            let tool = try #require(ToolID(rawValue: toolRawValue))
+            let expected = Set(Self.smallToolCommands
+                .filter { $0.tool == toolRawValue && $0.mutability == Mutability.`mutating` }
+                .map(\.command))
+            #expect(OperationRegistry.mutatingCommands(tool: tool) == expected)
+            #expect(expected == (LogicProServer.mutatingCommandsByTool[toolRawValue] ?? []))
+        }
+    }
+
+    @Test("read-only registry entries preserve flag-off and flag-on mutability")
+    func smallToolReadOnlyFlagParity() {
+        let entries = Self.smallToolCommands.filter { $0.mutability == .readOnly }
+
+        withRegistryFlag(nil) {
+            for entry in entries {
+                #expect(!LogicProServer.usesOperationRegistry(tool: entry.tool))
+                #expect(!LogicProServer.isMutatingCommand(tool: entry.tool, command: entry.command))
+            }
+        }
+        withRegistryFlag("1") {
+            for entry in entries {
+                #expect(LogicProServer.usesOperationRegistry(tool: entry.tool))
+                #expect(!LogicProServer.isMutatingCommand(tool: entry.tool, command: entry.command))
+            }
+        }
+    }
+
+    @Test("plugin medium deadlines preserve flag-off and flag-on legacy parity")
+    func pluginMediumDeadlineFlagParity() {
+        let commands = ["set_param_verified", "insert_verified"]
+
+        for command in commands {
+            #expect(OperationRegistry.deadlineSeconds(tool: "logic_plugins", command: command) == 90)
+        }
+        withRegistryFlag(nil) {
+            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_plugins"))
+            for command in commands {
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_plugins", command: command) == 90)
+            }
+        }
+        withRegistryFlag("1") {
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_plugins"))
+            for command in commands {
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_plugins", command: command) == 90)
+            }
+        }
+    }
+
+    @Test("small tools use registry only behind the flag and retain legacy fallbacks")
+    func smallToolFlagGateAndFallbacks() {
+        withRegistryFlag(nil) {
+            for entry in Self.smallToolCommands {
+                #expect(!LogicProServer.usesOperationRegistry(tool: entry.tool))
+                #expect(LogicProServer.isMutatingCommand(tool: entry.tool, command: entry.command)
+                    == (entry.mutability == Mutability.`mutating`))
+                #expect(LogicProServer.commandDeadlineSeconds(tool: entry.tool, command: entry.command)
+                    == entry.deadline.seconds)
+            }
+        }
+        withRegistryFlag("1") {
+            for tool in ["logic_transport", "logic_mixer", "logic_navigate", "logic_audio", "logic_system", "logic_plugins"] {
+                #expect(LogicProServer.usesOperationRegistry(tool: tool))
+            }
+            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_midi"))
+            for entry in Self.smallToolCommands {
+                #expect(LogicProServer.isMutatingCommand(tool: entry.tool, command: entry.command)
+                    == (entry.mutability == Mutability.`mutating`))
+                #expect(LogicProServer.commandDeadlineSeconds(tool: entry.tool, command: entry.command)
+                    == entry.deadline.seconds)
+            }
+            #expect(!LogicProServer.isMutatingCommand(tool: "logic_audio", command: "import_file"))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_audio", command: "import_file") == 300)
             #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
         }
     }

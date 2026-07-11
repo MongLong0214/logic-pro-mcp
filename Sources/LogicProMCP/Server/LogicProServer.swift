@@ -495,9 +495,7 @@ actor LogicProServer {
 
     static func usesOperationRegistry(tool: String) -> Bool {
         FeatureFlags.adr003OperationRegistry
-            && (tool == ToolID.logicTransport.rawValue
-                || tool == ToolID.logicMixer.rawValue
-                || tool == ToolID.logicNavigate.rawValue)
+            && OperationRegistry.registeredToolRawValues.contains(tool)
     }
 
     /// Per-command server-side deadline in seconds. Set far above each
