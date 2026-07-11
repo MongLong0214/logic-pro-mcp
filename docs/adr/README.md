@@ -38,7 +38,7 @@ The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementati
 
 | ADR | Name | Category | Status | GitHub issue |
 | --- | --- | --- | --- | --- |
-| ADR-011 | Full Verified Compressor Control | D | `Proposed` | [#299](https://github.com/MongLong0214/logic-pro-mcp/issues/299) |
+| ADR-011 | Full Verified Compressor Control | D | `In Implementation` | [#299](https://github.com/MongLong0214/logic-pro-mcp/issues/299) |
 | ADR-012 | Spectral Analysis and EQ Recommendation | D | `Proposed` | [#300](https://github.com/MongLong0214/logic-pro-mcp/issues/300) |
 | ADR-013 | Verified Channel EQ Band Control | D | `Proposed` | [#301](https://github.com/MongLong0214/logic-pro-mcp/issues/301) |
 | ADR-014 | Independent MIDI Event Readback | D | `Proposed` | [#302](https://github.com/MongLong0214/logic-pro-mcp/issues/302) |
@@ -117,6 +117,14 @@ Kernel pilots merged to `main`, all behind default-off feature flags (zero runti
 - **Pure canonicalization + verification** — `canonicalize` (velocity-0 note-off normalization, overlapping same-pitch trimming, stable sort, PPQ normalization, tempo map kept separate from note ticks) and `verifyRegion`, which returns **`incompleteCannotVerify` for any snapshot with `complete:false` or `provenance == .none` — an incomplete or non-independent scan can never report a full State-A exact match** — otherwise `exactMatch` or `mismatch(added/removed/changed)`; plus a region diff.
 - 10 deterministic synthetic tests (incomplete-cannot-match, missing-provenance-cannot-match, canonicalization velocity-0/overlap/sort, PPQ-normalization-match, exact + added/removed/changed verification, region diff, provider-gate-no-public-before-qualification, complete-drops-partial-reason, flag-default-off).
 - Deferred (honest scope): the live Event List AX and controlled SMF-export provider implementations, the qualification evidence that would promote a provider to `public`, the project-package format-stability spike, and the MCP surface (`read_selected_region_notes` / `verify_region_against_sequence` / `diff_region_notes`). Those need real Logic and are not claimed here.
+
+### ADR-011 — Full Verified Compressor Control (`In Implementation`)
+- Compressor capability manifest + pure unit/plane/outcome logic only, behind `FeatureFlags.adr011CompressorControl` (default off), with no runtime path (no Compressor UI is driven).
+- **Specializes ADR-009, does not compete with it** — `CompressorCapabilityManifest` describes per-circuit-model parameter availability (Logic circuit types expose different parameter sets) and returns ADR-009 `VerifiedParameterCapability` values (all `experimental`, no evidence); it reuses the ADR-009 registry types rather than defining a second one.
+- **Write-plane honesty** — `CompressorWritePlane` priority (Controls-view AX › MCU/C4 › qualified native adapter › coordinate-only); `canPublicVerifiedWrite` is **false for the coordinate-only plane**, so a blind-coordinate / image-only route can never be claimed as a public verified write.
+- **Pure unit + outcome + saga logic** — physical-unit conversion (dB / ms / ratio / percent, round-trip stable), before/after outcome comparison against requested values within tolerance, and a saga-eligibility gate that is eligible **only** when a complete before-snapshot, a requested-parameter readback, and verified compensation all exist (an incomplete snapshot is never eligible).
+- 7 deterministic synthetic tests (manifest-specializes-ADR-009-by-circuit, coordinate-only-cannot-be-public-write, unit round-trip, outcome tolerance comparison, saga-requires-all-three, complete-drops-partial-reason, flag-default-off).
+- Deferred (honest scope): the live Controls-view AX parameter write/readback, real circuit-model detection, the MCP surface (`get_compressor_state_verified` / `set_compressor_params_verified` / `apply_compressor_plan_verified` / …), and the ADR-012 recommendation + audio-outcome analysis integration. Those need real Logic and are not claimed here.
 
 ### Release qualification
 - Strict live E2E suite (`LOGIC_PRO_MCP_STRICT_LIVE=1`, real Logic Pro, fresh-session bootstrap) is green on `main`.
