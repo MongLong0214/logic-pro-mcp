@@ -40,7 +40,7 @@ The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementati
 | --- | --- | --- | --- | --- |
 | ADR-011 | Full Verified Compressor Control | D | `In Implementation` | [#299](https://github.com/MongLong0214/logic-pro-mcp/issues/299) |
 | ADR-012 | Spectral Analysis and EQ Recommendation | D | `In Implementation` | [#300](https://github.com/MongLong0214/logic-pro-mcp/issues/300) |
-| ADR-013 | Verified Channel EQ Band Control | D | `Proposed` | [#301](https://github.com/MongLong0214/logic-pro-mcp/issues/301) |
+| ADR-013 | Verified Channel EQ Band Control | D | `In Implementation` | [#301](https://github.com/MongLong0214/logic-pro-mcp/issues/301) |
 | ADR-014 | Independent MIDI Event Readback | D | `Proposed` | [#302](https://github.com/MongLong0214/logic-pro-mcp/issues/302) |
 | ADR-015 | Piano Roll Data-level Transform | D | `Proposed` | [#303](https://github.com/MongLong0214/logic-pro-mcp/issues/303) |
 | ADR-016 | Smart Tempo and Tempo-map Control | D | `Proposed` | [#304](https://github.com/MongLong0214/logic-pro-mcp/issues/304) |
@@ -132,6 +132,14 @@ Kernel pilots merged to `main`, all behind default-off feature flags (zero runti
 - **Pure models** — `SpectralAnalysisResult` (bands, resonances, source classification, confidence, `complete`/`partialReason`), an `AnalysisJob` state machine (`queued → decoding → analyzing → completed | failed | cancelled`) that accepts only valid forward transitions (backtracking / skipping → rejected), and a pure `compareSpectra` band-delta comparison.
 - 11 deterministic synthetic tests (low-confidence / unknown-source / incomplete → no-safe-recommendation, high-confidence-resonance → advisory cuts, recommendations-always-advisory-never-applied, job-state forward-only + reject-backtrack/skip, spectra comparison, complete-drops-partial-reason, confidence-in-unit-interval, flag-default-off).
 - Deferred (honest scope): the real FFT / audio-feature extraction from managed artifacts, the async job execution, the MCP surface (`analyze_spectrum` / `compare_spectra` / `recommend_eq` / job control), and any EQ apply-back (ADR-013). Those need real audio and are not claimed here.
+
+### ADR-013 — Verified Channel EQ Band Control (`In Implementation`)
+- 8-band channel-EQ state model + pure band-write preflight only, behind `FeatureFlags.adr013ChannelEQ` (default off), with no runtime path (no EQ is driven).
+- **State model** — `ChannelEQState` (present, 8 `ChannelEQBandState` bands with role / frequency / gain-or-slope / Q, master gain, `complete`/`partialReason`); band role is fixed by census, not by UI label alone; a `present` EQ carries exactly 8 bands and a complete state carries no partial reason.
+- **Write-safety preflight (honesty core)** — `validateBandWrite` returns a list of rejections and performs no write: **`eqAbsent` when the channel has no EQ** (a band write is refused until an explicit `insert_verified` adds the EQ), band-out-of-range (1–8), frequency/gain/Q out-of-range, `staleTarget` on epoch mismatch, and `coordinateOnlyPlaneNotPublic` — the `EQWritePlane` priority is C4 control-surface › qualified AX Controls › coordinate-only, and the **coordinate-only plane can never be a public verified write**.
+- **Saga eligibility** — eligible only when a full 8-band before-snapshot (present + complete) and a verified restore both exist; an absent or incomplete snapshot is never eligible. Plus a pure before/after band-parameter comparison.
+- 9 deterministic synthetic tests (absent-EQ-rejects-band-write, coordinate-only-never-public, band/parameter ranges fail closed, stale-epoch-rejects, valid-write-passes-preflight, saga-requires-full-snapshot+restore, comparison, 8-band/complete invariants, flag-default-off).
+- Deferred (honest scope): the Mackie C4 control-surface adapter, the qualified AX Controls-view write/readback, the Doctor `verified_channel_eq` capability check, the MCP surface (`get_channel_eq_state_verified` / `set_channel_eq_band_verified` / …), and applying ADR-012 recommendations. Those need real Logic and are not claimed here.
 
 ### Release qualification
 - Strict live E2E suite (`LOGIC_PRO_MCP_STRICT_LIVE=1`, real Logic Pro, fresh-session bootstrap) is green on `main`.
