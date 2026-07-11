@@ -6,7 +6,7 @@ struct TrackDispatcher {
 
     static let tool = Tool(
         name: "logic_tracks",
-        description: "Track actions in Logic Pro. Commands: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets. Params: select -> { index: Int } or { name: String }; rename/mute/solo/arm/arm_only/set_automation/set_instrument ALL require explicit { index: Int (≥0) }; mute/solo/arm -> also { enabled: Bool }; arm_only disarms all others + arms target, returns error on partial disarm failure; record_sequence -> { bar?: Int (default 1), notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\" (BREAKING since v3.1.6: optional `ch` field is 1-based, range 1..16 — pre-v3.1.6 was 0-based; whole-parse-fail on any invalid segment; SMF end <= 3,600,000 ms), tempo?: Float } SMF-import path: generates a Standard MIDI File server-side, forces playhead to bar 1, imports via AX menu — byte-exact timing, creates a new track each call, then verifies the imported region by AX readback. Successful responses include `created_track`, `target_track_index`, `target_track_name`, `region_name`, `start_bar`, `end_bar`, `note_count`, and `verify_source`; structured error JSON distinguishes `import_failure`, `audibility_unverified`, `import_unverified`, `wrong_track_import`, `timing_mismatch`, and `unreadable_readback`. If Logic imports GM Device / External MIDI lanes, record_sequence fails closed instead of promoting region readback to audible success. v3.0.8 REMOVED the internal instrument auto-load: response always carries `\"instrument\":\"not-attempted\"`; callers that want a specific patch must follow up with explicit `set_instrument` on a Software Instrument track. The legacy `instrument_path` param is accepted for wire compat but ignored (surfaces as `\"ignored:<path>\"` in the response) — see CHANGELOG v3.0.8 for why the inline auto-load was unsafe (could load the wrong track's patch, corrupting a pre-existing track); create_* -> {}; delete/duplicate -> { index: Int }; set_automation -> { mode: read|write|touch|latch|trim|off }; set_instrument -> { path: String } or { category: String, preset: String } — path mode preferred and only `resolve_path` results with kind=`leaf` and loadable=true are valid apply candidates; scan_library -> { mode?: \"ax\"|\"disk\"|\"both\" } (default disk — dedupes user and app-bundle Instrument `.patch` candidates with Panel-taxonomy remap; ax is the legacy live Library Panel scan; both returns diff summary); resolve_path -> { path: String } cache-backed read-only classifier returning kind/source/loadable; scan_plugin_presets -> { submenuOpenDelayMs?: Int }.",
+        description: "Track actions in Logic Pro. Commands: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets. Params: select -> { index: Int } or { name: String }; rename -> { name: String, index: Int (≥0) } or, when LOGIC_MCP_ADR002_TARGET_REF=1, { name: String, target_ref: String, index?: Int }; when the flag is off target_ref is ignored and index remains required; mute/solo/arm/arm_only/set_automation/set_instrument ALL require explicit { index: Int (≥0) }; mute/solo/arm -> also { enabled: Bool }; arm_only disarms all others + arms target, returns error on partial disarm failure; record_sequence -> { bar?: Int (default 1), notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\" (BREAKING since v3.1.6: optional `ch` field is 1-based, range 1..16 — pre-v3.1.6 was 0-based; whole-parse-fail on any invalid segment; SMF end <= 3,600,000 ms), tempo?: Float } SMF-import path: generates a Standard MIDI File server-side, forces playhead to bar 1, imports via AX menu — byte-exact timing, creates a new track each call, then verifies the imported region by AX readback. Successful responses include `created_track`, `target_track_index`, `target_track_name`, `region_name`, `start_bar`, `end_bar`, `note_count`, and `verify_source`; structured error JSON distinguishes `import_failure`, `audibility_unverified`, `import_unverified`, `wrong_track_import`, `timing_mismatch`, and `unreadable_readback`. If Logic imports GM Device / External MIDI lanes, record_sequence fails closed instead of promoting region readback to audible success. v3.0.8 REMOVED the internal instrument auto-load: response always carries `\"instrument\":\"not-attempted\"`; callers that want a specific patch must follow up with explicit `set_instrument` on a Software Instrument track. The legacy `instrument_path` param is accepted for wire compat but ignored (surfaces as `\"ignored:<path>\"` in the response) — see CHANGELOG v3.0.8 for why the inline auto-load was unsafe (could load the wrong track's patch, corrupting a pre-existing track); create_* -> {}; delete/duplicate -> { index: Int }; set_automation -> { mode: read|write|touch|latch|trim|off }; set_instrument -> { path: String } or { category: String, preset: String } — path mode preferred and only `resolve_path` results with kind=`leaf` and loadable=true are valid apply candidates; scan_library -> { mode?: \"ax\"|\"disk\"|\"both\" } (default disk — dedupes user and app-bundle Instrument `.patch` candidates with Panel-taxonomy remap; ax is the legacy live Library Panel scan; both returns diff summary); resolve_path -> { path: String } cache-backed read-only classifier returning kind/source/loadable; scan_plugin_presets -> { submenuOpenDelayMs?: Int }.",
         inputSchema: commandParamsToolSchema(commandDescription: "Track command to execute")
     )
 
@@ -20,6 +20,7 @@ struct TrackDispatcher {
         params: [String: Value],
         router: ChannelRouter,
         cache: StateCache,
+        targetRegistry: TargetRegistry? = nil,
         dialogPresent: @escaping @Sendable () -> Bool = { false }
     ) async -> CallTool.Result {
         if let operation = modalGuardedTrackOperation(for: command), dialogPresent() {
@@ -78,6 +79,9 @@ struct TrackDispatcher {
             if result.isSuccess, !channelSuccessIsVerified(result) {
                 return toolTextResult(result.message, isError: true)
             }
+            if FeatureFlags.adr002TargetRef, result.isSuccess {
+                await targetRegistry?.bumpTopologyGeneration()
+            }
             return toolTextResult(result)
 
         case "delete":
@@ -116,6 +120,9 @@ struct TrackDispatcher {
                 )
             }
             let result = await router.route(operation: "track.delete")
+            if FeatureFlags.adr002TargetRef, result.isSuccess {
+                await targetRegistry?.bumpTopologyGeneration()
+            }
             return toolTextResult(result)
 
         case "duplicate":
@@ -153,14 +160,53 @@ struct TrackDispatcher {
                 )
             }
             let result = await router.route(operation: "track.duplicate")
+            if FeatureFlags.adr002TargetRef, result.isSuccess {
+                await targetRegistry?.bumpTopologyGeneration()
+            }
             return toolTextResult(result)
 
         case "rename":
-            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
-                return toolInvalidParamsResult(
-                    "rename requires explicit 'index' (Int ≥ 0)",
-                    extras: ["operation": "track.rename"]
-                )
+            let index: Int
+            let resolvedReference: TargetReference?
+            if FeatureFlags.adr002TargetRef, params["target_ref"] != nil {
+                let rawReference = params["target_ref"]?.stringValue?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let rawReference,
+                      !rawReference.isEmpty,
+                      let targetRegistry,
+                      let binding = await targetRegistry.resolve(TargetReference(rawValue: rawReference)),
+                      binding.kind == .track
+                else {
+                    return staleTargetReferenceResult(rawReference)
+                }
+
+                if params["index"] != nil || params["track"] != nil {
+                    guard let requestedIndex = intParamOrNil(params, "index", "track"),
+                          requestedIndex >= 0,
+                          requestedIndex == binding.descriptor.trackIndex
+                    else {
+                        return staleTargetReferenceResult(rawReference)
+                    }
+                }
+
+                let tracks = await cache.getTracks()
+                guard let track = tracks.first(where: { $0.id == binding.descriptor.trackIndex }),
+                      TargetDescriptor(trackIndex: track.id, trackName: track.name).fingerprint
+                        == binding.observedFingerprint
+                else {
+                    return staleTargetReferenceResult(rawReference)
+                }
+                index = binding.descriptor.trackIndex
+                resolvedReference = binding.reference
+            } else {
+                guard let requestedIndex = intParamOrNil(params, "index", "track"), requestedIndex >= 0 else {
+                    return toolInvalidParamsResult(
+                        "rename requires explicit 'index' (Int ≥ 0)",
+                        extras: ["operation": "track.rename"]
+                    )
+                }
+                index = requestedIndex
+                resolvedReference = nil
             }
             let name = stringParam(params, "name")
             guard !name.isEmpty else {
@@ -192,6 +238,16 @@ struct TrackDispatcher {
                verified == false {
                 return toolTextResult(result.message, isError: true)
             }
+            if let resolvedReference {
+                if var payload = decodedJSONObject(result.message) {
+                    payload["track_ref"] = resolvedReference.rawValue
+                    return toolTextResult(HonestContract.jsonString(payload))
+                }
+                return toolTextResult(HonestContract.encodeStateA(extras: [
+                    "operation": "track.rename",
+                    "track_ref": resolvedReference.rawValue,
+                ]))
+            }
             return toolTextResult(result)
 
         case "mute":
@@ -204,7 +260,11 @@ struct TrackDispatcher {
             return await handleToggle(command: "arm", operation: "track.set_arm", params: params, router: router)
 
         case "record_sequence":
-            return await handleRecordSequenceSMF(params: params, router: router, cache: cache)
+            let result = await handleRecordSequenceSMF(params: params, router: router, cache: cache)
+            if FeatureFlags.adr002TargetRef, result.isError != true {
+                await targetRegistry?.bumpTopologyGeneration()
+            }
+            return result
 
         case "arm_only":
             guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
@@ -484,6 +544,17 @@ struct TrackDispatcher {
             return toolTextResult(result.message, isError: true)
         }
         return toolTextResult(result)
+    }
+
+    private static func staleTargetReferenceResult(_ rawReference: String?) -> CallTool.Result {
+        toolStateCResult(
+            .staleTargetReference,
+            hint: "target_ref is stale or does not identify the requested current track",
+            extras: [
+                "operation": "track.rename",
+                "target_ref": rawReference ?? "",
+            ]
+        )
     }
 
     private static func modalGuardedTrackOperation(for command: String) -> String? {
