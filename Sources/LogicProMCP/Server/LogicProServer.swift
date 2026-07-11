@@ -499,7 +499,7 @@ actor LogicProServer {
     /// that would otherwise hang the stdio loop is bounded.
     static func commandDeadlineSeconds(tool: String, command: String) -> Double {
         if FeatureFlags.adr003OperationRegistry,
-           tool == ToolID.logicTransport.rawValue,
+           (tool == ToolID.logicTransport.rawValue || tool == ToolID.logicMixer.rawValue),
            let seconds = OperationRegistry.deadlineSeconds(tool: tool, command: command) {
             return seconds
         }
@@ -743,7 +743,7 @@ actor LogicProServer {
 
     static func isMutatingCommand(tool: String, command: String) -> Bool {
         if FeatureFlags.adr003OperationRegistry,
-           tool == ToolID.logicTransport.rawValue,
+           (tool == ToolID.logicTransport.rawValue || tool == ToolID.logicMixer.rawValue),
            let spec = OperationRegistry.spec(tool: tool, command: command) {
             return spec.mutability == Mutability.`mutating`
         }

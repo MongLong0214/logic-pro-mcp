@@ -24,6 +24,14 @@ struct OperationRegistryTests {
         "play", "stop", "record", "pause", "toggle_metronome", "goto_position",
     ]
 
+    private static let mixerCommands: [(OperationID, String)] = [
+        (.mixerSetVolume, "set_volume"),
+        (.mixerSetPan, "set_pan"),
+        (.mixerSetMasterVolume, "set_master_volume"),
+        (.mixerSetPluginParam, "set_plugin_param"),
+        (.mixerInsertPlugin, "insert_plugin"),
+    ]
+
     private func withRegistryFlag(_ value: String?, body: () -> Void) {
         let key = "LOGIC_MCP_ADR003_OPERATION_REGISTRY"
         let previous = ProcessInfo.processInfo.environment[key]
@@ -44,8 +52,9 @@ struct OperationRegistryTests {
 
     @Test("transport registry is exact, unique, and valid")
     func completenessAndValidation() {
-        #expect(OperationRegistry.specs.count == 13)
-        #expect(Set(OperationRegistry.specs.map(\.command)).count == 13)
+        let transportSpecs = OperationRegistry.specs.filter { $0.tool == .logicTransport }
+        #expect(transportSpecs.count == 13)
+        #expect(Set(transportSpecs.map(\.command)).count == 13)
         #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
         #expect(DeadlineClass.short.seconds == 25)
         #expect(DeadlineClass.medium.seconds == 90)
@@ -102,7 +111,10 @@ struct OperationRegistryTests {
 
     @Test("all transport metadata matches current runtime truth")
     func metadata() throws {
-        #expect(Set(Self.commands.map(\.1)) == Set(OperationRegistry.specs.map(\.command)))
+        let transportCommands = OperationRegistry.specs
+            .filter { $0.tool == .logicTransport }
+            .map(\.command)
+        #expect(Set(Self.commands.map(\.1)) == Set(transportCommands))
 
         for (id, command) in Self.commands {
             let spec = try #require(OperationRegistry.spec(tool: ToolID.logicTransport.rawValue, command: command))
@@ -127,7 +139,95 @@ struct OperationRegistryTests {
 
     @Test("derived mutating commands equal the unchanged legacy transport set")
     func mutatingParity() {
-        #expect(OperationRegistry.mutatingCommands == LogicProServer.mutatingCommandsByTool["logic_transport"])
+        #expect(OperationRegistry.mutatingCommands(tool: .logicTransport) == LogicProServer.mutatingCommandsByTool["logic_transport"])
+    }
+
+    @Test("mixer registry is exact, unique, and isolated")
+    func mixerCompletenessAndIsolation() {
+        #expect(OperationRegistry.specs.count == 18)
+        #expect(Set(OperationRegistry.specs.map(\.id)).count == 18)
+        #expect(Set(OperationRegistry.specs.map { "\($0.tool.rawValue):\($0.command)" }).count == 18)
+        #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
+        #expect(OperationRegistry.validationErrors().isEmpty)
+        #expect(OperationRegistry.spec(tool: ToolID.logicMixer.rawValue, command: "play") == nil)
+        #expect(OperationRegistry.spec(tool: ToolID.logicTransport.rawValue, command: "set_volume") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_midi", command: "set_volume") == nil)
+        #expect(OperationRegistry.spec(tool: ToolID.logicMixer.rawValue, command: "unknown") == nil)
+    }
+
+    @Test("all mixer metadata matches current runtime truth")
+    func mixerMetadata() throws {
+        let mixerSpecs = OperationRegistry.specs.filter { $0.tool == .logicMixer }
+        #expect(Set(Self.mixerCommands.map(\.1)) == Set(mixerSpecs.map(\.command)))
+
+        for (id, command) in Self.mixerCommands {
+            let spec = try #require(OperationRegistry.spec(tool: ToolID.logicMixer.rawValue, command: command))
+            #expect(spec.id == id)
+            #expect(spec.tool == .logicMixer)
+            #expect(spec.command == command)
+            #expect(spec.mutability == Mutability.`mutating`)
+            #expect(spec.confirmation == (command == "insert_plugin" ? .l2 : .none))
+            #expect(spec.target == .none)
+            #expect(spec.verification == .readbackRequired)
+            #expect(spec.retry == .neverAutomatic)
+            #expect(spec.deadline == .short)
+            #expect(spec.availability == .defaultInstall)
+            #expect(spec.capability.rawValue == id.rawValue)
+        }
+    }
+
+    @Test("derived mixer mutations and deadlines equal unchanged legacy behavior")
+    func mixerLegacyParity() {
+        #expect(OperationRegistry.mutatingCommands(tool: .logicMixer) == LogicProServer.mutatingCommandsByTool["logic_mixer"])
+        for (_, command) in Self.mixerCommands {
+            #expect(OperationRegistry.deadlineSeconds(tool: ToolID.logicMixer.rawValue, command: command) == 25)
+        }
+    }
+
+    @Test("validation rejects a mixer command assigned to transport")
+    func mixerWrongToolValidation() throws {
+        var entries = OperationRegistry.specs.map {
+            OperationRegistry.ValidationEntry(
+                operationID: $0.id.rawValue,
+                tool: $0.tool.rawValue,
+                command: $0.command
+            )
+        }
+        let index = try #require(entries.firstIndex { $0.command == "set_volume" })
+        entries[index] = .init(
+            operationID: entries[index].operationID,
+            tool: ToolID.logicTransport.rawValue,
+            command: entries[index].command
+        )
+        #expect(OperationRegistry.validationErrors(for: entries).contains { $0.contains("incorrect tools:") })
+    }
+
+    @Test("flag off uses unchanged legacy mixer decisions")
+    func mixerFlagOff() {
+        withRegistryFlag(nil) {
+            #expect(FeatureFlags.adr003OperationRegistry == false)
+            for (_, command) in Self.mixerCommands {
+                #expect(LogicProServer.mutatingCommandsByTool["logic_mixer"]?.contains(command) == true)
+                #expect(LogicProServer.isMutatingCommand(tool: "logic_mixer", command: command))
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: command) == 25)
+            }
+            #expect(!LogicProServer.isMutatingCommand(tool: "logic_mixer", command: "play"))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: "play") == 25)
+        }
+    }
+
+    @Test("flag on derives mixer decisions and preserves legacy fallbacks")
+    func mixerFlagOn() {
+        withRegistryFlag("1") {
+            #expect(FeatureFlags.adr003OperationRegistry)
+            for (_, command) in Self.mixerCommands {
+                #expect(LogicProServer.isMutatingCommand(tool: "logic_mixer", command: command))
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: command) == 25)
+            }
+            #expect(!LogicProServer.isMutatingCommand(tool: "logic_mixer", command: "play"))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: "import_file") == 300)
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
+        }
     }
 
     @Test("registry deadlines are short and match legacy with the flag unset")

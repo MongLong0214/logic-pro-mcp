@@ -12,10 +12,16 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case transportSetCycleRange = "transport.set_cycle_range"
     case transportToggleCountIn = "transport.toggle_count_in"
     case transportToggleAutopunch = "transport.toggle_autopunch"
+    case mixerSetVolume = "mixer.set_volume"
+    case mixerSetPan = "mixer.set_pan"
+    case mixerSetMasterVolume = "mixer.set_master_volume"
+    case mixerSetPluginParam = "mixer.set_plugin_param"
+    case mixerInsertPlugin = "mixer.insert_plugin"
 }
 
 enum ToolID: String, Sendable, Equatable {
     case logicTransport = "logic_transport"
+    case logicMixer = "logic_mixer"
 }
 
 enum Mutability: Sendable, Equatable {
@@ -98,18 +104,31 @@ enum OperationRegistry {
         let command: String
     }
 
-    private static let allowedOperationIDs: Set<String> = [
-        "transport.play", "transport.stop", "transport.record", "transport.pause",
-        "transport.rewind", "transport.fast_forward", "transport.toggle_cycle",
-        "transport.toggle_metronome", "transport.set_tempo", "transport.goto_position",
-        "transport.set_cycle_range", "transport.toggle_count_in", "transport.toggle_autopunch",
+    private static let allowedOperationIDsByTool: [String: Set<String>] = [
+        ToolID.logicTransport.rawValue: [
+            "transport.play", "transport.stop", "transport.record", "transport.pause",
+            "transport.rewind", "transport.fast_forward", "transport.toggle_cycle",
+            "transport.toggle_metronome", "transport.set_tempo", "transport.goto_position",
+            "transport.set_cycle_range", "transport.toggle_count_in", "transport.toggle_autopunch",
+        ],
+        ToolID.logicMixer.rawValue: [
+            "mixer.set_volume", "mixer.set_pan", "mixer.set_master_volume",
+            "mixer.set_plugin_param", "mixer.insert_plugin",
+        ],
     ]
 
-    private static let allowedCommands: Set<String> = [
-        "play", "stop", "record", "pause", "rewind", "fast_forward", "toggle_cycle",
-        "toggle_metronome", "set_tempo", "goto_position", "set_cycle_range", "toggle_count_in",
-        "toggle_autopunch",
+    private static let allowedCommandsByTool: [String: Set<String>] = [
+        ToolID.logicTransport.rawValue: [
+            "play", "stop", "record", "pause", "rewind", "fast_forward", "toggle_cycle",
+            "toggle_metronome", "set_tempo", "goto_position", "set_cycle_range", "toggle_count_in",
+            "toggle_autopunch",
+        ],
+        ToolID.logicMixer.rawValue: [
+            "set_volume", "set_pan", "set_master_volume", "set_plugin_param", "insert_plugin",
+        ],
     ]
+
+    private static let allowedOperationIDs = Set(allowedOperationIDsByTool.values.flatMap { $0 })
 
     static let specs: [OperationSpec] = ([
         (.transportPlay, "play", .readbackRequired, .defaultInstall),
@@ -139,14 +158,34 @@ enum OperationRegistry {
             availability: entry.3,
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
+    } + ([
+        (.mixerSetVolume, "set_volume", .none),
+        (.mixerSetPan, "set_pan", .none),
+        (.mixerSetMasterVolume, "set_master_volume", .none),
+        (.mixerSetPluginParam, "set_plugin_param", .none),
+        (.mixerInsertPlugin, "insert_plugin", .l2),
+    ] as [(OperationID, String, ConfirmationPolicy)]).map { entry in
+        OperationSpec(
+            id: entry.0,
+            tool: .logicMixer,
+            command: entry.1,
+            mutability: Mutability.`mutating`,
+            confirmation: entry.2,
+            target: .none,
+            verification: .readbackRequired,
+            retry: .neverAutomatic,
+            deadline: .short,
+            availability: .defaultInstall,
+            capability: CapabilityID(rawValue: entry.0.rawValue)
+        )
     }
 
     static func spec(tool: String, command: String) -> OperationSpec? {
         specs.first { $0.tool.rawValue == tool && $0.command == command }
     }
 
-    static var mutatingCommands: Set<String> {
-        Set(specs.filter { $0.mutability == Mutability.`mutating` }.map(\.command))
+    static func mutatingCommands(tool: ToolID) -> Set<String> {
+        Set(specs.filter { $0.tool == tool && $0.mutability == Mutability.`mutating` }.map(\.command))
     }
 
     static func deadlineSeconds(tool: String, command: String) -> Double? {
@@ -173,7 +212,7 @@ enum OperationRegistry {
             errors.append("duplicate operation IDs: \(duplicateIDs.joined(separator: ", "))")
         }
 
-        let duplicateCommands = Dictionary(grouping: entries.map(\.command), by: { $0 })
+        let duplicateCommands = Dictionary(grouping: entries.map { "\($0.tool):\($0.command)" }, by: { $0 })
             .filter { $0.value.count > 1 }
             .keys.sorted()
         if !duplicateCommands.isEmpty {
@@ -190,26 +229,47 @@ enum OperationRegistry {
             errors.append("unexpected operation IDs: \(unexpectedIDs.joined(separator: ", "))")
         }
 
-        let actualCommands = Set(entries.map(\.command))
-        let missingCommands = allowedCommands.subtracting(actualCommands).sorted()
-        if !missingCommands.isEmpty {
-            errors.append("missing commands: \(missingCommands.joined(separator: ", "))")
-        }
-        let unexpectedCommands = actualCommands.subtracting(allowedCommands).sorted()
-        if !unexpectedCommands.isEmpty {
-            errors.append("unexpected commands: \(unexpectedCommands.joined(separator: ", "))")
+        for tool in allowedCommandsByTool.keys.sorted() {
+            let toolEntries = entries.filter { $0.tool == tool }
+            let actualCommands = Set(toolEntries.map(\.command))
+            let allowedCommands = allowedCommandsByTool[tool] ?? []
+            let missingCommands = allowedCommands.subtracting(actualCommands).sorted()
+            if !missingCommands.isEmpty {
+                errors.append("missing commands: \(missingCommands.joined(separator: ", "))")
+            }
+            let unexpectedCommands = actualCommands.subtracting(allowedCommands).sorted()
+            if !unexpectedCommands.isEmpty {
+                errors.append("unexpected commands: \(unexpectedCommands.joined(separator: ", "))")
+            }
         }
 
+        let expectedTools = allowedOperationIDsByTool.reduce(into: [String: String]()) { result, entry in
+            for operationID in entry.value {
+                result[operationID] = entry.key
+            }
+        }
         let incorrectTools = entries
-            .filter { $0.tool != ToolID.logicTransport.rawValue }
+            .filter { entry in
+                guard let expectedTool = expectedTools[entry.operationID] else {
+                    return !allowedOperationIDsByTool.keys.contains(entry.tool)
+                }
+                return entry.tool != expectedTool
+            }
             .map { "\($0.command)=\($0.tool)" }
             .sorted()
         if !incorrectTools.isEmpty {
             errors.append("incorrect tools: \(incorrectTools.joined(separator: ", "))")
         }
 
+        let operationPrefixes = [
+            ToolID.logicTransport.rawValue: "transport",
+            ToolID.logicMixer.rawValue: "mixer",
+        ]
         let mismatches = entries
-            .filter { $0.operationID != "transport.\($0.command)" }
+            .filter { entry in
+                guard let prefix = operationPrefixes[entry.tool] else { return true }
+                return entry.operationID != "\(prefix).\(entry.command)"
+            }
             .map { "\($0.operationID)=\($0.command)" }
             .sorted()
         if !mismatches.isEmpty {
