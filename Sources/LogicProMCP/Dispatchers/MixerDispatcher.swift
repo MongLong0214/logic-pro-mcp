@@ -35,10 +35,13 @@ struct MixerDispatcher {
                     "set_volume 'volume' must be in 0.0..1.0 (got \(volume))"
                 )
             }
-            return await routedTextResult(router, operation: "mixer.set_volume", params: [
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
+            let result = await routedTextResult(router, operation: "mixer.set_volume", params: [
                 "index": String(index),
                 "volume": String(volume),
             ])
+            return await finalizeTrace(result, traceID: traceID)
 
         case "set_pan":
             // RB-1.a — same fail-closed treatment as set_volume.
@@ -57,10 +60,13 @@ struct MixerDispatcher {
                     "set_pan 'value' must be in -1.0..1.0 (got \(pan))"
                 )
             }
-            return await routedTextResult(router, operation: "mixer.set_pan", params: [
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
+            let result = await routedTextResult(router, operation: "mixer.set_pan", params: [
                 "index": String(index),
                 "pan": String(pan),
             ])
+            return await finalizeTrace(result, traceID: traceID)
 
         case "set_send":
             return notExposedCommandResult(
@@ -216,5 +222,65 @@ struct MixerDispatcher {
                 extras: ["operation": "mixer.\(command)"]
             )
         }
+    }
+
+    private static func startTraceIfEnabled(command: String) async -> TraceID? {
+        guard FeatureFlags.adr005OperationTrace,
+              let spec = OperationRegistry.spec(tool: tool.name, command: command) else {
+            return nil
+        }
+        switch spec.id {
+        case .mixerSetVolume, .mixerSetPan:
+            let id = await OperationTraceStore.shared.start(operationID: spec.id.rawValue)
+            await OperationTraceStore.shared.record(id, phase: .requestReceived, attributes: [
+                "operation_id": spec.id.rawValue,
+                "command": command,
+            ])
+            return id
+        default:
+            return nil
+        }
+    }
+
+    private static func recordWriteBoundary(_ traceID: TraceID?) async {
+        guard let traceID else { return }
+        await OperationTraceStore.shared.record(traceID, phase: .writeBoundaryCrossed)
+    }
+
+    private static func finalizeTrace(
+        _ result: CallTool.Result,
+        traceID: TraceID?
+    ) async -> CallTool.Result {
+        guard let traceID else { return result }
+        guard case .text(let raw, _, _) = result.content.first else {
+            await OperationTraceStore.shared.record(
+                traceID,
+                phase: .verificationCompleted,
+                attributes: ["readback_state": result.isError == true ? "C" : "A"]
+            )
+            await OperationTraceStore.shared.record(traceID, phase: .resultEmitted)
+            await OperationTraceStore.shared.complete(traceID)
+            return result
+        }
+
+        let object = decodedJSONObject(raw)
+        var attributes = [
+            "readback_state": object?["state"] as? String
+                ?? (result.isError == true ? "C" : "A"),
+        ]
+        if let errorCode = object?["error"] as? String {
+            attributes["error_code"] = errorCode
+        }
+        await OperationTraceStore.shared.record(
+            traceID,
+            phase: .verificationCompleted,
+            attributes: attributes
+        )
+        await OperationTraceStore.shared.record(traceID, phase: .resultEmitted)
+        await OperationTraceStore.shared.complete(traceID)
+
+        let merged = HonestContract.addExtras(["trace_id": traceID.rawValue], into: raw)
+        guard merged != raw else { return result }
+        return toolTextResult(merged, isError: result.isError == true)
     }
 }

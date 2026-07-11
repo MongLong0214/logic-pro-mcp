@@ -316,3 +316,131 @@ struct OperationTraceTests {
         }
     }
 }
+
+private actor OperationTraceMixerChannel: Channel {
+    nonisolated let id: ChannelID = .accessibility
+    private(set) var executedOperations: [String] = []
+
+    func start() async throws {}
+    func stop() async {}
+
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        executedOperations.append(operation)
+        switch operation {
+        case OperationID.mixerSetVolume.rawValue:
+            return .success(
+                #"{"operation":"mixer.set_volume","state":"A","success":true,"verified":true}"#
+            )
+        case OperationID.mixerSetPan.rawValue:
+            return .success(
+                #"{"operation":"mixer.set_pan","state":"A","success":true,"verified":true}"#
+            )
+        default:
+            return .error("Unexpected mixer operation: \(operation)")
+        }
+    }
+
+    func healthCheck() async -> ChannelHealth {
+        .healthy(detail: "operation trace mixer test")
+    }
+}
+
+extension OperationTraceTests {
+    @Test(arguments: ["set_volume", "set_pan"])
+    func OperationTraceMixerFlagOff(command: String) async {
+        let previous = replaceOperationTraceFlag(with: nil)
+        defer { _ = replaceOperationTraceFlag(with: previous) }
+        await OperationTraceStore.shared.clear()
+
+        let channel = OperationTraceMixerChannel()
+        let router = ChannelRouter()
+        await router.register(channel)
+
+        let result = await MixerDispatcher.handle(
+            command: command,
+            params: command == "set_volume"
+                ? ["track": .int(2), "value": .double(0.5)]
+                : ["track": .int(2), "value": .double(-0.25)],
+            router: router,
+            cache: StateCache()
+        )
+
+        let operationID = command == "set_volume"
+            ? OperationID.mixerSetVolume
+            : OperationID.mixerSetPan
+        let expected = command == "set_volume"
+            ? #"{"operation":"mixer.set_volume","state":"A","success":true,"verified":true}"#
+            : #"{"operation":"mixer.set_pan","state":"A","success":true,"verified":true}"#
+        #expect(sharedToolText(result) == expected)
+        #expect(!expected.contains("trace_id"))
+        #expect(await channel.executedOperations == [operationID.rawValue])
+        #expect(await OperationTraceStore.shared.recent().isEmpty)
+    }
+
+    @Test(arguments: ["set_volume", "set_pan"])
+    func OperationTraceMixerEnabled(command: String) async throws {
+        let previous = replaceOperationTraceFlag(with: "1")
+        defer { _ = replaceOperationTraceFlag(with: previous) }
+        await OperationTraceStore.shared.clear()
+
+        let channel = OperationTraceMixerChannel()
+        let router = ChannelRouter()
+        await router.register(channel)
+
+        let result = await MixerDispatcher.handle(
+            command: command,
+            params: command == "set_volume"
+                ? ["track": .int(2), "value": .double(0.5)]
+                : ["track": .int(2), "value": .double(-0.25)],
+            router: router,
+            cache: StateCache()
+        )
+
+        let operationID = command == "set_volume"
+            ? OperationID.mixerSetVolume
+            : OperationID.mixerSetPan
+        let resultObject = try #require(sharedJSONObject(sharedToolText(result)))
+        let rawID = try #require(resultObject["trace_id"] as? String)
+        let trace = try #require(
+            await OperationTraceStore.shared.trace(TraceID(rawValue: rawID))
+        )
+        #expect(result.isError == false)
+        #expect(trace.operationID == operationID.rawValue)
+        #expect(trace.events.map(\.phase) == [
+            .requestReceived, .writeBoundaryCrossed, .verificationCompleted, .resultEmitted,
+        ])
+        #expect(trace.events[2].attributes["readback_state"] == "A")
+        #expect(trace.completedAt != nil)
+        #expect(await channel.executedOperations == [operationID.rawValue])
+
+        let allowedAttributeKeys: Set<String> = [
+            "operation_id", "command", "target_ref", "project_path_hash",
+            "readback_state", "error_code",
+        ]
+        #expect(trace.events.allSatisfy {
+            Set($0.attributes.keys).isSubset(of: allowedAttributeKeys)
+        })
+    }
+
+    @Test(arguments: ["set_volume", "set_pan"])
+    func OperationTraceMixerInvalidParamsDoNotTrace(command: String) async {
+        let previous = replaceOperationTraceFlag(with: "1")
+        defer { _ = replaceOperationTraceFlag(with: previous) }
+        await OperationTraceStore.shared.clear()
+
+        let channel = OperationTraceMixerChannel()
+        let router = ChannelRouter()
+        await router.register(channel)
+
+        let result = await MixerDispatcher.handle(
+            command: command,
+            params: ["value": .double(0.5)],
+            router: router,
+            cache: StateCache()
+        )
+
+        #expect(result.isError == true)
+        #expect(await channel.executedOperations.isEmpty)
+        #expect(await OperationTraceStore.shared.recent().isEmpty)
+    }
+}
