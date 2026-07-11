@@ -52,4 +52,8 @@ enum FeatureFlags: Sendable {
     static var adr010MidiReadback: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR010_MIDI_READBACK"] == "1"
     }
+
+    static var adr011CompressorControl: Bool {
+        ProcessInfo.processInfo.environment["LOGIC_MCP_ADR011_COMPRESSOR_CONTROL"] == "1"
+    }
 }
