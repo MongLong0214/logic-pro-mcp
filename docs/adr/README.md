@@ -31,7 +31,7 @@ The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementati
 | ADR | Name | Category | Status | GitHub issue |
 | --- | --- | --- | --- | --- |
 | ADR-008 | Verified Mixer Routing Graph | C | `In Implementation` | [#291](https://github.com/MongLong0214/logic-pro-mcp/issues/291) |
-| ADR-009 | Verified Plugin Apply-back Expansion | C | `Proposed` | [#292](https://github.com/MongLong0214/logic-pro-mcp/issues/292) |
+| ADR-009 | Verified Plugin Apply-back Expansion | C | `In Implementation` | [#292](https://github.com/MongLong0214/logic-pro-mcp/issues/292) |
 | ADR-010 | MIDI Note-level Independent Readback Research | C | `Proposed` | [#293](https://github.com/MongLong0214/logic-pro-mcp/issues/293) |
 
 ## Category D — Capability ADRs
@@ -102,6 +102,13 @@ Kernel pilots merged to `main`, all behind default-off feature flags (zero runti
 - **Graph diff** — pure before/after routing comparison (added/removed/changed sends, input/output changes) for a State-A routing diff.
 - 12 deterministic synthetic tests (occupied-slot-no-write, occupied+replace-allowed, stale-epoch-no-write, duplicate-aux-bus-distinguished + name-only-rejects, partial-never-complete, unknown-destination, missing-source/out-of-range, graph diff, Codable round-trip, flag-default-off).
 - Deferred (honest scope): live AX mixer-strip readback (building the graph from real Logic), the popup-driven verified write execution, and live qualification (English/Korean × Desktop/Creator, 32-track fixture). Those need real Logic UI and are not claimed here.
+
+### ADR-009 — Verified Plugin Apply-back Expansion (`In Implementation`)
+- Verified-capability model + registry + pure verification/apply logic only, behind `FeatureFlags.adr009PluginCapabilities` (default off), with no runtime path (no plugin windows are driven).
+- **Honesty core** — `VerifiedParameterCapability` (plugin identity, parameter id, semantic value type + allowed range + tolerance, write/readback method, required view, selector signatures, qualification evidence, lifecycle status) with an `isPubliclyExposable` invariant. The `CapabilityRegistry` seeds candidate parameters (Compressor threshold/ratio/attack/release/makeup, Gain gain/phase-invert, Limiter gain/ceiling/release — Channel EQ deliberately excluded) **all as `experimental` with no evidence**, so `publicCapabilities()` is **empty** — "generic AX control movement is not verified apply-back," and nothing is publicly exposed until live evidence exists.
+- **Pure verification / apply logic** — `verifyReadback` (semantic-value normalization + tolerance → `confirmed` / `mismatch(observed, expected, tolerance)`), `planBatchApply` (all-or-nothing preflight that fails closed on an unsupported parameter or an out-of-range value **before any write**), a `BatchApplyResult` / `BatchApplyOutcome` where a partial application is `complete: false` and **never reports top-level success**, and a `snapshotDiff` for before/after apply-back.
+- 9 deterministic synthetic tests (candidates-experimental + public-surface-empty, public-without-evidence-not-exposable, tolerance confirmed/mismatch, out-of-range-rejected-in-preflight, unsupported-lookup-fails-closed, partial-batch-never-success, snapshot diff, value-type round-trip, flag-default-off).
+- Deferred (honest scope): the live plugin-window verified write/readback, the qualification-evidence collection that would promote any candidate to `public` (A/B proof, idempotency, min/max, closed/open-window starts, wrong track/slot/plugin, en/ko, Desktop/Creator), and the MCP surface (`list_verified_capabilities` / `get_param_verified` / `apply_snapshot_verified` / `diff_snapshot`). Those need real Logic UI and are not claimed here.
 
 ### Release qualification
 - Strict live E2E suite (`LOGIC_PRO_MCP_STRICT_LIVE=1`, real Logic Pro, fresh-session bootstrap) is green on `main`.
