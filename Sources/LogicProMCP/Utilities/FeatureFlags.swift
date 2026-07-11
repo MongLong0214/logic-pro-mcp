@@ -36,4 +36,8 @@ enum FeatureFlags: Sendable {
     static var adr006VersionedCache: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR006_VERSIONED_CACHE"] == "1"
     }
+
+    static var adr007SelectorAtlas: Bool {
+        ProcessInfo.processInfo.environment["LOGIC_MCP_ADR007_SELECTOR_ATLAS"] == "1"
+    }
 }
