@@ -48,4 +48,8 @@ enum FeatureFlags: Sendable {
     static var adr009PluginCapabilities: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR009_PLUGIN_CAPABILITIES"] == "1"
     }
+
+    static var adr010MidiReadback: Bool {
+        ProcessInfo.processInfo.environment["LOGIC_MCP_ADR010_MIDI_READBACK"] == "1"
+    }
 }
