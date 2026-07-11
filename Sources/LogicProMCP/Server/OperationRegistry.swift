@@ -25,12 +25,23 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case navigateZoomToFit = "navigate.zoom_to_fit"
     case navigateSetZoom = "navigate.set_zoom"
     case navigateToggleView = "navigate.toggle_view"
+    case audioAnalyzeFile = "audio.analyze_file"
+    case systemHealth = "system.health"
+    case systemPermissions = "system.permissions"
+    case systemRefreshCache = "system.refresh_cache"
+    case systemHelp = "system.help"
+    case pluginsGetInventory = "plugins.get_inventory"
+    case pluginsSetParamVerified = "plugins.set_param_verified"
+    case pluginsInsertVerified = "plugins.insert_verified"
 }
 
 enum ToolID: String, Sendable, Equatable {
     case logicTransport = "logic_transport"
     case logicMixer = "logic_mixer"
     case logicNavigate = "logic_navigate"
+    case logicAudio = "logic_audio"
+    case logicSystem = "logic_system"
+    case logicPlugins = "logic_plugins"
 }
 
 enum Mutability: Sendable, Equatable {
@@ -129,6 +140,15 @@ enum OperationRegistry {
             "navigate.delete_marker", "navigate.rename_marker", "navigate.zoom_to_fit",
             "navigate.set_zoom", "navigate.toggle_view",
         ],
+        ToolID.logicAudio.rawValue: [
+            "audio.analyze_file",
+        ],
+        ToolID.logicSystem.rawValue: [
+            "system.health", "system.permissions", "system.refresh_cache", "system.help",
+        ],
+        ToolID.logicPlugins.rawValue: [
+            "plugins.get_inventory", "plugins.set_param_verified", "plugins.insert_verified",
+        ],
     ]
 
     private static let allowedCommandsByTool: [String: Set<String>] = [
@@ -144,9 +164,19 @@ enum OperationRegistry {
             "goto_bar", "goto_marker", "create_marker", "delete_marker", "rename_marker",
             "zoom_to_fit", "set_zoom", "toggle_view",
         ],
+        ToolID.logicAudio.rawValue: [
+            "analyze_file",
+        ],
+        ToolID.logicSystem.rawValue: [
+            "health", "permissions", "refresh_cache", "help",
+        ],
+        ToolID.logicPlugins.rawValue: [
+            "get_inventory", "set_param_verified", "insert_verified",
+        ],
     ]
 
     private static let allowedOperationIDs = Set(allowedOperationIDsByTool.values.flatMap { $0 })
+    static let registeredToolRawValues = Set(allowedOperationIDsByTool.keys)
 
     static let specs: [OperationSpec] = ([
         (.transportPlay, "play", .readbackRequired, .defaultInstall),
@@ -217,6 +247,59 @@ enum OperationRegistry {
             retry: .neverAutomatic,
             deadline: .short,
             availability: entry.3,
+            capability: CapabilityID(rawValue: entry.0.rawValue)
+        )
+    } + ([
+        (.audioAnalyzeFile, "analyze_file", Mutability.readOnly),
+    ] as [(OperationID, String, Mutability)]).map { entry in
+        OperationSpec(
+            id: entry.0,
+            tool: .logicAudio,
+            command: entry.1,
+            mutability: entry.2,
+            confirmation: .none,
+            target: .none,
+            verification: .none,
+            retry: .neverAutomatic,
+            deadline: .short,
+            availability: .defaultInstall,
+            capability: CapabilityID(rawValue: entry.0.rawValue)
+        )
+    } + ([
+        (.systemHealth, "health", Mutability.readOnly),
+        (.systemPermissions, "permissions", Mutability.readOnly),
+        (.systemRefreshCache, "refresh_cache", Mutability.readOnly),
+        (.systemHelp, "help", Mutability.readOnly),
+    ] as [(OperationID, String, Mutability)]).map { entry in
+        OperationSpec(
+            id: entry.0,
+            tool: .logicSystem,
+            command: entry.1,
+            mutability: entry.2,
+            confirmation: .none,
+            target: .none,
+            verification: .none,
+            retry: .neverAutomatic,
+            deadline: .short,
+            availability: .defaultInstall,
+            capability: CapabilityID(rawValue: entry.0.rawValue)
+        )
+    } + ([
+        (.pluginsGetInventory, "get_inventory", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none),
+        (.pluginsSetParamVerified, "set_param_verified", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired),
+        (.pluginsInsertVerified, "insert_verified", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired),
+    ] as [(OperationID, String, Mutability, DeadlineClass, VerificationPolicy)]).map { entry in
+        OperationSpec(
+            id: entry.0,
+            tool: .logicPlugins,
+            command: entry.1,
+            mutability: entry.2,
+            confirmation: .none,
+            target: .none,
+            verification: entry.4,
+            retry: .neverAutomatic,
+            deadline: entry.3,
+            availability: .defaultInstall,
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
     }
@@ -306,6 +389,9 @@ enum OperationRegistry {
             ToolID.logicTransport.rawValue: "transport",
             ToolID.logicMixer.rawValue: "mixer",
             ToolID.logicNavigate.rawValue: "navigate",
+            ToolID.logicAudio.rawValue: "audio",
+            ToolID.logicSystem.rawValue: "system",
+            ToolID.logicPlugins.rawValue: "plugins",
         ]
         let mismatches = entries
             .filter { entry in
