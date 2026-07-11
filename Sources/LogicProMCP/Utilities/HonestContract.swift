@@ -95,6 +95,7 @@ enum HonestContract {
         case slotOccupied = "slot_occupied"
         case trackSelectionFailed = "track_selection_failed"
         case staleSnapshot = "stale_snapshot"
+        case staleTargetReference = "stale_target_reference"
         case windowOpenFailed = "window_open_failed"
         case windowIdentityUnresolved = "window_identity_unresolved"
         case paramControlNotFound = "param_control_not_found"
@@ -319,6 +320,7 @@ enum HonestContract {
         FailureError.slotOccupied.rawValue,
         FailureError.trackSelectionFailed.rawValue,
         FailureError.staleSnapshot.rawValue,
+        FailureError.staleTargetReference.rawValue,
         FailureError.windowOpenFailed.rawValue,
         FailureError.windowIdentityUnresolved.rawValue,
         FailureError.paramControlNotFound.rawValue,

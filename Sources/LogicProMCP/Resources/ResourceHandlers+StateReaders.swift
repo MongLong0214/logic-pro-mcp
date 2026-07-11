@@ -131,6 +131,7 @@ extension ResourceHandlers {
     static func readTracks(
         cache: StateCache,
         uri: String,
+        targetRegistry: TargetRegistry? = nil,
         fileReader: LogicProjectFileReader.Runtime
     ) async throws -> ReadResource.Result {
         var liveTracks = await cache.getTracks()
@@ -168,7 +169,25 @@ extension ResourceHandlers {
             }
         }
 
-        let body = encodeJSON(tracksOut)
+        let body: String
+        if FeatureFlags.adr002TargetRef, let targetRegistry {
+            var payload: [[String: Any]] = []
+            payload.reserveCapacity(tracksOut.count)
+            for track in tracksOut {
+                let descriptor = TargetDescriptor(trackIndex: track.id, trackName: track.name)
+                let reference = await targetRegistry.bind(
+                    kind: .track,
+                    descriptor: descriptor,
+                    fingerprint: descriptor.fingerprint
+                )
+                var object = jsonObject(track) as? [String: Any] ?? [:]
+                object["track_ref"] = reference.rawValue
+                payload.append(object)
+            }
+            body = encodeJSONObject(payload)
+        } else {
+            body = encodeJSON(tracksOut)
+        }
         let json = wrapWithCacheEnvelope(
             bodyJSON: body,
             fetchedAt: cacheFetchedAt,

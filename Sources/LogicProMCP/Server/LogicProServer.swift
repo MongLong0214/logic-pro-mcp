@@ -233,6 +233,7 @@ actor LogicProServer {
     private let server: Server
     private let router: ChannelRouter
     private let cache: StateCache
+    private let targetRegistry: TargetRegistry
     private let poller: StatePoller
     private let resourceSubscriptions: ResourceSubscriptionRegistry
     private let resourceNotifier: ResourceUpdateNotifier
@@ -270,6 +271,7 @@ actor LogicProServer {
         )
         let router = ChannelRouter()
         let cache = StateCache()
+        let targetRegistry = TargetRegistry()
         let resourceSubscriptions = ResourceSubscriptionRegistry()
         let resourceNotifier = ResourceUpdateNotifier(registry: resourceSubscriptions)
 
@@ -277,6 +279,7 @@ actor LogicProServer {
         self.server = server
         self.router = router
         self.cache = cache
+        self.targetRegistry = targetRegistry
         self.resourceSubscriptions = resourceSubscriptions
         self.resourceNotifier = resourceNotifier
         self.portManager = MIDIPortManager()
@@ -325,7 +328,15 @@ actor LogicProServer {
                 await resourceNotifier.publishChangedResources(
                     cacheKeys: cacheKeys,
                     cache: cache,
-                    router: router
+                    router: router,
+                    readResource: { uri, cache, router in
+                        try await ResourceHandlers.read(
+                            uri: uri,
+                            cache: cache,
+                            router: router,
+                            targetRegistry: targetRegistry
+                        )
+                    }
                 ) { uri in
                     try await server.notify(ResourceUpdatedNotification.message(.init(uri: uri)))
                 }
@@ -355,6 +366,7 @@ actor LogicProServer {
         let cache = self.cache
         let poller = self.poller
         let mutationGate = self.mutationGate
+        let targetRegistry = self.targetRegistry
 
         return LogicProServerHandlers(
             listTools: { _ in
@@ -393,6 +405,7 @@ actor LogicProServer {
                             params: cmdParams,
                             router: router,
                             cache: cache,
+                            targetRegistry: targetRegistry,
                             dialogPresent: dialogPresent
                         )
                     case "logic_mixer":
@@ -409,6 +422,7 @@ actor LogicProServer {
                             params: cmdParams,
                             router: router,
                             cache: cache,
+                            targetRegistry: targetRegistry,
                             dialogPresent: dialogPresent
                         )
                     case "logic_audio":
@@ -416,7 +430,13 @@ actor LogicProServer {
                     case "logic_system":
                         return await SystemDispatcher.handle(command: command, params: cmdParams, router: router, cache: cache, poller: poller)
                     case "logic_plugins":
-                        return await PluginsDispatcher.handle(command: command, params: cmdParams, router: router, cache: cache)
+                        return await PluginsDispatcher.handle(
+                            command: command,
+                            params: cmdParams,
+                            router: router,
+                            cache: cache,
+                            targetRegistry: targetRegistry
+                        )
                     default:
                         return toolTextResult("Unknown tool: \(name)", isError: true)
                     }
@@ -440,7 +460,12 @@ actor LogicProServer {
                 // session must return a typed operation_timeout body, never leave
                 // the client with no JSON-RPC response.
                 try await Self.runResourceReadWithDeadline(uri: params.uri) {
-                    try await ResourceHandlers.read(uri: params.uri, cache: cache, router: router)
+                    try await ResourceHandlers.read(
+                        uri: params.uri,
+                        cache: cache,
+                        router: router,
+                        targetRegistry: targetRegistry
+                    )
                 }
             },
             listResourceTemplates: { _ in
@@ -973,10 +998,19 @@ actor LogicProServer {
     }
 
     func publishResourceChangesForTesting(_ cacheKeys: [ResourceCacheKey]) async {
+        let targetRegistry = self.targetRegistry
         await resourceNotifier.publishChangedResources(
             cacheKeys: cacheKeys,
             cache: cache,
-            router: router
+            router: router,
+            readResource: { uri, cache, router in
+                try await ResourceHandlers.read(
+                    uri: uri,
+                    cache: cache,
+                    router: router,
+                    targetRegistry: targetRegistry
+                )
+            }
         ) { uri in
             try await server.notify(ResourceUpdatedNotification.message(.init(uri: uri)))
         }

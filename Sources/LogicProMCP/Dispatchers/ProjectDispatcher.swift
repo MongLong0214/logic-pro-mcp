@@ -20,6 +20,7 @@ struct ProjectDispatcher {
         params: [String: Value],
         router: ChannelRouter,
         cache: StateCache,
+        targetRegistry: TargetRegistry? = nil,
         // Single source of truth — use ProcessUtils.isLogicProRunning everywhere
         // (NSRunningApplication-based with multi-fallback). Removed prior OR with
         // PermissionChecker.checkAutomationState() == .granted because permission
@@ -172,7 +173,7 @@ struct ProjectDispatcher {
             // the data was current. clearProjectState() is idempotent and
             // mutation-free on actor state — safe to call on every success
             // even if the poller would have caught up eventually.
-            await invalidateOnSuccess(result, cache: cache)
+            await invalidateOnSuccess(result, cache: cache, targetRegistry: targetRegistry)
             return toolTextResult(result)
 
         case "open":
@@ -207,7 +208,7 @@ struct ProjectDispatcher {
                 params: ["path": path]
             )
             // v3.1.2 (P0-3) — same cache stale-after-lifecycle bug as `new`.
-            await invalidateOnSuccess(result, cache: cache)
+            await invalidateOnSuccess(result, cache: cache, targetRegistry: targetRegistry)
             return toolTextResult(result)
 
         case "save":
@@ -284,7 +285,7 @@ struct ProjectDispatcher {
             // v3.1.2 (P0-3) — closing the project leaves the cache stuffed
             // with the just-closed tracks/regions/markers. Clear so resource
             // reads honestly reflect "no project" until the next open.
-            await invalidateOnSuccess(result, cache: cache)
+            await invalidateOnSuccess(result, cache: cache, targetRegistry: targetRegistry)
             return toolTextResult(result)
 
         case "bounce":
@@ -778,9 +779,16 @@ struct ProjectDispatcher {
     /// transition (`new` / `open` / `close`). Defensive: only fires when the
     /// underlying channel reports success, so a failed AppleScript leaves
     /// the cache untouched (preserves whatever truth the poller had).
-    private static func invalidateOnSuccess(_ result: ChannelResult, cache: StateCache) async {
+    private static func invalidateOnSuccess(
+        _ result: ChannelResult,
+        cache: StateCache,
+        targetRegistry: TargetRegistry?
+    ) async {
         guard result.isSuccess else { return }
         await cache.clearProjectState()
+        if FeatureFlags.adr002TargetRef {
+            await targetRegistry?.bumpProjectEpoch()
+        }
     }
 
     private static func refreshRegionCache(from result: ChannelResult, cache: StateCache) async {

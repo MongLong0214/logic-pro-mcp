@@ -46,7 +46,8 @@ struct PluginsDispatcher {
         command: String,
         params: [String: Value],
         router: ChannelRouter,
-        cache: StateCache
+        cache: StateCache,
+        targetRegistry: TargetRegistry? = nil
     ) async -> CallTool.Result {
         switch command {
         case "get_inventory":
@@ -69,8 +70,14 @@ struct PluginsDispatcher {
 
         case "insert_verified":
             return await runVerified(operation: "plugin.insert_verified") {
-                await routedTextResult(router, operation: "plugin.insert_verified",
-                                       params: insertVerifiedParams(params))
+                let result = await router.route(
+                    operation: "plugin.insert_verified",
+                    params: insertVerifiedParams(params)
+                )
+                if FeatureFlags.adr002TargetRef, channelResultIsVerified(result) {
+                    await targetRegistry?.bumpTopologyGeneration()
+                }
+                return toolTextResult(result)
             }
 
         default:

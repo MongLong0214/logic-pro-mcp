@@ -20,6 +20,7 @@ extension ResourceHandlers {
         uri: String,
         cache: StateCache,
         router: ChannelRouter,
+        targetRegistry: TargetRegistry? = nil,
         fileReader: LogicProjectFileReader.Runtime = .production
     ) async throws -> ReadResource.Result {
         // Health must be side-effect free so the resource stays aligned with the tool contract.
@@ -83,7 +84,12 @@ extension ResourceHandlers {
             return try await readTransportState(cache: cache, router: router, uri: uri)
 
         case "logic://tracks":
-            return try await readTracks(cache: cache, uri: uri, fileReader: fileReader)
+            return try await readTracks(
+                cache: cache,
+                uri: uri,
+                targetRegistry: targetRegistry,
+                fileReader: fileReader
+            )
 
         case "logic://mixer":
             return try await readMixer(cache: cache, uri: uri)
