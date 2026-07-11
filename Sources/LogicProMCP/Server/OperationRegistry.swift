@@ -47,6 +47,22 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case editNormalize = "edit.normalize"
     case editDuplicate = "edit.duplicate"
     case editToggleStepInput = "edit.toggle_step_input"
+    case projectNew = "project.new"
+    case projectOpen = "project.open"
+    case projectSave = "project.save"
+    case projectSaveAs = "project.save_as"
+    case projectClose = "project.close"
+    case projectBounce = "project.bounce"
+    case projectIsRunning = "project.is_running"
+    case projectLaunch = "project.launch"
+    case projectQuit = "project.quit"
+    case projectGetRegions = "project.get_regions"
+    case projectExportPlan = "project.export_plan"
+    case projectExportRun = "project.export_run"
+    case projectExportResume = "project.export_resume"
+    case projectAudit = "project.audit"
+    case projectCleanupPlan = "project.cleanup_plan"
+    case projectCleanupApply = "project.cleanup_apply"
 }
 
 enum ToolID: String, Sendable, Equatable {
@@ -57,6 +73,7 @@ enum ToolID: String, Sendable, Equatable {
     case logicSystem = "logic_system"
     case logicPlugins = "logic_plugins"
     case logicEdit = "logic_edit"
+    case logicProject = "logic_project"
 }
 
 enum Mutability: Sendable, Equatable {
@@ -169,6 +186,13 @@ enum OperationRegistry {
             "edit.select_all", "edit.split", "edit.join", "edit.quantize",
             "edit.bounce_in_place", "edit.normalize", "edit.duplicate", "edit.toggle_step_input",
         ],
+        ToolID.logicProject.rawValue: [
+            "project.new", "project.open", "project.save", "project.save_as", "project.close",
+            "project.bounce", "project.is_running", "project.launch", "project.quit",
+            "project.get_regions", "project.export_plan", "project.export_run",
+            "project.export_resume", "project.audit", "project.cleanup_plan",
+            "project.cleanup_apply",
+        ],
     ]
 
     private static let allowedCommandsByTool: [String: Set<String>] = [
@@ -196,6 +220,11 @@ enum OperationRegistry {
         ToolID.logicEdit.rawValue: [
             "undo", "redo", "cut", "copy", "paste", "delete", "select_all", "split", "join",
             "quantize", "bounce_in_place", "normalize", "duplicate", "toggle_step_input",
+        ],
+        ToolID.logicProject.rawValue: [
+            "new", "open", "save", "save_as", "close", "bounce", "is_running", "launch",
+            "quit", "get_regions", "export_plan", "export_run", "export_resume", "audit",
+            "cleanup_plan", "cleanup_apply",
         ],
     ]
 
@@ -355,6 +384,37 @@ enum OperationRegistry {
             availability: entry.2,
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
+    } + ([
+        (.projectNew, "new", Mutability.`mutating`, ConfirmationPolicy.l1, VerificationPolicy.readbackRequired, DeadlineClass.medium),
+        (.projectOpen, "open", Mutability.`mutating`, ConfirmationPolicy.l2, VerificationPolicy.readbackRequired, DeadlineClass.long),
+        (.projectSave, "save", Mutability.`mutating`, ConfirmationPolicy.l1, VerificationPolicy.readbackRequired, DeadlineClass.medium),
+        (.projectSaveAs, "save_as", Mutability.`mutating`, ConfirmationPolicy.l2, VerificationPolicy.readbackRequired, DeadlineClass.long),
+        (.projectClose, "close", Mutability.`mutating`, ConfirmationPolicy.l3, VerificationPolicy.none, DeadlineClass.medium),
+        (.projectBounce, "bounce", Mutability.`mutating`, ConfirmationPolicy.l2, VerificationPolicy.readbackRequired, DeadlineClass.long),
+        (.projectIsRunning, "is_running", Mutability.readOnly, ConfirmationPolicy.none, VerificationPolicy.none, DeadlineClass.short),
+        (.projectLaunch, "launch", Mutability.`mutating`, ConfirmationPolicy.l1, VerificationPolicy.readbackRequired, DeadlineClass.short),
+        (.projectQuit, "quit", Mutability.`mutating`, ConfirmationPolicy.l3, VerificationPolicy.readbackRequired, DeadlineClass.medium),
+        (.projectGetRegions, "get_regions", Mutability.readOnly, ConfirmationPolicy.none, VerificationPolicy.none, DeadlineClass.short),
+        (.projectExportPlan, "export_plan", Mutability.readOnly, ConfirmationPolicy.none, VerificationPolicy.none, DeadlineClass.short),
+        (.projectExportRun, "export_run", Mutability.`mutating`, ConfirmationPolicy.l2, VerificationPolicy.readbackRequired, DeadlineClass.long),
+        (.projectExportResume, "export_resume", Mutability.`mutating`, ConfirmationPolicy.l2, VerificationPolicy.readbackRequired, DeadlineClass.long),
+        (.projectAudit, "audit", Mutability.readOnly, ConfirmationPolicy.none, VerificationPolicy.none, DeadlineClass.short),
+        (.projectCleanupPlan, "cleanup_plan", Mutability.readOnly, ConfirmationPolicy.none, VerificationPolicy.none, DeadlineClass.short),
+        (.projectCleanupApply, "cleanup_apply", Mutability.`mutating`, ConfirmationPolicy.l1, VerificationPolicy.readbackRequired, DeadlineClass.medium),
+    ] as [(OperationID, String, Mutability, ConfirmationPolicy, VerificationPolicy, DeadlineClass)]).map { entry in
+        OperationSpec(
+            id: entry.0,
+            tool: .logicProject,
+            command: entry.1,
+            mutability: entry.2,
+            confirmation: entry.3,
+            target: .none,
+            verification: entry.4,
+            retry: .neverAutomatic,
+            deadline: entry.5,
+            availability: .defaultInstall,
+            capability: CapabilityID(rawValue: entry.0.rawValue)
+        )
     }
 
     static func spec(tool: String, command: String) -> OperationSpec? {
@@ -446,6 +506,7 @@ enum OperationRegistry {
             ToolID.logicSystem.rawValue: "system",
             ToolID.logicPlugins.rawValue: "plugins",
             ToolID.logicEdit.rawValue: "edit",
+            ToolID.logicProject.rawValue: "project",
         ]
         let mismatches = entries
             .filter { entry in
