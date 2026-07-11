@@ -7,7 +7,7 @@ The core execution order is ADR-002 → ADR-003 → ADR-004 → ADR-001.
 ADR-005 is cross-cutting and applies throughout the entire sequence.
 Every ADR starts in `Proposed` status and advances only with its own implementation and qualification evidence.
 
-The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementation`: each has flag-gated (default-off) pilots merged to `main` with deterministic tests and live evidence (see the [Implementation status](#implementation-status) section). They add zero runtime behavior with their flags off. ADR-006 has also entered `In Implementation` with a first, types-only increment (the runtime cache rewiring is deferred pending a live soak — see its status entry). ADR-004 has entered `In Implementation` with a pure in-memory saga engine (reversible-ops-only; live execution and MCP surface deferred — see its status entry). ADR-001, ADR-007 and all Category C/D ADRs remain `Proposed` — they depend on the kernel being not just merged but live-qualified, which is ongoing.
+The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementation`: each has flag-gated (default-off) pilots merged to `main` with deterministic tests and live evidence (see the [Implementation status](#implementation-status) section). They add zero runtime behavior with their flags off. ADR-006 has also entered `In Implementation` with a first, types-only increment (the runtime cache rewiring is deferred pending a live soak — see its status entry). ADR-004 has entered `In Implementation` with a pure in-memory saga engine (reversible-ops-only; live execution and MCP surface deferred — see its status entry). ADR-001 has entered `In Implementation` with a qualification-gate harness skeleton (attestation types + a pure promotion-gate evaluator; the live qualification matrix and release-gate CI enforcement are deferred — see its status entry). This completes the guide's core assurance chain (ADR-002 → 003 → 004 → 001) in flag-gated / harness form. ADR-007 and all Category C/D ADRs remain `Proposed` — they depend on the kernel being not just merged but live-qualified, which is ongoing.
 
 ## Category A — Core execution path
 
@@ -17,7 +17,7 @@ The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementati
 | ADR-003 | Public Operation Contract Registry | A | `In Implementation` | [#286](https://github.com/MongLong0214/logic-pro-mcp/issues/286) |
 | ADR-005 | Operation Trace and Support Bundle | A | `In Implementation` | [#288](https://github.com/MongLong0214/logic-pro-mcp/issues/288) |
 | ADR-004 | Verified Mutation Saga | A | `In Implementation` | [#287](https://github.com/MongLong0214/logic-pro-mcp/issues/287) |
-| ADR-001 | Same-Release Live Qualification Gate | A | `Proposed` | [#284](https://github.com/MongLong0214/logic-pro-mcp/issues/284) |
+| ADR-001 | Same-Release Live Qualification Gate | A | `In Implementation` | [#284](https://github.com/MongLong0214/logic-pro-mcp/issues/284) |
 
 ## Category B — Shared infrastructure
 
@@ -79,6 +79,13 @@ Kernel pilots merged to `main`, all behind default-off feature flags (zero runti
 - **No blind inverse**: on an unverified (State B) or ambiguous write, the engine does a fresh readback and branches — applied → compensate, not-applied → no-op, unknown → `rollbackUncertain`. `fullyCompensated` is reported only after compensation readback confirms restoration; partial outcomes never surface as top-level success (`complete: false`).
 - 7 deterministic tests (synthetic executor): preflight-rejects-before-run, happy-path journal evidence, reverse-order compensation, no-blind-inverse reconciliation, compensation-failure honesty, idempotency + flag-default-off, exact state-machine/allowlist.
 - Deferred (honest scope): live execution against real dispatchers, the public MCP surface, and non-reversible / multi-target operations. Those need real write-path wiring plus live qualification and are not claimed here.
+
+### ADR-001 — Same-Release Live Qualification Gate (`In Implementation`)
+- Harness skeleton + pure gate logic only. `ReleaseQualificationAttestation` / `QualificationCase` / `QualificationWaiver` value types (matching #284's schema, snake_case JSON keys), the qualification matrix axes (`LogicVariant` / `QualificationLocale` / `SetupProfile` / `CacheState` / `ProjectFixture`), and the exact 4 required combinations (desktop|creator × en-US|ko-KR, core/cold).
+- **Pure `PromotionGate` evaluator** (no I/O, no clock): rejects promotion on any of the six distinct reasons — required case failed, required combination not qualified, missing artifact, binary SHA-256 mismatch, expired waiver, release-version mismatch. A required combination qualifies **only** when a matching case is `passed` **and** `verified` **and** carries evidence — a `waived` / unverified / evidence-less case never satisfies a required combination (`skip is not pass`). Waiver expiry is a pure SemVer comparison; malformed SHA / version inputs fail closed.
+- `Scripts/live-qualification-runner.py` is a **non-live skeleton** — it emits the attestation shape with `not_qualified` placeholders and a `TODO(#284)` marking where the real matrix run plugs in. It performs no Logic / MCP calls.
+- 19 deterministic tests over the gate (all six rejection reasons, the three `skip-is-not-pass` variants, fail-closed-on-malformed, duplicate-case detection, `Codable` date round-trip, exact required-combination keys).
+- Deferred (honest scope): the actual same-artifact live qualification matrix run on real Logic Pro, and wiring the gate into the release pipeline as an enforced CI check. Those need a human-attended real-Logic environment across the full variant/locale/profile matrix and are not claimed here; no CI workflow or release script is modified by this increment.
 
 ### Release qualification
 - Strict live E2E suite (`LOGIC_PRO_MCP_STRICT_LIVE=1`, real Logic Pro, fresh-session bootstrap) is green on `main`.
