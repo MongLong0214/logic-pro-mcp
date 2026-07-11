@@ -42,7 +42,7 @@ The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementati
 | ADR-012 | Spectral Analysis and EQ Recommendation | D | `In Implementation` | [#300](https://github.com/MongLong0214/logic-pro-mcp/issues/300) |
 | ADR-013 | Verified Channel EQ Band Control | D | `In Implementation` | [#301](https://github.com/MongLong0214/logic-pro-mcp/issues/301) |
 | ADR-014 | Independent MIDI Event Readback | D | `Proposed` | [#302](https://github.com/MongLong0214/logic-pro-mcp/issues/302) |
-| ADR-015 | Piano Roll Data-level Transform | D | `Proposed` | [#303](https://github.com/MongLong0214/logic-pro-mcp/issues/303) |
+| ADR-015 | Piano Roll Data-level Transform | D | `In Implementation` | [#303](https://github.com/MongLong0214/logic-pro-mcp/issues/303) |
 | ADR-016 | Smart Tempo and Tempo-map Control | D | `Proposed` | [#304](https://github.com/MongLong0214/logic-pro-mcp/issues/304) |
 | ADR-017 | Flex Pitch Inspection and Verified Editing | D | `Proposed` | [#305](https://github.com/MongLong0214/logic-pro-mcp/issues/305) |
 | ADR-018 | Verified Third-party Host-Parameter Control | D | `Proposed` | [#306](https://github.com/MongLong0214/logic-pro-mcp/issues/306) |
@@ -140,6 +140,14 @@ Kernel pilots merged to `main`, all behind default-off feature flags (zero runti
 - **Saga eligibility** — eligible only when a full 8-band before-snapshot (present + complete) and a verified restore both exist; an absent or incomplete snapshot is never eligible. Plus a pure before/after band-parameter comparison.
 - 9 deterministic synthetic tests (absent-EQ-rejects-band-write, coordinate-only-never-public, band/parameter ranges fail closed, stale-epoch-rejects, valid-write-passes-preflight, saga-requires-full-snapshot+restore, comparison, 8-band/complete invariants, flag-default-off).
 - Deferred (honest scope): the Mackie C4 control-surface adapter, the qualified AX Controls-view write/readback, the Doctor `verified_channel_eq` capability check, the MCP surface (`get_channel_eq_state_verified` / `set_channel_eq_band_verified` / …), and applying ADR-012 recommendations. Those need real Logic and are not claimed here.
+
+### ADR-015 — Piano Roll Data-Level Transform (`In Implementation`)
+- Pure MIDI transform engine + plan/verify/compensate logic only, behind `FeatureFlags.adr015PianoRoll` (default off), with no runtime path. Operates on the ADR-010 note **data model**, not on graphic note dragging.
+- **Deterministic transform engine** — `MIDITransform` (`transpose` / `setVelocity` / `scaleVelocity` / `quantize(grid, strength, swing)` / `humanize(seed)`) applied as pure data transforms over `[MIDINoteEvent]` with pitch/velocity clamping; `humanize` is **seed-deterministic** (no wall clock / RNG).
+- **Plan-generation binding** — a `RegionTransformPlan` binds to the before-snapshot's generation; `planTransform` refuses an incomplete before-snapshot, and `validateApply` **rejects a stale plan** (`staleGeneration` when the region's generation moved, `regionMismatch`, `snapshotIncomplete`).
+- **Verification (patch ordering)** — `verifyTransform` returns State A **only** when the post-write snapshot is `complete`, has the same region ref, shows the expected generation transition, and its note set is an **exact multiset match** of the predicted canonical result; an incomplete snapshot, a wrong generation, or any unexpected event is `stateBUnverified` / `mismatch` — a partial or pixel-drag result can never be State A. Compensation restores the exact before-snapshot (not a blind inverse).
+- 15 deterministic synthetic tests (transform clamps, humanize-seed-determinism, incomplete-before → no plan, stale-apply rejection, region-mismatch, exact-multiset → State A, incomplete/wrong-generation/region-mismatch → never State A, multiset-mismatch reporting, compensation restores before-snapshot, flag-default-off).
+- Deferred (honest scope): the live note selection / edit against Logic, the live before/after snapshot reads (which themselves depend on an ADR-014/ADR-010 provider being qualified), and the MCP surface (`plan_region_transform` / `apply_region_transform_verified` / …). Those need real Logic and are not claimed here.
 
 ### Release qualification
 - Strict live E2E suite (`LOGIC_PRO_MCP_STRICT_LIVE=1`, real Logic Pro, fresh-session bootstrap) is green on `main`.
