@@ -32,6 +32,28 @@ struct OperationRegistryTests {
         (.mixerInsertPlugin, "insert_plugin"),
     ]
 
+    private static let navigateCommands: [(String, String)] = [
+        ("navigate.goto_bar", "goto_bar"),
+        ("navigate.goto_marker", "goto_marker"),
+        ("navigate.create_marker", "create_marker"),
+        ("navigate.delete_marker", "delete_marker"),
+        ("navigate.rename_marker", "rename_marker"),
+        ("navigate.zoom_to_fit", "zoom_to_fit"),
+        ("navigate.set_zoom", "set_zoom"),
+        ("navigate.toggle_view", "toggle_view"),
+    ]
+
+    private static let unverifiedNavigateCommands: Set<String> = [
+        "delete_marker", "rename_marker", "toggle_view",
+    ]
+
+    private static let navigateAvailabilityOverrides: [String: AvailabilityPolicy] = [
+        "delete_marker": .requiresKeyBinding,
+        "rename_marker": .unsupported,
+    ]
+
+    private static let expectedRegistryCount = commands.count + mixerCommands.count + navigateCommands.count
+
     private func withRegistryFlag(_ value: String?, body: () -> Void) {
         let key = "LOGIC_MCP_ADR003_OPERATION_REGISTRY"
         let previous = ProcessInfo.processInfo.environment[key]
@@ -144,9 +166,9 @@ struct OperationRegistryTests {
 
     @Test("mixer registry is exact, unique, and isolated")
     func mixerCompletenessAndIsolation() {
-        #expect(OperationRegistry.specs.count == 18)
-        #expect(Set(OperationRegistry.specs.map(\.id)).count == 18)
-        #expect(Set(OperationRegistry.specs.map { "\($0.tool.rawValue):\($0.command)" }).count == 18)
+        #expect(OperationRegistry.specs.count == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map(\.id)).count == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map { "\($0.tool.rawValue):\($0.command)" }).count == Self.expectedRegistryCount)
         #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
         #expect(OperationRegistry.validationErrors().isEmpty)
         #expect(OperationRegistry.spec(tool: ToolID.logicMixer.rawValue, command: "play") == nil)
@@ -268,6 +290,92 @@ struct OperationRegistryTests {
             #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: "import_file") == 300)
             #expect(!LogicProServer.isMutatingCommand(tool: "logic_transport", command: "bounce"))
             #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_transport", command: "bounce") == 300)
+        }
+    }
+
+    @Test("navigate registry is exact, unique, and isolated")
+    func navigateCompletenessAndIsolation() throws {
+        let tool = try #require(ToolID(rawValue: "logic_navigate"))
+        let navigateSpecs = OperationRegistry.specs.filter { $0.tool == tool }
+        #expect(navigateSpecs.count == Self.navigateCommands.count)
+        #expect(Set(navigateSpecs.map(\.command)) == Set(Self.navigateCommands.map(\.1)))
+        #expect(Set(navigateSpecs.map(\.id.rawValue)) == Set(Self.navigateCommands.map(\.0)))
+        #expect(OperationRegistry.validationErrors().isEmpty)
+        #expect(OperationRegistry.spec(tool: "logic_navigate", command: "play") == nil)
+        #expect(OperationRegistry.spec(tool: ToolID.logicTransport.rawValue, command: "goto_bar") == nil)
+        #expect(OperationRegistry.spec(tool: ToolID.logicMixer.rawValue, command: "goto_bar") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_navigate", command: "unknown") == nil)
+    }
+
+    @Test("all navigate metadata matches current runtime truth")
+    func navigateMetadata() throws {
+        let tool = try #require(ToolID(rawValue: "logic_navigate"))
+
+        for (idRawValue, command) in Self.navigateCommands {
+            let id = try #require(OperationID(rawValue: idRawValue))
+            let spec = try #require(OperationRegistry.spec(tool: tool.rawValue, command: command))
+            #expect(spec.id == id)
+            #expect(spec.tool == tool)
+            #expect(spec.command == command)
+            #expect(spec.mutability == Mutability.`mutating`)
+            #expect(spec.confirmation == .none)
+            #expect(spec.target == .none)
+            #expect(spec.verification == (Self.unverifiedNavigateCommands.contains(command) ? .none : .readbackRequired))
+            #expect(spec.retry == .neverAutomatic)
+            #expect(spec.deadline == .short)
+            #expect(spec.availability == (Self.navigateAvailabilityOverrides[command] ?? .defaultInstall))
+            #expect(spec.capability.rawValue == idRawValue)
+        }
+    }
+
+    @Test("derived navigate mutations and deadlines equal unchanged legacy behavior")
+    func navigateLegacyParity() throws {
+        let tool = try #require(ToolID(rawValue: "logic_navigate"))
+        #expect(OperationRegistry.mutatingCommands(tool: tool) == LogicProServer.mutatingCommandsByTool["logic_navigate"])
+        for (_, command) in Self.navigateCommands {
+            #expect(OperationRegistry.deadlineSeconds(tool: tool.rawValue, command: command) == 25)
+        }
+    }
+
+    @Test("navigate rename marker is honestly marked unsupported")
+    func navigateRenameMarkerUnsupported() throws {
+        let spec = try #require(OperationRegistry.spec(tool: "logic_navigate", command: "rename_marker"))
+        #expect(spec.availability == .unsupported)
+        #expect(spec.verification == .none)
+        #expect(spec.confirmation == .none)
+        #expect(HonestContract.terminalErrorCodes.contains("not_implemented"))
+    }
+
+    @Test("flag off uses unchanged legacy navigate decisions")
+    func navigateFlagOff() {
+        withRegistryFlag(nil) {
+            #expect(FeatureFlags.adr003OperationRegistry == false)
+            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_navigate"))
+            for (_, command) in Self.navigateCommands {
+                #expect(LogicProServer.mutatingCommandsByTool["logic_navigate"]?.contains(command) == true)
+                #expect(LogicProServer.isMutatingCommand(tool: "logic_navigate", command: command))
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_navigate", command: command) == 25)
+            }
+            #expect(!LogicProServer.isMutatingCommand(tool: "logic_navigate", command: "play"))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_navigate", command: "play") == 25)
+        }
+    }
+
+    @Test("flag on derives navigate decisions and preserves legacy fallbacks")
+    func navigateFlagOn() {
+        withRegistryFlag("1") {
+            #expect(FeatureFlags.adr003OperationRegistry)
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_transport"))
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_mixer"))
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_navigate"))
+            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_midi"))
+            for (_, command) in Self.navigateCommands {
+                #expect(LogicProServer.isMutatingCommand(tool: "logic_navigate", command: command))
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_navigate", command: command) == 25)
+            }
+            #expect(!LogicProServer.isMutatingCommand(tool: "logic_navigate", command: "play"))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_navigate", command: "import_file") == 300)
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
         }
     }
 }

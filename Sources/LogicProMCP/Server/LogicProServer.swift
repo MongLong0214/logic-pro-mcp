@@ -493,13 +493,19 @@ actor LogicProServer {
         "cleanup_apply", "new", "save", "close", "quit", "play_sequence",
     ]
 
+    static func usesOperationRegistry(tool: String) -> Bool {
+        FeatureFlags.adr003OperationRegistry
+            && (tool == ToolID.logicTransport.rawValue
+                || tool == ToolID.logicMixer.rawValue
+                || tool == ToolID.logicNavigate.rawValue)
+    }
+
     /// Per-command server-side deadline in seconds. Set far above each
     /// command's healthy completion time (sub-second for the fast tier) so a
     /// normal op can never false-trip; only a wedged/occluded Logic session
     /// that would otherwise hang the stdio loop is bounded.
     static func commandDeadlineSeconds(tool: String, command: String) -> Double {
-        if FeatureFlags.adr003OperationRegistry,
-           (tool == ToolID.logicTransport.rawValue || tool == ToolID.logicMixer.rawValue),
+        if usesOperationRegistry(tool: tool),
            let seconds = OperationRegistry.deadlineSeconds(tool: tool, command: command) {
             return seconds
         }
@@ -742,8 +748,7 @@ actor LogicProServer {
     ]
 
     static func isMutatingCommand(tool: String, command: String) -> Bool {
-        if FeatureFlags.adr003OperationRegistry,
-           (tool == ToolID.logicTransport.rawValue || tool == ToolID.logicMixer.rawValue),
+        if usesOperationRegistry(tool: tool),
            let spec = OperationRegistry.spec(tool: tool, command: command) {
             return spec.mutability == Mutability.`mutating`
         }
