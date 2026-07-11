@@ -79,6 +79,25 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case midiMMCStop = "midi.mmc_stop"
     case midiMMCRecord = "midi.mmc_record"
     case midiMMCLocate = "midi.mmc_locate"
+    case tracksSelect = "tracks.select"
+    case tracksCreateAudio = "tracks.create_audio"
+    case tracksCreateInstrument = "tracks.create_instrument"
+    case tracksCreateDrummer = "tracks.create_drummer"
+    case tracksCreateExternalMIDI = "tracks.create_external_midi"
+    case tracksDelete = "tracks.delete"
+    case tracksDuplicate = "tracks.duplicate"
+    case tracksRename = "tracks.rename"
+    case tracksMute = "tracks.mute"
+    case tracksSolo = "tracks.solo"
+    case tracksArm = "tracks.arm"
+    case tracksArmOnly = "tracks.arm_only"
+    case tracksRecordSequence = "tracks.record_sequence"
+    case tracksSetAutomation = "tracks.set_automation"
+    case tracksSetInstrument = "tracks.set_instrument"
+    case tracksListLibrary = "tracks.list_library"
+    case tracksScanLibrary = "tracks.scan_library"
+    case tracksResolvePath = "tracks.resolve_path"
+    case tracksScanPluginPresets = "tracks.scan_plugin_presets"
 }
 
 enum ToolID: String, Sendable, Equatable {
@@ -91,6 +110,7 @@ enum ToolID: String, Sendable, Equatable {
     case logicEdit = "logic_edit"
     case logicProject = "logic_project"
     case logicMidi = "logic_midi"
+    case logicTracks = "logic_tracks"
 }
 
 enum Mutability: Sendable, Equatable {
@@ -217,6 +237,14 @@ enum OperationRegistry {
             "midi.create_virtual_port", "midi.step_input", "midi.mmc_play", "midi.mmc_stop",
             "midi.mmc_record", "midi.mmc_locate",
         ],
+        ToolID.logicTracks.rawValue: [
+            "tracks.select", "tracks.create_audio", "tracks.create_instrument",
+            "tracks.create_drummer", "tracks.create_external_midi", "tracks.delete",
+            "tracks.duplicate", "tracks.rename", "tracks.mute", "tracks.solo", "tracks.arm",
+            "tracks.arm_only", "tracks.record_sequence", "tracks.set_automation",
+            "tracks.set_instrument", "tracks.list_library", "tracks.scan_library",
+            "tracks.resolve_path", "tracks.scan_plugin_presets",
+        ],
     ]
 
     private static let allowedCommandsByTool: [String: Set<String>] = [
@@ -255,6 +283,12 @@ enum OperationRegistry {
             "send_aftertouch", "send_sysex", "play_sequence", "import_file", "list_ports",
             "create_virtual_port", "step_input", "mmc_play", "mmc_stop", "mmc_record",
             "mmc_locate",
+        ],
+        ToolID.logicTracks.rawValue: [
+            "select", "create_audio", "create_instrument", "create_drummer",
+            "create_external_midi", "delete", "duplicate", "rename", "mute", "solo", "arm",
+            "arm_only", "record_sequence", "set_automation", "set_instrument", "list_library",
+            "scan_library", "resolve_path", "scan_plugin_presets",
         ],
     ]
 
@@ -476,6 +510,40 @@ enum OperationRegistry {
             availability: .defaultInstall,
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
+    } + ([
+        (.tracksSelect, "select", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
+        (.tracksCreateAudio, "create_audio", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
+        (.tracksCreateInstrument, "create_instrument", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
+        (.tracksCreateDrummer, "create_drummer", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
+        (.tracksCreateExternalMIDI, "create_external_midi", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
+        (.tracksDelete, "delete", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
+        (.tracksDuplicate, "duplicate", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
+        (.tracksRename, "rename", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
+        (.tracksMute, "mute", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
+        (.tracksSolo, "solo", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
+        (.tracksArm, "arm", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
+        (.tracksArmOnly, "arm_only", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
+        (.tracksRecordSequence, "record_sequence", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired),
+        (.tracksSetAutomation, "set_automation", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
+        (.tracksSetInstrument, "set_instrument", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired),
+        (.tracksListLibrary, "list_library", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none),
+        (.tracksScanLibrary, "scan_library", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none),
+        (.tracksResolvePath, "resolve_path", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none),
+        (.tracksScanPluginPresets, "scan_plugin_presets", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none),
+    ] as [(OperationID, String, Mutability, DeadlineClass, VerificationPolicy)]).map { entry in
+        OperationSpec(
+            id: entry.0,
+            tool: .logicTracks,
+            command: entry.1,
+            mutability: entry.2,
+            confirmation: .none,
+            target: .none,
+            verification: entry.4,
+            retry: .neverAutomatic,
+            deadline: entry.3,
+            availability: .defaultInstall,
+            capability: CapabilityID(rawValue: entry.0.rawValue)
+        )
     }
 
     static func spec(tool: String, command: String) -> OperationSpec? {
@@ -569,6 +637,7 @@ enum OperationRegistry {
             ToolID.logicEdit.rawValue: "edit",
             ToolID.logicProject.rawValue: "project",
             ToolID.logicMidi.rawValue: "midi",
+            ToolID.logicTracks.rawValue: "tracks",
         ]
         let mismatches = entries
             .filter { entry in

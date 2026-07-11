@@ -55,7 +55,7 @@ struct OperationRegistryTests {
     private static let smallToolCount = 8 // logic_audio(1) + logic_system(4) + logic_plugins(3)
     private static let expectedRegistryCount =
         commands.count + mixerCommands.count + navigateCommands.count + smallToolCount
-            + editCommands.count + projectCommands.count + midiCommands.count
+            + editCommands.count + projectCommands.count + midiCommands.count + trackCommands.count
 
     private func withRegistryFlag(_ value: String?, body: () -> Void) {
         let key = "LOGIC_MCP_ADR003_OPERATION_REGISTRY"
@@ -908,6 +908,180 @@ struct OperationRegistryTests {
             #expect(!LogicProServer.isMutatingCommand(tool: "logic_midi", command: "list_ports"))
             #expect(!LogicProServer.isMutatingCommand(tool: "logic_midi", command: "is_running"))
             #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: "open") == 300)
+        }
+    }
+
+    private static let trackCommands: [(
+        id: String,
+        command: String,
+        mutability: Mutability,
+        deadline: DeadlineClass,
+        verification: VerificationPolicy
+    )] = [
+        ("tracks.select", "select", .mutating, .short, .readbackRequired),
+        ("tracks.create_audio", "create_audio", .mutating, .short, .readbackRequired),
+        ("tracks.create_instrument", "create_instrument", .mutating, .short, .readbackRequired),
+        ("tracks.create_drummer", "create_drummer", .mutating, .short, .readbackRequired),
+        ("tracks.create_external_midi", "create_external_midi", .mutating, .short, .readbackRequired),
+        ("tracks.delete", "delete", .mutating, .short, .readbackRequired),
+        ("tracks.duplicate", "duplicate", .mutating, .short, .none),
+        ("tracks.rename", "rename", .mutating, .short, .readbackRequired),
+        ("tracks.mute", "mute", .mutating, .short, .readbackRequired),
+        ("tracks.solo", "solo", .mutating, .short, .readbackRequired),
+        ("tracks.arm", "arm", .mutating, .short, .readbackRequired),
+        ("tracks.arm_only", "arm_only", .mutating, .short, .readbackRequired),
+        ("tracks.record_sequence", "record_sequence", .mutating, .long, .readbackRequired),
+        ("tracks.set_automation", "set_automation", .mutating, .short, .none),
+        ("tracks.set_instrument", "set_instrument", .mutating, .medium, .readbackRequired),
+        ("tracks.list_library", "list_library", .readOnly, .long, .none),
+        ("tracks.scan_library", "scan_library", .readOnly, .long, .none),
+        ("tracks.resolve_path", "resolve_path", .readOnly, .short, .none),
+        ("tracks.scan_plugin_presets", "scan_plugin_presets", .readOnly, .long, .none),
+    ]
+
+    @Test("tracks registry is exact, globally unique, and cross-tool isolated")
+    func tracksCompletenessAndIsolation() throws {
+        let tool = try #require(ToolID(rawValue: "logic_tracks"))
+        let trackSpecs = OperationRegistry.specs.filter { $0.tool == tool }
+        #expect(trackSpecs.count == Self.trackCommands.count)
+        #expect(Set(trackSpecs.map(\.command)) == Set(Self.trackCommands.map(\.command)))
+        #expect(Set(trackSpecs.map(\.id.rawValue)) == Set(Self.trackCommands.map(\.id)))
+        #expect(OperationRegistry.specs.count == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map(\.id)).count == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map { "\($0.tool.rawValue):\($0.command)" }).count
+            == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
+        #expect(OperationRegistry.validationErrors().isEmpty)
+
+        #expect(OperationRegistry.spec(tool: "logic_tracks", command: "library") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_tracks", command: "set_color") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_tracks", command: "unknown") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_transport", command: "rename") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_midi", command: "record_sequence") == nil)
+    }
+
+    @Test("all tracks metadata matches dispatcher and channel truth")
+    func tracksMetadata() throws {
+        let tool = try #require(ToolID(rawValue: "logic_tracks"))
+
+        for entry in Self.trackCommands {
+            let id = try #require(OperationID(rawValue: entry.id))
+            let spec = try #require(OperationRegistry.spec(tool: tool.rawValue, command: entry.command))
+            #expect(spec.id == id)
+            #expect(spec.tool == tool)
+            #expect(spec.command == entry.command)
+            #expect(spec.mutability == entry.mutability)
+            #expect(spec.confirmation == .none)
+            #expect(spec.target == .none)
+            #expect(spec.verification == entry.verification)
+            #expect(spec.retry == .neverAutomatic)
+            #expect(spec.deadline == entry.deadline)
+            #expect(spec.availability == .defaultInstall)
+            #expect(spec.capability.rawValue == entry.id)
+        }
+    }
+
+    @Test("tracks mutations exactly match unchanged legacy behavior")
+    func tracksLegacyMutationParity() throws {
+        let tool = try #require(ToolID(rawValue: "logic_tracks"))
+        let expected = Set(Self.trackCommands
+            .filter { $0.mutability == Mutability.`mutating` }
+            .map(\.command))
+        #expect(expected == Set([
+            "select", "create_audio", "create_instrument", "create_drummer", "create_external_midi",
+            "delete", "duplicate", "rename", "mute", "solo", "arm", "arm_only", "record_sequence",
+            "set_automation", "set_instrument",
+        ]))
+        #expect(OperationRegistry.mutatingCommands(tool: tool) == expected)
+        #expect(expected == LogicProServer.mutatingCommandsByTool[tool.rawValue])
+        for command in ["list_library", "scan_library", "resolve_path", "scan_plugin_presets"] {
+            #expect(!expected.contains(command))
+        }
+    }
+
+    @Test("tracks deadlines preserve short medium long and read-only long tiers")
+    func tracksDeadlineParity() {
+        #expect(Self.trackCommands.filter { $0.deadline == .short }.count == 14)
+        #expect(Self.trackCommands.filter { $0.deadline == .medium }.map(\.command) == ["set_instrument"])
+        #expect(Set(Self.trackCommands.filter { $0.deadline == .long }.map(\.command)) == Set([
+            "record_sequence", "list_library", "scan_library", "scan_plugin_presets",
+        ]))
+        #expect(Set(Self.trackCommands
+            .filter { $0.mutability == .readOnly && $0.deadline == .long }
+            .map(\.command)) == Set(["list_library", "scan_library", "scan_plugin_presets"]))
+
+        for entry in Self.trackCommands {
+            #expect(OperationRegistry.deadlineSeconds(tool: "logic_tracks", command: entry.command)
+                == entry.deadline.seconds)
+        }
+        withRegistryFlag(nil) {
+            for entry in Self.trackCommands {
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: entry.command)
+                    == entry.deadline.seconds)
+            }
+        }
+        withRegistryFlag("1") {
+            for entry in Self.trackCommands {
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: entry.command)
+                    == entry.deadline.seconds)
+            }
+        }
+    }
+
+    @Test("flag off preserves every legacy tracks decision")
+    func tracksFlagOff() {
+        withRegistryFlag(nil) {
+            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_tracks"))
+            for entry in Self.trackCommands {
+                #expect(LogicProServer.isMutatingCommand(tool: "logic_tracks", command: entry.command)
+                    == (entry.mutability == Mutability.`mutating`))
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: entry.command)
+                    == entry.deadline.seconds)
+            }
+        }
+    }
+
+    @Test("tracks flag gate remains cross-tool isolated")
+    func tracksFlagGateAndCrossToolIsolation() {
+        withRegistryFlag("1") {
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_tracks"))
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_midi"))
+            for entry in Self.trackCommands {
+                #expect(LogicProServer.isMutatingCommand(tool: "logic_tracks", command: entry.command)
+                    == (entry.mutability == Mutability.`mutating`))
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: entry.command)
+                    == entry.deadline.seconds)
+            }
+            #expect(!LogicProServer.isMutatingCommand(tool: "logic_tracks", command: "library"))
+            #expect(OperationRegistry.spec(tool: "logic_tracks", command: "library") == nil)
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: "import_file") == 300)
+        }
+    }
+
+    @Test("registry covers the exact server catalog and every legacy mutation set")
+    func registryCoversExactServerCatalogAndLegacyMutations() {
+        let expectedTools: Set<String> = [
+            "logic_transport", "logic_tracks", "logic_mixer", "logic_midi", "logic_edit",
+            "logic_navigate", "logic_project", "logic_audio", "logic_system", "logic_plugins",
+        ]
+        #expect(ServerCatalog.toolNames == expectedTools)
+        #expect(OperationRegistry.registeredToolRawValues == expectedTools)
+        #expect(OperationRegistry.registeredToolRawValues.count == 10)
+
+        let derivedMutations = Dictionary(uniqueKeysWithValues: expectedTools.compactMap { tool -> (String, Set<String>)? in
+            guard let toolID = ToolID(rawValue: tool) else { return nil }
+            let commands = OperationRegistry.mutatingCommands(tool: toolID)
+            return commands.isEmpty ? nil : (tool, commands)
+        })
+        #expect(derivedMutations == LogicProServer.mutatingCommandsByTool)
+        for tool in expectedTools {
+            let toolID = ToolID(rawValue: tool)
+            #expect(toolID != nil)
+            if let toolID {
+                #expect(OperationRegistry.mutatingCommands(tool: toolID)
+                    == (LogicProServer.mutatingCommandsByTool[tool] ?? []))
+            }
         }
     }
 }
