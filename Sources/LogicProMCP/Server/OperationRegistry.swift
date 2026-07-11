@@ -63,6 +63,22 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case projectAudit = "project.audit"
     case projectCleanupPlan = "project.cleanup_plan"
     case projectCleanupApply = "project.cleanup_apply"
+    case midiSendNote = "midi.send_note"
+    case midiSendChord = "midi.send_chord"
+    case midiSendCC = "midi.send_cc"
+    case midiSendProgramChange = "midi.send_program_change"
+    case midiSendPitchBend = "midi.send_pitch_bend"
+    case midiSendAftertouch = "midi.send_aftertouch"
+    case midiSendSysEx = "midi.send_sysex"
+    case midiPlaySequence = "midi.play_sequence"
+    case midiImportFile = "midi.import_file"
+    case midiListPorts = "midi.list_ports"
+    case midiCreateVirtualPort = "midi.create_virtual_port"
+    case midiStepInput = "midi.step_input"
+    case midiMMCPlay = "midi.mmc_play"
+    case midiMMCStop = "midi.mmc_stop"
+    case midiMMCRecord = "midi.mmc_record"
+    case midiMMCLocate = "midi.mmc_locate"
 }
 
 enum ToolID: String, Sendable, Equatable {
@@ -74,6 +90,7 @@ enum ToolID: String, Sendable, Equatable {
     case logicPlugins = "logic_plugins"
     case logicEdit = "logic_edit"
     case logicProject = "logic_project"
+    case logicMidi = "logic_midi"
 }
 
 enum Mutability: Sendable, Equatable {
@@ -193,6 +210,13 @@ enum OperationRegistry {
             "project.export_resume", "project.audit", "project.cleanup_plan",
             "project.cleanup_apply",
         ],
+        ToolID.logicMidi.rawValue: [
+            "midi.send_note", "midi.send_chord", "midi.send_cc", "midi.send_program_change",
+            "midi.send_pitch_bend", "midi.send_aftertouch", "midi.send_sysex",
+            "midi.play_sequence", "midi.import_file", "midi.list_ports",
+            "midi.create_virtual_port", "midi.step_input", "midi.mmc_play", "midi.mmc_stop",
+            "midi.mmc_record", "midi.mmc_locate",
+        ],
     ]
 
     private static let allowedCommandsByTool: [String: Set<String>] = [
@@ -225,6 +249,12 @@ enum OperationRegistry {
             "new", "open", "save", "save_as", "close", "bounce", "is_running", "launch",
             "quit", "get_regions", "export_plan", "export_run", "export_resume", "audit",
             "cleanup_plan", "cleanup_apply",
+        ],
+        ToolID.logicMidi.rawValue: [
+            "send_note", "send_chord", "send_cc", "send_program_change", "send_pitch_bend",
+            "send_aftertouch", "send_sysex", "play_sequence", "import_file", "list_ports",
+            "create_virtual_port", "step_input", "mmc_play", "mmc_stop", "mmc_record",
+            "mmc_locate",
         ],
     ]
 
@@ -415,6 +445,37 @@ enum OperationRegistry {
             availability: .defaultInstall,
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
+    } + ([
+        (.midiSendNote, "send_note", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
+        (.midiSendChord, "send_chord", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
+        (.midiSendCC, "send_cc", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
+        (.midiSendProgramChange, "send_program_change", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
+        (.midiSendPitchBend, "send_pitch_bend", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
+        (.midiSendAftertouch, "send_aftertouch", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
+        (.midiSendSysEx, "send_sysex", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
+        (.midiPlaySequence, "play_sequence", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.none),
+        (.midiImportFile, "import_file", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired),
+        (.midiListPorts, "list_ports", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none),
+        (.midiCreateVirtualPort, "create_virtual_port", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
+        (.midiStepInput, "step_input", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
+        (.midiMMCPlay, "mmc_play", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
+        (.midiMMCStop, "mmc_stop", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
+        (.midiMMCRecord, "mmc_record", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
+        (.midiMMCLocate, "mmc_locate", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.bestEffort),
+    ] as [(OperationID, String, Mutability, DeadlineClass, VerificationPolicy)]).map { entry in
+        OperationSpec(
+            id: entry.0,
+            tool: .logicMidi,
+            command: entry.1,
+            mutability: entry.2,
+            confirmation: .none,
+            target: .none,
+            verification: entry.4,
+            retry: .neverAutomatic,
+            deadline: entry.3,
+            availability: .defaultInstall,
+            capability: CapabilityID(rawValue: entry.0.rawValue)
+        )
     }
 
     static func spec(tool: String, command: String) -> OperationSpec? {
@@ -507,6 +568,7 @@ enum OperationRegistry {
             ToolID.logicPlugins.rawValue: "plugins",
             ToolID.logicEdit.rawValue: "edit",
             ToolID.logicProject.rawValue: "project",
+            ToolID.logicMidi.rawValue: "midi",
         ]
         let mismatches = entries
             .filter { entry in

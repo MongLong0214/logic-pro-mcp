@@ -55,7 +55,7 @@ struct OperationRegistryTests {
     private static let smallToolCount = 8 // logic_audio(1) + logic_system(4) + logic_plugins(3)
     private static let expectedRegistryCount =
         commands.count + mixerCommands.count + navigateCommands.count + smallToolCount
-            + editCommands.count + projectCommands.count
+            + editCommands.count + projectCommands.count + midiCommands.count
 
     private func withRegistryFlag(_ value: String?, body: () -> Void) {
         let key = "LOGIC_MCP_ADR003_OPERATION_REGISTRY"
@@ -375,7 +375,7 @@ struct OperationRegistryTests {
             #expect(LogicProServer.usesOperationRegistry(tool: "logic_transport"))
             #expect(LogicProServer.usesOperationRegistry(tool: "logic_mixer"))
             #expect(LogicProServer.usesOperationRegistry(tool: "logic_navigate"))
-            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_midi"))
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_midi"))
             for (_, command) in Self.navigateCommands {
                 #expect(LogicProServer.isMutatingCommand(tool: "logic_navigate", command: command))
                 #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_navigate", command: command) == 25)
@@ -514,7 +514,7 @@ struct OperationRegistryTests {
             for tool in ["logic_transport", "logic_mixer", "logic_navigate", "logic_audio", "logic_system", "logic_plugins"] {
                 #expect(LogicProServer.usesOperationRegistry(tool: tool))
             }
-            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_midi"))
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_midi"))
             for entry in Self.smallToolCommands {
                 #expect(LogicProServer.isMutatingCommand(tool: entry.tool, command: entry.command)
                     == (entry.mutability == Mutability.`mutating`))
@@ -612,7 +612,7 @@ struct OperationRegistryTests {
         }
         withRegistryFlag("1") {
             #expect(LogicProServer.usesOperationRegistry(tool: "logic_edit"))
-            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_midi"))
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_midi"))
             for entry in Self.editCommands {
                 #expect(LogicProServer.isMutatingCommand(tool: "logic_edit", command: entry.command))
                 #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_edit", command: entry.command) == 25)
@@ -762,7 +762,7 @@ struct OperationRegistryTests {
         withRegistryFlag("1") {
             #expect(LogicProServer.usesOperationRegistry(tool: "logic_project"))
             #expect(LogicProServer.usesOperationRegistry(tool: "logic_transport"))
-            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_midi"))
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_midi"))
             for entry in Self.projectCommands {
                 #expect(LogicProServer.isMutatingCommand(tool: "logic_project", command: entry.command)
                     == (entry.mutability == Mutability.`mutating`))
@@ -772,6 +772,142 @@ struct OperationRegistryTests {
             #expect(!LogicProServer.isMutatingCommand(tool: "logic_project", command: "import_file"))
             #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: "import_file") == 300)
             #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
+        }
+    }
+
+    private static let midiCommands: [(
+        id: String,
+        command: String,
+        mutability: Mutability,
+        deadline: DeadlineClass,
+        verification: VerificationPolicy
+    )] = [
+        ("midi.send_note", "send_note", .mutating, .short, .none),
+        ("midi.send_chord", "send_chord", .mutating, .short, .none),
+        ("midi.send_cc", "send_cc", .mutating, .short, .none),
+        ("midi.send_program_change", "send_program_change", .mutating, .short, .none),
+        ("midi.send_pitch_bend", "send_pitch_bend", .mutating, .short, .none),
+        ("midi.send_aftertouch", "send_aftertouch", .mutating, .short, .none),
+        ("midi.send_sysex", "send_sysex", .mutating, .short, .none),
+        ("midi.play_sequence", "play_sequence", .mutating, .medium, .none),
+        ("midi.import_file", "import_file", .mutating, .long, .readbackRequired),
+        ("midi.list_ports", "list_ports", .readOnly, .short, .none),
+        ("midi.create_virtual_port", "create_virtual_port", .mutating, .short, .none),
+        ("midi.step_input", "step_input", .mutating, .short, .none),
+        ("midi.mmc_play", "mmc_play", .mutating, .short, .none),
+        ("midi.mmc_stop", "mmc_stop", .mutating, .short, .none),
+        ("midi.mmc_record", "mmc_record", .mutating, .short, .none),
+        ("midi.mmc_locate", "mmc_locate", .mutating, .short, .bestEffort),
+    ]
+
+    @Test("MIDI registry is exact, globally unique, and cross-tool isolated")
+    func midiCompletenessAndIsolation() throws {
+        let tool = try #require(ToolID(rawValue: "logic_midi"))
+        let midiSpecs = OperationRegistry.specs.filter { $0.tool == tool }
+        #expect(midiSpecs.count == Self.midiCommands.count)
+        #expect(Set(midiSpecs.map(\.command)) == Set(Self.midiCommands.map(\.command)))
+        #expect(Set(midiSpecs.map(\.id.rawValue)) == Set(Self.midiCommands.map(\.id)))
+        #expect(OperationRegistry.specs.count == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map(\.id)).count == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map { "\($0.tool.rawValue):\($0.command)" }).count
+            == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
+        #expect(OperationRegistry.validationErrors().isEmpty)
+
+        #expect(OperationRegistry.spec(tool: "logic_midi", command: "play") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_transport", command: "send_note") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_project", command: "import_file") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_midi", command: "send_note.keycmd") == nil)
+    }
+
+    @Test("all MIDI metadata matches dispatcher and routing truth")
+    func midiMetadata() throws {
+        let tool = try #require(ToolID(rawValue: "logic_midi"))
+
+        for entry in Self.midiCommands {
+            let id = try #require(OperationID(rawValue: entry.id))
+            let spec = try #require(OperationRegistry.spec(tool: tool.rawValue, command: entry.command))
+            #expect(spec.id == id)
+            #expect(spec.tool == tool)
+            #expect(spec.command == entry.command)
+            #expect(spec.mutability == entry.mutability)
+            #expect(spec.confirmation == .none)
+            #expect(spec.target == .none)
+            #expect(spec.verification == entry.verification)
+            #expect(spec.retry == .neverAutomatic)
+            #expect(spec.deadline == entry.deadline)
+            #expect(spec.availability == .defaultInstall)
+            #expect(spec.capability.rawValue == entry.id)
+        }
+    }
+
+    @Test("MIDI mutations exactly match unchanged legacy behavior")
+    func midiLegacyMutationParity() throws {
+        let tool = try #require(ToolID(rawValue: "logic_midi"))
+        let expected = Set(Self.midiCommands
+            .filter { $0.mutability == Mutability.`mutating` }
+            .map(\.command))
+        #expect(expected == Set([
+            "send_note", "send_chord", "send_cc", "send_program_change", "send_pitch_bend",
+            "send_aftertouch", "send_sysex", "play_sequence", "import_file", "create_virtual_port",
+            "step_input", "mmc_play", "mmc_stop", "mmc_record", "mmc_locate",
+        ]))
+        #expect(OperationRegistry.mutatingCommands(tool: tool) == expected)
+        #expect(expected == LogicProServer.mutatingCommandsByTool[tool.rawValue])
+        #expect(!expected.contains("list_ports"))
+    }
+
+    @Test("MIDI deadlines preserve short medium and long legacy tiers")
+    func midiDeadlineParity() {
+        #expect(Self.midiCommands.filter { $0.deadline == .short }.count == 14)
+        #expect(Self.midiCommands.filter { $0.deadline == .medium }.map(\.command) == ["play_sequence"])
+        #expect(Self.midiCommands.filter { $0.deadline == .long }.map(\.command) == ["import_file"])
+
+        for entry in Self.midiCommands {
+            #expect(OperationRegistry.deadlineSeconds(tool: "logic_midi", command: entry.command)
+                == entry.deadline.seconds)
+        }
+        withRegistryFlag(nil) {
+            for entry in Self.midiCommands {
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: entry.command)
+                    == entry.deadline.seconds)
+            }
+        }
+        withRegistryFlag("1") {
+            for entry in Self.midiCommands {
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: entry.command)
+                    == entry.deadline.seconds)
+            }
+        }
+    }
+
+    @Test("flag off preserves every legacy MIDI decision")
+    func midiFlagOff() {
+        withRegistryFlag(nil) {
+            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_midi"))
+            for entry in Self.midiCommands {
+                #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: entry.command)
+                    == (entry.mutability == Mutability.`mutating`))
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: entry.command)
+                    == entry.deadline.seconds)
+            }
+        }
+    }
+
+    @Test("MIDI flag gate remains cross-tool isolated")
+    func midiFlagGateAndCrossToolIsolation() {
+        withRegistryFlag("1") {
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_midi"))
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_project"))
+            for entry in Self.midiCommands {
+                #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: entry.command)
+                    == (entry.mutability == Mutability.`mutating`))
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: entry.command)
+                    == entry.deadline.seconds)
+            }
+            #expect(!LogicProServer.isMutatingCommand(tool: "logic_midi", command: "list_ports"))
+            #expect(!LogicProServer.isMutatingCommand(tool: "logic_midi", command: "is_running"))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: "open") == 300)
         }
     }
 }
