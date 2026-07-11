@@ -32,7 +32,7 @@ The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementati
 | --- | --- | --- | --- | --- |
 | ADR-008 | Verified Mixer Routing Graph | C | `In Implementation` | [#291](https://github.com/MongLong0214/logic-pro-mcp/issues/291) |
 | ADR-009 | Verified Plugin Apply-back Expansion | C | `In Implementation` | [#292](https://github.com/MongLong0214/logic-pro-mcp/issues/292) |
-| ADR-010 | MIDI Note-level Independent Readback Research | C | `Proposed` | [#293](https://github.com/MongLong0214/logic-pro-mcp/issues/293) |
+| ADR-010 | MIDI Note-level Independent Readback Research | C | `In Implementation` | [#293](https://github.com/MongLong0214/logic-pro-mcp/issues/293) |
 
 ## Category D — Capability ADRs
 
@@ -109,6 +109,14 @@ Kernel pilots merged to `main`, all behind default-off feature flags (zero runti
 - **Pure verification / apply logic** — `verifyReadback` (semantic-value normalization + tolerance → `confirmed` / `mismatch(observed, expected, tolerance)`), `planBatchApply` (all-or-nothing preflight that fails closed on an unsupported parameter or an out-of-range value **before any write**), a `BatchApplyResult` / `BatchApplyOutcome` where a partial application is `complete: false` and **never reports top-level success**, and a `snapshotDiff` for before/after apply-back.
 - 9 deterministic synthetic tests (candidates-experimental + public-surface-empty, public-without-evidence-not-exposable, tolerance confirmed/mismatch, out-of-range-rejected-in-preflight, unsupported-lookup-fails-closed, partial-batch-never-success, snapshot diff, value-type round-trip, flag-default-off).
 - Deferred (honest scope): the live plugin-window verified write/readback, the qualification-evidence collection that would promote any candidate to `public` (A/B proof, idempotency, min/max, closed/open-window starts, wrong track/slot/plugin, en/ko, Desktop/Creator), and the MCP surface (`list_verified_capabilities` / `get_param_verified` / `apply_snapshot_verified` / `diff_snapshot`). Those need real Logic UI and are not claimed here.
+
+### ADR-010 — MIDI Note-level Independent Readback (`In Implementation`)
+- Provider abstraction + note data model + pure canonicalization / verification + a provider ship-gate only, behind `FeatureFlags.adr010MidiReadback` (default off), with no runtime path (no provider is implemented or invoked).
+- **Provider abstraction** — a `MIDINoteReadbackProvider` protocol + `MIDIReadbackProvenance` (Event List AX, controlled SMF export, project-package parser, playback capture) and the `MIDIRegionNoteSnapshot` / `MIDINoteEvent` data model (with `complete` / `partialReason`, epoch, provenance, PPQ, notes, tempo map, time signatures). No provider is wired — the server's own input note list is explicitly **not** used as readback.
+- **Provider ship-gate (honesty core)** — a `QualifiedProviderRegistry` where **all four candidate providers are unqualified**, so `publicProvider()` returns **nil** — "no qualified provider means no public API." Each candidate records the exact proofs it must pass to qualify (selected-region identity, completeness, filter/temp-path/traversal safety, en/ko + Desktop/Creator, version-drift), so promotion requires live evidence, not code.
+- **Pure canonicalization + verification** — `canonicalize` (velocity-0 note-off normalization, overlapping same-pitch trimming, stable sort, PPQ normalization, tempo map kept separate from note ticks) and `verifyRegion`, which returns **`incompleteCannotVerify` for any snapshot with `complete:false` or `provenance == .none` — an incomplete or non-independent scan can never report a full State-A exact match** — otherwise `exactMatch` or `mismatch(added/removed/changed)`; plus a region diff.
+- 10 deterministic synthetic tests (incomplete-cannot-match, missing-provenance-cannot-match, canonicalization velocity-0/overlap/sort, PPQ-normalization-match, exact + added/removed/changed verification, region diff, provider-gate-no-public-before-qualification, complete-drops-partial-reason, flag-default-off).
+- Deferred (honest scope): the live Event List AX and controlled SMF-export provider implementations, the qualification evidence that would promote a provider to `public`, the project-package format-stability spike, and the MCP surface (`read_selected_region_notes` / `verify_region_against_sequence` / `diff_region_notes`). Those need real Logic and are not claimed here.
 
 ### Release qualification
 - Strict live E2E suite (`LOGIC_PRO_MCP_STRICT_LIVE=1`, real Logic Pro, fresh-session bootstrap) is green on `main`.
