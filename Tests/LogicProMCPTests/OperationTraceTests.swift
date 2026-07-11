@@ -1,4 +1,5 @@
 import Foundation
+import MCP
 import Testing
 @testable import LogicProMCP
 
@@ -442,5 +443,105 @@ extension OperationTraceTests {
         #expect(result.isError == true)
         #expect(await channel.executedOperations.isEmpty)
         #expect(await OperationTraceStore.shared.recent().isEmpty)
+    }
+}
+
+private actor OperationTraceTrackChannel: Channel {
+    nonisolated let id: ChannelID = .accessibility
+    private(set) var executedOperations: [String] = []
+
+    func start() async throws {}
+    func stop() async {}
+
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        executedOperations.append(operation)
+        switch operation {
+        case "track.rename", "track.set_mute":
+            return .success(
+                "{\"operation\":\"\(operation)\",\"state\":\"A\",\"success\":true,\"verified\":true}"
+            )
+        default:
+            return .error("Unexpected track operation: \(operation)")
+        }
+    }
+
+    func healthCheck() async -> ChannelHealth {
+        .healthy(detail: "operation trace track test")
+    }
+}
+
+extension OperationTraceTests {
+    @Test(arguments: ["rename", "mute"])
+    func OperationTraceTracksFlagOff(command: String) async {
+        let previous = replaceOperationTraceFlag(with: nil)
+        defer { _ = replaceOperationTraceFlag(with: previous) }
+        await OperationTraceStore.shared.clear()
+
+        let channel = OperationTraceTrackChannel()
+        let router = ChannelRouter()
+        await router.register(channel)
+
+        let result = await TrackDispatcher.handle(
+            command: command,
+            params: command == "rename"
+                ? ["index": .int(2), "name": .string("Trace Track")]
+                : ["index": .int(2), "enabled": .bool(true)],
+            router: router,
+            cache: StateCache()
+        )
+
+        let operation = command == "rename" ? "track.rename" : "track.set_mute"
+        #expect(sharedJSONObject(sharedToolText(result))?["trace_id"] == nil)
+        #expect(await channel.executedOperations == [operation])
+        #expect(await OperationTraceStore.shared.recent().isEmpty)
+    }
+
+    @Test(arguments: ["rename", "mute"])
+    func OperationTraceTracksEnabled(command: String) async throws {
+        let previous = replaceOperationTraceFlag(with: "1")
+        defer { _ = replaceOperationTraceFlag(with: previous) }
+        await OperationTraceStore.shared.clear()
+
+        let channel = OperationTraceTrackChannel()
+        let router = ChannelRouter()
+        await router.register(channel)
+
+        var params: [String: Value] = command == "rename"
+            ? ["index": .int(2), "name": .string("Trace Track")]
+            : ["index": .int(2), "enabled": .bool(true)]
+        params["project_path"] = .string("/Users/test/secret.logicx")
+        params["token"] = .string("secret-token")
+        let result = await TrackDispatcher.handle(
+            command: command,
+            params: params,
+            router: router,
+            cache: StateCache()
+        )
+
+        let operationID = command == "rename" ? OperationID.tracksRename : OperationID.tracksMute
+        let operation = command == "rename" ? "track.rename" : "track.set_mute"
+        let resultObject = try #require(sharedJSONObject(sharedToolText(result)))
+        let rawID = try #require(resultObject["trace_id"] as? String)
+        let trace = try #require(
+            await OperationTraceStore.shared.trace(TraceID(rawValue: rawID))
+        )
+        #expect(result.isError == false)
+        #expect(trace.operationID == operationID.rawValue)
+        #expect(trace.events.map(\.phase) == [
+            .requestReceived, .writeBoundaryCrossed, .verificationCompleted, .resultEmitted,
+        ])
+        #expect(trace.events[2].attributes["readback_state"] == "A")
+        #expect(trace.completedAt != nil)
+        #expect(await channel.executedOperations == [operation])
+
+        let allowedAttributeKeys: Set<String> = [
+            "operation_id", "command", "target_ref", "project_path_hash",
+            "readback_state", "error_code",
+        ]
+        #expect(trace.events.allSatisfy {
+            Set($0.attributes.keys).isSubset(of: allowedAttributeKeys)
+                && !$0.attributes.values.contains("/Users/test/secret.logicx")
+                && !$0.attributes.values.contains("secret-token")
+        })
     }
 }

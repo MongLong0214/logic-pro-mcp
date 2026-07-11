@@ -225,39 +225,77 @@ struct TrackDispatcher {
                     ]
                 )
             }
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "track.rename",
                 params: ["index": String(index), "name": name]
             )
             guard result.isSuccess else {
-                return toolTextResult(result.message, isError: true)
+                return await finalizeTrace(
+                    toolTextResult(result.message, isError: true),
+                    traceID: traceID
+                )
             }
             if let data = result.message.data(using: .utf8),
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let verified = json["verified"] as? Bool,
                verified == false {
-                return toolTextResult(result.message, isError: true)
+                return await finalizeTrace(
+                    toolTextResult(result.message, isError: true),
+                    traceID: traceID
+                )
             }
             if let resolvedReference {
                 if var payload = decodedJSONObject(result.message) {
                     payload["track_ref"] = resolvedReference.rawValue
-                    return toolTextResult(HonestContract.jsonString(payload))
+                    return await finalizeTrace(
+                        toolTextResult(HonestContract.jsonString(payload)),
+                        traceID: traceID
+                    )
                 }
-                return toolTextResult(HonestContract.encodeStateA(extras: [
-                    "operation": "track.rename",
-                    "track_ref": resolvedReference.rawValue,
-                ]))
+                return await finalizeTrace(
+                    toolTextResult(HonestContract.encodeStateA(extras: [
+                        "operation": "track.rename",
+                        "track_ref": resolvedReference.rawValue,
+                    ])),
+                    traceID: traceID
+                )
             }
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "mute":
-            return await handleToggle(command: "mute", operation: "track.set_mute", params: params, router: router)
+            let traceID = await startTraceIfEnabled(command: command)
+            let result = await handleToggle(
+                command: "mute",
+                operation: "track.set_mute",
+                params: params,
+                router: router,
+                traceID: traceID
+            )
+            return await finalizeTrace(result, traceID: traceID)
 
         case "solo":
-            return await handleToggle(command: "solo", operation: "track.set_solo", params: params, router: router)
+            let traceID = await startTraceIfEnabled(command: command)
+            let result = await handleToggle(
+                command: "solo",
+                operation: "track.set_solo",
+                params: params,
+                router: router,
+                traceID: traceID
+            )
+            return await finalizeTrace(result, traceID: traceID)
 
         case "arm":
-            return await handleToggle(command: "arm", operation: "track.set_arm", params: params, router: router)
+            let traceID = await startTraceIfEnabled(command: command)
+            let result = await handleToggle(
+                command: "arm",
+                operation: "track.set_arm",
+                params: params,
+                router: router,
+                traceID: traceID
+            )
+            return await finalizeTrace(result, traceID: traceID)
 
         case "record_sequence":
             let result = await handleRecordSequenceSMF(params: params, router: router, cache: cache)
@@ -514,7 +552,8 @@ struct TrackDispatcher {
         command: String,
         operation: String,
         params: [String: Value],
-        router: ChannelRouter
+        router: ChannelRouter,
+        traceID: TraceID? = nil
     ) async -> CallTool.Result {
         guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
             return toolInvalidParamsResult(
@@ -533,6 +572,7 @@ struct TrackDispatcher {
         } else {
             enabled = true
         }
+        await recordWriteBoundary(traceID)
         let result = await router.route(
             operation: operation,
             params: ["index": String(index), "enabled": String(enabled)]
@@ -544,6 +584,66 @@ struct TrackDispatcher {
             return toolTextResult(result.message, isError: true)
         }
         return toolTextResult(result)
+    }
+
+    private static func startTraceIfEnabled(command: String) async -> TraceID? {
+        guard FeatureFlags.adr005OperationTrace,
+              let spec = OperationRegistry.spec(tool: tool.name, command: command) else {
+            return nil
+        }
+        switch spec.id {
+        case .tracksRename, .tracksMute, .tracksSolo, .tracksArm:
+            let id = await OperationTraceStore.shared.start(operationID: spec.id.rawValue)
+            await OperationTraceStore.shared.record(id, phase: .requestReceived, attributes: [
+                "operation_id": spec.id.rawValue,
+                "command": command,
+            ])
+            return id
+        default:
+            return nil
+        }
+    }
+
+    private static func recordWriteBoundary(_ traceID: TraceID?) async {
+        guard let traceID else { return }
+        await OperationTraceStore.shared.record(traceID, phase: .writeBoundaryCrossed)
+    }
+
+    private static func finalizeTrace(
+        _ result: CallTool.Result,
+        traceID: TraceID?
+    ) async -> CallTool.Result {
+        guard let traceID else { return result }
+        guard case .text(let raw, _, _) = result.content.first else {
+            await OperationTraceStore.shared.record(
+                traceID,
+                phase: .verificationCompleted,
+                attributes: ["readback_state": result.isError == true ? "C" : "A"]
+            )
+            await OperationTraceStore.shared.record(traceID, phase: .resultEmitted)
+            await OperationTraceStore.shared.complete(traceID)
+            return result
+        }
+
+        let object = decodedJSONObject(raw)
+        var attributes = [
+            "readback_state": object?["state"] as? String
+                ?? (result.isError == true ? "C" : "A"),
+        ]
+        if let errorCode = object?["error"] as? String {
+            attributes["error_code"] = errorCode
+        }
+        await OperationTraceStore.shared.record(
+            traceID,
+            phase: .verificationCompleted,
+            attributes: attributes
+        )
+        await OperationTraceStore.shared.record(traceID, phase: .resultEmitted)
+        await OperationTraceStore.shared.complete(traceID)
+
+        let merged = HonestContract.addExtras(["trace_id": traceID.rawValue], into: raw)
+        guard merged != raw else { return result }
+        return toolTextResult(merged, isError: result.isError == true)
     }
 
     private static func staleTargetReferenceResult(_ rawReference: String?) -> CallTool.Result {
