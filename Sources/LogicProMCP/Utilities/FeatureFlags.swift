@@ -28,4 +28,8 @@ enum FeatureFlags: Sendable {
     static var adr005OperationTrace: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR005_OPERATION_TRACE"] == "1"
     }
+
+    static var adr006VersionedCache: Bool {
+        ProcessInfo.processInfo.environment["LOGIC_MCP_ADR006_VERSIONED_CACHE"] == "1"
+    }
 }
