@@ -17,11 +17,20 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case mixerSetMasterVolume = "mixer.set_master_volume"
     case mixerSetPluginParam = "mixer.set_plugin_param"
     case mixerInsertPlugin = "mixer.insert_plugin"
+    case navigateGotoBar = "navigate.goto_bar"
+    case navigateGotoMarker = "navigate.goto_marker"
+    case navigateCreateMarker = "navigate.create_marker"
+    case navigateDeleteMarker = "navigate.delete_marker"
+    case navigateRenameMarker = "navigate.rename_marker"
+    case navigateZoomToFit = "navigate.zoom_to_fit"
+    case navigateSetZoom = "navigate.set_zoom"
+    case navigateToggleView = "navigate.toggle_view"
 }
 
 enum ToolID: String, Sendable, Equatable {
     case logicTransport = "logic_transport"
     case logicMixer = "logic_mixer"
+    case logicNavigate = "logic_navigate"
 }
 
 enum Mutability: Sendable, Equatable {
@@ -115,6 +124,11 @@ enum OperationRegistry {
             "mixer.set_volume", "mixer.set_pan", "mixer.set_master_volume",
             "mixer.set_plugin_param", "mixer.insert_plugin",
         ],
+        ToolID.logicNavigate.rawValue: [
+            "navigate.goto_bar", "navigate.goto_marker", "navigate.create_marker",
+            "navigate.delete_marker", "navigate.rename_marker", "navigate.zoom_to_fit",
+            "navigate.set_zoom", "navigate.toggle_view",
+        ],
     ]
 
     private static let allowedCommandsByTool: [String: Set<String>] = [
@@ -125,6 +139,10 @@ enum OperationRegistry {
         ],
         ToolID.logicMixer.rawValue: [
             "set_volume", "set_pan", "set_master_volume", "set_plugin_param", "insert_plugin",
+        ],
+        ToolID.logicNavigate.rawValue: [
+            "goto_bar", "goto_marker", "create_marker", "delete_marker", "rename_marker",
+            "zoom_to_fit", "set_zoom", "toggle_view",
         ],
     ]
 
@@ -176,6 +194,29 @@ enum OperationRegistry {
             retry: .neverAutomatic,
             deadline: .short,
             availability: .defaultInstall,
+            capability: CapabilityID(rawValue: entry.0.rawValue)
+        )
+    } + ([
+        (.navigateGotoBar, "goto_bar", .readbackRequired, .defaultInstall),
+        (.navigateGotoMarker, "goto_marker", .readbackRequired, .defaultInstall),
+        (.navigateCreateMarker, "create_marker", .readbackRequired, .defaultInstall),
+        (.navigateDeleteMarker, "delete_marker", .none, .requiresKeyBinding),
+        (.navigateRenameMarker, "rename_marker", .none, .unsupported),
+        (.navigateZoomToFit, "zoom_to_fit", .readbackRequired, .defaultInstall),
+        (.navigateSetZoom, "set_zoom", .readbackRequired, .defaultInstall),
+        (.navigateToggleView, "toggle_view", .none, .defaultInstall),
+    ] as [(OperationID, String, VerificationPolicy, AvailabilityPolicy)]).map { entry in
+        OperationSpec(
+            id: entry.0,
+            tool: .logicNavigate,
+            command: entry.1,
+            mutability: Mutability.`mutating`,
+            confirmation: .none,
+            target: .none,
+            verification: entry.2,
+            retry: .neverAutomatic,
+            deadline: .short,
+            availability: entry.3,
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
     }
@@ -264,6 +305,7 @@ enum OperationRegistry {
         let operationPrefixes = [
             ToolID.logicTransport.rawValue: "transport",
             ToolID.logicMixer.rawValue: "mixer",
+            ToolID.logicNavigate.rawValue: "navigate",
         ]
         let mismatches = entries
             .filter { entry in
