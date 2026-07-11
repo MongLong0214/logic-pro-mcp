@@ -40,4 +40,8 @@ enum FeatureFlags: Sendable {
     static var adr007SelectorAtlas: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR007_SELECTOR_ATLAS"] == "1"
     }
+
+    static var adr008RoutingGraph: Bool {
+        ProcessInfo.processInfo.environment["LOGIC_MCP_ADR008_ROUTING_GRAPH"] == "1"
+    }
 }
