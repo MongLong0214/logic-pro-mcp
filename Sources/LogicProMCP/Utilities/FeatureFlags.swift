@@ -60,4 +60,8 @@ enum FeatureFlags: Sendable {
     static var adr012SpectralEQ: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR012_SPECTRAL_EQ"] == "1"
     }
+
+    static var adr013ChannelEQ: Bool {
+        ProcessInfo.processInfo.environment["LOGIC_MCP_ADR013_CHANNEL_EQ"] == "1"
+    }
 }
