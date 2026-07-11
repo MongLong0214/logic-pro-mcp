@@ -7,7 +7,7 @@ The core execution order is ADR-002 → ADR-003 → ADR-004 → ADR-001.
 ADR-005 is cross-cutting and applies throughout the entire sequence.
 Every ADR starts in `Proposed` status and advances only with its own implementation and qualification evidence.
 
-The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementation`: each has flag-gated (default-off) pilots merged to `main` with deterministic tests and live evidence (see the [Implementation status](#implementation-status) section). They add zero runtime behavior with their flags off. ADR-001, ADR-004, ADR-006, ADR-007 and all Category C/D ADRs remain `Proposed` — they depend on the kernel being not just merged but live-qualified, which is ongoing.
+The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementation`: each has flag-gated (default-off) pilots merged to `main` with deterministic tests and live evidence (see the [Implementation status](#implementation-status) section). They add zero runtime behavior with their flags off. ADR-006 has also entered `In Implementation` with a first, types-only increment (the runtime cache rewiring is deferred pending a live soak — see its status entry). ADR-001, ADR-004, ADR-007 and all Category C/D ADRs remain `Proposed` — they depend on the kernel being not just merged but live-qualified, which is ongoing.
 
 ## Category A — Core execution path
 
@@ -23,7 +23,7 @@ The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementati
 
 | ADR | Name | Category | Status | GitHub issue |
 | --- | --- | --- | --- | --- |
-| ADR-006 | Versioned Cache | B | `Proposed` | [#289](https://github.com/MongLong0214/logic-pro-mcp/issues/289) |
+| ADR-006 | Versioned Cache | B | `In Implementation` | [#289](https://github.com/MongLong0214/logic-pro-mcp/issues/289) |
 | ADR-007 | AX Selector Atlas | B | `Proposed` | [#290](https://github.com/MongLong0214/logic-pro-mcp/issues/290) |
 
 ## Category C — Expansion foundations
@@ -64,8 +64,13 @@ Kernel pilots merged to `main`, all behind default-off feature flags (zero runti
 - Merged: #318.
 
 ### ADR-005 — Operation Trace and Support Bundle (`In Implementation`)
-- `OperationTraceStore` actor (bounded ring buffer, privacy allowlist), trace-ID + event-phase model with explicit `write_boundary.crossed` instrumentation, piloted on the verified `logic_transport` and `logic_mixer` write paths behind `FeatureFlags.adr005OperationTrace`. `logic_system` trace query commands added.
-- Merged: #317, #320.
+- `OperationTraceStore` actor (bounded ring buffer, privacy allowlist), trace-ID + event-phase model with explicit `write_boundary.crossed` instrumentation, piloted on the verified `logic_transport`, `logic_mixer`, and `logic_tracks` (rename / mute / solo / arm) write paths behind `FeatureFlags.adr005OperationTrace`. `logic_system` trace query commands added.
+- Merged: #317, #320, #330.
+
+### ADR-006 — Versioned Cache (`In Implementation`)
+- First increment: pure snapshot value types only — `VersionedSnapshot<Value>` (project epoch, section revision, observed-at, source, completeness, fingerprint), `StateSource` / `Completeness` / `CacheSectionID` enums, and pure `etag` / `cacheAgeMillis(now:)` derivations, behind `FeatureFlags.adr006VersionedCache` (default off).
+- Deliberately scoped out (deferred): the `RefreshCoordinator` (single-flight refresh + backpressure), the actual resource-envelope wiring (`project_epoch` / `section_revision` / `etag` / `cache_age_ms` on reads), and any `StateCache` rewiring. Those require the 30-minute memory-soak and large-project benchmarks from #289's acceptance criteria, which need live qualification and are not claimed here.
+- Deterministic tests only (no runtime path touched): field preservation, etag stability, `cacheAgeMillis` monotonicity + clock-skew guard, `Codable` round-trips, section completeness, flag-default-off.
 
 ### Release qualification
 - Strict live E2E suite (`LOGIC_PRO_MCP_STRICT_LIVE=1`, real Logic Pro, fresh-session bootstrap) is green on `main`.
