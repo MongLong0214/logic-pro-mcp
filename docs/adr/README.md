@@ -39,7 +39,7 @@ The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementati
 | ADR | Name | Category | Status | GitHub issue |
 | --- | --- | --- | --- | --- |
 | ADR-011 | Full Verified Compressor Control | D | `In Implementation` | [#299](https://github.com/MongLong0214/logic-pro-mcp/issues/299) |
-| ADR-012 | Spectral Analysis and EQ Recommendation | D | `Proposed` | [#300](https://github.com/MongLong0214/logic-pro-mcp/issues/300) |
+| ADR-012 | Spectral Analysis and EQ Recommendation | D | `In Implementation` | [#300](https://github.com/MongLong0214/logic-pro-mcp/issues/300) |
 | ADR-013 | Verified Channel EQ Band Control | D | `Proposed` | [#301](https://github.com/MongLong0214/logic-pro-mcp/issues/301) |
 | ADR-014 | Independent MIDI Event Readback | D | `Proposed` | [#302](https://github.com/MongLong0214/logic-pro-mcp/issues/302) |
 | ADR-015 | Piano Roll Data-level Transform | D | `Proposed` | [#303](https://github.com/MongLong0214/logic-pro-mcp/issues/303) |
@@ -125,6 +125,13 @@ Kernel pilots merged to `main`, all behind default-off feature flags (zero runti
 - **Pure unit + outcome + saga logic** — physical-unit conversion (dB / ms / ratio / percent, round-trip stable), before/after outcome comparison against requested values within tolerance, and a saga-eligibility gate that is eligible **only** when a complete before-snapshot, a requested-parameter readback, and verified compensation all exist (an incomplete snapshot is never eligible).
 - 7 deterministic synthetic tests (manifest-specializes-ADR-009-by-circuit, coordinate-only-cannot-be-public-write, unit round-trip, outcome tolerance comparison, saga-requires-all-three, complete-drops-partial-reason, flag-default-off).
 - Deferred (honest scope): the live Controls-view AX parameter write/readback, real circuit-model detection, the MCP surface (`get_compressor_state_verified` / `set_compressor_params_verified` / `apply_compressor_plan_verified` / …), and the ADR-012 recommendation + audio-outcome analysis integration. Those need real Logic and are not claimed here.
+
+### ADR-012 — Spectral Analysis and EQ Recommendation (`In Implementation`)
+- Read-only analysis-result model + async-job state machine + pure recommendation engine only, behind `FeatureFlags.adr012SpectralEQ` (default off), with no runtime path. **Recommendation-only — no EQ write** (Channel EQ writes are owned by ADR-013).
+- **Recommendation honesty core** — `recommendEQ` returns **`noSafeRecommendation`** whenever the analysis is incomplete, its confidence is below the minimum, or the source classification is `unknown`; otherwise it returns advisory band cuts. Every recommendation is marked **`advisory` (never applied)** — a recommendation is not an automatic-adjustment claim, and analysis/apply-back stay separate.
+- **Pure models** — `SpectralAnalysisResult` (bands, resonances, source classification, confidence, `complete`/`partialReason`), an `AnalysisJob` state machine (`queued → decoding → analyzing → completed | failed | cancelled`) that accepts only valid forward transitions (backtracking / skipping → rejected), and a pure `compareSpectra` band-delta comparison.
+- 11 deterministic synthetic tests (low-confidence / unknown-source / incomplete → no-safe-recommendation, high-confidence-resonance → advisory cuts, recommendations-always-advisory-never-applied, job-state forward-only + reject-backtrack/skip, spectra comparison, complete-drops-partial-reason, confidence-in-unit-interval, flag-default-off).
+- Deferred (honest scope): the real FFT / audio-feature extraction from managed artifacts, the async job execution, the MCP surface (`analyze_spectrum` / `compare_spectra` / `recommend_eq` / job control), and any EQ apply-back (ADR-013). Those need real audio and are not claimed here.
 
 ### Release qualification
 - Strict live E2E suite (`LOGIC_PRO_MCP_STRICT_LIVE=1`, real Logic Pro, fresh-session bootstrap) is green on `main`.
