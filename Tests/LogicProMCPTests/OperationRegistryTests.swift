@@ -54,7 +54,7 @@ struct OperationRegistryTests {
 
     private static let smallToolCount = 8 // logic_audio(1) + logic_system(4) + logic_plugins(3)
     private static let expectedRegistryCount =
-        commands.count + mixerCommands.count + navigateCommands.count + smallToolCount
+        commands.count + mixerCommands.count + navigateCommands.count + smallToolCount + editCommands.count
 
     private func withRegistryFlag(_ value: String?, body: () -> Void) {
         let key = "LOGIC_MCP_ADR003_OPERATION_REGISTRY"
@@ -405,9 +405,9 @@ struct OperationRegistryTests {
 
     @Test("small-tool registries are exact, unique, and isolated")
     func smallToolCompletenessAndIsolation() throws {
-        #expect(OperationRegistry.specs.count == 34)
-        #expect(Set(OperationRegistry.specs.map(\.id)).count == 34)
-        #expect(Set(OperationRegistry.specs.map { "\($0.tool.rawValue):\($0.command)" }).count == 34)
+        #expect(OperationRegistry.specs.count == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map(\.id)).count == Self.expectedRegistryCount)
+        #expect(Set(OperationRegistry.specs.map { "\($0.tool.rawValue):\($0.command)" }).count == Self.expectedRegistryCount)
         #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
         #expect(OperationRegistry.validationErrors().isEmpty)
 
@@ -522,6 +522,102 @@ struct OperationRegistryTests {
             }
             #expect(!LogicProServer.isMutatingCommand(tool: "logic_audio", command: "import_file"))
             #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_audio", command: "import_file") == 300)
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
+        }
+    }
+
+    private static let editCommands: [(
+        id: String,
+        command: String,
+        availability: AvailabilityPolicy,
+        verification: VerificationPolicy
+    )] = [
+        ("edit.undo", "undo", .defaultInstall, .none),
+        ("edit.redo", "redo", .defaultInstall, .none),
+        ("edit.cut", "cut", .defaultInstall, .none),
+        ("edit.copy", "copy", .defaultInstall, .none),
+        ("edit.paste", "paste", .defaultInstall, .none),
+        ("edit.delete", "delete", .defaultInstall, .none),
+        ("edit.select_all", "select_all", .defaultInstall, .none),
+        ("edit.split", "split", .defaultInstall, .none),
+        ("edit.join", "join", .defaultInstall, .none),
+        ("edit.quantize", "quantize", .defaultInstall, .none),
+        ("edit.bounce_in_place", "bounce_in_place", .defaultInstall, .none),
+        ("edit.normalize", "normalize", .requiresKeyBinding, .none),
+        ("edit.duplicate", "duplicate", .requiresKeyBinding, .none),
+        ("edit.toggle_step_input", "toggle_step_input", .requiresKeyBinding, .none),
+    ]
+
+    @Test("edit registry is exact, unique, and isolated")
+    func editCompletenessAndIsolation() throws {
+        let tool = try #require(ToolID(rawValue: "logic_edit"))
+        let editSpecs = OperationRegistry.specs.filter { $0.tool == tool }
+        #expect(editSpecs.count == Self.editCommands.count)
+        #expect(Set(editSpecs.map(\.command)) == Set(Self.editCommands.map(\.command)))
+        #expect(Set(editSpecs.map(\.id.rawValue)) == Set(Self.editCommands.map(\.id)))
+        #expect(OperationRegistry.specs.count == 48)
+        #expect(Set(OperationRegistry.specs.map(\.id)).count == 48)
+        #expect(Set(OperationRegistry.specs.map { "\($0.tool.rawValue):\($0.command)" }).count == 48)
+        #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
+        #expect(OperationRegistry.validationErrors().isEmpty)
+
+        #expect(OperationRegistry.spec(tool: "logic_edit", command: "play") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_transport", command: "undo") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_mixer", command: "undo") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_navigate", command: "undo") == nil)
+        #expect(OperationRegistry.spec(tool: "logic_edit", command: "unknown") == nil)
+    }
+
+    @Test("all edit metadata and derived availability match runtime truth")
+    func editMetadataAndAvailability() throws {
+        let tool = try #require(ToolID(rawValue: "logic_edit"))
+
+        for entry in Self.editCommands {
+            let id = try #require(OperationID(rawValue: entry.id))
+            let spec = try #require(OperationRegistry.spec(tool: tool.rawValue, command: entry.command))
+            #expect(spec.id == id)
+            #expect(spec.tool == tool)
+            #expect(spec.command == entry.command)
+            #expect(spec.mutability == Mutability.`mutating`)
+            #expect(spec.confirmation == .none)
+            #expect(spec.target == .none)
+            #expect(spec.verification == entry.verification)
+            #expect(spec.retry == .neverAutomatic)
+            #expect(spec.deadline == .short)
+            #expect(spec.availability == entry.availability)
+            #expect(spec.capability.rawValue == entry.id)
+        }
+    }
+
+    @Test("derived edit mutations and deadlines equal unchanged legacy behavior")
+    func editLegacyParity() throws {
+        let tool = try #require(ToolID(rawValue: "logic_edit"))
+        let commands = Set(Self.editCommands.map(\.command))
+        #expect(OperationRegistry.mutatingCommands(tool: tool) == commands)
+        #expect(OperationRegistry.mutatingCommands(tool: tool) == LogicProServer.mutatingCommandsByTool[tool.rawValue])
+        for command in commands {
+            #expect(OperationRegistry.deadlineSeconds(tool: tool.rawValue, command: command) == 25)
+        }
+    }
+
+    @Test("edit uses registry only behind the flag and remains cross-tool isolated")
+    func editFlagGateAndFallbacks() {
+        withRegistryFlag(nil) {
+            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_edit"))
+            for entry in Self.editCommands {
+                #expect(LogicProServer.isMutatingCommand(tool: "logic_edit", command: entry.command))
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_edit", command: entry.command) == 25)
+            }
+        }
+        withRegistryFlag("1") {
+            #expect(LogicProServer.usesOperationRegistry(tool: "logic_edit"))
+            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_midi"))
+            for entry in Self.editCommands {
+                #expect(LogicProServer.isMutatingCommand(tool: "logic_edit", command: entry.command))
+                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_edit", command: entry.command) == 25)
+            }
+            #expect(!LogicProServer.isMutatingCommand(tool: "logic_edit", command: "play"))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_edit", command: "play") == 25)
             #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
         }
     }

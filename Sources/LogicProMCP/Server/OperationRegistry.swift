@@ -33,6 +33,20 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case pluginsGetInventory = "plugins.get_inventory"
     case pluginsSetParamVerified = "plugins.set_param_verified"
     case pluginsInsertVerified = "plugins.insert_verified"
+    case editUndo = "edit.undo"
+    case editRedo = "edit.redo"
+    case editCut = "edit.cut"
+    case editCopy = "edit.copy"
+    case editPaste = "edit.paste"
+    case editDelete = "edit.delete"
+    case editSelectAll = "edit.select_all"
+    case editSplit = "edit.split"
+    case editJoin = "edit.join"
+    case editQuantize = "edit.quantize"
+    case editBounceInPlace = "edit.bounce_in_place"
+    case editNormalize = "edit.normalize"
+    case editDuplicate = "edit.duplicate"
+    case editToggleStepInput = "edit.toggle_step_input"
 }
 
 enum ToolID: String, Sendable, Equatable {
@@ -42,6 +56,7 @@ enum ToolID: String, Sendable, Equatable {
     case logicAudio = "logic_audio"
     case logicSystem = "logic_system"
     case logicPlugins = "logic_plugins"
+    case logicEdit = "logic_edit"
 }
 
 enum Mutability: Sendable, Equatable {
@@ -149,6 +164,11 @@ enum OperationRegistry {
         ToolID.logicPlugins.rawValue: [
             "plugins.get_inventory", "plugins.set_param_verified", "plugins.insert_verified",
         ],
+        ToolID.logicEdit.rawValue: [
+            "edit.undo", "edit.redo", "edit.cut", "edit.copy", "edit.paste", "edit.delete",
+            "edit.select_all", "edit.split", "edit.join", "edit.quantize",
+            "edit.bounce_in_place", "edit.normalize", "edit.duplicate", "edit.toggle_step_input",
+        ],
     ]
 
     private static let allowedCommandsByTool: [String: Set<String>] = [
@@ -172,6 +192,10 @@ enum OperationRegistry {
         ],
         ToolID.logicPlugins.rawValue: [
             "get_inventory", "set_param_verified", "insert_verified",
+        ],
+        ToolID.logicEdit.rawValue: [
+            "undo", "redo", "cut", "copy", "paste", "delete", "select_all", "split", "join",
+            "quantize", "bounce_in_place", "normalize", "duplicate", "toggle_step_input",
         ],
     ]
 
@@ -302,6 +326,35 @@ enum OperationRegistry {
             availability: .defaultInstall,
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
+    } + ([
+        (.editUndo, "undo", AvailabilityPolicy.defaultInstall, VerificationPolicy.none),
+        (.editRedo, "redo", .defaultInstall, .none),
+        (.editCut, "cut", .defaultInstall, .none),
+        (.editCopy, "copy", .defaultInstall, .none),
+        (.editPaste, "paste", .defaultInstall, .none),
+        (.editDelete, "delete", .defaultInstall, .none),
+        (.editSelectAll, "select_all", .defaultInstall, .none),
+        (.editSplit, "split", .defaultInstall, .none),
+        (.editJoin, "join", .defaultInstall, .none),
+        (.editQuantize, "quantize", .defaultInstall, .none),
+        (.editBounceInPlace, "bounce_in_place", .defaultInstall, .none),
+        (.editNormalize, "normalize", .requiresKeyBinding, .none),
+        (.editDuplicate, "duplicate", .requiresKeyBinding, .none),
+        (.editToggleStepInput, "toggle_step_input", .requiresKeyBinding, .none),
+    ] as [(OperationID, String, AvailabilityPolicy, VerificationPolicy)]).map { entry in
+        OperationSpec(
+            id: entry.0,
+            tool: .logicEdit,
+            command: entry.1,
+            mutability: Mutability.`mutating`,
+            confirmation: .none,
+            target: .none,
+            verification: entry.3,
+            retry: .neverAutomatic,
+            deadline: .short,
+            availability: entry.2,
+            capability: CapabilityID(rawValue: entry.0.rawValue)
+        )
     }
 
     static func spec(tool: String, command: String) -> OperationSpec? {
@@ -392,6 +445,7 @@ enum OperationRegistry {
             ToolID.logicAudio.rawValue: "audio",
             ToolID.logicSystem.rawValue: "system",
             ToolID.logicPlugins.rawValue: "plugins",
+            ToolID.logicEdit.rawValue: "edit",
         ]
         let mismatches = entries
             .filter { entry in
