@@ -7,7 +7,7 @@ The core execution order is ADR-002 → ADR-003 → ADR-004 → ADR-001.
 ADR-005 is cross-cutting and applies throughout the entire sequence.
 Every ADR starts in `Proposed` status and advances only with its own implementation and qualification evidence.
 
-The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementation`: each has flag-gated (default-off) pilots merged to `main` with deterministic tests and live evidence (see the [Implementation status](#implementation-status) section). They add zero runtime behavior with their flags off. ADR-006 has also entered `In Implementation` with a first, types-only increment (the runtime cache rewiring is deferred pending a live soak — see its status entry). ADR-001, ADR-004, ADR-007 and all Category C/D ADRs remain `Proposed` — they depend on the kernel being not just merged but live-qualified, which is ongoing.
+The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementation`: each has flag-gated (default-off) pilots merged to `main` with deterministic tests and live evidence (see the [Implementation status](#implementation-status) section). They add zero runtime behavior with their flags off. ADR-006 has also entered `In Implementation` with a first, types-only increment (the runtime cache rewiring is deferred pending a live soak — see its status entry). ADR-004 has entered `In Implementation` with a pure in-memory saga engine (reversible-ops-only; live execution and MCP surface deferred — see its status entry). ADR-001, ADR-007 and all Category C/D ADRs remain `Proposed` — they depend on the kernel being not just merged but live-qualified, which is ongoing.
 
 ## Category A — Core execution path
 
@@ -16,7 +16,7 @@ The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementati
 | ADR-002 | Session-scoped Stable Target Reference | A | `In Implementation` | [#285](https://github.com/MongLong0214/logic-pro-mcp/issues/285) |
 | ADR-003 | Public Operation Contract Registry | A | `In Implementation` | [#286](https://github.com/MongLong0214/logic-pro-mcp/issues/286) |
 | ADR-005 | Operation Trace and Support Bundle | A | `In Implementation` | [#288](https://github.com/MongLong0214/logic-pro-mcp/issues/288) |
-| ADR-004 | Verified Mutation Saga | A | `Proposed` | [#287](https://github.com/MongLong0214/logic-pro-mcp/issues/287) |
+| ADR-004 | Verified Mutation Saga | A | `In Implementation` | [#287](https://github.com/MongLong0214/logic-pro-mcp/issues/287) |
 | ADR-001 | Same-Release Live Qualification Gate | A | `Proposed` | [#284](https://github.com/MongLong0214/logic-pro-mcp/issues/284) |
 
 ## Category B — Shared infrastructure
@@ -71,6 +71,14 @@ Kernel pilots merged to `main`, all behind default-off feature flags (zero runti
 - First increment: pure snapshot value types only — `VersionedSnapshot<Value>` (project epoch, section revision, observed-at, source, completeness, fingerprint), `StateSource` / `Completeness` / `CacheSectionID` enums, and pure `etag` / `cacheAgeMillis(now:)` derivations, behind `FeatureFlags.adr006VersionedCache` (default off).
 - Deliberately scoped out (deferred): the `RefreshCoordinator` (single-flight refresh + backpressure), the actual resource-envelope wiring (`project_epoch` / `section_revision` / `etag` / `cache_age_ms` on reads), and any `StateCache` rewiring. Those require the 30-minute memory-soak and large-project benchmarks from #289's acceptance criteria, which need live qualification and are not claimed here.
 - Deterministic tests only (no runtime path touched): field preservation, etag stability, `cacheAgeMillis` monotonicity + clock-skew guard, `Codable` round-trips, section completeness, flag-default-off.
+
+### ADR-004 — Verified Mutation Saga (`In Implementation`)
+- MVP saga engine only: a pure in-memory `actor MutationSaga` (12-state machine, full-plan preflight, compensation journal) behind `FeatureFlags.adr004MutationSaga` (default off). Step execution is injected via a `SagaStepExecutor` protocol — tests drive it with a synthetic mock; no live Logic and no dispatcher/MCP wiring.
+- **Full-plan preflight gate**: every step's target is resolved against the `TargetRegistry` (ADR-002) and validated against the operation registry (ADR-003); if any step has a stale/mismatched target, an unregistered/non-reversible operation, or an invalid inverse, **no step executes** (the executor is never called — asserted by `runCount == 0`).
+- **Reversible-ops allowlist, exactly six**: `track.rename`, `mixer.set_volume`, `mixer.set_pan`, `tracks.set_mute`, `tracks.set_solo`, `tracks.set_record_arm`. Each inverse restores the captured before-state.
+- **No blind inverse**: on an unverified (State B) or ambiguous write, the engine does a fresh readback and branches — applied → compensate, not-applied → no-op, unknown → `rollbackUncertain`. `fullyCompensated` is reported only after compensation readback confirms restoration; partial outcomes never surface as top-level success (`complete: false`).
+- 7 deterministic tests (synthetic executor): preflight-rejects-before-run, happy-path journal evidence, reverse-order compensation, no-blind-inverse reconciliation, compensation-failure honesty, idempotency + flag-default-off, exact state-machine/allowlist.
+- Deferred (honest scope): live execution against real dispatchers, the public MCP surface, and non-reversible / multi-target operations. Those need real write-path wiring plus live qualification and are not claimed here.
 
 ### Release qualification
 - Strict live E2E suite (`LOGIC_PRO_MCP_STRICT_LIVE=1`, real Logic Pro, fresh-session bootstrap) is green on `main`.
