@@ -90,6 +90,57 @@ private final class TrackRenameSession: @unchecked Sendable {
     var selectionCommitted = false
 }
 
+private final class DeleteTrackSession: @unchecked Sendable {
+    var pressedTitles: [String] = []
+}
+
+private func makeDeleteTrackFixture(
+    menuTitle: String,
+    itemTitles: [String]
+) -> (runtime: AXLogicProElements.Runtime, session: DeleteTrackSession) {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(380)
+    let window = builder.element(381)
+    let menuBar = builder.element(382)
+    let trackMenu = builder.element(383)
+    let trackList = builder.element(384)
+    let trackHeader = builder.element(385)
+    let itemElements = itemTitles.indices.map { builder.element(390 + $0) }
+    let session = DeleteTrackSession()
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setChildren(window, [trackList])
+    builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setChildren(trackList, [trackHeader])
+    builder.setAttribute(trackHeader, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    builder.setChildren(menuBar, [trackMenu])
+    builder.setAttribute(trackMenu, kAXTitleAttribute as String, menuTitle)
+    builder.setChildren(trackMenu, itemElements)
+    for (element, title) in zip(itemElements, itemTitles) {
+        builder.setAttribute(element, kAXTitleAttribute as String, title)
+    }
+
+    let titlesByID = Dictionary(uniqueKeysWithValues: zip(itemElements, itemTitles).map {
+        (builder.elementID($0.0), $0.1)
+    })
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            guard action == kAXPressAction as String,
+                  let title = titlesByID[builder.elementID(element)] else { return true }
+            session.pressedTitles.append(title)
+            if title == "Delete Track" || title == "트랙 삭제" {
+                builder.setChildren(trackList, [])
+            }
+            return true
+        }
+    )
+    return (runtime, session)
+}
+
 private final class BlockingExecuteProbe: @unchecked Sendable {
     private let entered = DispatchSemaphore(value: 0)
     private let release = DispatchSemaphore(value: 0)
@@ -1877,6 +1928,54 @@ private func makeTempoSliderFixture(
     #expect(result.message.contains("\"observed_track_type\":\"software_instrument\""))
     #expect(result.message.contains("\"track_type_verification_source\":\"menu_clicked\""))
     #expect(result.message.contains("\"verification_source\":\"track_count_delta\""))
+}
+
+@Test func testDeleteTrackUsesExactEnglishMenuItemAndReportsClickedTitle() async throws {
+    let fixture = makeDeleteTrackFixture(
+        menuTitle: "Track",
+        itemTitles: ["Delete Unused Tracks", "Delete Track"]
+    )
+
+    let result = await AccessibilityChannel.defaultDeleteTrack(runtime: fixture.runtime)
+
+    try #require(result.isSuccess, "English-only Track menu must resolve Delete Track, got: \(result.message)")
+    let object = decodeAccessibilityJSON(result.message)
+    #expect(object["verified"] as? Bool == true)
+    #expect(object["menu_clicked"] as? String == "Delete Track")
+    #expect(fixture.session.pressedTitles == ["Delete Track"])
+}
+
+@Test func testDeleteTrackUsesKoreanMenuItemAndReportsClickedTitle() async throws {
+    let fixture = makeDeleteTrackFixture(
+        menuTitle: "트랙",
+        itemTitles: ["트랙 삭제"]
+    )
+
+    let result = await AccessibilityChannel.defaultDeleteTrack(runtime: fixture.runtime)
+
+    try #require(result.isSuccess, "Korean-only 트랙 menu must resolve 트랙 삭제, got: \(result.message)")
+    let object = decodeAccessibilityJSON(result.message)
+    #expect(object["verified"] as? Bool == true)
+    #expect(object["menu_clicked"] as? String == "트랙 삭제")
+    #expect(fixture.session.pressedTitles == ["트랙 삭제"])
+}
+
+@Test func testDeleteTrackMissingItemHintNamesEnglishAndKoreanCandidates() async {
+    let fixture = makeDeleteTrackFixture(
+        menuTitle: "Track",
+        itemTitles: ["Delete Unused Tracks"]
+    )
+
+    let result = await AccessibilityChannel.defaultDeleteTrack(runtime: fixture.runtime)
+
+    #expect(!result.isSuccess)
+    let object = decodeAccessibilityJSON(result.message)
+    #expect(object["error"] as? String == "element_not_found")
+    #expect(
+        object["hint"] as? String ==
+            "Track > Delete Track / 트랙 삭제 menu item not found / not pressable"
+    )
+    #expect(fixture.session.pressedTitles.isEmpty)
 }
 
 @Test func testAccessibilityChannelCreateInstrumentFailsWhenTrackCountDoesNotIncrease() async {

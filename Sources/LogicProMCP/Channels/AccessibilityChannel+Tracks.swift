@@ -605,17 +605,26 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ChannelResult {
         let beforeCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
-        let click = clickTrackMenu("트랙 삭제", menuName: "트랙", englishMenuName: "Track", runtime: runtime)
+        let click = clickTrackMenu(
+            ["Delete Track", "트랙 삭제"],
+            menuName: "트랙",
+            englishMenuName: "Track",
+            runtime: runtime
+        )
         guard click.isSuccess else {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
-                hint: "Track > 트랙 삭제 menu item not found / not pressable",
+                hint: "Track > Delete Track / 트랙 삭제 menu item not found / not pressable",
                 extras: ["track_count_before": beforeCount]
             ))
         }
 
+        let menuClicked = (
+            (try? JSONSerialization.jsonObject(with: Data(click.message.utf8))) as? [String: String]
+        )?["menu_clicked"] ?? "Delete Track / 트랙 삭제"
+
         let extras: [String: Any] = [
-            "menu_clicked": "트랙 삭제",
+            "menu_clicked": menuClicked,
             "track_count_before": beforeCount,
             "requested_delta": -1
         ]
