@@ -269,3 +269,36 @@ private func makeSignals(
     #expect(ModalReconciliation.decide(kind: .informationalAlert, isDeleteContext: true) == .acknowledgeAlert)
     #expect(ModalReconciliation.decide(kind: .informationalAlert, isDeleteContext: false) == .acknowledgeAlert)
 }
+
+// MARK: - create-path preflight scope (#348)
+
+@Test func testPreflightCreateScopeDoesNotClickCreateForMandatoryNewTrack() {
+    // DOUBLE-CREATE GUARD: in create scope the mandatory New Track sheet still
+    // DECIDES clickCreate, but preflight must NOT PERFORM it — createTrackViaMenu
+    // opens/confirms its own dialog, so acting here would create two tracks.
+    #expect(ModalReconciliation.decide(kind: .mandatoryNewTrack, isDeleteContext: false) == .clickCreate)
+    #expect(!ModalReconciliation.preflightShouldPerform(kind: .mandatoryNewTrack, clearMandatoryNewTrack: false))
+}
+
+@Test func testPreflightDefaultScopeClearsMandatoryNewTrack() {
+    // Default scope (any other caller) still auto-clears the mandatory sheet.
+    #expect(ModalReconciliation.preflightShouldPerform(kind: .mandatoryNewTrack, clearMandatoryNewTrack: true))
+}
+
+@Test func testPreflightCreateScopeStillAcknowledgesAlert() {
+    #expect(ModalReconciliation.decide(kind: .informationalAlert, isDeleteContext: false) == .acknowledgeAlert)
+    #expect(ModalReconciliation.preflightShouldPerform(kind: .informationalAlert, clearMandatoryNewTrack: false))
+}
+
+@Test func testPreflightCreateScopeStillEscapesStrayMenu() {
+    #expect(ModalReconciliation.decide(kind: .strayMenu, isDeleteContext: false) == .escapeMenu)
+    #expect(ModalReconciliation.preflightShouldPerform(kind: .strayMenu, clearMandatoryNewTrack: false))
+}
+
+@Test func testPreflightNeverActsOnDeleteConfirmUnknownOrNone() {
+    for clear in [true, false] {
+        #expect(!ModalReconciliation.preflightShouldPerform(kind: .deleteConfirm, clearMandatoryNewTrack: clear))
+        #expect(!ModalReconciliation.preflightShouldPerform(kind: .unknownSheet, clearMandatoryNewTrack: clear))
+        #expect(!ModalReconciliation.preflightShouldPerform(kind: .none, clearMandatoryNewTrack: clear))
+    }
+}

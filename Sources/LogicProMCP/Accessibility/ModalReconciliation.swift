@@ -126,4 +126,27 @@ enum ModalReconciliation {
             return .noAction
         }
     }
+
+    /// Whether a PREFLIGHT reconciliation should actually PERFORM the action for
+    /// `kind`. Preflight only auto-clears non-destructive blockers: a single-
+    /// button informational alert and a stray menu ALWAYS; the mandatory New
+    /// Track sheet ONLY when `clearMandatoryNewTrack` is true. The create path
+    /// passes `false` so preflight never clicks "Create" — `createTrackViaMenu`
+    /// opens and confirms its own New Track dialog, and auto-Creating here too
+    /// would DOUBLE-CREATE. deleteConfirm / unknownSheet / none never act at
+    /// preflight (fail closed — never confirm an unrequested delete or dismiss a
+    /// sheet that could be a Save prompt).
+    static func preflightShouldPerform(
+        kind: BlockingModalKind,
+        clearMandatoryNewTrack: Bool
+    ) -> Bool {
+        switch kind {
+        case .informationalAlert, .strayMenu:
+            return true
+        case .mandatoryNewTrack:
+            return clearMandatoryNewTrack
+        case .deleteConfirm, .unknownSheet, .none:
+            return false
+        }
+    }
 }

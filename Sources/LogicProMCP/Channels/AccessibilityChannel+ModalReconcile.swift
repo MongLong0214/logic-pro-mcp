@@ -28,33 +28,52 @@ extension AccessibilityChannel {
         isDeleteContext: Bool,
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ModalReconcileOutcome {
-        await reconcile(isDeleteContext: isDeleteContext, preflight: false, runtime: runtime)
+        await reconcile(
+            isDeleteContext: isDeleteContext,
+            preflight: false,
+            clearMandatoryNewTrack: true,
+            runtime: runtime
+        )
     }
 
-    /// Reconcile a blocking modal BEFORE starting an operation. Only auto-clears
-    /// the mandatory New Track sheet, a single-button informational alert, and a
-    /// stray open menu; a deleteConfirm / unknownSheet is reported but NOT acted
-    /// on (we never confirm a delete the caller did not request, nor dismiss a
-    /// sheet/dialog that could be a Save prompt).
+    /// Reconcile a blocking modal BEFORE starting an operation. Auto-clears a
+    /// single-button informational alert and a stray open menu; the mandatory
+    /// New Track sheet is auto-cleared ONLY when `clearMandatoryNewTrack` is true
+    /// (the default). The CREATE path passes `false` so preflight never clicks
+    /// "Create" — `createTrackViaMenu` opens/confirms its own New Track dialog,
+    /// and doing both would double-create. A deleteConfirm / unknownSheet is
+    /// reported but NOT acted on (we never confirm a delete the caller did not
+    /// request, nor dismiss a sheet/dialog that could be a Save prompt).
     static func reconcilePreflight(
+        clearMandatoryNewTrack: Bool = true,
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ModalReconcileOutcome {
-        await reconcile(isDeleteContext: false, preflight: true, runtime: runtime)
+        await reconcile(
+            isDeleteContext: false,
+            preflight: true,
+            clearMandatoryNewTrack: clearMandatoryNewTrack,
+            runtime: runtime
+        )
     }
 
     private static func reconcile(
         isDeleteContext: Bool,
         preflight: Bool,
+        clearMandatoryNewTrack: Bool,
         runtime: AXLogicProElements.Runtime
     ) async -> ModalReconcileOutcome {
         let signals = readModalSignals(runtime: runtime)
         let kind = ModalReconciliation.classify(signals)
         let decision = ModalReconciliation.decide(kind: kind, isDeleteContext: isDeleteContext)
 
-        // Preflight only auto-clears the mandatory New Track sheet, a single-
-        // button informational alert, and a stray menu; everything else is
-        // reported without a side effect.
-        if preflight, kind != .mandatoryNewTrack, kind != .informationalAlert, kind != .strayMenu {
+        // At preflight, only the non-destructive blockers are auto-cleared (and
+        // the mandatory New Track sheet only when `clearMandatoryNewTrack`); the
+        // scoping policy is the pure `preflightShouldPerform`.
+        if preflight,
+           !ModalReconciliation.preflightShouldPerform(
+                kind: kind,
+                clearMandatoryNewTrack: clearMandatoryNewTrack
+           ) {
             return ModalReconcileOutcome(kind: kind, decision: decision, performed: false)
         }
 
