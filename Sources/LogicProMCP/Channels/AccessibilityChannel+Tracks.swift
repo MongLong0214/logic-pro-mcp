@@ -444,6 +444,15 @@ extension AccessibilityChannel {
             return .error("No document open for track creation")
         }
 
+        // #348: clear a stray blocking modal BEFORE driving the Track menu — a
+        // single-OK top-level alert (audio-interface warning on fresh-document /
+        // first-track creation) otherwise wedges the create. Scoped with
+        // `clearMandatoryNewTrack: false` so preflight NEVER clicks "Create": the
+        // New-Track-dialog confirmation below (`sendReturnKey`) owns that, and
+        // doing both would double-create. Acknowledges alerts + escapes stray
+        // menus only; a no-op AX read when nothing is blocking.
+        let reconcileOutcome = await reconcilePreflight(clearMandatoryNewTrack: false, runtime: runtime)
+
         let beforeTracks = observedTrackStates(runtime: runtime)
         let beforeCount = beforeTracks.count
 
@@ -477,6 +486,7 @@ extension AccessibilityChannel {
             expectedTrackType: expectedTrackType,
             beforeTracks: beforeTracks,
             dialogConfirmationAttempted: dialogConfirmationAttempted,
+            reconcileOutcome: reconcileOutcome,
             runtime: runtime
         )
     }
@@ -502,12 +512,13 @@ extension AccessibilityChannel {
         expectedTrackType: TrackType,
         beforeTracks: [TrackState],
         dialogConfirmationAttempted: Bool,
+        reconcileOutcome: ModalReconcileOutcome,
         runtime: AXLogicProElements.Runtime
     ) async -> ChannelResult {
         let beforeCount = beforeTracks.count
         var lastObservedCount = beforeCount
 
-        let extras: [String: Any] = [
+        var extras: [String: Any] = [
             "menu_clicked": title,
             "track_count_before": beforeCount,
             "requested_delta": 1,
@@ -516,6 +527,15 @@ extension AccessibilityChannel {
             "track_type_verification_source": "menu_clicked",
             "verification_source": "track_count_delta"
         ]
+        // #348: note any pre-create reconciliation (alert acknowledged / stray
+        // menu escaped). No-op when nothing was blocking, so the clean create
+        // path stays byte-identical.
+        mergeReconcileExtras(
+            &extras,
+            kind: reconcileOutcome.kind,
+            action: reconcileActionLabel(reconcileOutcome.decision),
+            newTrackAutoConfirmed: false
+        )
 
         for attempt in 0..<4 {
             let currentTracks = observedTrackStates(runtime: runtime)
