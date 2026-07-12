@@ -81,7 +81,12 @@ extension ResourceHandlers {
 
         switch uri {
         case "logic://transport/state":
-            return try await readTransportState(cache: cache, router: router, uri: uri)
+            return try await readTransportState(
+                cache: cache,
+                router: router,
+                uri: uri,
+                targetRegistry: targetRegistry
+            )
 
         case "logic://tracks":
             return try await readTracks(
@@ -92,13 +97,18 @@ extension ResourceHandlers {
             )
 
         case "logic://mixer":
-            return try await readMixer(cache: cache, uri: uri)
+            return try await readMixer(cache: cache, uri: uri, targetRegistry: targetRegistry)
 
         case "logic://markers":
             return try await readMarkers(cache: cache, uri: uri)
 
         case "logic://project/info":
-            return try await readProjectInfo(cache: cache, uri: uri, fileReader: fileReader)
+            return try await readProjectInfo(
+                cache: cache,
+                uri: uri,
+                fileReader: fileReader,
+                targetRegistry: targetRegistry
+            )
 
         case "logic://project/audit":
             return try await readProjectAudit(cache: cache, uri: uri)

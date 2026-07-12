@@ -6,7 +6,12 @@ import MCP
 extension ResourceHandlers {
     // MARK: - Individual resource handlers
 
-    static func readTransportState(cache: StateCache, router: ChannelRouter, uri: String) async throws -> ReadResource.Result {
+    static func readTransportState(
+        cache: StateCache,
+        router: ChannelRouter,
+        uri: String,
+        targetRegistry: TargetRegistry? = nil
+    ) async throws -> ReadResource.Result {
         let liveRefresh = await readLiveTransportState(router: router)
         if let liveState = liveRefresh.state {
             await cache.updateTransport(liveState)
@@ -23,11 +28,19 @@ extension ResourceHandlers {
         let body = """
             {"state":\(inner),"has_document":\(hasDocument)}
             """
+        var extras = transportStateEnvelopeExtras(liveRefresh: liveRefresh, cachedState: state)
+        if FeatureFlags.adr006VersionedCache {
+            extras.merge(versionedCacheExtras(
+                projectEpoch: await targetRegistry?.currentProjectEpoch ?? 0,
+                sectionRevision: await cache.sectionRevision(.transport),
+                bodyJSON: body
+            )) { _, new in new }
+        }
         let json = wrapWithCacheEnvelope(
             bodyJSON: body,
             fetchedAt: state.lastUpdated,
             axOccluded: axOccluded,
-            extras: transportStateEnvelopeExtras(liveRefresh: liveRefresh, cachedState: state)
+            extras: extras
         )
         return ReadResource.Result(
             contents: [.text(json, uri: uri, mimeType: "application/json")]
@@ -188,11 +201,19 @@ extension ResourceHandlers {
         } else {
             body = encodeJSON(tracksOut)
         }
+        var extras: [String: Any] = ["source": source]
+        if FeatureFlags.adr006VersionedCache {
+            extras.merge(versionedCacheExtras(
+                projectEpoch: await targetRegistry?.currentProjectEpoch ?? 0,
+                sectionRevision: await cache.sectionRevision(.tracks),
+                bodyJSON: body
+            )) { _, new in new }
+        }
         let json = wrapWithCacheEnvelope(
             bodyJSON: body,
             fetchedAt: cacheFetchedAt,
             axOccluded: axOccluded,
-            extras: ["source": source]
+            extras: extras
         )
         return ReadResource.Result(
             contents: [.text(json, uri: uri, mimeType: "application/json")]
@@ -262,7 +283,11 @@ extension ResourceHandlers {
         return now.timeIntervalSince(fetchedAt) <= freshThreshold ? "ax_poll" : "cache_stale"
     }
 
-    static func readMixer(cache: StateCache, uri: String) async throws -> ReadResource.Result {
+    static func readMixer(
+        cache: StateCache,
+        uri: String,
+        targetRegistry: TargetRegistry? = nil
+    ) async throws -> ReadResource.Result {
         let strips = await cache.getChannelStrips()
         let conn = await cache.getMCUConnection()
         let fetchedAt = await cache.getMixerFetchedAt()
@@ -276,8 +301,18 @@ extension ResourceHandlers {
         // one-release alias of `mcu_registered` for existing parsers.
         let dataSource = mixerDataSource(fetchedAt: fetchedAt)
         let ageMsPart = conn.lastFeedbackAgeMs().map { "\($0)" } ?? "null"
+        let versionedFragment: String
+        if FeatureFlags.adr006VersionedCache {
+            versionedFragment = encodeExtrasFragment(versionedCacheExtras(
+                projectEpoch: await targetRegistry?.currentProjectEpoch ?? 0,
+                sectionRevision: await cache.sectionRevision(.mixer),
+                bodyJSON: stripsJSON
+            ))
+        } else {
+            versionedFragment = ""
+        }
         let json = """
-            {"cache_age_sec":\(agePart),"data_source":"\(dataSource)","fetched_at":\(isoPart),"ax_occluded":\(axOccluded),"mcu_connected":\(conn.isConnected),"mcu_registered":\(conn.registeredAsDevice),"mcu_last_feedback_age_ms":\(ageMsPart),"registered":\(conn.registeredAsDevice),"strips":\(stripsJSON)}
+            {"cache_age_sec":\(agePart),"data_source":"\(dataSource)","fetched_at":\(isoPart),"ax_occluded":\(axOccluded),"mcu_connected":\(conn.isConnected),"mcu_registered":\(conn.registeredAsDevice),"mcu_last_feedback_age_ms":\(ageMsPart),"registered":\(conn.registeredAsDevice),"strips":\(stripsJSON)\(versionedFragment)}
             """
         return ReadResource.Result(
             contents: [.text(json, uri: uri, mimeType: "application/json")]
@@ -305,7 +340,8 @@ extension ResourceHandlers {
     static func readProjectInfo(
         cache: StateCache,
         uri: String,
-        fileReader: LogicProjectFileReader.Runtime
+        fileReader: LogicProjectFileReader.Runtime,
+        targetRegistry: TargetRegistry? = nil
     ) async throws -> ReadResource.Result {
         let snapshot = await cache.auditSnapshot()
         let cached = snapshot.project
@@ -411,6 +447,13 @@ extension ResourceHandlers {
         if let age = lastSavedAgeSec { extras["last_saved_age_sec"] = age }
 
         let body = encodeJSON(info)
+        if FeatureFlags.adr006VersionedCache {
+            extras.merge(versionedCacheExtras(
+                projectEpoch: await targetRegistry?.currentProjectEpoch ?? 0,
+                sectionRevision: await cache.sectionRevision(.project),
+                bodyJSON: body
+            )) { _, new in new }
+        }
         let cacheReferenceDate = cacheContributionDates.max() ?? cachedProjectReferenceDate
         let envelope = wrapWithCacheEnvelope(
             bodyJSON: body,
