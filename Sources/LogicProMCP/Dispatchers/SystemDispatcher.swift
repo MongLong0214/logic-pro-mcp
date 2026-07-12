@@ -2,7 +2,11 @@ import Foundation
 import CoreGraphics
 import MCP
 
-struct SystemDispatcher {
+struct SystemDispatcher: OperationTraceDispatching {
+    typealias SupportBundleExporter = @Sendable (
+        URL,
+        @Sendable () async -> Void
+    ) async throws -> SupportBundleBuilder.Result
     private struct HealthResponse: Encodable {
         struct MCUSection: Encodable {
             let connected: Bool
@@ -130,10 +134,11 @@ struct SystemDispatcher {
         name: "logic_system",
         description: """
             Diagnostics and help for the Logic Pro MCP server. \
-            Commands: health, permissions, refresh_cache, help. \
+            Commands: health, permissions, refresh_cache, export_support_bundle, help. \
             Params by command: \
             help -> { category: String } (returns full param docs for a dispatcher); \
             refresh_cache -> {} (force AX re-poll); \
+            export_support_bundle -> { dir?: String } (local files only; never uploaded); \
             Others -> {}
             """,
         inputSchema: .object([
@@ -157,7 +162,8 @@ struct SystemDispatcher {
         params: [String: Value],
         router: ChannelRouter,
         cache: StateCache,
-        poller: StatePoller? = nil
+        poller: StatePoller? = nil,
+        supportBundleExporter: SupportBundleExporter? = nil
     ) async -> CallTool.Result {
         if FeatureFlags.adr005OperationTrace,
            let traceResult = await handleTraceCommand(command: command, params: params) {
@@ -251,6 +257,54 @@ struct SystemDispatcher {
             }
             return toolTextResult("State refresh triggered. Cache will be updated on next poll cycle.")
 
+        case "export_support_bundle":
+            let createdAt = Date()
+            let directory: URL
+            if let raw = params["dir"] {
+                guard let path = raw.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !path.isEmpty,
+                      path.hasPrefix("/") else {
+                    return toolInvalidParamsResult("export_support_bundle 'dir' must be an absolute path")
+                }
+                directory = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+            } else {
+                directory = defaultSupportBundleDirectory(createdAt: createdAt)
+            }
+            let traceID = await startTraceIfEnabled(command: command)
+            do {
+                let result: SupportBundleBuilder.Result
+                if let supportBundleExporter {
+                    result = try await supportBundleExporter(directory) {
+                        await recordWriteBoundary(traceID)
+                    }
+                } else {
+                    result = try await exportSupportBundle(
+                        to: directory,
+                        createdAt: createdAt,
+                        router: router,
+                        onFirstWrite: { await recordWriteBoundary(traceID) }
+                    )
+                }
+                return await finalizeTrace(
+                    toolTextResult(HonestContract.encodeStateA(extras: [
+                        "bundle_path": result.directory.path,
+                        "files": result.files.map { ["name": $0.name, "sha256": $0.sha256] },
+                    ])),
+                    traceID: traceID
+                )
+            } catch {
+                return await finalizeTrace(
+                    toolTextResult(
+                        HonestContract.encodeStateC(
+                            error: .supportBundleExportFailed,
+                            hint: "Support bundle could not be written to the requested local directory"
+                        ),
+                        isError: true
+                    ),
+                    traceID: traceID
+                )
+            }
+
         case "help":
             // #219: an unknown category used to fall through to full help with
             // isError:false, hiding client typos. An absent category still means
@@ -278,9 +332,69 @@ struct SystemDispatcher {
         }
     }
 
+    private static func defaultSupportBundleDirectory(createdAt: Date) -> URL {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/LogicProMCP/support-bundles", isDirectory: true)
+            .appendingPathComponent(
+                "\(formatter.string(from: createdAt))-\(UUID().uuidString.lowercased())",
+                isDirectory: true
+            )
+    }
+
+    private static func exportSupportBundle(
+        to directory: URL,
+        createdAt: Date,
+        router: ChannelRouter,
+        onFirstWrite: @escaping @Sendable () async -> Void
+    ) async throws -> SupportBundleBuilder.Result {
+        let approvalStore = ManualValidationStore()
+        let approvals = await approvalStore.list()
+        let manualStoreHealth = await approvalStore.health()
+        let doctor = try await SupportBundleBuilder.runBlocking {
+            SetupDoctor.generate(
+                arguments: [CommandLine.arguments.first ?? "LogicProMCP", "doctor", "--json"],
+                permissionStatus: PermissionChecker.check(),
+                approvals: approvals,
+                manualStoreHealth: manualStoreHealth
+            )
+        }
+        let channels = await router.healthReport().sorted { $0.key.rawValue < $1.key.rawValue }.map {
+            SupportBundleBuilder.ChannelMetadata(
+                id: $0.key.rawValue,
+                available: $0.value.available,
+                ready: $0.value.ready,
+                verificationStatus: $0.value.verificationStatus.rawValue
+            )
+        }
+        let process = ProcessUtils.currentProcessMetrics()
+        let target = LogicProTarget.current
+        let input = SupportBundleBuilder.Input(
+            createdAt: createdAt,
+            serverVersion: ServerConfig.serverVersion,
+            serverCommit: "unknown",
+            logic: .init(
+                version: ProcessUtils.logicProVersion() ?? "unknown",
+                variant: target.variantLabel,
+                locale: Locale.current.identifier
+            ),
+            qualificationReference: "not_available",
+            traces: await OperationTraceStore.shared.recent(limit: .max),
+            doctorReport: doctor,
+            metadata: .init(
+                process: .init(uptimeSec: process.uptimeSec, memoryMb: process.memoryMB),
+                channels: channels
+            )
+        )
+        return try await SupportBundleBuilder().build(input, at: directory, onFirstWrite: onFirstWrite)
+    }
+
     private static func unknownCommandResult(_ command: String) -> CallTool.Result {
         toolTextResult(
-            "Unknown system command: \(command). Available: health, permissions, refresh_cache, help",
+            "Unknown system command: \(command). Available: health, permissions, refresh_cache, export_support_bundle, help",
             isError: true
         )
     }
@@ -544,6 +658,7 @@ struct SystemDispatcher {
                   health            -> {} — Channel status + cache info
                   permissions       -> {} — macOS permission status
                   refresh_cache     -> {} — Force AX re-poll
+                  export_support_bundle -> { dir?: String } — Write privacy-safe local diagnostics; never upload
                   help              -> { category: String } — Param docs per category
 
                 Categories: transport, tracks, mixer, midi, edit, navigate, project, audio, plugins, system

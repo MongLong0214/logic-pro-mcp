@@ -61,6 +61,14 @@ actor OperationTraceStore {
     static let shared = OperationTraceStore()
     static let defaultMaximumTraceCount = 128
     static let defaultMaximumBytes = 8 * 1024 * 1024
+    static let attributePrivacyClasses: [String: TracePrivacyClass] = [
+        "operation_id": .publicDiagnostic,
+        "command": .publicDiagnostic,
+        "target_ref": .publicDiagnostic,
+        "project_path_hash": .hashed,
+        "readback_state": .publicDiagnostic,
+        "error_code": .publicDiagnostic,
+    ]
 
     let maximumTraceCount: Int
     let maximumBytes: Int
@@ -176,18 +184,10 @@ actor OperationTraceStore {
     private static func filteredAttributes(
         _ attributes: [String: String]
     ) -> (values: [String: String], privacyClasses: [String: TracePrivacyClass]) {
-        let classes: [String: TracePrivacyClass] = [
-            "operation_id": .publicDiagnostic,
-            "command": .publicDiagnostic,
-            "target_ref": .publicDiagnostic,
-            "project_path_hash": .hashed,
-            "readback_state": .publicDiagnostic,
-            "error_code": .publicDiagnostic,
-        ]
         var values: [String: String] = [:]
         var privacyClasses: [String: TracePrivacyClass] = [:]
         for (key, value) in attributes {
-            guard let privacyClass = classes[key] else { continue }
+            guard let privacyClass = attributePrivacyClasses[key] else { continue }
             values[key] = value
             privacyClasses[key] = privacyClass
         }

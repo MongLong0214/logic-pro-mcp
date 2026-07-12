@@ -51,7 +51,7 @@ struct OperationRegistryTests {
         "rename_marker": .unsupported,
     ]
 
-    private static let smallToolCount = 8 // logic_audio(1) + logic_system(4) + logic_plugins(3)
+    private static let smallToolCount = 9 // logic_audio(1) + logic_system(5) + logic_plugins(3)
     private static let expectedRegistryCount =
         commands.count + mixerCommands.count + navigateCommands.count + smallToolCount
             + editCommands.count + projectCommands.count + midiCommands.count + trackCommands.count
@@ -356,6 +356,7 @@ struct OperationRegistryTests {
         ("logic_system", "system.permissions", "permissions", .readOnly, .short, .none),
         ("logic_system", "system.refresh_cache", "refresh_cache", .readOnly, .short, .none),
         ("logic_system", "system.help", "help", .readOnly, .short, .none),
+        ("logic_system", "system.export_support_bundle", "export_support_bundle", .mutating, .medium, .readbackRequired),
         ("logic_plugins", "plugins.get_inventory", "get_inventory", .readOnly, .short, .none),
         ("logic_plugins", "plugins.set_param_verified", "set_param_verified", .mutating, .medium, .readbackRequired),
         ("logic_plugins", "plugins.insert_verified", "insert_verified", .mutating, .medium, .readbackRequired),

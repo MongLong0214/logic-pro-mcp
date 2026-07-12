@@ -361,7 +361,10 @@ actor LogicProServer {
 
     // MARK: - Tool Registration (10 dispatchers)
 
-    func makeHandlers(dialogPresent: @escaping @Sendable () -> Bool = { false }) -> LogicProServerHandlers {
+    func makeHandlers(
+        dialogPresent: @escaping @Sendable () -> Bool = { false },
+        supportBundleExporter: SystemDispatcher.SupportBundleExporter? = nil
+    ) -> LogicProServerHandlers {
         let router = self.router
         let cache = self.cache
         let poller = self.poller
@@ -428,7 +431,14 @@ actor LogicProServer {
                     case "logic_audio":
                         return AudioDispatcher.handle(command: command, params: cmdParams)
                     case "logic_system":
-                        return await SystemDispatcher.handle(command: command, params: cmdParams, router: router, cache: cache, poller: poller)
+                        return await SystemDispatcher.handle(
+                            command: command,
+                            params: cmdParams,
+                            router: router,
+                            cache: cache,
+                            poller: poller,
+                            supportBundleExporter: supportBundleExporter
+                        )
                     case "logic_plugins":
                         return await PluginsDispatcher.handle(
                             command: command,

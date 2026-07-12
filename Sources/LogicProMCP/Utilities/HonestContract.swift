@@ -173,6 +173,7 @@ enum HonestContract {
         /// can tell a typo'd category apart from a missing required argument,
         /// and so an unknown category never silently returns full help. #219.
         case unknownCategory = "unknown_category"
+        case supportBundleExportFailed = "support_bundle_export_failed"
     }
 
     // MARK: - Encoding primitives
@@ -351,6 +352,7 @@ enum HonestContract {
         // category. (help doesn't route through the fallback chain; listed for
         // classification consistency.)
         FailureError.unknownCategory.rawValue,
+        FailureError.supportBundleExportFailed.rawValue,
     ]
 
     /// Returns true if the given message is a State-C envelope whose `error`

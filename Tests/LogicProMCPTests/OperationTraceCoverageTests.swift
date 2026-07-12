@@ -91,8 +91,8 @@ extension OperationTraceTests {
         let mutatingSpecs = OperationRegistry.specs.filter {
             $0.mutability == Mutability.`mutating`
         }
-        #expect(OperationRegistry.specs.count == 99)
-        #expect(mutatingSpecs.count == 83)
+        #expect(OperationRegistry.specs.count == 100)
+        #expect(mutatingSpecs.count == 84)
 
         for spec in mutatingSpecs {
             await OperationTraceStore.shared.clear()
@@ -252,7 +252,13 @@ private func dispatchOperationTraceCoverageSpec(
             command: spec.command,
             params: params,
             router: router,
-            cache: cache
+            cache: cache,
+            supportBundleExporter: { directory, onFirstWrite in
+                await onFirstWrite()
+                return .init(directory: directory, files: [
+                    .init(name: "manifest.json", sha256: String(repeating: "a", count: 64)),
+                ])
+            }
         )
     case .logicPlugins:
         return await PluginsDispatcher.handle(
@@ -309,6 +315,9 @@ private func operationTraceCoverageParams(
     fixtures: OperationTraceCoverageFixtures
 ) -> [String: Value] {
     switch operationID {
+    case .systemExportSupportBundle:
+        return ["dir": .string(URL(fileURLWithPath: fixtures.outputRoot)
+            .appendingPathComponent("support-bundle").path)]
     case .transportSetTempo:
         return ["tempo": .double(120)]
     case .transportGotoPosition:
