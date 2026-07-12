@@ -29,6 +29,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case systemHealth = "system.health"
     case systemPermissions = "system.permissions"
     case systemRefreshCache = "system.refresh_cache"
+    case systemExportSupportBundle = "system.export_support_bundle"
     case systemHelp = "system.help"
     case pluginsGetInventory = "plugins.get_inventory"
     case pluginsSetParamVerified = "plugins.set_param_verified"
@@ -213,7 +214,8 @@ enum OperationRegistry {
             "audio.analyze_file",
         ],
         ToolID.logicSystem.rawValue: [
-            "system.health", "system.permissions", "system.refresh_cache", "system.help",
+            "system.health", "system.permissions", "system.refresh_cache",
+            "system.export_support_bundle", "system.help",
         ],
         ToolID.logicPlugins.rawValue: [
             "plugins.get_inventory", "plugins.set_param_verified", "plugins.insert_verified",
@@ -264,7 +266,7 @@ enum OperationRegistry {
             "analyze_file",
         ],
         ToolID.logicSystem.rawValue: [
-            "health", "permissions", "refresh_cache", "help",
+            "health", "permissions", "refresh_cache", "export_support_bundle", "help",
         ],
         ToolID.logicPlugins.rawValue: [
             "get_inventory", "set_param_verified", "insert_verified",
@@ -383,11 +385,12 @@ enum OperationRegistry {
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
     } + ([
-        (.systemHealth, "health", Mutability.readOnly),
-        (.systemPermissions, "permissions", Mutability.readOnly),
-        (.systemRefreshCache, "refresh_cache", Mutability.readOnly),
-        (.systemHelp, "help", Mutability.readOnly),
-    ] as [(OperationID, String, Mutability)]).map { entry in
+        (.systemHealth, "health", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none),
+        (.systemPermissions, "permissions", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none),
+        (.systemRefreshCache, "refresh_cache", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none),
+        (.systemExportSupportBundle, "export_support_bundle", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired),
+        (.systemHelp, "help", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none),
+    ] as [(OperationID, String, Mutability, DeadlineClass, VerificationPolicy)]).map { entry in
         OperationSpec(
             id: entry.0,
             tool: .logicSystem,
@@ -395,9 +398,9 @@ enum OperationRegistry {
             mutability: entry.2,
             confirmation: .none,
             target: .none,
-            verification: .none,
+            verification: entry.4,
             retry: .neverAutomatic,
-            deadline: .short,
+            deadline: entry.3,
             availability: .defaultInstall,
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )

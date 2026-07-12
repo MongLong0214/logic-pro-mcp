@@ -546,7 +546,7 @@ enum WorkflowSkillCatalog {
             "audit", "cleanup_plan", "cleanup_apply", "launch", "quit",
         ],
         "logic_system": [
-            "health", "permissions", "refresh_cache", "help",
+            "health", "permissions", "refresh_cache", "export_support_bundle", "help",
         ],
         "logic_audio": [
             "analyze_file",
