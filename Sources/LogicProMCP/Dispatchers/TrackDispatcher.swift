@@ -268,6 +268,30 @@ struct TrackDispatcher {
                 )
             }
             if let resolvedReference {
+                // AX readback verified this rename, so `name` is ground truth.
+                // Commit it before rebind to close the stale-cache window; the
+                // poller confirms the same value on its next cycle. A poller
+                // write between get/update may clobber other fields for one
+                // cycle, but the following poll self-heals them.
+                var tracks = await cache.getTracks()
+                if tracks.indices.contains(index) {
+                    let track = tracks[index]
+                    tracks[index] = TrackState(
+                        id: track.id,
+                        name: name,
+                        type: track.type,
+                        isMuted: track.isMuted,
+                        isSoloed: track.isSoloed,
+                        isArmed: track.isArmed,
+                        isSelected: track.isSelected,
+                        volume: track.volume,
+                        pan: track.pan,
+                        automationMode: track.automationMode,
+                        color: track.color,
+                        placeholder: track.placeholder
+                    )
+                    await cache.updateTracks(tracks)
+                }
                 // ADR-002 (#353): this verified rename ran THROUGH `resolvedReference`
                 // and changed the track's name — the exact field the drift check
                 // hashes — so rebind the ref in place. The causal chain (server-issued,

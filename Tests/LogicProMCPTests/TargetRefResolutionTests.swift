@@ -746,14 +746,8 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(renameResult.isError == false)
-
-            // Live cache now reflects Logic's applied rename — exactly the change
-            // that used to invalidate the ref.
-            await cache.updateTracks([
-                TrackState(id: 0, name: "Kick", type: .audio),
-                TrackState(id: 1, name: "Snare", type: .audio),
-                TrackState(id: 2, name: "Sub Bass", type: .audio),
-            ])
+            #expect((await registry.resolve(reference))!.descriptor.trackName == "Sub Bass")
+            #expect((await cache.getTracks())[2].name == "Sub Bass")
 
             let (selectRouter, selectChannels) = await makeRouter()
             let secondOp = await TrackDispatcher.handle(
@@ -765,6 +759,22 @@ struct TargetRefResolutionTests {
             )
             #expect(secondOp.isError == false)
             #expect(await opParams(selectChannels, "track.select") == ["index": "2"])
+        }
+    }
+
+    @Test
+    func testRenameViaIndexDoesNotUpdateCache() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (_, cache, _) = await boundTrack(index: 2, name: "Bass")
+            let (router, _) = await makeRouter()
+            let result = await TrackDispatcher.handle(
+                command: "rename",
+                params: ["index": .int(2), "name": .string("Sub Bass")],
+                router: router,
+                cache: cache
+            )
+            #expect(result.isError == false)
+            #expect((await cache.getTracks())[2].name == "Bass")
         }
     }
 
