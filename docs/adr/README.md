@@ -45,7 +45,7 @@ The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementati
 | ADR-015 | Piano Roll Data-level Transform | D | `In Implementation` | [#303](https://github.com/MongLong0214/logic-pro-mcp/issues/303) |
 | ADR-016 | Smart Tempo and Tempo-map Control | D | `In Implementation` | [#304](https://github.com/MongLong0214/logic-pro-mcp/issues/304) |
 | ADR-017 | Flex Pitch Inspection and Verified Editing | D | `In Implementation` | [#305](https://github.com/MongLong0214/logic-pro-mcp/issues/305) |
-| ADR-018 | Verified Third-party Host-Parameter Control | D | `Proposed` | [#306](https://github.com/MongLong0214/logic-pro-mcp/issues/306) |
+| ADR-018 | Verified Third-party Host-Parameter Control | D | `In Implementation` | [#306](https://github.com/MongLong0214/logic-pro-mcp/issues/306) |
 
 ## Implementation status
 
@@ -163,6 +163,13 @@ Kernel pilots merged to `main`, all behind default-off feature flags (zero runti
 - **Public-edit gate (honesty core)** — `editEligibility` returns `experimental(reasons:)` unless every condition holds, and `publicEditableReferences` is therefore **empty without live dual evidence**. It fails closed on an incomplete snapshot, a stale snapshot, a stale note reference, a reference that does not belong to the snapshot, a non-finite / out-of-range monophonic confidence or threshold, a **polyphonic** signal (confidence below threshold), or **fewer than two independent evidence planes** (`provenance == .none` or `dualEvidenceCount < 2`). Only a monophonic, complete, current, dual-evidence-backed reference is `publicEligible`.
 - 11 deterministic synthetic tests (dual-evidence-required, polyphonic-experimental, incomplete-experimental, stale-reference-detected, reference-must-belong-to-snapshot, invalid-confidence/threshold-fail-closed, fully-qualified-synthetic-eligible, reference-validity-uses-only-analysis-generation, complete-clears-partial-reason, Codable round-trip, flag-default-off).
 - Deferred (honest scope): the live Flex Pitch inspection/edit, the `FlexPitchProvider` implementations (Create-MIDI-Track-from-Flex plane A plus an ADR-014 independent readback), and the MCP surface (`enable_flex_pitch_verified` / `set_flex_pitch_note_verified` / …). Those need real Logic and are not claimed here.
+
+### ADR-018 — Verified Third-Party Host-Parameter Control (`In Implementation`)
+- Host-parameter provider-plane model + capability manifest + a pure host-write gate only, behind `FeatureFlags.adr018HostParams` (default off), with no runtime path. This is host-exposed automatable parameter control, **not** arbitrary GUI automation.
+- **Honesty core (`canHostVerifiedWrite`)** — the provider planes are, in priority order, `mcuC4PluginEdit` › `controlsViewAX` › `separateAUInstance` › `pixelGUI`; only the first two can be a host-verified write. A **separate `AUParameterTree` / AU instance is never host-verifiable** (the MCP server is not the host attached to Logic's live AU instance, so mutating a separate instance would not change the project's insert), and **pixel/coordinate GUI automation is never host-verifiable** (unsafe across plug-in updates / scaling / skins / locale).
+- **Manifest lifecycle** — a `PluginCapabilityManifest` (provider, per-parameter `GenericPluginParameter` with a value kind, build + UI-signature fingerprints, approval flag) whose parameters are exposed only when the manifest is **approved AND still valid**; a changed build or UI-signature fingerprint **auto-invalidates** the manifest (empty public parameters), an unapproved manifest fails closed, and an `unsupported` value kind is hidden and rejected. Saga eligibility requires a full parameter snapshot **and** a verified inverse snapshot.
+- 11 deterministic synthetic tests (only-Logic-hosted-planes-verify, non-hosted-provider-cannot-expose/validate, fingerprint-invalidation, unapproved-fails-closed, unsupported-hidden/rejected, approved-valid-passes, deterministic rejection reasons, saga-requires-full+verified-inverse, provider priority, Codable round-trip, flag-default-off).
+- Deferred (honest scope): the live MCU/C4 Plug-in-Edit and Controls-view AX parameter enumeration/write/readback, live manifest creation + third-party plug-in qualification, and the MCP surface (`approve_plugin_manifest` / …). Those need real Logic and are not claimed here.
 
 ### Release qualification
 - Strict live E2E suite (`LOGIC_PRO_MCP_STRICT_LIVE=1`, real Logic Pro, fresh-session bootstrap) is green on `main`.

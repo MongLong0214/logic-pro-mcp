@@ -76,4 +76,8 @@ enum FeatureFlags: Sendable {
     static var adr017FlexPitch: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR017_FLEX_PITCH"] == "1"
     }
+
+    static var adr018HostParams: Bool {
+        ProcessInfo.processInfo.environment["LOGIC_MCP_ADR018_HOST_PARAMS"] == "1"
+    }
 }
