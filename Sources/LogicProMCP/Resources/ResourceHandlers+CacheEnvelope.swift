@@ -58,6 +58,25 @@ extension ResourceHandlers {
         return "{\"cache_age_sec\":\(agePart),\"fetched_at\":\(isoPart),\"ax_occluded\":\(axOccluded)\(extrasPart),\"data\":\(bodyJSON)}"
     }
 
+    static func etag(of bodyJSON: String) -> String {
+        let hash = bodyJSON.utf8.reduce(UInt64(0xcbf29ce484222325)) { hash, byte in
+            (hash ^ UInt64(byte)) &* 0x100000001b3
+        }
+        return String(format: "%016llx", hash)
+    }
+
+    static func versionedCacheExtras(
+        projectEpoch: UInt64,
+        sectionRevision: UInt64,
+        bodyJSON: String
+    ) -> [String: Any] {
+        [
+            "project_epoch": projectEpoch,
+            "section_revision": sectionRevision,
+            "etag": etag(of: bodyJSON),
+        ]
+    }
+
     /// Serialise the optional extras map into a fragment that splices between
     /// `ax_occluded` and `data`. Returns an empty string when nil/empty so the
     /// envelope shape is byte-identical to v3.1.7 for callers passing nil.

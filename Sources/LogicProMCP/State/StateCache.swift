@@ -13,6 +13,7 @@ actor StateCache {
     private(set) var project = ProjectInfo()
     private(set) var mcuConnection = MCUConnectionState()
     private(set) var mcuDisplay = MCUDisplayState()
+    private var sectionRevisions: [CacheSectionID: UInt64] = [:]
 
     /// Whether Logic Pro has an open document with a visible window.
     /// Defaults to true (optimistic) — StatePoller sets to false when no document detected.
@@ -94,6 +95,9 @@ actor StateCache {
     func getMCUConnection() -> MCUConnectionState { mcuConnection }
     func getMCUDisplay() -> MCUDisplayState { mcuDisplay }
     func getHasDocument() -> Bool { hasDocument }
+    func sectionRevision(_ section: CacheSectionID) -> UInt64 {
+        sectionRevisions[section, default: 0]
+    }
 
     /// v3.1.4 (#4) — current AX occlusion flag. See field comment for
     /// semantics; flips to true when StatePoller detects a dialog/plugin
@@ -171,6 +175,10 @@ actor StateCache {
         // combine hasDocument with transport_age_sec to distinguish
         // "no project open" from "project open, idle playback".
         transport = TransportState()
+        advanceSectionRevision(.transport)
+        advanceSectionRevision(.tracks)
+        advanceSectionRevision(.mixer)
+        advanceSectionRevision(.project)
     }
 
     // MARK: - Write access (poller calls these)
@@ -196,8 +204,13 @@ actor StateCache {
         }
     }
 
+    private func advanceSectionRevision(_ section: CacheSectionID) {
+        sectionRevisions[section, default: 0] += 1
+    }
+
     func updateTransport(_ state: TransportState) {
         transport = state
+        advanceSectionRevision(.transport)
     }
 
     func updateTracks(_ newTracks: [TrackState]) {
@@ -221,6 +234,7 @@ actor StateCache {
         }
         tracks = newTracks
         tracksFetchedAt = Date()
+        advanceSectionRevision(.tracks)
     }
 
     /// v3.1.1 (P1-3) — exposed for diagnostics and tests. Returns the number
@@ -239,6 +253,7 @@ actor StateCache {
         ensureTrackExists(at: index)
         guard tracks.indices.contains(index) else { return }
         mutator(&tracks[index])
+        advanceSectionRevision(.tracks)
     }
 
     /// Mark exactly one track as selected, clearing the flag on every other
@@ -250,11 +265,13 @@ actor StateCache {
         for i in tracks.indices {
             tracks[i].isSelected = (i == index)
         }
+        advanceSectionRevision(.tracks)
     }
 
     func updateChannelStrips(_ strips: [ChannelStripState]) {
         channelStrips = strips
         mixerFetchedAt = Date()
+        advanceSectionRevision(.mixer)
     }
 
     func updateRegions(_ newRegions: [RegionState], complete: Bool) {
@@ -287,6 +304,7 @@ actor StateCache {
     func updateProject(_ info: ProjectInfo) {
         project = info
         projectFetchedAt = Date()
+        advanceSectionRevision(.project)
     }
 
     // MARK: - MCU Feedback Write
@@ -299,6 +317,7 @@ actor StateCache {
         // tell a fresh echo from a stale cache hit left over from a prior
         // identical-value set_volume call.
         faderUpdatedAt[strip] = Date()
+        advanceSectionRevision(.mixer)
     }
 
     /// v3.1.0 (Ralph-2 / C1) — last time an MCU echo (or any other caller)
@@ -316,6 +335,7 @@ actor StateCache {
         guard channelStrips.indices.contains(strip) else { return }
         channelStrips[strip].pan = min(max(value, -1.0), 1.0)
         panUpdatedAt[strip] = Date()
+        advanceSectionRevision(.mixer)
     }
 
     /// v3.1.3 (#1) — last time a V-Pot LED-ring echo wrote a pan into this
@@ -356,6 +376,7 @@ actor StateCache {
 
     func updateMCUConnection(_ state: MCUConnectionState) {
         mcuConnection = state
+        advanceSectionRevision(.mixer)
     }
 
     /// v3.8.0 (WS6 / AC3, audit #7) — atomic read-modify-write of the MCU
@@ -367,6 +388,7 @@ actor StateCache {
     /// that window structurally.
     func updateMCUConnection(mutator: (inout MCUConnectionState) -> Void) {
         mutator(&mcuConnection)
+        advanceSectionRevision(.mixer)
     }
 
     func updateMCUDisplay(_ display: MCUDisplayState) {
