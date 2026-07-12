@@ -1,7 +1,7 @@
 import Foundation
 import MCP
 
-struct TransportDispatcher {
+struct TransportDispatcher: OperationTraceDispatching {
     static let tool = Tool(
         name: "logic_transport",
         description: "Control Logic Pro transport. Commands: play, stop, record, pause, rewind, fast_forward, toggle_cycle, toggle_metronome, set_tempo, goto_position, set_cycle_range, toggle_count_in, toggle_autopunch. Params: set_tempo -> { tempo: Float } (5.0-999.0); goto_position -> { bar: Int (1..9999) } or { position: String } where String is bar.beat.sub.tick (e.g. \"9.1.1.1\") or HH:MM:SS:FF SMPTE (e.g. \"00:00:08:12\"); set_cycle_range -> { start: Int, end: Int } (UNSUPPORTED/best-effort: Logic 12.x exposes no numeric cycle-locator fields, so this fails closed with State C not_implemented and CANNOT verify a write); others -> {}.",
@@ -16,8 +16,8 @@ struct TransportDispatcher {
         sleep: @escaping (UInt64) async -> Void = { try? await Task.sleep(nanoseconds: $0) },
         dialogPresent: @escaping @Sendable () -> Bool = { false }
     ) async -> CallTool.Result {
-        let traceID = await startTraceIfEnabled(command: command)
         if let operation = modalGuardedTransportOperation(for: command), dialogPresent() {
+            let traceID = await startTraceIfEnabled(command: command)
             return await finalizeTrace(
                 blockingLogicDialogResult(operation: operation),
                 traceID: traceID
@@ -26,6 +26,7 @@ struct TransportDispatcher {
 
         switch command {
         case "play":
+            let traceID = await startTraceIfEnabled(command: command)
             let result = await handleVerifiedTransportCommand(
                 action: .play,
                 router: router,
@@ -35,6 +36,7 @@ struct TransportDispatcher {
             return await finalizeTrace(result, traceID: traceID)
 
         case "stop":
+            let traceID = await startTraceIfEnabled(command: command)
             let result = await verifiedStopResult(
                 router: router,
                 cache: cache,
@@ -44,6 +46,7 @@ struct TransportDispatcher {
             return await finalizeTrace(result, traceID: traceID)
 
         case "record":
+            let traceID = await startTraceIfEnabled(command: command)
             let result = await handleVerifiedTransportCommand(
                 action: .record,
                 router: router,
@@ -53,6 +56,7 @@ struct TransportDispatcher {
             return await finalizeTrace(result, traceID: traceID)
 
         case "pause":
+            let traceID = await startTraceIfEnabled(command: command)
             let result = await verifiedPauseResult(
                 router: router,
                 cache: cache,
@@ -62,34 +66,47 @@ struct TransportDispatcher {
             return await finalizeTrace(result, traceID: traceID)
 
         case "rewind":
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(operation: "transport.rewind")
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "fast_forward":
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(operation: "transport.fast_forward")
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "toggle_cycle":
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(operation: "transport.toggle_cycle")
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "toggle_metronome":
+            let traceID = await startTraceIfEnabled(command: command)
             let beforeTransport = await liveTransportState(router: router, cache: cache)
+            await recordWriteBoundary(traceID)
             let result = await router.route(operation: "transport.toggle_metronome")
-            return await finalizeToggleMetronomeResult(
+            let finalized = await finalizeToggleMetronomeResult(
                 result,
                 beforeTransport: beforeTransport,
                 router: router,
                 cache: cache
             )
+            return await finalizeTrace(finalized, traceID: traceID)
 
         case "toggle_count_in":
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(operation: "transport.toggle_count_in")
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "toggle_autopunch":
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(operation: "transport.toggle_autopunch")
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "set_tempo":
             guard params["tempo"] != nil || params["bpm"] != nil else {
@@ -110,11 +127,13 @@ struct TransportDispatcher {
                         "set_tempo 'tempo' must be in 5..999 (got \(tempo))"
                     )
             }
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "transport.set_tempo",
                 params: ["bpm": String(tempo)]
             )
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "goto_position":
             // Reject unknown keys before falling back to defaults. Prior to
@@ -147,16 +166,19 @@ struct TransportDispatcher {
                         "goto_position 'bar' must be in 1..9999 (got \(bar))"
                     )
                 }
+                let traceID = await startTraceIfEnabled(command: command)
+                await recordWriteBoundary(traceID)
                 let result = await router.route(
                     operation: "transport.goto_position",
                     params: ["position": "\(bar).1.1.1"]
                 )
-                return await finalizeGotoPositionResult(
+                let finalized = await finalizeGotoPositionResult(
                     result,
                     requestedPosition: "\(bar).1.1.1",
                     router: router,
                     cache: cache
                 )
+                return await finalizeTrace(finalized, traceID: traceID)
             }
             let time = stringParam(params, "position", default: "1.1.1.1")
             // Validate position format before routing. Accept:
@@ -167,16 +189,19 @@ struct TransportDispatcher {
                     "goto_position 'position' must be bar.beat.sub.tick (e.g. 1.1.1.1) or HH:MM:SS:FF (got '\(time)')"
                 )
             }
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "transport.goto_position",
                 params: ["position": time]
             )
-            return await finalizeGotoPositionResult(
+            let finalized = await finalizeGotoPositionResult(
                 result,
                 requestedPosition: time,
                 router: router,
                 cache: cache
             )
+            return await finalizeTrace(finalized, traceID: traceID)
 
         case "set_cycle_range":
             guard params["start"] != nil, params["end"] != nil else {
@@ -202,11 +227,13 @@ struct TransportDispatcher {
                     "set_cycle_range 'start' (\(start)) must be <= 'end' (\(end))"
                 )
             }
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "transport.set_cycle_range",
                 params: ["start": "\(start).1.1.1", "end": "\(end).1.1.1"]
             )
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         default:
             return toolTextResult(
@@ -214,66 +241,6 @@ struct TransportDispatcher {
                 isError: true
             )
         }
-    }
-
-    private static func startTraceIfEnabled(command: String) async -> TraceID? {
-        guard FeatureFlags.adr005OperationTrace,
-              let spec = OperationRegistry.spec(tool: tool.name, command: command) else {
-            return nil
-        }
-        switch spec.id {
-        case .transportPlay, .transportStop, .transportRecord, .transportPause:
-            let id = await OperationTraceStore.shared.start(operationID: spec.id.rawValue)
-            await OperationTraceStore.shared.record(id, phase: .requestReceived, attributes: [
-                "operation_id": spec.id.rawValue,
-                "command": command,
-            ])
-            return id
-        default:
-            return nil
-        }
-    }
-
-    private static func recordWriteBoundary(_ traceID: TraceID?) async {
-        guard let traceID else { return }
-        await OperationTraceStore.shared.record(traceID, phase: .writeBoundaryCrossed)
-    }
-
-    private static func finalizeTrace(
-        _ result: CallTool.Result,
-        traceID: TraceID?
-    ) async -> CallTool.Result {
-        guard let traceID else { return result }
-        guard case .text(let raw, _, _) = result.content.first else {
-            await OperationTraceStore.shared.record(
-                traceID,
-                phase: .verificationCompleted,
-                attributes: ["readback_state": result.isError == true ? "C" : "A"]
-            )
-            await OperationTraceStore.shared.record(traceID, phase: .resultEmitted)
-            await OperationTraceStore.shared.complete(traceID)
-            return result
-        }
-
-        let object = decodedJSONObject(raw)
-        var attributes = [
-            "readback_state": object?["state"] as? String
-                ?? (result.isError == true ? "C" : "A"),
-        ]
-        if let errorCode = object?["error"] as? String {
-            attributes["error_code"] = errorCode
-        }
-        await OperationTraceStore.shared.record(
-            traceID,
-            phase: .verificationCompleted,
-            attributes: attributes
-        )
-        await OperationTraceStore.shared.record(traceID, phase: .resultEmitted)
-        await OperationTraceStore.shared.complete(traceID)
-
-        let merged = HonestContract.addExtras(["trace_id": traceID.rawValue], into: raw)
-        guard merged != raw else { return result }
-        return toolTextResult(merged, isError: result.isError == true)
     }
 
     private static func modalGuardedTransportOperation(for command: String) -> String? {

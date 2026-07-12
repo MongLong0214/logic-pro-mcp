@@ -1,7 +1,7 @@
 import Foundation
 import MCP
 
-struct MixerDispatcher {
+struct MixerDispatcher: OperationTraceDispatching {
     static let tool = commandTool(
         name: "logic_mixer",
         description: "Mixer actions in Logic Pro. Commands: set_volume, set_pan, set_master_volume, set_plugin_param, insert_plugin. BREAKING since v3.3.0: every mutating command requires explicit `track` (Int ≥ 0) — pre-v3.3.0 missing `track` defaulted to 0 and silently mutated the first track; this now returns an error. Params: set_volume -> { track: Int (required, ≥ 0), value: Float (0.0..1.0) } verified against the visible mixer strip via AX readback; set_pan -> { track: Int (required, ≥ 0), value: Float (-1.0..1.0) } verified against the visible mixer strip via AX readback; set_master_volume -> { value: Float (0.0..1.0) } — the master fader has no AX track-header equivalent, so MCU echo is the ONLY readback: State A only when a fresh echo lands, otherwise honest State B echo_timeout with readback_source:mcu_echo + a surface_limitation note (non-deterministic, not a recoverable failure); set_plugin_param -> { track: Int (required, ≥ 0), insert: Int (required, currently only 0), param: Int (required, ≥ 0), value: Float (required) } on the selected track via Scripter; insert_plugin -> { track: Int, slot: Int, plugin_name: Gain|Compressor|Channel EQ, confirmed: true } via AX mixer slot with readback. ADR-002 (LOGIC_MCP_ADR002_TARGET_REF=1): set_volume and set_pan ALSO accept a session-stable { target_ref: String } (a trk_… value from the logic://tracks resource) that resolves to the addressed track's mixer strip in place of the explicit track/index; when both target_ref and track/index are supplied they must agree or the op fails closed (stale_target_reference); with the flag off target_ref is ignored and the explicit track/index remains required.",
@@ -120,9 +120,12 @@ struct MixerDispatcher {
                     "set_master_volume 'value' must be in 0.0..1.0 (got \(volume))"
                 )
             }
-            return await routedTextResult(router, operation: "mixer.set_master_volume", params: [
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
+            let result = await routedTextResult(router, operation: "mixer.set_master_volume", params: [
                 "volume": String(volume),
             ])
+            return await finalizeTrace(result, traceID: traceID)
 
         case "toggle_eq":
             return notExposedCommandResult(operation: "mixer.toggle_eq")
@@ -159,11 +162,14 @@ struct MixerDispatcher {
             case .invalid(let hint):
                 return toolInvalidParamsResult("insert_plugin \(hint)")
             }
-            return await routedTextResult(router, operation: "plugin.insert", params: [
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
+            let result = await routedTextResult(router, operation: "plugin.insert", params: [
                 "track": String(track),
                 "slot": String(slot),
                 "plugin_name": spec.canonicalName,
             ])
+            return await finalizeTrace(result, traceID: traceID)
 
         case "bypass_plugin":
             // Still removed from the public surface: no verified AX/MCU
@@ -220,15 +226,20 @@ struct MixerDispatcher {
                     "set_plugin_param 'param' must be 0...17 (Scripter CC range); got \(paramIndex)"
                 )
             }
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let selectResult = await router.route(
                 operation: "track.select",
                 params: ["index": String(track)]
             )
             guard selectResult.isSuccess else {
-                return toolTextResult(selectResult.message, isError: true)
+                return await finalizeTrace(
+                    toolTextResult(selectResult.message, isError: true),
+                    traceID: traceID
+                )
             }
             guard channelResultIsVerified(selectResult) else {
-                return toolStateCResult(
+                return await finalizeTrace(toolStateCResult(
                     .readbackMismatch,
                     hint: "set_plugin_param refused: track \(track) selection unverified (State B). Cannot safely write plugin parameter to an unverified selected track.",
                     extras: [
@@ -236,14 +247,15 @@ struct MixerDispatcher {
                         "requested_track": track,
                         "select_response": selectResult.message,
                     ]
-                )
+                ), traceID: traceID)
             }
-            return await routedTextResult(router, operation: "plugin.set_param", params: [
+            let result = await routedTextResult(router, operation: "plugin.set_param", params: [
                 "track": String(track),
                 "insert": String(insert),
                 "param": String(paramIndex),
                 "value": String(value),
             ])
+            return await finalizeTrace(result, traceID: traceID)
 
         default:
             return toolInvalidParamsResult(
@@ -253,63 +265,4 @@ struct MixerDispatcher {
         }
     }
 
-    private static func startTraceIfEnabled(command: String) async -> TraceID? {
-        guard FeatureFlags.adr005OperationTrace,
-              let spec = OperationRegistry.spec(tool: tool.name, command: command) else {
-            return nil
-        }
-        switch spec.id {
-        case .mixerSetVolume, .mixerSetPan:
-            let id = await OperationTraceStore.shared.start(operationID: spec.id.rawValue)
-            await OperationTraceStore.shared.record(id, phase: .requestReceived, attributes: [
-                "operation_id": spec.id.rawValue,
-                "command": command,
-            ])
-            return id
-        default:
-            return nil
-        }
-    }
-
-    private static func recordWriteBoundary(_ traceID: TraceID?) async {
-        guard let traceID else { return }
-        await OperationTraceStore.shared.record(traceID, phase: .writeBoundaryCrossed)
-    }
-
-    private static func finalizeTrace(
-        _ result: CallTool.Result,
-        traceID: TraceID?
-    ) async -> CallTool.Result {
-        guard let traceID else { return result }
-        guard case .text(let raw, _, _) = result.content.first else {
-            await OperationTraceStore.shared.record(
-                traceID,
-                phase: .verificationCompleted,
-                attributes: ["readback_state": result.isError == true ? "C" : "A"]
-            )
-            await OperationTraceStore.shared.record(traceID, phase: .resultEmitted)
-            await OperationTraceStore.shared.complete(traceID)
-            return result
-        }
-
-        let object = decodedJSONObject(raw)
-        var attributes = [
-            "readback_state": object?["state"] as? String
-                ?? (result.isError == true ? "C" : "A"),
-        ]
-        if let errorCode = object?["error"] as? String {
-            attributes["error_code"] = errorCode
-        }
-        await OperationTraceStore.shared.record(
-            traceID,
-            phase: .verificationCompleted,
-            attributes: attributes
-        )
-        await OperationTraceStore.shared.record(traceID, phase: .resultEmitted)
-        await OperationTraceStore.shared.complete(traceID)
-
-        let merged = HonestContract.addExtras(["trace_id": traceID.rawValue], into: raw)
-        guard merged != raw else { return result }
-        return toolTextResult(merged, isError: result.isError == true)
-    }
 }

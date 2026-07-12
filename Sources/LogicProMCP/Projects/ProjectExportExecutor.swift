@@ -75,6 +75,7 @@ enum ProjectExportExecutor {
         var pollAttempts: Int
         var pollIntervalNanos: UInt64
         var sleep: @Sendable (UInt64) async -> Void
+        var onFirstWrite: @Sendable () async -> Void = {}
         /// Minimum sane duration (seconds) for a produced artifact. A bounce that
         /// yields a sub-tick file is treated as not-verified (State B).
         var minimumDurationSeconds: Double
@@ -144,13 +145,15 @@ enum ProjectExportExecutor {
             return confirmationRequiredRun(plan: plan, resume: resume)
         }
 
+        let firstWriteNotifier = FirstWriteNotifier(action: options.onFirstWrite)
         var runProjects: [RunProject] = []
         for project in plan.projects {
             let runProject = await execute(
                 project: project,
                 plan: plan,
                 router: router,
-                options: options
+                options: options,
+                firstWriteNotifier: firstWriteNotifier
             )
             runProjects.append(runProject)
         }
@@ -164,7 +167,8 @@ enum ProjectExportExecutor {
         project: ProjectExportPlanProject,
         plan: ProjectExportPlan,
         router: ChannelRouter,
-        options: Options
+        options: Options,
+        firstWriteNotifier: FirstWriteNotifier
     ) async -> RunProject {
         // A degraded/invalid project (bad path, intra-plan collision, would-
         // overwrite under fail_if_exists) never gets opened — every artifact
@@ -228,6 +232,7 @@ enum ProjectExportExecutor {
         }
 
         // (3a) Open the project (existing open path through the router).
+        await firstWriteNotifier.notify()
         let openResult = await router.route(
             operation: "project.open",
             params: ["path": project.projectPath]
@@ -303,5 +308,20 @@ enum ProjectExportExecutor {
             opened: true,
             artifacts: arts
         )
+    }
+
+    private actor FirstWriteNotifier {
+        private let action: @Sendable () async -> Void
+        private var notified = false
+
+        init(action: @escaping @Sendable () async -> Void) {
+            self.action = action
+        }
+
+        func notify() async {
+            guard !notified else { return }
+            notified = true
+            await action()
+        }
     }
 }

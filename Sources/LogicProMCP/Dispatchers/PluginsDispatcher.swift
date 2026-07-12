@@ -35,7 +35,7 @@ final class VerifiedOpGate: @unchecked Sendable {
 /// AX-only verified operations (`plugin.*`). Verified ops never fall back
 /// (router chain is `[.accessibility]` alone) so a State C is always the honest
 /// AX result.
-struct PluginsDispatcher {
+struct PluginsDispatcher: OperationTraceDispatching {
     static let tool = commandTool(
         name: "logic_plugins",
         description: "Verified plugin apply-back for Logic Pro (logic_plugins.*). Commands: get_inventory, set_param_verified, insert_verified. Unlike legacy logic_mixer.set_plugin_param (Scripter, unverified State B), this surface identifies the target track/insert/plugin/param via AX, writes, and reads back — State A only when the observed value matches within tolerance. get_inventory -> { track: Int (required, >= 0) } returns a drift-safe insert chain (physical slot index, read_status ok|empty|unreadable, complete). set_param_verified -> { track: Int, insert: Int, plugin: canonical logic.stock.* id or alias, param: key (e.g. gain_db), value: Float, unit: String, mode: \"duplicate_applyback\", project_expected_path: String (required) }. insert_verified -> { track: Int, insert: Int, plugin: Gain|Channel EQ|Compressor, mode: \"duplicate_applyback\", project_expected_path: String (required) }. mode confirmed_live is not supported in Release 1 (State C unsupported_mode). ADR-002 (LOGIC_MCP_ADR002_TARGET_REF=1): set_param_verified ALSO accepts a session-stable { target_ref: String } (a trk_… value from the logic://tracks resource) that resolves the host track in place of the explicit track; when both target_ref and track are supplied they must agree or the op fails closed (stale_target_reference); with the flag off target_ref is ignored and the explicit track remains required.",
@@ -63,7 +63,8 @@ struct PluginsDispatcher {
             return await routedTextResult(router, operation: "plugin.get_inventory", params: inventoryParams)
 
         case "set_param_verified":
-            return await runVerified(operation: "plugin.set_param_verified") {
+            let traceID = await startTraceIfEnabled(command: command)
+            let result = await runVerified(operation: "plugin.set_param_verified") {
                 var writeParams = verifiedWriteParams(params)
                 // ADR-002: with the flag on, a target_ref resolves the host track
                 // (verified plugin writes are trackIndex-keyed) and overrides the
@@ -88,12 +89,16 @@ struct PluginsDispatcher {
                         return result
                     }
                 }
+                await recordWriteBoundary(traceID)
                 return await routedTextResult(router, operation: "plugin.set_param_verified",
                                               params: writeParams)
             }
+            return await finalizeTrace(result, traceID: traceID)
 
         case "insert_verified":
-            return await runVerified(operation: "plugin.insert_verified") {
+            let traceID = await startTraceIfEnabled(command: command)
+            let result = await runVerified(operation: "plugin.insert_verified") {
+                await recordWriteBoundary(traceID)
                 let result = await router.route(
                     operation: "plugin.insert_verified",
                     params: insertVerifiedParams(params)
@@ -103,6 +108,7 @@ struct PluginsDispatcher {
                 }
                 return toolTextResult(result)
             }
+            return await finalizeTrace(result, traceID: traceID)
 
         default:
             return toolTextResult(

@@ -1,7 +1,7 @@
 import Foundation
 import MCP
 
-struct ProjectDispatcher {
+struct ProjectDispatcher: OperationTraceDispatching {
     struct LifecycleExecution: Sendable {
         let executionError: String?
         let timedOut: Bool
@@ -108,25 +108,42 @@ struct ProjectDispatcher {
                     extras: ["operation": "project.\(command)"]
                 )
             }
+            let traceID = await startTraceIfEnabled(command: command)
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
-                return blockingLogicDialogResult(operation: "project.\(command)")
+                return await finalizeTrace(
+                    blockingLogicDialogResult(operation: "project.\(command)"),
+                    traceID: traceID
+                )
             }
-            let run: ProjectExportExecutor.RunResult
-            switch strictBoolParam(params, "confirmed") {
-            case .invalid(let hint):
+            let confirmation = strictBoolParam(params, "confirmed")
+            if case .invalid(let hint) = confirmation {
                 audit(command, phase: .rejected, reason: "invalid confirmed")
-                return toolInvalidParamsResult(
+                return await finalizeTrace(toolInvalidParamsResult(
                     "\(command) \(hint)",
                     extras: ["operation": "project.\(command)"]
-                )
+                ), traceID: traceID)
+            }
+            let existingFirstWrite = exportOptions.onFirstWrite
+            var tracedExportOptions = exportOptions
+            tracedExportOptions.onFirstWrite = {
+                await existingFirstWrite()
+                await recordWriteBoundary(traceID)
+            }
+            let run: ProjectExportExecutor.RunResult
+            switch confirmation {
+            case .invalid:
+                return await finalizeTrace(toolInvalidParamsResult(
+                    "\(command) 'confirmed' must be a literal boolean true or false",
+                    extras: ["operation": "project.\(command)"]
+                ), traceID: traceID)
             case .missing, .value(false):
                 audit(command, phase: .confirmationRequired)
                 run = await ProjectExportExecutor.run(
                     params: params,
                     router: router,
                     resume: command == "export_resume",
-                    options: exportOptions
+                    options: tracedExportOptions
                 )
             case .value(true):
                 audit(command, phase: .executed)
@@ -134,7 +151,7 @@ struct ProjectDispatcher {
                     params: params,
                     router: router,
                     resume: command == "export_resume",
-                    options: exportOptions
+                    options: tracedExportOptions
                 )
             }
             // Lifecycle cache invalidation: a guarded run opens projects, so the
@@ -149,20 +166,28 @@ struct ProjectDispatcher {
                 // wire so a client never reads a failed/blocked run as success.
                 let body = try encodeJSONStrict(run, compact: true)
                 let isError = run.status == "failed" || run.status == "confirmation_required"
-                return toolTextResult(body, isError: isError)
+                return await finalizeTrace(
+                    toolTextResult(body, isError: isError),
+                    traceID: traceID
+                )
             } catch {
-                return toolTextResult(
+                return await finalizeTrace(toolTextResult(
                     "{\"success\":false,\"error\":\"\(command) encode failed: \(jsonStringEscape(error.localizedDescription))\"}",
                     isError: true
-                )
+                ), traceID: traceID)
             }
 
         case "new":
+            let traceID = await startTraceIfEnabled(command: command)
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
-                return blockingLogicDialogResult(operation: "project.new")
+                return await finalizeTrace(
+                    blockingLogicDialogResult(operation: "project.new"),
+                    traceID: traceID
+                )
             }
             audit(command, phase: .executed)
+            await recordWriteBoundary(traceID)
             let result = await router.route(operation: "project.new")
             // v3.1.2 (P0-3) — clear cache on lifecycle success so the next
             // resource read / name-based routing decision sees the fresh
@@ -174,7 +199,7 @@ struct ProjectDispatcher {
             // mutation-free on actor state — safe to call on every success
             // even if the poller would have caught up eventually.
             await invalidateOnSuccess(result, cache: cache, targetRegistry: targetRegistry)
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "open":
             let path = stringParam(params, "path")
@@ -192,37 +217,49 @@ struct ProjectDispatcher {
                     extras: ["operation": "project.open"]
                 )
             }
+            let traceID = await startTraceIfEnabled(command: command)
             let confirmation = destructiveConfirmation(for: command)
-            if let error = confirmation.error { return error }
+            if let error = confirmation.error {
+                return await finalizeTrace(error, traceID: traceID)
+            }
             if !confirmation.confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 audit(command, phase: .confirmationRequired)
-                return toolTextResult(response)
+                return await finalizeTrace(toolTextResult(response), traceID: traceID)
             }
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
-                return blockingLogicDialogResult(operation: "project.open")
+                return await finalizeTrace(
+                    blockingLogicDialogResult(operation: "project.open"),
+                    traceID: traceID
+                )
             }
             audit(command, phase: .executed)
+            await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "project.open",
                 params: ["path": path]
             )
             // v3.1.2 (P0-3) — same cache stale-after-lifecycle bug as `new`.
             await invalidateOnSuccess(result, cache: cache, targetRegistry: targetRegistry)
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "save":
+            let traceID = await startTraceIfEnabled(command: command)
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
-                return blockingLogicDialogResult(operation: "project.save")
+                return await finalizeTrace(
+                    blockingLogicDialogResult(operation: "project.save"),
+                    traceID: traceID
+                )
             }
             audit(command, phase: .executed)
             // #110: save is an export/bounce prerequisite. The read-back
             // verification lives in the AppleScript channel (the reliable
             // writer, now tried first) so it stays DI-testable like save_as;
             // the dispatcher just routes + surfaces the channel's HC verdict.
+            await recordWriteBoundary(traceID)
             let result = await router.route(operation: "project.save")
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "save_as":
             let path = stringParam(params, "path")
@@ -240,22 +277,29 @@ struct ProjectDispatcher {
                     extras: ["operation": "project.save_as"]
                 )
             }
+            let traceID = await startTraceIfEnabled(command: command)
             let confirmation = destructiveConfirmation(for: command)
-            if let error = confirmation.error { return error }
+            if let error = confirmation.error {
+                return await finalizeTrace(error, traceID: traceID)
+            }
             if !confirmation.confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 audit(command, phase: .confirmationRequired)
-                return toolTextResult(response)
+                return await finalizeTrace(toolTextResult(response), traceID: traceID)
             }
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
-                return blockingLogicDialogResult(operation: "project.save_as")
+                return await finalizeTrace(
+                    blockingLogicDialogResult(operation: "project.save_as"),
+                    traceID: traceID
+                )
             }
             audit(command, phase: .executed)
+            await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "project.save_as",
                 params: ["path": path]
             )
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "close":
             let savingRaw = stringParam(params, "saving", default: "yes")
@@ -267,17 +311,24 @@ struct ProjectDispatcher {
                     extras: ["operation": "project.close"]
                 )
             }
+            let traceID = await startTraceIfEnabled(command: command)
             let confirmation = destructiveConfirmation(for: command)
-            if let error = confirmation.error { return error }
+            if let error = confirmation.error {
+                return await finalizeTrace(error, traceID: traceID)
+            }
             if !confirmation.confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 audit(command, phase: .confirmationRequired)
-                return toolTextResult(response)
+                return await finalizeTrace(toolTextResult(response), traceID: traceID)
             }
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
-                return blockingLogicDialogResult(operation: "project.close")
+                return await finalizeTrace(
+                    blockingLogicDialogResult(operation: "project.close"),
+                    traceID: traceID
+                )
             }
             audit(command, phase: .executed)
+            await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "project.close",
                 params: ["saving": saving]
@@ -286,27 +337,34 @@ struct ProjectDispatcher {
             // with the just-closed tracks/regions/markers. Clear so resource
             // reads honestly reflect "no project" until the next open.
             await invalidateOnSuccess(result, cache: cache, targetRegistry: targetRegistry)
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "bounce":
+            let traceID = await startTraceIfEnabled(command: command)
             let confirmation = destructiveConfirmation(for: command)
-            if let error = confirmation.error { return error }
+            if let error = confirmation.error {
+                return await finalizeTrace(error, traceID: traceID)
+            }
             if !confirmation.confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 audit(command, phase: .confirmationRequired)
-                return toolTextResult(response)
+                return await finalizeTrace(toolTextResult(response), traceID: traceID)
             }
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
-                return blockingLogicDialogResult(operation: "project.bounce")
+                return await finalizeTrace(
+                    blockingLogicDialogResult(operation: "project.bounce"),
+                    traceID: traceID
+                )
             }
             let preflight = await ProjectSessionAudit.buildAudit(cache: cache)
             if let block = bouncePreflightBlock(preflight) {
                 audit(command, phase: .rejected, reason: "export readiness blocked")
-                return block
+                return await finalizeTrace(block, traceID: traceID)
             }
             audit(command, phase: .executed)
+            await recordWriteBoundary(traceID)
             let result = await router.route(operation: "project.bounce")
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "is_running":
             return toolTextResult(isLogicProRunning() ? "true" : "false")
@@ -344,58 +402,81 @@ struct ProjectDispatcher {
             }
 
         case "cleanup_apply":
+            let traceID = await startTraceIfEnabled(command: command)
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
-                return blockingLogicDialogResult(operation: "project.cleanup_apply")
+                return await finalizeTrace(
+                    blockingLogicDialogResult(operation: "project.cleanup_apply"),
+                    traceID: traceID
+                )
             }
-            return await handleCleanupApply(
+            let result = await handleCleanupApply(
                 params: params,
                 router: router,
                 cache: cache,
-                auditFileReader: cleanupAuditFileReader
+                auditFileReader: cleanupAuditFileReader,
+                traceID: traceID
             )
+            return await finalizeTrace(result, traceID: traceID)
 
         case "launch":
+            let traceID = await startTraceIfEnabled(command: command)
             if isLogicProRunning() {
                 audit(command, phase: .rejected, reason: "already running")
-                return toolTextResult("Logic Pro is already running")
+                return await finalizeTrace(
+                    toolTextResult("Logic Pro is already running"),
+                    traceID: traceID
+                )
             }
             audit(command, phase: .executed)
-            return await runLifecycleScript(
+            let result = await runLifecycleScript(
                 script: LogicProTarget.appleScriptTarget().activateByBundleID,
                 successMessage: "Logic Pro launched",
                 expectedRunning: true,
                 actionLabel: "launch",
                 execute: executeLifecycleScript,
                 isLogicProRunning: isLogicProRunning,
-                sleep: sleep
+                sleep: sleep,
+                traceID: traceID
             )
+            return await finalizeTrace(result, traceID: traceID)
 
         case "quit":
+            let traceID = await startTraceIfEnabled(command: command)
             let confirmation = destructiveConfirmation(for: command)
-            if let error = confirmation.error { return error }
+            if let error = confirmation.error {
+                return await finalizeTrace(error, traceID: traceID)
+            }
             if !confirmation.confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 audit(command, phase: .confirmationRequired)
-                return toolTextResult(response)
+                return await finalizeTrace(toolTextResult(response), traceID: traceID)
             }
             if !isLogicProRunning() {
                 audit(command, phase: .rejected, reason: "not running")
-                return toolTextResult("Logic Pro is not running")
+                return await finalizeTrace(
+                    toolTextResult("Logic Pro is not running"),
+                    traceID: traceID
+                )
             }
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
-                return blockingLogicDialogResult(operation: "project.quit")
+                return await finalizeTrace(
+                    blockingLogicDialogResult(operation: "project.quit"),
+                    traceID: traceID
+                )
             }
             audit(command, phase: .executed)
-            return await runLifecycleScript(
+            let result = await runLifecycleScript(
                 script: LogicProTarget.appleScriptTarget().quitByBundleID,
                 successMessage: "Logic Pro quit",
                 expectedRunning: false,
                 actionLabel: "quit",
                 execute: executeLifecycleScript,
                 isLogicProRunning: isLogicProRunning,
-                sleep: sleep
+                sleep: sleep,
+                traceID: traceID
             )
+            return await finalizeTrace(result, traceID: traceID)
 
         default:
             return toolInvalidParamsResult(
@@ -436,7 +517,8 @@ struct ProjectDispatcher {
         params: [String: Value],
         router: ChannelRouter,
         cache: StateCache,
-        auditFileReader: LogicProjectFileReader.Runtime = .production
+        auditFileReader: LogicProjectFileReader.Runtime = .production,
+        traceID: TraceID? = nil
     ) async -> CallTool.Result {
         let stepID = stringParam(params, "step_id", "stepId")
         guard !stepID.isEmpty else {
@@ -545,7 +627,8 @@ struct ProjectDispatcher {
                 step,
                 params: params,
                 router: router,
-                cache: cache
+                cache: cache,
+                traceID: traceID
             )
         default:
             audit(command, phase: .rejected, reason: "no executable path")
@@ -566,7 +649,8 @@ struct ProjectDispatcher {
         _ step: ProjectSessionAudit.CleanupPlanStep,
         params: [String: Value],
         router: ChannelRouter,
-        cache: StateCache
+        cache: StateCache,
+        traceID: TraceID?
     ) async -> CallTool.Result {
         let targets = cleanupApplyTargetIndices(step.targetIdentifier)
         guard !targets.isEmpty else {
@@ -597,6 +681,7 @@ struct ProjectDispatcher {
         }
 
         var renamed: [[String: Any]] = []
+        await recordWriteBoundary(traceID)
         for (target, newName) in zip(targets, names) {
             let result = await TrackDispatcher.handle(
                 command: "rename",
@@ -848,8 +933,10 @@ struct ProjectDispatcher {
         actionLabel: String,
         execute: (String) async -> LifecycleExecution,
         isLogicProRunning: () -> Bool,
-        sleep: (UInt64) async -> Void
+        sleep: (UInt64) async -> Void,
+        traceID: TraceID?
     ) async -> CallTool.Result {
+        await recordWriteBoundary(traceID)
         let execution = await execute(script)
         if let executionError = execution.executionError {
             return toolTextResult("Failed to \(actionLabel) Logic Pro: \(executionError)", isError: true)
