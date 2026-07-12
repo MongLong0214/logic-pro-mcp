@@ -17,21 +17,6 @@ import Testing
     #expect(FeatureFlags.adr002TargetRef == false)
 }
 
-@Test func operationRegistryDefaultsToFalse() {
-    let key = "LOGIC_MCP_ADR003_OPERATION_REGISTRY"
-    let previous = ProcessInfo.processInfo.environment[key]
-    unsetenv(key)
-    defer {
-        if let previous {
-            setenv(key, previous, 1)
-        } else {
-            unsetenv(key)
-        }
-    }
-
-    #expect(FeatureFlags.adr003OperationRegistry == false)
-}
-
 @Test func operationTraceDefaultsToFalse() {
     let key = "LOGIC_MCP_ADR005_OPERATION_TRACE"
     let previous = ProcessInfo.processInfo.environment[key]

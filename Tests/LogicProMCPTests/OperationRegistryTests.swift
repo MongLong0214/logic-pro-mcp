@@ -1,4 +1,3 @@
-import Foundation
 import Testing
 @testable import LogicProMCP
 
@@ -56,24 +55,6 @@ struct OperationRegistryTests {
     private static let expectedRegistryCount =
         commands.count + mixerCommands.count + navigateCommands.count + smallToolCount
             + editCommands.count + projectCommands.count + midiCommands.count + trackCommands.count
-
-    private func withRegistryFlag(_ value: String?, body: () -> Void) {
-        let key = "LOGIC_MCP_ADR003_OPERATION_REGISTRY"
-        let previous = ProcessInfo.processInfo.environment[key]
-        if let value {
-            setenv(key, value, 1)
-        } else {
-            unsetenv(key)
-        }
-        defer {
-            if let previous {
-                setenv(key, previous, 1)
-            } else {
-                unsetenv(key)
-            }
-        }
-        body()
-    }
 
     @Test("transport registry is exact, unique, and valid")
     func completenessAndValidation() {
@@ -162,9 +143,9 @@ struct OperationRegistryTests {
         #expect(cycleRange.availability == .unsupported)
     }
 
-    @Test("derived mutating commands equal the unchanged legacy transport set")
+    @Test("derived mutating commands equal the transport command set")
     func mutatingParity() {
-        #expect(OperationRegistry.mutatingCommands(tool: .logicTransport) == LogicProServer.mutatingCommandsByTool["logic_transport"])
+        #expect(OperationRegistry.mutatingCommands(tool: .logicTransport) == Set(Self.commands.map(\.1)))
     }
 
     @Test("mixer registry is exact, unique, and isolated")
@@ -202,11 +183,13 @@ struct OperationRegistryTests {
         }
     }
 
-    @Test("derived mixer mutations and deadlines equal unchanged legacy behavior")
+    @Test("derived mixer mutations and deadlines match server decisions")
     func mixerLegacyParity() {
-        #expect(OperationRegistry.mutatingCommands(tool: .logicMixer) == LogicProServer.mutatingCommandsByTool["logic_mixer"])
+        #expect(OperationRegistry.mutatingCommands(tool: .logicMixer) == Set(Self.mixerCommands.map(\.1)))
         for (_, command) in Self.mixerCommands {
             #expect(OperationRegistry.deadlineSeconds(tool: ToolID.logicMixer.rawValue, command: command) == 25)
+            #expect(LogicProServer.isMutatingCommand(tool: ToolID.logicMixer.rawValue, command: command))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: ToolID.logicMixer.rawValue, command: command) == 25)
         }
     }
 
@@ -228,77 +211,60 @@ struct OperationRegistryTests {
         #expect(OperationRegistry.validationErrors(for: entries).contains { $0.contains("incorrect tools:") })
     }
 
-    @Test("flag off uses unchanged legacy mixer decisions")
+    @Test("mixer decisions are registry-backed")
     func mixerFlagOff() {
-        withRegistryFlag(nil) {
-            #expect(FeatureFlags.adr003OperationRegistry == false)
-            for (_, command) in Self.mixerCommands {
-                #expect(LogicProServer.mutatingCommandsByTool["logic_mixer"]?.contains(command) == true)
-                #expect(LogicProServer.isMutatingCommand(tool: "logic_mixer", command: command))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: command) == 25)
-            }
-            #expect(!LogicProServer.isMutatingCommand(tool: "logic_mixer", command: "play"))
-            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: "play") == 25)
+        for (_, command) in Self.mixerCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_mixer", command: command))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: command) == 25)
         }
+        #expect(!LogicProServer.isMutatingCommand(tool: "logic_mixer", command: "play"))
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: "play") == 25)
     }
 
-    @Test("flag on derives mixer decisions and preserves legacy fallbacks")
+    @Test("mixer decisions stay cross-tool isolated")
     func mixerFlagOn() {
-        withRegistryFlag("1") {
-            #expect(FeatureFlags.adr003OperationRegistry)
-            for (_, command) in Self.mixerCommands {
-                #expect(LogicProServer.isMutatingCommand(tool: "logic_mixer", command: command))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: command) == 25)
-            }
-            #expect(!LogicProServer.isMutatingCommand(tool: "logic_mixer", command: "play"))
-            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: "import_file") == 300)
-            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
+        for (_, command) in Self.mixerCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_mixer", command: command))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: command) == 25)
         }
+        #expect(!LogicProServer.isMutatingCommand(tool: "logic_mixer", command: "play"))
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: "import_file") == 25)
+        #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
     }
 
-    @Test("registry deadlines are short and match legacy with the flag unset")
+    @Test("registry short deadlines match server decisions")
     func deadlineParity() {
-        withRegistryFlag(nil) {
-            #expect(FeatureFlags.adr003OperationRegistry == false)
-            for spec in OperationRegistry.specs where [
-                ToolID.logicTransport, .logicMixer, .logicNavigate,
-            ].contains(spec.tool) {
-                #expect(spec.deadline.seconds == 25)
-                #expect(OperationRegistry.deadlineSeconds(tool: spec.tool.rawValue, command: spec.command) == 25)
-                #expect(LogicProServer.commandDeadlineSeconds(tool: spec.tool.rawValue, command: spec.command) == 25)
-            }
+        for spec in OperationRegistry.specs where [
+            ToolID.logicTransport, .logicMixer, .logicNavigate,
+        ].contains(spec.tool) {
+            #expect(spec.deadline.seconds == 25)
+            #expect(OperationRegistry.deadlineSeconds(tool: spec.tool.rawValue, command: spec.command) == 25)
+            #expect(LogicProServer.commandDeadlineSeconds(tool: spec.tool.rawValue, command: spec.command) == 25)
         }
     }
 
-    @Test("flag off uses legacy mutability and deadlines")
+    @Test("transport decisions are registry-backed")
     func flagOff() {
-        withRegistryFlag(nil) {
-            #expect(FeatureFlags.adr003OperationRegistry == false)
-            for (_, command) in Self.commands {
-                #expect(LogicProServer.mutatingCommandsByTool["logic_transport"]?.contains(command) == true)
-                #expect(LogicProServer.isMutatingCommand(tool: "logic_transport", command: command))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_transport", command: command) == 25)
-            }
-            #expect(!LogicProServer.isMutatingCommand(tool: "logic_transport", command: "unknown"))
-            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_transport", command: "unknown") == 25)
+        for (_, command) in Self.commands {
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_transport", command: command))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_transport", command: command) == 25)
         }
+        #expect(!LogicProServer.isMutatingCommand(tool: "logic_transport", command: "unknown"))
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_transport", command: "unknown") == 25)
     }
 
-    @Test("flag on derives known transport decisions and preserves legacy fallbacks")
+    @Test("transport decisions stay cross-tool isolated")
     func flagOn() {
-        withRegistryFlag("1") {
-            #expect(FeatureFlags.adr003OperationRegistry)
-            for spec in OperationRegistry.specs where [
-                ToolID.logicTransport, .logicMixer, .logicNavigate,
-            ].contains(spec.tool) {
-                #expect(LogicProServer.isMutatingCommand(tool: spec.tool.rawValue, command: spec.command))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: spec.tool.rawValue, command: spec.command) == 25)
-            }
-            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
-            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: "import_file") == 300)
-            #expect(!LogicProServer.isMutatingCommand(tool: "logic_transport", command: "bounce"))
-            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_transport", command: "bounce") == 300)
+        for spec in OperationRegistry.specs where [
+            ToolID.logicTransport, .logicMixer, .logicNavigate,
+        ].contains(spec.tool) {
+            #expect(LogicProServer.isMutatingCommand(tool: spec.tool.rawValue, command: spec.command))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: spec.tool.rawValue, command: spec.command) == 25)
         }
+        #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: "import_file") == 300)
+        #expect(!LogicProServer.isMutatingCommand(tool: "logic_transport", command: "bounce"))
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_transport", command: "bounce") == 25)
     }
 
     @Test("navigate registry is exact, unique, and isolated")
@@ -336,12 +302,14 @@ struct OperationRegistryTests {
         }
     }
 
-    @Test("derived navigate mutations and deadlines equal unchanged legacy behavior")
+    @Test("derived navigate mutations and deadlines match server decisions")
     func navigateLegacyParity() throws {
         let tool = try #require(ToolID(rawValue: "logic_navigate"))
-        #expect(OperationRegistry.mutatingCommands(tool: tool) == LogicProServer.mutatingCommandsByTool["logic_navigate"])
+        #expect(OperationRegistry.mutatingCommands(tool: tool) == Set(Self.navigateCommands.map(\.1)))
         for (_, command) in Self.navigateCommands {
             #expect(OperationRegistry.deadlineSeconds(tool: tool.rawValue, command: command) == 25)
+            #expect(LogicProServer.isMutatingCommand(tool: tool.rawValue, command: command))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: tool.rawValue, command: command) == 25)
         }
     }
 
@@ -354,37 +322,25 @@ struct OperationRegistryTests {
         #expect(HonestContract.terminalErrorCodes.contains("not_implemented"))
     }
 
-    @Test("flag off uses unchanged legacy navigate decisions")
+    @Test("navigate decisions are registry-backed")
     func navigateFlagOff() {
-        withRegistryFlag(nil) {
-            #expect(FeatureFlags.adr003OperationRegistry == false)
-            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_navigate"))
-            for (_, command) in Self.navigateCommands {
-                #expect(LogicProServer.mutatingCommandsByTool["logic_navigate"]?.contains(command) == true)
-                #expect(LogicProServer.isMutatingCommand(tool: "logic_navigate", command: command))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_navigate", command: command) == 25)
-            }
-            #expect(!LogicProServer.isMutatingCommand(tool: "logic_navigate", command: "play"))
-            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_navigate", command: "play") == 25)
+        for (_, command) in Self.navigateCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_navigate", command: command))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_navigate", command: command) == 25)
         }
+        #expect(!LogicProServer.isMutatingCommand(tool: "logic_navigate", command: "play"))
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_navigate", command: "play") == 25)
     }
 
-    @Test("flag on derives navigate decisions and preserves legacy fallbacks")
+    @Test("navigate decisions stay cross-tool isolated")
     func navigateFlagOn() {
-        withRegistryFlag("1") {
-            #expect(FeatureFlags.adr003OperationRegistry)
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_transport"))
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_mixer"))
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_navigate"))
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_midi"))
-            for (_, command) in Self.navigateCommands {
-                #expect(LogicProServer.isMutatingCommand(tool: "logic_navigate", command: command))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_navigate", command: command) == 25)
-            }
-            #expect(!LogicProServer.isMutatingCommand(tool: "logic_navigate", command: "play"))
-            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_navigate", command: "import_file") == 300)
-            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
+        for (_, command) in Self.navigateCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_navigate", command: command))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_navigate", command: command) == 25)
         }
+        #expect(!LogicProServer.isMutatingCommand(tool: "logic_navigate", command: "play"))
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_navigate", command: "import_file") == 25)
+        #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
     }
 
     private static let smallToolCommands: [(
@@ -449,7 +405,7 @@ struct OperationRegistryTests {
         }
     }
 
-    @Test("derived small-tool mutations equal unchanged legacy behavior")
+    @Test("derived small-tool mutations match server decisions")
     func smallToolLegacyMutationParity() throws {
         for toolRawValue in ["logic_audio", "logic_system", "logic_plugins"] {
             let tool = try #require(ToolID(rawValue: toolRawValue))
@@ -457,75 +413,43 @@ struct OperationRegistryTests {
                 .filter { $0.tool == toolRawValue && $0.mutability == Mutability.`mutating` }
                 .map(\.command))
             #expect(OperationRegistry.mutatingCommands(tool: tool) == expected)
-            #expect(expected == (LogicProServer.mutatingCommandsByTool[toolRawValue] ?? []))
+            for entry in Self.smallToolCommands where entry.tool == toolRawValue {
+                #expect(LogicProServer.isMutatingCommand(tool: toolRawValue, command: entry.command)
+                    == (entry.mutability == Mutability.`mutating`))
+            }
         }
     }
 
-    @Test("read-only registry entries preserve flag-off and flag-on mutability")
+    @Test("read-only registry entries remain nonmutating")
     func smallToolReadOnlyFlagParity() {
         let entries = Self.smallToolCommands.filter { $0.mutability == .readOnly }
 
-        withRegistryFlag(nil) {
-            for entry in entries {
-                #expect(!LogicProServer.usesOperationRegistry(tool: entry.tool))
-                #expect(!LogicProServer.isMutatingCommand(tool: entry.tool, command: entry.command))
-            }
-        }
-        withRegistryFlag("1") {
-            for entry in entries {
-                #expect(LogicProServer.usesOperationRegistry(tool: entry.tool))
-                #expect(!LogicProServer.isMutatingCommand(tool: entry.tool, command: entry.command))
-            }
+        for entry in entries {
+            #expect(!LogicProServer.isMutatingCommand(tool: entry.tool, command: entry.command))
         }
     }
 
-    @Test("plugin medium deadlines preserve flag-off and flag-on legacy parity")
+    @Test("plugin medium deadlines match server decisions")
     func pluginMediumDeadlineFlagParity() {
         let commands = ["set_param_verified", "insert_verified"]
 
         for command in commands {
             #expect(OperationRegistry.deadlineSeconds(tool: "logic_plugins", command: command) == 90)
-        }
-        withRegistryFlag(nil) {
-            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_plugins"))
-            for command in commands {
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_plugins", command: command) == 90)
-            }
-        }
-        withRegistryFlag("1") {
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_plugins"))
-            for command in commands {
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_plugins", command: command) == 90)
-            }
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_plugins", command: command) == 90)
         }
     }
 
-    @Test("small tools use registry only behind the flag and retain legacy fallbacks")
+    @Test("small-tool decisions are registry-backed with safe unknown fallthroughs")
     func smallToolFlagGateAndFallbacks() {
-        withRegistryFlag(nil) {
-            for entry in Self.smallToolCommands {
-                #expect(!LogicProServer.usesOperationRegistry(tool: entry.tool))
-                #expect(LogicProServer.isMutatingCommand(tool: entry.tool, command: entry.command)
-                    == (entry.mutability == Mutability.`mutating`))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: entry.tool, command: entry.command)
-                    == entry.deadline.seconds)
-            }
+        for entry in Self.smallToolCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: entry.tool, command: entry.command)
+                == (entry.mutability == Mutability.`mutating`))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: entry.tool, command: entry.command)
+                == entry.deadline.seconds)
         }
-        withRegistryFlag("1") {
-            for tool in ["logic_transport", "logic_mixer", "logic_navigate", "logic_audio", "logic_system", "logic_plugins"] {
-                #expect(LogicProServer.usesOperationRegistry(tool: tool))
-            }
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_midi"))
-            for entry in Self.smallToolCommands {
-                #expect(LogicProServer.isMutatingCommand(tool: entry.tool, command: entry.command)
-                    == (entry.mutability == Mutability.`mutating`))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: entry.tool, command: entry.command)
-                    == entry.deadline.seconds)
-            }
-            #expect(!LogicProServer.isMutatingCommand(tool: "logic_audio", command: "import_file"))
-            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_audio", command: "import_file") == 300)
-            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
-        }
+        #expect(!LogicProServer.isMutatingCommand(tool: "logic_audio", command: "import_file"))
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_audio", command: "import_file") == 25)
+        #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
     }
 
     private static let editCommands: [(
@@ -591,37 +515,27 @@ struct OperationRegistryTests {
         }
     }
 
-    @Test("derived edit mutations and deadlines equal unchanged legacy behavior")
+    @Test("derived edit mutations and deadlines match server decisions")
     func editLegacyParity() throws {
         let tool = try #require(ToolID(rawValue: "logic_edit"))
         let commands = Set(Self.editCommands.map(\.command))
         #expect(OperationRegistry.mutatingCommands(tool: tool) == commands)
-        #expect(OperationRegistry.mutatingCommands(tool: tool) == LogicProServer.mutatingCommandsByTool[tool.rawValue])
         for command in commands {
             #expect(OperationRegistry.deadlineSeconds(tool: tool.rawValue, command: command) == 25)
+            #expect(LogicProServer.isMutatingCommand(tool: tool.rawValue, command: command))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: tool.rawValue, command: command) == 25)
         }
     }
 
-    @Test("edit uses registry only behind the flag and remains cross-tool isolated")
+    @Test("edit decisions are registry-backed and cross-tool isolated")
     func editFlagGateAndFallbacks() {
-        withRegistryFlag(nil) {
-            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_edit"))
-            for entry in Self.editCommands {
-                #expect(LogicProServer.isMutatingCommand(tool: "logic_edit", command: entry.command))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_edit", command: entry.command) == 25)
-            }
+        for entry in Self.editCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_edit", command: entry.command))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_edit", command: entry.command) == 25)
         }
-        withRegistryFlag("1") {
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_edit"))
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_midi"))
-            for entry in Self.editCommands {
-                #expect(LogicProServer.isMutatingCommand(tool: "logic_edit", command: entry.command))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_edit", command: entry.command) == 25)
-            }
-            #expect(!LogicProServer.isMutatingCommand(tool: "logic_edit", command: "play"))
-            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_edit", command: "play") == 25)
-            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
-        }
+        #expect(!LogicProServer.isMutatingCommand(tool: "logic_edit", command: "play"))
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_edit", command: "play") == 25)
+        #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
     }
 
     private static let projectCommands: [(
@@ -692,7 +606,7 @@ struct OperationRegistryTests {
         }
     }
 
-    @Test("project mutations exactly match unchanged legacy behavior")
+    @Test("project mutations exactly match registry behavior")
     func projectLegacyMutationParity() throws {
         let tool = try #require(ToolID(rawValue: "logic_project"))
         let expected = Set(Self.projectCommands
@@ -703,10 +617,13 @@ struct OperationRegistryTests {
             "export_run", "export_resume", "cleanup_apply",
         ]))
         #expect(OperationRegistry.mutatingCommands(tool: tool) == expected)
-        #expect(expected == LogicProServer.mutatingCommandsByTool[tool.rawValue])
+        for entry in Self.projectCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: tool.rawValue, command: entry.command)
+                == (entry.mutability == Mutability.`mutating`))
+        }
     }
 
-    @Test("project deadlines exactly match legacy short medium and long tiers")
+    @Test("project deadlines exactly match registry short medium and long tiers")
     func projectDeadlineParity() {
         #expect(Self.projectCommands.filter { $0.deadline == .short }.count == 6)
         #expect(Self.projectCommands.filter { $0.deadline == .medium }.count == 5)
@@ -715,18 +632,8 @@ struct OperationRegistryTests {
         for entry in Self.projectCommands {
             #expect(OperationRegistry.deadlineSeconds(tool: "logic_project", command: entry.command)
                 == entry.deadline.seconds)
-        }
-        withRegistryFlag(nil) {
-            for entry in Self.projectCommands {
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: entry.command)
-                    == entry.deadline.seconds)
-            }
-        }
-        withRegistryFlag("1") {
-            for entry in Self.projectCommands {
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: entry.command)
-                    == entry.deadline.seconds)
-            }
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: entry.command)
+                == entry.deadline.seconds)
         }
     }
 
@@ -741,39 +648,31 @@ struct OperationRegistryTests {
         }
     }
 
-    @Test("flag off preserves all legacy project decisions")
+    @Test("project decisions are registry-backed")
     func projectFlagOff() {
-        withRegistryFlag(nil) {
-            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_project"))
-            for entry in Self.projectCommands {
-                #expect(LogicProServer.isMutatingCommand(tool: "logic_project", command: entry.command)
-                    == (entry.mutability == Mutability.`mutating`))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: entry.command)
-                    == entry.deadline.seconds)
-            }
+        for entry in Self.projectCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_project", command: entry.command)
+                == (entry.mutability == Mutability.`mutating`))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: entry.command)
+                == entry.deadline.seconds)
         }
     }
 
-    @Test("project flag gate remains cross-tool isolated with legacy fallbacks")
+    @Test("project decisions stay cross-tool isolated with safe fallthroughs")
     func projectFlagGateAndCrossToolIsolation() {
         #expect(OperationRegistry.spec(tool: "logic_project", command: "play") == nil)
         #expect(OperationRegistry.spec(tool: "logic_transport", command: "new") == nil)
         #expect(OperationRegistry.spec(tool: "logic_audio", command: "open") == nil)
 
-        withRegistryFlag("1") {
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_project"))
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_transport"))
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_midi"))
-            for entry in Self.projectCommands {
-                #expect(LogicProServer.isMutatingCommand(tool: "logic_project", command: entry.command)
-                    == (entry.mutability == Mutability.`mutating`))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: entry.command)
-                    == entry.deadline.seconds)
-            }
-            #expect(!LogicProServer.isMutatingCommand(tool: "logic_project", command: "import_file"))
-            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: "import_file") == 300)
-            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
+        for entry in Self.projectCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_project", command: entry.command)
+                == (entry.mutability == Mutability.`mutating`))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: entry.command)
+                == entry.deadline.seconds)
         }
+        #expect(!LogicProServer.isMutatingCommand(tool: "logic_project", command: "import_file"))
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: "import_file") == 25)
+        #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
     }
 
     private static let midiCommands: [(
@@ -842,7 +741,7 @@ struct OperationRegistryTests {
         }
     }
 
-    @Test("MIDI mutations exactly match unchanged legacy behavior")
+    @Test("MIDI mutations exactly match registry behavior")
     func midiLegacyMutationParity() throws {
         let tool = try #require(ToolID(rawValue: "logic_midi"))
         let expected = Set(Self.midiCommands
@@ -854,11 +753,14 @@ struct OperationRegistryTests {
             "step_input", "mmc_play", "mmc_stop", "mmc_record", "mmc_locate",
         ]))
         #expect(OperationRegistry.mutatingCommands(tool: tool) == expected)
-        #expect(expected == LogicProServer.mutatingCommandsByTool[tool.rawValue])
         #expect(!expected.contains("list_ports"))
+        for entry in Self.midiCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: tool.rawValue, command: entry.command)
+                == (entry.mutability == Mutability.`mutating`))
+        }
     }
 
-    @Test("MIDI deadlines preserve short medium and long legacy tiers")
+    @Test("MIDI deadlines preserve registry short medium and long tiers")
     func midiDeadlineParity() {
         #expect(Self.midiCommands.filter { $0.deadline == .short }.count == 14)
         #expect(Self.midiCommands.filter { $0.deadline == .medium }.map(\.command) == ["play_sequence"])
@@ -867,49 +769,32 @@ struct OperationRegistryTests {
         for entry in Self.midiCommands {
             #expect(OperationRegistry.deadlineSeconds(tool: "logic_midi", command: entry.command)
                 == entry.deadline.seconds)
-        }
-        withRegistryFlag(nil) {
-            for entry in Self.midiCommands {
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: entry.command)
-                    == entry.deadline.seconds)
-            }
-        }
-        withRegistryFlag("1") {
-            for entry in Self.midiCommands {
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: entry.command)
-                    == entry.deadline.seconds)
-            }
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: entry.command)
+                == entry.deadline.seconds)
         }
     }
 
-    @Test("flag off preserves every legacy MIDI decision")
+    @Test("MIDI decisions are registry-backed")
     func midiFlagOff() {
-        withRegistryFlag(nil) {
-            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_midi"))
-            for entry in Self.midiCommands {
-                #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: entry.command)
-                    == (entry.mutability == Mutability.`mutating`))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: entry.command)
-                    == entry.deadline.seconds)
-            }
+        for entry in Self.midiCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: entry.command)
+                == (entry.mutability == Mutability.`mutating`))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: entry.command)
+                == entry.deadline.seconds)
         }
     }
 
-    @Test("MIDI flag gate remains cross-tool isolated")
+    @Test("MIDI decisions stay cross-tool isolated")
     func midiFlagGateAndCrossToolIsolation() {
-        withRegistryFlag("1") {
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_midi"))
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_project"))
-            for entry in Self.midiCommands {
-                #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: entry.command)
-                    == (entry.mutability == Mutability.`mutating`))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: entry.command)
-                    == entry.deadline.seconds)
-            }
-            #expect(!LogicProServer.isMutatingCommand(tool: "logic_midi", command: "list_ports"))
-            #expect(!LogicProServer.isMutatingCommand(tool: "logic_midi", command: "is_running"))
-            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: "open") == 300)
+        for entry in Self.midiCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: entry.command)
+                == (entry.mutability == Mutability.`mutating`))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: entry.command)
+                == entry.deadline.seconds)
         }
+        #expect(!LogicProServer.isMutatingCommand(tool: "logic_midi", command: "list_ports"))
+        #expect(!LogicProServer.isMutatingCommand(tool: "logic_midi", command: "is_running"))
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: "open") == 25)
     }
 
     private static let trackCommands: [(
@@ -986,7 +871,7 @@ struct OperationRegistryTests {
         }
     }
 
-    @Test("tracks mutations exactly match unchanged legacy behavior")
+    @Test("tracks mutations exactly match registry behavior")
     func tracksLegacyMutationParity() throws {
         let tool = try #require(ToolID(rawValue: "logic_tracks"))
         let expected = Set(Self.trackCommands
@@ -998,9 +883,12 @@ struct OperationRegistryTests {
             "set_automation", "set_instrument",
         ]))
         #expect(OperationRegistry.mutatingCommands(tool: tool) == expected)
-        #expect(expected == LogicProServer.mutatingCommandsByTool[tool.rawValue])
         for command in ["list_library", "scan_library", "resolve_path", "scan_plugin_presets"] {
             #expect(!expected.contains(command))
+        }
+        for entry in Self.trackCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: tool.rawValue, command: entry.command)
+                == (entry.mutability == Mutability.`mutating`))
         }
     }
 
@@ -1018,53 +906,36 @@ struct OperationRegistryTests {
         for entry in Self.trackCommands {
             #expect(OperationRegistry.deadlineSeconds(tool: "logic_tracks", command: entry.command)
                 == entry.deadline.seconds)
-        }
-        withRegistryFlag(nil) {
-            for entry in Self.trackCommands {
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: entry.command)
-                    == entry.deadline.seconds)
-            }
-        }
-        withRegistryFlag("1") {
-            for entry in Self.trackCommands {
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: entry.command)
-                    == entry.deadline.seconds)
-            }
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: entry.command)
+                == entry.deadline.seconds)
         }
     }
 
-    @Test("flag off preserves every legacy tracks decision")
+    @Test("tracks decisions are registry-backed")
     func tracksFlagOff() {
-        withRegistryFlag(nil) {
-            #expect(!LogicProServer.usesOperationRegistry(tool: "logic_tracks"))
-            for entry in Self.trackCommands {
-                #expect(LogicProServer.isMutatingCommand(tool: "logic_tracks", command: entry.command)
-                    == (entry.mutability == Mutability.`mutating`))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: entry.command)
-                    == entry.deadline.seconds)
-            }
+        for entry in Self.trackCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_tracks", command: entry.command)
+                == (entry.mutability == Mutability.`mutating`))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: entry.command)
+                == entry.deadline.seconds)
         }
     }
 
-    @Test("tracks flag gate remains cross-tool isolated")
+    @Test("tracks decisions stay cross-tool isolated")
     func tracksFlagGateAndCrossToolIsolation() {
-        withRegistryFlag("1") {
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_tracks"))
-            #expect(LogicProServer.usesOperationRegistry(tool: "logic_midi"))
-            for entry in Self.trackCommands {
-                #expect(LogicProServer.isMutatingCommand(tool: "logic_tracks", command: entry.command)
-                    == (entry.mutability == Mutability.`mutating`))
-                #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: entry.command)
-                    == entry.deadline.seconds)
-            }
-            #expect(!LogicProServer.isMutatingCommand(tool: "logic_tracks", command: "library"))
-            #expect(OperationRegistry.spec(tool: "logic_tracks", command: "library") == nil)
-            #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
-            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: "import_file") == 300)
+        for entry in Self.trackCommands {
+            #expect(LogicProServer.isMutatingCommand(tool: "logic_tracks", command: entry.command)
+                == (entry.mutability == Mutability.`mutating`))
+            #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: entry.command)
+                == entry.deadline.seconds)
         }
+        #expect(!LogicProServer.isMutatingCommand(tool: "logic_tracks", command: "library"))
+        #expect(OperationRegistry.spec(tool: "logic_tracks", command: "library") == nil)
+        #expect(LogicProServer.isMutatingCommand(tool: "logic_midi", command: "import_file"))
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: "import_file") == 300)
     }
 
-    @Test("registry covers the exact server catalog and every legacy mutation set")
+    @Test("registry covers the exact server catalog and server decisions")
     func registryCoversExactServerCatalogAndLegacyMutations() {
         let expectedTools: Set<String> = [
             "logic_transport", "logic_tracks", "logic_mixer", "logic_midi", "logic_edit",
@@ -1074,18 +945,14 @@ struct OperationRegistryTests {
         #expect(OperationRegistry.registeredToolRawValues == expectedTools)
         #expect(OperationRegistry.registeredToolRawValues.count == 10)
 
-        let derivedMutations = Dictionary(uniqueKeysWithValues: expectedTools.compactMap { tool -> (String, Set<String>)? in
-            guard let toolID = ToolID(rawValue: tool) else { return nil }
-            let commands = OperationRegistry.mutatingCommands(tool: toolID)
-            return commands.isEmpty ? nil : (tool, commands)
-        })
-        #expect(derivedMutations == LogicProServer.mutatingCommandsByTool)
         for tool in expectedTools {
             let toolID = ToolID(rawValue: tool)
             #expect(toolID != nil)
             if let toolID {
-                #expect(OperationRegistry.mutatingCommands(tool: toolID)
-                    == (LogicProServer.mutatingCommandsByTool[tool] ?? []))
+                for spec in OperationRegistry.specs where spec.tool == toolID {
+                    #expect(LogicProServer.isMutatingCommand(tool: tool, command: spec.command)
+                        == (spec.mutability == Mutability.`mutating`))
+                }
             }
         }
     }

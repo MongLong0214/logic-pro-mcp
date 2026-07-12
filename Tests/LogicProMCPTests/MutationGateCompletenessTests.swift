@@ -5,14 +5,14 @@ import Testing
 // WS8b (AC5) — mutation-gate completeness. Every command each dispatcher's
 // `switch command { case "…" }` (plus EditDispatcher's route table) accepts must
 // be CONSCIOUSLY classified as exactly one of:
-//   • mutating  → present in LogicProServer.mutatingCommandsByTool (serialized by
+//   • mutating  → declared mutating by OperationRegistry (serialized by
 //                 LogicMutationGate), checked via `isMutatingCommand`;
 //   • read-only → on the explicit allowlist below (a query: cache/disk/AX read);
 //   • not-exposed stub → an error-only "not in the production MCP contract" label;
 //   • alias → a second `case "canonical", "alias":` label routing to a censused one.
 // A newly-added command that lands in none of these fails the suite — forcing the
 // author to gate it or allowlist it rather than shipping an un-serialized mutation.
-// Read-only test: it parses the dispatcher sources and consults production maps;
+// Read-only test: it parses dispatcher sources and consults the production registry;
 // it never edits Sources. The allowlist is kept in lockstep by this test the same
 // way SystemDispatcher.validHelpCategories is (audit AC5).
 @Suite("Mutation-gate completeness")
@@ -127,7 +127,7 @@ struct MutationGateCompletenessTests {
                 let alias = Self.aliases[tool]?.contains(command) ?? false
                 #expect(
                     gated || readOnly || stub || alias,
-                    "\(tool).\(command) is UNCLASSIFIED — gate it in LogicProServer.mutatingCommandsByTool if it mutates, else add it to the read-only allowlist / stub list."
+                    "\(tool).\(command) is UNCLASSIFIED — mark its OperationRegistry spec mutating, or add it to the read-only allowlist / stub list."
                 )
                 // A command may not be BOTH gated and read-only — that would be a
                 // contradiction in intent.
@@ -155,12 +155,7 @@ struct MutationGateCompletenessTests {
 
     @Test("every dispatcher tool is mapped for the completeness audit")
     func everyToolMapped() {
-        // Lockstep with the mutation-gate map keys: the same 10 tools LogicProServer
-        // enumerates must be audited here (a new tool must be added to both).
         let mapped = Set(Self.dispatcherFiles.keys)
-        for tool in ["logic_transport", "logic_tracks", "logic_mixer", "logic_midi", "logic_edit",
-                     "logic_navigate", "logic_project", "logic_system", "logic_audio", "logic_plugins"] {
-            #expect(mapped.contains(tool), "dispatcher \(tool) is not mapped for the mutation-gate completeness audit")
-        }
+        #expect(mapped == OperationRegistry.registeredToolRawValues)
     }
 }
