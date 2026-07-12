@@ -478,38 +478,12 @@ actor LogicProServer {
 
     // MARK: - #112 command deadline (stdio-loop liveness backstop)
 
-    /// Commands that legitimately take many seconds against live AX: full
-    /// Library / preset tree walks, SMF import, and the guarded bounce/export
-    /// state machines. They get a much longer deadline so the backstop never
-    /// false-trips them, while still bounding a genuine hang.
-    private static let longRunningCommands: Set<String> = [
-        "scan_library", "scan_plugin_presets", "list_library", "record_sequence",
-        "import_file", "bounce", "export_run", "export_resume", "open", "save_as",
-    ]
-
-    /// Medium-cost commands that drive multi-step AX menu/library navigation.
-    private static let mediumRunningCommands: Set<String> = [
-        "set_instrument", "insert_verified", "set_param_verified",
-        "cleanup_apply", "new", "save", "close", "quit", "play_sequence",
-    ]
-
-    static func usesOperationRegistry(tool: String) -> Bool {
-        FeatureFlags.adr003OperationRegistry
-            && OperationRegistry.registeredToolRawValues.contains(tool)
-    }
-
     /// Per-command server-side deadline in seconds. Set far above each
     /// command's healthy completion time (sub-second for the fast tier) so a
     /// normal op can never false-trip; only a wedged/occluded Logic session
     /// that would otherwise hang the stdio loop is bounded.
     static func commandDeadlineSeconds(tool: String, command: String) -> Double {
-        if usesOperationRegistry(tool: tool),
-           let seconds = OperationRegistry.deadlineSeconds(tool: tool, command: command) {
-            return seconds
-        }
-        if longRunningCommands.contains(command) { return 300 }
-        if mediumRunningCommands.contains(command) { return 90 }
-        return 25
+        OperationRegistry.deadlineSeconds(tool: tool, command: command) ?? 25
     }
 
     static func deadlineTimeoutResult(
@@ -705,52 +679,8 @@ actor LogicProServer {
         }
     }
 
-    static let mutatingCommandsByTool: [String: Set<String>] = [
-        "logic_transport": [
-            "play", "stop", "record", "pause", "rewind", "fast_forward", "toggle_cycle",
-            "toggle_metronome", "set_tempo", "goto_position", "set_cycle_range", "toggle_count_in",
-            "toggle_autopunch",
-        ],
-        "logic_tracks": [
-            "select", "create_audio", "create_instrument", "create_drummer", "create_external_midi",
-            "delete", "duplicate", "rename", "mute", "solo", "arm", "arm_only", "record_sequence",
-            "set_automation", "set_instrument",
-            // NOTE: list_library / scan_library / scan_plugin_presets are read-only
-            // queries (cache/disk/AX reads that transiently move + restore AX
-            // selection but do not change project state). They intentionally stay
-            // OUT of the mutation gate so a multi-minute library scan cannot block
-            // every real write — and so a slow scan can never wedge the gate. They
-            // still carry the long-running deadline via `longRunningCommands`.
-        ],
-        "logic_mixer": [
-            "set_volume", "set_pan", "set_master_volume", "set_plugin_param", "insert_plugin",
-        ],
-        "logic_midi": [
-            "send_note", "send_chord", "send_cc", "send_program_change", "send_pitch_bend",
-            "send_aftertouch", "send_sysex", "play_sequence", "import_file", "create_virtual_port",
-            "step_input", "mmc_play", "mmc_stop", "mmc_record", "mmc_locate",
-        ],
-        "logic_edit": [
-            "undo", "redo", "cut", "copy", "paste", "delete", "select_all", "split", "join",
-            "quantize", "bounce_in_place", "normalize", "duplicate", "toggle_step_input",
-        ],
-        "logic_navigate": [
-            "goto_bar", "goto_marker", "create_marker", "delete_marker", "rename_marker",
-            "zoom_to_fit", "set_zoom", "toggle_view",
-        ],
-        "logic_project": [
-            "new", "open", "save", "save_as", "close", "bounce", "launch", "quit",
-            "export_run", "export_resume", "cleanup_apply",
-        ],
-        "logic_plugins": ["set_param_verified", "insert_verified"],
-    ]
-
     static func isMutatingCommand(tool: String, command: String) -> Bool {
-        if usesOperationRegistry(tool: tool),
-           let spec = OperationRegistry.spec(tool: tool, command: command) {
-            return spec.mutability == Mutability.`mutating`
-        }
-        return mutatingCommandsByTool[tool]?.contains(command) == true
+        OperationRegistry.spec(tool: tool, command: command)?.mutability == Mutability.`mutating`
     }
 
     private static func operationName(tool: String, command: String) -> String {

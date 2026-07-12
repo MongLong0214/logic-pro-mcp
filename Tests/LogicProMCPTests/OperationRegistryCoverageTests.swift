@@ -24,6 +24,7 @@ struct OperationRegistryCoverageTests {
         let missing = Self.publicOperations.subtracting(Self.registeredOperations).sorted()
         let orphans = Self.registeredOperations.subtracting(Self.publicOperations).sorted()
 
+        #expect(OperationRegistry.specs.count == 99)
         #expect(OperationRegistry.registeredToolRawValues == Set(WorkflowSkillCatalog.publicCommands.keys))
         #expect(Self.registeredOperations.count == OperationRegistry.specs.count)
         #expect(missing.isEmpty, "missing specs: \(missing)")
@@ -31,34 +32,32 @@ struct OperationRegistryCoverageTests {
         #expect(OperationRegistry.validationErrors().isEmpty)
     }
 
-    @Test("registry mutability and deadlines equal flag-off legacy values for every public command")
-    func registryValuesEqualFlagOffLegacyValues() throws {
-        let registryMutations = Set(OperationRegistry.specs
-            .filter { $0.mutability == Mutability.`mutating` }
-            .map { Self.operationKey(tool: $0.tool.rawValue, command: $0.command) })
-        let legacyMutations = Set(LogicProServer.mutatingCommandsByTool.flatMap { tool, commands in
-            commands.map { Self.operationKey(tool: tool, command: $0) }
-        })
-        #expect(registryMutations == legacyMutations)
-
-        #expect(!FeatureFlags.adr003OperationRegistry)
+    @Test("registry drives server mutability and deadlines for every public command")
+    func registryDrivesServerDecisionsForEveryPublicCommand() throws {
         for tool in WorkflowSkillCatalog.publicCommands.keys.sorted() {
-            #expect(!LogicProServer.usesOperationRegistry(tool: tool))
             for command in WorkflowSkillCatalog.publicCommands[tool, default: []].sorted() {
                 let spec = try #require(OperationRegistry.spec(tool: tool, command: command))
-                let legacyMutating = LogicProServer.mutatingCommandsByTool[tool, default: []]
-                    .contains(command)
                 let registryDeadline = try #require(
                     OperationRegistry.deadlineSeconds(tool: tool, command: command)
                 )
 
-                #expect((spec.mutability == Mutability.`mutating`) == legacyMutating)
+                #expect(LogicProServer.isMutatingCommand(tool: tool, command: command)
+                    == (spec.mutability == Mutability.`mutating`))
                 #expect(registryDeadline == LogicProServer.commandDeadlineSeconds(
                     tool: tool,
                     command: command
                 ))
             }
         }
+    }
+
+    @Test("unregistered commands use the safe deadline and mutation fallthrough")
+    func unregisteredCommandsUseSafeFallthrough() {
+        #expect(OperationRegistry.spec(tool: "logic_audio", command: "import_file") == nil)
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_audio", command: "import_file") == 25)
+        #expect(!LogicProServer.isMutatingCommand(tool: "logic_audio", command: "import_file"))
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_unknown", command: "bounce") == 25)
+        #expect(!LogicProServer.isMutatingCommand(tool: "logic_unknown", command: "play"))
     }
 
     @Test("unclassified mutation targets = 0")

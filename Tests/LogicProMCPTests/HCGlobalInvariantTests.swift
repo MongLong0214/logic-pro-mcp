@@ -306,8 +306,8 @@ struct HCGlobalInvariantTests {
         ]
     }
 
-    @Test("authoritative mutating command map matches invariant specs")
-    func authoritativeMutatingCommandsMatchSpecs() throws {
+    @Test("registry mutating commands match invariant specs")
+    func registryMutatingCommandsMatchSpecs() throws {
         let projectPath = try Self.makeLogicProjectPath(create: true)
         defer { try? FileManager.default.removeItem(atPath: projectPath) }
         let saveAsPath = try Self.makeLogicProjectPath(create: false)
@@ -322,9 +322,12 @@ struct HCGlobalInvariantTests {
         }.mapValues { entries in
             Set(entries.compactMap { $0.split(separator: ".", maxSplits: 1).last.map(String.init) })
         }
+        let registryMutations = Dictionary(grouping: OperationRegistry.specs.filter {
+            $0.mutability == Mutability.`mutating`
+        }, by: { $0.tool.rawValue }).mapValues { Set($0.map(\.command)) }
         let representedTools = Set(casesByTool.keys).union(allowlistByTool.keys)
-        #expect(representedTools == Set(LogicProServer.mutatingCommandsByTool.keys))
-        for (tool, commandSet) in LogicProServer.mutatingCommandsByTool {
+        #expect(representedTools == Set(registryMutations.keys))
+        for (tool, commandSet) in registryMutations {
             let represented = (casesByTool[tool] ?? []).union(allowlistByTool[tool] ?? [])
             #expect(
                 represented == commandSet,

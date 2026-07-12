@@ -21,10 +21,6 @@ enum FeatureFlags: Sendable {
     }
     #endif
 
-    static var adr003OperationRegistry: Bool {
-        ProcessInfo.processInfo.environment["LOGIC_MCP_ADR003_OPERATION_REGISTRY"] == "1"
-    }
-
     static var adr004MutationSaga: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR004_MUTATION_SAGA"] == "1"
     }
