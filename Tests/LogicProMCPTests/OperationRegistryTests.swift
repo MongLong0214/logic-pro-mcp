@@ -183,6 +183,7 @@ struct OperationRegistryTests {
     @Test("all mixer metadata matches current runtime truth")
     func mixerMetadata() throws {
         let mixerSpecs = OperationRegistry.specs.filter { $0.tool == .logicMixer }
+        let targetBearingCommands: Set<String> = ["set_volume", "set_pan"]
         #expect(Set(Self.mixerCommands.map(\.1)) == Set(mixerSpecs.map(\.command)))
 
         for (id, command) in Self.mixerCommands {
@@ -192,7 +193,7 @@ struct OperationRegistryTests {
             #expect(spec.command == command)
             #expect(spec.mutability == Mutability.`mutating`)
             #expect(spec.confirmation == (command == "insert_plugin" ? .l2 : .none))
-            #expect(spec.target == .none)
+            #expect(spec.target == (targetBearingCommands.contains(command) ? .requiresStableTarget : .none))
             #expect(spec.verification == .readbackRequired)
             #expect(spec.retry == .neverAutomatic)
             #expect(spec.deadline == .short)
@@ -439,7 +440,7 @@ struct OperationRegistryTests {
             #expect(spec.command == entry.command)
             #expect(spec.mutability == entry.mutability)
             #expect(spec.confirmation == .none)
-            #expect(spec.target == .none)
+            #expect(spec.target == (id == .pluginsSetParamVerified ? .requiresStableTarget : .none))
             #expect(spec.verification == entry.verification)
             #expect(spec.retry == .neverAutomatic)
             #expect(spec.deadline == entry.deadline)
@@ -963,6 +964,10 @@ struct OperationRegistryTests {
     @Test("all tracks metadata matches dispatcher and channel truth")
     func tracksMetadata() throws {
         let tool = try #require(ToolID(rawValue: "logic_tracks"))
+        let targetBearingCommands: Set<String> = [
+            "select", "delete", "duplicate", "rename", "mute", "solo", "arm", "arm_only",
+            "set_automation", "set_instrument",
+        ]
 
         for entry in Self.trackCommands {
             let id = try #require(OperationID(rawValue: entry.id))
@@ -972,7 +977,7 @@ struct OperationRegistryTests {
             #expect(spec.command == entry.command)
             #expect(spec.mutability == entry.mutability)
             #expect(spec.confirmation == .none)
-            #expect(spec.target == .none)
+            #expect(spec.target == (targetBearingCommands.contains(entry.command) ? .requiresStableTarget : .none))
             #expect(spec.verification == entry.verification)
             #expect(spec.retry == .neverAutomatic)
             #expect(spec.deadline == entry.deadline)

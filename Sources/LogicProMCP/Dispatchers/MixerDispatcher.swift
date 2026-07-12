@@ -25,6 +25,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             // whose (trackIndex-keyed) mixer strip is addressed; flag off →
             // explicit track/index required (byte-identical to prior behaviour).
             let index: Int
+            let resolvedReference: TargetReference?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -37,6 +38,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             ) {
             case .success(let resolved):
                 index = resolved.index
+                resolvedReference = resolved.reference
             case .failure(let result):
                 return result
             }
@@ -52,10 +54,13 @@ struct MixerDispatcher: OperationTraceDispatching {
             }
             let traceID = await startTraceIfEnabled(command: command)
             await recordWriteBoundary(traceID)
-            let result = await routedTextResult(router, operation: "mixer.set_volume", params: [
-                "index": String(index),
-                "volume": String(volume),
-            ])
+            let result = TargetRefResolver.addEvidence(
+                resolvedReference,
+                to: await routedTextResult(router, operation: "mixer.set_volume", params: [
+                    "index": String(index),
+                    "volume": String(volume),
+                ])
+            )
             return await finalizeTrace(result, traceID: traceID)
 
         case "set_pan":
@@ -64,6 +69,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             // (trackIndex-keyed) mixer strip; flag off → explicit track/index
             // required (byte-identical to prior behaviour).
             let index: Int
+            let resolvedReference: TargetReference?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -76,6 +82,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             ) {
             case .success(let resolved):
                 index = resolved.index
+                resolvedReference = resolved.reference
             case .failure(let result):
                 return result
             }
@@ -91,10 +98,13 @@ struct MixerDispatcher: OperationTraceDispatching {
             }
             let traceID = await startTraceIfEnabled(command: command)
             await recordWriteBoundary(traceID)
-            let result = await routedTextResult(router, operation: "mixer.set_pan", params: [
-                "index": String(index),
-                "pan": String(pan),
-            ])
+            let result = TargetRefResolver.addEvidence(
+                resolvedReference,
+                to: await routedTextResult(router, operation: "mixer.set_pan", params: [
+                    "index": String(index),
+                    "pan": String(pan),
+                ])
+            )
             return await finalizeTrace(result, traceID: traceID)
 
         case "set_send":

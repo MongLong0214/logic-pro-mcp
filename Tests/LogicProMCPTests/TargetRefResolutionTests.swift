@@ -102,6 +102,10 @@ struct TargetRefResolutionTests {
         sharedJSONObject(sharedToolText(result))?["error"] as? String
     }
 
+    private func echoedTargetRef(_ result: CallTool.Result) -> String? {
+        sharedJSONObject(sharedToolText(result))?["target_ref"] as? String
+    }
+
     private func dummyInvalid() -> CallTool.Result {
         toolInvalidParamsResult("resolver-test: explicit index required")
     }
@@ -380,6 +384,7 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.select") == ["index": "2"])
         }
     }
@@ -397,6 +402,7 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == nil)
             // target_ref (which points at 2) is ignored; explicit index 1 wins.
             #expect(await opParams(channels, "track.select") == ["index": "1"])
         }
@@ -454,6 +460,7 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.select") == ["index": "2"])
             #expect(await allOps(channels).contains(where: { $0.0 == "track.delete" }))
         }
@@ -472,6 +479,7 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.select") == ["index": "2"])
             #expect(await allOps(channels).contains(where: { $0.0 == "track.duplicate" }))
         }
@@ -490,6 +498,7 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.set_mute") == ["index": "2", "enabled": "true"])
         }
     }
@@ -525,6 +534,7 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.set_arm") == ["index": "2", "enabled": "true"])
         }
     }
@@ -542,6 +552,7 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.set_automation") == ["index": "2", "mode": "read"])
         }
     }
@@ -559,12 +570,13 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.set_instrument") == ["index": "2", "path": "/x.patch"])
         }
     }
 
     @Test
-    func testTrackRenameFlagOnResolvesTargetRefAndEchoesTrackRef() async {
+    func testTrackRenameFlagOnResolvesTargetRefAndEchoesTargetRef() async {
         await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
             let (router, channels) = await makeRouter()
@@ -576,7 +588,10 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == false)
-            #expect(sharedJSONObject(sharedToolText(result))?["track_ref"] as? String == reference.rawValue)
+            #expect(echoedTargetRef(result) == reference.rawValue)
+            // rename keeps its pre-uniform `track_ref` alias (G8 backward compat);
+            // the other 12 mutations emit only the uniform `target_ref` key.
+            #expect(sharedJSONObject(sharedToolText(result))!["track_ref"] as! String == reference.rawValue)
             #expect(await opParams(channels, "track.rename") == ["index": "2", "name": "Sub Bass"])
         }
     }
@@ -596,6 +611,7 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "mixer.set_volume") == ["index": "2", "volume": "0.5"])
         }
     }
@@ -617,6 +633,7 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == nil)
             #expect(await opParams(channels, "mixer.set_volume") == ["index": "1", "volume": "0.5"])
         }
     }
@@ -634,6 +651,7 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "mixer.set_pan") == ["index": "2", "pan": "-0.25"])
         }
     }
@@ -687,6 +705,7 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "plugin.set_param_verified")?["track"] == "2")
         }
     }
@@ -704,6 +723,7 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == nil)
             // target_ref (pointing at 2) is ignored; explicit track 3 forwarded.
             #expect(await opParams(channels, "plugin.set_param_verified")?["track"] == "3")
         }
@@ -774,6 +794,7 @@ struct TargetRefResolutionTests {
                 cache: cache
             )
             #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == nil)
             #expect((await cache.getTracks())[2].name == "Bass")
         }
     }

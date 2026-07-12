@@ -324,19 +324,19 @@ enum OperationRegistry {
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
     } + ([
-        (.mixerSetVolume, "set_volume", .none),
-        (.mixerSetPan, "set_pan", .none),
-        (.mixerSetMasterVolume, "set_master_volume", .none),
-        (.mixerSetPluginParam, "set_plugin_param", .none),
-        (.mixerInsertPlugin, "insert_plugin", .l2),
-    ] as [(OperationID, String, ConfirmationPolicy)]).map { entry in
+        (.mixerSetVolume, "set_volume", .none, TargetPolicy.requiresStableTarget),
+        (.mixerSetPan, "set_pan", .none, .requiresStableTarget),
+        (.mixerSetMasterVolume, "set_master_volume", .none, .none),
+        (.mixerSetPluginParam, "set_plugin_param", .none, .none),
+        (.mixerInsertPlugin, "insert_plugin", .l2, .none),
+    ] as [(OperationID, String, ConfirmationPolicy, TargetPolicy)]).map { entry in
         OperationSpec(
             id: entry.0,
             tool: .logicMixer,
             command: entry.1,
             mutability: Mutability.`mutating`,
             confirmation: entry.2,
-            target: .none,
+            target: entry.3,
             verification: .readbackRequired,
             retry: .neverAutomatic,
             deadline: .short,
@@ -402,17 +402,17 @@ enum OperationRegistry {
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
     } + ([
-        (.pluginsGetInventory, "get_inventory", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none),
-        (.pluginsSetParamVerified, "set_param_verified", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired),
-        (.pluginsInsertVerified, "insert_verified", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired),
-    ] as [(OperationID, String, Mutability, DeadlineClass, VerificationPolicy)]).map { entry in
+        (.pluginsGetInventory, "get_inventory", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, TargetPolicy.none),
+        (.pluginsSetParamVerified, "set_param_verified", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget),
+        (.pluginsInsertVerified, "insert_verified", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired, TargetPolicy.none),
+    ] as [(OperationID, String, Mutability, DeadlineClass, VerificationPolicy, TargetPolicy)]).map { entry in
         OperationSpec(
             id: entry.0,
             tool: .logicPlugins,
             command: entry.1,
             mutability: entry.2,
             confirmation: .none,
-            target: .none,
+            target: entry.5,
             verification: entry.4,
             retry: .neverAutomatic,
             deadline: entry.3,
@@ -511,33 +511,33 @@ enum OperationRegistry {
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
     } + ([
-        (.tracksSelect, "select", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
-        (.tracksCreateAudio, "create_audio", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
-        (.tracksCreateInstrument, "create_instrument", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
-        (.tracksCreateDrummer, "create_drummer", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
-        (.tracksCreateExternalMIDI, "create_external_midi", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
-        (.tracksDelete, "delete", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
-        (.tracksDuplicate, "duplicate", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
-        (.tracksRename, "rename", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
-        (.tracksMute, "mute", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
-        (.tracksSolo, "solo", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
-        (.tracksArm, "arm", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
-        (.tracksArmOnly, "arm_only", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired),
-        (.tracksRecordSequence, "record_sequence", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired),
-        (.tracksSetAutomation, "set_automation", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
-        (.tracksSetInstrument, "set_instrument", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired),
-        (.tracksListLibrary, "list_library", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none),
-        (.tracksScanLibrary, "scan_library", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none),
-        (.tracksResolvePath, "resolve_path", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none),
-        (.tracksScanPluginPresets, "scan_plugin_presets", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none),
-    ] as [(OperationID, String, Mutability, DeadlineClass, VerificationPolicy)]).map { entry in
+        (.tracksSelect, "select", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget),
+        (.tracksCreateAudio, "create_audio", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.none),
+        (.tracksCreateInstrument, "create_instrument", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.none),
+        (.tracksCreateDrummer, "create_drummer", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.none),
+        (.tracksCreateExternalMIDI, "create_external_midi", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.none),
+        (.tracksDelete, "delete", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget),
+        (.tracksDuplicate, "duplicate", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none, TargetPolicy.requiresStableTarget),
+        (.tracksRename, "rename", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget),
+        (.tracksMute, "mute", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget),
+        (.tracksSolo, "solo", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget),
+        (.tracksArm, "arm", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget),
+        (.tracksArmOnly, "arm_only", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget),
+        (.tracksRecordSequence, "record_sequence", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, TargetPolicy.none),
+        (.tracksSetAutomation, "set_automation", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none, TargetPolicy.requiresStableTarget),
+        (.tracksSetInstrument, "set_instrument", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget),
+        (.tracksListLibrary, "list_library", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none, TargetPolicy.none),
+        (.tracksScanLibrary, "scan_library", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none, TargetPolicy.none),
+        (.tracksResolvePath, "resolve_path", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, TargetPolicy.none),
+        (.tracksScanPluginPresets, "scan_plugin_presets", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none, TargetPolicy.none),
+    ] as [(OperationID, String, Mutability, DeadlineClass, VerificationPolicy, TargetPolicy)]).map { entry in
         OperationSpec(
             id: entry.0,
             tool: .logicTracks,
             command: entry.1,
             mutability: entry.2,
             confirmation: .none,
-            target: .none,
+            target: entry.5,
             verification: entry.4,
             retry: .neverAutomatic,
             deadline: entry.3,

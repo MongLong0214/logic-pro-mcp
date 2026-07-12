@@ -60,4 +60,36 @@ struct OperationRegistryCoverageTests {
             }
         }
     }
+
+    @Test("unclassified mutation targets = 0")
+    func everyMutationHasAnExplicitTargetPolicy() {
+        let mutating = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
+        let targetBearingIDs = Set(mutating
+            .filter { $0.target == .requiresStableTarget }
+            .map(\.id))
+        let targetless = mutating.filter { $0.target == .none }
+        let expectedTargetBearingIDs: Set<OperationID> = [
+            .mixerSetVolume,
+            .mixerSetPan,
+            .pluginsSetParamVerified,
+            .tracksSelect,
+            .tracksDelete,
+            .tracksDuplicate,
+            .tracksRename,
+            .tracksMute,
+            .tracksSolo,
+            .tracksArm,
+            .tracksArmOnly,
+            .tracksSetAutomation,
+            .tracksSetInstrument,
+        ]
+
+        #expect(mutating.count == 83)
+        #expect(targetBearingIDs == expectedTargetBearingIDs)
+        #expect(targetless.count == 70)
+        #expect(targetBearingIDs.count + targetless.count == mutating.count)
+        #expect(OperationRegistry.specs
+            .filter { $0.mutability == .readOnly }
+            .allSatisfy { $0.target == .none })
+    }
 }
