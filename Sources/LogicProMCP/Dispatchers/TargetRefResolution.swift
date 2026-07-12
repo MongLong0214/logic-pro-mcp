@@ -11,8 +11,8 @@ import MCP
 enum TargetRefResolver {
     /// A resolved mutation target: the concrete track index plus — when the
     /// caller supplied a valid `target_ref` — the reference that produced it, so
-    /// the dispatcher can echo `track_ref` back (as `rename` does).
-    struct Resolved {
+    /// the dispatcher can echo `target_ref` evidence on verified success.
+    struct Resolved: Sendable {
         let index: Int
         let reference: TargetReference?
     }
@@ -86,6 +86,34 @@ enum TargetRefResolver {
             return .failure(invalidIndexResult())
         }
         return .success(Resolved(index: requestedIndex, reference: nil))
+    }
+
+    /// Echo the causal reference only on a verified State A response. Nil
+    /// references are the legacy index/flag-off path and remain byte-identical.
+    static func addEvidence(
+        _ reference: TargetReference?,
+        to result: CallTool.Result
+    ) -> CallTool.Result {
+        guard let reference,
+              case .text(let rawJSON, let annotations, let meta) = result.content.first,
+              decodedJSONObject(rawJSON)?["state"] as? String == "A" else {
+            return result
+        }
+
+        let echoed = HonestContract.addExtras(
+            ["target_ref": reference.rawValue],
+            into: rawJSON
+        )
+        guard echoed != rawJSON else { return result }
+
+        var content = result.content
+        content[0] = .text(text: echoed, annotations: annotations, _meta: meta)
+        return CallTool.Result(
+            content: content,
+            structuredContent: structuredContentValue(fromToolText: echoed),
+            isError: result.isError,
+            _meta: result._meta
+        )
     }
 
     /// Fail-closed State C for a `target_ref` that is missing/malformed, no longer

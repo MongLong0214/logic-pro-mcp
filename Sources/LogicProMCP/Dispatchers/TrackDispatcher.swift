@@ -59,7 +59,10 @@ struct TrackDispatcher: OperationTraceDispatching {
                         operation: "track.select",
                         params: ["index": String(resolved.index)]
                     )
-                    return await finalizeTrace(toolTextResult(result), traceID: traceID)
+                    return await finalizeTrace(
+                        TargetRefResolver.addEvidence(resolved.reference, to: toolTextResult(result)),
+                        traceID: traceID
+                    )
                 case .failure(let result):
                     return result
                 }
@@ -126,6 +129,7 @@ struct TrackDispatcher: OperationTraceDispatching {
 
         case "delete":
             let index: Int
+            let resolvedReference: TargetReference?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -138,6 +142,7 @@ struct TrackDispatcher: OperationTraceDispatching {
             ) {
             case .success(let resolved):
                 index = resolved.index
+                resolvedReference = resolved.reference
             case .failure(let result):
                 return result
             }
@@ -178,10 +183,14 @@ struct TrackDispatcher: OperationTraceDispatching {
             if FeatureFlags.adr002TargetRef, result.isSuccess {
                 await targetRegistry?.bumpTopologyGeneration()
             }
-            return await finalizeTrace(toolTextResult(result), traceID: traceID)
+            return await finalizeTrace(
+                TargetRefResolver.addEvidence(resolvedReference, to: toolTextResult(result)),
+                traceID: traceID
+            )
 
         case "duplicate":
             let index: Int
+            let resolvedReference: TargetReference?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -194,6 +203,7 @@ struct TrackDispatcher: OperationTraceDispatching {
             ) {
             case .success(let resolved):
                 index = resolved.index
+                resolvedReference = resolved.reference
             case .failure(let result):
                 return result
             }
@@ -233,7 +243,10 @@ struct TrackDispatcher: OperationTraceDispatching {
             if FeatureFlags.adr002TargetRef, result.isSuccess {
                 await targetRegistry?.bumpTopologyGeneration()
             }
-            return await finalizeTrace(toolTextResult(result), traceID: traceID)
+            return await finalizeTrace(
+                TargetRefResolver.addEvidence(resolvedReference, to: toolTextResult(result)),
+                traceID: traceID
+            )
 
         case "rename":
             let index: Int
@@ -329,22 +342,11 @@ struct TrackDispatcher: OperationTraceDispatching {
                     resolvedReference,
                     to: TargetDescriptor(trackIndex: index, trackName: name)
                 )
-                if var payload = decodedJSONObject(result.message) {
-                    payload["track_ref"] = resolvedReference.rawValue
-                    return await finalizeTrace(
-                        toolTextResult(HonestContract.jsonString(payload)),
-                        traceID: traceID
-                    )
-                }
-                return await finalizeTrace(
-                    toolTextResult(HonestContract.encodeStateA(extras: [
-                        "operation": "track.rename",
-                        "track_ref": resolvedReference.rawValue,
-                    ])),
-                    traceID: traceID
-                )
             }
-            return await finalizeTrace(toolTextResult(result), traceID: traceID)
+            return await finalizeTrace(
+                TargetRefResolver.addEvidence(resolvedReference, to: toolTextResult(result)),
+                traceID: traceID
+            )
 
         case "mute":
             let traceID = await startTraceIfEnabled(command: command)
@@ -400,6 +402,7 @@ struct TrackDispatcher: OperationTraceDispatching {
 
         case "arm_only":
             let index: Int
+            let resolvedReference: TargetReference?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -412,6 +415,7 @@ struct TrackDispatcher: OperationTraceDispatching {
             ) {
             case .success(let resolved):
                 index = resolved.index
+                resolvedReference = resolved.reference
             case .failure(let result):
                 return result
             }
@@ -501,25 +505,32 @@ struct TrackDispatcher: OperationTraceDispatching {
                     HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras)
                 )), traceID: traceID)
             }
-            return await finalizeTrace(toolTextResult(.success(
-                HonestContract.encodeStateA(
-                    extras: armOnlyExtras(
-                        targetIndex: index,
-                        armResult: armResult,
-                        armedSuccess: true,
-                        verified: true,
-                        disarmed: disarmed,
-                        unverifiedDisarm: [],
-                        failedDisarm: []
-                    )
-                )
-            )), traceID: traceID)
+            return await finalizeTrace(
+                TargetRefResolver.addEvidence(
+                    resolvedReference,
+                    to: toolTextResult(.success(
+                        HonestContract.encodeStateA(
+                            extras: armOnlyExtras(
+                                targetIndex: index,
+                                armResult: armResult,
+                                armedSuccess: true,
+                                verified: true,
+                                disarmed: disarmed,
+                                unverifiedDisarm: [],
+                                failedDisarm: []
+                            )
+                        )
+                    ))
+                ),
+                traceID: traceID
+            )
 
         case "set_color":
             return notExposedCommandResult(operation: "track.set_color")
 
         case "set_automation":
             let index: Int
+            let resolvedReference: TargetReference?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -532,6 +543,7 @@ struct TrackDispatcher: OperationTraceDispatching {
             ) {
             case .success(let resolved):
                 index = resolved.index
+                resolvedReference = resolved.reference
             case .failure(let result):
                 return result
             }
@@ -555,10 +567,14 @@ struct TrackDispatcher: OperationTraceDispatching {
                 operation: "track.set_automation",
                 params: ["index": String(index), "mode": mode]
             )
-            return await finalizeTrace(toolTextResult(result), traceID: traceID)
+            return await finalizeTrace(
+                TargetRefResolver.addEvidence(resolvedReference, to: toolTextResult(result)),
+                traceID: traceID
+            )
 
         case "set_instrument":
             let index: Int
+            let resolvedReference: TargetReference?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -572,6 +588,7 @@ struct TrackDispatcher: OperationTraceDispatching {
             ) {
             case .success(let resolved):
                 index = resolved.index
+                resolvedReference = resolved.reference
             case .failure(let result):
                 return result
             }
@@ -608,7 +625,10 @@ struct TrackDispatcher: OperationTraceDispatching {
             // no-op rebind), and any other guess could mask an external rename. So we
             // honestly defer: an auto-rename here fails the next same-ref op closed,
             // which is correct — the server cannot cheaply prove the new identity.
-            return await finalizeTrace(toolTextResult(result), traceID: traceID)
+            return await finalizeTrace(
+                TargetRefResolver.addEvidence(resolvedReference, to: toolTextResult(result)),
+                traceID: traceID
+            )
 
         case "resolve_path":
             let path = stringParam(params, "path")
@@ -700,6 +720,7 @@ struct TrackDispatcher: OperationTraceDispatching {
         traceID: TraceID? = nil
     ) async -> CallTool.Result {
         let index: Int
+        let resolvedReference: TargetReference?
         switch await TargetRefResolver.resolveMutationIndex(
             params,
             targetRegistry: targetRegistry,
@@ -712,6 +733,7 @@ struct TrackDispatcher: OperationTraceDispatching {
         ) {
         case .success(let resolved):
             index = resolved.index
+            resolvedReference = resolved.reference
         case .failure(let result):
             return result
         }
@@ -737,7 +759,7 @@ struct TrackDispatcher: OperationTraceDispatching {
         if result.isSuccess, !trackToggleResultIsVerified(result) {
             return toolTextResult(result.message, isError: true)
         }
-        return toolTextResult(result)
+        return TargetRefResolver.addEvidence(resolvedReference, to: toolTextResult(result))
     }
 
     private static func modalGuardedTrackOperation(for command: String) -> String? {

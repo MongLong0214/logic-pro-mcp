@@ -64,6 +64,7 @@ struct PluginsDispatcher: OperationTraceDispatching {
 
         case "set_param_verified":
             let traceID = await startTraceIfEnabled(command: command)
+            var resolvedReference: TargetReference?
             let result = await runVerified(operation: "plugin.set_param_verified") {
                 var writeParams = verifiedWriteParams(params)
                 // ADR-002: with the flag on, a target_ref resolves the host track
@@ -85,6 +86,7 @@ struct PluginsDispatcher: OperationTraceDispatching {
                     ) {
                     case .success(let resolved):
                         writeParams["track"] = String(resolved.index)
+                        resolvedReference = resolved.reference
                     case .failure(let result):
                         return result
                     }
@@ -93,7 +95,10 @@ struct PluginsDispatcher: OperationTraceDispatching {
                 return await routedTextResult(router, operation: "plugin.set_param_verified",
                                               params: writeParams)
             }
-            return await finalizeTrace(result, traceID: traceID)
+            return await finalizeTrace(
+                TargetRefResolver.addEvidence(resolvedReference, to: result),
+                traceID: traceID
+            )
 
         case "insert_verified":
             let traceID = await startTraceIfEnabled(command: command)
