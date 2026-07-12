@@ -6,7 +6,7 @@ struct TrackDispatcher {
 
     static let tool = Tool(
         name: "logic_tracks",
-        description: "Track actions in Logic Pro. Commands: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets. Params: select -> { index: Int } or { name: String }; rename -> { name: String, index: Int (≥0) } or, when LOGIC_MCP_ADR002_TARGET_REF=1, { name: String, target_ref: String, index?: Int }; when the flag is off target_ref is ignored and index remains required; mute/solo/arm/arm_only/set_automation/set_instrument ALL require explicit { index: Int (≥0) }; mute/solo/arm -> also { enabled: Bool }; arm_only disarms all others + arms target, returns error on partial disarm failure; record_sequence -> { bar?: Int (default 1), notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\" (BREAKING since v3.1.6: optional `ch` field is 1-based, range 1..16 — pre-v3.1.6 was 0-based; whole-parse-fail on any invalid segment; SMF end <= 3,600,000 ms), tempo?: Float } SMF-import path: generates a Standard MIDI File server-side, forces playhead to bar 1, imports via AX menu — byte-exact timing, creates a new track each call, then verifies the imported region by AX readback. Successful responses include `created_track`, `target_track_index`, `target_track_name`, `region_name`, `start_bar`, `end_bar`, `note_count`, and `verify_source`; structured error JSON distinguishes `import_failure`, `audibility_unverified`, `import_unverified`, `wrong_track_import`, `timing_mismatch`, and `unreadable_readback`. If Logic imports GM Device / External MIDI lanes, record_sequence fails closed instead of promoting region readback to audible success. v3.0.8 REMOVED the internal instrument auto-load: response always carries `\"instrument\":\"not-attempted\"`; callers that want a specific patch must follow up with explicit `set_instrument` on a Software Instrument track. The legacy `instrument_path` param is accepted for wire compat but ignored (surfaces as `\"ignored:<path>\"` in the response) — see CHANGELOG v3.0.8 for why the inline auto-load was unsafe (could load the wrong track's patch, corrupting a pre-existing track); create_* -> {}; delete/duplicate -> { index: Int }; set_automation -> { mode: read|write|touch|latch|trim|off }; set_instrument -> { path: String } or { category: String, preset: String } — path mode preferred and only `resolve_path` results with kind=`leaf` and loadable=true are valid apply candidates; scan_library -> { mode?: \"ax\"|\"disk\"|\"both\" } (default disk — dedupes user and app-bundle Instrument `.patch` candidates with Panel-taxonomy remap; ax is the legacy live Library Panel scan; both returns diff summary); resolve_path -> { path: String } cache-backed read-only classifier returning kind/source/loadable; scan_plugin_presets -> { submenuOpenDelayMs?: Int }.",
+        description: "Track actions in Logic Pro. Commands: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets. Params: select -> { index: Int } or { name: String }; rename -> { name: String, index: Int (≥0) } or, when LOGIC_MCP_ADR002_TARGET_REF=1, { name: String, target_ref: String, index?: Int }; when the flag is off target_ref is ignored and index remains required; mute/solo/arm/arm_only/set_automation/set_instrument ALL require explicit { index: Int (≥0) }; mute/solo/arm -> also { enabled: Bool }; arm_only disarms all others + arms target, returns error on partial disarm failure; record_sequence -> { bar?: Int (default 1), notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\" (BREAKING since v3.1.6: optional `ch` field is 1-based, range 1..16 — pre-v3.1.6 was 0-based; whole-parse-fail on any invalid segment; SMF end <= 3,600,000 ms), tempo?: Float } SMF-import path: generates a Standard MIDI File server-side, forces playhead to bar 1, imports via AX menu — byte-exact timing, creates a new track each call, then verifies the imported region by AX readback. Successful responses include `created_track`, `target_track_index`, `target_track_name`, `region_name`, `start_bar`, `end_bar`, `note_count`, and `verify_source`; structured error JSON distinguishes `import_failure`, `audibility_unverified`, `import_unverified`, `wrong_track_import`, `timing_mismatch`, and `unreadable_readback`. If Logic imports GM Device / External MIDI lanes, record_sequence fails closed instead of promoting region readback to audible success. v3.0.8 REMOVED the internal instrument auto-load: response always carries `\"instrument\":\"not-attempted\"`; callers that want a specific patch must follow up with explicit `set_instrument` on a Software Instrument track. The legacy `instrument_path` param is accepted for wire compat but ignored (surfaces as `\"ignored:<path>\"` in the response) — see CHANGELOG v3.0.8 for why the inline auto-load was unsafe (could load the wrong track's patch, corrupting a pre-existing track); create_* -> {}; delete/duplicate -> { index: Int }; set_automation -> { mode: read|write|touch|latch|trim|off }; set_instrument -> { path: String } or { category: String, preset: String } — path mode preferred and only `resolve_path` results with kind=`leaf` and loadable=true are valid apply candidates; scan_library -> { mode?: \"ax\"|\"disk\"|\"both\" } (default disk — dedupes user and app-bundle Instrument `.patch` candidates with Panel-taxonomy remap; ax is the legacy live Library Panel scan; both returns diff summary); resolve_path -> { path: String } cache-backed read-only classifier returning kind/source/loadable; scan_plugin_presets -> { submenuOpenDelayMs?: Int }. ADR-002 (LOGIC_MCP_ADR002_TARGET_REF=1): select, delete, duplicate, mute, solo, arm, arm_only, set_automation, and set_instrument ALSO accept a session-stable { target_ref: String } (a trk_… value from the logic://tracks resource) in place of the explicit index; when both target_ref and index are supplied they must agree or the op fails closed (stale_target_reference); with the flag off target_ref is ignored and the explicit index remains required.",
         inputSchema: commandParamsToolSchema(commandDescription: "Track command to execute")
     )
 
@@ -33,6 +33,31 @@ struct TrackDispatcher {
             // `index` is supplied but not a valid non-negative integer, fail
             // closed — silently falling back to track 0 on a malformed
             // request would corrupt the wrong track.
+            // ADR-002: when the flag is on and a target_ref is supplied, resolve
+            // it to the current track index (fail-closed on stale/wrong-kind);
+            // flag off or no target_ref falls through to the byte-identical
+            // index/name flow below.
+            if FeatureFlags.adr002TargetRef, params["target_ref"] != nil {
+                switch await TargetRefResolver.resolveMutationIndex(
+                    params,
+                    targetRegistry: targetRegistry,
+                    cache: cache,
+                    operation: "track.select",
+                    invalidIndexResult: toolInvalidParamsResult(
+                        "select requires 'index' or 'name' param",
+                        extras: ["operation": "track.select"]
+                    )
+                ) {
+                case .success(let resolved):
+                    let result = await router.route(
+                        operation: "track.select",
+                        params: ["index": String(resolved.index)]
+                    )
+                    return toolTextResult(result)
+                case .failure(let result):
+                    return result
+                }
+            }
             if params["index"] != nil || params["track"] != nil {
                 guard let index = intParamOrNil(params, "index", "track") else {
                     return toolInvalidParamsResult(
@@ -85,11 +110,21 @@ struct TrackDispatcher {
             return toolTextResult(result)
 
         case "delete":
-            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
-                return toolInvalidParamsResult(
+            let index: Int
+            switch await TargetRefResolver.resolveMutationIndex(
+                params,
+                targetRegistry: targetRegistry,
+                cache: cache,
+                operation: "track.delete",
+                invalidIndexResult: toolInvalidParamsResult(
                     "delete requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.delete"]
                 )
+            ) {
+            case .success(let resolved):
+                index = resolved.index
+            case .failure(let result):
+                return result
             }
             let selectResult = await router.route(
                 operation: "track.select",
@@ -126,11 +161,21 @@ struct TrackDispatcher {
             return toolTextResult(result)
 
         case "duplicate":
-            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
-                return toolInvalidParamsResult(
+            let index: Int
+            switch await TargetRefResolver.resolveMutationIndex(
+                params,
+                targetRegistry: targetRegistry,
+                cache: cache,
+                operation: "track.duplicate",
+                invalidIndexResult: toolInvalidParamsResult(
                     "duplicate requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.duplicate"]
                 )
+            ) {
+            case .success(let resolved):
+                index = resolved.index
+            case .failure(let result):
+                return result
             }
             let selectResult = await router.route(
                 operation: "track.select",
@@ -168,45 +213,21 @@ struct TrackDispatcher {
         case "rename":
             let index: Int
             let resolvedReference: TargetReference?
-            if FeatureFlags.adr002TargetRef, params["target_ref"] != nil {
-                let rawReference = params["target_ref"]?.stringValue?
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                guard let rawReference,
-                      !rawReference.isEmpty,
-                      let targetRegistry,
-                      let binding = await targetRegistry.resolve(TargetReference(rawValue: rawReference)),
-                      binding.kind == .track
-                else {
-                    return staleTargetReferenceResult(rawReference)
-                }
-
-                if params["index"] != nil || params["track"] != nil {
-                    guard let requestedIndex = intParamOrNil(params, "index", "track"),
-                          requestedIndex >= 0,
-                          requestedIndex == binding.descriptor.trackIndex
-                    else {
-                        return staleTargetReferenceResult(rawReference)
-                    }
-                }
-
-                let tracks = await cache.getTracks()
-                guard let track = tracks.first(where: { $0.id == binding.descriptor.trackIndex }),
-                      TargetDescriptor(trackIndex: track.id, trackName: track.name).fingerprint
-                        == binding.observedFingerprint
-                else {
-                    return staleTargetReferenceResult(rawReference)
-                }
-                index = binding.descriptor.trackIndex
-                resolvedReference = binding.reference
-            } else {
-                guard let requestedIndex = intParamOrNil(params, "index", "track"), requestedIndex >= 0 else {
-                    return toolInvalidParamsResult(
-                        "rename requires explicit 'index' (Int ≥ 0)",
-                        extras: ["operation": "track.rename"]
-                    )
-                }
-                index = requestedIndex
-                resolvedReference = nil
+            switch await TargetRefResolver.resolveMutationIndex(
+                params,
+                targetRegistry: targetRegistry,
+                cache: cache,
+                operation: "track.rename",
+                invalidIndexResult: toolInvalidParamsResult(
+                    "rename requires explicit 'index' (Int ≥ 0)",
+                    extras: ["operation": "track.rename"]
+                )
+            ) {
+            case .success(let resolved):
+                index = resolved.index
+                resolvedReference = resolved.reference
+            case .failure(let result):
+                return result
             }
             let name = stringParam(params, "name")
             guard !name.isEmpty else {
@@ -271,6 +292,8 @@ struct TrackDispatcher {
                 operation: "track.set_mute",
                 params: params,
                 router: router,
+                cache: cache,
+                targetRegistry: targetRegistry,
                 traceID: traceID
             )
             return await finalizeTrace(result, traceID: traceID)
@@ -282,6 +305,8 @@ struct TrackDispatcher {
                 operation: "track.set_solo",
                 params: params,
                 router: router,
+                cache: cache,
+                targetRegistry: targetRegistry,
                 traceID: traceID
             )
             return await finalizeTrace(result, traceID: traceID)
@@ -293,6 +318,8 @@ struct TrackDispatcher {
                 operation: "track.set_arm",
                 params: params,
                 router: router,
+                cache: cache,
+                targetRegistry: targetRegistry,
                 traceID: traceID
             )
             return await finalizeTrace(result, traceID: traceID)
@@ -305,11 +332,21 @@ struct TrackDispatcher {
             return result
 
         case "arm_only":
-            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
-                return toolInvalidParamsResult(
+            let index: Int
+            switch await TargetRefResolver.resolveMutationIndex(
+                params,
+                targetRegistry: targetRegistry,
+                cache: cache,
+                operation: "track.arm_only",
+                invalidIndexResult: toolInvalidParamsResult(
                     "arm_only requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.arm_only"]
                 )
+            ) {
+            case .success(let resolved):
+                index = resolved.index
+            case .failure(let result):
+                return result
             }
             let tracks = await cache.getTracks()
             var disarmed: [Int] = []
@@ -413,11 +450,21 @@ struct TrackDispatcher {
             return notExposedCommandResult(operation: "track.set_color")
 
         case "set_automation":
-            guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
-                return toolInvalidParamsResult(
+            let index: Int
+            switch await TargetRefResolver.resolveMutationIndex(
+                params,
+                targetRegistry: targetRegistry,
+                cache: cache,
+                operation: "track.set_automation",
+                invalidIndexResult: toolInvalidParamsResult(
                     "set_automation requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.set_automation"]
                 )
+            ) {
+            case .success(let resolved):
+                index = resolved.index
+            case .failure(let result):
+                return result
             }
             guard params["mode"] != nil else {
                 return toolInvalidParamsResult(
@@ -440,11 +487,22 @@ struct TrackDispatcher {
             return toolTextResult(result)
 
         case "set_instrument":
-            guard let index = intParamOrNil(params, "index"), index >= 0 else {
-                return toolInvalidParamsResult(
+            let index: Int
+            switch await TargetRefResolver.resolveMutationIndex(
+                params,
+                targetRegistry: targetRegistry,
+                cache: cache,
+                operation: "track.set_instrument",
+                indexKeys: ["index"],
+                invalidIndexResult: toolInvalidParamsResult(
                     "set_instrument requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.set_instrument"]
                 )
+            ) {
+            case .success(let resolved):
+                index = resolved.index
+            case .failure(let result):
+                return result
             }
             let category = stringParam(params, "category")
             let preset = stringParam(params, "preset")
@@ -553,13 +611,25 @@ struct TrackDispatcher {
         operation: String,
         params: [String: Value],
         router: ChannelRouter,
+        cache: StateCache,
+        targetRegistry: TargetRegistry?,
         traceID: TraceID? = nil
     ) async -> CallTool.Result {
-        guard let index = intParamOrNil(params, "index", "track"), index >= 0 else {
-            return toolInvalidParamsResult(
+        let index: Int
+        switch await TargetRefResolver.resolveMutationIndex(
+            params,
+            targetRegistry: targetRegistry,
+            cache: cache,
+            operation: operation,
+            invalidIndexResult: toolInvalidParamsResult(
                 "\(command) requires explicit 'index' (Int ≥ 0)",
                 extras: ["operation": operation]
             )
+        ) {
+        case .success(let resolved):
+            index = resolved.index
+        case .failure(let result):
+            return result
         }
         let enabled: Bool
         if params["enabled"] != nil {
@@ -644,17 +714,6 @@ struct TrackDispatcher {
         let merged = HonestContract.addExtras(["trace_id": traceID.rawValue], into: raw)
         guard merged != raw else { return result }
         return toolTextResult(merged, isError: result.isError == true)
-    }
-
-    private static func staleTargetReferenceResult(_ rawReference: String?) -> CallTool.Result {
-        toolStateCResult(
-            .staleTargetReference,
-            hint: "target_ref is stale or does not identify the requested current track",
-            extras: [
-                "operation": "track.rename",
-                "target_ref": rawReference ?? "",
-            ]
-        )
     }
 
     private static func modalGuardedTrackOperation(for command: String) -> String? {

@@ -6,6 +6,13 @@ import MCP
 /// `index` on mutating track commands where falling through to track 0
 /// would edit the wrong track on a malformed caller request.
 func intParamOrNil(_ params: [String: Value], _ keys: String...) -> Int? {
+    intParamOrNil(params, keys: keys)
+}
+
+/// Array-keyed companion to the variadic `intParamOrNil`, so callers that build
+/// their alias list dynamically (e.g. the ADR-002 `target_ref` resolver) share
+/// the exact same coercion + alias-conflict semantics.
+func intParamOrNil(_ params: [String: Value], keys: [String]) -> Int? {
     var selected: Int?
     for key in keys {
         guard let raw = params[key] else { continue }
