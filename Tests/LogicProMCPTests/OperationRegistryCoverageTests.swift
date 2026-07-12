@@ -24,7 +24,7 @@ struct OperationRegistryCoverageTests {
         let missing = Self.publicOperations.subtracting(Self.registeredOperations).sorted()
         let orphans = Self.registeredOperations.subtracting(Self.publicOperations).sorted()
 
-        #expect(OperationRegistry.specs.count == 100)
+        #expect(OperationRegistry.specs.count == 104)
         #expect(OperationRegistry.registeredToolRawValues == Set(WorkflowSkillCatalog.publicCommands.keys))
         #expect(Self.registeredOperations.count == OperationRegistry.specs.count)
         #expect(missing.isEmpty, "missing specs: \(missing)")
@@ -63,6 +63,7 @@ struct OperationRegistryCoverageTests {
     @Test("unclassified mutation targets = 0")
     func everyMutationHasAnExplicitTargetPolicy() {
         let mutating = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
+        let readOnly = OperationRegistry.specs.filter { $0.mutability == .readOnly }
         let targetBearingIDs = Set(mutating
             .filter { $0.target == .requiresStableTarget }
             .map(\.id))
@@ -83,12 +84,11 @@ struct OperationRegistryCoverageTests {
             .tracksSetInstrument,
         ]
 
-        #expect(mutating.count == 84)
+        #expect(mutating.count == 86)
+        #expect(readOnly.count == 18)
         #expect(targetBearingIDs == expectedTargetBearingIDs)
-        #expect(targetless.count == 71)
+        #expect(targetless.count == 73)
         #expect(targetBearingIDs.count + targetless.count == mutating.count)
-        #expect(OperationRegistry.specs
-            .filter { $0.mutability == .readOnly }
-            .allSatisfy { $0.target == .none })
+        #expect(readOnly.allSatisfy { $0.target == .none })
     }
 }

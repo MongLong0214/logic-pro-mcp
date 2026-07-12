@@ -130,6 +130,11 @@ struct ServerRuntimePlan: @unchecked Sendable {
 }
 
 final class LogicMutationGate: @unchecked Sendable {
+    enum ReclaimPolicy: Equatable, Sendable {
+        case automatic
+        case releaseOnly
+    }
+
     /// Opaque claim returned by `tryAcquire` and required by `release`. The
     /// `epoch` makes release idempotent and reclaim-safe: a holder that was
     /// reclaimed for staleness cannot release a successor that happens to share
@@ -147,6 +152,7 @@ final class LogicMutationGate: @unchecked Sendable {
     /// rather than the blanket `staleHolderTTL`, so one hung transport/track op
     /// cannot pin the entire write surface for minutes.
     private var timedOutAt: Date?
+    private var activeReclaimPolicy: ReclaimPolicy = .automatic
     private var epoch: UInt64 = 0
 
     /// Staleness safety valve. The #112 deadline frees the stdio loop on a hang,
@@ -172,11 +178,17 @@ final class LogicMutationGate: @unchecked Sendable {
         self.timedOutReclaimGrace = timedOutReclaimGrace
     }
 
-    func tryAcquire(operation: String, now: Date = Date()) -> Claim? {
+    func tryAcquire(
+        operation: String,
+        now: Date = Date(),
+        reclaimPolicy: ReclaimPolicy = .automatic
+    ) -> Claim? {
         lock.lock()
         defer { lock.unlock() }
         if let active = activeOperation, let since = acquiredAt {
-            if let timedOutAt, now.timeIntervalSince(timedOutAt) >= timedOutReclaimGrace {
+            if activeReclaimPolicy == .releaseOnly {
+                return nil
+            } else if let timedOutAt, now.timeIntervalSince(timedOutAt) >= timedOutReclaimGrace {
                 Log.warn(
                     "Reclaiming timed-out mutation gate from \(active) (grace \(Int(timedOutReclaimGrace))s elapsed) — prior op was abandoned by the command deadline",
                     subsystem: "server"
@@ -194,6 +206,7 @@ final class LogicMutationGate: @unchecked Sendable {
         activeOperation = operation
         acquiredAt = now
         timedOutAt = nil
+        activeReclaimPolicy = reclaimPolicy
         return Claim(epoch: epoch, operation: operation)
     }
 
@@ -203,7 +216,7 @@ final class LogicMutationGate: @unchecked Sendable {
     /// successor that already reclaimed the gate.
     func markTimedOut(_ claim: Claim, now: Date = Date()) {
         lock.lock()
-        if epoch == claim.epoch {
+        if epoch == claim.epoch, activeReclaimPolicy == .automatic {
             timedOutAt = now
         }
         lock.unlock()
@@ -215,6 +228,7 @@ final class LogicMutationGate: @unchecked Sendable {
             activeOperation = nil
             acquiredAt = nil
             timedOutAt = nil
+            activeReclaimPolicy = .automatic
         }
         lock.unlock()
     }
@@ -234,6 +248,7 @@ actor LogicProServer {
     private let router: ChannelRouter
     private let cache: StateCache
     private let targetRegistry: TargetRegistry
+    private let sagaJournal: SagaJournal
     private let poller: StatePoller
     private let resourceSubscriptions: ResourceSubscriptionRegistry
     private let resourceNotifier: ResourceUpdateNotifier
@@ -254,11 +269,13 @@ actor LogicProServer {
     /// write surface for the full stale-holder TTL. Single source of truth for
     /// the gate's grace and the timeout envelope's `gate_reclaim_after_sec`.
     static let mutationGateReclaimGraceSeconds: Double = 15
-    private let mutationGate = LogicMutationGate(timedOutReclaimGrace: LogicProServer.mutationGateReclaimGraceSeconds)
+    private let mutationGate: LogicMutationGate
 
     init(
         runtimeOverrides: LogicProServerRuntimeOverrides? = nil,
-        pollerRuntime: StatePoller.Runtime = .production
+        pollerRuntime: StatePoller.Runtime = .production,
+        sagaJournal: SagaJournal = SagaJournal(),
+        mutationGate: LogicMutationGate? = nil
     ) {
         let server = Server(
             name: ServerConfig.serverName,
@@ -280,6 +297,10 @@ actor LogicProServer {
         self.router = router
         self.cache = cache
         self.targetRegistry = targetRegistry
+        self.sagaJournal = sagaJournal
+        self.mutationGate = mutationGate ?? LogicMutationGate(
+            timedOutReclaimGrace: LogicProServer.mutationGateReclaimGraceSeconds
+        )
         self.resourceSubscriptions = resourceSubscriptions
         self.resourceNotifier = resourceNotifier
         self.portManager = MIDIPortManager()
@@ -370,13 +391,16 @@ actor LogicProServer {
         let poller = self.poller
         let mutationGate = self.mutationGate
         let targetRegistry = self.targetRegistry
+        let sagaJournal = self.sagaJournal
         let handlerDependencies = HandlerDependencies(
             router: router,
             cache: cache,
             targetRegistry: targetRegistry,
             poller: poller,
             dialogPresent: dialogPresent,
-            supportBundleExporter: supportBundleExporter
+            supportBundleExporter: supportBundleExporter,
+            sagaJournal: sagaJournal,
+            mutationGate: mutationGate
         )
 
         return LogicProServerHandlers(
@@ -400,7 +424,16 @@ actor LogicProServer {
                 // set well above each command's healthy completion time, so a
                 // normal op can never false-trip (verified across the full live
                 // surface); only a genuine hang is bounded.
-                return await Self.runWithDeadline(tool: name, command: command, mutationGate: mutationGate) {
+                let sagaControlPath = Self.sagaControlBypassesGlobalMutationGate(
+                    tool: name,
+                    command: command
+                )
+                return await Self.runWithDeadline(
+                    tool: name,
+                    command: command,
+                    mutationGate: sagaControlPath ? nil : mutationGate,
+                    externallyManagedMutation: sagaControlPath && command == "saga_execute"
+                ) {
                     guard let handler = OperationHandlerRegistry.handler(
                         tool: name,
                         command: command
@@ -460,11 +493,17 @@ actor LogicProServer {
         OperationRegistry.deadlineSeconds(tool: tool, command: command) ?? 25
     }
 
+    static func sagaControlBypassesGlobalMutationGate(tool: String, command: String) -> Bool {
+        tool == ToolID.logicSystem.rawValue
+            && (command == "saga_execute" || command == "saga_cancel")
+    }
+
     static func deadlineTimeoutResult(
         tool: String,
         command: String,
         seconds: Double,
-        mutationMayStillBeRunning: Bool = false
+        mutationMayStillBeRunning: Bool = false,
+        mutationGateReclaimableAfterGrace: Bool = true
     ) -> CallTool.Result {
         let operation = operationName(tool: tool, command: command)
         var extras: [String: Any] = [
@@ -472,6 +511,10 @@ actor LogicProServer {
             "timeout_sec": seconds,
             "recovery_hint": "Logic Pro may be busy, occluded, or showing a modal dialog. Dismiss any dialog and retry; check logic_system.health.",
         ]
+        if tool == ToolID.logicSystem.rawValue,
+           ["saga_preflight", "saga_execute", "saga_status", "saga_cancel"].contains(command) {
+            extras.merge(SagaWire.sessionFields) { _, new in new }
+        }
         if mutationMayStillBeRunning {
             // #201: the abandoned op's effect is unknown, so this result is not
             // itself safe to retry — but the gate no longer pins the session
@@ -480,8 +523,12 @@ actor LogicProServer {
             // (their `mutating_operation_in_progress` refusal is `safe_to_retry`).
             extras["safe_to_retry"] = false
             extras["underlying_operation_stopped"] = false
-            extras["mutation_gate"] = "reclaimable_after_grace"
-            extras["gate_reclaim_after_sec"] = Self.mutationGateReclaimGraceSeconds
+            if mutationGateReclaimableAfterGrace {
+                extras["mutation_gate"] = "reclaimable_after_grace"
+                extras["gate_reclaim_after_sec"] = Self.mutationGateReclaimGraceSeconds
+            } else {
+                extras["mutation_gate"] = "held_until_saga_unwinds"
+            }
         }
         let body = HonestContract.encodeStateC(
             error: .operationTimeout,
@@ -525,6 +572,7 @@ actor LogicProServer {
         command: String,
         deadlineOverride: Double? = nil,
         mutationGate: LogicMutationGate? = nil,
+        externallyManagedMutation: Bool = false,
         work: @escaping @Sendable () async -> CallTool.Result
     ) async -> CallTool.Result {
         let deadline = deadlineOverride ?? commandDeadlineSeconds(tool: tool, command: command)
@@ -564,6 +612,8 @@ actor LogicProServer {
                         command: command,
                         seconds: deadline,
                         mutationMayStillBeRunning: heldMutationGate != nil
+                            || externallyManagedMutation,
+                        mutationGateReclaimableAfterGrace: !externallyManagedMutation
                     )
                 )
                 if didWin {
@@ -852,6 +902,7 @@ actor LogicProServer {
     }
 
     func start() async throws {
+        await sagaJournal.clear()
         OperationHandlerRegistry.validate()
         if let cleanupStartupArtifacts = runtimeOverrides?.cleanupStartupArtifacts {
             cleanupStartupArtifacts()
@@ -869,6 +920,7 @@ actor LogicProServer {
     /// virtual MIDI ports, AX poller, and channel transports instead of
     /// leaking them on `exit(0)`.
     func stop() async {
+        await sagaJournal.clear()
         if let stopPoller = runtimeOverrides?.stopPoller {
             await stopPoller()
         } else {
@@ -889,6 +941,7 @@ actor LogicProServer {
     }
 
     func startProtocolProbe(transport: any Transport) async throws {
+        await sagaJournal.clear()
         OperationHandlerRegistry.validate()
         await registerTools()
         await registerResources()
@@ -897,6 +950,7 @@ actor LogicProServer {
     }
 
     func stopProtocolProbe() async {
+        await sagaJournal.clear()
         await server.stop()
         await resourceSubscriptions.clear()
         await resourceNotifier.reset()
@@ -991,6 +1045,7 @@ actor LogicProServer {
                 }
             },
             stopPoller: {
+                await self.sagaJournal.clear()
                 if let stopPoller = self.runtimeOverrides?.stopPoller {
                     await stopPoller()
                 } else {

@@ -225,6 +225,9 @@ extension OperationTraceDispatching {
     }
 
     static func recordWriteBoundary(_ traceID: TraceID?) async {
+        if let onWriteBoundary = OperationTraceParentBoundary.onWriteBoundary {
+            await onWriteBoundary()
+        }
         guard let traceID else { return }
         await OperationTraceStore.shared.record(traceID, phase: .writeBoundaryCrossed)
     }

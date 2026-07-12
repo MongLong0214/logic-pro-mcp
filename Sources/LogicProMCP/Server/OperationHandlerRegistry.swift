@@ -7,6 +7,28 @@ struct HandlerDependencies: Sendable {
     let poller: StatePoller
     let dialogPresent: @Sendable () -> Bool
     let supportBundleExporter: SystemDispatcher.SupportBundleExporter?
+    let sagaJournal: SagaJournal
+    let mutationGate: LogicMutationGate?
+
+    init(
+        router: ChannelRouter,
+        cache: StateCache,
+        targetRegistry: TargetRegistry,
+        poller: StatePoller,
+        dialogPresent: @escaping @Sendable () -> Bool,
+        supportBundleExporter: SystemDispatcher.SupportBundleExporter?,
+        sagaJournal: SagaJournal = SagaJournal(),
+        mutationGate: LogicMutationGate? = nil
+    ) {
+        self.router = router
+        self.cache = cache
+        self.targetRegistry = targetRegistry
+        self.poller = poller
+        self.dialogPresent = dialogPresent
+        self.supportBundleExporter = supportBundleExporter
+        self.sagaJournal = sagaJournal
+        self.mutationGate = mutationGate
+    }
 }
 
 typealias OperationHandler = @Sendable (
@@ -172,7 +194,11 @@ enum OperationHandlerRegistry {
                     router: dependencies.router,
                     cache: dependencies.cache,
                     poller: dependencies.poller,
-                    supportBundleExporter: dependencies.supportBundleExporter
+                    supportBundleExporter: dependencies.supportBundleExporter,
+                    targetRegistry: dependencies.targetRegistry,
+                    dialogPresent: dependencies.dialogPresent,
+                    sagaJournal: dependencies.sagaJournal,
+                    mutationGate: dependencies.mutationGate
                 )
             }
         case .logicPlugins:

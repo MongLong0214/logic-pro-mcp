@@ -32,6 +32,7 @@ enum HonestContract {
         /// a count-delta success as an audible arrangement. v3.6.x (#128).
         case importedAsGMDevice
         case sendOnlyNoReadback
+        case sagaReconciliationRequired
 
         var rawValue: String {
             switch self {
@@ -41,6 +42,7 @@ enum HonestContract {
             case .retryExhausted: return "retry_exhausted"
             case .importedAsGMDevice: return "imported_as_gm_device"
             case .sendOnlyNoReadback: return "send_only_no_readback"
+            case .sagaReconciliationRequired: return "saga_reconciliation_required"
             }
         }
     }
@@ -174,6 +176,11 @@ enum HonestContract {
         /// and so an unknown category never silently returns full help. #219.
         case unknownCategory = "unknown_category"
         case supportBundleExportFailed = "support_bundle_export_failed"
+        case sagaInProgress = "saga_in_progress"
+        case idempotencyKeyConflict = "idempotency_key_conflict"
+        case sagaJournalCapacityExceeded = "saga_journal_capacity_exceeded"
+        case notSupported = "not_supported"
+        case sagaExecutionFailed = "saga_execution_failed"
     }
 
     // MARK: - Encoding primitives
@@ -353,6 +360,8 @@ enum HonestContract {
         // classification consistency.)
         FailureError.unknownCategory.rawValue,
         FailureError.supportBundleExportFailed.rawValue,
+        FailureError.idempotencyKeyConflict.rawValue,
+        FailureError.sagaJournalCapacityExceeded.rawValue,
     ]
 
     /// Returns true if the given message is a State-C envelope whose `error`

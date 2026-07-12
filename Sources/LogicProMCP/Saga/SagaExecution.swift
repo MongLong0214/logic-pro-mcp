@@ -256,3 +256,71 @@ extension SagaStepExecutor {
         return captured
     }
 }
+
+struct SagaBeforeStateAvailability: Sendable {
+    let stepIndex: Int
+    let state: ObservedState?
+}
+
+extension SagaStepExecutor {
+    func captureBeforeStateAvailability(plan: SagaPlan) async -> [SagaBeforeStateAvailability] {
+        let captured = await captureBeforeState(plan: plan)
+        if captured.count == plan.steps.count {
+            return plan.steps.indices.map {
+                SagaBeforeStateAvailability(stepIndex: $0, state: captured[$0])
+            }
+        }
+        var availability: [SagaBeforeStateAvailability] = []
+        for (index, step) in plan.steps.enumerated() {
+            let singleStepPlan = SagaPlan(
+                steps: [step],
+                idempotencyKey: "\(plan.idempotencyKey)#before-state-\(index)"
+            )
+            let state = await captureBeforeState(plan: singleStepPlan)[0]
+            availability.append(SagaBeforeStateAvailability(stepIndex: index, state: state))
+        }
+        return availability
+    }
+}
+
+actor SagaFirstWriteBoundary {
+    private var crossed = false
+
+    func cross(_ action: @Sendable () async -> Void) async {
+        guard !crossed else { return }
+        crossed = true
+        await action()
+    }
+}
+
+struct SagaSurfaceStepExecutor<Base: SagaStepExecutor>: SagaStepExecutor {
+    private let base: Base
+    private let refreshAfterWrite: @Sendable () async -> Void
+
+    init(
+        base: Base,
+        refreshAfterWrite: @escaping @Sendable () async -> Void = {}
+    ) {
+        self.base = base
+        self.refreshAfterWrite = refreshAfterWrite
+    }
+
+    func run(_ step: SagaStep) async -> StepResult {
+        guard !Task.isCancelled else {
+            return StepResult(
+                state: .stateC,
+                writeBoundaryCrossed: false,
+                detail: "saga execution cancelled before step dispatch"
+            )
+        }
+        let result = await base.run(step)
+        if result.writeBoundaryCrossed {
+            await refreshAfterWrite()
+        }
+        return result
+    }
+
+    func readState(_ step: SagaStep) async -> ObservedState? {
+        await base.readState(step)
+    }
+}

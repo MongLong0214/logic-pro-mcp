@@ -312,7 +312,7 @@ struct OperationTraceTests {
             #expect(result.isError == true)
             #expect(
                 sharedToolText(result)
-                    == "Unknown system command: \(command). Available: health, permissions, refresh_cache, export_support_bundle, help"
+                    == "Unknown system command: \(command). Available: health, permissions, refresh_cache, export_support_bundle, saga_preflight, saga_execute, saga_status, saga_cancel, help"
             )
         }
     }
