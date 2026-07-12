@@ -105,37 +105,54 @@ extension AccessibilityChannel {
                 strayMenuOpen: detectStrayMenuOpen(runtime: runtime),
                 topLevelAlertPresent: alert.present,
                 topLevelAlertButtonCount: alert.buttonCount,
-                topLevelAlertPrimaryButton: alert.primaryButton
+                topLevelAlertPrimaryButton: alert.primaryButton,
+                createButtonTitle: "",
+                cancelButtonTitle: "",
+                deletePrimaryTitle: ""
             )
         }
 
         let description = (AXHelpers.getAttribute(sheet, kAXDescriptionAttribute, runtime: runtime.ax) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let buttons = AXHelpers.findAllDescendants(
+        // #350: resolve each button's on-screen label ONCE, then match locale-
+        // aware against the AXLocalePolicy LabelSets (EN + KO) so Korean Logic's
+        // 생성 / 취소 / 새로운 트랙 sheet is recognized, not just the English literals.
+        // The captured labels are threaded to the executor so it clicks the REAL
+        // localized title rather than a hardcoded English string.
+        let labeled = AXHelpers.findAllDescendants(
             of: sheet, role: kAXButtonRole as String, maxDepth: 6, runtime: runtime.ax
-        )
+        ).map { (element: $0, label: buttonLabel($0, runtime: runtime.ax)) }
 
-        let createPresent = buttons.contains { buttonLabel($0, runtime: runtime.ax) == "Create" }
-        let cancelButton = buttons.first { buttonLabel($0, runtime: runtime.ax) == "Cancel" }
+        let createButton = labeled.first { AXLocalePolicy.createButton.matches($0.label, mode: .exact) }
+        let cancelButton = labeled.first { AXLocalePolicy.cancelButton.matches($0.label, mode: .exact) }
+        // Delete-confirm primary: localized LabelSet (EN only today) OR the
+        // structural English `Delete ` prefix. The KO title is unverified, so KO
+        // delete-confirm detection degrades to fail-closed + the Return fallback.
+        let deleteButton = labeled.first {
+            AXLocalePolicy.deleteTracksPrimaryButton.matches($0.label, mode: .exact)
+                || $0.label.hasPrefix("Delete ")
+        }
         // Fail-closed default: an unreadable enabled state is treated as ENABLED
         // so a normal cancelable sheet is never mistaken for the mandatory one
         // (which would auto-click "Create" — a side effect we must not guess).
         let cancelEnabled: Bool = cancelButton
-            .flatMap { AXHelpers.getAttribute($0, kAXEnabledAttribute, runtime: runtime.ax) as Bool? }
+            .flatMap { AXHelpers.getAttribute($0.element, kAXEnabledAttribute, runtime: runtime.ax) as Bool? }
             ?? true
-        let deletePresent = buttons.contains { buttonLabel($0, runtime: runtime.ax).hasPrefix("Delete ") }
 
         return ModalReconciliation.ModalSignals(
             sheetPresent: true,
             sheetDescription: description,
-            createButtonPresent: createPresent,
+            createButtonPresent: createButton != nil,
             cancelButtonPresent: cancelButton != nil,
             cancelButtonEnabled: cancelEnabled,
-            deleteConfirmButtonPresent: deletePresent,
+            deleteConfirmButtonPresent: deleteButton != nil,
             strayMenuOpen: false,
             topLevelAlertPresent: false,
             topLevelAlertButtonCount: 0,
-            topLevelAlertPrimaryButton: ""
+            topLevelAlertPrimaryButton: "",
+            createButtonTitle: createButton?.label ?? "",
+            cancelButtonTitle: cancelButton?.label ?? "",
+            deletePrimaryTitle: deleteButton?.label ?? ""
         )
     }
 
@@ -203,9 +220,9 @@ extension AccessibilityChannel {
         case .noAction, .failClosed:
             return false
         case .clickCreate:
-            return await clickNewTrackCreateButton()
+            return await clickNewTrackCreateButton(createTitle: signals.createButtonTitle)
         case .confirmDelete:
-            return await confirmDeleteTracksSheet()
+            return await confirmDeleteTracksSheet(deleteTitle: signals.deletePrimaryTitle)
         case .acknowledgeAlert:
             return await acknowledgeTopLevelAlert(primaryButton: signals.topLevelAlertPrimaryButton)
         case .escapeMenu:
@@ -213,14 +230,16 @@ extension AccessibilityChannel {
         }
     }
 
-    /// Click the mandatory New Track sheet's only exit. This exact addressing is
-    /// the live-verified recovery — Escape/Cancel are inert on this sheet.
-    private static func clickNewTrackCreateButton() async -> Bool {
+    /// Click the mandatory New Track sheet's only exit (`Create` / `생성`). The
+    /// title is the localized on-screen label the reader resolved (#350), so this
+    /// works on Korean Logic; Escape/Cancel are inert on this sheet.
+    private static func clickNewTrackCreateButton(createTitle: String) async -> Bool {
         let target = LogicProTarget.appleScriptTarget()
+        let escapedTitle = AppleScriptSafety.escapeForScript(createTitle)
         let script = """
         tell application "System Events"
             tell \(target.systemEventsProcessTarget)
-                click button "Create" of group 1 of sheet 1 of window 1
+                click button "\(escapedTitle)" of group 1 of sheet 1 of window 1
             end tell
         end tell
         return "clicked"
@@ -229,19 +248,22 @@ extension AccessibilityChannel {
     }
 
     /// Confirm the delete-channel-strips sheet by its primary destructive button,
-    /// falling back to the sheet's default button (Return) when the exact title
-    /// is not matched (e.g. a localized build).
-    private static func confirmDeleteTracksSheet() async -> Bool {
+    /// clicking the localized title the reader resolved (#350). Falls back to the
+    /// sheet's default button (Return) when the title is absent/unmatched — which
+    /// also covers the KO path (the KO delete title is unverified, so no variant).
+    private static func confirmDeleteTracksSheet(deleteTitle: String) async -> Bool {
         let target = LogicProTarget.appleScriptTarget()
+        let escapedTitle = AppleScriptSafety.escapeForScript(deleteTitle)
         let script = """
         tell application "System Events"
             tell \(target.systemEventsProcessTarget)
-                click button "Delete Tracks and Content" of sheet 1 of window 1
+                click button "\(escapedTitle)" of sheet 1 of window 1
             end tell
         end tell
         return "clicked"
         """
-        if await AppleScriptChannel.executeAppleScript(script).isSuccess {
+        if !deleteTitle.isEmpty,
+           await AppleScriptChannel.executeAppleScript(script).isSuccess {
             return true
         }
         // Fall back to the default button — the primary delete action is the
