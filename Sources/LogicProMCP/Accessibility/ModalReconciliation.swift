@@ -50,6 +50,13 @@ enum ModalReconciliation {
         let topLevelAlertButtonCount: Int
         /// The single button's title (empty when none/ambiguous).
         let topLevelAlertPrimaryButton: String
+        /// #350: the ACTUAL localized on-screen titles the reader resolved for
+        /// the sheet buttons (e.g. `생성` / `Create`, `취소` / `Cancel`, the primary
+        /// delete title), so the executor clicks the real title rather than a
+        /// hardcoded English one. Empty when the corresponding button is absent.
+        let createButtonTitle: String
+        let cancelButtonTitle: String
+        let deletePrimaryTitle: String
     }
 
     /// The sanctioned reconciliation action for a classified modal.
@@ -69,23 +76,23 @@ enum ModalReconciliation {
         case failClosed(String)
     }
 
-    /// Logic's own `AXDescription` on the mandatory New Track sheet. Either this
-    /// OR the disabled-Cancel signal is sufficient to identify the sheet.
-    static let newTrackSheetDescription = "New Track"
-
     /// Classify the current modal from its observable signals. Precedence: a
     /// main-window sheet (the strongest blocker) outranks a top-level alert,
     /// which outranks a stray menu. The mandatory New Track sheet is
     /// disambiguated from an ordinary cancelable sheet by its DISABLED Cancel (or
-    /// the "New Track" description) — the `createButtonPresent` conjunct keeps a
+    /// the New Track description) — the `createButtonPresent` conjunct keeps a
     /// delete-confirm sheet that happens to disable Cancel from being misread as
-    /// a New Track sheet. A top-level alert is only acknowledged when it has
-    /// EXACTLY ONE button; two+ buttons is a lossy CHOICE and fails closed.
+    /// a New Track sheet. Both signals are locale-aware (#350): the description is
+    /// matched against `AXLocalePolicy.newTrackSheetDescription` (EN + KO), and
+    /// `createButtonPresent`/`cancelButtonPresent` are resolved by the reader
+    /// against the localized button LabelSets. A top-level alert is only
+    /// acknowledged when it has EXACTLY ONE button; two+ buttons is a lossy CHOICE
+    /// and fails closed.
     static func classify(_ s: ModalSignals) -> BlockingModalKind {
         if s.sheetPresent {
             let isMandatoryNewTrack =
                 (s.createButtonPresent && s.cancelButtonPresent && !s.cancelButtonEnabled)
-                || s.sheetDescription == newTrackSheetDescription
+                || AXLocalePolicy.newTrackSheetDescription.matches(s.sheetDescription, mode: .exact)
             if isMandatoryNewTrack {
                 return .mandatoryNewTrack
             }

@@ -176,6 +176,36 @@ enum AXLocalePolicy {
         rationale: "Dialog dismissal fallback; no success state is inferred from this click."
     )
 
+    /// #346/#350: the mandatory New Track sheet's only exit ("Create"). The modal
+    /// reconciler clicks it to un-wedge Logic, then verifies via track-count
+    /// readback — the click itself gates no State-A success. KO live-confirmed
+    /// (Logic 12.3: `생성`).
+    static let createButton = LabelSet(
+        canonical: "Create",
+        variants: ["생성"],
+        rationale: "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3)."
+    )
+
+    /// #346/#350: `AXDescription` that identifies the mandatory New Track sheet.
+    /// One of two signals (with disabled-Cancel) the reconciler uses to classify
+    /// the sheet; read-only classifier. KO live-confirmed (Logic 12.3: `새로운 트랙`).
+    static let newTrackSheetDescription = LabelSet(
+        canonical: "New Track",
+        variants: ["새로운 트랙"],
+        rationale: "Identifies the mandatory New Track sheet by AXDescription (with disabled-Cancel); read-only classifier. KO live-confirmed (Logic 12.3)."
+    )
+
+    /// #346/#350: primary destructive button on the "delete channel strips that
+    /// are assigned to tracks!" confirm sheet. KO variant is UNVERIFIED (no live
+    /// capture), so `variants` stays empty; KO detection degrades to the
+    /// structural `Delete `-prefix check plus the Return default-button fallback
+    /// (fail-closed — a wrong-title guess is never fabricated).
+    static let deleteTracksPrimaryButton = LabelSet(
+        canonical: "Delete Tracks and Content",
+        variants: [],
+        rationale: "Primary destructive button on the delete-channel-strips confirm sheet; reconciler-clicked with a Return fallback. KO UNVERIFIED → variants empty (fail-closed structural + Return fallback)."
+    )
+
     static let saveConfirmationButton = LabelSet(
         canonical: "Save",
         variants: ["저장", "OK", "확인"],

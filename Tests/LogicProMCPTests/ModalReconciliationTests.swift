@@ -17,7 +17,10 @@ private func makeSignals(
     strayMenuOpen: Bool = false,
     topLevelAlertPresent: Bool = false,
     topLevelAlertButtonCount: Int = 0,
-    topLevelAlertPrimaryButton: String = ""
+    topLevelAlertPrimaryButton: String = "",
+    createButtonTitle: String = "",
+    cancelButtonTitle: String = "",
+    deletePrimaryTitle: String = ""
 ) -> ModalReconciliation.ModalSignals {
     ModalReconciliation.ModalSignals(
         sheetPresent: sheetPresent,
@@ -29,7 +32,10 @@ private func makeSignals(
         strayMenuOpen: strayMenuOpen,
         topLevelAlertPresent: topLevelAlertPresent,
         topLevelAlertButtonCount: topLevelAlertButtonCount,
-        topLevelAlertPrimaryButton: topLevelAlertPrimaryButton
+        topLevelAlertPrimaryButton: topLevelAlertPrimaryButton,
+        createButtonTitle: createButtonTitle,
+        cancelButtonTitle: cancelButtonTitle,
+        deletePrimaryTitle: deletePrimaryTitle
     )
 }
 
@@ -301,4 +307,72 @@ private func makeSignals(
         #expect(!ModalReconciliation.preflightShouldPerform(kind: .unknownSheet, clearMandatoryNewTrack: clear))
         #expect(!ModalReconciliation.preflightShouldPerform(kind: .none, clearMandatoryNewTrack: clear))
     }
+}
+
+// MARK: - locale-aware classification (#350, Korean Logic)
+
+@Test func testClassifyKoreanMandatoryNewTrackViaDisabledCancel() {
+    // Logic 12.3 ko: 생성 / 취소(disabled) / desc 새로운 트랙. Must classify as the
+    // mandatory New Track sheet just like English, not fall to .unknownSheet.
+    let signals = makeSignals(
+        sheetPresent: true,
+        sheetDescription: "새로운 트랙",
+        createButtonPresent: true,
+        cancelButtonPresent: true,
+        cancelButtonEnabled: false,
+        createButtonTitle: "생성",
+        cancelButtonTitle: "취소"
+    )
+    #expect(ModalReconciliation.classify(signals) == .mandatoryNewTrack)
+}
+
+@Test func testClassifyKoreanNewTrackViaDescriptionOnly() {
+    // The localized description alone (새로운 트랙) identifies the sheet, even if
+    // the disabled-Cancel signal were unreadable.
+    let signals = makeSignals(sheetPresent: true, sheetDescription: "새로운 트랙")
+    #expect(ModalReconciliation.classify(signals) == .mandatoryNewTrack)
+}
+
+@Test func testClassifyKoreanCancelableSheetIsNotMandatory() {
+    // Korean sheet with 취소 ENABLED and a non-New-Track description must NOT be
+    // misclassified as mandatory (no auto-Create) — it is an unknown sheet.
+    let signals = makeSignals(
+        sheetPresent: true,
+        sheetDescription: "다른 시트",
+        createButtonPresent: true,
+        cancelButtonPresent: true,
+        cancelButtonEnabled: true,
+        createButtonTitle: "생성",
+        cancelButtonTitle: "취소"
+    )
+    #expect(ModalReconciliation.classify(signals) == .unknownSheet)
+}
+
+@Test func testClassifyEnglishNewTrackDescriptionStillMatches() {
+    // English description path still works after the LabelSet migration.
+    let signals = makeSignals(sheetPresent: true, sheetDescription: "New Track")
+    #expect(ModalReconciliation.classify(signals) == .mandatoryNewTrack)
+}
+
+// MARK: - AXLocalePolicy LabelSets added for the reconciler (#350)
+
+@Test func testCreateButtonLabelSetMatchesEnAndKo() {
+    #expect(AXLocalePolicy.createButton.matches("Create"))
+    #expect(AXLocalePolicy.createButton.matches("생성"))
+    #expect(!AXLocalePolicy.createButton.matches("취소"))
+    #expect(!AXLocalePolicy.createButton.matches("Delete"))
+}
+
+@Test func testNewTrackSheetDescriptionLabelSetMatchesEnAndKo() {
+    #expect(AXLocalePolicy.newTrackSheetDescription.matches("New Track"))
+    #expect(AXLocalePolicy.newTrackSheetDescription.matches("새로운 트랙"))
+    #expect(!AXLocalePolicy.newTrackSheetDescription.matches("Some Other Sheet"))
+    // Diacritic-SENSITIVE: an accented English variant must NOT match.
+    #expect(!AXLocalePolicy.newTrackSheetDescription.matches("Nèw Track"))
+}
+
+@Test func testDeleteTracksPrimaryButtonLabelSetEnglishOnly() {
+    #expect(AXLocalePolicy.deleteTracksPrimaryButton.matches("Delete Tracks and Content"))
+    // KO variant intentionally absent (unverified) — must not match a guess.
+    #expect(!AXLocalePolicy.deleteTracksPrimaryButton.matches("트랙 및 콘텐츠 삭제"))
 }
