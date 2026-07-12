@@ -14,7 +14,10 @@ private func makeSignals(
     cancelButtonPresent: Bool = false,
     cancelButtonEnabled: Bool = true,
     deleteConfirmButtonPresent: Bool = false,
-    strayMenuOpen: Bool = false
+    strayMenuOpen: Bool = false,
+    topLevelAlertPresent: Bool = false,
+    topLevelAlertButtonCount: Int = 0,
+    topLevelAlertPrimaryButton: String = ""
 ) -> ModalReconciliation.ModalSignals {
     ModalReconciliation.ModalSignals(
         sheetPresent: sheetPresent,
@@ -23,7 +26,10 @@ private func makeSignals(
         cancelButtonPresent: cancelButtonPresent,
         cancelButtonEnabled: cancelButtonEnabled,
         deleteConfirmButtonPresent: deleteConfirmButtonPresent,
-        strayMenuOpen: strayMenuOpen
+        strayMenuOpen: strayMenuOpen,
+        topLevelAlertPresent: topLevelAlertPresent,
+        topLevelAlertButtonCount: topLevelAlertButtonCount,
+        topLevelAlertPrimaryButton: topLevelAlertPrimaryButton
     )
 }
 
@@ -188,4 +194,78 @@ private func makeSignals(
     let kind = ModalReconciliation.classify(signals)
     #expect(kind == .deleteConfirm)
     #expect(ModalReconciliation.decide(kind: kind, isDeleteContext: true) == .confirmDelete)
+}
+
+// MARK: - top-level informational alerts (#346 increment 2)
+
+@Test func testSingleButtonTopLevelAlertIsAcknowledged() {
+    // Live shape: top-level AXDialog "alert" with a single "OK" button.
+    let signals = makeSignals(
+        sheetPresent: false,
+        topLevelAlertPresent: true,
+        topLevelAlertButtonCount: 1,
+        topLevelAlertPrimaryButton: "OK"
+    )
+    let kind = ModalReconciliation.classify(signals)
+    #expect(kind == .informationalAlert)
+    #expect(ModalReconciliation.decide(kind: kind, isDeleteContext: false) == .acknowledgeAlert)
+    #expect(ModalReconciliation.decide(kind: kind, isDeleteContext: true) == .acknowledgeAlert)
+}
+
+@Test func testTwoButtonTopLevelDialogIsNeverAcknowledged() {
+    // DATA-LOSS SAFETY GUARD: a 2+ button dialog is a CHOICE (e.g. Save /
+    // Don't Save / Cancel) and must NEVER be auto-dismissed — classify to
+    // unknownSheet, decide to failClosed, and assert it is not acknowledged.
+    let signals = makeSignals(
+        sheetPresent: false,
+        topLevelAlertPresent: true,
+        topLevelAlertButtonCount: 2,
+        topLevelAlertPrimaryButton: "Save"
+    )
+    let kind = ModalReconciliation.classify(signals)
+    #expect(kind == .unknownSheet)
+    let decision = ModalReconciliation.decide(kind: kind, isDeleteContext: false)
+    #expect(decision == .failClosed("unexpected blocking sheet"))
+    #expect(decision != .acknowledgeAlert)
+}
+
+@Test func testZeroButtonTopLevelAlertFailsClosed() {
+    // Present but no identifiable single button ⇒ cannot safely acknowledge.
+    let signals = makeSignals(
+        sheetPresent: false,
+        topLevelAlertPresent: true,
+        topLevelAlertButtonCount: 0
+    )
+    #expect(ModalReconciliation.classify(signals) == .unknownSheet)
+}
+
+@Test func testMainWindowSheetOutranksTopLevelAlert() {
+    // Both present ⇒ the main-window sheet wins (sheet is the stronger blocker).
+    let signals = makeSignals(
+        sheetPresent: true,
+        sheetDescription: "New Track",
+        createButtonPresent: true,
+        cancelButtonPresent: true,
+        cancelButtonEnabled: false,
+        topLevelAlertPresent: true,
+        topLevelAlertButtonCount: 1,
+        topLevelAlertPrimaryButton: "OK"
+    )
+    #expect(ModalReconciliation.classify(signals) == .mandatoryNewTrack)
+}
+
+@Test func testTopLevelAlertOutranksStrayMenu() {
+    let signals = makeSignals(
+        sheetPresent: false,
+        strayMenuOpen: true,
+        topLevelAlertPresent: true,
+        topLevelAlertButtonCount: 1,
+        topLevelAlertPrimaryButton: "OK"
+    )
+    #expect(ModalReconciliation.classify(signals) == .informationalAlert)
+}
+
+@Test func testDecideInformationalAlertAcknowledgesInAnyContext() {
+    #expect(ModalReconciliation.decide(kind: .informationalAlert, isDeleteContext: true) == .acknowledgeAlert)
+    #expect(ModalReconciliation.decide(kind: .informationalAlert, isDeleteContext: false) == .acknowledgeAlert)
 }

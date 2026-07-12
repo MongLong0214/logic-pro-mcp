@@ -32,9 +32,10 @@ extension AccessibilityChannel {
     }
 
     /// Reconcile a blocking modal BEFORE starting an operation. Only auto-clears
-    /// the mandatory New Track sheet and a stray open menu; a deleteConfirm /
-    /// unknownSheet is reported but NOT acted on (we never confirm a delete the
-    /// caller did not request, nor dismiss a sheet that could be a Save prompt).
+    /// the mandatory New Track sheet, a single-button informational alert, and a
+    /// stray open menu; a deleteConfirm / unknownSheet is reported but NOT acted
+    /// on (we never confirm a delete the caller did not request, nor dismiss a
+    /// sheet/dialog that could be a Save prompt).
     static func reconcilePreflight(
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ModalReconcileOutcome {
@@ -50,13 +51,14 @@ extension AccessibilityChannel {
         let kind = ModalReconciliation.classify(signals)
         let decision = ModalReconciliation.decide(kind: kind, isDeleteContext: isDeleteContext)
 
-        // Preflight only auto-clears the mandatory New Track sheet + a stray
-        // menu; everything else is reported without a side effect.
-        if preflight, kind != .mandatoryNewTrack, kind != .strayMenu {
+        // Preflight only auto-clears the mandatory New Track sheet, a single-
+        // button informational alert, and a stray menu; everything else is
+        // reported without a side effect.
+        if preflight, kind != .mandatoryNewTrack, kind != .informationalAlert, kind != .strayMenu {
             return ModalReconcileOutcome(kind: kind, decision: decision, performed: false)
         }
 
-        let performed = await perform(decision, runtime: runtime)
+        let performed = await perform(decision, signals: signals, runtime: runtime)
         return ModalReconcileOutcome(kind: kind, decision: decision, performed: performed)
     }
 
@@ -69,6 +71,11 @@ extension AccessibilityChannel {
     ) -> ModalReconciliation.ModalSignals {
         guard let window = AXLogicProElements.mainWindow(runtime: runtime),
               let sheet = firstSheet(in: window, runtime: runtime.ax) else {
+            // No main-window sheet: the remaining blockers are a top-level
+            // informational alert (safe only when single-button) and a stray
+            // open menu. Alert signals are populated ONLY here, so any sheet
+            // above still outranks a top-level alert.
+            let alert = topLevelAlertSignals(runtime: runtime)
             return ModalReconciliation.ModalSignals(
                 sheetPresent: false,
                 sheetDescription: "",
@@ -76,7 +83,10 @@ extension AccessibilityChannel {
                 cancelButtonPresent: false,
                 cancelButtonEnabled: false,
                 deleteConfirmButtonPresent: false,
-                strayMenuOpen: detectStrayMenuOpen(runtime: runtime)
+                strayMenuOpen: detectStrayMenuOpen(runtime: runtime),
+                topLevelAlertPresent: alert.present,
+                topLevelAlertButtonCount: alert.buttonCount,
+                topLevelAlertPrimaryButton: alert.primaryButton
             )
         }
 
@@ -103,8 +113,28 @@ extension AccessibilityChannel {
             cancelButtonPresent: cancelButton != nil,
             cancelButtonEnabled: cancelEnabled,
             deleteConfirmButtonPresent: deletePresent,
-            strayMenuOpen: false
+            strayMenuOpen: false,
+            topLevelAlertPresent: false,
+            topLevelAlertButtonCount: 0,
+            topLevelAlertPrimaryButton: ""
         )
+    }
+
+    /// Detect a TOP-LEVEL informational `AXDialog` alert (NOT a main-window
+    /// sheet). Reuses `blockingDialogInfo` — which already scans top-level
+    /// windows, excludes plugin-editor / keyboard-layout overlays, and returns
+    /// the dialog's titled buttons — so the single-button safety gate applies to
+    /// its `buttonTitles.count`. Restricted to the `AXDialog` subrole so it stays
+    /// consistent with the executor's verified `subrole is "AXDialog"` targeting
+    /// (an `AXSystemDialog` we could not dismiss is deliberately not claimed).
+    private static func topLevelAlertSignals(
+        runtime: AXLogicProElements.Runtime
+    ) -> (present: Bool, buttonCount: Int, primaryButton: String) {
+        guard let info = AXLogicProElements.blockingDialogInfo(runtime: runtime),
+              info.role == (kAXDialogSubrole as String) else {
+            return (false, 0, "")
+        }
+        return (true, info.buttonTitles.count, info.buttonTitles.first ?? "")
     }
 
     /// The main window's first attached sheet. Real AX exposes an open sheet via
@@ -147,6 +177,7 @@ extension AccessibilityChannel {
 
     private static func perform(
         _ decision: ModalReconciliation.ModalReconcileDecision,
+        signals: ModalReconciliation.ModalSignals,
         runtime: AXLogicProElements.Runtime
     ) async -> Bool {
         switch decision {
@@ -156,6 +187,8 @@ extension AccessibilityChannel {
             return await clickNewTrackCreateButton()
         case .confirmDelete:
             return await confirmDeleteTracksSheet()
+        case .acknowledgeAlert:
+            return await acknowledgeTopLevelAlert(primaryButton: signals.topLevelAlertPrimaryButton)
         case .escapeMenu:
             return await sendEscapeKey()
         }
@@ -198,6 +231,28 @@ extension AccessibilityChannel {
         return true
     }
 
+    /// Acknowledge a single-button top-level informational alert (the classifier
+    /// has already gated this to EXACTLY ONE button). Clicks the named button on
+    /// the first `AXDialog` window, falling back to that dialog's first button.
+    private static func acknowledgeTopLevelAlert(primaryButton: String) async -> Bool {
+        let target = LogicProTarget.appleScriptTarget()
+        let escapedButton = AppleScriptSafety.escapeForScript(primaryButton)
+        let script = """
+        tell application "System Events"
+            tell \(target.systemEventsProcessTarget)
+                set alertWindow to first window whose subrole is "AXDialog"
+                try
+                    click button "\(escapedButton)" of alertWindow
+                on error
+                    click button 1 of alertWindow
+                end try
+            end tell
+        end tell
+        return "acknowledged"
+        """
+        return await AppleScriptChannel.executeAppleScript(script).isSuccess
+    }
+
     /// Send Escape (key code 53) to close a stray open menu.
     private static func sendEscapeKey() async -> Bool {
         let target = LogicProTarget.appleScriptTarget()
@@ -220,6 +275,7 @@ extension AccessibilityChannel {
         case .none: return "none"
         case .mandatoryNewTrack: return "mandatory_new_track"
         case .deleteConfirm: return "delete_confirm"
+        case .informationalAlert: return "informational_alert"
         case .strayMenu: return "stray_menu"
         case .unknownSheet: return "unknown_sheet"
         }
@@ -231,6 +287,7 @@ extension AccessibilityChannel {
         case .noAction: return "none"
         case .clickCreate: return "click_create"
         case .confirmDelete: return "confirm_delete"
+        case .acknowledgeAlert: return "acknowledge_alert"
         case .escapeMenu: return "escape_menu"
         case .failClosed: return "fail_closed"
         }

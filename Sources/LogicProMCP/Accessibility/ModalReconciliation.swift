@@ -22,6 +22,10 @@ enum ModalReconciliation {
         case mandatoryNewTrack
         /// "delete channel strips that are assigned to tracks!" confirmation.
         case deleteConfirm
+        /// A top-level informational `AXDialog` alert (NOT a main-window sheet)
+        /// with EXACTLY ONE button — safe to acknowledge. A 2+ button dialog is
+        /// a CHOICE and is classified `.unknownSheet` instead (fail closed).
+        case informationalAlert
         /// A menu bar menu left open (no sheet present).
         case strayMenu
         /// A sheet is up that we do not recognise — never blindly dismissed.
@@ -38,6 +42,14 @@ enum ModalReconciliation {
         let cancelButtonEnabled: Bool
         let deleteConfirmButtonPresent: Bool
         let strayMenuOpen: Bool
+        /// A top-level `AXDialog` alert window (NOT a main-window sheet) is up.
+        /// Only populated on the no-sheet branch, so a sheet always outranks it.
+        let topLevelAlertPresent: Bool
+        /// Number of titled buttons on that alert — the safety discriminator:
+        /// exactly one ⇒ informational (acknowledge); two+ ⇒ a choice (fail closed).
+        let topLevelAlertButtonCount: Int
+        /// The single button's title (empty when none/ambiguous).
+        let topLevelAlertPrimaryButton: String
     }
 
     /// The sanctioned reconciliation action for a classified modal.
@@ -47,6 +59,9 @@ enum ModalReconciliation {
         case clickCreate
         /// Confirm the delete-channel-strips sheet (primary delete button).
         case confirmDelete
+        /// Acknowledge a single-button top-level informational alert (click its
+        /// only button). Safe in any context — one button means no lossy choice.
+        case acknowledgeAlert
         /// Send Escape to close a stray open menu.
         case escapeMenu
         /// Refuse to act — report the reason; NEVER blindly dismiss a modal we
@@ -58,12 +73,14 @@ enum ModalReconciliation {
     /// OR the disabled-Cancel signal is sufficient to identify the sheet.
     static let newTrackSheetDescription = "New Track"
 
-    /// Classify the current modal from its observable signals. A present sheet
-    /// always wins over a stray menu (a sheet is the stronger blocker), and the
-    /// mandatory New Track sheet is disambiguated from an ordinary cancelable
-    /// sheet by its DISABLED Cancel (or the "New Track" description) — the
-    /// `createButtonPresent` conjunct keeps a delete-confirm sheet that happens
-    /// to disable Cancel from being misread as a New Track sheet.
+    /// Classify the current modal from its observable signals. Precedence: a
+    /// main-window sheet (the strongest blocker) outranks a top-level alert,
+    /// which outranks a stray menu. The mandatory New Track sheet is
+    /// disambiguated from an ordinary cancelable sheet by its DISABLED Cancel (or
+    /// the "New Track" description) — the `createButtonPresent` conjunct keeps a
+    /// delete-confirm sheet that happens to disable Cancel from being misread as
+    /// a New Track sheet. A top-level alert is only acknowledged when it has
+    /// EXACTLY ONE button; two+ buttons is a lossy CHOICE and fails closed.
     static func classify(_ s: ModalSignals) -> BlockingModalKind {
         if s.sheetPresent {
             let isMandatoryNewTrack =
@@ -76,6 +93,12 @@ enum ModalReconciliation {
                 return .deleteConfirm
             }
             return .unknownSheet
+        }
+        if s.topLevelAlertPresent {
+            // Exactly one button ⇒ informational (safe to acknowledge). Anything
+            // else (0 ambiguous, or 2+ = a choice like Save/Don't Save/Cancel) is
+            // never guessed — fail closed as an unknown sheet.
+            return s.topLevelAlertButtonCount == 1 ? .informationalAlert : .unknownSheet
         }
         if s.strayMenuOpen {
             return .strayMenu
@@ -93,6 +116,8 @@ enum ModalReconciliation {
             return .clickCreate
         case .deleteConfirm:
             return isDeleteContext ? .confirmDelete : .failClosed("unexpected delete-confirm sheet")
+        case .informationalAlert:
+            return .acknowledgeAlert
         case .strayMenu:
             return .escapeMenu
         case .unknownSheet:
