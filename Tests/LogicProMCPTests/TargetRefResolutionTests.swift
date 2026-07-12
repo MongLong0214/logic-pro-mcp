@@ -12,13 +12,20 @@ import Testing
 //   * the #308 wrong-target negative guarantees (never a wrong-target mutation).
 
 private actor RecordingChannel: Channel {
+    // #353: `.stateB` returns a `verified:false` success so a rename's dispatcher
+    // guard treats it as unverified (State B). Default `.stateA` keeps every other
+    // test byte-identical.
+    enum Envelope: Sendable { case stateA, stateB }
+
     nonisolated let id: ChannelID
     private let succeeds: Bool
+    private let envelope: Envelope
     private(set) var executedOps: [(String, [String: String])] = []
 
-    init(id: ChannelID, succeeds: Bool = true) {
+    init(id: ChannelID, succeeds: Bool = true, envelope: Envelope = .stateA) {
         self.id = id
         self.succeeds = succeeds
+        self.envelope = envelope
     }
 
     func start() async throws {}
@@ -27,7 +34,15 @@ private actor RecordingChannel: Channel {
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
         executedOps.append((operation, params))
         guard succeeds else { return .error("synthetic failure") }
-        return .success(HonestContract.encodeStateA(extras: ["operation": operation]))
+        switch envelope {
+        case .stateA:
+            return .success(HonestContract.encodeStateA(extras: ["operation": operation]))
+        case .stateB:
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackMismatch,
+                extras: ["operation": operation]
+            ))
+        }
     }
 
     func healthCheck() async -> ChannelHealth {
@@ -711,5 +726,165 @@ struct TargetRefResolutionTests {
             #expect(errorCode(result) == "stale_target_reference")
             #expect(await allOps(channels).isEmpty)
         }
+    }
+
+    // MARK: - #353: rebind target_ref on verified server-performed rename
+
+    /// The core regression: renaming a track THROUGH its own target_ref must not
+    /// invalidate that ref. Pre-#353 the drift check saw the new live name and
+    /// failed the next same-ref op closed; the verified-success rebind keeps it.
+    @Test
+    func testRenameViaRefThenSecondOpViaSameRefResolves() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
+            let (renameRouter, _) = await makeRouter()
+            let renameResult = await TrackDispatcher.handle(
+                command: "rename",
+                params: ["target_ref": .string(reference.rawValue), "name": .string("Sub Bass")],
+                router: renameRouter,
+                cache: cache,
+                targetRegistry: registry
+            )
+            #expect(renameResult.isError == false)
+
+            // Live cache now reflects Logic's applied rename — exactly the change
+            // that used to invalidate the ref.
+            await cache.updateTracks([
+                TrackState(id: 0, name: "Kick", type: .audio),
+                TrackState(id: 1, name: "Snare", type: .audio),
+                TrackState(id: 2, name: "Sub Bass", type: .audio),
+            ])
+
+            let (selectRouter, selectChannels) = await makeRouter()
+            let secondOp = await TrackDispatcher.handle(
+                command: "select",
+                params: ["target_ref": .string(reference.rawValue)],
+                router: selectRouter,
+                cache: cache,
+                targetRegistry: registry
+            )
+            #expect(secondOp.isError == false)
+            #expect(await opParams(selectChannels, "track.select") == ["index": "2"])
+        }
+    }
+
+    /// Regression guard for the intended fail-closed behaviour: a rename made
+    /// DIRECTLY in Logic's UI (no server op, no rebind) still invalidates the
+    /// ref — the server cannot prove it caused the change.
+    @Test
+    func testExternalRenameWithoutServerOpStillFailsClosed() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
+            // User renamed the track in Logic; the cache caught up but no server
+            // op / rebind ever ran.
+            await cache.updateTracks([
+                TrackState(id: 0, name: "Kick", type: .audio),
+                TrackState(id: 1, name: "Snare", type: .audio),
+                TrackState(id: 2, name: "Renamed In Logic", type: .audio),
+            ])
+            let (router, channels) = await makeRouter()
+            let result = await TrackDispatcher.handle(
+                command: "select",
+                params: ["target_ref": .string(reference.rawValue)],
+                router: router,
+                cache: cache,
+                targetRegistry: registry
+            )
+            #expect(result.isError == true)
+            #expect(errorCode(result) == "stale_target_reference")
+            #expect(await allOps(channels).isEmpty)
+        }
+    }
+
+    /// A State B (unverified) rename must NOT rebind — identity is not proven.
+    /// Once the cache reflects the (unverified) new name, the ref fails closed.
+    @Test
+    func testRenameStateBUnverifiedDoesNotRebind() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
+            let router = ChannelRouter()
+            await router.register(RecordingChannel(id: .accessibility, envelope: .stateB))
+            let renameResult = await TrackDispatcher.handle(
+                command: "rename",
+                params: ["target_ref": .string(reference.rawValue), "name": .string("Sub Bass")],
+                router: router,
+                cache: cache,
+                targetRegistry: registry
+            )
+            // State B (verified:false) rename surfaces as an error.
+            #expect(renameResult.isError == true)
+
+            await cache.updateTracks([
+                TrackState(id: 0, name: "Kick", type: .audio),
+                TrackState(id: 1, name: "Snare", type: .audio),
+                TrackState(id: 2, name: "Sub Bass", type: .audio),
+            ])
+            let (selectRouter, selectChannels) = await makeRouter()
+            let secondOp = await TrackDispatcher.handle(
+                command: "select",
+                params: ["target_ref": .string(reference.rawValue)],
+                router: selectRouter,
+                cache: cache,
+                targetRegistry: registry
+            )
+            #expect(secondOp.isError == true)
+            #expect(errorCode(secondOp) == "stale_target_reference")
+            #expect(await allOps(selectChannels).isEmpty)
+        }
+    }
+
+    // MARK: - #353: TargetRegistry.rebind unit
+
+    @Test
+    func testRebindUnknownReferenceIsNoOp() async {
+        let registry = TargetRegistry()
+        let unknown = TargetReference(rawValue: "trk_\(UUID().uuidString)")
+        await registry.rebind(unknown, to: TargetDescriptor(trackIndex: 5, trackName: "Ghost"))
+        // No binding existed, so none was created — never resurrected.
+        #expect(await registry.resolve(unknown) == nil)
+    }
+
+    @Test
+    func testRebindStaleReferenceIsNoOp() async {
+        let registry = TargetRegistry()
+        let descriptor = TargetDescriptor(trackIndex: 2, trackName: "Bass")
+        let reference = await registry.bind(
+            kind: .track,
+            descriptor: descriptor,
+            fingerprint: descriptor.fingerprint
+        )
+        await registry.bumpTopologyGeneration()  // binding is now stale/removed
+        await registry.rebind(reference, to: TargetDescriptor(trackIndex: 2, trackName: "Sub Bass"))
+        // A stale reference must not be rebound back to life.
+        #expect(await registry.resolve(reference) == nil)
+    }
+
+    @Test
+    func testRebindPreservesIdentityFieldsAndUpdatesDescriptor() async {
+        let registry = TargetRegistry()
+        let old = TargetDescriptor(trackIndex: 2, trackName: "Bass")
+        let reference = await registry.bind(
+            kind: .track,
+            descriptor: old,
+            fingerprint: old.fingerprint
+        )
+        let epochBefore = await registry.currentProjectEpoch
+        let generationBefore = await registry.currentTopologyGeneration
+
+        let new = TargetDescriptor(trackIndex: 2, trackName: "Sub Bass")
+        await registry.rebind(reference, to: new)
+
+        guard let binding = await registry.resolve(reference) else {
+            Issue.record("expected the rebound reference to still resolve")
+            return
+        }
+        // Descriptor + fingerprint adopt the new identity...
+        #expect(binding.descriptor == new)
+        #expect(binding.observedFingerprint == new.fingerprint)
+        // ...while reference / kind / epoch / topology-generation are preserved.
+        #expect(binding.reference == reference)
+        #expect(binding.kind == .track)
+        #expect(binding.projectEpoch == epochBefore)
+        #expect(binding.topologyGeneration == generationBefore)
     }
 }

@@ -268,6 +268,18 @@ struct TrackDispatcher {
                 )
             }
             if let resolvedReference {
+                // ADR-002 (#353): this verified rename ran THROUGH `resolvedReference`
+                // and changed the track's name — the exact field the drift check
+                // hashes — so rebind the ref in place. The causal chain (server-issued,
+                // read-back-verified rename via this ref) proves identity, letting the
+                // SAME ref keep addressing the track across its own rename. We are past
+                // the `verified == false` guard above, so only State A rebinds; State
+                // B/C (unverified/failed) never do. External (non-server) renames stay
+                // fail-closed via the unchanged drift check — see `TargetRegistry.rebind`.
+                await targetRegistry?.rebind(
+                    resolvedReference,
+                    to: TargetDescriptor(trackIndex: index, trackName: name)
+                )
                 if var payload = decodedJSONObject(result.message) {
                     payload["track_ref"] = resolvedReference.rawValue
                     return await finalizeTrace(
@@ -524,6 +536,14 @@ struct TrackDispatcher {
                 operation: "track.set_instrument",
                 params: routeParams
             )
+            // ADR-002 (#353): unlike `rename`, set_instrument does NOT rebind the
+            // target_ref. Loading a patch CAN make Logic auto-rename the track, but
+            // this path neither reads back the track's NEW name nor refreshes the
+            // cache — the success read-back confirms the loaded PRESET, not the track
+            // name. Re-reading the cache here would only yield the pre-op name (a
+            // no-op rebind), and any other guess could mask an external rename. So we
+            // honestly defer: an auto-rename here fails the next same-ref op closed,
+            // which is correct — the server cannot cheaply prove the new identity.
             return toolTextResult(result)
 
         case "resolve_path":
