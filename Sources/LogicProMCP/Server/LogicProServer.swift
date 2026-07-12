@@ -370,6 +370,14 @@ actor LogicProServer {
         let poller = self.poller
         let mutationGate = self.mutationGate
         let targetRegistry = self.targetRegistry
+        let handlerDependencies = HandlerDependencies(
+            router: router,
+            cache: cache,
+            targetRegistry: targetRegistry,
+            poller: poller,
+            dialogPresent: dialogPresent,
+            supportBundleExporter: supportBundleExporter
+        )
 
         return LogicProServerHandlers(
             listTools: { _ in
@@ -393,63 +401,19 @@ actor LogicProServer {
                 // normal op can never false-trip (verified across the full live
                 // surface); only a genuine hang is bounded.
                 return await Self.runWithDeadline(tool: name, command: command, mutationGate: mutationGate) {
-                    switch name {
-                    case "logic_transport":
-                        return await TransportDispatcher.handle(
-                            command: command,
-                            params: cmdParams,
-                            router: router,
-                            cache: cache,
-                            dialogPresent: dialogPresent
-                        )
-                    case "logic_tracks":
-                        return await TrackDispatcher.handle(
-                            command: command,
-                            params: cmdParams,
-                            router: router,
-                            cache: cache,
-                            targetRegistry: targetRegistry,
-                            dialogPresent: dialogPresent
-                        )
-                    case "logic_mixer":
-                        return await MixerDispatcher.handle(command: command, params: cmdParams, router: router, cache: cache, targetRegistry: targetRegistry)
-                    case "logic_midi":
-                        return await MIDIDispatcher.handle(command: command, params: cmdParams, router: router, cache: cache)
-                    case "logic_edit":
-                        return await EditDispatcher.handle(command: command, params: cmdParams, router: router, cache: cache)
-                    case "logic_navigate":
-                        return await NavigateDispatcher.handle(command: command, params: cmdParams, router: router, cache: cache)
-                    case "logic_project":
-                        return await ProjectDispatcher.handle(
-                            command: command,
-                            params: cmdParams,
-                            router: router,
-                            cache: cache,
-                            targetRegistry: targetRegistry,
-                            dialogPresent: dialogPresent
-                        )
-                    case "logic_audio":
-                        return AudioDispatcher.handle(command: command, params: cmdParams)
-                    case "logic_system":
-                        return await SystemDispatcher.handle(
-                            command: command,
-                            params: cmdParams,
-                            router: router,
-                            cache: cache,
-                            poller: poller,
-                            supportBundleExporter: supportBundleExporter
-                        )
-                    case "logic_plugins":
-                        return await PluginsDispatcher.handle(
-                            command: command,
-                            params: cmdParams,
-                            router: router,
-                            cache: cache,
-                            targetRegistry: targetRegistry
-                        )
-                    default:
-                        return toolTextResult("Unknown tool: \(name)", isError: true)
+                    guard let handler = OperationHandlerRegistry.handler(
+                        tool: name,
+                        command: command
+                    ) else {
+                        guard let fallback = OperationHandlerRegistry.fallbackHandler(
+                            tool: name,
+                            command: command
+                        ) else {
+                            return toolTextResult("Unknown tool: \(name)", isError: true)
+                        }
+                        return await fallback(handlerDependencies, cmdParams)
                     }
+                    return await handler(handlerDependencies, cmdParams)
                 }
             },
             listResources: { _ in
@@ -811,8 +775,8 @@ actor LogicProServer {
     ///    present command whose command-specific params are missing (e.g.
     ///    `set_tempo` with no `tempo`) still dispatches and returns the
     ///    dispatcher's typed domain `invalid_params` State C.
-    /// Single source of truth for the wire behavior; the dispatch switch's
-    /// `default: "Unknown tool"` branch remains only as unreachable defense.
+    /// Single source of truth for the wire behavior; the registry route's
+    /// `"Unknown tool"` result remains only as unreachable defense.
     static func toolCallProtocolError(name: String, arguments: [String: Value]?) -> MCPError? {
         guard ServerCatalog.toolNames.contains(name) else {
             return .invalidParams("Unknown tool: \(name)")
@@ -888,6 +852,7 @@ actor LogicProServer {
     }
 
     func start() async throws {
+        OperationHandlerRegistry.validate()
         if let cleanupStartupArtifacts = runtimeOverrides?.cleanupStartupArtifacts {
             cleanupStartupArtifacts()
         } else {
@@ -924,6 +889,7 @@ actor LogicProServer {
     }
 
     func startProtocolProbe(transport: any Transport) async throws {
+        OperationHandlerRegistry.validate()
         await registerTools()
         await registerResources()
         await registerPrompts()
