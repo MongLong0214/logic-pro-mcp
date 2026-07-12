@@ -68,4 +68,8 @@ enum FeatureFlags: Sendable {
     static var adr015PianoRoll: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR015_PIANO_ROLL"] == "1"
     }
+
+    static var adr016SmartTempo: Bool {
+        ProcessInfo.processInfo.environment["LOGIC_MCP_ADR016_SMART_TEMPO"] == "1"
+    }
 }
