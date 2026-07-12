@@ -44,7 +44,7 @@ The three kernel ADRs — ADR-002, ADR-003, ADR-005 — are now `In Implementati
 | ADR-014 | Independent MIDI Event Readback | D | `Proposed` | [#302](https://github.com/MongLong0214/logic-pro-mcp/issues/302) |
 | ADR-015 | Piano Roll Data-level Transform | D | `In Implementation` | [#303](https://github.com/MongLong0214/logic-pro-mcp/issues/303) |
 | ADR-016 | Smart Tempo and Tempo-map Control | D | `In Implementation` | [#304](https://github.com/MongLong0214/logic-pro-mcp/issues/304) |
-| ADR-017 | Flex Pitch Inspection and Verified Editing | D | `Proposed` | [#305](https://github.com/MongLong0214/logic-pro-mcp/issues/305) |
+| ADR-017 | Flex Pitch Inspection and Verified Editing | D | `In Implementation` | [#305](https://github.com/MongLong0214/logic-pro-mcp/issues/305) |
 | ADR-018 | Verified Third-party Host-Parameter Control | D | `Proposed` | [#306](https://github.com/MongLong0214/logic-pro-mcp/issues/306) |
 
 ## Implementation status
@@ -155,6 +155,13 @@ Kernel pilots merged to `main`, all behind default-off feature flags (zero runti
 - **Read-only state + honesty gate** — a `TempoMapSnapshot` (events + time signatures, `complete`/`partialReason`) and a read-only `SmartTempoState`; project-wide mode/map mutation is only saga-eligible when a **complete, valid before-checkpoint and a verified restore both exist** — an incomplete/invalid checkpoint or an unverified restore accumulates honest rejections, so `Adapt`-style automatic application cannot be claimed without independent readback + rollback qualification.
 - 10 deterministic synthetic tests (constant-tempo one-bar → 2s, variable-tempo piecewise integration, beat↔time round-trip, invalid-map fail-closed, saga-requires-complete-valid-checkpoint + verified-restore, honest rejection accumulation, tempo-map diff, complete-clears-partial-reason, mode/state round-trip, flag-default-off). Reuses the ADR-010 `TimeSignatureEvent`.
 - Deferred (honest scope): live Smart Tempo analysis jobs, the live tempo-map read/write, the high-risk `Adapt` project-tempo mutation, and the MCP surface (`set_project_tempo_mode_verified` / `apply_tempo_map_verified` / …). Those need real Logic and are not claimed here.
+
+### ADR-017 — Flex Pitch Inspection and Verified Editing (`In Implementation`)
+- Flex-pitch target-identity model + a read-only inspection snapshot + a public-edit eligibility gate only, behind `FeatureFlags.adr017FlexPitch` (default off), with no runtime path. This is one of the highest-risk automation surfaces (graphical UI, unstable note identity), so the gate is deliberately conservative.
+- **Target identity + stale detection** — `FlexPitchNoteReference` binds region ref + analysis generation + note ordinal + start/duration + coarse pitch + pitch-curve fingerprint; `isReferenceCurrent` treats a reference as current **only** when its analysis generation matches the live one (a Flex re-analysis / split / merge / region edit bumps the generation and expires old references), and `staleReferences` enumerates the expired ones.
+- **Public-edit gate (honesty core)** — `editEligibility` returns `experimental(reasons:)` unless every condition holds, and `publicEditableReferences` is therefore **empty without live dual evidence**. It fails closed on an incomplete snapshot, a stale snapshot, a stale note reference, a reference that does not belong to the snapshot, a non-finite / out-of-range monophonic confidence or threshold, a **polyphonic** signal (confidence below threshold), or **fewer than two independent evidence planes** (`provenance == .none` or `dualEvidenceCount < 2`). Only a monophonic, complete, current, dual-evidence-backed reference is `publicEligible`.
+- 11 deterministic synthetic tests (dual-evidence-required, polyphonic-experimental, incomplete-experimental, stale-reference-detected, reference-must-belong-to-snapshot, invalid-confidence/threshold-fail-closed, fully-qualified-synthetic-eligible, reference-validity-uses-only-analysis-generation, complete-clears-partial-reason, Codable round-trip, flag-default-off).
+- Deferred (honest scope): the live Flex Pitch inspection/edit, the `FlexPitchProvider` implementations (Create-MIDI-Track-from-Flex plane A plus an ADR-014 independent readback), and the MCP surface (`enable_flex_pitch_verified` / `set_flex_pitch_note_verified` / …). Those need real Logic and are not claimed here.
 
 ### Release qualification
 - Strict live E2E suite (`LOGIC_PRO_MCP_STRICT_LIVE=1`, real Logic Pro, fresh-session bootstrap) is green on `main`.
