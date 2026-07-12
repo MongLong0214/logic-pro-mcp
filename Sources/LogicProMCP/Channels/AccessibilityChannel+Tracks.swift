@@ -483,7 +483,9 @@ extension AccessibilityChannel {
 
     /// Send Return key via CGEvent — used to auto-confirm Logic 12's
     /// "New Track" dialog (which is sometimes opaque to AX tree).
-    private static func sendReturnKey() {
+    // internal (not private): reused by the +ModalReconcile extension as the
+    // delete-confirm sheet's default-button fallback (#346).
+    static func sendReturnKey() {
         guard let src = CGEventSource(stateID: .hidSystemState) else { return }
         let returnVK: CGKeyCode = 0x24
         if let down = CGEvent(keyboardEventSource: src, virtualKey: returnVK, keyDown: true) {
@@ -623,36 +625,70 @@ extension AccessibilityChannel {
             (try? JSONSerialization.jsonObject(with: Data(click.message.utf8))) as? [String: String]
         )?["menu_clicked"] ?? "Delete Track / 트랙 삭제"
 
-        let extras: [String: Any] = [
+        var extras: [String: Any] = [
             "menu_clicked": menuClicked,
             "track_count_before": beforeCount,
             "requested_delta": -1
         ]
 
+        // #346: a channel-strip delete raises a "delete channel strips…" confirm
+        // sheet, and a delete that empties the project raises the mandatory New
+        // Track sheet (Cancel disabled, Escape inert) — both wedge Logic until
+        // reconciled. Reconcile each poll round (a cheap AX read that no-ops when
+        // no sheet is up) and note the outcome. Reconciliation is ADDITIVE: State
+        // A below still requires a real decrement, so auto-Creating a replacement
+        // track on delete-to-zero correctly stays an honest State B rather than a
+        // fabricated success.
+        var reconcileKind = ModalReconciliation.BlockingModalKind.none
+        var reconcileAction = "none"
+        var newTrackAutoConfirmed = false
+
         var lastObservedCount = beforeCount
         for attempt in 0..<4 {
             try? await Task.sleep(nanoseconds: 250_000_000)
+
+            // Bound the mandatory-New-Track auto-Create to exactly once — it is
+            // the terminal sheet, so stop reconciling after it fires.
+            if !newTrackAutoConfirmed {
+                let outcome = await reconcileAfterMutation(isDeleteContext: true, runtime: runtime)
+                if outcome.kind != .none {
+                    reconcileKind = outcome.kind
+                    reconcileAction = reconcileActionLabel(outcome.decision)
+                    if outcome.kind == .mandatoryNewTrack && outcome.performed {
+                        newTrackAutoConfirmed = true
+                    }
+                }
+            }
+
             let currentCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
             lastObservedCount = currentCount
             if currentCount < beforeCount {
-                let merged = extras.merging([
-                    "track_count_after": currentCount,
-                    "observed_delta": currentCount - beforeCount
-                ]) { _, new in new }
-                return .success(HonestContract.encodeStateA(extras: merged))
+                extras["track_count_after"] = currentCount
+                extras["observed_delta"] = currentCount - beforeCount
+                mergeReconcileExtras(
+                    &extras,
+                    kind: reconcileKind,
+                    action: reconcileAction,
+                    newTrackAutoConfirmed: newTrackAutoConfirmed
+                )
+                return .success(HonestContract.encodeStateA(extras: extras))
             }
             if attempt < 3 {
                 try? await Task.sleep(nanoseconds: 750_000_000)
             }
         }
 
-        let merged = extras.merging([
-            "track_count_after": lastObservedCount,
-            "observed_delta": lastObservedCount - beforeCount
-        ]) { _, new in new }
+        extras["track_count_after"] = lastObservedCount
+        extras["observed_delta"] = lastObservedCount - beforeCount
+        mergeReconcileExtras(
+            &extras,
+            kind: reconcileKind,
+            action: reconcileAction,
+            newTrackAutoConfirmed: newTrackAutoConfirmed
+        )
         return .success(HonestContract.encodeStateB(
             reason: .retryExhausted,
-            extras: merged
+            extras: extras
         ))
     }
 

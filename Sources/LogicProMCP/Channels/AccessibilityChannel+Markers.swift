@@ -147,15 +147,30 @@ extension AccessibilityChannel {
                 if exists menu bar item "Navigate" of menu bar 1 then
                     click menu bar item "Navigate" of menu bar 1
                     delay 0.1
-                    set targetItem to menu item "\(englishItem)" of menu 1 of menu bar item "Navigate" of menu bar 1
-                    if enabled of targetItem is false then error "menu item disabled"
-                    click targetItem
+                    -- #346: once the menu is open, ANY failure (item missing on a
+                    -- wrong locale, or disabled) must Escape it before erroring so
+                    -- the Navigate menu is never left open (wedging Logic).
+                    try
+                        set targetItem to menu item "\(englishItem)" of menu 1 of menu bar item "Navigate" of menu bar 1
+                        if enabled of targetItem is false then error "menu item disabled"
+                        click targetItem
+                    on error errMsg
+                        key code 53
+                        delay 0.1
+                        error errMsg
+                    end try
                 else
                     click menu bar item "탐색" of menu bar 1
                     delay 0.1
-                    set targetItem to menu item "\(koreanItem)" of menu 1 of menu bar item "탐색" of menu bar 1
-                    if enabled of targetItem is false then error "menu item disabled"
-                    click targetItem
+                    try
+                        set targetItem to menu item "\(koreanItem)" of menu 1 of menu bar item "탐색" of menu bar 1
+                        if enabled of targetItem is false then error "menu item disabled"
+                        click targetItem
+                    on error errMsg
+                        key code 53
+                        delay 0.1
+                        error errMsg
+                    end try
                 end if
             end tell
         end tell
