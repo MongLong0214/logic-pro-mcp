@@ -165,6 +165,26 @@ jobs:
         # .testFormulaInstallPathsMatchRepoAndReleaseStaging.
         run: bash Scripts/release-verify-formula-install-paths.sh
 
+      - name: Qualify and verify promotion
+        env:
+          GIT_COMMIT: ${{ github.sha }}
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          binary_sha256="$(shasum -a 256 LogicProMCP | awk '{print $1}')"
+          ./LogicProMCP --qualify \
+            --out release-qualification-attestation.json \
+            --release-version "$RELEASE_VERSION" \
+            --variant desktop \
+            --locale en \
+            --profile core \
+            --cache cold
+          ./LogicProMCP --verify-promotion \
+            --attestation release-qualification-attestation.json \
+            --release-version "$RELEASE_VERSION" \
+            --expected-binary-sha256 "$binary_sha256" \
+            --required-artifacts LogicProMCP,evidence-manifest.json
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191
         with:
