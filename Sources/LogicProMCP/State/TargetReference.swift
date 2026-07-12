@@ -98,6 +98,42 @@ actor TargetRegistry {
         return binding
     }
 
+    /// Rebind an existing `target_ref` to a new descriptor after the SERVER
+    /// ITSELF verifiably changed the referenced track's identity fingerprint —
+    /// currently a `logic_tracks rename` performed through this very ref and
+    /// confirmed by read-back (State A). The causal chain (this server issued
+    /// the verified mutation via this reference) proves the binding still names
+    /// the same track, so we update it in place instead of letting the
+    /// name-fingerprint drift check invalidate a track that was renamed via its
+    /// own ref.
+    ///
+    /// Validity gates match `resolve` (session / project-epoch /
+    /// topology-generation): an unknown or already-stale reference is a no-op —
+    /// a stale binding is NEVER resurrected. The rebound binding preserves
+    /// `reference`, `kind`, `serverSessionID`, `projectEpoch`,
+    /// `topologyGeneration`, and `createdAt`, adopting only the new `descriptor`
+    /// with `observedFingerprint = descriptor.fingerprint`.
+    ///
+    /// Deliberately server-only: user-initiated (non-server) renames, and any
+    /// topology change made directly in Logic's UI, are NOT rebound — the server
+    /// cannot prove it caused those, so the drift check MUST keep invalidating
+    /// them (fail-closed). Dropping the track name from the fingerprint instead
+    /// would forfeit that external-change protection; hence rebind-on-proof, not
+    /// a thinner fingerprint.
+    func rebind(_ reference: TargetReference, to descriptor: TargetDescriptor) {
+        guard let existing = resolve(reference) else { return }
+        bindings[reference] = TargetBinding(
+            reference: existing.reference,
+            kind: existing.kind,
+            serverSessionID: existing.serverSessionID,
+            projectEpoch: existing.projectEpoch,
+            topologyGeneration: existing.topologyGeneration,
+            descriptor: descriptor,
+            observedFingerprint: descriptor.fingerprint,
+            createdAt: existing.createdAt
+        )
+    }
+
     func bumpProjectEpoch() {
         projectEpoch += 1
         bindings.removeAll(keepingCapacity: true)
