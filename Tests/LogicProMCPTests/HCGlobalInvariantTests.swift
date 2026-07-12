@@ -304,6 +304,8 @@ struct HCGlobalInvariantTests {
             RouteCase(tool: "logic_project", command: "cleanup_apply", params: ["step_id": .string("rename_duplicate_kick_0_1"), "confirmed": .bool(true), "names": .string("Kick L,Kick R")], operation: "project.cleanup_apply", destinations: [], invariant: .minimumV1),
 
             RouteCase(tool: "logic_system", command: "export_support_bundle", params: ["dir": .string(fixtures.supportBundlePath)], operation: "system.export_support_bundle", destinations: [], invariant: .minimumV1),
+            RouteCase(tool: "logic_system", command: "saga_execute", params: [:], operation: "system.saga_execute", destinations: [], invariant: .minimumV1),
+            RouteCase(tool: "logic_system", command: "saga_cancel", params: [:], operation: "system.saga_cancel", destinations: [], invariant: .minimumV1),
 
             RouteCase(tool: "logic_plugins", command: "set_param_verified", params: ["track": .int(0), "insert": .int(0), "plugin": .string("logic.stock.gain"), "param": .string("gain_db"), "value": .double(0), "unit": .string("dB"), "mode": .string("duplicate_applyback"), "project_expected_path": .string(fixtures.existingProjectPath)], operation: "plugin.set_param_verified", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_plugins", command: "insert_verified", params: ["track": .int(0), "insert": .int(0), "plugin": .string("Gain"), "mode": .string("duplicate_applyback"), "project_expected_path": .string(fixtures.existingProjectPath)], operation: "plugin.insert_verified", destinations: [], invariant: .minimumV1),

@@ -133,12 +133,18 @@ struct SystemDispatcher: OperationTraceDispatching {
     static let tool = Tool(
         name: "logic_system",
         description: """
-            Diagnostics and help for the Logic Pro MCP server. \
-            Commands: health, permissions, refresh_cache, export_support_bundle, help. \
+            Diagnostics, help, and saga coordination for the Logic Pro MCP server. \
+            Commands: health, permissions, refresh_cache, export_support_bundle, saga_preflight, \
+            saga_execute, saga_status, saga_cancel, help. \
             Params by command: \
             help -> { category: String } (returns full param docs for a dispatcher); \
             refresh_cache -> {} (force AX re-poll); \
             export_support_bundle -> { dir?: String } (local files only; never uploaded); \
+            saga_preflight/saga_execute -> { steps: [step], idempotency_key: String }; \
+            saga_status/saga_cancel -> { idempotency_key: String }. \
+            Saga work is ordered best-effort work with compensation; it does not promise \
+            all-or-nothing completion or durable recovery. The journal is session-only and \
+            cleared when the server session ends, including process restart. \
             Others -> {}
             """,
         inputSchema: .object([
@@ -163,7 +169,12 @@ struct SystemDispatcher: OperationTraceDispatching {
         router: ChannelRouter,
         cache: StateCache,
         poller: StatePoller? = nil,
-        supportBundleExporter: SupportBundleExporter? = nil
+        supportBundleExporter: SupportBundleExporter? = nil,
+        targetRegistry: TargetRegistry = TargetRegistry(),
+        dialogPresent: @escaping @Sendable () -> Bool = { false },
+        sagaJournal: SagaJournal = SagaJournal(),
+        mutationGate: LogicMutationGate? = nil,
+        sagaRefreshAfterWrite: (@Sendable () async -> Void)? = nil
     ) async -> CallTool.Result {
         if FeatureFlags.adr005OperationTrace,
            let traceResult = await handleTraceCommand(command: command, params: params) {
@@ -305,6 +316,238 @@ struct SystemDispatcher: OperationTraceDispatching {
                 )
             }
 
+        case "saga_preflight":
+            let plan: SagaPlan
+            do {
+                plan = try SagaWire.plan(from: params)
+            } catch {
+                return SagaWire.invalidParams(error)
+            }
+            let journalIssues: [[String: Any]]
+            switch await sagaJournal.disposition(for: plan) {
+            case .conflict:
+                journalIssues = [[
+                    "code": HonestContract.FailureError.idempotencyKeyConflict.rawValue,
+                ]]
+            case .capacityExceeded:
+                journalIssues = [[
+                    "code": HonestContract.FailureError.sagaJournalCapacityExceeded.rawValue,
+                ]]
+            case .available, .inProgress, .completed:
+                journalIssues = []
+            }
+            let executor = ProductionSagaStepExecutor(
+                router: router,
+                cache: cache,
+                targetRegistry: targetRegistry,
+                dialogPresent: dialogPresent
+            )
+            let preflight = await MutationSaga(targetRegistry: targetRegistry).preflight(plan)
+            let availability = await executor.captureBeforeStateAvailability(plan: plan)
+            let availabilityIssues = SagaWire.availabilityIssues(availability, plan: plan)
+            let issues = preflight.issues.map(SagaWire.preflightIssue)
+                + availabilityIssues
+                + journalIssues
+            let body = SagaWire.sessionFields.merging([
+                "ok": issues.isEmpty,
+                "issues": issues,
+                "before_state_availability": SagaWire.availabilityObjects(availability, plan: plan),
+                "writes_performed": 0,
+            ]) { _, new in new }
+            return toolTextResult(HonestContract.jsonString(body))
+
+        case "saga_execute":
+            let traceID = await startTraceIfEnabled(command: command)
+            let plan: SagaPlan
+            do {
+                plan = try SagaWire.plan(from: params)
+            } catch {
+                return await finalizeTrace(SagaWire.invalidParams(error), traceID: traceID)
+            }
+            switch await sagaJournal.begin(plan) {
+            case .inProgress:
+                return await finalizeTrace(
+                    SagaWire.scopedStateC(
+                        .sagaInProgress,
+                        hint: "A saga with this idempotency_key is still running",
+                        extras: ["idempotency_key": plan.idempotencyKey]
+                    ),
+                    traceID: traceID
+                )
+            case .completed(let outcome):
+                let duplicate = SagaWire.duplicateOutcome(outcome)
+                return await finalizeTrace(
+                    toolTextResult(duplicate.body, isError: duplicate.isError),
+                    traceID: traceID
+                )
+            case .conflict:
+                return await finalizeTrace(
+                    SagaWire.idempotencyConflict(plan.idempotencyKey),
+                    traceID: traceID
+                )
+            case .capacityExceeded:
+                return await finalizeTrace(
+                    SagaWire.journalCapacityExceeded(plan.idempotencyKey),
+                    traceID: traceID
+                )
+            case .started(let journalClaim):
+                let mutationClaim: LogicMutationGate.Claim?
+                if let mutationGate {
+                    guard let acquired = mutationGate.tryAcquire(
+                        operation: OperationID.systemSagaExecute.rawValue,
+                        reclaimPolicy: .releaseOnly
+                    ) else {
+                        await sagaJournal.abandon(journalClaim)
+                        return await finalizeTrace(
+                            SagaWire.scopedStateC(
+                                .mutatingOperationInProgress,
+                                hint: "Saga execution is waiting for the active mutation to finish",
+                                extras: [
+                                    "idempotency_key": plan.idempotencyKey,
+                                    "active_operation": mutationGate.currentOperation()
+                                        as Any? ?? NSNull(),
+                                    "safe_to_retry": true,
+                                    "write_attempted": false,
+                                ]
+                            ),
+                            traceID: traceID
+                        )
+                    }
+                    mutationClaim = acquired
+                } else {
+                    mutationClaim = nil
+                }
+                defer {
+                    if let mutationClaim { mutationGate?.release(mutationClaim) }
+                }
+                let executor = ProductionSagaStepExecutor(
+                    router: router,
+                    cache: cache,
+                    targetRegistry: targetRegistry,
+                    dialogPresent: dialogPresent
+                )
+                let saga = MutationSaga(targetRegistry: targetRegistry)
+                let preflight = await saga.preflight(plan)
+                let availability = await executor.captureBeforeStateAvailability(plan: plan)
+                let availabilityIssues = SagaWire.availabilityIssues(availability, plan: plan)
+                if !preflight.issues.isEmpty || !availabilityIssues.isEmpty {
+                    let result = SagaWire.scopedStateC(
+                        SagaWire.executionFailureError(
+                            preflightIssues: preflight.issues,
+                            availabilityIssues: availabilityIssues
+                        ),
+                        hint: "Saga preflight rejected the plan",
+                        extras: [
+                            "idempotency_key": plan.idempotencyKey,
+                            "duplicate": false,
+                            "issues": preflight.issues.map(SagaWire.preflightIssue)
+                                + availabilityIssues,
+                            "before_state_availability": SagaWire.availabilityObjects(
+                                availability,
+                                plan: plan
+                            ),
+                        ]
+                    )
+                    await sagaJournal.complete(
+                        journalClaim,
+                        outcome: SagaWire.storedOutcome(from: result)
+                    )
+                    return await finalizeTrace(result, traceID: traceID)
+                }
+                let refreshAfterWrite: @Sendable () async -> Void
+                if let sagaRefreshAfterWrite {
+                    refreshAfterWrite = sagaRefreshAfterWrite
+                } else if let poller {
+                    refreshAfterWrite = { await poller.refreshNow() }
+                } else {
+                    refreshAfterWrite = {}
+                }
+                let surfaceExecutor = SagaSurfaceStepExecutor(
+                    base: executor,
+                    refreshAfterWrite: refreshAfterWrite
+                )
+                let parentBoundary = SagaFirstWriteBoundary()
+                let onWriteBoundary: @Sendable () async -> Void = {
+                    guard let traceID else { return }
+                    await parentBoundary.cross {
+                        await OperationTraceStore.shared.record(
+                            traceID,
+                            phase: .writeBoundaryCrossed
+                        )
+                    }
+                }
+                let outcome = await OperationTraceParentBoundary.$onWriteBoundary.withValue(
+                    onWriteBoundary
+                ) {
+                    await saga.execute(plan, executor: surfaceExecutor)
+                }
+                let stored = SagaWire.storedOutcome(plan: plan, outcome: outcome)
+                await sagaJournal.complete(journalClaim, outcome: stored)
+                return await finalizeTrace(
+                    toolTextResult(stored.body, isError: stored.isError),
+                    traceID: traceID
+                )
+            }
+
+        case "saga_status":
+            let idempotencyKey: String
+            do {
+                idempotencyKey = try SagaWire.idempotencyKey(from: params)
+            } catch {
+                return SagaWire.invalidParams(error)
+            }
+            guard let record = await sagaJournal.record(for: idempotencyKey) else {
+                return SagaWire.scopedStateC(
+                    .elementNotFound,
+                    hint: "No saga journal record exists for this idempotency_key",
+                    extras: ["idempotency_key": idempotencyKey]
+                )
+            }
+            let details: [String: Any]
+            switch record {
+            case .inProgress:
+                details = ["status": "in_progress"]
+            case .completed(let outcome):
+                details = ["status": "completed", "outcome": SagaWire.jsonObject(outcome.body)]
+            }
+            return toolTextResult(HonestContract.jsonString(
+                SagaWire.sessionFields.merging([
+                    "idempotency_key": idempotencyKey,
+                    "record": details,
+                ]) { _, new in new }
+            ))
+
+        case "saga_cancel":
+            let traceID = await startTraceIfEnabled(command: command)
+            let idempotencyKey: String
+            do {
+                idempotencyKey = try SagaWire.idempotencyKey(from: params)
+            } catch {
+                return await finalizeTrace(SagaWire.invalidParams(error), traceID: traceID)
+            }
+            let result: CallTool.Result
+            switch await sagaJournal.record(for: idempotencyKey) {
+            case nil:
+                result = SagaWire.scopedStateC(
+                    .elementNotFound,
+                    hint: "No saga journal record exists for this idempotency_key",
+                    extras: ["idempotency_key": idempotencyKey]
+                )
+            case .inProgress:
+                result = SagaWire.scopedStateC(
+                    .notSupported,
+                    hint: "The current saga engine does not expose safe step-boundary cancellation",
+                    extras: ["idempotency_key": idempotencyKey]
+                )
+            case .completed:
+                result = SagaWire.scopedStateC(
+                    .unsupportedState,
+                    hint: "The saga is already completed",
+                    extras: ["idempotency_key": idempotencyKey]
+                )
+            }
+            return await finalizeTrace(result, traceID: traceID)
+
         case "help":
             // #219: an unknown category used to fall through to full help with
             // isError:false, hiding client typos. An absent category still means
@@ -394,7 +637,7 @@ struct SystemDispatcher: OperationTraceDispatching {
 
     private static func unknownCommandResult(_ command: String) -> CallTool.Result {
         toolTextResult(
-            "Unknown system command: \(command). Available: health, permissions, refresh_cache, export_support_bundle, help",
+            "Unknown system command: \(command). Available: health, permissions, refresh_cache, export_support_bundle, saga_preflight, saga_execute, saga_status, saga_cancel, help",
             isError: true
         )
     }
@@ -659,7 +902,18 @@ struct SystemDispatcher: OperationTraceDispatching {
                   permissions       -> {} — macOS permission status
                   refresh_cache     -> {} — Force AX re-poll
                   export_support_bundle -> { dir?: String } — Write privacy-safe local diagnostics; never upload
+                  saga_preflight    -> { steps: [step], idempotency_key: String } — Validate and inspect before-state availability; writes 0
+                  saga_execute      -> { steps: [step], idempotency_key: String } — Execute ordered steps with evidence and compensation
+                  saga_status       -> { idempotency_key: String } — Read the session journal
+                  saga_cancel       -> { idempotency_key: String } — Typed not_supported with the current engine
                   help              -> { category: String } — Param docs per category
+
+                step = { operation_id: String, target_ref?: String, params: Object,
+                         expected_inverse: { operation_id: String, value_parameter: String } }
+
+                Saga execution is ordered best-effort work with compensation. It does not promise
+                all-or-nothing completion or durable recovery. The session journal is cleared when
+                the server session ends, including process restart.
 
                 Categories: transport, tracks, mixer, midi, edit, navigate, project, audio, plugins, system
 

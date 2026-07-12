@@ -3,6 +3,8 @@ import Foundation
 enum FeatureFlags: Sendable {
     #if DEBUG
     @TaskLocal static var adr002TargetRefOverride: Bool?
+    @TaskLocal static var adr004MutationSagaOverride: Bool?
+    @TaskLocal static var adr005OperationTraceOverride: Bool?
     #endif
 
     static var adr002TargetRef: Bool {
@@ -22,12 +24,34 @@ enum FeatureFlags: Sendable {
     #endif
 
     static var adr004MutationSaga: Bool {
-        ProcessInfo.processInfo.environment["LOGIC_MCP_ADR004_MUTATION_SAGA"] == "1"
+        #if DEBUG
+        if let adr004MutationSagaOverride { return adr004MutationSagaOverride }
+        #endif
+        return ProcessInfo.processInfo.environment["LOGIC_MCP_ADR004_MUTATION_SAGA"] == "1"
     }
 
     static var adr005OperationTrace: Bool {
-        ProcessInfo.processInfo.environment["LOGIC_MCP_ADR005_OPERATION_TRACE"] == "1"
+        #if DEBUG
+        if let adr005OperationTraceOverride { return adr005OperationTraceOverride }
+        #endif
+        return ProcessInfo.processInfo.environment["LOGIC_MCP_ADR005_OPERATION_TRACE"] == "1"
     }
+
+    #if DEBUG
+    static func withAdr004MutationSagaForTests<Result>(
+        _ value: Bool,
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        try await $adr004MutationSagaOverride.withValue(value, operation: operation)
+    }
+
+    static func withAdr005OperationTraceForTests<Result>(
+        _ value: Bool,
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        try await $adr005OperationTraceOverride.withValue(value, operation: operation)
+    }
+    #endif
 
     static var adr006VersionedCache: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR006_VERSIONED_CACHE"] == "1"

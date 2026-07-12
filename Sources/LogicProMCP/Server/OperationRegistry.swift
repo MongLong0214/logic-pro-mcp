@@ -31,6 +31,10 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case systemRefreshCache = "system.refresh_cache"
     case systemExportSupportBundle = "system.export_support_bundle"
     case systemHelp = "system.help"
+    case systemSagaPreflight = "system.saga_preflight"
+    case systemSagaExecute = "system.saga_execute"
+    case systemSagaStatus = "system.saga_status"
+    case systemSagaCancel = "system.saga_cancel"
     case pluginsGetInventory = "plugins.get_inventory"
     case pluginsSetParamVerified = "plugins.set_param_verified"
     case pluginsInsertVerified = "plugins.insert_verified"
@@ -215,7 +219,8 @@ enum OperationRegistry {
         ],
         ToolID.logicSystem.rawValue: [
             "system.health", "system.permissions", "system.refresh_cache",
-            "system.export_support_bundle", "system.help",
+            "system.export_support_bundle", "system.help", "system.saga_preflight",
+            "system.saga_execute", "system.saga_status", "system.saga_cancel",
         ],
         ToolID.logicPlugins.rawValue: [
             "plugins.get_inventory", "plugins.set_param_verified", "plugins.insert_verified",
@@ -267,6 +272,7 @@ enum OperationRegistry {
         ],
         ToolID.logicSystem.rawValue: [
             "health", "permissions", "refresh_cache", "export_support_bundle", "help",
+            "saga_preflight", "saga_execute", "saga_status", "saga_cancel",
         ],
         ToolID.logicPlugins.rawValue: [
             "get_inventory", "set_param_verified", "insert_verified",
@@ -390,6 +396,10 @@ enum OperationRegistry {
         (.systemRefreshCache, "refresh_cache", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none),
         (.systemExportSupportBundle, "export_support_bundle", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired),
         (.systemHelp, "help", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none),
+        (.systemSagaPreflight, "saga_preflight", Mutability.readOnly, DeadlineClass.medium, VerificationPolicy.none),
+        (.systemSagaExecute, "saga_execute", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired),
+        (.systemSagaStatus, "saga_status", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none),
+        (.systemSagaCancel, "saga_cancel", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none),
     ] as [(OperationID, String, Mutability, DeadlineClass, VerificationPolicy)]).map { entry in
         OperationSpec(
             id: entry.0,

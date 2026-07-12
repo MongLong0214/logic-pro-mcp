@@ -31,7 +31,7 @@ Every tool in `tools/list` advertises an `outputSchema`. Mixed command tools adv
 | `logic_navigate` | bars, markers, zoom, view toggles |
 | `logic_project` | new, open, save, save_as, close, bounce, launch/quit, is_running, regions, export plan/run/resume, audit, cleanup |
 | `logic_audio` | read-only audio artifact analysis |
-| `logic_system` | health, permissions, command help |
+| `logic_system` | health, permissions, command help, saga preflight/execute/status/cancel |
 
 ## Resources
 
@@ -200,9 +200,13 @@ Destructive or file-writing paths require confirmation. `save_as` verifies the r
 
 ### `logic_system`
 
-Common commands: `health`, `permissions`, `refresh_cache`, `help`.
+Common commands: `health`, `permissions`, `refresh_cache`, `export_support_bundle`, `saga_preflight`, `saga_execute`, `saga_status`, `saga_cancel`, `help`.
 
 Use `health` for channel readiness and `help` for command summaries. `help` accepts category `all`, `transport`, `tracks`, `mixer`, `midi`, `edit`, `navigate`, `project`, `audio`, `plugins`, or `system`.
+
+`saga_preflight` and `saga_execute` accept `{ steps: [step], idempotency_key: String }`; each step contains `operation_id`, optional `target_ref`, `params`, and `expected_inverse`. Preflight performs no Logic writes and reports per-step before-state availability. Execute reports verified per-step evidence; a failed request remains State C even when every applied step is compensated, while partial or unknown compensation is State B.
+
+The bounded journal belongs only to the current server session and is cleared on session end or process restart. A completed duplicate key returns its stored outcome with `duplicate:true`; `saga_status` reads that record. `saga_cancel` returns a typed refusal for active work because the current engine has no safe cancellation seam. Ordered work with compensation does not promise all-or-nothing completion or durable recovery.
 
 ### Not-exposed commands
 

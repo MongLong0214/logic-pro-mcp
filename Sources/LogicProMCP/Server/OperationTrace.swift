@@ -1,5 +1,9 @@
 import Foundation
 
+enum OperationTraceParentBoundary {
+    @TaskLocal static var onWriteBoundary: (@Sendable () async -> Void)?
+}
+
 struct TraceID: RawRepresentable, Codable, Sendable, Hashable, CustomStringConvertible {
     let rawValue: String
 

@@ -91,8 +91,8 @@ extension OperationTraceTests {
         let mutatingSpecs = OperationRegistry.specs.filter {
             $0.mutability == Mutability.`mutating`
         }
-        #expect(OperationRegistry.specs.count == 100)
-        #expect(mutatingSpecs.count == 84)
+        #expect(OperationRegistry.specs.count == 104)
+        #expect(mutatingSpecs.count == 86)
 
         for spec in mutatingSpecs {
             await OperationTraceStore.shared.clear()
