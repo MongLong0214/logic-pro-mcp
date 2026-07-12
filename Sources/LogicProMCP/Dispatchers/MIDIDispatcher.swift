@@ -1,7 +1,7 @@
 import Foundation
 import MCP
 
-struct MIDIDispatcher {
+struct MIDIDispatcher: OperationTraceDispatching {
     private static let maxSysExBytes = 1024
     private static let maxSysExTextCharacters = maxSysExBytes * 5
 
@@ -35,6 +35,7 @@ struct MIDIDispatcher {
             case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await dispatchSendOp(
+                command: command,
                 baseOp: "midi.send_note",
                 params: params,
                 additionalParams: [
@@ -62,6 +63,7 @@ struct MIDIDispatcher {
             case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await dispatchSendOp(
+                command: command,
                 baseOp: "midi.send_chord",
                 params: params,
                 additionalParams: [
@@ -102,9 +104,12 @@ struct MIDIDispatcher {
                 return toolInvalidParamsResult(msg.message)
             case .success(let port):
                 let opKey = port == "midi" ? "midi.play_sequence" : "midi.play_sequence.\(port)"
-                return await routedTextResult(router, operation: opKey, params: [
+                let traceID = await startTraceIfEnabled(command: command)
+                await recordWriteBoundary(traceID)
+                let result = await routedTextResult(router, operation: opKey, params: [
                     "notes": notes,
                 ])
+                return await finalizeTrace(result, traceID: traceID)
             }
 
         case "send_cc":
@@ -119,6 +124,7 @@ struct MIDIDispatcher {
             case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await dispatchSendOp(
+                command: command,
                 baseOp: "midi.send_cc",
                 params: params,
                 additionalParams: [
@@ -135,6 +141,7 @@ struct MIDIDispatcher {
             case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await dispatchSendOp(
+                command: command,
                 baseOp: "midi.send_program_change",
                 params: params,
                 additionalParams: [
@@ -150,6 +157,7 @@ struct MIDIDispatcher {
             case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await dispatchSendOp(
+                command: command,
                 baseOp: "midi.send_pitch_bend",
                 params: params,
                 additionalParams: [
@@ -165,6 +173,7 @@ struct MIDIDispatcher {
             case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             return await dispatchSendOp(
+                command: command,
                 baseOp: "midi.send_aftertouch",
                 params: params,
                 additionalParams: [
@@ -186,7 +195,10 @@ struct MIDIDispatcher {
             case .success(let parsed): data = parsed
             case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
-            return await routedTextResult(router, operation: "midi.send_sysex", params: ["data": data])
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
+            let result = await routedTextResult(router, operation: "midi.send_sysex", params: ["data": data])
+            return await finalizeTrace(result, traceID: traceID)
 
         case "import_file":
             if let reject = rejectIfPortPresent(params, command: command) {
@@ -197,17 +209,23 @@ struct MIDIDispatcher {
             case .success(let parsed): path = parsed
             case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
-            return await routedTextResult(router, operation: "midi.import_file", params: [
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
+            let result = await routedTextResult(router, operation: "midi.import_file", params: [
                 "path": path,
             ])
+            return await finalizeTrace(result, traceID: traceID)
 
         case "create_virtual_port":
             if let reject = rejectIfPortPresent(params, command: command) {
                 return reject
             }
-            return await routedTextResult(router, operation: "midi.create_virtual_port", params: [
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
+            let result = await routedTextResult(router, operation: "midi.create_virtual_port", params: [
                 "name": stringParam(params, "name", default: "Virtual Port"),
             ])
+            return await finalizeTrace(result, traceID: traceID)
 
         case "list_ports":
             if let reject = rejectIfPortPresent(params, command: command) {
@@ -219,19 +237,28 @@ struct MIDIDispatcher {
             if let reject = rejectIfPortPresent(params, command: command) {
                 return reject
             }
-            return await routedTextResult(router, operation: "mmc.play")
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
+            let result = await routedTextResult(router, operation: "mmc.play")
+            return await finalizeTrace(result, traceID: traceID)
 
         case "mmc_stop":
             if let reject = rejectIfPortPresent(params, command: command) {
                 return reject
             }
-            return await routedTextResult(router, operation: "mmc.stop")
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
+            let result = await routedTextResult(router, operation: "mmc.stop")
+            return await finalizeTrace(result, traceID: traceID)
 
         case "mmc_record":
             if let reject = rejectIfPortPresent(params, command: command) {
                 return reject
             }
-            return await routedTextResult(router, operation: "mmc.record_strobe")
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
+            let result = await routedTextResult(router, operation: "mmc.record_strobe")
+            return await finalizeTrace(result, traceID: traceID)
 
         case "mmc_locate":
             if let reject = rejectIfPortPresent(params, command: command) {
@@ -256,23 +283,29 @@ struct MIDIDispatcher {
                 // returned the raw channel State B and could only ever report
                 // `verified:false` — it never confirmed the playhead landed.
                 let position = "\(bar).1.1.1"
+                let traceID = await startTraceIfEnabled(command: command)
+                await recordWriteBoundary(traceID)
                 let result = await router.route(
                     operation: "transport.goto_position",
                     params: ["position": position]
                 )
-                return await TransportDispatcher.finalizeGotoPositionResult(
+                let finalized = await TransportDispatcher.finalizeGotoPositionResult(
                     result,
                     requestedPosition: position,
                     router: router,
                     cache: cache
                 )
+                return await finalizeTrace(finalized, traceID: traceID)
             }
             guard let time = params["time"]?.stringValue, isValidSMPTE(time) else {
                 return toolInvalidParamsResult("mmc_locate 'time' must be HH:MM:SS:FF")
             }
-            return await routedTextResult(router, operation: "mmc.locate", params: [
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
+            let result = await routedTextResult(router, operation: "mmc.locate", params: [
                 "time": time,
             ])
+            return await finalizeTrace(result, traceID: traceID)
 
         case "step_input":
             if let reject = rejectIfPortPresent(params, command: command) {
@@ -291,10 +324,13 @@ struct MIDIDispatcher {
             case .success(let parsed): duration = parsed
             case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
-            return await routedTextResult(router, operation: "midi.step_input", params: [
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
+            let result = await routedTextResult(router, operation: "midi.step_input", params: [
                 "note": String(note),
                 "duration": duration,
             ])
+            return await finalizeTrace(result, traceID: traceID)
 
         default:
             return toolTextResult(
@@ -314,6 +350,7 @@ struct MIDIDispatcher {
     /// this helper because its per-event channels live inside the notes string;
     /// it inlines just the `validatePort` half above.
     private static func dispatchSendOp(
+        command: String,
         baseOp: String,
         params: [String: Value],
         additionalParams: [String: String],
@@ -330,7 +367,10 @@ struct MIDIDispatcher {
                 let opKey = port == "midi" ? baseOp : "\(baseOp).\(port)"
                 var allParams = additionalParams
                 allParams["channel"] = String(wireChannel)
-                return await routedTextResult(router, operation: opKey, params: allParams)
+                let traceID = await startTraceIfEnabled(command: command)
+                await recordWriteBoundary(traceID)
+                let result = await routedTextResult(router, operation: opKey, params: allParams)
+                return await finalizeTrace(result, traceID: traceID)
             }
         }
     }

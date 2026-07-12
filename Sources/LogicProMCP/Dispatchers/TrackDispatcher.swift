@@ -1,7 +1,7 @@
 import Foundation
 import MCP
 
-struct TrackDispatcher {
+struct TrackDispatcher: OperationTraceDispatching {
     private static let maxTrackNameLength = 128
 
     static let tool = Tool(
@@ -24,7 +24,11 @@ struct TrackDispatcher {
         dialogPresent: @escaping @Sendable () -> Bool = { false }
     ) async -> CallTool.Result {
         if let operation = modalGuardedTrackOperation(for: command), dialogPresent() {
-            return blockingLogicDialogResult(operation: operation)
+            let traceID = await startTraceIfEnabled(command: command)
+            return await finalizeTrace(
+                blockingLogicDialogResult(operation: operation),
+                traceID: traceID
+            )
         }
 
         switch command {
@@ -49,11 +53,13 @@ struct TrackDispatcher {
                     )
                 ) {
                 case .success(let resolved):
+                    let traceID = await startTraceIfEnabled(command: command)
+                    await recordWriteBoundary(traceID)
                     let result = await router.route(
                         operation: "track.select",
                         params: ["index": String(resolved.index)]
                     )
-                    return toolTextResult(result)
+                    return await finalizeTrace(toolTextResult(result), traceID: traceID)
                 case .failure(let result):
                     return result
                 }
@@ -71,21 +77,25 @@ struct TrackDispatcher {
                         extras: ["operation": "track.select"]
                     )
                 }
+                let traceID = await startTraceIfEnabled(command: command)
+                await recordWriteBoundary(traceID)
                 let result = await router.route(
                     operation: "track.select",
                     params: ["index": String(index)]
                 )
-                return toolTextResult(result)
+                return await finalizeTrace(toolTextResult(result), traceID: traceID)
             }
             let name = stringParam(params, "name")
             if !name.isEmpty {
                 let tracks = await cache.getTracks()
                 if let track = tracks.first(where: { $0.name.localizedCaseInsensitiveContains(name) }) {
+                    let traceID = await startTraceIfEnabled(command: command)
+                    await recordWriteBoundary(traceID)
                     let result = await router.route(
                         operation: "track.select",
                         params: ["index": String(track.id)]
                     )
-                    return toolTextResult(result)
+                    return await finalizeTrace(toolTextResult(result), traceID: traceID)
                 }
                 return toolStateCResult(
                     .elementNotFound,
@@ -100,14 +110,19 @@ struct TrackDispatcher {
 
         case "create_audio", "create_instrument", "create_drummer", "create_external_midi":
             // 4 byte-identical bodies; the channel op is always "track.<command>".
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(operation: "track.\(command)")
             if result.isSuccess, !channelSuccessIsVerified(result) {
-                return toolTextResult(result.message, isError: true)
+                return await finalizeTrace(
+                    toolTextResult(result.message, isError: true),
+                    traceID: traceID
+                )
             }
             if FeatureFlags.adr002TargetRef, result.isSuccess {
                 await targetRegistry?.bumpTopologyGeneration()
             }
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "delete":
             let index: Int
@@ -126,12 +141,17 @@ struct TrackDispatcher {
             case .failure(let result):
                 return result
             }
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let selectResult = await router.route(
                 operation: "track.select",
                 params: ["index": String(index)]
             )
             guard selectResult.isSuccess else {
-                return toolTextResult(selectResult.message, isError: true)
+                return await finalizeTrace(
+                    toolTextResult(selectResult.message, isError: true),
+                    traceID: traceID
+                )
             }
             // v3.1.2 P1-5 — `track.select` can return State B (`verified:false`,
             // e.g. `reason:"retry_exhausted"` or `"readback_mismatch"`) while
@@ -144,7 +164,7 @@ struct TrackDispatcher {
             // require the caller to re-issue selection (or accept that the
             // selection is uncertain and abort).
             guard channelResultIsVerified(selectResult) else {
-                return toolStateCResult(
+                return await finalizeTrace(toolStateCResult(
                     .readbackMismatch,
                     hint: "track.delete refused: track \(index) selection unverified (State B). Cannot safely delete unverified target — re-select or fix Logic Pro AX state and retry.",
                     extras: [
@@ -152,13 +172,13 @@ struct TrackDispatcher {
                         "requested_index": index,
                         "select_response": selectResult.message,
                     ]
-                )
+                ), traceID: traceID)
             }
             let result = await router.route(operation: "track.delete")
             if FeatureFlags.adr002TargetRef, result.isSuccess {
                 await targetRegistry?.bumpTopologyGeneration()
             }
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "duplicate":
             let index: Int
@@ -177,12 +197,17 @@ struct TrackDispatcher {
             case .failure(let result):
                 return result
             }
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let selectResult = await router.route(
                 operation: "track.select",
                 params: ["index": String(index)]
             )
             guard selectResult.isSuccess else {
-                return toolTextResult(selectResult.message, isError: true)
+                return await finalizeTrace(
+                    toolTextResult(selectResult.message, isError: true),
+                    traceID: traceID
+                )
             }
             // RB-1.c (2026-05-08 enterprise review): mirror the State-B
             // refusal gate that `delete` already enforces. `track.select`
@@ -194,7 +219,7 @@ struct TrackDispatcher {
             // and confusing the caller's mental model. Refuse and require
             // the caller to re-issue selection.
             guard channelResultIsVerified(selectResult) else {
-                return toolStateCResult(
+                return await finalizeTrace(toolStateCResult(
                     .readbackMismatch,
                     hint: "track.duplicate refused: track \(index) selection unverified (State B). Cannot safely duplicate unverified target — re-select or fix Logic Pro AX state and retry.",
                     extras: [
@@ -202,13 +227,13 @@ struct TrackDispatcher {
                         "requested_index": index,
                         "select_response": selectResult.message,
                     ]
-                )
+                ), traceID: traceID)
             }
             let result = await router.route(operation: "track.duplicate")
             if FeatureFlags.adr002TargetRef, result.isSuccess {
                 await targetRegistry?.bumpTopologyGeneration()
             }
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "rename":
             let index: Int
@@ -361,11 +386,17 @@ struct TrackDispatcher {
             return await finalizeTrace(result, traceID: traceID)
 
         case "record_sequence":
-            let result = await handleRecordSequenceSMF(params: params, router: router, cache: cache)
+            let traceID = await startTraceIfEnabled(command: command)
+            let result = await handleRecordSequenceSMF(
+                params: params,
+                router: router,
+                cache: cache,
+                traceID: traceID
+            )
             if FeatureFlags.adr002TargetRef, result.isError != true {
                 await targetRegistry?.bumpTopologyGeneration()
             }
-            return result
+            return await finalizeTrace(result, traceID: traceID)
 
         case "arm_only":
             let index: Int
@@ -385,6 +416,8 @@ struct TrackDispatcher {
                 return result
             }
             let tracks = await cache.getTracks()
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             var disarmed: [Int] = []
             var unverifiedDisarm: [Int] = []
             var failedDisarm: [Int] = []
@@ -418,11 +451,11 @@ struct TrackDispatcher {
                     unverifiedDisarm: unverifiedDisarm,
                     failedDisarm: failedDisarm
                 )
-                return toolStateCResult(
+                return await finalizeTrace(toolStateCResult(
                     .axWriteFailed,
                     hint: "arm_only failed: target arm rejected — \(armResult.message)",
                     extras: extras
-                )
+                ), traceID: traceID)
             }
             if !trackToggleResultIsVerified(armResult) {
                 let extras = armOnlyExtras(
@@ -434,9 +467,9 @@ struct TrackDispatcher {
                     unverifiedDisarm: unverifiedDisarm,
                     failedDisarm: failedDisarm
                 )
-                return toolTextResult(.success(
+                return await finalizeTrace(toolTextResult(.success(
                     HonestContract.encodeStateB(reason: armOnlyUncertainReason(from: armResult), extras: extras)
-                ))
+                )), traceID: traceID)
             }
             if !failedDisarm.isEmpty {
                 let extras = armOnlyExtras(
@@ -448,11 +481,11 @@ struct TrackDispatcher {
                     unverifiedDisarm: unverifiedDisarm,
                     failedDisarm: failedDisarm
                 )
-                return toolStateCResult(
+                return await finalizeTrace(toolStateCResult(
                     .axWriteFailed,
                     hint: "arm_only failed: disarm rejected",
                     extras: extras
-                )
+                ), traceID: traceID)
             }
             if !unverifiedDisarm.isEmpty {
                 let extras = armOnlyExtras(
@@ -464,11 +497,11 @@ struct TrackDispatcher {
                     unverifiedDisarm: unverifiedDisarm,
                     failedDisarm: failedDisarm
                 )
-                return toolTextResult(.success(
+                return await finalizeTrace(toolTextResult(.success(
                     HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras)
-                ))
+                )), traceID: traceID)
             }
-            return toolTextResult(.success(
+            return await finalizeTrace(toolTextResult(.success(
                 HonestContract.encodeStateA(
                     extras: armOnlyExtras(
                         targetIndex: index,
@@ -480,7 +513,7 @@ struct TrackDispatcher {
                         failedDisarm: []
                     )
                 )
-            ))
+            )), traceID: traceID)
 
         case "set_color":
             return notExposedCommandResult(operation: "track.set_color")
@@ -516,11 +549,13 @@ struct TrackDispatcher {
                     extras: ["operation": "track.set_automation"]
                 )
             }
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "track.set_automation",
                 params: ["index": String(index), "mode": mode]
             )
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "set_instrument":
             let index: Int
@@ -553,9 +588,14 @@ struct TrackDispatcher {
             if !path.isEmpty { routeParams["path"] = path }
             if !category.isEmpty { routeParams["category"] = category }
             if !preset.isEmpty { routeParams["preset"] = preset }
+            let traceID = await startTraceIfEnabled(command: command)
             if dialogPresent() {
-                return blockingLogicDialogResult(operation: "track.set_instrument")
+                return await finalizeTrace(
+                    blockingLogicDialogResult(operation: "track.set_instrument"),
+                    traceID: traceID
+                )
             }
+            await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "track.set_instrument",
                 params: routeParams
@@ -568,7 +608,7 @@ struct TrackDispatcher {
             // no-op rebind), and any other guess could mask an external rename. So we
             // honestly defer: an auto-rename here fails the next same-ref op closed,
             // which is correct — the server cannot cheaply prove the new identity.
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "resolve_path":
             let path = stringParam(params, "path")
@@ -698,66 +738,6 @@ struct TrackDispatcher {
             return toolTextResult(result.message, isError: true)
         }
         return toolTextResult(result)
-    }
-
-    private static func startTraceIfEnabled(command: String) async -> TraceID? {
-        guard FeatureFlags.adr005OperationTrace,
-              let spec = OperationRegistry.spec(tool: tool.name, command: command) else {
-            return nil
-        }
-        switch spec.id {
-        case .tracksRename, .tracksMute, .tracksSolo, .tracksArm:
-            let id = await OperationTraceStore.shared.start(operationID: spec.id.rawValue)
-            await OperationTraceStore.shared.record(id, phase: .requestReceived, attributes: [
-                "operation_id": spec.id.rawValue,
-                "command": command,
-            ])
-            return id
-        default:
-            return nil
-        }
-    }
-
-    private static func recordWriteBoundary(_ traceID: TraceID?) async {
-        guard let traceID else { return }
-        await OperationTraceStore.shared.record(traceID, phase: .writeBoundaryCrossed)
-    }
-
-    private static func finalizeTrace(
-        _ result: CallTool.Result,
-        traceID: TraceID?
-    ) async -> CallTool.Result {
-        guard let traceID else { return result }
-        guard case .text(let raw, _, _) = result.content.first else {
-            await OperationTraceStore.shared.record(
-                traceID,
-                phase: .verificationCompleted,
-                attributes: ["readback_state": result.isError == true ? "C" : "A"]
-            )
-            await OperationTraceStore.shared.record(traceID, phase: .resultEmitted)
-            await OperationTraceStore.shared.complete(traceID)
-            return result
-        }
-
-        let object = decodedJSONObject(raw)
-        var attributes = [
-            "readback_state": object?["state"] as? String
-                ?? (result.isError == true ? "C" : "A"),
-        ]
-        if let errorCode = object?["error"] as? String {
-            attributes["error_code"] = errorCode
-        }
-        await OperationTraceStore.shared.record(
-            traceID,
-            phase: .verificationCompleted,
-            attributes: attributes
-        )
-        await OperationTraceStore.shared.record(traceID, phase: .resultEmitted)
-        await OperationTraceStore.shared.complete(traceID)
-
-        let merged = HonestContract.addExtras(["trace_id": traceID.rawValue], into: raw)
-        guard merged != raw else { return result }
-        return toolTextResult(merged, isError: result.isError == true)
     }
 
     private static func modalGuardedTrackOperation(for command: String) -> String? {

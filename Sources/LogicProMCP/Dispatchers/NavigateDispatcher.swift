@@ -1,7 +1,7 @@
 import Foundation
 import MCP
 
-struct NavigateDispatcher {
+struct NavigateDispatcher: OperationTraceDispatching {
     static let tool = Tool(
         name: "logic_navigate",
         description: "Navigation and markers in Logic Pro. Commands: goto_bar, goto_marker, create_marker, delete_marker, rename_marker, zoom_to_fit, set_zoom, toggle_view. UNSUPPORTED: rename_marker is NOT implemented — there is no verified AX write path on Logic 12.x, so it always fails closed with State C error=not_implemented; to rename, delete_marker the target then create_marker with the new name. BREAKING since v3.3.0: delete_marker / rename_marker require explicit `index` (Int ≥ 0) — pre-v3.3.0 missing `index` defaulted to 0 and silently mutated marker 0; rename_marker now also rejects empty `name`. Params: goto_bar -> { bar: Int }; goto_marker -> { index: Int } or { name: String }; create_marker -> { name: String }; rename_marker -> { index: Int (required, ≥ 0), name: String (required, non-empty) } (not implemented: returns not_implemented); delete_marker -> { index: Int (required, ≥ 0) }; set_zoom -> { level: String } (in|out|fit); toggle_view -> { view: String } (mixer|piano_roll|score|step_editor|library|inspector|automation).",
@@ -31,16 +31,19 @@ struct NavigateDispatcher {
                     "goto_bar 'bar' must be in 1..9999 (got \(bar))"
                 )
             }
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "transport.goto_position",
                 params: ["position": "\(bar).1.1.1"]
             )
-            return await TransportDispatcher.finalizeGotoPositionResult(
+            let finalized = await TransportDispatcher.finalizeGotoPositionResult(
                 result,
                 requestedPosition: "\(bar).1.1.1",
                 router: router,
                 cache: cache
             )
+            return await finalizeTrace(finalized, traceID: traceID)
 
         case "goto_marker":
             // v3.1.10 (boomer P1-1) — resolve the target marker from cache and
@@ -53,6 +56,8 @@ struct NavigateDispatcher {
             //
             let markers = await cache.getMarkers()
             func routeMarkerTarget(_ target: MarkerState) async -> CallTool.Result {
+                let traceID = await startTraceIfEnabled(command: command)
+                await recordWriteBoundary(traceID)
                 var result = await router.route(
                     operation: "transport.goto_position",
                     params: ["position": target.position]
@@ -65,12 +70,13 @@ struct NavigateDispatcher {
                     )
                     result = result.isSuccess ? .success(merged) : .error(merged)
                 }
-                return await TransportDispatcher.finalizeGotoPositionResult(
+                let finalized = await TransportDispatcher.finalizeGotoPositionResult(
                     result,
                     requestedPosition: target.position,
                     router: router,
                     cache: cache
                 )
+                return await finalizeTrace(finalized, traceID: traceID)
             }
             // H-2 (2026-05-08 enterprise review): pre-fix the cache-cold
             // index-based path fell back to `nav.goto_marker` (CC 38), which
@@ -138,11 +144,14 @@ struct NavigateDispatcher {
                     extras: ["operation": "nav.create_marker"]
                 )
             }
-            return await finalizeCreateMarkerResult(
+            let traceID = await startTraceIfEnabled(command: command)
+            let result = await finalizeCreateMarkerResult(
                 requestedName: providedName.isEmpty ? nil : providedName,
                 router: router,
-                cache: cache
+                cache: cache,
+                traceID: traceID
             )
+            return await finalizeTrace(result, traceID: traceID)
 
         case "delete_marker":
             // RB-1.b (2026-05-08 enterprise review): pre-fix `intParam(default: 0)`
@@ -155,11 +164,13 @@ struct NavigateDispatcher {
                     extras: ["operation": "nav.delete_marker"]
                 )
             }
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "nav.delete_marker",
                 params: ["index": String(index)]
             )
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "rename_marker":
             // RB-1.b — same fail-closed treatment for index, plus reject empty
@@ -177,15 +188,22 @@ struct NavigateDispatcher {
                     extras: ["operation": "nav.rename_marker"]
                 )
             }
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "nav.rename_marker",
                 params: ["index": String(index), "name": name]
             )
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "zoom_to_fit":
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(operation: "nav.zoom_to_fit")
-            return toolTextResultTreatingUnverifiedAsError(result)
+            return await finalizeTrace(
+                toolTextResultTreatingUnverifiedAsError(result),
+                traceID: traceID
+            )
 
         case "set_zoom":
             // Accept both `level` (docs) and `direction` (common caller term) —
@@ -200,20 +218,35 @@ struct NavigateDispatcher {
             let level = stringParam(params, "level", "direction", default: "fit")
             switch level {
             case "in":
+                let traceID = await startTraceIfEnabled(command: command)
+                await recordWriteBoundary(traceID)
                 let result = await router.route(
                     operation: "nav.set_zoom_level",
                     params: ["level": "8"]
                 )
-                return toolTextResultTreatingUnverifiedAsError(result)
+                return await finalizeTrace(
+                    toolTextResultTreatingUnverifiedAsError(result),
+                    traceID: traceID
+                )
             case "out":
+                let traceID = await startTraceIfEnabled(command: command)
+                await recordWriteBoundary(traceID)
                 let result = await router.route(
                     operation: "nav.set_zoom_level",
                     params: ["level": "2"]
                 )
-                return toolTextResultTreatingUnverifiedAsError(result)
+                return await finalizeTrace(
+                    toolTextResultTreatingUnverifiedAsError(result),
+                    traceID: traceID
+                )
             case "fit":
+                let traceID = await startTraceIfEnabled(command: command)
+                await recordWriteBoundary(traceID)
                 let result = await router.route(operation: "nav.zoom_to_fit")
-                return toolTextResultTreatingUnverifiedAsError(result)
+                return await finalizeTrace(
+                    toolTextResultTreatingUnverifiedAsError(result),
+                    traceID: traceID
+                )
             default:
                 guard let numericLevel = Int(level),
                       (1...10).contains(numericLevel) else {
@@ -221,11 +254,16 @@ struct NavigateDispatcher {
                         "set_zoom 'level' must be one of: in, out, fit, or integer 1..10"
                     )
                 }
+                let traceID = await startTraceIfEnabled(command: command)
+                await recordWriteBoundary(traceID)
                 let result = await router.route(
                     operation: "nav.set_zoom_level",
                     params: ["level": String(numericLevel)]
                 )
-                return toolTextResultTreatingUnverifiedAsError(result)
+                return await finalizeTrace(
+                    toolTextResultTreatingUnverifiedAsError(result),
+                    traceID: traceID
+                )
             }
 
         case "toggle_view":
@@ -250,8 +288,10 @@ struct NavigateDispatcher {
                     extras: ["operation": "nav.toggle_view"]
                 )
             }
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(operation: operation)
-            return toolTextResult(result)
+            return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         default:
             return toolInvalidParamsResult(
@@ -264,7 +304,8 @@ struct NavigateDispatcher {
     private static func finalizeCreateMarkerResult(
         requestedName: String?,
         router: ChannelRouter,
-        cache: StateCache
+        cache: StateCache,
+        traceID: TraceID?
     ) async -> CallTool.Result {
         // audit P1 #8: snapshot the marker list BEFORE the mutating route so the
         // count-delta verify reflects the +1 this create adds. Pre-fix both the
@@ -272,6 +313,7 @@ struct NavigateDispatcher {
         // counts were equal on success → every verified-by-readback create fell
         // to the State-B readback-mismatch path. Still fail-closed: a nil/short
         // readback below returns State B.
+        await recordWriteBoundary(traceID)
         let openResult = await router.route(operation: "nav.open_marker_list")
         guard openResult.isSuccess else {
             return toolTextResult(openResult)

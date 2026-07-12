@@ -1,7 +1,7 @@
 import Foundation
 import MCP
 
-struct EditDispatcher {
+struct EditDispatcher: OperationTraceDispatching {
     private enum EditRoute {
         case regular(String)
         case unverifiedIsError(String)
@@ -65,7 +65,9 @@ struct EditDispatcher {
             guard let route = routedCommands[command] else {
                 return toolTextResult("Internal edit route missing for \(command)", isError: true)
             }
-            return await routeEditCommand(route, router: router)
+            let traceID = await startTraceIfEnabled(command: command)
+            let result = await routeEditCommand(route, router: router, traceID: traceID)
+            return await finalizeTrace(result, traceID: traceID)
 
         case "quantize":
             guard params["value"] != nil || params["grid"] != nil else {
@@ -80,11 +82,16 @@ struct EditDispatcher {
                     isError: true
                 )
             }
+            let traceID = await startTraceIfEnabled(command: command)
+            await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "edit.quantize",
                 params: ["value": value]
             )
-            return toolTextResultTreatingUnverifiedAsError(result)
+            return await finalizeTrace(
+                toolTextResultTreatingUnverifiedAsError(result),
+                traceID: traceID
+            )
 
         default:
             return toolTextResult(
@@ -96,8 +103,10 @@ struct EditDispatcher {
 
     private static func routeEditCommand(
         _ route: EditRoute,
-        router: ChannelRouter
+        router: ChannelRouter,
+        traceID: TraceID?
     ) async -> CallTool.Result {
+        await recordWriteBoundary(traceID)
         switch route {
         case .regular(let operation):
             return await routedTextResult(router, operation: operation)

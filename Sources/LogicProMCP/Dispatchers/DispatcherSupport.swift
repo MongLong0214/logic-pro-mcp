@@ -204,3 +204,65 @@ func blockingLogicDialogResult(
         isError: true
     )
 }
+
+protocol OperationTraceDispatching {
+    static var tool: Tool { get }
+}
+
+extension OperationTraceDispatching {
+    static func startTraceIfEnabled(command: String) async -> TraceID? {
+        guard FeatureFlags.adr005OperationTrace,
+              let spec = OperationRegistry.spec(tool: tool.name, command: command),
+              spec.mutability == Mutability.`mutating` else {
+            return nil
+        }
+        let id = await OperationTraceStore.shared.start(operationID: spec.id.rawValue)
+        await OperationTraceStore.shared.record(id, phase: .requestReceived, attributes: [
+            "operation_id": spec.id.rawValue,
+            "command": command,
+        ])
+        return id
+    }
+
+    static func recordWriteBoundary(_ traceID: TraceID?) async {
+        guard let traceID else { return }
+        await OperationTraceStore.shared.record(traceID, phase: .writeBoundaryCrossed)
+    }
+
+    static func finalizeTrace(
+        _ result: CallTool.Result,
+        traceID: TraceID?
+    ) async -> CallTool.Result {
+        guard let traceID else { return result }
+        guard case .text(let raw, _, _) = result.content.first else {
+            await OperationTraceStore.shared.record(
+                traceID,
+                phase: .verificationCompleted,
+                attributes: ["readback_state": result.isError == true ? "C" : "A"]
+            )
+            await OperationTraceStore.shared.record(traceID, phase: .resultEmitted)
+            await OperationTraceStore.shared.complete(traceID)
+            return result
+        }
+
+        let object = decodedJSONObject(raw)
+        var attributes = [
+            "readback_state": object?["state"] as? String
+                ?? (result.isError == true ? "C" : "A"),
+        ]
+        if let errorCode = object?["error"] as? String {
+            attributes["error_code"] = errorCode
+        }
+        await OperationTraceStore.shared.record(
+            traceID,
+            phase: .verificationCompleted,
+            attributes: attributes
+        )
+        await OperationTraceStore.shared.record(traceID, phase: .resultEmitted)
+        await OperationTraceStore.shared.complete(traceID)
+
+        let merged = HonestContract.addExtras(["trace_id": traceID.rawValue], into: raw)
+        guard merged != raw else { return result }
+        return toolTextResult(merged, isError: result.isError == true)
+    }
+}

@@ -18,6 +18,7 @@ extension TrackDispatcher {
         params: [String: MCP.Value],
         router: ChannelRouter,
         cache: StateCache,
+        traceID: TraceID? = nil,
         trackHeaderCount: @escaping @Sendable () -> Int = { AXLogicProElements.allTrackHeaders().count },
         trackNameAt: @escaping @Sendable (Int) -> String? = { AXLogicProElements.trackName(at: $0) },
         readRegions: @escaping @Sendable () -> RecordSequenceRegionReadback = {
@@ -158,6 +159,7 @@ extension TrackDispatcher {
         // above), so the goto-dialog is enabled on any non-empty project,
         // and on an empty project the playhead is already at bar 1 and the
         // slider fallback succeeds trivially.
+        await recordWriteBoundary(traceID)
         let gotoResult = await router.route(
             operation: "transport.goto_position",
             params: ["bar": "1"]
