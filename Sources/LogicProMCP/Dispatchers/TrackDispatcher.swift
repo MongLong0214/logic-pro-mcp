@@ -344,7 +344,13 @@ struct TrackDispatcher: OperationTraceDispatching {
                 )
             }
             return await finalizeTrace(
-                TargetRefResolver.addEvidence(resolvedReference, to: toolTextResult(result)),
+                // legacyTrackRefAlias: rename shipped the `track_ref` echo before the
+                // uniform `target_ref` evidence key existed — keep both (G8 compat).
+                TargetRefResolver.addEvidence(
+                    resolvedReference,
+                    to: toolTextResult(result),
+                    legacyTrackRefAlias: true
+                ),
                 traceID: traceID
             )
 

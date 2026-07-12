@@ -90,9 +90,13 @@ enum TargetRefResolver {
 
     /// Echo the causal reference only on a verified State A response. Nil
     /// references are the legacy index/flag-off path and remain byte-identical.
+    /// `legacyTrackRefAlias` additionally emits the pre-uniform `track_ref` key —
+    /// rename shipped that echo first, so it keeps the alias for backward
+    /// compatibility (G8); new consumers should read `target_ref`.
     static func addEvidence(
         _ reference: TargetReference?,
-        to result: CallTool.Result
+        to result: CallTool.Result,
+        legacyTrackRefAlias: Bool = false
     ) -> CallTool.Result {
         guard let reference,
               case .text(let rawJSON, let annotations, let meta) = result.content.first,
@@ -100,8 +104,12 @@ enum TargetRefResolver {
             return result
         }
 
+        var evidence: [String: Any] = ["target_ref": reference.rawValue]
+        if legacyTrackRefAlias {
+            evidence["track_ref"] = reference.rawValue
+        }
         let echoed = HonestContract.addExtras(
-            ["target_ref": reference.rawValue],
+            evidence,
             into: rawJSON
         )
         guard echoed != rawJSON else { return result }

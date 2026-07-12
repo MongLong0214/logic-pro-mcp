@@ -240,7 +240,11 @@ struct TargetRegistryTests {
             )
 
             #expect(result.isError == false)
-            #expect(sharedJSONObject(sharedToolText(result))?["track_ref"] as? String == reference.rawValue)
+            // rename keeps its pre-uniform `track_ref` echo (G8 backward compat)
+            // AND carries the uniform `target_ref` evidence key.
+            let payload = sharedJSONObject(sharedToolText(result))!
+            #expect(payload["track_ref"] as! String == reference.rawValue)
+            #expect(payload["target_ref"] as! String == reference.rawValue)
             let operations = await channel.executedOps
             #expect(operations.count == 1)
             #expect(operations.first?.0 == "track.rename")

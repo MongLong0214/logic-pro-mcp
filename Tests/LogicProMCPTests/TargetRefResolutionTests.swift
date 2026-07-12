@@ -589,7 +589,9 @@ struct TargetRefResolutionTests {
             )
             #expect(result.isError == false)
             #expect(echoedTargetRef(result) == reference.rawValue)
-            #expect(sharedJSONObject(sharedToolText(result))?["track_ref"] == nil)
+            // rename keeps its pre-uniform `track_ref` alias (G8 backward compat);
+            // the other 12 mutations emit only the uniform `target_ref` key.
+            #expect(sharedJSONObject(sharedToolText(result))!["track_ref"] as! String == reference.rawValue)
             #expect(await opParams(channels, "track.rename") == ["index": "2", "name": "Sub Bass"])
         }
     }
