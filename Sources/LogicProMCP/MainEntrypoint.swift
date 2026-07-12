@@ -23,6 +23,9 @@ enum MainEntrypoint {
         approvalStoreFactory: () -> any ManualValidationStoring = { ManualValidationStore() },
         doctorRuntime: SetupDoctor.Runtime = .production,
         lifecycleRuntime: SetupLifecycle.Runtime = .production,
+        qualificationCommand: ([String]) async -> QualificationCommandResult = { arguments in
+            await QualificationRunner().run(arguments: arguments)
+        },
         // Injected so doctor's color/TTY gating is pinnable in tests (AC-5.4).
         isStdoutTTY: () -> Bool = { isatty(STDOUT_FILENO) != 0 },
         doctorEnvironment: [String: String] = ProcessInfo.processInfo.environment,
@@ -50,6 +53,14 @@ enum MainEntrypoint {
         if hasFlag("--help", or: "-h", in: arguments) {
             writeStdout(usageText + "\n")
             return 0
+        }
+
+        if let command = arguments.dropFirst().first,
+           command == "--qualify" || command == "--verify-promotion" {
+            let result = await qualificationCommand(arguments)
+            if !result.stdout.isEmpty { writeStdout(result.stdout) }
+            if !result.stderr.isEmpty { writeStderr(result.stderr) }
+            return result.exitCode
         }
 
         let approvalStore = approvalStoreFactory()
@@ -255,6 +266,10 @@ enum MainEntrypoint {
           LogicProMCP <install|update|uninstall> --dry-run [--json]
                                                Print a read-only lifecycle plan and exit
           LogicProMCP --check-permissions      Print macOS permission status and exit (non-zero if not ready)
+          LogicProMCP --qualify --out <attestation.json> [--cases <cases.json>] [--release-version <version>] [--variant <desktop|creator>] [--locale <en|ko>] [--profile <core|full>] [--cache <cold|warm>]
+                                               Run deterministic structural qualification and write an attestation
+          LogicProMCP --verify-promotion --attestation <attestation.json> --release-version <version> --expected-binary-sha256 <hex> [--required-artifacts <path,...>]
+                                               Evaluate the release promotion gate and emit a JSON decision
           LogicProMCP --list-approvals         List manual channel approvals and exit
           LogicProMCP --approve-channel <MIDIKeyCommands|Scripter> [--approval-note <note>]
                                                Record a manual channel approval and exit
