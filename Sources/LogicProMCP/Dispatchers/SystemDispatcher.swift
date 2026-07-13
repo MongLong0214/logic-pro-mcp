@@ -149,7 +149,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             refresh_cache -> {} (force AX re-poll); \
             list_recent_traces -> { limit?: Int }; \
             get_trace -> { trace_id: String }; \
-            clear_traces -> {}; \
+            clear_traces -> { confirmed: Bool }; \
             export_support_bundle -> { dir?: String } (local files only; never uploaded); \
             saga_preflight/saga_execute -> { steps: [step], idempotency_key: String }; \
             saga_status/saga_cancel -> { idempotency_key: String }. \
@@ -712,6 +712,16 @@ struct SystemDispatcher: OperationTraceDispatching {
             ]))
 
         case "clear_traces":
+            switch strictBoolParam(params, "confirmed") {
+            case .value(true):
+                break
+            case .invalid(let hint):
+                return toolInvalidParamsResult("clear_traces \(hint)")
+            case .missing, .value(false):
+                return toolInvalidParamsResult(
+                    "clear_traces requires 'confirmed:true' because it destroys in-process diagnostic evidence"
+                )
+            }
             await OperationTraceStore.shared.clear()
             return toolTextResult(HonestContract.jsonString(["success": true]))
 
@@ -917,7 +927,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                   export_support_bundle -> { dir?: String } — Write privacy-safe local diagnostics; never upload
                   list_recent_traces -> { limit?: Int } — List recent in-process operation traces
                   get_trace         -> { trace_id: String } — Read one in-process operation trace
-                  clear_traces      -> {} — Clear the in-process operation trace store
+                  clear_traces      -> { confirmed: Bool } — Clear diagnostic evidence; requires confirmed:true
                   saga_preflight    -> { steps: [step], idempotency_key: String } — Validate and inspect before-state availability; writes 0
                   saga_execute      -> { steps: [step], idempotency_key: String } — Execute ordered steps with evidence and compensation
                   saga_status       -> { idempotency_key: String } — Read the session journal

@@ -7,6 +7,13 @@ import Testing
 struct OperationCatalogTests {
     private static let uri = "logic://system/operations"
 
+    // Plugin selectors are consumed after channel/AX routing, so deterministic headless proof is delegated to live qualification.
+    private static let selectorsRequiringLiveQualificationByOperation: [OperationID: Set<String>] = [
+        .pluginsGetInventory: ["index", "track"],
+        .pluginsSetParamVerified: ["track"],
+        .pluginsInsertVerified: ["track"],
+    ]
+
     private func withOperationTraceEnvironment<Result>(
         _ operation: () async throws -> Result
     ) async rethrows -> Result {
@@ -23,28 +30,6 @@ struct OperationCatalogTests {
         return try await operation()
     }
 
-    private static let selectorParamsByOperation: [OperationID: Set<String>] = [
-        .navigateGotoMarker: ["index"],
-        .navigateDeleteMarker: ["index"],
-        .navigateRenameMarker: ["index"],
-        .mixerSetVolume: ["index", "track"],
-        .mixerSetPan: ["index", "track"],
-        .mixerInsertPlugin: ["index", "track"],
-        .mixerSetPluginParam: ["track"],
-        .pluginsGetInventory: ["index", "track"],
-        .pluginsSetParamVerified: ["track"],
-        .pluginsInsertVerified: ["track"],
-        .tracksSelect: ["index", "track"],
-        .tracksDelete: ["index", "track"],
-        .tracksDuplicate: ["index", "track"],
-        .tracksRename: ["index", "track"],
-        .tracksMute: ["index", "track"],
-        .tracksSolo: ["index", "track"],
-        .tracksArm: ["index", "track"],
-        .tracksArmOnly: ["index", "track"],
-        .tracksSetAutomation: ["index", "track"],
-        .tracksSetInstrument: ["index"],
-    ]
     private static let legacyIgnoredParams: [OperationID: Set<String>] = [
         .tracksRecordSequence: ["instrument", "instrument_path"],
     ]
@@ -105,6 +90,7 @@ struct OperationCatalogTests {
         ],
         .systemListRecentTraces: ["limit"],
         .systemGetTrace: ["trace_id"],
+        .systemClearTraces: ["confirmed"],
         .systemExportSupportBundle: ["dir"],
         .systemHelp: ["category"],
         .systemSagaPreflight: ["idempotency_key", "steps"],
@@ -164,7 +150,7 @@ struct OperationCatalogTests {
     ]
 
     private static func expectedAllowedParams(for spec: OperationSpec) -> Set<String> {
-        var expected = selectorParamsByOperation[spec.id] ?? []
+        var expected = spec.allowedParams.intersection(["index", "track"])
         if spec.target == .requiresStableTarget {
             expected.insert("target_ref")
         }
@@ -237,16 +223,17 @@ struct OperationCatalogTests {
         try await withOperationTraceEnvironment {
             await OperationTraceStore.shared.clear()
             do {
-                let expectedSpecs: [(String, String, Set<String>)] = [
-                    ("list_recent_traces", "system.list_recent_traces", ["limit"]),
-                    ("get_trace", "system.get_trace", ["trace_id"]),
-                    ("clear_traces", "system.clear_traces", []),
+                let expectedSpecs: [(String, String, Set<String>, ConfirmationPolicy)] = [
+                    ("list_recent_traces", "system.list_recent_traces", ["limit"], .none),
+                    ("get_trace", "system.get_trace", ["trace_id"], .none),
+                    ("clear_traces", "system.clear_traces", ["confirmed"], .l2),
                 ]
                 #expect(OperationRegistry.specs.count == 107)
-                for (command, operationID, allowedParams) in expectedSpecs {
+                for (command, operationID, allowedParams, confirmation) in expectedSpecs {
                     let spec = OperationRegistry.spec(tool: "logic_system", command: command)
                     #expect(spec?.id.rawValue == operationID, "\(command) must have one public spec")
                     #expect(spec?.mutability == .readOnly, "\(command) must bypass mutation gating")
+                    #expect(spec?.confirmation == confirmation)
                     #expect(spec?.deadline == .short)
                     #expect(spec?.verification == VerificationPolicy.none)
                     #expect(spec?.allowedParams == allowedParams)
@@ -267,7 +254,7 @@ struct OperationCatalogTests {
                 let strictCases: [(String, [String: Value], [String])] = [
                     ("list_recent_traces", ["limit": .int(1)], ["limit"]),
                     ("get_trace", ["trace_id": .string(traceID.rawValue)], ["trace_id"]),
-                    ("clear_traces", [:], []),
+                    ("clear_traces", ["confirmed": .bool(true)], ["confirmed"]),
                 ]
                 for (command, validParams, allowedParams) in strictCases {
                     var params = validParams
@@ -327,11 +314,32 @@ struct OperationCatalogTests {
                 #expect(malformedBody["error"] as? String == "invalid_params")
                 #expect((malformedBody["hint"] as? String)?.contains("malformed") == true)
 
+                let unconfirmedCases: [[String: Value]] = [
+                    [:],
+                    ["confirmed": .bool(false)],
+                    ["confirmed": .string("true")],
+                ]
+                for params in unconfirmedCases {
+                    let unconfirmed = await handlers.callTool(.init(
+                        name: "logic_system",
+                        arguments: [
+                            "command": .string("clear_traces"),
+                            "params": .object(params),
+                        ]
+                    ))
+                    let unconfirmedBody = sharedJSONObject(sharedToolText(unconfirmed)) ?? [:]
+                    #expect(unconfirmed.isError == true)
+                    #expect(unconfirmedBody["state"] as? String == "C")
+                    #expect(unconfirmedBody["error"] as? String == "invalid_params")
+                    #expect((unconfirmedBody["hint"] as? String)?.contains("confirmed") == true)
+                    #expect(await OperationTraceStore.shared.trace(traceID) != nil)
+                }
+
                 let cleared = await handlers.callTool(.init(
                     name: "logic_system",
                     arguments: [
                         "command": .string("clear_traces"),
-                        "params": .object([:]),
+                        "params": .object(["confirmed": .bool(true)]),
                     ]
                 ))
                 let clearedBody = sharedJSONObject(sharedToolText(cleared)) ?? [:]
@@ -343,6 +351,56 @@ struct OperationCatalogTests {
                 throw error
             }
             await OperationTraceStore.shared.clear()
+        }
+    }
+
+    @Test("strict: advertised selectors use dispatcher proof or explicit live qualification")
+    func advertisedSelectorsUseDispatcherProofOrLiveQualification() async throws {
+        let handlers = await LogicProServer().makeHandlers()
+        let advertised = OperationRegistry.specs.flatMap { spec in
+            ["index", "track"].compactMap { key -> (OperationSpec, String)? in
+                spec.allowedParams.contains(key) ? (spec, key) : nil
+            }
+        }
+        let probes = advertised.filter {
+            !(Self.selectorsRequiringLiveQualificationByOperation[$0.0.id]?.contains($0.1) ?? false)
+        }
+
+        #expect(advertised.filter { $0.1 == "index" }.count == 17)
+        #expect(advertised.filter { $0.1 == "track" }.count == 16)
+        #expect(advertised.count == 33)
+        #expect(probes.filter { $0.1 == "index" }.count == 16)
+        #expect(probes.filter { $0.1 == "track" }.count == 13)
+        #expect(probes.count == 29)
+        #expect(Self.selectorsRequiringLiveQualificationByOperation.values.reduce(0) { $0 + $1.count } == 4)
+
+        for (id, keys) in Self.selectorsRequiringLiveQualificationByOperation {
+            let spec = OperationRegistry.specs.first { $0.id == id }
+            #expect(spec != nil, "\(id.rawValue) must remain registered")
+            if let spec {
+                #expect(spec.allowedParams.intersection(["index", "track"]) == keys)
+            }
+        }
+
+        for (spec, key) in probes {
+            let result = await handlers.callTool(.init(
+                name: spec.tool.rawValue,
+                arguments: [
+                    "command": .string(spec.command),
+                    "params": .object([key: .string("xx")]),
+                ]
+            ))
+            let body = try #require(
+                sharedJSONObject(sharedToolText(result)),
+                "\(spec.id.rawValue) malformed \(key) response must be typed JSON"
+            )
+            #expect(result.isError == true, "\(spec.id.rawValue) did not reject malformed \(key)")
+            #expect(body["state"] as? String == "C", "\(spec.id.rawValue).\(key)")
+            #expect(body["error"] as? String == "invalid_params", "\(spec.id.rawValue).\(key)")
+            #expect(
+                (body["hint"] as? String)?.contains(key) == true,
+                "\(spec.id.rawValue) response did not identify malformed \(key)"
+            )
         }
     }
 
@@ -516,12 +574,6 @@ struct OperationCatalogTests {
         ])
         #expect(OperationRegistry.legacyIgnoredParamsByOperation == Self.legacyIgnoredParams)
         #expect(OperationRegistry.dispatcherRejectedParamsByOperation == Self.dispatcherRejectedParams)
-        let expectedIndex = Set(Self.selectorParamsByOperation.compactMap { id, keys in
-            keys.contains("index") ? id : nil
-        })
-        let expectedTrack = Set(Self.selectorParamsByOperation.compactMap { id, keys in
-            keys.contains("track") ? id : nil
-        })
         let actualIndex = Set(OperationRegistry.specs.filter {
             $0.allowedParams.contains("index")
         }.map(\.id))
@@ -534,10 +586,8 @@ struct OperationCatalogTests {
         let targetBearing = Set(OperationRegistry.specs.filter {
             $0.target == .requiresStableTarget
         }.map(\.id))
-        #expect(expectedIndex.count == 17)
-        #expect(expectedTrack.count == 16)
-        #expect(actualIndex == expectedIndex)
-        #expect(actualTrack == expectedTrack)
+        #expect(actualIndex.count == 17)
+        #expect(actualTrack.count == 16)
         #expect(actualTargetRef == targetBearing)
         #expect(actualTargetRef.count == 13)
         for spec in OperationRegistry.specs {

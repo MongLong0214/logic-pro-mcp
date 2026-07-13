@@ -403,7 +403,7 @@ struct OperationRegistryTests {
             #expect(spec.tool == tool)
             #expect(spec.command == entry.command)
             #expect(spec.mutability == entry.mutability)
-            #expect(spec.confirmation == .none)
+            #expect(spec.confirmation == (id == .systemClearTraces ? .l2 : .none))
             #expect(spec.target == (id == .pluginsSetParamVerified ? .requiresStableTarget : .none))
             #expect(spec.verification == entry.verification)
             #expect(spec.retry == .neverAutomatic)

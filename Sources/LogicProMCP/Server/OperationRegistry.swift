@@ -482,7 +482,8 @@ enum OperationRegistry {
         (.systemRefreshCache, "refresh_cache", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, []),
         (.systemListRecentTraces, "list_recent_traces", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["limit"]),
         (.systemGetTrace, "get_trace", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["trace_id"]),
-        (.systemClearTraces, "clear_traces", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, []),
+        // WHY: trace deletion destroys internal evidence, not Logic state, so it stays readOnly and bypasses the Logic-write gate.
+        (.systemClearTraces, "clear_traces", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["confirmed"]),
         (.systemExportSupportBundle, "export_support_bundle", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired, ["dir"]),
         (.systemHelp, "help", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["category"]),
         (.systemSagaPreflight, "saga_preflight", Mutability.readOnly, DeadlineClass.medium, VerificationPolicy.none, ["idempotency_key", "steps"]),
@@ -495,7 +496,7 @@ enum OperationRegistry {
             tool: .logicSystem,
             command: entry.1,
             mutability: entry.2,
-            confirmation: .none,
+            confirmation: entry.0 == .systemClearTraces ? .l2 : .none,
             target: .none,
             verification: entry.4,
             retry: .neverAutomatic,

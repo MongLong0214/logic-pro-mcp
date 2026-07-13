@@ -260,7 +260,7 @@ struct OperationTraceTests {
 
         let clearResult = await SystemDispatcher.handle(
             command: "clear_traces",
-            params: [:],
+            params: ["confirmed": .bool(true)],
             router: router,
             cache: cache
         )

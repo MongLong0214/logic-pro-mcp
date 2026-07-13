@@ -208,7 +208,7 @@ Use `health` for channel readiness and `help` for command summaries. `help` acce
 
 With `LOGIC_MCP_ADR005_OPERATION_TRACE=1`, `list_recent_traces` returns bounded summaries from the in-process trace store and accepts optional `limit`.
 `get_trace` returns one stored trace by required `trace_id`.
-`clear_traces` clears only the in-process trace store.
+`clear_traces` clears only the in-process trace store and requires `confirmed:true` because it destroys in-session diagnostic evidence.
 
 `saga_preflight` and `saga_execute` accept `{ steps: [step], idempotency_key: String }`; each step contains `operation_id`, optional `target_ref`, `params`, and `expected_inverse`. Preflight performs no Logic writes and reports per-step before-state availability. Execute reports verified per-step evidence; a failed request remains State C even when every applied step is compensated, while partial or unknown compensation is State B.
 
