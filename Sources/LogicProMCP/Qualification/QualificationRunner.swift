@@ -36,6 +36,7 @@ struct QualificationRunner: Sendable {
     private struct QualifyOptions {
         let outputURL: URL
         let externalCasesURL: URL?
+        let waiversURL: URL?
         let releaseVersion: String
         let variant: LogicVariant
         let locale: QualificationLocale
@@ -102,6 +103,8 @@ struct QualificationRunner: Sendable {
         case invalidArguments(String)
         case missingOption(String)
         case invalidOption(String, String)
+        case malformedWaiver(caseID: String, field: String)
+        case duplicateWaiver(caseID: String)
         case releaseVersionMismatch(expected: String, actual: String)
         case executableUnavailable
 
@@ -110,6 +113,9 @@ struct QualificationRunner: Sendable {
             case .invalidArguments(let detail): detail
             case .missingOption(let option): "Missing required option: \(option)"
             case .invalidOption(let option, let value): "Invalid value for \(option): \(value)"
+            case .malformedWaiver(let caseID, let field):
+                "Malformed waiver \(caseID.isEmpty ? "<empty>" : caseID): invalid \(field)"
+            case .duplicateWaiver(let caseID): "Duplicate waiver for caseID: \(caseID)"
             case .releaseVersionMismatch(let expected, let actual):
                 "Release version does not match this binary: expected \(expected), got \(actual)"
             case .executableUnavailable: "Unable to resolve the running executable"
@@ -169,6 +175,7 @@ struct QualificationRunner: Sendable {
                 actual: options.releaseVersion
             )
         }
+        let waivers = try Self.loadWaivers(from: options.waiversURL)
         let startedAt = runtime.now()
         let executableData = try Data(contentsOf: runtime.executableURL(), options: .mappedIfSafe)
         let binarySHA256 = SupportBundleBuilder.sha256(executableData)
@@ -323,7 +330,7 @@ struct QualificationRunner: Sendable {
             failed: cases.filter { $0.status == .failed }.count,
             waived: cases.filter { $0.status == .waived }.count,
             cases: cases,
-            waivers: [],
+            waivers: waivers,
             evidenceManifestSHA256: SupportBundleBuilder.sha256(manifestData)
         )
         try Self.attestationData(attestation, cache: options.cache).write(
@@ -334,7 +341,7 @@ struct QualificationRunner: Sendable {
 
     private func parseQualifyOptions(_ arguments: [String]) throws -> QualifyOptions {
         let values = try Self.optionValues(arguments, allowed: [
-            "--out", "--cases", "--release-version", "--variant", "--locale", "--profile", "--cache",
+            "--out", "--cases", "--waivers", "--release-version", "--variant", "--locale", "--profile", "--cache",
         ])
         guard let output = values["--out"] else { throw RunnerError.missingOption("--out") }
         let environment = runtime.environment()
@@ -345,6 +352,7 @@ struct QualificationRunner: Sendable {
         return QualifyOptions(
             outputURL: URL(fileURLWithPath: output),
             externalCasesURL: values["--cases"].map(URL.init(fileURLWithPath:)),
+            waiversURL: values["--waivers"].map(URL.init(fileURLWithPath:)),
             releaseVersion: values["--release-version"] ?? environment["RELEASE_VERSION"] ?? "unknown",
             variant: variant,
             locale: locale,
@@ -460,6 +468,41 @@ struct QualificationRunner: Sendable {
                 reason: "expiredWaiver", caseID: caseID, key: nil,
                 name: nil, expected: nil, actual: nil
             )
+        case .waiverForUnknownCase(let caseID):
+            VerificationOutput.Rejection(
+                reason: "waiverForUnknownCase", caseID: caseID, key: nil,
+                name: nil, expected: nil, actual: nil
+            )
+        case .waiverForPassingCase(let caseID):
+            VerificationOutput.Rejection(
+                reason: "waiverForPassingCase", caseID: caseID, key: nil,
+                name: nil, expected: nil, actual: nil
+            )
+        case .waiverForNonWaivedCase(let caseID, let status):
+            VerificationOutput.Rejection(
+                reason: "waiverForNonWaivedCase", caseID: caseID, key: nil,
+                name: nil, expected: nil, actual: status.rawValue
+            )
+        case .waivedCaseMissingWaiver(let caseID):
+            VerificationOutput.Rejection(
+                reason: "waivedCaseMissingWaiver", caseID: caseID, key: nil,
+                name: nil, expected: nil, actual: nil
+            )
+        case .invalidWaiver(let caseID, let field):
+            VerificationOutput.Rejection(
+                reason: "invalidWaiver", caseID: caseID, key: field,
+                name: nil, expected: nil, actual: nil
+            )
+        case .duplicateWaiver(let caseID):
+            VerificationOutput.Rejection(
+                reason: "duplicateWaiver", caseID: caseID, key: nil,
+                name: nil, expected: nil, actual: nil
+            )
+        case .duplicateCaseID(let caseID):
+            VerificationOutput.Rejection(
+                reason: "duplicateCaseID", caseID: caseID, key: nil,
+                name: nil, expected: nil, actual: nil
+            )
         case .releaseVersionMismatch(let expected, let actual):
             VerificationOutput.Rejection(
                 reason: "releaseVersionMismatch", caseID: nil, key: nil,
@@ -511,6 +554,23 @@ struct QualificationRunner: Sendable {
     }
 
     private static let manifestFilename = "evidence-manifest.json"
+
+    private static func loadWaivers(from url: URL?) throws -> [QualificationWaiver] {
+        guard let url else { return [] }
+        let waivers = try JSONDecoder().decode(
+            [QualificationWaiver].self,
+            from: Data(contentsOf: url)
+        )
+        if let issue = QualificationWaiverValidator.issues(in: waivers).first {
+            switch issue {
+            case .invalidField(let caseID, let field):
+                throw RunnerError.malformedWaiver(caseID: caseID, field: field)
+            case .duplicateCaseID(let caseID):
+                throw RunnerError.duplicateWaiver(caseID: caseID)
+            }
+        }
+        return waivers
+    }
 
     private static func normalizedVersion(_ version: String) -> Substring {
         version.first == "v" || version.first == "V" ? version.dropFirst() : version[...]

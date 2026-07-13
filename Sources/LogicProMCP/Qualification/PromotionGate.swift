@@ -4,6 +4,13 @@ enum PromotionRejectionReason: Equatable, Sendable {
     case missingArtifact(name: String)
     case binarySHAMismatch(expected: String, actual: String)
     case expiredWaiver(caseID: String)
+    case waiverForUnknownCase(caseID: String)
+    case waiverForPassingCase(caseID: String)
+    case waiverForNonWaivedCase(caseID: String, status: QualificationStatus)
+    case waivedCaseMissingWaiver(caseID: String)
+    case invalidWaiver(caseID: String, field: String)
+    case duplicateWaiver(caseID: String)
+    case duplicateCaseID(caseID: String)
     case releaseVersionMismatch(expected: String, actual: String)
 }
 
@@ -41,6 +48,41 @@ struct PromotionGate {
         for artifact in requiredArtifacts.subtracting(presentArtifacts).sorted() {
             rejections.append(.missingArtifact(name: artifact))
         }
+        let casesByID = Dictionary(grouping: attestation.cases, by: \.id)
+        let duplicateCaseIDs = Set(casesByID.compactMap { caseID, cases in
+            cases.count > 1 ? caseID : nil
+        })
+        for caseID in duplicateCaseIDs.sorted() {
+            rejections.append(.duplicateCaseID(caseID: caseID))
+        }
+        for issue in QualificationWaiverValidator.issues(in: attestation.waivers) {
+            switch issue {
+            case .invalidField(let caseID, let field):
+                rejections.append(.invalidWaiver(caseID: caseID, field: field))
+            case .duplicateCaseID(let caseID):
+                rejections.append(.duplicateWaiver(caseID: caseID))
+            }
+        }
+        let waiverCaseIDs = Set(attestation.waivers.map(\.caseID))
+        for caseID in Set(attestation.cases.compactMap {
+            $0.status == .waived && !waiverCaseIDs.contains($0.id) ? $0.id : nil
+        }).sorted() {
+            rejections.append(.waivedCaseMissingWaiver(caseID: caseID))
+        }
+        for waiver in attestation.waivers {
+            guard let matchingCases = casesByID[waiver.caseID] else {
+                rejections.append(.waiverForUnknownCase(caseID: waiver.caseID))
+                continue
+            }
+            if matchingCases.contains(where: { $0.status == .passed }) {
+                rejections.append(.waiverForPassingCase(caseID: waiver.caseID))
+            } else if let nonWaived = matchingCases.first(where: { $0.status != .waived }) {
+                rejections.append(.waiverForNonWaivedCase(
+                    caseID: waiver.caseID,
+                    status: nonWaived.status
+                ))
+            }
+        }
         let expiredWaiverIDs = Set(attestation.waivers.compactMap { waiver in
             Self.isExpired(waiver.expiryVersion, at: releaseVersion) ? waiver.caseID : nil
         })
@@ -58,8 +100,8 @@ struct PromotionGate {
                 .first
             if let failedCaseID {
                 rejections.append(.requiredCaseFailed(caseID: failedCaseID))
-            } else if Set(matchingCases.map(\.id)).count != matchingCases.count {
-                rejections.append(.requiredCombinationNotQualified(key: axis.key))
+            } else if matchingCases.contains(where: { duplicateCaseIDs.contains($0.id) }) {
+                continue
             } else if !matchingCases.contains(where: {
                 $0.status == .passed && $0.verified && !$0.evidenceFiles.isEmpty
             }) {
@@ -95,7 +137,7 @@ struct PromotionGate {
     }
 }
 
-private struct SemanticVersion: Comparable {
+struct SemanticVersion: Comparable {
     let major: Int
     let minor: Int
     let patch: Int

@@ -138,6 +138,82 @@ struct QualificationRunnerTests {
         #expect(attestation.total == 6)
     }
 
+    @Test func waiverIngestionEmbedsValidatedSet() async throws {
+        let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)))
+        defer { fixture.remove() }
+        let waiver = Self.waiver(caseID: "optional/live-case")
+        try JSONEncoder().encode([waiver]).write(to: fixture.waiversURL)
+
+        let result = await fixture.runner.run(arguments: [
+            "LogicProMCP", "--qualify",
+            "--out", fixture.attestationURL.path,
+            "--waivers", fixture.waiversURL.path,
+            "--release-version", "1.2.3",
+        ])
+
+        #expect(result.exitCode == 0)
+        let attestation = try JSONDecoder().decode(
+            ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL)
+        )
+        #expect(attestation.waivers == [waiver])
+    }
+
+    @Test func malformedWaiverRejectsQualify() async throws {
+        let invalidWaivers: [(field: String, waiver: QualificationWaiver)] = [
+            ("caseID", Self.waiver(caseID: "")),
+            ("reasonCode", Self.waiver(caseID: "optional/live-case", reasonCode: "unknown")),
+            ("owningIssue", Self.waiver(caseID: "optional/live-case", owningIssue: "")),
+            ("userImpact", Self.waiver(caseID: "optional/live-case", userImpact: "")),
+            ("affectedCapability", Self.waiver(caseID: "optional/live-case", affectedCapability: "")),
+            ("expiryVersion", Self.waiver(caseID: "optional/live-case", expiryVersion: "soon")),
+        ]
+
+        for invalid in invalidWaivers {
+            let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)))
+            defer { fixture.remove() }
+            try JSONEncoder().encode([invalid.waiver]).write(to: fixture.waiversURL)
+
+            let result = await fixture.runner.run(arguments: [
+                "LogicProMCP", "--qualify",
+                "--out", fixture.attestationURL.path,
+                "--waivers", fixture.waiversURL.path,
+                "--release-version", "1.2.3",
+            ])
+
+            #expect(result.exitCode != 0)
+            #expect(result.stderr.contains(invalid.field))
+            #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
+            #expect(!FileManager.default.fileExists(atPath: fixture.manifestURL.path))
+            #expect(!FileManager.default.fileExists(
+                atPath: fixture.directory.appendingPathComponent("evidence").path
+            ))
+        }
+    }
+
+    @Test func duplicateWaiverRejectsQualify() async throws {
+        let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)))
+        defer { fixture.remove() }
+        let waiver = Self.waiver(caseID: "optional/live-case")
+        try JSONEncoder().encode([waiver, waiver]).write(to: fixture.waiversURL)
+
+        let result = await fixture.runner.run(arguments: [
+            "LogicProMCP", "--qualify",
+            "--out", fixture.attestationURL.path,
+            "--waivers", fixture.waiversURL.path,
+            "--release-version", "1.2.3",
+        ])
+
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("Duplicate waiver"))
+        #expect(result.stderr.contains(waiver.caseID))
+        #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
+        #expect(!FileManager.default.fileExists(atPath: fixture.manifestURL.path))
+        #expect(!FileManager.default.fileExists(
+            atPath: fixture.directory.appendingPathComponent("evidence").path
+        ))
+    }
+
     @Test func sameSHAApprovesWithExitZero() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }
@@ -265,6 +341,72 @@ struct QualificationRunnerTests {
         #expect(reasons.contains("missingArtifact"))
         #expect(reasons.contains("expiredWaiver"))
         #expect(reasons.contains("releaseVersionMismatch"))
+    }
+
+    @Test func verificationEmitsWaiverAndDuplicateRejectionsThroughCLI() async throws {
+        let fixture = try Fixture(specs: OperationRegistry.specs)
+        defer { fixture.remove() }
+        let original = try await fixture.qualify()
+        let passedCase = try #require(original.cases.first)
+        let changed = fixture.copy(
+            original,
+            cases: original.cases + [passedCase],
+            waivers: [
+                Self.waiver(caseID: "missing-case"),
+                Self.waiver(caseID: passedCase.id),
+            ]
+        )
+        try JSONEncoder().encode(changed).write(to: fixture.attestationURL)
+
+        let result = await fixture.verify(
+            expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData)
+        )
+        let reasons = Self.rejectionReasons(try Self.resultObject(result))
+
+        #expect(result.exitCode != 0)
+        #expect(reasons.contains("duplicateCaseID"))
+        #expect(reasons.contains("waiverForUnknownCase"))
+        #expect(reasons.contains("waiverForPassingCase"))
+    }
+
+    @Test func verificationRejectsMalformedDuplicateAndImplicitWaivers() async throws {
+        let fixture = try Fixture(specs: OperationRegistry.specs)
+        defer { fixture.remove() }
+        let original = try await fixture.qualify()
+        let first = try #require(original.cases.first)
+        let waivedCase = QualificationCase(
+            id: first.id,
+            status: .waived,
+            tool: first.tool,
+            command: first.command,
+            traceID: first.traceID,
+            verified: false,
+            evidenceFiles: first.evidenceFiles
+        )
+        var cases = original.cases
+        cases[0] = waivedCase
+        let validWaiver = Self.waiver(caseID: waivedCase.id)
+        let scenarios: [(waivers: [QualificationWaiver], reason: String)] = [
+            ([Self.waiver(caseID: waivedCase.id, reasonCode: "unsupported-reason")], "invalidWaiver"),
+            ([Self.waiver(caseID: waivedCase.id, owningIssue: "")], "invalidWaiver"),
+            ([validWaiver, validWaiver], "duplicateWaiver"),
+            ([], "waivedCaseMissingWaiver"),
+        ]
+
+        for scenario in scenarios {
+            try JSONEncoder().encode(fixture.copy(
+                original,
+                cases: cases,
+                waivers: scenario.waivers
+            )).write(to: fixture.attestationURL)
+
+            let result = await fixture.verify(
+                expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData)
+            )
+
+            #expect(result.exitCode != 0)
+            #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(scenario.reason))
+        }
     }
 
     @Test func rebuildAfterQualificationRejects() async throws {
@@ -409,6 +551,7 @@ struct QualificationRunnerTests {
 
         #expect(result == 0)
         #expect(stdout.contains("--qualify --out <attestation.json>"))
+        #expect(stdout.contains("--waivers <waivers.json>"))
         #expect(stdout.contains("--verify-promotion --attestation <attestation.json>"))
         #expect(stdout.contains("--expected-binary-sha256 <hex>"))
     }
@@ -427,10 +570,16 @@ struct QualificationRunnerTests {
         #expect(gateText.contains("shasum -a 256 LogicProMCP"))
         #expect(gateText.contains("./LogicProMCP --qualify"))
         #expect(gateText.contains("--out release-qualification-attestation.json"))
+        #expect(gateText.contains("--waivers .github/qualification/waivers.json"))
         #expect(gateText.contains("./LogicProMCP --verify-promotion"))
         #expect(gateText.contains("--expected-binary-sha256 \"$binary_sha256\""))
         #expect(gateText.contains("--release-version \"$RELEASE_VERSION\""))
         #expect(!gateText.contains("swift build"))
+        let waiverData = try Data(contentsOf: URL(
+            fileURLWithPath: ".github/qualification/waivers.json"
+        ))
+        let waiverArray = try #require(JSONSerialization.jsonObject(with: waiverData) as? [Any])
+        #expect(waiverArray.isEmpty)
         #expect(workflow.contains("tags:"))
         #expect(workflow.contains("validate-install:"))
         #expect(workflow.contains("needs: build"))
@@ -446,6 +595,26 @@ struct QualificationRunnerTests {
         return Set(rejections.compactMap { $0["reason"] as? String })
     }
 
+    private static func waiver(
+        caseID: String,
+        reasonCode: String = "known-limitation",
+        owningIssue: String = "#284",
+        userImpact: String = "Optional capability unavailable",
+        affectedCapability: String = "optional-capability",
+        expiryVersion: String = "1.3.0"
+    ) -> QualificationWaiver {
+        QualificationWaiver(
+            caseID: caseID,
+            reasonCode: reasonCode,
+            owningIssue: owningIssue,
+            userImpact: userImpact,
+            affectedCapability: affectedCapability,
+            affectsDefaultProfile: false,
+            expiryVersion: expiryVersion,
+            releaseNoteVisible: true
+        )
+    }
+
     private actor MockQualificationServer: ServerStarting {
         func start() async throws {}
         func stop() async {}
@@ -458,6 +627,7 @@ struct QualificationRunnerTests {
         let attestationURL: URL
         let manifestURL: URL
         let externalCasesURL: URL
+        let waiversURL: URL
         let commitSHA = String(repeating: "c", count: 40)
         let runner: QualificationRunner
 
@@ -469,6 +639,7 @@ struct QualificationRunnerTests {
             attestationURL = directory.appendingPathComponent("attestation.json")
             manifestURL = directory.appendingPathComponent("evidence-manifest.json")
             externalCasesURL = directory.appendingPathComponent("cases.json")
+            waiversURL = directory.appendingPathComponent("waivers.json")
             try executableData.write(to: executableURL)
             runner = QualificationRunner(runtime: .init(
                 executableURL: { [executableURL] in executableURL },
