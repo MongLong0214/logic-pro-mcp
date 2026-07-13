@@ -51,6 +51,8 @@ struct ResourceProviderTests {
 
         #expect(uris.contains("logic://workflow-skills/{id}"))
         #expect(uris.contains("logic://workflow-skills/search?query={query}"))
+        #expect(uris.contains("logic://system/operations"))
+        #expect(uris.count == 12)
     }
 
     @Test("every static resource URI maps to a handler")
@@ -88,6 +90,7 @@ struct ResourceProviderTests {
             "logic://workflow-skills/logic.workflow.plugins.stock_chain_plan",
             "logic://workflow-skills/search?query=plugin",
             "logic://workflow-plans/session?prompt=16-bar%20funk%20in%20E%20minor%20at%20110%20BPM",
+            "logic://system/operations",
 
         ]
         for uri in probes {
@@ -145,11 +148,16 @@ struct ResourceProviderTests {
 
     // MARK: - Template placeholders
 
-    @Test("template URIs include placeholder tokens in {braces}")
+    @Test("template URIs are parameterized except the exact ADR-003 operation catalog")
     func templatePlaceholders() {
         for t in ResourceProvider.templates {
-            #expect(t.uriTemplate.contains("{"))
-            #expect(t.uriTemplate.contains("}"))
+            if t.uriTemplate == "logic://system/operations" {
+                #expect(!t.uriTemplate.contains("{"))
+                #expect(!t.uriTemplate.contains("}"))
+            } else {
+                #expect(t.uriTemplate.contains("{"))
+                #expect(t.uriTemplate.contains("}"))
+            }
         }
     }
 }

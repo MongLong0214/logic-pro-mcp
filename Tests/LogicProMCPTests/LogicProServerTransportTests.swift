@@ -428,6 +428,7 @@ private func waitForFeedbackEvents(
 
         "logic://workflow-skills/{id}",
         "logic://workflow-skills/search?query={query}",
+        "logic://system/operations",
     ]
     #expect(expectedTemplates.isSubset(of: Set(snapshot.templateURIs)))
     #expect(snapshot.startupBanner == "Starting logic-pro-mcp v3.11.0 — 10 tools, \(snapshot.resourceURIs.count) resources, 4 channels")

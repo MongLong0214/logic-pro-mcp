@@ -241,7 +241,7 @@ final class LogicMutationGate: @unchecked Sendable {
 }
 
 /// Main MCP server for Logic Pro integration.
-/// Exposes 10 dispatcher tools + 18 resources + 11 templates, routing through
+/// Exposes 10 dispatcher tools + 18 resources + 12 templates, routing through
 /// the ChannelRouter to the appropriate macOS communication channel.
 actor LogicProServer {
     private let server: Server
@@ -410,7 +410,22 @@ actor LogicProServer {
             callTool: { params in
                 let name = params.name
                 let command = params.arguments?["command"]?.stringValue ?? ""
-                let cmdParams: [String: Value] = params.arguments?["params"]?.objectValue ?? [:]
+                let rawCmdParams = params.arguments?["params"]
+                if let invalidParams = Self.strictParamContainerValidationResult(
+                    tool: name,
+                    command: command,
+                    params: rawCmdParams
+                ) {
+                    return invalidParams
+                }
+                let cmdParams: [String: Value] = rawCmdParams?.objectValue ?? [:]
+                if let invalidParams = Self.strictParamValidationResult(
+                    tool: name,
+                    command: command,
+                    params: cmdParams
+                ) {
+                    return invalidParams
+                }
 
                 await cache.recordToolAccess()
 
@@ -838,6 +853,61 @@ actor LogicProServer {
         return nil
     }
 
+    static func strictParamValidationResult(
+        tool: String,
+        command: String,
+        params: [String: Value]
+    ) -> CallTool.Result? {
+        guard let spec = strictValidationSpec(tool: tool, command: command) else { return nil }
+
+        let recognizedParams = spec.allowedParams.union(
+            OperationRegistry.dispatcherRejectedParamsByOperation[spec.id] ?? []
+        )
+        let unknownParams = Set(params.keys).subtracting(recognizedParams).sorted()
+        guard !unknownParams.isEmpty else { return nil }
+
+        let allowedParams = spec.allowedParams.sorted()
+        return toolInvalidParamsResult(
+            "Unknown parameters: \(unknownParams.joined(separator: ", ")). "
+                + "Allowed parameters: \(allowedParams.joined(separator: ", ")).",
+            extras: [
+                "allowed_params": allowedParams,
+                "operation": spec.id.rawValue,
+                "unknown_params": unknownParams,
+                "write_attempted": false,
+            ]
+        )
+    }
+
+    static func strictParamContainerValidationResult(
+        tool: String,
+        command: String,
+        params: Value?
+    ) -> CallTool.Result? {
+        guard let spec = strictValidationSpec(tool: tool, command: command),
+              let params,
+              params.objectValue == nil else {
+            return nil
+        }
+        return toolInvalidParamsResult(
+            "Parameters for \(spec.id.rawValue) must be an object.",
+            extras: [
+                "expected_params_type": "object",
+                "operation": spec.id.rawValue,
+                "write_attempted": false,
+            ]
+        )
+    }
+
+    private static func strictValidationSpec(tool: String, command: String) -> OperationSpec? {
+        guard FeatureFlags.adr003StrictParams,
+              let spec = OperationRegistry.spec(tool: tool, command: command),
+              !OperationRegistry.strictParamValidationOptOuts.contains(spec.id) else {
+            return nil
+        }
+        return spec
+    }
+
     private func registerTools() async {
         let handlers = makeHandlers(dialogPresent: { AXLogicProElements.dialogPresent() })
         await server.withMethodHandler(ListTools.self) { params in
@@ -854,7 +924,7 @@ actor LogicProServer {
         }
     }
 
-    // MARK: - Resource Registration (18 resources + 11 templates)
+    // MARK: - Resource Registration (18 resources + 12 templates)
 
     private func registerResources() async {
         let handlers = makeHandlers()

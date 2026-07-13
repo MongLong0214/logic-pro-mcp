@@ -14,7 +14,7 @@ A local Model Context Protocol (MCP) server that lets Claude Code, Claude Deskto
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-0.10-blue.svg?style=flat-square" /></a>
   <a href="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml"><img src="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
-  <img src="https://img.shields.io/badge/tests-2264_passing-brightgreen.svg?style=flat-square" />
+  <img src="https://img.shields.io/badge/tests-2271_passing-brightgreen.svg?style=flat-square" />
   <img src="https://img.shields.io/badge/stable-v3.11.0-blue.svg?style=flat-square" />
 </p>
 
@@ -55,10 +55,10 @@ Logic Pro MCP: region imported, instrument routed, readback exposed through reso
 |---------|---------------------|
 | MCP tools | 10 tools covering transport, tracks, mixer, MIDI, edit, navigation, project lifecycle, audio artifact analysis, system health, and verified plugin apply-back |
 | Read resources | 18 static resources for health, transport, tracks, mixer, markers, project metadata, project audit/cleanup planning, MIDI ports, MCU state, library inventory, stock plugin/instrument intelligence, Session Players, and workflow skills |
-| Resource templates | 11 templates for track, region, mixer-strip, stock plugin detail/search, stock instrument detail/search, Session Player detail, session-plan dry run, and workflow detail/search lookup |
+| Resource templates | 12 templates for the generated operation catalog, track, region, mixer-strip, stock plugin detail/search, stock instrument detail/search, Session Player detail, session-plan dry run, and workflow detail/search lookup |
 | Control channels | MCU, Accessibility, AppleScript, CoreMIDI, CGEvent, Scripter, MIDI Key Commands |
 | Supported Logic Pro | **Latest Logic Pro first** — desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`) and Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`). Same MCP server controls both; bundle ID and process name differ. Set `LOGIC_PRO_BUNDLE_ID` to force a variant when both are installed. Logic Pro 12.3 is the first-class, actively-validated target (macOS 15.6+); older versions down to 12.0.1 are best-effort |
-| Verification line | Current source tree (v3.11.0): `2264` Swift tests + release build. The last full strict live Logic E2E ran on the v3.8.0 line (`372/373`); v3.9.0's two live-only surfaces (MIDI export read-back, Channel EQ verified params) were spike-tested against live Logic 12.3 and **honestly deferred** — see the CHANGELOG **Deferred** section. v3.11.0 keeps the v3.10.0 Creator Studio support, v3.9.2 plugin-window proof, and adds targeted live Logic 12.3 QA for tempo fallback, native Bounce, partial region metadata, marker creation/readability, Count In, Step Input, and help categories |
+| Verification line | Current source tree (v3.11.0): `2271` Swift tests + release build. The last full strict live Logic E2E ran on the v3.8.0 line (`372/373`); v3.9.0's two live-only surfaces (MIDI export read-back, Channel EQ verified params) were spike-tested against live Logic 12.3 and **honestly deferred** — see the CHANGELOG **Deferred** section. v3.11.0 keeps the v3.10.0 Creator Studio support, v3.9.2 plugin-window proof, and adds targeted live Logic 12.3 QA for tempo fallback, native Bounce, partial region metadata, marker creation/readability, Count In, Step Input, and help categories |
 | Release state | Published stable [v3.11.0](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.11.0); previous stable `v3.10.0` remains available for pinned installs |
 
 If this project helps you make music with Claude, Cursor, or any MCP client, star the repo. It helps the project reach more Logic Pro users and maintainers.
@@ -248,7 +248,7 @@ MCP clients launch the Swift stdio server. Dispatchers validate tool parameters,
 | Document | Audience | Purpose |
 |----------|----------|---------|
 | [Setup Guide](docs/SETUP.md) | End users | Install, MCP registration, Logic Pro integration, doctor anchors |
-| [API Reference](docs/API.md) | End users, MCP clients | All 10 tools, 18 resources, 11 templates, Honest Contract, verified apply-back |
+| [API Reference](docs/API.md) | End users, MCP clients | All 10 tools, 18 resources, 12 templates, Honest Contract, verified apply-back |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | End users | Common failures and fixes |
 | [Security Policy](SECURITY.md) | Security reviewers | Threat model, reporting, hardening |
 | [Changelog](CHANGELOG.md) | Everyone | Per-release changes |
@@ -266,7 +266,7 @@ The public docs tree is intentionally scoped: setup, API, troubleshooting, READM
 
 | Gate | Current evidence |
 |------|------------------|
-| Full deterministic suite | Current source tree: `swift test --no-parallel` -> `2264` passed, `0` failed |
+| Full deterministic suite | Current source tree: `swift test --no-parallel` -> `2271` passed, `0` failed |
 | Release build | Current source tree: `swift build -c release` passed |
 | Python E2E syntax | PR #24 verification: `python3 -m py_compile Scripts/live-e2e-test.py` passed |
 | Targeted live plugin proof | Logic Pro 12.2: `logic_plugins.insert_verified track=6 insert=6 plugin=Gain` returned State A with `observed_slot:6`, `write_source:"ax_exact_slot_popup"`, and independent `get_inventory` readback |

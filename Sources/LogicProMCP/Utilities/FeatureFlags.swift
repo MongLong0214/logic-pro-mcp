@@ -3,6 +3,7 @@ import Foundation
 enum FeatureFlags: Sendable {
     #if DEBUG
     @TaskLocal static var adr002TargetRefOverride: Bool?
+    @TaskLocal static var adr003StrictParamsOverride: Bool?
     @TaskLocal static var adr004MutationSagaOverride: Bool?
     @TaskLocal static var adr005OperationTraceOverride: Bool?
     #endif
@@ -20,6 +21,22 @@ enum FeatureFlags: Sendable {
         operation: () async throws -> Result
     ) async rethrows -> Result {
         try await $adr002TargetRefOverride.withValue(value, operation: operation)
+    }
+    #endif
+
+    static var adr003StrictParams: Bool {
+        #if DEBUG
+        if let adr003StrictParamsOverride { return adr003StrictParamsOverride }
+        #endif
+        return ProcessInfo.processInfo.environment["LOGIC_MCP_ADR003_STRICT_PARAMS"] != "0"
+    }
+
+    #if DEBUG
+    static func withAdr003StrictParamsForTests<Result>(
+        _ value: Bool,
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        try await $adr003StrictParamsOverride.withValue(value, operation: operation)
     }
     #endif
 

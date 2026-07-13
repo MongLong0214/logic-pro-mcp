@@ -1,7 +1,7 @@
 {
   "name": "logic-pro-mcp",
   "display_name": "Logic Pro MCP Server",
-  "description": "Production-oriented MCP server for Logic Pro. Gives Claude, Cursor, and custom MCP agents stateful DAW control, live project readback, MIDI composition, mixer/plugin operations, and fail-closed safety gates across 10 tools + 18 resources + 11 templates.",
+  "description": "Production-oriented MCP server for Logic Pro. Gives Claude, Cursor, and custom MCP agents stateful DAW control, live project readback, MIDI composition, mixer/plugin operations, and fail-closed safety gates across 10 tools + 18 resources + 12 templates.",
   "version": "3.11.0",
   "author": "Isaac (MongLong0214)",
   "license": "MIT",
@@ -95,6 +95,7 @@
     "logic://workflow-skills/schema"
   ],
   "resource_templates": [
+    "logic://system/operations",
     "logic://tracks/{index}",
     "logic://tracks/{index}/regions",
     "logic://mixer/{strip}",

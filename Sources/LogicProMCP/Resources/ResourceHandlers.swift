@@ -27,6 +27,15 @@ extension ResourceHandlers {
         if uri == "logic://system/health" {
             return try await readSystemHealth(cache: cache, router: router, uri: uri)
         }
+        if uri == "logic://system/operations" {
+            return ReadResource.Result(contents: [
+                .text(
+                    encodeJSON(OperationCatalog.snapshot(), compact: true),
+                    uri: uri,
+                    mimeType: "application/json"
+                )
+            ])
+        }
 
         await cache.recordToolAccess()
 

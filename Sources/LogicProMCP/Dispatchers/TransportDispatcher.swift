@@ -140,12 +140,14 @@ struct TransportDispatcher: OperationTraceDispatching {
             // v3.0.0 a legacy `time` alias was silently accepted; callers that
             // never updated their schema would silently seek to bar 1. Now the
             // tool fails closed and surfaces exactly which key was wrong.
-            let allowedKeys: Set<String> = ["bar", "position"]
+            let allowedKeys = FeatureFlags.adr003StrictParams
+                ? Set<String>(["bar", "position"]).union(OperationRegistry.commonAllowedParams)
+                : Set<String>(["bar", "position"])
             let unknownKeys = params.keys.filter { !allowedKeys.contains($0) }
             if !unknownKeys.isEmpty {
                 let sorted = unknownKeys.sorted().joined(separator: ", ")
                 return toolTextResult(
-                    "goto_position got unknown param(s): \(sorted). Allowed: bar, position. The legacy 'time' alias was removed in v3.0.0.",
+                    "goto_position got unknown param(s): \(sorted). Allowed: \(allowedKeys.sorted().joined(separator: ", ")). The legacy 'time' alias was removed in v3.0.0.",
                     isError: true
                 )
             }
