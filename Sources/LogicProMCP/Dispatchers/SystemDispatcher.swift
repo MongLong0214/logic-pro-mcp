@@ -189,8 +189,7 @@ struct SystemDispatcher: OperationTraceDispatching {
     ) async -> CallTool.Result {
         switch command {
         case "list_recent_traces", "get_trace", "clear_traces":
-            guard FeatureFlags.adr005OperationTrace,
-                  let traceResult = await handleTraceCommand(command: command, params: params) else {
+            guard let traceResult = await handleTraceCommand(command: command, params: params) else {
                 return unknownCommandResult(command)
             }
             return traceResult
@@ -650,7 +649,7 @@ struct SystemDispatcher: OperationTraceDispatching {
 
     private static func unknownCommandResult(_ command: String) -> CallTool.Result {
         toolTextResult(
-            "Unknown system command: \(command). Available: health, permissions, refresh_cache, export_support_bundle, saga_preflight, saga_execute, saga_status, saga_cancel, help",
+            "Unknown system command: \(command). Available: health, permissions, refresh_cache, export_support_bundle, list_recent_traces, get_trace, clear_traces, saga_preflight, saga_execute, saga_status, saga_cancel, help",
             isError: true
         )
     }
@@ -668,6 +667,13 @@ struct SystemDispatcher: OperationTraceDispatching {
                 limit = min(max(0, requested), OperationTraceStore.defaultMaximumTraceCount)
             } else {
                 return toolInvalidParamsResult("list_recent_traces 'limit' must be an integer")
+            }
+            guard FeatureFlags.adr005OperationTrace else {
+                return toolTextResult(HonestContract.jsonString([
+                    "note": "trace_disabled",
+                    "trace_disabled": true,
+                    "traces": [],
+                ]))
             }
             let traces = await OperationTraceStore.shared.recent(limit: limit)
             let summaries: [[String: Any]] = traces.map { trace in
@@ -691,6 +697,17 @@ struct SystemDispatcher: OperationTraceDispatching {
             }
             guard TraceID.isValid(rawID) else {
                 return toolInvalidParamsResult("get_trace 'trace_id' is malformed")
+            }
+            guard FeatureFlags.adr005OperationTrace else {
+                return toolStateCResult(
+                    .notSupported,
+                    hint: "Operation tracing is disabled; set LOGIC_MCP_ADR005_OPERATION_TRACE=1",
+                    extras: [
+                        "operation": "system.get_trace",
+                        "trace_disabled": true,
+                        "write_attempted": false,
+                    ]
+                )
             }
             guard let trace = await OperationTraceStore.shared.trace(TraceID(rawValue: rawID)) else {
                 return toolStateCResult(
@@ -721,6 +738,13 @@ struct SystemDispatcher: OperationTraceDispatching {
                 return toolInvalidParamsResult(
                     "clear_traces requires 'confirmed:true' because it destroys in-process diagnostic evidence"
                 )
+            }
+            guard FeatureFlags.adr005OperationTrace else {
+                return toolTextResult(HonestContract.jsonString([
+                    "note": "trace_disabled",
+                    "success": true,
+                    "trace_disabled": true,
+                ]))
             }
             await OperationTraceStore.shared.clear()
             return toolTextResult(HonestContract.jsonString(["success": true]))

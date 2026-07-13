@@ -299,22 +299,61 @@ struct OperationTraceTests {
         #expect(sharedJSONObject(sharedToolText(unknown))?["error"] as? String == "element_not_found")
     }
 
-    @Test func OperationTraceSystemFlagOff() async {
-        let previous = replaceOperationTraceFlag(with: nil)
-        defer { _ = replaceOperationTraceFlag(with: previous) }
+    @Test func OperationTraceSystemFlagOffReturnsTypedDisabledResponses() async {
         let router = ChannelRouter()
         let cache = StateCache()
+        await OperationTraceStore.shared.clear()
+        let traceID = await OperationTraceStore.shared.start(operationID: "test.flag-off.seed")
+        await OperationTraceStore.shared.complete(traceID)
 
-        for command in ["list_recent_traces", "get_trace", "clear_traces"] {
-            let result = await SystemDispatcher.handle(
-                command: command, params: [:], router: router, cache: cache
+        await FeatureFlags.withAdr005OperationTraceForTests(false) {
+            let listed = await SystemDispatcher.handle(
+                command: "list_recent_traces",
+                params: ["limit": .int(1)],
+                router: router,
+                cache: cache
             )
-            #expect(result.isError == true)
-            #expect(
-                sharedToolText(result)
-                    == "Unknown system command: \(command). Available: health, permissions, refresh_cache, export_support_bundle, saga_preflight, saga_execute, saga_status, saga_cancel, help"
+            let listedBody = sharedJSONObject(sharedToolText(listed)) ?? [:]
+            #expect(listed.isError != true)
+            #expect((listedBody["traces"] as? [Any])?.isEmpty == true)
+            #expect(listedBody["note"] as? String == "trace_disabled")
+
+            let fetched = await SystemDispatcher.handle(
+                command: "get_trace",
+                params: ["trace_id": .string(traceID.rawValue)],
+                router: router,
+                cache: cache
             )
+            let fetchedBody = sharedJSONObject(sharedToolText(fetched)) ?? [:]
+            #expect(fetched.isError == true)
+            #expect(fetchedBody["state"] as? String == "C")
+            #expect(fetchedBody["error"] as? String == "not_supported")
+            #expect(fetchedBody["trace_disabled"] as? Bool == true)
+            #expect(fetchedBody["write_attempted"] as? Bool == false)
+
+            let unconfirmed = await SystemDispatcher.handle(
+                command: "clear_traces",
+                params: [:],
+                router: router,
+                cache: cache
+            )
+            #expect(unconfirmed.isError == true)
+            #expect(sharedJSONObject(sharedToolText(unconfirmed))?["error"] as? String == "invalid_params")
+            #expect(await OperationTraceStore.shared.trace(traceID) != nil)
+
+            let cleared = await SystemDispatcher.handle(
+                command: "clear_traces",
+                params: ["confirmed": .bool(true)],
+                router: router,
+                cache: cache
+            )
+            let clearedBody = sharedJSONObject(sharedToolText(cleared)) ?? [:]
+            #expect(cleared.isError != true)
+            #expect(clearedBody["success"] as? Bool == true)
+            #expect(clearedBody["note"] as? String == "trace_disabled")
+            #expect(await OperationTraceStore.shared.trace(traceID) != nil)
         }
+        await OperationTraceStore.shared.clear()
     }
 }
 

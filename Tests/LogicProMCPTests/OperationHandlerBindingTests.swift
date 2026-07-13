@@ -89,8 +89,8 @@ struct OperationHandlerBindingTests {
         #expect(missing.phantom.isEmpty)
     }
 
-    @Test("unregistered dispatcher cases have no MCP fallback")
-    func unregisteredDispatcherCasesHaveNoFallback() {
+    @Test("only deliberate not-exposed stubs have an unregistered MCP fallback")
+    func onlyNotExposedStubsHaveUnregisteredFallback() {
         for (tool, commands) in Self.directOnlyCommandsByTool {
             #expect(commands.isDisjoint(with: Self.handledCommandsByTool[tool] ?? []))
             for command in commands {
@@ -110,15 +110,27 @@ struct OperationHandlerBindingTests {
             (ToolID.logicMixer.rawValue, "toggle_eq"),
             (ToolID.logicMixer.rawValue, "reset_strip"),
             (ToolID.logicMixer.rawValue, "bypass_plugin"),
-            (ToolID.logicTracks.rawValue, "__unknown__"),
         ]
 
         for (tool, command) in typedStubs {
+            #expect(OperationRegistry.spec(tool: tool, command: command) == nil)
             #expect(
-                OperationHandlerRegistry.fallbackHandler(tool: tool, command: command) == nil,
-                "\(tool).\(command) unexpectedly reaches a dispatcher fallback"
+                OperationHandlerRegistry.fallbackHandler(tool: tool, command: command) != nil,
+                "\(tool).\(command) must reach its typed dispatcher stub"
             )
         }
+
+        #expect(TrackDispatcher.notExposedCommands == ["set_color"])
+        #expect(MixerDispatcher.notExposedCommands == [
+            "set_send", "set_output", "set_input", "toggle_eq", "reset_strip", "bypass_plugin",
+        ])
+        #expect(TrackDispatcher.notExposedCommands.isDisjoint(with: TrackDispatcher.handledCommands))
+        #expect(MixerDispatcher.notExposedCommands.isDisjoint(with: MixerDispatcher.handledCommands))
+
+        #expect(OperationHandlerRegistry.fallbackHandler(
+            tool: ToolID.logicTracks.rawValue,
+            command: "__unknown__"
+        ) == nil)
     }
 
     @Test("registry exactly binds every operation spec once")
@@ -220,31 +232,51 @@ struct OperationHandlerBindingTests {
         }
     }
 
-    @Test("known tools reject unregistered commands before dispatcher fallback")
-    func knownToolsRejectUnregisteredCommands() async throws {
+    @Test("known not-exposed commands reach typed stubs while truly unknown commands stay rejected")
+    func knownNotExposedCommandsReachTypedStubsAndUnknownCommandsStayRejected() async throws {
         let server = LogicProServer()
         let handlers = await server.makeHandlers()
-        let cases = [
-            (ToolID.logicTracks.rawValue, "library"),
+        let notExposedCases = [
             (ToolID.logicTracks.rawValue, "set_color"),
-            (ToolID.logicTracks.rawValue, "__operation_handler_binding_unknown__"),
+            (ToolID.logicMixer.rawValue, "set_send"),
+            (ToolID.logicMixer.rawValue, "set_output"),
+            (ToolID.logicMixer.rawValue, "set_input"),
+            (ToolID.logicMixer.rawValue, "toggle_eq"),
+            (ToolID.logicMixer.rawValue, "reset_strip"),
+            (ToolID.logicMixer.rawValue, "bypass_plugin"),
         ]
 
-        for (tool, command) in cases {
+        for (tool, command) in notExposedCases {
             let result = await handlers.callTool(.init(
                 name: tool,
                 arguments: ["command": .string(command)]
             ))
             let body = try #require(sharedJSONObject(sharedToolText(result)))
             #expect(OperationHandlerRegistry.handler(tool: tool, command: command) == nil)
-            #expect(OperationHandlerRegistry.fallbackHandler(tool: tool, command: command) == nil)
+            #expect(OperationHandlerRegistry.fallbackHandler(tool: tool, command: command) != nil)
+            #expect(result.isError == true)
+            #expect(body["state"] as? String == "C")
+            #expect(body["error"] as? String == "command_not_exposed")
+            #expect(body["not_exposed"] as? Bool == true)
+            #expect(body["supported"] as? Bool == false)
+        }
+
+        for command in ["library", "__nope__"] {
+            let result = await handlers.callTool(.init(
+                name: ToolID.logicTracks.rawValue,
+                arguments: ["command": .string(command)]
+            ))
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(OperationHandlerRegistry.fallbackHandler(
+                tool: ToolID.logicTracks.rawValue,
+                command: command
+            ) == nil)
             #expect(result.isError == true)
             #expect(body["state"] as? String == "C")
             #expect(body["error"] as? String == "invalid_params")
-            #expect(body["tool"] as? String == tool)
+            #expect(body["tool"] as? String == ToolID.logicTracks.rawValue)
             #expect(body["command"] as? String == command)
             #expect(body["write_attempted"] as? Bool == false)
-            #expect(!(body["hint"] as? String ?? "").contains("Unknown tool"))
         }
 
         let unknownTool = await handlers.callTool(.init(

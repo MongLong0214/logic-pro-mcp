@@ -3,6 +3,36 @@ import MCP
 import Testing
 @testable import LogicProMCP
 
+private actor CatalogSelectorProbeChannel: Channel {
+    struct Invocation: Sendable, Equatable {
+        let operation: String
+        let params: [String: String]
+    }
+
+    nonisolated let id: ChannelID
+    private var recorded: [Invocation] = []
+
+    init(id: ChannelID) {
+        self.id = id
+    }
+
+    func start() async throws {}
+    func stop() async {}
+
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        recorded.append(Invocation(operation: operation, params: params))
+        return .success(HonestContract.encodeStateA(extras: ["operation": operation]))
+    }
+
+    func healthCheck() async -> ChannelHealth {
+        .healthy(detail: "catalog selector probe")
+    }
+
+    func invocations() -> [Invocation] {
+        recorded
+    }
+}
+
 @Suite("OperationCatalogTests", .serialized)
 struct OperationCatalogTests {
     private static let uri = "logic://system/operations"
@@ -12,6 +42,11 @@ struct OperationCatalogTests {
         .pluginsGetInventory: ["index", "track"],
         .pluginsSetParamVerified: ["track"],
         .pluginsInsertVerified: ["track"],
+    ]
+    private static let selectorLiveQualificationReasonByOperation: [OperationID: String] = [
+        .pluginsGetInventory: "AX inventory must expose the selected strip identity after ChannelRouter forwarding",
+        .pluginsSetParamVerified: "AX apply-back must expose target_identity after verified preflight",
+        .pluginsInsertVerified: "AX insert readback must expose target_identity after verified preflight",
     ]
 
     private func withOperationTraceEnvironment<Result>(
@@ -157,6 +192,103 @@ struct OperationCatalogTests {
         return expected
             .union(commandParams[spec.id] ?? [])
             .union(legacyIgnoredParams[spec.id] ?? [])
+    }
+
+    private static func validSelectorParams(
+        operationID: OperationID,
+        key: String,
+        value: Int
+    ) -> [String: Value]? {
+        var params: [String: Value] = [key: .int(value)]
+        switch operationID {
+        case .mixerSetVolume:
+            params["value"] = .double(0.3)
+        case .mixerSetPan:
+            params["value"] = .double(0.25)
+        case .mixerSetPluginParam:
+            params["insert"] = .int(0)
+            params["param"] = .int(0)
+            params["value"] = .double(0.3)
+        case .mixerInsertPlugin:
+            params["slot"] = .int(0)
+            params["plugin_name"] = .string("Gain")
+            params["confirmed"] = .bool(true)
+        case .navigateGotoMarker, .navigateDeleteMarker,
+             .tracksSelect, .tracksDelete, .tracksDuplicate, .tracksArmOnly:
+            break
+        case .navigateRenameMarker, .tracksRename:
+            params["name"] = .string("Selector Probe")
+        case .tracksMute, .tracksSolo, .tracksArm:
+            params["enabled"] = .bool(true)
+        case .tracksSetAutomation:
+            params["mode"] = .string("read")
+        case .tracksSetInstrument:
+            params["path"] = .string("/tmp/selector-probe.patch")
+        default:
+            return nil
+        }
+        return params
+    }
+
+    private func routedSelectorInvocations(
+        spec: OperationSpec,
+        key: String,
+        value: Int
+    ) async throws -> [CatalogSelectorProbeChannel.Invocation] {
+        let router = ChannelRouter()
+        let channels = ChannelID.allCases.map { CatalogSelectorProbeChannel(id: $0) }
+        for channel in channels {
+            await router.register(channel)
+        }
+        let cache = StateCache()
+        await cache.updateTracks((0...8).map {
+            TrackState(id: $0, name: "Track \($0)", type: .audio)
+        })
+        await cache.updateMarkers([
+            MarkerState(id: 1, name: "Marker 1", position: "1.1.1.1"),
+            MarkerState(id: 7, name: "Marker 7", position: "7.1.1.1"),
+        ])
+        let params = try #require(
+            Self.validSelectorParams(operationID: spec.id, key: key, value: value),
+            "\(spec.id.rawValue).\(key) requires an explicit valid-selector fixture"
+        )
+        let dependencies = HandlerDependencies(
+            router: router,
+            cache: cache,
+            targetRegistry: TargetRegistry(),
+            poller: StatePoller(
+                axChannel: AccessibilityChannel(),
+                cache: cache,
+                runtime: .fastTest
+            ),
+            dialogPresent: { false },
+            supportBundleExporter: nil
+        )
+        let handler = try #require(OperationHandlerRegistry.handler(for: spec.id))
+        _ = await handler(dependencies, params)
+
+        var invocations: [CatalogSelectorProbeChannel.Invocation] = []
+        for channel in channels {
+            invocations.append(contentsOf: await channel.invocations())
+        }
+        return invocations
+    }
+
+    private static func selectorEvidence(
+        operationID: OperationID,
+        invocations: [CatalogSelectorProbeChannel.Invocation]
+    ) -> String? {
+        if operationID == .navigateGotoMarker {
+            return invocations.first { $0.operation == "transport.goto_position" }?
+                .params["position"]
+        }
+        return invocations.lazy.compactMap { invocation in
+            invocation.params["index"] ?? invocation.params["track"]
+        }.first
+    }
+
+    private static func expectedSelectorEvidence(operationID: OperationID, value: Int) -> String {
+        operationID == .navigateGotoMarker ? "\(value).1.1.1" : String(value)
     }
 
     private static func wire(_ value: Mutability) -> String {
@@ -373,6 +505,10 @@ struct OperationCatalogTests {
         #expect(probes.filter { $0.1 == "track" }.count == 13)
         #expect(probes.count == 29)
         #expect(Self.selectorsRequiringLiveQualificationByOperation.values.reduce(0) { $0 + $1.count } == 4)
+        #expect(
+            Set(Self.selectorLiveQualificationReasonByOperation.keys)
+                == Set(Self.selectorsRequiringLiveQualificationByOperation.keys)
+        )
 
         for (id, keys) in Self.selectorsRequiringLiveQualificationByOperation {
             let spec = OperationRegistry.specs.first { $0.id == id }
@@ -380,6 +516,7 @@ struct OperationCatalogTests {
             if let spec {
                 #expect(spec.allowedParams.intersection(["index", "track"]) == keys)
             }
+            #expect(Self.selectorLiveQualificationReasonByOperation[id]?.contains("AX") == true)
         }
 
         for (spec, key) in probes {
@@ -400,6 +537,25 @@ struct OperationCatalogTests {
             #expect(
                 (body["hint"] as? String)?.contains(key) == true,
                 "\(spec.id.rawValue) response did not identify malformed \(key)"
+            )
+        }
+
+        for (spec, key) in probes {
+            let first = try await routedSelectorInvocations(spec: spec, key: key, value: 1)
+            let second = try await routedSelectorInvocations(spec: spec, key: key, value: 7)
+            let firstEvidence = Self.selectorEvidence(operationID: spec.id, invocations: first)
+            let secondEvidence = Self.selectorEvidence(operationID: spec.id, invocations: second)
+            #expect(
+                firstEvidence == Self.expectedSelectorEvidence(operationID: spec.id, value: 1),
+                "\(spec.id.rawValue).\(key) did not forward selector 1"
+            )
+            #expect(
+                secondEvidence == Self.expectedSelectorEvidence(operationID: spec.id, value: 7),
+                "\(spec.id.rawValue).\(key) did not forward selector 7"
+            )
+            #expect(
+                first != second,
+                "\(spec.id.rawValue).\(key) distinct valid selectors routed identically"
             )
         }
     }

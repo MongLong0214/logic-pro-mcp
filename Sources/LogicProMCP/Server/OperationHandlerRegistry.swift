@@ -87,11 +87,10 @@ enum OperationHandlerRegistry {
 
     static func fallbackHandler(tool: String, command: String) -> OperationHandler? {
         validate()
-        guard let toolID = ToolID(rawValue: tool),
-              OperationRegistry.spec(tool: tool, command: command) != nil,
-              handledCommands(for: toolID).contains(command) else {
-            return nil
-        }
+        guard let toolID = ToolID(rawValue: tool) else { return nil }
+        let isRegistered = OperationRegistry.spec(tool: tool, command: command) != nil
+            && handledCommands(for: toolID).contains(command)
+        guard isRegistered || notExposedCommands(for: toolID).contains(command) else { return nil }
         return makeHandler(tool: toolID, command: command)
     }
 
@@ -107,6 +106,14 @@ enum OperationHandlerRegistry {
         case .logicProject: ProjectDispatcher.handledCommands
         case .logicMidi: MIDIDispatcher.handledCommands
         case .logicTracks: TrackDispatcher.handledCommands
+        }
+    }
+
+    static func notExposedCommands(for tool: ToolID) -> Set<String> {
+        switch tool {
+        case .logicMixer: MixerDispatcher.notExposedCommands
+        case .logicTracks: TrackDispatcher.notExposedCommands
+        default: []
         }
     }
 
@@ -165,6 +172,20 @@ enum OperationHandlerRegistry {
         }
         if handlersByKey.count != bindings.count {
             errors.append("tool-command table count: expected \(bindings.count), got \(handlersByKey.count)")
+        }
+
+        for rawTool in OperationRegistry.registeredToolRawValues.sorted() {
+            guard let tool = ToolID(rawValue: rawTool) else { continue }
+            let notExposed = notExposedCommands(for: tool)
+            let handledOverlap = notExposed.intersection(handledCommands(for: tool)).sorted()
+            if !handledOverlap.isEmpty {
+                errors.append("not-exposed/handled overlap for \(rawTool): \(handledOverlap.joined(separator: ", "))")
+            }
+            let registered = Set(specs.filter { $0.tool == tool }.map(\.command))
+            let registryOverlap = notExposed.intersection(registered).sorted()
+            if !registryOverlap.isEmpty {
+                errors.append("not-exposed/registry overlap for \(rawTool): \(registryOverlap.joined(separator: ", "))")
+            }
         }
 
         return errors

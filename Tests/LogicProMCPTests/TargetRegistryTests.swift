@@ -383,7 +383,7 @@ struct TargetRegistryTests {
     }
 
     @Test
-    func testRenameIgnoresTargetReferenceWhenFeatureDisabled() async {
+    func testRenameTargetReferenceFailsClosedWhenFeatureDisabled() async {
         await FeatureFlags.withAdr002TargetRefForTests(false) {
             #expect(FeatureFlags.adr002TargetRef == false)
 
@@ -402,11 +402,11 @@ struct TargetRegistryTests {
                 cache: StateCache()
             )
 
-            #expect(result.isError == false)
-            let operations = await channel.executedOps
-            #expect(operations.count == 1)
-            #expect(operations.first?.0 == "track.rename")
-            #expect(operations.first?.1 == ["index": "2", "name": "Legacy Rename"])
+            let body = sharedJSONObject(sharedToolText(result)) ?? [:]
+            #expect(result.isError == true)
+            #expect(body["error"] as? String == "target_ref_unavailable")
+            #expect(body["write_attempted"] as? Bool == false)
+            #expect(await channel.executedOps.isEmpty)
         }
     }
 }
