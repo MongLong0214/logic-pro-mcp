@@ -3,6 +3,13 @@ import CoreGraphics
 import MCP
 
 struct SystemDispatcher: OperationTraceDispatching {
+    // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
+    static let handledCommands: Set<String> = [
+        "health", "permissions", "refresh_cache", "export_support_bundle", "help",
+        "list_recent_traces", "get_trace", "clear_traces",
+        "saga_preflight", "saga_execute", "saga_status", "saga_cancel",
+    ]
+
     typealias SupportBundleExporter = @Sendable (
         URL,
         @Sendable () async -> Void
@@ -135,10 +142,14 @@ struct SystemDispatcher: OperationTraceDispatching {
         description: """
             Diagnostics, help, and saga coordination for the Logic Pro MCP server. \
             Commands: health, permissions, refresh_cache, export_support_bundle, saga_preflight, \
-            saga_execute, saga_status, saga_cancel, help. \
+            saga_execute, saga_status, saga_cancel, list_recent_traces, get_trace, clear_traces, \
+            help. \
             Params by command: \
             help -> { category: String } (returns full param docs for a dispatcher); \
             refresh_cache -> {} (force AX re-poll); \
+            list_recent_traces -> { limit?: Int }; \
+            get_trace -> { trace_id: String }; \
+            clear_traces -> { confirmed: Bool }; \
             export_support_bundle -> { dir?: String } (local files only; never uploaded); \
             saga_preflight/saga_execute -> { steps: [step], idempotency_key: String }; \
             saga_status/saga_cancel -> { idempotency_key: String }. \
@@ -176,12 +187,13 @@ struct SystemDispatcher: OperationTraceDispatching {
         mutationGate: LogicMutationGate? = nil,
         sagaRefreshAfterWrite: (@Sendable () async -> Void)? = nil
     ) async -> CallTool.Result {
-        if FeatureFlags.adr005OperationTrace,
-           let traceResult = await handleTraceCommand(command: command, params: params) {
-            return traceResult
-        }
-
         switch command {
+        case "list_recent_traces", "get_trace", "clear_traces":
+            guard let traceResult = await handleTraceCommand(command: command, params: params) else {
+                return unknownCommandResult(command)
+            }
+            return traceResult
+
         case "health":
             let report = await router.healthReport()
             var entries: [HealthResponse.ChannelSection] = []
@@ -637,7 +649,7 @@ struct SystemDispatcher: OperationTraceDispatching {
 
     private static func unknownCommandResult(_ command: String) -> CallTool.Result {
         toolTextResult(
-            "Unknown system command: \(command). Available: health, permissions, refresh_cache, export_support_bundle, saga_preflight, saga_execute, saga_status, saga_cancel, help",
+            "Unknown system command: \(command). Available: health, permissions, refresh_cache, export_support_bundle, list_recent_traces, get_trace, clear_traces, saga_preflight, saga_execute, saga_status, saga_cancel, help",
             isError: true
         )
     }
@@ -655,6 +667,13 @@ struct SystemDispatcher: OperationTraceDispatching {
                 limit = min(max(0, requested), OperationTraceStore.defaultMaximumTraceCount)
             } else {
                 return toolInvalidParamsResult("list_recent_traces 'limit' must be an integer")
+            }
+            guard FeatureFlags.adr005OperationTrace else {
+                return toolTextResult(HonestContract.jsonString([
+                    "note": "trace_disabled",
+                    "trace_disabled": true,
+                    "traces": [],
+                ]))
             }
             let traces = await OperationTraceStore.shared.recent(limit: limit)
             let summaries: [[String: Any]] = traces.map { trace in
@@ -679,6 +698,17 @@ struct SystemDispatcher: OperationTraceDispatching {
             guard TraceID.isValid(rawID) else {
                 return toolInvalidParamsResult("get_trace 'trace_id' is malformed")
             }
+            guard FeatureFlags.adr005OperationTrace else {
+                return toolStateCResult(
+                    .notSupported,
+                    hint: "Operation tracing is disabled; set LOGIC_MCP_ADR005_OPERATION_TRACE=1",
+                    extras: [
+                        "operation": "system.get_trace",
+                        "trace_disabled": true,
+                        "write_attempted": false,
+                    ]
+                )
+            }
             guard let trace = await OperationTraceStore.shared.trace(TraceID(rawValue: rawID)) else {
                 return toolStateCResult(
                     .elementNotFound,
@@ -699,6 +729,23 @@ struct SystemDispatcher: OperationTraceDispatching {
             ]))
 
         case "clear_traces":
+            switch strictBoolParam(params, "confirmed") {
+            case .value(true):
+                break
+            case .invalid(let hint):
+                return toolInvalidParamsResult("clear_traces \(hint)")
+            case .missing, .value(false):
+                return toolInvalidParamsResult(
+                    "clear_traces requires 'confirmed:true' because it destroys in-process diagnostic evidence"
+                )
+            }
+            guard FeatureFlags.adr005OperationTrace else {
+                return toolTextResult(HonestContract.jsonString([
+                    "note": "trace_disabled",
+                    "success": true,
+                    "trace_disabled": true,
+                ]))
+            }
             await OperationTraceStore.shared.clear()
             return toolTextResult(HonestContract.jsonString(["success": true]))
 
@@ -902,6 +949,9 @@ struct SystemDispatcher: OperationTraceDispatching {
                   permissions       -> {} — macOS permission status
                   refresh_cache     -> {} — Force AX re-poll
                   export_support_bundle -> { dir?: String } — Write privacy-safe local diagnostics; never upload
+                  list_recent_traces -> { limit?: Int } — List recent in-process operation traces
+                  get_trace         -> { trace_id: String } — Read one in-process operation trace
+                  clear_traces      -> { confirmed: Bool } — Clear diagnostic evidence; requires confirmed:true
                   saga_preflight    -> { steps: [step], idempotency_key: String } — Validate and inspect before-state availability; writes 0
                   saga_execute      -> { steps: [step], idempotency_key: String } — Execute ordered steps with evidence and compensation
                   saga_status       -> { idempotency_key: String } — Read the session journal

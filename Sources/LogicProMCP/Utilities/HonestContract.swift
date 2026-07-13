@@ -98,6 +98,7 @@ enum HonestContract {
         case trackSelectionFailed = "track_selection_failed"
         case staleSnapshot = "stale_snapshot"
         case staleTargetReference = "stale_target_reference"
+        case targetRefUnavailable = "target_ref_unavailable"
         case windowOpenFailed = "window_open_failed"
         case windowIdentityUnresolved = "window_identity_unresolved"
         case paramControlNotFound = "param_control_not_found"

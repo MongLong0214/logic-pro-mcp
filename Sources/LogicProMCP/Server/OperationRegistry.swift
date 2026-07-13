@@ -29,6 +29,9 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case systemHealth = "system.health"
     case systemPermissions = "system.permissions"
     case systemRefreshCache = "system.refresh_cache"
+    case systemListRecentTraces = "system.list_recent_traces"
+    case systemGetTrace = "system.get_trace"
+    case systemClearTraces = "system.clear_traces"
     case systemExportSupportBundle = "system.export_support_bundle"
     case systemHelp = "system.help"
     case systemSagaPreflight = "system.saga_preflight"
@@ -220,6 +223,7 @@ enum OperationRegistry {
         ],
         ToolID.logicSystem.rawValue: [
             "system.health", "system.permissions", "system.refresh_cache",
+            "system.list_recent_traces", "system.get_trace", "system.clear_traces",
             "system.export_support_bundle", "system.help", "system.saga_preflight",
             "system.saga_execute", "system.saga_status", "system.saga_cancel",
         ],
@@ -273,6 +277,7 @@ enum OperationRegistry {
         ],
         ToolID.logicSystem.rawValue: [
             "health", "permissions", "refresh_cache", "export_support_bundle", "help",
+            "list_recent_traces", "get_trace", "clear_traces",
             "saga_preflight", "saga_execute", "saga_status", "saga_cancel",
         ],
         ToolID.logicPlugins.rawValue: [
@@ -303,7 +308,6 @@ enum OperationRegistry {
 
     private static let allowedOperationIDs = Set(allowedOperationIDsByTool.values.flatMap { $0 })
     static let registeredToolRawValues = Set(allowedOperationIDsByTool.keys)
-    static let commonAllowedParams: Set<String> = ["index", "target_ref", "track"]
     // The saga surfaces (#287) do their OWN strict param validation inside
     // SystemDispatcher and return richer, saga-specific error envelopes
     // (typed error + journal_scope). Routing them through the generic
@@ -331,11 +335,15 @@ enum OperationRegistry {
 
     private static func allowedParams(
         for operationID: OperationID,
+        target: TargetPolicy = .none,
         commandSpecific: Set<String>
     ) -> Set<String> {
-        commonAllowedParams
-            .union(commandSpecific)
+        var allowed = commandSpecific
             .union(legacyIgnoredParamsByOperation[operationID] ?? [])
+        if target == .requiresStableTarget {
+            allowed.insert("target_ref")
+        }
+        return allowed
     }
 
     static let specs: [OperationSpec] = ([
@@ -368,16 +376,31 @@ enum OperationRegistry {
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
     } + ([
-        (.mixerSetVolume, "set_volume", .none, TargetPolicy.requiresStableTarget, ["value", "volume"]),
-        (.mixerSetPan, "set_pan", .none, .requiresStableTarget, ["pan", "value"]),
+        (
+            .mixerSetVolume,
+            "set_volume",
+            .none,
+            TargetPolicy.requiresStableTarget,
+            ["index", "track", "value", "volume"]
+        ),
+        (.mixerSetPan, "set_pan", .none, .requiresStableTarget, ["index", "pan", "track", "value"]),
         (.mixerSetMasterVolume, "set_master_volume", .none, .none, ["value", "volume"]),
-        (.mixerSetPluginParam, "set_plugin_param", .none, .none, ["insert", "param", "value"]),
+        (
+            .mixerSetPluginParam,
+            "set_plugin_param",
+            .none,
+            .none,
+            ["insert", "param", "track", "value"]
+        ),
         (
             .mixerInsertPlugin,
             "insert_plugin",
             .l2,
             .none,
-            ["confirmed", "insert", "name", "plugin", "plugin_name", "slot", "track_index"]
+            [
+                "confirmed", "index", "insert", "name", "plugin", "plugin_name", "slot",
+                "track", "track_index",
+            ]
         ),
     ] as [(OperationID, String, ConfirmationPolicy, TargetPolicy, Set<String>)]).map { entry in
         OperationSpec(
@@ -391,15 +414,19 @@ enum OperationRegistry {
             retry: .neverAutomatic,
             deadline: .short,
             availability: .defaultInstall,
-            allowedParams: allowedParams(for: entry.0, commandSpecific: entry.4),
+            allowedParams: allowedParams(
+                for: entry.0,
+                target: entry.3,
+                commandSpecific: entry.4
+            ),
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
     } + ([
         (.navigateGotoBar, "goto_bar", .readbackRequired, .defaultInstall, ["bar"]),
-        (.navigateGotoMarker, "goto_marker", .readbackRequired, .defaultInstall, ["name"]),
+        (.navigateGotoMarker, "goto_marker", .readbackRequired, .defaultInstall, ["index", "name"]),
         (.navigateCreateMarker, "create_marker", .readbackRequired, .defaultInstall, ["name"]),
-        (.navigateDeleteMarker, "delete_marker", .none, .requiresKeyBinding, []),
-        (.navigateRenameMarker, "rename_marker", .none, .unsupported, ["name"]),
+        (.navigateDeleteMarker, "delete_marker", .none, .requiresKeyBinding, ["index"]),
+        (.navigateRenameMarker, "rename_marker", .none, .unsupported, ["index", "name"]),
         (.navigateZoomToFit, "zoom_to_fit", .readbackRequired, .defaultInstall, []),
         (.navigateSetZoom, "set_zoom", .readbackRequired, .defaultInstall, ["direction", "level"]),
         (.navigateToggleView, "toggle_view", .none, .defaultInstall, ["view"]),
@@ -453,6 +480,10 @@ enum OperationRegistry {
         (.systemHealth, "health", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, []),
         (.systemPermissions, "permissions", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, []),
         (.systemRefreshCache, "refresh_cache", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, []),
+        (.systemListRecentTraces, "list_recent_traces", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["limit"]),
+        (.systemGetTrace, "get_trace", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["trace_id"]),
+        // WHY: trace deletion destroys internal evidence, not Logic state, so it stays readOnly and bypasses the Logic-write gate.
+        (.systemClearTraces, "clear_traces", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["confirmed"]),
         (.systemExportSupportBundle, "export_support_bundle", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired, ["dir"]),
         (.systemHelp, "help", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["category"]),
         (.systemSagaPreflight, "saga_preflight", Mutability.readOnly, DeadlineClass.medium, VerificationPolicy.none, ["idempotency_key", "steps"]),
@@ -465,7 +496,7 @@ enum OperationRegistry {
             tool: .logicSystem,
             command: entry.1,
             mutability: entry.2,
-            confirmation: .none,
+            confirmation: entry.0 == .systemClearTraces ? .l2 : .none,
             target: .none,
             verification: entry.4,
             retry: .neverAutomatic,
@@ -475,7 +506,15 @@ enum OperationRegistry {
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
     } + ([
-        (.pluginsGetInventory, "get_inventory", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, TargetPolicy.none, ["track_index"]),
+        (
+            .pluginsGetInventory,
+            "get_inventory",
+            Mutability.readOnly,
+            DeadlineClass.short,
+            VerificationPolicy.none,
+            TargetPolicy.none,
+            ["index", "track", "track_index"]
+        ),
         (
             .pluginsSetParamVerified,
             "set_param_verified",
@@ -485,7 +524,7 @@ enum OperationRegistry {
             TargetPolicy.requiresStableTarget,
             [
                 "insert", "mode", "param", "plugin", "plugin_id", "plugin_name",
-                "project_expected_path", "unit", "value",
+                "project_expected_path", "track", "unit", "value",
             ]
         ),
         (
@@ -495,7 +534,10 @@ enum OperationRegistry {
             DeadlineClass.medium,
             VerificationPolicy.readbackRequired,
             TargetPolicy.none,
-            ["insert", "mode", "plugin", "plugin_id", "plugin_name", "project_expected_path", "slot"]
+            [
+                "insert", "mode", "plugin", "plugin_id", "plugin_name", "project_expected_path",
+                "slot", "track",
+            ]
         ),
     ] as [(OperationID, String, Mutability, DeadlineClass, VerificationPolicy, TargetPolicy, Set<String>)]).map { entry in
         OperationSpec(
@@ -509,7 +551,11 @@ enum OperationRegistry {
             retry: .neverAutomatic,
             deadline: entry.3,
             availability: .defaultInstall,
-            allowedParams: allowedParams(for: entry.0, commandSpecific: entry.6),
+            allowedParams: allowedParams(
+                for: entry.0,
+                target: entry.5,
+                commandSpecific: entry.6
+            ),
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
     } + ([
@@ -648,21 +694,29 @@ enum OperationRegistry {
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
     } + ([
-        (.tracksSelect, "select", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["name"]),
+        (
+            .tracksSelect,
+            "select",
+            Mutability.`mutating`,
+            DeadlineClass.short,
+            VerificationPolicy.readbackRequired,
+            TargetPolicy.requiresStableTarget,
+            ["index", "name", "track"]
+        ),
         (.tracksCreateAudio, "create_audio", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.none, []),
         (.tracksCreateInstrument, "create_instrument", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.none, []),
         (.tracksCreateDrummer, "create_drummer", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.none, []),
         (.tracksCreateExternalMIDI, "create_external_midi", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.none, []),
-        (.tracksDelete, "delete", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, []),
-        (.tracksDuplicate, "duplicate", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none, TargetPolicy.requiresStableTarget, []),
-        (.tracksRename, "rename", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["name"]),
-        (.tracksMute, "mute", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["enabled"]),
-        (.tracksSolo, "solo", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["enabled"]),
-        (.tracksArm, "arm", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["enabled"]),
-        (.tracksArmOnly, "arm_only", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, []),
+        (.tracksDelete, "delete", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["index", "track"]),
+        (.tracksDuplicate, "duplicate", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none, TargetPolicy.requiresStableTarget, ["index", "track"]),
+        (.tracksRename, "rename", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["index", "name", "track"]),
+        (.tracksMute, "mute", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["enabled", "index", "track"]),
+        (.tracksSolo, "solo", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["enabled", "index", "track"]),
+        (.tracksArm, "arm", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["enabled", "index", "track"]),
+        (.tracksArmOnly, "arm_only", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["index", "track"]),
         (.tracksRecordSequence, "record_sequence", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, TargetPolicy.none, ["bar", "notes", "tempo"]),
-        (.tracksSetAutomation, "set_automation", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none, TargetPolicy.requiresStableTarget, ["mode"]),
-        (.tracksSetInstrument, "set_instrument", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["category", "path", "preset"]),
+        (.tracksSetAutomation, "set_automation", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none, TargetPolicy.requiresStableTarget, ["index", "mode", "track"]),
+        (.tracksSetInstrument, "set_instrument", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["category", "index", "path", "preset"]),
         (.tracksListLibrary, "list_library", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none, TargetPolicy.none, []),
         (.tracksScanLibrary, "scan_library", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none, TargetPolicy.none, ["mode"]),
         (.tracksResolvePath, "resolve_path", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, TargetPolicy.none, ["path"]),
@@ -679,7 +733,11 @@ enum OperationRegistry {
             retry: .neverAutomatic,
             deadline: entry.3,
             availability: .defaultInstall,
-            allowedParams: allowedParams(for: entry.0, commandSpecific: entry.6),
+            allowedParams: allowedParams(
+                for: entry.0,
+                target: entry.5,
+                commandSpecific: entry.6
+            ),
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
     }

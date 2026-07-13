@@ -8,7 +8,6 @@ import Testing
 // `FeatureFlags.adr002TargetRef`. These synthetic, deterministic tests lock in:
 //   * the shared `TargetRefResolver` resolution + fail-closed matrix,
 //   * per-command-family wiring (flag-on resolves the correct index),
-//   * flag-off byte-identity (target_ref ignored, explicit index required),
 //   * the #308 wrong-target negative guarantees (never a wrong-target mutation).
 
 private actor RecordingChannel: Channel {
@@ -172,10 +171,8 @@ struct TargetRefResolutionTests {
         }
     }
 
-    // MARK: - Resolver unit: flag-off byte-identity
-
     @Test
-    func testResolverFlagOffIgnoresTargetRefAndUsesIndex() async {
+    func testResolverFlagOffTargetRefFailsClosedBeforeIndexFallback() async {
         await FeatureFlags.withAdr002TargetRefForTests(false) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let outcome = await TargetRefResolver.resolveMutationIndex(
@@ -185,17 +182,20 @@ struct TargetRefResolutionTests {
                 operation: "track.delete",
                 invalidIndexResult: dummyInvalid()
             )
-            guard case .success(let resolved) = outcome else {
-                Issue.record("expected success")
+            guard case .failure(let result) = outcome else {
+                Issue.record("expected fail-closed target_ref refusal")
                 return
             }
-            #expect(resolved.index == 5)
-            #expect(resolved.reference == nil)
+            let body = sharedJSONObject(sharedToolText(result)) ?? [:]
+            #expect(errorCode(result) == "target_ref_unavailable")
+            #expect(body["target_ref"] as? String == reference.rawValue)
+            #expect(body["write_attempted"] as? Bool == false)
+            #expect((body["hint"] as? String)?.contains("LOGIC_MCP_ADR002_TARGET_REF=1") == true)
         }
     }
 
     @Test
-    func testResolverFlagOffTargetRefWithoutIndexFailsInvalidParams() async {
+    func testResolverFlagOffTargetRefWithoutIndexFailsUnavailable() async {
         await FeatureFlags.withAdr002TargetRefForTests(false) {
             let (registry, cache, reference) = await boundTrack()
             let outcome = await TargetRefResolver.resolveMutationIndex(
@@ -209,7 +209,7 @@ struct TargetRefResolutionTests {
                 Issue.record("expected failure")
                 return
             }
-            #expect(errorCode(result) == "invalid_params")
+            #expect(errorCode(result) == "target_ref_unavailable")
         }
     }
 
@@ -369,8 +369,6 @@ struct TargetRefResolutionTests {
         }
     }
 
-    // MARK: - Track dispatcher wiring (flag on resolves; flag off byte-identical)
-
     @Test
     func testTrackSelectFlagOnResolvesTargetRef() async {
         await FeatureFlags.withAdr002TargetRefForTests(true) {
@@ -390,7 +388,7 @@ struct TargetRefResolutionTests {
     }
 
     @Test
-    func testTrackSelectFlagOffIgnoresTargetRef() async {
+    func testTrackSelectFlagOffTargetRefFailsClosed() async {
         await FeatureFlags.withAdr002TargetRefForTests(false) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
@@ -401,10 +399,10 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
-            #expect(echoedTargetRef(result) == nil)
-            // target_ref (which points at 2) is ignored; explicit index 1 wins.
-            #expect(await opParams(channels, "track.select") == ["index": "1"])
+            #expect(result.isError == true)
+            #expect(errorCode(result) == "target_ref_unavailable")
+            #expect(echoedTargetRef(result) == reference.rawValue)
+            #expect(await allOps(channels).isEmpty)
         }
     }
 
@@ -504,7 +502,7 @@ struct TargetRefResolutionTests {
     }
 
     @Test
-    func testTrackMuteFlagOffRequiresIndex() async {
+    func testTrackMuteFlagOffRejectsTargetRefBeforeIndexValidation() async {
         await FeatureFlags.withAdr002TargetRefForTests(false) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
@@ -516,7 +514,7 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             #expect(result.isError == true)
-            #expect(errorCode(result) == "invalid_params")
+            #expect(errorCode(result) == "target_ref_unavailable")
             #expect(await allOps(channels).isEmpty)
         }
     }
@@ -617,24 +615,33 @@ struct TargetRefResolutionTests {
     }
 
     @Test
-    func testMixerSetVolumeFlagOffIgnoresTargetRef() async {
+    func testMixerSetVolumeFlagOffTargetRefFailsClosedWithoutWrongTargetWrite() async {
         await FeatureFlags.withAdr002TargetRefForTests(false) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
+            let before = await cache.getTracks().map {
+                "\($0.id)|\($0.name)|\($0.volume)|\($0.isSelected)"
+            }
             let result = await MixerDispatcher.handle(
                 command: "set_volume",
                 params: [
                     "track": .int(1),
-                    "value": .double(0.5),
+                    "value": .double(0.3),
                     "target_ref": .string(reference.rawValue),
                 ],
                 router: router,
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
-            #expect(echoedTargetRef(result) == nil)
-            #expect(await opParams(channels, "mixer.set_volume") == ["index": "1", "volume": "0.5"])
+            #expect(result.isError == true)
+            #expect(errorCode(result) == "target_ref_unavailable")
+            #expect(sharedJSONObject(sharedToolText(result))?["write_attempted"] as? Bool == false)
+            #expect(echoedTargetRef(result) == reference.rawValue)
+            #expect(await allOps(channels).isEmpty, "neither conflicting track may be written")
+            let after = await cache.getTracks().map {
+                "\($0.id)|\($0.name)|\($0.volume)|\($0.isSelected)"
+            }
+            #expect(after == before, "target track and neighbouring track must remain unchanged")
         }
     }
 
@@ -711,7 +718,7 @@ struct TargetRefResolutionTests {
     }
 
     @Test
-    func testPluginSetParamVerifiedFlagOffForwardsTrackUnchanged() async {
+    func testPluginSetParamVerifiedFlagOffTargetRefFailsClosed() async {
         await FeatureFlags.withAdr002TargetRefForTests(false) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
@@ -722,10 +729,10 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
-            #expect(echoedTargetRef(result) == nil)
-            // target_ref (pointing at 2) is ignored; explicit track 3 forwarded.
-            #expect(await opParams(channels, "plugin.set_param_verified")?["track"] == "3")
+            #expect(result.isError == true)
+            #expect(errorCode(result) == "target_ref_unavailable")
+            #expect(echoedTargetRef(result) == reference.rawValue)
+            #expect(await allOps(channels).isEmpty)
         }
     }
 

@@ -315,7 +315,8 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect(mixer.contents.first?.text != nil)
 }
 
-@Test func testHealthResponseMCUFields() async {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testHealthResponseMCUFields() async {
     let cache = StateCache()
     var conn = MCUConnectionState()
     conn.isConnected = true
@@ -338,7 +339,8 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect(lastFeedbackAt != nil)
 }
 
-@Test func testHealthResponseProcessFields() async {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testHealthResponseProcessFields() async {
     let cache = StateCache()
     let router = ChannelRouter()
 
@@ -359,7 +361,8 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect((uptimeSec ?? -1) >= 0)
 }
 
-@Test func testHealthResponseOmitsRemovedExternalClickDependencySection() async throws {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testHealthResponseOmitsRemovedExternalClickDependencySection() async throws {
     let cache = StateCache()
     let router = ChannelRouter()
 
@@ -426,7 +429,8 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect(ops[0].0 == "midi.list_ports")
 }
 
-@Test func testHealthResponseMCUDisconnected() async {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testHealthResponseMCUDisconnected() async {
     let cache = StateCache()
     let router = ChannelRouter()
     let result = await SystemDispatcher.handle(command: "health", params: [:], router: router, cache: cache)
@@ -445,7 +449,8 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect(display.upperRow.hasPrefix("Vocals"))
 }
 
-@Test func testHealthResponseFullSchema() async {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testHealthResponseFullSchema() async {
     let cache = StateCache()
     let router = ChannelRouter()
     let mockChannel = MockChannel(id: .mcu)
@@ -470,7 +475,8 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect(json["process"] as? [String: Any] != nil)
 }
 
-@Test func testHealthResponseExposesChannelVerificationStatus() async {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testHealthResponseExposesChannelVerificationStatus() async {
     let cache = StateCache()
     let router = ChannelRouter()
     await router.register(MockChannel(id: .midiKeyCommands, healthOverride: .healthy(
@@ -496,7 +502,8 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect(!((byName["Scripter"]?["ready"] as? Bool)!))
 }
 
-@Test func testSystemHealthToolMatchesResource() async {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testSystemHealthToolMatchesResource() async {
     let cache = StateCache()
     let router = ChannelRouter()
     let mockChannel = MockChannel(id: .mcu)

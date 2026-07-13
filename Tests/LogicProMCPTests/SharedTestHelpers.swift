@@ -1,6 +1,17 @@
 import Foundation
 import MCP
+import Testing
 @testable import LogicProMCP
+
+let codexSeatbeltActive = ProcessInfo.processInfo.environment["CODEX_SANDBOX"] == "seatbelt"
+let codexSeatbeltProcessInspectionDisabled: ConditionTrait = .disabled(
+    if: codexSeatbeltActive,
+    "Codex seatbelt traps LaunchServices process inspection; this remains live qualification."
+)
+let codexSeatbeltCoreMIDIDisabled: ConditionTrait = .disabled(
+    if: codexSeatbeltActive,
+    "Codex seatbelt denies the CoreMIDI service connection; this remains live qualification."
+)
 
 /// Extract text from a CallTool.Result, supporting both .text and .resource content types.
 func sharedToolText(_ result: CallTool.Result) -> String {

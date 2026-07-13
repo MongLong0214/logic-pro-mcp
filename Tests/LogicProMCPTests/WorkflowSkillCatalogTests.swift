@@ -444,8 +444,8 @@ struct WorkflowCommandCensusTests {
     // "not exposed in the production MCP contract" stub. They are real labels
     // but must NOT be in the public census.
     private static let notExposedStubs: [String: Set<String>] = [
-        "logic_tracks": ["set_color"],
-        "logic_mixer": ["set_send", "set_output", "set_input", "toggle_eq", "reset_strip", "bypass_plugin"],
+        "logic_tracks": TrackDispatcher.notExposedCommands,
+        "logic_mixer": MixerDispatcher.notExposedCommands,
     ]
 
     // Convenience aliases that route to a censused command via the same

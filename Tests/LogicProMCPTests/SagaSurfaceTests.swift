@@ -381,6 +381,57 @@ struct SagaSurfaceTests {
         }
     }
 
+    @Test("saga_status registry keys match its in-process exact parser")
+    func sagaStatusRegistryMatchesDispatcherValidation() async throws {
+        // Deterministic saga parser only; AX/CGEvent parameter truth remains live qualification (B4).
+        let spec = try #require(OperationRegistry.spec(
+            tool: ToolID.logicSystem.rawValue,
+            command: "saga_status"
+        ))
+        #expect(spec.allowedParams == ["idempotency_key"])
+        #expect(OperationRegistry.strictParamValidationOptOuts.contains(spec.id))
+
+        let allowedChannel = SagaSurfaceWriteProbeChannel()
+        let allowed = await dispatcher(
+            command: "saga_status",
+            params: ["idempotency_key": .string("registry-parser-proof")],
+            channel: allowedChannel
+        )
+        let allowedBody = try resultObject(allowed)
+        #expect(allowed.isError == true)
+        #expect(allowedBody["error"] as? String == "element_not_found")
+        #expect(allowedBody["journal_scope"] as? String == "session")
+        #expect(await allowedChannel.writeCount() == 0)
+        #expect(LogicProServer.strictParamValidationResult(
+            tool: spec.tool.rawValue,
+            command: spec.command,
+            params: ["idempotency_key": .string("registry-parser-proof")]
+        ) == nil)
+
+        for key in ["index", "target_ref", "__unregistered"] {
+            let channel = SagaSurfaceWriteProbeChannel()
+            let rejected = await dispatcher(
+                command: "saga_status",
+                params: [
+                    "idempotency_key": .string("registry-parser-proof"),
+                    key: .string("rejected"),
+                ],
+                channel: channel
+            )
+            let body = try resultObject(rejected)
+            #expect(rejected.isError == true)
+            #expect(body["state"] as? String == "C")
+            #expect(body["error"] as? String == "invalid_params")
+            #expect(body["journal_scope"] as? String == "session")
+            #expect(await channel.writeCount() == 0)
+            #expect(LogicProServer.strictParamValidationResult(
+                tool: spec.tool.rawValue,
+                command: spec.command,
+                params: [key: .string("generic opt-out remains explicit")]
+            ) == nil)
+        }
+    }
+
     @Test("status and cancel return typed missing-record failures")
     func missingJournalRecordIsTyped() async throws {
         for command in ["saga_status", "saga_cancel"] {

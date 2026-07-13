@@ -2,6 +2,13 @@ import Foundation
 import MCP
 
 struct TransportDispatcher: OperationTraceDispatching {
+    // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
+    static let handledCommands: Set<String> = [
+        "play", "stop", "record", "pause", "rewind", "fast_forward", "toggle_cycle",
+        "toggle_metronome", "set_tempo", "goto_position", "set_cycle_range",
+        "toggle_count_in", "toggle_autopunch",
+    ]
+
     static let tool = Tool(
         name: "logic_transport",
         description: "Control Logic Pro transport. Commands: play, stop, record, pause, rewind, fast_forward, toggle_cycle, toggle_metronome, set_tempo, goto_position, set_cycle_range, toggle_count_in, toggle_autopunch. Params: set_tempo -> { tempo: Float } (5.0-999.0); goto_position -> { bar: Int (1..9999) } or { position: String } where String is bar.beat.sub.tick (e.g. \"9.1.1.1\") or HH:MM:SS:FF SMPTE (e.g. \"00:00:08:12\"); set_cycle_range -> { start: Int, end: Int } (UNSUPPORTED/best-effort: Logic 12.x exposes no numeric cycle-locator fields, so this fails closed with State C not_implemented and CANNOT verify a write); others -> {}.",
@@ -140,9 +147,7 @@ struct TransportDispatcher: OperationTraceDispatching {
             // v3.0.0 a legacy `time` alias was silently accepted; callers that
             // never updated their schema would silently seek to bar 1. Now the
             // tool fails closed and surfaces exactly which key was wrong.
-            let allowedKeys = FeatureFlags.adr003StrictParams
-                ? Set<String>(["bar", "position"]).union(OperationRegistry.commonAllowedParams)
-                : Set<String>(["bar", "position"])
+            let allowedKeys: Set<String> = ["bar", "position"]
             let unknownKeys = params.keys.filter { !allowedKeys.contains($0) }
             if !unknownKeys.isEmpty {
                 let sorted = unknownKeys.sorted().joined(separator: ", ")

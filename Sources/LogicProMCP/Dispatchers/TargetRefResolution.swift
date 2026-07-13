@@ -6,8 +6,8 @@ import MCP
 ///
 /// Extracted verbatim from `logic_tracks rename`'s original inline logic so that
 /// every index-keyed mutation can ALSO accept an opaque `trk_…` reference behind
-/// `FeatureFlags.adr002TargetRef`, while the flag-off / no-`target_ref` path
-/// stays byte-identical to the prior explicit-index behaviour.
+/// `FeatureFlags.adr002TargetRef`. Supplying `target_ref` while resolution is
+/// unavailable fails closed; omitting it preserves the explicit-index path.
 enum TargetRefResolver {
     /// A resolved mutation target: the concrete track index plus — when the
     /// caller supplied a valid `target_ref` — the reference that produced it, so
@@ -28,20 +28,20 @@ enum TargetRefResolver {
 
     /// Resolve the target track index for a mutation.
     ///
-    /// Flag ON **and** `target_ref` present:
+    /// `target_ref` present:
+    ///   0. Require the feature flag and a live resolver; otherwise fail closed.
     ///   1. Trim the raw reference; require non-empty + a live `TargetRegistry`.
     ///   2. `resolve` it and require `binding.kind == requiredKind`.
     ///   3. Optional cross-check: if an explicit index alias (`indexKeys`) is
     ///      ALSO present it must be ≥ 0 and equal the bound track index.
     ///   4. Drift check: the live cache must still hold a track at the bound
     ///      index whose fingerprint matches the one observed at bind time.
-    ///   Any failure fails closed with `staleTargetReferenceResult` — never a
-    ///   wrong-target mutation.
+    ///   Resolution and drift failures after the availability gate fail closed
+    ///   with `staleTargetReferenceResult` — never a wrong-target mutation.
     ///
-    /// Flag OFF **or** no `target_ref`: require an explicit non-negative index
-    /// from `indexKeys`; on missing/malformed/negative return the caller's own
-    /// `invalidIndexResult` (an autoclosure, so the exact prior error shape is
-    /// preserved byte-for-byte and only built when actually needed).
+    /// No `target_ref`: require an explicit non-negative index from `indexKeys`;
+    /// on missing/malformed/negative return the caller's own `invalidIndexResult`
+    /// (an autoclosure, so it is only built when actually needed).
     static func resolveMutationIndex(
         _ params: [String: Value],
         targetRegistry: TargetRegistry?,
@@ -51,12 +51,14 @@ enum TargetRefResolver {
         requiredKind: TargetKind = .track,
         invalidIndexResult: @autoclosure () -> CallTool.Result
     ) async -> Outcome {
-        if FeatureFlags.adr002TargetRef, params["target_ref"] != nil {
+        if params["target_ref"] != nil {
             let rawReference = params["target_ref"]?.stringValue?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard FeatureFlags.adr002TargetRef, let targetRegistry else {
+                return .failure(targetReferenceUnavailableResult(rawReference, operation: operation))
+            }
             guard let rawReference,
                   !rawReference.isEmpty,
-                  let targetRegistry,
                   let binding = await targetRegistry.resolve(TargetReference(rawValue: rawReference)),
                   binding.kind == requiredKind
             else {
@@ -88,8 +90,8 @@ enum TargetRefResolver {
         return .success(Resolved(index: requestedIndex, reference: nil))
     }
 
-    /// Echo the causal reference only on a verified State A response. Nil
-    /// references are the legacy index/flag-off path and remain byte-identical.
+    /// Echo the causal reference only on a verified State A response. A nil
+    /// reference is the explicit-index/no-`target_ref` path and leaves the result unchanged.
     /// `legacyTrackRefAlias` additionally emits the pre-uniform `track_ref` key —
     /// rename shipped that echo first, so it keeps the alias for backward
     /// compatibility (G8); new consumers should read `target_ref`.
@@ -136,6 +138,21 @@ enum TargetRefResolver {
             extras: [
                 "operation": operation,
                 "target_ref": rawReference ?? "",
+            ]
+        )
+    }
+
+    static func targetReferenceUnavailableResult(
+        _ rawReference: String?,
+        operation: String
+    ) -> CallTool.Result {
+        toolStateCResult(
+            .targetRefUnavailable,
+            hint: "stable target reference requires LOGIC_MCP_ADR002_TARGET_REF=1 and an active target resolver",
+            extras: [
+                "operation": operation,
+                "target_ref": rawReference ?? "",
+                "write_attempted": false,
             ]
         )
     }

@@ -2,6 +2,14 @@ import Foundation
 import MCP
 
 struct MIDIDispatcher: OperationTraceDispatching {
+    // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
+    static let handledCommands: Set<String> = [
+        "send_note", "send_chord", "send_cc", "send_program_change", "send_pitch_bend",
+        "send_aftertouch", "send_sysex", "play_sequence", "import_file", "list_ports",
+        "create_virtual_port", "step_input", "mmc_play", "mmc_stop", "mmc_record",
+        "mmc_locate",
+    ]
+
     private static let maxSysExBytes = 1024
     private static let maxSysExTextCharacters = maxSysExBytes * 5
 

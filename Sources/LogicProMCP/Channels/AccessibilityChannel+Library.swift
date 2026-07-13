@@ -622,7 +622,8 @@ extension AccessibilityChannel {
     static func setTrackInstrument(
         params: [String: String],
         runtime: AXLogicProElements.Runtime = .production,
-        staging: LibraryPanelStaging = .production
+        staging: LibraryPanelStaging = .production,
+        canPostEvents: @escaping @Sendable () -> Bool = { CGPreflightPostEventAccess() }
     ) async -> ChannelResult {
         // Resolve path-OR-legacy. Path wins when both provided.
         let pathParam = params["path"].flatMap { $0.isEmpty ? nil : $0 }
@@ -701,7 +702,7 @@ extension AccessibilityChannel {
             if let name = AXLogicProElements.trackName(at: index, runtime: runtime) {
                 targetTrackName = name
             }
-            if !CGPreflightPostEventAccess() {
+            if !canPostEvents() {
                 return .error("Event-post permission required (Accessibility → Input Monitoring). Grant in System Settings.")
             }
             guard AXLogicProElements.selectTrackViaAX(at: index, runtime: runtime) else {

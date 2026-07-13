@@ -51,7 +51,7 @@ struct OperationRegistryTests {
         "rename_marker": .unsupported,
     ]
 
-    private static let smallToolCount = 13
+    private static let smallToolCount = 16
     private static let expectedRegistryCount =
         commands.count + mixerCommands.count + navigateCommands.count + smallToolCount
             + editCommands.count + projectCommands.count + midiCommands.count + trackCommands.count
@@ -355,6 +355,9 @@ struct OperationRegistryTests {
         ("logic_system", "system.health", "health", .readOnly, .short, .none),
         ("logic_system", "system.permissions", "permissions", .readOnly, .short, .none),
         ("logic_system", "system.refresh_cache", "refresh_cache", .readOnly, .short, .none),
+        ("logic_system", "system.list_recent_traces", "list_recent_traces", .readOnly, .short, .none),
+        ("logic_system", "system.get_trace", "get_trace", .readOnly, .short, .none),
+        ("logic_system", "system.clear_traces", "clear_traces", .readOnly, .short, .none),
         ("logic_system", "system.help", "help", .readOnly, .short, .none),
         ("logic_system", "system.export_support_bundle", "export_support_bundle", .mutating, .medium, .readbackRequired),
         ("logic_system", "system.saga_preflight", "saga_preflight", .readOnly, .medium, .none),
@@ -385,9 +388,9 @@ struct OperationRegistryTests {
         #expect(OperationRegistry.spec(tool: "logic_audio", command: "health") == nil)
         #expect(OperationRegistry.spec(tool: "logic_system", command: "analyze_file") == nil)
         #expect(OperationRegistry.spec(tool: "logic_plugins", command: "refresh_cache") == nil)
-        #expect(OperationRegistry.spec(tool: "logic_system", command: "list_recent_traces") == nil)
-        #expect(OperationRegistry.spec(tool: "logic_system", command: "get_trace") == nil)
-        #expect(OperationRegistry.spec(tool: "logic_system", command: "clear_traces") == nil)
+        for command in ["list_recent_traces", "get_trace", "clear_traces"] {
+            #expect(OperationRegistry.spec(tool: "logic_system", command: command) != nil)
+        }
     }
 
     @Test("all small-tool metadata matches current runtime truth")
@@ -400,7 +403,7 @@ struct OperationRegistryTests {
             #expect(spec.tool == tool)
             #expect(spec.command == entry.command)
             #expect(spec.mutability == entry.mutability)
-            #expect(spec.confirmation == .none)
+            #expect(spec.confirmation == (id == .systemClearTraces ? .l2 : .none))
             #expect(spec.target == (id == .pluginsSetParamVerified ? .requiresStableTarget : .none))
             #expect(spec.verification == entry.verification)
             #expect(spec.retry == .neverAutomatic)
