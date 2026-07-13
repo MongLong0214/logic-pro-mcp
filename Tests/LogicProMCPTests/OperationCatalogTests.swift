@@ -6,7 +6,45 @@ import Testing
 @Suite("OperationCatalogTests", .serialized)
 struct OperationCatalogTests {
     private static let uri = "logic://system/operations"
-    private static let commonAllowedParams: Set<String> = ["index", "target_ref", "track"]
+
+    private func withOperationTraceEnvironment<Result>(
+        _ operation: () async throws -> Result
+    ) async rethrows -> Result {
+        let key = "LOGIC_MCP_ADR005_OPERATION_TRACE"
+        let previous = getenv(key).map { String(cString: $0) }
+        setenv(key, "1", 1)
+        defer {
+            if let previous {
+                setenv(key, previous, 1)
+            } else {
+                unsetenv(key)
+            }
+        }
+        return try await operation()
+    }
+
+    private static let selectorParamsByOperation: [OperationID: Set<String>] = [
+        .navigateGotoMarker: ["index"],
+        .navigateDeleteMarker: ["index"],
+        .navigateRenameMarker: ["index"],
+        .mixerSetVolume: ["index", "track"],
+        .mixerSetPan: ["index", "track"],
+        .mixerInsertPlugin: ["index", "track"],
+        .mixerSetPluginParam: ["track"],
+        .pluginsGetInventory: ["index", "track"],
+        .pluginsSetParamVerified: ["track"],
+        .pluginsInsertVerified: ["track"],
+        .tracksSelect: ["index", "track"],
+        .tracksDelete: ["index", "track"],
+        .tracksDuplicate: ["index", "track"],
+        .tracksRename: ["index", "track"],
+        .tracksMute: ["index", "track"],
+        .tracksSolo: ["index", "track"],
+        .tracksArm: ["index", "track"],
+        .tracksArmOnly: ["index", "track"],
+        .tracksSetAutomation: ["index", "track"],
+        .tracksSetInstrument: ["index"],
+    ]
     private static let legacyIgnoredParams: [OperationID: Set<String>] = [
         .tracksRecordSequence: ["instrument", "instrument_path"],
     ]
@@ -65,6 +103,8 @@ struct OperationCatalogTests {
             "output_root",
             "path",
         ],
+        .systemListRecentTraces: ["limit"],
+        .systemGetTrace: ["trace_id"],
         .systemExportSupportBundle: ["dir"],
         .systemHelp: ["category"],
         .systemSagaPreflight: ["idempotency_key", "steps"],
@@ -123,10 +163,14 @@ struct OperationCatalogTests {
         .tracksScanPluginPresets: ["submenuOpenDelayMs"],
     ]
 
-    private static func expectedAllowedParams(for id: OperationID) -> Set<String> {
-        commonAllowedParams
-            .union(commandParams[id] ?? [])
-            .union(legacyIgnoredParams[id] ?? [])
+    private static func expectedAllowedParams(for spec: OperationSpec) -> Set<String> {
+        var expected = selectorParamsByOperation[spec.id] ?? []
+        if spec.target == .requiresStableTarget {
+            expected.insert("target_ref")
+        }
+        return expected
+            .union(commandParams[spec.id] ?? [])
+            .union(legacyIgnoredParams[spec.id] ?? [])
     }
 
     private static func wire(_ value: Mutability) -> String {
@@ -186,6 +230,122 @@ struct OperationCatalogTests {
         }
     }
 
+    @Test("trace commands use the registered strict MCP path")
+    func traceCommandsUseRegisteredStrictMCPPath() async throws {
+        let handlers = await LogicProServer().makeHandlers()
+
+        try await withOperationTraceEnvironment {
+            await OperationTraceStore.shared.clear()
+            do {
+                let expectedSpecs: [(String, String, Set<String>)] = [
+                    ("list_recent_traces", "system.list_recent_traces", ["limit"]),
+                    ("get_trace", "system.get_trace", ["trace_id"]),
+                    ("clear_traces", "system.clear_traces", []),
+                ]
+                #expect(OperationRegistry.specs.count == 107)
+                for (command, operationID, allowedParams) in expectedSpecs {
+                    let spec = OperationRegistry.spec(tool: "logic_system", command: command)
+                    #expect(spec?.id.rawValue == operationID, "\(command) must have one public spec")
+                    #expect(spec?.mutability == .readOnly, "\(command) must bypass mutation gating")
+                    #expect(spec?.deadline == .short)
+                    #expect(spec?.verification == VerificationPolicy.none)
+                    #expect(spec?.allowedParams == allowedParams)
+                    #expect(OperationHandlerRegistry.handler(
+                        tool: "logic_system",
+                        command: command
+                    ) != nil)
+                    #expect(OperationHandlerRegistry.fallbackHandler(
+                        tool: "logic_system",
+                        command: command
+                    ) != nil)
+                }
+
+                let traceID = await OperationTraceStore.shared.start(operationID: "test.trace.seed")
+                await OperationTraceStore.shared.record(traceID, phase: .inputValidated)
+                await OperationTraceStore.shared.complete(traceID)
+
+                let strictCases: [(String, [String: Value], [String])] = [
+                    ("list_recent_traces", ["limit": .int(1)], ["limit"]),
+                    ("get_trace", ["trace_id": .string(traceID.rawValue)], ["trace_id"]),
+                    ("clear_traces", [:], []),
+                ]
+                for (command, validParams, allowedParams) in strictCases {
+                    var params = validParams
+                    params["__unknown"] = .bool(true)
+                    let rejected = await handlers.callTool(.init(
+                        name: "logic_system",
+                        arguments: [
+                            "command": .string(command),
+                            "params": .object(params),
+                        ]
+                    ))
+                    let body = sharedJSONObject(sharedToolText(rejected)) ?? [:]
+                    #expect(rejected.isError == true, "\(command) must reject unknown keys")
+                    #expect(body["state"] as? String == "C")
+                    #expect(body["error"] as? String == "invalid_params")
+                    #expect(body["unknown_params"] as? [String] == ["__unknown"])
+                    #expect(body["allowed_params"] as? [String] == allowedParams)
+                    #expect(body["write_attempted"] as? Bool == false)
+                }
+
+                let listed = await handlers.callTool(.init(
+                    name: "logic_system",
+                    arguments: [
+                        "command": .string("list_recent_traces"),
+                        "params": .object(["limit": .int(1)]),
+                    ]
+                ))
+                let listedBody = sharedJSONObject(sharedToolText(listed)) ?? [:]
+                let traces = listedBody["traces"] as? [[String: Any]]
+                #expect(listed.isError != true)
+                #expect(traces?.count == 1)
+                #expect(traces?.first?["trace_id"] as? String == traceID.rawValue)
+
+                let fetched = await handlers.callTool(.init(
+                    name: "logic_system",
+                    arguments: [
+                        "command": .string("get_trace"),
+                        "params": .object(["trace_id": .string(traceID.rawValue)]),
+                    ]
+                ))
+                let fetchedBody = sharedJSONObject(sharedToolText(fetched)) ?? [:]
+                #expect(fetched.isError != true)
+                #expect(fetchedBody["trace_id"] as? String == traceID.rawValue)
+                #expect(fetchedBody["operation_id"] as? String == "test.trace.seed")
+                #expect((fetchedBody["events"] as? [[String: Any]])?.count == 1)
+
+                let malformed = await handlers.callTool(.init(
+                    name: "logic_system",
+                    arguments: [
+                        "command": .string("get_trace"),
+                        "params": .object(["trace_id": .string("bad")]),
+                    ]
+                ))
+                let malformedBody = sharedJSONObject(sharedToolText(malformed)) ?? [:]
+                #expect(malformed.isError == true)
+                #expect(malformedBody["state"] as? String == "C")
+                #expect(malformedBody["error"] as? String == "invalid_params")
+                #expect((malformedBody["hint"] as? String)?.contains("malformed") == true)
+
+                let cleared = await handlers.callTool(.init(
+                    name: "logic_system",
+                    arguments: [
+                        "command": .string("clear_traces"),
+                        "params": .object([:]),
+                    ]
+                ))
+                let clearedBody = sharedJSONObject(sharedToolText(cleared)) ?? [:]
+                #expect(cleared.isError != true)
+                #expect(clearedBody["success"] as? Bool == true)
+                #expect(await OperationTraceStore.shared.trace(traceID) == nil)
+            } catch {
+                await OperationTraceStore.shared.clear()
+                throw error
+            }
+            await OperationTraceStore.shared.clear()
+        }
+    }
+
     @Test("strict: registered command rejects unknown params as typed State C")
     func strictUnknownParamsRejectedBeforeDispatch() async throws {
         let handlers = await LogicProServer().makeHandlers()
@@ -223,30 +383,76 @@ struct OperationCatalogTests {
         #expect(malformedBody["error"] as? String == "invalid_params")
         #expect(malformedBody["expected_params_type"] as? String == "object")
 
-        let commonKeys = await handlers.callTool(
-            CallTool.Parameters(
-                name: "logic_transport",
-                arguments: [
-                    "command": .string("goto_position"),
-                    "params": .object([
-                        "position": .string("1.1.1.1"),
-                        "index": .int(0),
-                        "target_ref": .string("compatibility"),
-                        "track": .int(0),
-                    ]),
-                ]
+        for key in ["index", "target_ref", "track"] {
+            let rejected = try #require(
+                LogicProServer.strictParamValidationResult(
+                    tool: ToolID.logicTransport.rawValue,
+                    command: "goto_position",
+                    params: [key: .string("not consumed")]
+                )
             )
-        )
-        #expect(!sharedToolText(commonKeys).contains("unknown param"))
+            let rejectedBody = try #require(sharedJSONObject(sharedToolText(rejected)))
+            #expect(rejected.isError == true)
+            #expect(rejectedBody["state"] as? String == "C")
+            #expect(rejectedBody["error"] as? String == "invalid_params")
+            #expect(rejectedBody["unknown_params"] as? [String] == [key])
+            #expect(rejectedBody["write_attempted"] as? Bool == false)
+        }
+    }
+
+    @Test("strict: target_ref allowance exactly follows target policy")
+    func targetRefAllowanceMatchesTargetPolicy() async throws {
+        let handlers = await LogicProServer().makeHandlers()
+
+        for spec in OperationRegistry.specs {
+            let requiresTarget = spec.target == .requiresStableTarget
+            #expect(spec.allowedParams.contains("target_ref") == requiresTarget, "\(spec.id.rawValue)")
+
+            if requiresTarget {
+                #expect(
+                    LogicProServer.strictParamValidationResult(
+                        tool: spec.tool.rawValue,
+                        command: spec.command,
+                        params: ["target_ref": .string("trk_probe")]
+                    ) == nil,
+                    "\(spec.id.rawValue)"
+                )
+            } else {
+                let rejected: CallTool.Result
+                if OperationRegistry.strictParamValidationOptOuts.contains(spec.id) {
+                    rejected = await handlers.callTool(.init(
+                        name: spec.tool.rawValue,
+                        arguments: [
+                            "command": .string(spec.command),
+                            "params": .object(["target_ref": .string("trk_probe")]),
+                        ]
+                    ))
+                } else {
+                    rejected = try #require(LogicProServer.strictParamValidationResult(
+                        tool: spec.tool.rawValue,
+                        command: spec.command,
+                        params: ["target_ref": .string("trk_probe")]
+                    ))
+                }
+                let body = try #require(sharedJSONObject(sharedToolText(rejected)))
+                #expect(rejected.isError == true, "\(spec.id.rawValue)")
+                #expect(body["state"] as? String == "C", "\(spec.id.rawValue)")
+                #expect(body["error"] as? String == "invalid_params", "\(spec.id.rawValue)")
+                #expect(body["write_attempted"] as? Bool == false, "\(spec.id.rawValue)")
+                if !OperationRegistry.strictParamValidationOptOuts.contains(spec.id) {
+                    #expect(body["unknown_params"] as? [String] == ["target_ref"], "\(spec.id.rawValue)")
+                }
+            }
+        }
     }
 
     @Test("strict: every registered operation rejects unknown keys and accepts its pinned keys")
     func strictRegistryWideInvariant() throws {
-        #expect(OperationRegistry.specs.count == 104)
+        #expect(OperationRegistry.specs.count == 107)
         #expect(Set(OperationRegistry.specs.map(\.id)) == Set(OperationID.allCases))
 
         for spec in OperationRegistry.specs {
-            let expected = Self.expectedAllowedParams(for: spec.id)
+            let expected = Self.expectedAllowedParams(for: spec)
             #expect(spec.allowedParams == expected, "\(spec.id.rawValue)")
 
             // Opt-out operations (the saga surfaces) bypass the generic gate and
@@ -310,7 +516,30 @@ struct OperationCatalogTests {
         ])
         #expect(OperationRegistry.legacyIgnoredParamsByOperation == Self.legacyIgnoredParams)
         #expect(OperationRegistry.dispatcherRejectedParamsByOperation == Self.dispatcherRejectedParams)
-        #expect(OperationRegistry.commonAllowedParams == Self.commonAllowedParams)
+        let expectedIndex = Set(Self.selectorParamsByOperation.compactMap { id, keys in
+            keys.contains("index") ? id : nil
+        })
+        let expectedTrack = Set(Self.selectorParamsByOperation.compactMap { id, keys in
+            keys.contains("track") ? id : nil
+        })
+        let actualIndex = Set(OperationRegistry.specs.filter {
+            $0.allowedParams.contains("index")
+        }.map(\.id))
+        let actualTrack = Set(OperationRegistry.specs.filter {
+            $0.allowedParams.contains("track")
+        }.map(\.id))
+        let actualTargetRef = Set(OperationRegistry.specs.filter {
+            $0.allowedParams.contains("target_ref")
+        }.map(\.id))
+        let targetBearing = Set(OperationRegistry.specs.filter {
+            $0.target == .requiresStableTarget
+        }.map(\.id))
+        #expect(expectedIndex.count == 17)
+        #expect(expectedTrack.count == 16)
+        #expect(actualIndex == expectedIndex)
+        #expect(actualTrack == expectedTrack)
+        #expect(actualTargetRef == targetBearing)
+        #expect(actualTargetRef.count == 13)
         for spec in OperationRegistry.specs {
             #expect(
                 spec.allowedParams.isDisjoint(
@@ -394,7 +623,7 @@ struct OperationCatalogTests {
         #expect(sharedToolText(trackRejected).contains("port parameter not supported for record_sequence"))
     }
 
-    @Test("catalog: exact URI reads the generated 104-operation catalog")
+    @Test("catalog: exact URI reads the generated 107-operation catalog")
     func catalogReadsRegistryProjection() async throws {
         let result = try await ResourceHandlers.read(
             uri: Self.uri,
@@ -407,7 +636,7 @@ struct OperationCatalogTests {
         #expect(body["generated_at"] as? String != nil)
         #expect(body["operation_count"] as? Int == OperationRegistry.specs.count)
         let operations = try #require(body["operations"] as? [[String: Any]])
-        #expect(operations.count == 104)
+        #expect(operations.count == 107)
         #expect(text.contains("\n") == false)
 
         let ids = operations.compactMap { $0["id"] as? String }
@@ -430,6 +659,10 @@ struct OperationCatalogTests {
             #expect(row["deadline"] as? String == Self.wire(spec.deadline))
             #expect(row["availability"] as? String == Self.wire(spec.availability))
             #expect(row["allowedParams"] as? [String] == spec.allowedParams.sorted())
+            #expect(
+                (row["allowedParams"] as? [String])?.contains("target_ref")
+                    == (spec.target == .requiresStableTarget)
+            )
             #expect(row.keys.sorted() == [
                 "allowedParams", "availability", "command", "confirmation", "deadline",
                 "id", "mutability", "retry", "target", "tool", "verification",
@@ -455,8 +688,8 @@ struct OperationCatalogTests {
         #expect(templates.templates.map(\.uriTemplate).filter { $0 == Self.uri }.count == 1)
     }
 
-    @Test("compatibility: unregistered commands preserve fallback bytes")
-    func compatibilityUnknownCommandFallbackUnchanged() async {
+    @Test("unregistered commands stay rejected regardless of raw params")
+    func unregisteredCommandRejectionIgnoresRawParams() async {
         let handlers = await LogicProServer().makeHandlers()
         let baseline = await handlers.callTool(
             CallTool.Parameters(

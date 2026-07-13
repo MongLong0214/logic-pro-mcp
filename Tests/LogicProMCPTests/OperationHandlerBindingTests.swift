@@ -5,6 +5,32 @@ import Testing
 
 @Suite("Operation handler bindings", .serialized)
 struct OperationHandlerBindingTests {
+    private static let handledCommandsByTool: [ToolID: Set<String>] = [
+        .logicTransport: TransportDispatcher.handledCommands,
+        .logicTracks: TrackDispatcher.handledCommands,
+        .logicMixer: MixerDispatcher.handledCommands,
+        .logicMidi: MIDIDispatcher.handledCommands,
+        .logicEdit: EditDispatcher.handledCommands,
+        .logicNavigate: NavigateDispatcher.handledCommands,
+        .logicProject: ProjectDispatcher.handledCommands,
+        .logicAudio: AudioDispatcher.handledCommands,
+        .logicSystem: SystemDispatcher.handledCommands,
+        .logicPlugins: PluginsDispatcher.handledCommands,
+    ]
+    private static let directOnlyCommandsByTool: [ToolID: Set<String>] = [
+        .logicTracks: TrackDispatcher.directOnlyCommands,
+    ]
+
+    private static func parityIssues(
+        registered: Set<String>,
+        handled: Set<String>
+    ) -> (missing: [String], phantom: [String]) {
+        (
+            registered.subtracting(handled).sorted(),
+            handled.subtracting(registered).sorted()
+        )
+    }
+
     private static func dependencies() -> HandlerDependencies {
         let cache = StateCache()
         return HandlerDependencies(
@@ -31,6 +57,70 @@ struct OperationHandlerBindingTests {
         try #require(JSONSerialization.jsonObject(with: bytes(result)) as? [String: Any])
     }
 
+    @Test("dispatchers and registry have bidirectional command parity")
+    func dispatcherCommandsMatchRegistryInBothDirections() {
+        #expect(
+            Set(Self.handledCommandsByTool.keys.map(\.rawValue))
+                == OperationRegistry.registeredToolRawValues
+        )
+
+        for (tool, handled) in Self.handledCommandsByTool {
+            let registered = Set(OperationRegistry.specs
+                .filter { $0.tool == tool }
+                .map(\.command))
+            let issues = Self.parityIssues(registered: registered, handled: handled)
+            #expect(issues.missing.isEmpty, "\(tool.rawValue) missing dispatcher cases: \(issues.missing)")
+            #expect(issues.phantom.isEmpty, "\(tool.rawValue) phantom dispatcher cases: \(issues.phantom)")
+        }
+    }
+
+    @Test("parity detector identifies phantom and missing commands")
+    func parityDetectorProvesBothDirections() {
+        let registered: Set<String> = ["implemented"]
+        let phantom = Self.parityIssues(
+            registered: registered,
+            handled: ["implemented", "__phantom"]
+        )
+        let missing = Self.parityIssues(registered: registered, handled: [])
+
+        #expect(phantom.missing.isEmpty)
+        #expect(phantom.phantom == ["__phantom"])
+        #expect(missing.missing == ["implemented"])
+        #expect(missing.phantom.isEmpty)
+    }
+
+    @Test("unregistered dispatcher cases have no MCP fallback")
+    func unregisteredDispatcherCasesHaveNoFallback() {
+        for (tool, commands) in Self.directOnlyCommandsByTool {
+            #expect(commands.isDisjoint(with: Self.handledCommandsByTool[tool] ?? []))
+            for command in commands {
+                #expect(OperationRegistry.spec(tool: tool.rawValue, command: command) == nil)
+                #expect(OperationHandlerRegistry.fallbackHandler(
+                    tool: tool.rawValue,
+                    command: command
+                ) == nil)
+            }
+        }
+
+        let typedStubs = [
+            (ToolID.logicTracks.rawValue, "set_color"),
+            (ToolID.logicMixer.rawValue, "set_send"),
+            (ToolID.logicMixer.rawValue, "set_output"),
+            (ToolID.logicMixer.rawValue, "set_input"),
+            (ToolID.logicMixer.rawValue, "toggle_eq"),
+            (ToolID.logicMixer.rawValue, "reset_strip"),
+            (ToolID.logicMixer.rawValue, "bypass_plugin"),
+            (ToolID.logicTracks.rawValue, "__unknown__"),
+        ]
+
+        for (tool, command) in typedStubs {
+            #expect(
+                OperationHandlerRegistry.fallbackHandler(tool: tool, command: command) == nil,
+                "\(tool).\(command) unexpectedly reaches a dispatcher fallback"
+            )
+        }
+    }
+
     @Test("registry exactly binds every operation spec once")
     func registryMatchesOperationSpecs() throws {
         let specs = OperationRegistry.specs
@@ -40,7 +130,7 @@ struct OperationHandlerBindingTests {
         let specKeys = Set(specs.map { "\($0.tool.rawValue):\($0.command)" })
         let bindingKeys = bindings.map { "\($0.tool):\($0.command)" }
 
-        #expect(specs.count == 104)
+        #expect(specs.count == 107)
         #expect(bindings.count == specs.count)
         #expect(Set(bindingIDs).count == bindings.count, "duplicate handler IDs")
         #expect(Set(bindingKeys).count == bindings.count, "duplicate handler keys")
@@ -49,6 +139,17 @@ struct OperationHandlerBindingTests {
         #expect(OperationHandlerRegistry.validationErrors().isEmpty)
 
         OperationHandlerRegistry.validate()
+        for command in ["list_recent_traces", "get_trace", "clear_traces"] {
+            let spec = try #require(OperationRegistry.spec(
+                tool: ToolID.logicSystem.rawValue,
+                command: command
+            ))
+            #expect(OperationHandlerRegistry.handler(for: spec.id) != nil)
+            #expect(OperationHandlerRegistry.fallbackHandler(
+                tool: ToolID.logicSystem.rawValue,
+                command: command
+            ) != nil)
+        }
         for spec in specs {
             #expect(OperationHandlerRegistry.handler(for: spec.id) != nil)
             #expect(OperationHandlerRegistry.handler(
@@ -119,31 +220,32 @@ struct OperationHandlerBindingTests {
         }
     }
 
-    @Test("unregistered server command preserves dispatcher bytes")
-    func unregisteredCommandPreservesDispatcherUnknownResponse() async throws {
-        let command = "__operation_handler_binding_unknown__"
+    @Test("known tools reject unregistered commands before dispatcher fallback")
+    func knownToolsRejectUnregisteredCommands() async throws {
         let server = LogicProServer()
         let handlers = await server.makeHandlers()
-        let throughServer = await handlers.callTool(.init(
-            name: TrackDispatcher.tool.name,
-            arguments: ["command": .string(command)]
-        ))
-        let dependencies = Self.dependencies()
-        let direct = await TrackDispatcher.handle(
-            command: command,
-            params: [:],
-            router: dependencies.router,
-            cache: dependencies.cache,
-            targetRegistry: dependencies.targetRegistry,
-            dialogPresent: dependencies.dialogPresent
-        )
+        let cases = [
+            (ToolID.logicTracks.rawValue, "library"),
+            (ToolID.logicTracks.rawValue, "set_color"),
+            (ToolID.logicTracks.rawValue, "__operation_handler_binding_unknown__"),
+        ]
 
-        #expect(OperationHandlerRegistry.handler(
-            tool: TrackDispatcher.tool.name,
-            command: command
-        ) == nil)
-        #expect(throughServer == direct)
-        #expect(try Self.bytes(throughServer) == Self.bytes(direct))
+        for (tool, command) in cases {
+            let result = await handlers.callTool(.init(
+                name: tool,
+                arguments: ["command": .string(command)]
+            ))
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(OperationHandlerRegistry.handler(tool: tool, command: command) == nil)
+            #expect(OperationHandlerRegistry.fallbackHandler(tool: tool, command: command) == nil)
+            #expect(result.isError == true)
+            #expect(body["state"] as? String == "C")
+            #expect(body["error"] as? String == "invalid_params")
+            #expect(body["tool"] as? String == tool)
+            #expect(body["command"] as? String == command)
+            #expect(body["write_attempted"] as? Bool == false)
+            #expect(!(body["hint"] as? String ?? "").contains("Unknown tool"))
+        }
 
         let unknownTool = await handlers.callTool(.init(
             name: "logic_unknown",
@@ -154,7 +256,7 @@ struct OperationHandlerBindingTests {
         #expect(try Self.bytes(unknownTool) == Self.bytes(directUnknownTool))
     }
 
-    @Test("MCP protocol preserves registered and unregistered dispatcher results")
+    @Test("MCP protocol preserves registered results and typed unregistered rejection")
     func protocolRoutePreservesDispatcherResults() async throws {
         let server = LogicProServer()
         let transport = MCPProtocolProbeTransport()
@@ -183,14 +285,10 @@ struct OperationHandlerBindingTests {
             == canonicalJSONObjectData(Self.object(registeredDirect)))
 
         let unknownCommand = "__operation_handler_protocol_unknown__"
-        let unknownDirect = await TrackDispatcher.handle(
-            command: unknownCommand,
-            params: [:],
-            router: dependencies.router,
-            cache: dependencies.cache,
-            targetRegistry: dependencies.targetRegistry,
-            dialogPresent: dependencies.dialogPresent
-        )
+        let unknownExpected = await server.makeHandlers().callTool(.init(
+            name: TrackDispatcher.tool.name,
+            arguments: ["command": .string(unknownCommand)]
+        ))
         await transport.queueJSON(probeToolCallFrame(
             id: 3,
             name: TrackDispatcher.tool.name,
@@ -199,6 +297,6 @@ struct OperationHandlerBindingTests {
         let unknownResponse = try await waitForProbeResponse(transport, id: 3)
         let unknownResult = try #require(unknownResponse["result"] as? [String: Any])
         #expect(try canonicalJSONObjectData(unknownResult)
-            == canonicalJSONObjectData(Self.object(unknownDirect)))
+            == canonicalJSONObjectData(Self.object(unknownExpected)))
     }
 }

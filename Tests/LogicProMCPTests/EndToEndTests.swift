@@ -30,6 +30,20 @@ private func e2eCall(
     return await handlers.callTool(CallTool.Parameters(name: tool, arguments: args))
 }
 
+private func e2eExpectUnregistered(
+    _ result: CallTool.Result,
+    tool: String,
+    command: String
+) {
+    let body = e2eJSON(e2eText(result))
+    #expect(result.isError == true)
+    #expect(body?["state"] as? String == "C")
+    #expect(body?["error"] as? String == "invalid_params")
+    #expect(body?["tool"] as? String == tool)
+    #expect(body?["command"] as? String == command)
+    #expect(body?["write_attempted"] as? Bool == false)
+}
+
 typealias ServerStartRecorder = SharedServerStartRecorder
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -42,8 +56,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 @Test func testE2ETransportGetStateRejectedAsUnknownCommand() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_transport", command: "get_state")
-    #expect(r.isError!)
-    #expect(e2eText(r).contains("Unknown"))
+    e2eExpectUnregistered(r, tool: "logic_transport", command: "get_state")
 }
 
 @Test func testE2ETransportPlayDispatchesWithoutCrash() async {
@@ -100,8 +113,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 @Test func testE2ETransportUnknownCommandFails() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_transport", command: "nonexistent")
-    #expect(r.isError!)
-    #expect(e2eText(r).contains("Unknown"))
+    e2eExpectUnregistered(r, tool: "logic_transport", command: "nonexistent")
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -113,15 +125,13 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 @Test func testE2ETracksGetTracksRejectedAsUnknownCommand() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_tracks", command: "get_tracks")
-    #expect(r.isError!)
-    #expect(e2eText(r).contains("Unknown"))
+    e2eExpectUnregistered(r, tool: "logic_tracks", command: "get_tracks")
 }
 
 @Test func testE2ETracksGetSelectedRejectedAsUnknownCommand() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_tracks", command: "get_selected")
-    #expect(r.isError!)
-    #expect(e2eText(r).contains("Unknown"))
+    e2eExpectUnregistered(r, tool: "logic_tracks", command: "get_selected")
 }
 
 @Test func testE2ETracksSelectRequiresIndex() async {
@@ -218,8 +228,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 @Test func testE2EMixerGetStateRejectedAsUnknownCommand() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_mixer", command: "get_state")
-    #expect(r.isError!)
-    #expect(e2eText(r).contains("Unknown"))
+    e2eExpectUnregistered(r, tool: "logic_mixer", command: "get_state")
 }
 
 @Test func testE2EMixerSetVolumeDispatches() async {
@@ -355,8 +364,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 @Test func testE2EMixerGetChannelStripRejectedAsUnknownCommand() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_mixer", command: "get_channel_strip", params: ["index": .string("0")])
-    #expect(r.isError!)
-    #expect(e2eText(r).contains("Unknown"))
+    e2eExpectUnregistered(r, tool: "logic_mixer", command: "get_channel_strip")
 }
 
 @Test func testE2EMixerSetVolumeRequiresParams() async {
@@ -499,8 +507,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 @Test func testE2ENavigateGetMarkersRejectedAsUnknownCommand() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_navigate", command: "get_markers")
-    #expect(r.isError!)
-    #expect(e2eText(r).contains("Unknown"))
+    e2eExpectUnregistered(r, tool: "logic_navigate", command: "get_markers")
 }
 
 @Test func testE2ENavigateCreateMarkerDispatches() async {
@@ -530,8 +537,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 @Test func testE2EProjectGetInfoRejectedAsUnknownCommand() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_project", command: "get_info")
-    #expect(r.isError!)
-    #expect(e2eText(r).contains("Unknown"))
+    e2eExpectUnregistered(r, tool: "logic_project", command: "get_info")
 }
 
 @Test func testE2EProjectOpenInvalidPathFails() async {
@@ -628,7 +634,8 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     #expect(text.contains("logic_system"))
 }
 
-@Test func testE2ESystemHealthReturnsValidJSON() async {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testE2ESystemHealthReturnsValidJSON() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_system", command: "health")
     let text = e2eText(r)
@@ -648,7 +655,8 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     #expect(process?["uptime_sec"] != nil)
 }
 
-@Test func testE2ESystemHealthChannelsArrayIsComplete() async {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testE2ESystemHealthChannelsArrayIsComplete() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_system", command: "health")
     let json = e2eJSON(e2eText(r))
@@ -665,7 +673,8 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     }
 }
 
-@Test func testE2ESystemPermissionsDispatches() async {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testE2ESystemPermissionsDispatches() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_system", command: "permissions")
     let text = e2eText(r)
@@ -683,8 +692,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 @Test func testE2ESystemCacheStateIsNotAPublicCommand() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_system", command: "cache_state")
-    #expect(r.isError!)
-    #expect(e2eText(r).contains("Unknown system command"))
+    e2eExpectUnregistered(r, tool: "logic_system", command: "cache_state")
 }
 
 @Test func testE2ESystemUnknownCommandFails() async {
@@ -907,7 +915,8 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 
 }
 
-@Test func testE2EResourceHealthMatchesToolHealth() async throws {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testE2EResourceHealthMatchesToolHealth() async throws {
     let h = await makeE2EHandlers()
     let resourceResult = try await h.readResource(.init(uri: "logic://system/health"))
     let resourceText = e2eResourceText(resourceResult)
@@ -1049,7 +1058,14 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 @Test func testE2EConcurrent16ResourceReadsAreSafe() async throws {
     let h = await makeE2EHandlers()
     try await withThrowingTaskGroup(of: Void.self) { group in
-        let uris = ["logic://transport/state", "logic://tracks", "logic://mixer", "logic://system/health"]
+        // Keep this concurrency proof in-process; live AX/AppleScript resource
+        // truth belongs to qualification, not a deterministic unit suite.
+        let uris = [
+            "logic://system/operations",
+            "logic://workflow-skills",
+            "logic://stock-instruments",
+            "logic://stock-plugins",
+        ]
         for i in 0..<16 {
             let uri = uris[i % uris.count]
             group.addTask { let r = try await h.readResource(.init(uri: uri)); #expect(!e2eResourceText(r).isEmpty) }
@@ -1058,7 +1074,8 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     }
 }
 
-@Test func testE2EConcurrentMixedToolsAndResourcesAreSafe() async throws {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testE2EConcurrentMixedToolsAndResourcesAreSafe() async throws {
     let h = await makeE2EHandlers()
     try await withThrowingTaskGroup(of: Void.self) { group in
         for i in 0..<10 {

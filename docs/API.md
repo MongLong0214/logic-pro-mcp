@@ -31,7 +31,7 @@ Every tool in `tools/list` advertises an `outputSchema`. Mixed command tools adv
 | `logic_navigate` | bars, markers, zoom, view toggles |
 | `logic_project` | new, open, save, save_as, close, bounce, launch/quit, is_running, regions, export plan/run/resume, audit, cleanup |
 | `logic_audio` | read-only audio artifact analysis |
-| `logic_system` | health, permissions, command help, saga preflight/execute/status/cancel |
+| `logic_system` | health, permissions, command help, trace list/read/clear, saga preflight/execute/status/cancel |
 
 ## Resources
 
@@ -64,7 +64,7 @@ Every tool in `tools/list` advertises an `outputSchema`. Mixed command tools adv
 `logic://session-players/{id}`, `logic://workflow-plans/session?prompt={prompt}`,
 `logic://workflow-skills/{id}`, `logic://workflow-skills/search?query={query}`.
 
-Registered operations reject unknown command-parameter keys at the runtime boundary by default, before cache access, mutation gates, or dispatcher invocation. The State C `invalid_params` response includes sorted `unknown_params` and `allowed_params`. The common compatibility keys `index`, `target_ref`, and `track` remain recognized for every registered operation; `record_sequence` also preserves its ignored `instrument` / `instrument_path` inputs. Set `LOGIC_MCP_ADR003_STRICT_PARAMS=0` only as a temporary compatibility escape hatch to restore pre-strict pass-through.
+Registered operations reject unknown command-parameter keys at the runtime boundary by default, before cache access, mutation gates, or dispatcher invocation. The State C `invalid_params` response includes sorted `unknown_params` and `allowed_params`. Selector keys are operation-scoped: `target_ref` is recognized only when the operation's target policy is `requiresStableTarget`, while `index` and `track` appear only on operations whose dispatcher consumes those aliases. The exact per-operation set is published by `logic://system/operations`; `record_sequence` also preserves its ignored `instrument` / `instrument_path` inputs. Set `LOGIC_MCP_ADR003_STRICT_PARAMS=0` only as a temporary compatibility escape hatch for registered-command parameter pass-through; it does not expose unregistered commands or dispatcher-only aliases.
 
 ### Track state values (`logic://tracks`)
 
@@ -202,9 +202,13 @@ Destructive or file-writing paths require confirmation. `save_as` verifies the r
 
 ### `logic_system`
 
-Common commands: `health`, `permissions`, `refresh_cache`, `export_support_bundle`, `saga_preflight`, `saga_execute`, `saga_status`, `saga_cancel`, `help`.
+Common commands: `health`, `permissions`, `refresh_cache`, `export_support_bundle`, `list_recent_traces`, `get_trace`, `clear_traces`, `saga_preflight`, `saga_execute`, `saga_status`, `saga_cancel`, `help`.
 
 Use `health` for channel readiness and `help` for command summaries. `help` accepts category `all`, `transport`, `tracks`, `mixer`, `midi`, `edit`, `navigate`, `project`, `audio`, `plugins`, or `system`.
+
+With `LOGIC_MCP_ADR005_OPERATION_TRACE=1`, `list_recent_traces` returns bounded summaries from the in-process trace store and accepts optional `limit`.
+`get_trace` returns one stored trace by required `trace_id`.
+`clear_traces` clears only the in-process trace store.
 
 `saga_preflight` and `saga_execute` accept `{ steps: [step], idempotency_key: String }`; each step contains `operation_id`, optional `target_ref`, `params`, and `expected_inverse`. Preflight performs no Logic writes and reports per-step before-state availability. Execute reports verified per-step evidence; a failed request remains State C even when every applied step is compensated, while partial or unknown compensation is State B.
 

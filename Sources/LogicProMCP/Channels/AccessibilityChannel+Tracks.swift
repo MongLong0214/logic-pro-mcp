@@ -438,6 +438,7 @@ extension AccessibilityChannel {
         korean: String,
         english: String,
         expectedTrackType: TrackType,
+        confirmDialog: @escaping @Sendable () -> Void = { sendReturnKey() },
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ChannelResult {
         guard AXLogicProElements.mainWindow(runtime: runtime) != nil else {
@@ -478,7 +479,7 @@ extension AccessibilityChannel {
         let dialogConfirmationAttempted = midCount == beforeCount
         if dialogConfirmationAttempted {
             // Track not created yet — assume New Track dialog is awaiting confirmation
-            sendReturnKey()
+            confirmDialog()
         }
 
         return await verifyTrackCreation(

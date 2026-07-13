@@ -87,8 +87,27 @@ enum OperationHandlerRegistry {
 
     static func fallbackHandler(tool: String, command: String) -> OperationHandler? {
         validate()
-        guard let toolID = ToolID(rawValue: tool) else { return nil }
+        guard let toolID = ToolID(rawValue: tool),
+              OperationRegistry.spec(tool: tool, command: command) != nil,
+              handledCommands(for: toolID).contains(command) else {
+            return nil
+        }
         return makeHandler(tool: toolID, command: command)
+    }
+
+    private static func handledCommands(for tool: ToolID) -> Set<String> {
+        switch tool {
+        case .logicTransport: TransportDispatcher.handledCommands
+        case .logicMixer: MixerDispatcher.handledCommands
+        case .logicNavigate: NavigateDispatcher.handledCommands
+        case .logicAudio: AudioDispatcher.handledCommands
+        case .logicSystem: SystemDispatcher.handledCommands
+        case .logicPlugins: PluginsDispatcher.handledCommands
+        case .logicEdit: EditDispatcher.handledCommands
+        case .logicProject: ProjectDispatcher.handledCommands
+        case .logicMidi: MIDIDispatcher.handledCommands
+        case .logicTracks: TrackDispatcher.handledCommands
+        }
     }
 
     static func validate() {

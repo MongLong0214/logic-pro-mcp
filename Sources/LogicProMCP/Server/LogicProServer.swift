@@ -427,6 +427,25 @@ actor LogicProServer {
                     return invalidParams
                 }
 
+                let handler = OperationHandlerRegistry.handler(tool: name, command: command)
+                let fallback = handler == nil
+                    ? OperationHandlerRegistry.fallbackHandler(tool: name, command: command)
+                    : nil
+                if handler == nil, fallback == nil {
+                    guard ToolID(rawValue: name) != nil else {
+                        return toolTextResult("Unknown tool: \(name)", isError: true)
+                    }
+                    return toolStateCResult(
+                        .invalidParams,
+                        hint: "Command '\(command)' is not registered for MCP tool '\(name)'",
+                        extras: [
+                            "command": command,
+                            "tool": name,
+                            "write_attempted": false,
+                        ]
+                    )
+                }
+
                 await cache.recordToolAccess()
 
                 // #112: every tool dispatch runs under a server-side deadline.
@@ -449,19 +468,13 @@ actor LogicProServer {
                     mutationGate: sagaControlPath ? nil : mutationGate,
                     externallyManagedMutation: sagaControlPath && command == "saga_execute"
                 ) {
-                    guard let handler = OperationHandlerRegistry.handler(
-                        tool: name,
-                        command: command
-                    ) else {
-                        guard let fallback = OperationHandlerRegistry.fallbackHandler(
-                            tool: name,
-                            command: command
-                        ) else {
-                            return toolTextResult("Unknown tool: \(name)", isError: true)
-                        }
-                        return await fallback(handlerDependencies, cmdParams)
+                    if let handler {
+                        return await handler(handlerDependencies, cmdParams)
                     }
-                    return await handler(handlerDependencies, cmdParams)
+                    guard let fallback else {
+                        return toolTextResult("Unknown tool: \(name)", isError: true)
+                    }
+                    return await fallback(handlerDependencies, cmdParams)
                 }
             },
             listResources: { _ in

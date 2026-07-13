@@ -104,6 +104,8 @@ actor AccessibilityChannel: Channel {
         let openMarkerList: @Sendable () async -> ChannelResult
         let createMarker: @Sendable ([String: String]) async -> ChannelResult
         let importMIDIFile: @Sendable (String) async -> ChannelResult
+        let confirmNewTrackDialog: @Sendable () -> Void
+        let canPostEvents: @Sendable () -> Bool
         // v3.1.5 AppleScript-primary helpers (markersAppleScript /
         // projectInfoAppleScript / tracksAppleScript) removed in v3.1.8 —
         // see Issue #7. The dictionary terms they relied on (tracks /
@@ -134,6 +136,12 @@ actor AccessibilityChannel: Channel {
             openMarkerList: @escaping @Sendable () async -> ChannelResult = { .error("openMarkerList not wired") },
             createMarker: @escaping @Sendable ([String: String]) async -> ChannelResult = { _ in .error("createMarker not wired") },
             importMIDIFile: @escaping @Sendable (String) async -> ChannelResult = { _ in .error("importMIDIFile not wired") },
+            confirmNewTrackDialog: @escaping @Sendable () -> Void = {
+                AccessibilityChannel.sendReturnKey()
+            },
+            canPostEvents: @escaping @Sendable () -> Bool = {
+                CGPreflightPostEventAccess()
+            },
             logicRuntime: AXLogicProElements.Runtime = .production
         ) {
             self.isTrusted = isTrusted
@@ -158,6 +166,8 @@ actor AccessibilityChannel: Channel {
             self.openMarkerList = openMarkerList
             self.createMarker = createMarker
             self.importMIDIFile = importMIDIFile
+            self.confirmNewTrackDialog = confirmNewTrackDialog
+            self.canPostEvents = canPostEvents
             self.logicRuntime = logicRuntime
         }
 
@@ -169,6 +179,12 @@ actor AccessibilityChannel: Channel {
             controlBarMouseRuntime: AXMouseHelper.Runtime = .production,
             trackRenameMouseRuntime: AXMouseHelper.Runtime = .production,
             processRuntime: ProcessUtils.Runtime = .production,
+            confirmNewTrackDialog: @escaping @Sendable () -> Void = {
+                AccessibilityChannel.sendReturnKey()
+            },
+            canPostEvents: @escaping @Sendable () -> Bool = {
+                CGPreflightPostEventAccess()
+            },
             runTempoFallback: @escaping @Sendable (String) -> Bool = { tempo in
                 AccessibilityChannel.runTempoFallbackScript(tempo: tempo)
             }
@@ -223,6 +239,8 @@ actor AccessibilityChannel: Channel {
                     )
                 },
                 importMIDIFile: { await AccessibilityChannel.defaultImportMIDIFile(path: $0, runtime: logicRuntime) },
+                confirmNewTrackDialog: confirmNewTrackDialog,
+                canPostEvents: canPostEvents,
                 logicRuntime: logicRuntime
             )
         }
@@ -432,7 +450,10 @@ actor AccessibilityChannel: Channel {
                 }
             )
             let result = await AccessibilityChannel.setTrackInstrument(
-                params: params, runtime: runtime.logicRuntime, staging: staging
+                params: params,
+                runtime: runtime.logicRuntime,
+                staging: staging,
+                canPostEvents: runtime.canPostEvents
             )
             // T4 Tier-A cache population: remember what we routed for future scan restore.
             // Covers both legacy {category, preset} and path-mode {path} callers.
@@ -465,6 +486,7 @@ actor AccessibilityChannel: Channel {
                 korean: "새로운 소프트웨어 악기 트랙",
                 english: "New Software Instrument Track",
                 expectedTrackType: .softwareInstrument,
+                confirmDialog: runtime.confirmNewTrackDialog,
                 runtime: runtime.logicRuntime
             )
         case "track.create_audio":
@@ -472,6 +494,7 @@ actor AccessibilityChannel: Channel {
                 korean: "새로운 오디오 트랙",
                 english: "New Audio Track",
                 expectedTrackType: .audio,
+                confirmDialog: runtime.confirmNewTrackDialog,
                 runtime: runtime.logicRuntime
             )
         case "track.create_drummer":
@@ -482,6 +505,7 @@ actor AccessibilityChannel: Channel {
                 korean: "새로운 Session Player SI 트랙…",
                 english: "New Session Player SI Track…",
                 expectedTrackType: .drummer,
+                confirmDialog: runtime.confirmNewTrackDialog,
                 runtime: runtime.logicRuntime
             )
             if l12.isSuccess { return l12 }
@@ -489,6 +513,7 @@ actor AccessibilityChannel: Channel {
                 korean: "새로운 Drummer 트랙",
                 english: "New Drummer Track",
                 expectedTrackType: .drummer,
+                confirmDialog: runtime.confirmNewTrackDialog,
                 runtime: runtime.logicRuntime
             )
         case "track.create_external_midi":

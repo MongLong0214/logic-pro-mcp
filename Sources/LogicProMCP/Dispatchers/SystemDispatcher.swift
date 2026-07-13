@@ -3,6 +3,13 @@ import CoreGraphics
 import MCP
 
 struct SystemDispatcher: OperationTraceDispatching {
+    // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
+    static let handledCommands: Set<String> = [
+        "health", "permissions", "refresh_cache", "export_support_bundle", "help",
+        "list_recent_traces", "get_trace", "clear_traces",
+        "saga_preflight", "saga_execute", "saga_status", "saga_cancel",
+    ]
+
     typealias SupportBundleExporter = @Sendable (
         URL,
         @Sendable () async -> Void
@@ -135,10 +142,14 @@ struct SystemDispatcher: OperationTraceDispatching {
         description: """
             Diagnostics, help, and saga coordination for the Logic Pro MCP server. \
             Commands: health, permissions, refresh_cache, export_support_bundle, saga_preflight, \
-            saga_execute, saga_status, saga_cancel, help. \
+            saga_execute, saga_status, saga_cancel, list_recent_traces, get_trace, clear_traces, \
+            help. \
             Params by command: \
             help -> { category: String } (returns full param docs for a dispatcher); \
             refresh_cache -> {} (force AX re-poll); \
+            list_recent_traces -> { limit?: Int }; \
+            get_trace -> { trace_id: String }; \
+            clear_traces -> {}; \
             export_support_bundle -> { dir?: String } (local files only; never uploaded); \
             saga_preflight/saga_execute -> { steps: [step], idempotency_key: String }; \
             saga_status/saga_cancel -> { idempotency_key: String }. \
@@ -176,12 +187,14 @@ struct SystemDispatcher: OperationTraceDispatching {
         mutationGate: LogicMutationGate? = nil,
         sagaRefreshAfterWrite: (@Sendable () async -> Void)? = nil
     ) async -> CallTool.Result {
-        if FeatureFlags.adr005OperationTrace,
-           let traceResult = await handleTraceCommand(command: command, params: params) {
-            return traceResult
-        }
-
         switch command {
+        case "list_recent_traces", "get_trace", "clear_traces":
+            guard FeatureFlags.adr005OperationTrace,
+                  let traceResult = await handleTraceCommand(command: command, params: params) else {
+                return unknownCommandResult(command)
+            }
+            return traceResult
+
         case "health":
             let report = await router.healthReport()
             var entries: [HealthResponse.ChannelSection] = []
@@ -902,6 +915,9 @@ struct SystemDispatcher: OperationTraceDispatching {
                   permissions       -> {} — macOS permission status
                   refresh_cache     -> {} — Force AX re-poll
                   export_support_bundle -> { dir?: String } — Write privacy-safe local diagnostics; never upload
+                  list_recent_traces -> { limit?: Int } — List recent in-process operation traces
+                  get_trace         -> { trace_id: String } — Read one in-process operation trace
+                  clear_traces      -> {} — Clear the in-process operation trace store
                   saga_preflight    -> { steps: [step], idempotency_key: String } — Validate and inspect before-state availability; writes 0
                   saga_execute      -> { steps: [step], idempotency_key: String } — Execute ordered steps with evidence and compensation
                   saga_status       -> { idempotency_key: String } — Read the session journal

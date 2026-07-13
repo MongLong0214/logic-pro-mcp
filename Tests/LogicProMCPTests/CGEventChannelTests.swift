@@ -210,7 +210,8 @@ private func makeCGEventRuntime(
     try await running.start()
 }
 
-@Test func testCGEventProductionRuntimeSmokeExecutesWithoutCrash() {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testCGEventProductionRuntimeSmokeExecutesWithoutCrash() {
     let runtime = CGEventChannel.Runtime.production
 
     _ = runtime.isLogicProRunning()

@@ -371,7 +371,8 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
     }
 }
 
-@Test func testMIDIEngineProductionRuntimeStartStopSmoke() async throws {
+@Test(codexSeatbeltCoreMIDIDisabled)
+func testMIDIEngineProductionRuntimeStartStopSmoke() async throws {
     let engine = MIDIEngine()
 
     // v3.4.4 (CI hotfix): GitHub Actions macos-15-arm64 runners do not

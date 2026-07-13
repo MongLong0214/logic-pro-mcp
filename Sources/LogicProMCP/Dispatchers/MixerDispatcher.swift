@@ -2,6 +2,11 @@ import Foundation
 import MCP
 
 struct MixerDispatcher: OperationTraceDispatching {
+    // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
+    static let handledCommands: Set<String> = [
+        "set_volume", "set_pan", "set_master_volume", "set_plugin_param", "insert_plugin",
+    ]
+
     static let tool = commandTool(
         name: "logic_mixer",
         description: "Mixer actions in Logic Pro. Commands: set_volume, set_pan, set_master_volume, set_plugin_param, insert_plugin. BREAKING since v3.3.0: every mutating command requires explicit `track` (Int ≥ 0) — pre-v3.3.0 missing `track` defaulted to 0 and silently mutated the first track; this now returns an error. Params: set_volume -> { track: Int (required, ≥ 0), value: Float (0.0..1.0) } verified against the visible mixer strip via AX readback; set_pan -> { track: Int (required, ≥ 0), value: Float (-1.0..1.0) } verified against the visible mixer strip via AX readback; set_master_volume -> { value: Float (0.0..1.0) } — the master fader has no AX track-header equivalent, so MCU echo is the ONLY readback: State A only when a fresh echo lands, otherwise honest State B echo_timeout with readback_source:mcu_echo + a surface_limitation note (non-deterministic, not a recoverable failure); set_plugin_param -> { track: Int (required, ≥ 0), insert: Int (required, currently only 0), param: Int (required, ≥ 0), value: Float (required) } on the selected track via Scripter; insert_plugin -> { track: Int, slot: Int, plugin_name: Gain|Compressor|Channel EQ, confirmed: true } via AX mixer slot with readback. ADR-002 (LOGIC_MCP_ADR002_TARGET_REF=1): set_volume and set_pan ALSO accept a session-stable { target_ref: String } (a trk_… value from the logic://tracks resource) that resolves to the addressed track's mixer strip in place of the explicit track/index; when both target_ref and track/index are supplied they must agree or the op fails closed (stale_target_reference); with the flag off target_ref is ignored and the explicit track/index remains required.",

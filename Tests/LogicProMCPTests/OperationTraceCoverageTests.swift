@@ -91,7 +91,7 @@ extension OperationTraceTests {
         let mutatingSpecs = OperationRegistry.specs.filter {
             $0.mutability == Mutability.`mutating`
         }
-        #expect(OperationRegistry.specs.count == 104)
+        #expect(OperationRegistry.specs.count == 107)
         #expect(mutatingSpecs.count == 86)
 
         for spec in mutatingSpecs {

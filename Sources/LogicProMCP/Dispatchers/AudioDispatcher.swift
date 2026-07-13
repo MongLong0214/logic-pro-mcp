@@ -2,6 +2,9 @@ import Foundation
 import MCP
 
 struct AudioDispatcher {
+    // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
+    static let handledCommands: Set<String> = ["analyze_file"]
+
     /// Non-absolute marker assigned to outputRoot when the caller sent a present-but-malformed
     /// output_root. validatedURL rejects it (does not begin with "/") so confinement fails
     /// closed as unsafe_path instead of being silently disabled.

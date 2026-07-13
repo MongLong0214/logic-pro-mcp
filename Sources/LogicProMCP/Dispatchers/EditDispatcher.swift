@@ -2,6 +2,12 @@ import Foundation
 import MCP
 
 struct EditDispatcher: OperationTraceDispatching {
+    // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
+    static let handledCommands: Set<String> = [
+        "undo", "redo", "cut", "copy", "paste", "delete", "select_all", "split", "join",
+        "quantize", "bounce_in_place", "normalize", "duplicate", "toggle_step_input",
+    ]
+
     private enum EditRoute {
         case regular(String)
         case unverifiedIsError(String)

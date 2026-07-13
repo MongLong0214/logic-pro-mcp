@@ -23,7 +23,8 @@ private func logicProInstalled() -> Bool {
     return FileManager.default.fileExists(atPath: "/Applications/Logic Pro.app")
 }
 
-@Test func testProcessUtilsBundleURLResolvesWithoutAppKitRunloop() async {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testProcessUtilsBundleURLResolvesWithoutAppKitRunloop() async {
     guard logicProInstalled() else {
         // CI without Logic Pro — the assertion below would fail on
         // missing bundle, not on the bug under test. Skip cleanly.
@@ -43,7 +44,8 @@ private func logicProInstalled() -> Bool {
     #expect(url?.lastPathComponent == "Logic Pro.app")
 }
 
-@Test func testProcessUtilsLogicProVersionResolvesOffMain() async {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testProcessUtilsLogicProVersionResolvesOffMain() async {
     guard logicProInstalled() else { return }
 
     let version: String? = await Task.detached(priority: .userInitiated) {
@@ -58,7 +60,8 @@ private func logicProInstalled() -> Bool {
     }
 }
 
-@Test func testProcessUtilsIsLogicProRunningWorksOffMain() async {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testProcessUtilsIsLogicProRunningWorksOffMain() async {
     // Even without Logic running, the *call* must return a valid Bool
     // (not deadlock, not crash) when invoked off-main with no AppKit
     // runloop. The assertion is intentionally weak — we only check

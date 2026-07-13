@@ -37,7 +37,8 @@ struct MutationGateCompletenessTests {
         "logic_midi": ["list_ports"],
         "logic_project": ["audit", "cleanup_plan", "export_plan", "get_regions", "is_running"],
         "logic_system": [
-            "health", "help", "permissions", "refresh_cache", "saga_preflight", "saga_status",
+            "clear_traces", "get_trace", "health", "help", "list_recent_traces", "permissions",
+            "refresh_cache", "saga_preflight", "saga_status",
         ],
         "logic_audio": ["analyze_file"],
         "logic_plugins": ["get_inventory"],

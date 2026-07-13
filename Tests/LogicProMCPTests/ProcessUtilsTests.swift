@@ -256,7 +256,8 @@ private func makeBundleURL(version: String) throws -> URL {
     #expect(appleScriptCalls == 1)
 }
 
-@Test func testProcessUtilsProductionActivateWrapperReturnsWithoutCrash() {
+@Test(codexSeatbeltProcessInspectionDisabled)
+func testProcessUtilsProductionActivateWrapperReturnsWithoutCrash() {
     // activateLogicPro's result is environment-dependent (needs a running Logic);
     // this smoke test asserts the production wrapper runs without crashing.
     _ = ProcessUtils.activateLogicPro()

@@ -289,6 +289,8 @@ private func makeAXBackedAccessibilityChannel(
         sleepMicros: { _ in }
     ),
     processRuntime: ProcessUtils.Runtime = makeProcessRuntime(),
+    confirmNewTrackDialog: @escaping @Sendable () -> Void = {},
+    canPostEvents: @escaping @Sendable () -> Bool = { true },
     runTempoFallback: @escaping @Sendable (String) -> Bool = { _ in false }
 ) -> AccessibilityChannel {
     let runtime = AccessibilityChannel.Runtime.axBacked(
@@ -298,6 +300,8 @@ private func makeAXBackedAccessibilityChannel(
         controlBarMouseRuntime: controlBarMouseRuntime,
         trackRenameMouseRuntime: trackRenameMouseRuntime,
         processRuntime: processRuntime,
+        confirmNewTrackDialog: confirmNewTrackDialog,
+        canPostEvents: canPostEvents,
         runTempoFallback: runTempoFallback
     )
     return AccessibilityChannel(runtime: runtime)
@@ -2005,10 +2009,17 @@ private func makeTempoSliderFixture(
         setAttributeHandler: nil,
         performActionHandler: { _, _ in true }
     )
-    let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app, logicRuntime: runtime)
+    let confirmation = LockedFlag()
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: app,
+        logicRuntime: runtime,
+        confirmNewTrackDialog: { confirmation.set() }
+    )
 
     let result = await channel.execute(operation: "track.create_instrument", params: [:])
 
+    #expect(confirmation.value)
     #expect(!result.isSuccess)
     #expect(result.message.contains("\"error\":\"ax_write_failed\""))
     #expect(result.message.contains("track count did not increase"))
@@ -2047,10 +2058,17 @@ private func makeTempoSliderFixture(
         setAttributeHandler: nil,
         performActionHandler: { _, _ in true }
     )
-    let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app, logicRuntime: runtime)
+    let confirmation = LockedFlag()
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: app,
+        logicRuntime: runtime,
+        confirmNewTrackDialog: { confirmation.set() }
+    )
 
     let result = await channel.execute(operation: "track.create_instrument", params: [:])
 
+    #expect(confirmation.value)
     #expect(result.isSuccess)
     #expect(result.message.contains("\"verified\":false"))
     #expect(result.message.contains("\"reason\":\"retry_exhausted\""))
@@ -2519,7 +2537,8 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
             isPanelOpen: { _ in true },
             openPanel: { _ in },
             resolvePath: { _ in nil }
-        )
+        ),
+        canPostEvents: { true }
     )
 
     #expect(!result.isSuccess)
@@ -2559,7 +2578,8 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
             isPanelOpen: { _ in false },          // panel never open
             openPanel: { _ in openAttempted.set() }, // auto-open is a no-op
             resolvePath: { _ in nil }
-        )
+        ),
+        canPostEvents: { true }
     )
 
     #expect(!result.isSuccess)
@@ -2599,7 +2619,8 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
             isPanelOpen: { _ in true },
             openPanel: { _ in },
             resolvePath: { _ in false }   // cache says: path does not exist
-        )
+        ),
+        canPostEvents: { true }
     )
 
     #expect(!result.isSuccess)
@@ -2634,7 +2655,8 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
             openPanel: { _ in },
             resolvePathKind: { _ in .folder },
             resolvePath: { _ in true }
-        )
+        ),
+        canPostEvents: { true }
     )
 
     #expect(!result.isSuccess)
@@ -2707,7 +2729,8 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
             isPanelOpen: { _ in panelOpen.next() },
             openPanel: { _ in openCalls.inc() },
             resolvePath: { _ in true }   // cache says the path exists → attempt nav
-        )
+        ),
+        canPostEvents: { true }
     )
 
     #expect(!result.isSuccess)
@@ -2746,7 +2769,8 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
             isPanelOpen: { _ in true },   // panel stays open throughout
             openPanel: { _ in openCalls.inc() },
             resolvePath: { _ in true }
-        )
+        ),
+        canPostEvents: { true }
     )
 
     #expect(!result.isSuccess)

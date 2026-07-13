@@ -2,6 +2,16 @@ import Foundation
 import MCP
 
 struct TrackDispatcher: OperationTraceDispatching {
+    // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
+    static let handledCommands: Set<String> = [
+        "select", "create_audio", "create_instrument", "create_drummer",
+        "create_external_midi", "delete", "duplicate", "rename", "mute", "solo", "arm",
+        "arm_only", "record_sequence", "set_automation", "set_instrument", "list_library",
+        "scan_library", "resolve_path", "scan_plugin_presets",
+    ]
+    // The legacy direct alias stays explicit but is never exposed through MCP fallback.
+    static let directOnlyCommands: Set<String> = ["library"]
+
     private static let maxTrackNameLength = 128
 
     static let tool = Tool(
