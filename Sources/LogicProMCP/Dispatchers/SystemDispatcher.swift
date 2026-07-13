@@ -974,6 +974,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                   logic://workflow-plans/session?prompt={prompt} — Dry-run session plan
                   logic://workflow-skills/{id}    — Workflow skill detail
                   logic://workflow-skills/search?query={query} — Workflow skill search
+                  logic://system/operations       — Registry-generated operation catalog
 
                 Use: logic_system(command: "help", params: {category: "transport"})
                 for detailed command docs per category.

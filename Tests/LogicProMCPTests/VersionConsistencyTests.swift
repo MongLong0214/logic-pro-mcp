@@ -149,6 +149,7 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
 
     let templates = Set(try #require(manifest["resource_templates"] as? [String]))
     #expect(templates == [
+        "logic://system/operations",
         "logic://tracks/{index}",
         "logic://tracks/{index}/regions",
         "logic://mixer/{strip}",
@@ -165,14 +166,14 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
     #expect(templates == Set(ResourceProvider.templates.map(\.uriTemplate)))
 
     let description = try #require(manifest["description"] as? String)
-    #expect(description.contains("10 tools + 18 resources + 11 templates"))
+    #expect(description.contains("10 tools + 18 resources + 12 templates"))
 }
 
 @Test func testReadmeAndAPIDocsMatchPublicSurfaceAndRouting() throws {
     let readme = try readRepoFile("README.md")
     #expect(readme.contains("| Read resources | 18 static resources"))
-    #expect(readme.contains("| Resource templates | 11 templates"))
-    #expect(readme.contains("All 10 tools, 18 resources, 11 templates"))
+    #expect(readme.contains("| Resource templates | 12 templates"))
+    #expect(readme.contains("All 10 tools, 18 resources, 12 templates"))
 
     let api = try readRepoFile("docs/API.md")
     #expect(api.contains("| `toggle_cycle` | — | text | Accessibility → MIDIKeyCommands → CGEvent → MCU |"))

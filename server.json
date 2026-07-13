@@ -91,7 +91,7 @@
       "capabilities": {
         "tools": 10,
         "resources": 18,
-        "resourceTemplates": 11,
+        "resourceTemplates": 12,
         "controlChannels": [
           "MCU",
           "Accessibility",

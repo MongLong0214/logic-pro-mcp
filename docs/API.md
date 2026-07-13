@@ -1,6 +1,6 @@
 # API Reference
 
-Current surface: Logic Pro MCP exposes 10 tools, 18 static resources, and 11 resource templates. The published stable release is v3.11.0. It keeps the 10-tool / 18-resource / 11-template surface, includes the v3.9.0 MCP capability additions (resource subscriptions, workflow prompts, and per-tool `outputSchema` / `structuredContent`), keeps the v3.9.2 verified plugin closed-window fix, keeps v3.10.0 desktop/Creator Studio targeting, and adds the v3.11.0 Doctor, tempo, Bounce, region, marker, native toggle, and help-category fixes. `logic_midi` send-only successes and `logic_tracks.arm_only` return Honest Contract JSON envelopes (BREAKING response shape — see CHANGELOG).
+Current surface: Logic Pro MCP exposes 10 tools, 18 static resources, and 12 resource templates. The published stable release is v3.11.0. That release keeps the 10-tool / 18-resource / 11-template surface; the current source tree adds the read-only generated operation catalog. It includes the v3.9.0 MCP capability additions (resource subscriptions, workflow prompts, and per-tool `outputSchema` / `structuredContent`), keeps the v3.9.2 verified plugin closed-window fix, keeps v3.10.0 desktop/Creator Studio targeting, and adds the v3.11.0 Doctor, tempo, Bounce, region, marker, native toggle, and help-category fixes. `logic_midi` send-only successes and `logic_tracks.arm_only` return Honest Contract JSON envelopes (BREAKING response shape — see CHANGELOG).
 
 Use tools for actions. Use resources for state. Treat every mutating result as one of:
 
@@ -58,11 +58,13 @@ Every tool in `tools/list` advertises an `outputSchema`. Mixed command tools adv
 
 ## Resource Templates
 
-`logic://tracks/{index}`, `logic://tracks/{index}/regions`, `logic://mixer/{strip}`,
+`logic://system/operations` (exact read-only catalog URI), `logic://tracks/{index}`, `logic://tracks/{index}/regions`, `logic://mixer/{strip}`,
 `logic://stock-plugins/{id}`, `logic://stock-plugins/search?query={query}`,
 `logic://stock-instruments/{id}`, `logic://stock-instruments/search?query={query}`,
 `logic://session-players/{id}`, `logic://workflow-plans/session?prompt={prompt}`,
 `logic://workflow-skills/{id}`, `logic://workflow-skills/search?query={query}`.
+
+Registered operations reject unknown command-parameter keys at the runtime boundary by default, before cache access, mutation gates, or dispatcher invocation. The State C `invalid_params` response includes sorted `unknown_params` and `allowed_params`. The common compatibility keys `index`, `target_ref`, and `track` remain recognized for every registered operation; `record_sequence` also preserves its ignored `instrument` / `instrument_path` inputs. Set `LOGIC_MCP_ADR003_STRICT_PARAMS=0` only as a temporary compatibility escape hatch to restore pre-strict pass-through.
 
 ### Track state values (`logic://tracks`)
 

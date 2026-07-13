@@ -68,8 +68,10 @@ private let serverResourceText = sharedResourceText
 
         "logic://workflow-skills/{id}",
         "logic://workflow-skills/search?query={query}",
+        "logic://system/operations",
     ]
     #expect(expectedTemplates.isSubset(of: templateURIs))
+    #expect(templateURIs.count == 12)
 }
 
 @Test func testInvalidPaginationCursorRejectedWithInvalidParams() {

@@ -232,5 +232,11 @@ struct ResourceProvider {
             description: "Search workflow skills by query",
             mimeType: "application/json"
         ),
+        Resource.Template(
+            uriTemplate: "logic://system/operations",
+            name: "Operation Catalog",
+            description: "Registry-generated operation policies and accepted parameter keys",
+            mimeType: "application/json"
+        ),
     ]
 }
