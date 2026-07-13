@@ -86,6 +86,84 @@ struct QualificationGateTests {
         #expect(decision.rejections.isEmpty)
     }
 
+    @Test func waiverForUnknownCaseRejectsPromotion() {
+        let decision = evaluate(
+            cases: passedRequiredCases(),
+            waivers: [waiver(caseID: "missing-case", expiryVersion: "1.3.0")]
+        )
+
+        #expect(!decision.promotable)
+        #expect(decision.rejections.contains(.waiverForUnknownCase(caseID: "missing-case")))
+    }
+
+    @Test func waiverForPassingCaseRejectsPromotion() {
+        let passedCase = qualificationCase(id: "optional-case", status: .passed)
+        let decision = evaluate(
+            cases: passedRequiredCases() + [passedCase],
+            waivers: [waiver(caseID: passedCase.id, expiryVersion: "1.3.0")]
+        )
+
+        #expect(!decision.promotable)
+        #expect(decision.rejections.contains(.waiverForPassingCase(caseID: passedCase.id)))
+    }
+
+    @Test func waiverForFailedCaseRejectsPromotion() {
+        let failedCase = qualificationCase(id: "optional-case", status: .failed)
+        let decision = evaluate(
+            cases: passedRequiredCases() + [failedCase],
+            waivers: [waiver(caseID: failedCase.id, expiryVersion: "1.3.0")]
+        )
+
+        #expect(!decision.promotable)
+        #expect(decision.rejections.contains(
+            .waiverForNonWaivedCase(caseID: failedCase.id, status: .failed)
+        ))
+    }
+
+    @Test func waiverForNotQualifiedCaseRejectsPromotion() {
+        let skippedCase = qualificationCase(id: "optional-case", status: .notQualified)
+        let decision = evaluate(
+            cases: passedRequiredCases() + [skippedCase],
+            waivers: [waiver(caseID: skippedCase.id, expiryVersion: "1.3.0")]
+        )
+
+        #expect(!decision.promotable)
+        #expect(decision.rejections.contains(
+            .waiverForNonWaivedCase(caseID: skippedCase.id, status: .notQualified)
+        ))
+    }
+
+    @Test func waivedCaseWithoutWaiverRejectsPromotion() {
+        let waivedCase = qualificationCase(id: "optional-case", status: .waived)
+        let decision = evaluate(cases: passedRequiredCases() + [waivedCase])
+
+        #expect(!decision.promotable)
+        #expect(decision.rejections.contains(.waivedCaseMissingWaiver(caseID: waivedCase.id)))
+    }
+
+    @Test func malformedAndDuplicateWaiversRejectPromotion() {
+        let waivedCase = qualificationCase(id: "optional-case", status: .waived)
+        let malformed = waiver(
+            caseID: waivedCase.id,
+            expiryVersion: "1.3.0",
+            reasonCode: "unsupported-reason",
+            owningIssue: ""
+        )
+        let decision = evaluate(
+            cases: passedRequiredCases() + [waivedCase],
+            waivers: [malformed, malformed]
+        )
+
+        #expect(!decision.promotable)
+        #expect(decision.rejections.contains(
+            .invalidWaiver(caseID: waivedCase.id, field: "reasonCode")
+        ))
+        #expect(decision.rejections.contains(
+            .invalidWaiver(caseID: waivedCase.id, field: "owningIssue")
+        ))
+        #expect(decision.rejections.contains(.duplicateWaiver(caseID: waivedCase.id)))
+    }
+
     @Test func waivedRequiredCombinationDoesNotCountAsPassed() {
         let requiredKey = QualificationAxis.requiredCombinations[0].key
         let waivedKey = "\(requiredKey)/empty"
@@ -163,7 +241,7 @@ struct QualificationGateTests {
 
         #expect(!decision.promotable)
         #expect(decision.rejections == [
-            .requiredCombinationNotQualified(key: QualificationAxis.requiredCombinations[0].key),
+            .duplicateCaseID(caseID: duplicate.id),
         ])
     }
 
@@ -174,8 +252,16 @@ struct QualificationGateTests {
 
         #expect(!decision.promotable)
         #expect(decision.rejections == [
-            .requiredCombinationNotQualified(key: QualificationAxis.requiredCombinations[0].key),
+            .duplicateCaseID(caseID: duplicate.id),
         ])
+    }
+
+    @Test func duplicateOptionalCaseIDRejectsPromotion() {
+        let duplicate = qualificationCase(id: "optional-case", status: .passed)
+        let decision = evaluate(cases: passedRequiredCases() + [duplicate, duplicate])
+
+        #expect(!decision.promotable)
+        #expect(decision.rejections == [.duplicateCaseID(caseID: duplicate.id)])
     }
 
     @Test func releaseVersionMismatchRejects() {
@@ -296,11 +382,16 @@ struct QualificationGateTests {
         )
     }
 
-    private func waiver(caseID: String, expiryVersion: String) -> QualificationWaiver {
+    private func waiver(
+        caseID: String,
+        expiryVersion: String,
+        reasonCode: String = "known-limitation",
+        owningIssue: String = "#284"
+    ) -> QualificationWaiver {
         QualificationWaiver(
             caseID: caseID,
-            reasonCode: "known-limitation",
-            owningIssue: "#284",
+            reasonCode: reasonCode,
+            owningIssue: owningIssue,
             userImpact: "Optional capability unavailable",
             affectedCapability: "optional-capability",
             affectsDefaultProfile: false,

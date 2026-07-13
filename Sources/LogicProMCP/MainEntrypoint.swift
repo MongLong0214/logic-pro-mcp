@@ -266,7 +266,7 @@ enum MainEntrypoint {
           LogicProMCP <install|update|uninstall> --dry-run [--json]
                                                Print a read-only lifecycle plan and exit
           LogicProMCP --check-permissions      Print macOS permission status and exit (non-zero if not ready)
-          LogicProMCP --qualify --out <attestation.json> [--cases <cases.json>] [--release-version <version>] [--variant <desktop|creator>] [--locale <en|ko>] [--profile <core|full>] [--cache <cold|warm>]
+          LogicProMCP --qualify --out <attestation.json> [--cases <cases.json>] [--waivers <waivers.json>] [--release-version <version>] [--variant <desktop|creator>] [--locale <en|ko>] [--profile <core|full>] [--cache <cold|warm>]
                                                Run deterministic structural qualification and write an attestation
           LogicProMCP --verify-promotion --attestation <attestation.json> --release-version <version> --expected-binary-sha256 <hex> [--required-artifacts <path,...>]
                                                Evaluate the release promotion gate and emit a JSON decision

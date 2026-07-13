@@ -64,6 +64,47 @@ struct QualificationWaiver: Codable, Equatable, Sendable {
     let releaseNoteVisible: Bool
 }
 
+enum QualificationWaiverReasonCode: String, CaseIterable, Sendable {
+    case knownLimitation = "known-limitation"
+}
+
+enum QualificationWaiverValidationIssue: Equatable, Sendable {
+    case invalidField(caseID: String, field: String)
+    case duplicateCaseID(caseID: String)
+}
+
+struct QualificationWaiverValidator {
+    static func issues(in waivers: [QualificationWaiver]) -> [QualificationWaiverValidationIssue] {
+        var issues: [QualificationWaiverValidationIssue] = []
+        var caseIDs: Set<String> = []
+        for waiver in waivers {
+            let caseID = waiver.caseID.trimmingCharacters(in: .whitespacesAndNewlines)
+            if caseID.isEmpty {
+                issues.append(.invalidField(caseID: waiver.caseID, field: "caseID"))
+            }
+            if QualificationWaiverReasonCode(rawValue: waiver.reasonCode) == nil {
+                issues.append(.invalidField(caseID: caseID, field: "reasonCode"))
+            }
+            if waiver.owningIssue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                issues.append(.invalidField(caseID: caseID, field: "owningIssue"))
+            }
+            if waiver.userImpact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                issues.append(.invalidField(caseID: caseID, field: "userImpact"))
+            }
+            if waiver.affectedCapability.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                issues.append(.invalidField(caseID: caseID, field: "affectedCapability"))
+            }
+            if SemanticVersion(waiver.expiryVersion) == nil {
+                issues.append(.invalidField(caseID: caseID, field: "expiryVersion"))
+            }
+            if !caseID.isEmpty, !caseIDs.insert(caseID).inserted {
+                issues.append(.duplicateCaseID(caseID: caseID))
+            }
+        }
+        return issues
+    }
+}
+
 struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
     let schema: String
     let serverVersion: String

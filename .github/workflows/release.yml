@@ -174,6 +174,7 @@ jobs:
           binary_sha256="$(shasum -a 256 LogicProMCP | awk '{print $1}')"
           ./LogicProMCP --qualify \
             --out release-qualification-attestation.json \
+            --waivers .github/qualification/waivers.json \
             --release-version "$RELEASE_VERSION" \
             --variant desktop \
             --locale en \
