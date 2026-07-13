@@ -304,7 +304,14 @@ enum OperationRegistry {
     private static let allowedOperationIDs = Set(allowedOperationIDsByTool.values.flatMap { $0 })
     static let registeredToolRawValues = Set(allowedOperationIDsByTool.keys)
     static let commonAllowedParams: Set<String> = ["index", "target_ref", "track"]
-    static let strictParamValidationOptOuts: Set<OperationID> = []
+    // The saga surfaces (#287) do their OWN strict param validation inside
+    // SystemDispatcher and return richer, saga-specific error envelopes
+    // (typed error + journal_scope). Routing them through the generic
+    // strict-param gate would replace that with a bare invalid_params that
+    // drops journal_scope, so they opt out and rely on their own validation.
+    static let strictParamValidationOptOuts: Set<OperationID> = [
+        .systemSagaPreflight, .systemSagaExecute, .systemSagaStatus, .systemSagaCancel,
+    ]
     static let legacyIgnoredParamsByOperation: [OperationID: Set<String>] = [
         .tracksRecordSequence: ["instrument", "instrument_path"],
     ]

@@ -249,6 +249,21 @@ struct OperationCatalogTests {
             let expected = Self.expectedAllowedParams(for: spec.id)
             #expect(spec.allowedParams == expected, "\(spec.id.rawValue)")
 
+            // Opt-out operations (the saga surfaces) bypass the generic gate and
+            // validate params in their own dispatcher, so the generic gate must
+            // return nil for them regardless of the params.
+            if OperationRegistry.strictParamValidationOptOuts.contains(spec.id) {
+                #expect(
+                    LogicProServer.strictParamValidationResult(
+                        tool: spec.tool.rawValue,
+                        command: spec.command,
+                        params: ["__unknown_param": .string("reject")]
+                    ) == nil,
+                    "\(spec.id.rawValue) opt-out should bypass the generic gate"
+                )
+                continue
+            }
+
             for key in expected {
                 #expect(
                     LogicProServer.strictParamValidationResult(
@@ -288,7 +303,11 @@ struct OperationCatalogTests {
 
     @Test("compatibility: strict opt-out and legacy ignored lists are explicit")
     func compatibilityListsArePinned() {
-        #expect(OperationRegistry.strictParamValidationOptOuts == [])
+        // The saga surfaces opt out of the generic strict-param gate and do
+        // their own richer (journal_scope-carrying) validation in SystemDispatcher.
+        #expect(OperationRegistry.strictParamValidationOptOuts == [
+            .systemSagaPreflight, .systemSagaExecute, .systemSagaStatus, .systemSagaCancel,
+        ])
         #expect(OperationRegistry.legacyIgnoredParamsByOperation == Self.legacyIgnoredParams)
         #expect(OperationRegistry.dispatcherRejectedParamsByOperation == Self.dispatcherRejectedParams)
         #expect(OperationRegistry.commonAllowedParams == Self.commonAllowedParams)
