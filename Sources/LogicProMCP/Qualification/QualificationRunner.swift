@@ -211,7 +211,7 @@ struct QualificationRunner: Sendable {
                 actual: options.releaseVersion
             )
         }
-        let waivers = try Self.loadWaivers(from: options.waiversURL)
+        let waivers = try Self.loadWaivers(from: options.waiversURL, beforeRead: runtime.beforeEvidenceRead)
         let startedAt = runtime.now()
         let sourceExecutableURL = try runtime.executableURL()
         let environment = runtime.environment()
@@ -235,7 +235,8 @@ struct QualificationRunner: Sendable {
                 executableURL: executableURL,
                 environment: driveEnvironment,
                 expectedOperationCount: specs.count,
-                operations: specs
+                operations: specs,
+                expectedExecutableSHA256: binarySHA256
             ))
         } catch {
             driveResult = QualificationDriveResult(
@@ -563,7 +564,11 @@ struct QualificationRunner: Sendable {
             do {
                 externalManifest = try JSONDecoder().decode(
                     QualificationCaseManifest.self,
-                    from: Data(contentsOf: externalCasesURL)
+                    from: Self.readNoFollow(
+                        relativePath: externalCasesURL.lastPathComponent,
+                        directory: externalCasesURL.deletingLastPathComponent(),
+                        beforeRead: runtime.beforeEvidenceRead
+                    )
                 )
             } catch {
                 throw RunnerError.evidenceBindingMismatch("invalid external case manifest")
@@ -1018,11 +1023,18 @@ struct QualificationRunner: Sendable {
     private static let trustedPublicKeyEnvironmentKey =
         "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"
 
-    private static func loadWaivers(from url: URL?) throws -> [QualificationWaiver] {
+    private static func loadWaivers(
+        from url: URL?,
+        beforeRead: @Sendable (URL) -> Void
+    ) throws -> [QualificationWaiver] {
         guard let url else { return [] }
         let waivers = try JSONDecoder().decode(
             [QualificationWaiver].self,
-            from: Data(contentsOf: url)
+            from: readNoFollow(
+                relativePath: url.lastPathComponent,
+                directory: url.deletingLastPathComponent(),
+                beforeRead: beforeRead
+            )
         )
         if let issue = QualificationWaiverValidator.issues(in: waivers).first {
             switch issue {
@@ -1500,13 +1512,36 @@ struct QualificationRunner: Sendable {
         }
         beforeRead(directory.appendingPathComponent(relativePath))
         let handle = FileHandle(fileDescriptor: fileFD, closeOnDealloc: false)
-        let data = try handle.readToEnd() ?? Data()
+        var data = Data()
+        while true {
+            let remaining = maxBytes - Int64(data.count)
+            guard remaining > 0 else {
+                let overflow = try handle.read(upToCount: 1) ?? Data()
+                guard overflow.isEmpty else {
+                    throw RunnerError.invalidArguments("Evidence file exceeds size limit")
+                }
+                break
+            }
+            let chunk = try handle.read(upToCount: min(64 * 1024, Int(remaining))) ?? Data()
+            if chunk.isEmpty { break }
+            data.append(chunk)
+        }
 
+        var afterRead = stat()
         var current = stat()
-        guard fstatat(directoryFD, filename, &current, AT_SYMLINK_NOFOLLOW) == 0,
+        guard fstat(fileFD, &afterRead) == 0,
+              afterRead.st_mode & S_IFMT == S_IFREG,
+              afterRead.st_nlink == 1,
+              afterRead.st_dev == opened.st_dev,
+              afterRead.st_ino == opened.st_ino,
+              afterRead.st_size == data.count,
+              afterRead.st_size <= maxBytes,
+              fstatat(directoryFD, filename, &current, AT_SYMLINK_NOFOLLOW) == 0,
               current.st_mode & S_IFMT == S_IFREG,
               current.st_dev == opened.st_dev,
-              current.st_ino == opened.st_ino else {
+              current.st_ino == opened.st_ino,
+              current.st_nlink == 1,
+              current.st_size == afterRead.st_size else {
             throw RunnerError.invalidArguments("Evidence path changed during read")
         }
         return data

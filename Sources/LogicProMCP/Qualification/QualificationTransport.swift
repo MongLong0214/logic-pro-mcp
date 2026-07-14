@@ -6,17 +6,20 @@ struct QualificationDriveRequest: Sendable {
     let environment: [String: String]
     let expectedOperationCount: Int
     let operations: [OperationSpec]
+    let expectedExecutableSHA256: String?
 
     init(
         executableURL: URL,
         environment: [String: String],
         expectedOperationCount: Int,
-        operations: [OperationSpec] = []
+        operations: [OperationSpec] = [],
+        expectedExecutableSHA256: String? = nil
     ) {
         self.executableURL = executableURL
         self.environment = environment
         self.expectedOperationCount = expectedOperationCount
         self.operations = operations
+        self.expectedExecutableSHA256 = expectedExecutableSHA256
     }
 }
 
@@ -1118,6 +1121,7 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
         guard FileManager.default.isExecutableFile(atPath: request.executableURL.path) else {
             throw QualificationTransportError.launchFailed("not executable: \(request.executableURL.path)")
         }
+        try verifyExecutableIdentity()
         var environment = request.environment
         environment["LOGIC_MCP_ADR002_TARGET_REF"] = "0"
         environment["LOGIC_MCP_ADR003_STRICT_PARAMS"] = "1"
@@ -1131,13 +1135,23 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
         exit.start(process)
         do {
             try process.run()
+            try verifyExecutableIdentity()
         } catch {
+            if process.isRunning { process.terminate() }
             throw QualificationTransportError.launchFailed(String(describing: error))
         }
         stateLock.lock()
         started = true
         stateLock.unlock()
         startReaders()
+    }
+
+    private func verifyExecutableIdentity() throws {
+        guard let expected = request.expectedExecutableSHA256 else { return }
+        let data = try Data(contentsOf: request.executableURL, options: .mappedIfSafe)
+        guard SupportBundleBuilder.sha256(data) == expected else {
+            throw QualificationTransportError.launchFailed("qualification executable changed")
+        }
     }
 
     func request<Result: Decodable>(

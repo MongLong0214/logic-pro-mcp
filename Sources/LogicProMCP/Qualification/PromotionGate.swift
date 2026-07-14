@@ -312,7 +312,7 @@ struct SemanticVersion: Comparable {
         }
         let parts = releaseParts[0].split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 3,
-              parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }),
+              parts.allSatisfy(Self.validCoreNumber),
               let major = Int(parts[0]),
               let minor = Int(parts[1]),
               let patch = Int(parts[2]) else {
@@ -333,11 +333,16 @@ struct SemanticVersion: Comparable {
         if lhs.prerelease.isEmpty { return false }
         if rhs.prerelease.isEmpty { return true }
         for (left, right) in zip(lhs.prerelease, rhs.prerelease) where left != right {
-            switch (Int(left), Int(right)) {
-            case let (.some(leftNumber), .some(rightNumber)): return leftNumber < rightNumber
-            case (.some, .none): return true
-            case (.none, .some): return false
-            case (.none, .none): return left.lexicographicallyPrecedes(right)
+            let leftNumeric = Self.isASCIINumeric(left)
+            let rightNumeric = Self.isASCIINumeric(right)
+            switch (leftNumeric, rightNumeric) {
+            case (true, true):
+                return left.count == right.count
+                    ? left.lexicographicallyPrecedes(right)
+                    : left.count < right.count
+            case (true, false): return true
+            case (false, true): return false
+            case (false, false): return left.lexicographicallyPrecedes(right)
             }
         }
         return lhs.prerelease.count < rhs.prerelease.count
@@ -345,7 +350,20 @@ struct SemanticVersion: Comparable {
 
     private static func validIdentifiers(_ value: Substring) -> Bool {
         value.split(separator: ".", omittingEmptySubsequences: false).allSatisfy { identifier in
-            !identifier.isEmpty && identifier.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" }
+            !identifier.isEmpty
+                && identifier.utf8.allSatisfy {
+                    (48...57).contains($0) || (65...90).contains($0)
+                        || (97...122).contains($0) || $0 == 45
+                }
+                && (!isASCIINumeric(identifier) || identifier == "0" || identifier.first != "0")
         }
+    }
+
+    private static func validCoreNumber(_ value: Substring) -> Bool {
+        isASCIINumeric(value) && (value == "0" || value.first != "0")
+    }
+
+    private static func isASCIINumeric(_ value: Substring) -> Bool {
+        !value.isEmpty && value.utf8.allSatisfy { (48...57).contains($0) }
     }
 }

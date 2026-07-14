@@ -424,7 +424,10 @@ struct QualificationWaiverValidator {
             if QualificationWaiverReasonCode(rawValue: waiver.reasonCode) == nil {
                 issues.append(.invalidField(caseID: caseID, field: "reasonCode"))
             }
-            if waiver.owningIssue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let owningIssue = waiver.owningIssue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if owningIssue.first != "#"
+                || owningIssue.dropFirst().isEmpty
+                || !owningIssue.dropFirst().utf8.allSatisfy({ (48...57).contains($0) }) {
                 issues.append(.invalidField(caseID: caseID, field: "owningIssue"))
             }
             if waiver.userImpact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

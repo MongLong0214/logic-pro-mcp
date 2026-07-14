@@ -555,6 +555,18 @@ struct QualificationGateTests {
         ])
     }
 
+    @Test func semanticVersionRejectsLeadingZerosAndUnicodeIdentifiers() {
+        #expect(SemanticVersion("01.2.3") == nil)
+        #expect(SemanticVersion("1.2.3-01") == nil)
+        #expect(SemanticVersion("1.2.3-한글") == nil)
+    }
+
+    @Test func oversizedNumericPrereleaseKeepsNumericPrecedence() throws {
+        let numeric = try #require(SemanticVersion("1.2.3-999999999999999999999999"))
+        let alpha = try #require(SemanticVersion("1.2.3-alpha"))
+        #expect(numeric < alpha)
+    }
+
     @Test func attestationCodableRoundTripPreservesDates() throws {
         let original = attestation(
             cases: passedRequiredCases(),
