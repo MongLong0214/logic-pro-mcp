@@ -1,11 +1,11 @@
 # Pipeline Status: Enterprise Review & Refactor Sweep (v3.8.0)
 
-**PRD**: docs/prd/PRD-enterprise-review-refactor.md v0.4 — APPROVED (boomer CONVERGED R4, 2026-07-05)
+**PRD**: docs/prd/PRD-enterprise-review-refactor.md v0.4 — APPROVED (independent review CONVERGED R4, 2026-07-05)
 **Findings**: REVIEW-FINDINGS.md (round 1, 5 reviewers) + AUDIT-ROUND2.md (round 2, security/concurrency/completeness)
 **Size**: XL | **Baseline**: main 7bb8bf3, v3.7.4, 1980 tests green, 0 open issues
 **Branch**: chore/enterprise-review-refactor-v3.8.0 (worktree logic-pro-mcp-refactor)
 **Current Phase**: C→2 (Phase-1 source COMPLETE 7/7 integrated 2052 green; entering WS8 test-integrity)
-**Rule**: NO implementation until PRD + tickets boomer(codex gpt-5.5 xhigh)-converged (Isaac). No main/default merge or direct push (Isaac) — PR only.
+**Rule**: NO implementation until PRD + tickets independent review-converged (Isaac). No main/default merge or direct push (Isaac) — PR only.
 
 ## Workstreams / Tickets (file-atomic, disjoint)
 | WS | File | Phase | Priority | Owns |
@@ -20,7 +20,7 @@
 | WS8 | WS8-tests-dead-assertions.md | 2 (after Ph1) | P1 | existing Tests/* (excl 7 Phase-1 files) + ledger; sub-units 8c→8a→8b sequential |
 | WS9 | WS9-docs.md | 3 (after Ph2) | P2 | *.md docs |
 
-## Cross-WS sequencing notes (from boomer PRD reviews)
+## Cross-WS sequencing notes (from independent review PRD reviews)
 - WS5 adds `AppleScriptSafety.escapeForScript`; WS2 defers its escape-dedup (avoid cross-edit).
 - No file owned by two WS (verified round-2). LogicProServer→WS6 only; ResourceProvider→WS3 only; entrypoints→WS4.
 - Golden-snapshot harness captured from v3.7.4 binary BEFORE Phase-1; diff=0 gate per wire-sensitive WS (WS4/WS6/WS2/WS5). logic://tracks value-only allowlist (WS3).
@@ -28,13 +28,13 @@
 ## Review History
 | Phase | Round | Verdict | Notes |
 |-------|-------|---------|-------|
-| B-PRD | 1 | HAS_ISSUES (5) | boomer; all folded → v0.2 |
+| B-PRD | 1 | HAS_ISSUES (5) | independent review; all folded → v0.2 |
 | B-PRD | 2 | HAS_ISSUES (3) | extractTrackState exception + Projects ownership + MIDIFeedback tests → v0.3 |
 | B-PRD | 3 | HAS_ISSUES (1) | sentinel = wire change → v0.4 value-only |
 | B-PRD | 4 | **CONVERGED** | value-only confirmed; ready for tickets |
 | B-tickets | 1 | HAS_ISSUES (5) | ownership collisions; folded: StateCache→WS6, per-WS test files, ledger→WS8, permission-tristate G6-a, WS8→8a/b/c |
 | B-tickets | 2 | HAS_ISSUES (1) | WS9 permission-tristate SECURITY/TROUBLESHOOTING doc AC missing → added |
-| B-tickets | 3 | **CONVERGED** | boomer final sign-off: PRD + WS1-9 ready for implementation |
+| B-tickets | 3 | **CONVERGED** | independent review final sign-off: PRD + WS1-9 ready for implementation |
 
 ## Phase C integration log
 - Base test count: 2014 (fix-branch base; ws1 pure-move confirmed).
@@ -48,7 +48,7 @@
 - WS4 AC5 (create_marker pre-poll) unavoidably changes testNavigateDispatcherRoutesMarkerAndZoomCommands's expected axOps (7→8, adds nav.get_markers). Approved option (a): WS4 updates ONLY that one expected-op-list entry (intended consequence of an approved P1 fix; scenario unchanged; count-delta tests already cover it). Not a dead-assertion edit → WS8 later touches OTHER lines of DispatcherTests for the assertion sweep (different lines/purpose, sequential Phase-2, no collision).
 
 - **PHASE-1 COMPLETE: 7/7 integrated** (ws1/2/3/4/5/6/7), fix branch 2052 green, all merges conflict-0. Final WS4 (SIGPIPE P0 + ResourceHandlers/record_sequence splits + AC5 marker pre-poll).
-- Next: WS8 (test integrity, sequential 8c→8a→8b) + WS6 follow-up (HandshakeResult/parseDeviceResponse + MCUProtocolTests deletion). Then WS9 docs → boomer final full-diff review → v3.8.0 release.
+- Next: WS8 (test integrity, sequential 8c→8a→8b) + WS6 follow-up (HandshakeResult/parseDeviceResponse + MCUProtocolTests deletion). Then WS9 docs → independent review final full-diff review → v3.8.0 release.
 
 ## LIVE E2E (fix-branch binary, all 7 WS integrated, Logic 12.3) — 2026-07-05
 - strict live suite (Scripts/live-e2e-test.sh, LOGIC_PRO_MCP_STRICT_LIVE=1): **372 passed, 1 skipped, 373 total — ALL PASS** (baseline 369/370; 0 regression). First run hit an environmental fresh-bootstrap transient (stale blocking dialog); clean re-run all-green.
@@ -71,8 +71,8 @@
 - Cosmetic-only (NOT a defect, deferred): CleanupExecutionTests redundant extra `!` on a #require result — compiles clean, live, intent preserved.
 - **WS8 FULLY VERIFIED. Phase C (source refactor) + Phase 2 (test integrity) COMPLETE.**
 
-## RELEASE GATE — boomer NO-GO (P1 MCU restart regression, 2026-07-05)
-- boomer (narrowed-scope codex, after 1 context-death) found a REAL WS6-introduced regression: production MCU restart drops all feedback.
+## RELEASE GATE — independent review NO-GO (P1 MCU restart regression, 2026-07-05)
+- independent review found a REAL WS6-introduced regression: production MCU restart drops all feedback.
 - Root cause CONFIRMED vs main: main's ProductionMCUTransport stored `private var onReceive` + CoreMIDI callback used `[weak self] → self?.onReceive?(event)` (INDIRECT ref, so start() updating the property kept the reused port's callback pointing at the live sink = restart-safe). WS6 replaced this with the onReceive VALUE captured directly in the callback (`onReceive(event)`) + removed the stored property → on stop()/start(), createBidirectionalPort reuses the existing dest (ports[name] guard) WITHOUT re-registering the callback → old callback yields into the finished first AsyncStream continuation → silent drop.
 - Test gap: MockMCUTransport.start overwrites onReceive each call (MCUChannelTests:408), so it never exercises the production callback-reuse-on-restart path.
 - Severity: P1 NO-GO. MCU-control-surface users lose verified feedback after a restart.

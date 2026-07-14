@@ -6,13 +6,13 @@
 - MCUChannel.swift:180 `Task { await self.receiveFeedback(event) }` AND LogicProServer.swift:1051 `for event in events { Task { await self?.onReceive?(event) } }` — production MCU path fans into unordered Tasks TWICE. Actor admits in arrival not creation order → e2 before e1.
 - Order matters: pitchBend→updateFader last-write-wins (false State B echo_timeout OR false State A verified on intermediate); sysEx LCD positional; select→selectOnly wrong track.
 - Severity P1 (not P0): set_volume/set_pan now [.accessibility]-primary w/ AX readback (insulated); only mixer.set_master_volume [.mcu] + get_state depend on echo. P0 only on MCU-control-surface setups.
-- FIX (BOTH sites): ProductionMCUTransport yields events into AsyncStream continuation (synchronous .yield, FIFO) from CoreMIDI block; MCUChannel drains with ONE `for await event in stream { await receiveFeedback(event) }` task in start(), cancel in stop(). Mirror MIDIEngine.inboundMessages. Risk LOW-MED. Lifecycle tests (boomer #5): burst FIFO, start-stop-start, post-stop ignored, no leak. → WS-B.
+- FIX (BOTH sites): ProductionMCUTransport yields events into AsyncStream continuation (synchronous .yield, FIFO) from CoreMIDI block; MCUChannel drains with ONE `for await event in stream { await receiveFeedback(event) }` task in start(), cancel in stop(). Mirror MIDIEngine.inboundMessages. Risk LOW-MED. Lifecycle tests (independent review #5): burst FIFO, start-stop-start, post-stop ignored, no leak. → WS-B.
 
 ### [MEDIUM] cooperative-pool blocking pervasive + inconsistent:
 - On-actor sync sleeps: setTempo ~370ms (AccessibilityChannel:797-811), toggle usleep (1456/1474), rename usleep×5 (1567-1608), zoom usleep (3669/4070); runLiveScan Thread.sleep×11 ~50s (LibraryAccessor); AppleScript Task.detached still on pool (472); ProcessUtils ps/pgrep/osascript at top of EVERY execute (isLogicProRunning).
 - Only setTrackInstrument offloads correctly (DispatchQueue.global, :3190).
 - Mitigations keep it MEDIUM: LogicMutationGate serializes mutations; reads don't sleep; stdio on dedicated Thread; deadline on DispatchQueue.global. Server stays responsive. Starvation risk on 2-core CI.
-- **DECISION: EXCLUDE from v3.8.0 (follow-up).** Same class as boomer's CGEvent-async exclusion: MEDIUM risk, wide, NOT correctness, AX-thread-consistency constraint, mitigations exist. Document as follow-up. Behavior-preserving + tight ≠ risky wide change.
+- **DECISION: EXCLUDE from v3.8.0 (follow-up).** Same class as independent review's CGEvent-async exclusion: MEDIUM risk, wide, NOT correctness, AX-thread-consistency constraint, mitigations exist. Document as follow-up. Behavior-preserving + tight ≠ risky wide change.
 
 ### LOW: #3 MIDIEngine.inboundMessages produced never consumed (dead code + latent unbounded-buffer leak if sink ever receives) — remove or consume. Low risk → optional include. #4 withBanking continuation-semaphore fragile but CORRECT (no live bug). #5 MCUFeedbackParser conn RMW across awaits (fixed by #1 single-consumer). #6 ManualValidationStore flock spin (admin-CLI only). #7 ProcessUtils.runAppKit main.sync (guarded, never blocks in stdio server).
 

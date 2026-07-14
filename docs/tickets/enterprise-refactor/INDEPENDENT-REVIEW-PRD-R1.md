@@ -1,4 +1,4 @@
-# boomer PRD R1 verdict: HAS_ISSUES (all 5 ACCEPTED — fold into v0.2)
+# Independent review PRD R1 verdict: HAS_ISSUES (all 5 ACCEPTED — fold into v0.2)
 
 1. [P1] §3.2 WS partition NOT file-disjoint: WS-E P2-3 (bespoke-error→FailureError) edits TrackDispatcher/ProjectDispatcher (WS-D owns); WS-D mutation-gate test vs WS-G (Tests/*). FIX: WS-E adds ONLY FailureError enum cases; WS-D rewrites dispatcher call sites; mutation-gate completeness test → WS-G entirely (or named file to WS-D, excluded from WS-G).
 2. [P1] NG4/WS-B CGEvent async sleep NOT low-risk: postShortcutSequence blocks in-actor (CGEventChannel:246 sleepMicros 20_000); naive Task.sleep → actor reentrancy between keypresses → concurrent goto_position typing interleaves. FIX: EXCLUDE from v3.8.0 OR serialized key-event worker/queue + concurrent-sequence no-interleave test. **DECISION: EXCLUDE (move to NG) — not worth reentrancy risk this sweep.**

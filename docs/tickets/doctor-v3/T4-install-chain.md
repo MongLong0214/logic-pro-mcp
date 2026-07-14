@@ -73,7 +73,7 @@ Diagnose stale/shadowing installs and incomplete keg contents without ever execu
 5. Insert appends after `installSourceCheck` (generate :246), before `releaseSignatureCheck`. Add anchors, bump array + count.
 
 ### 4.3 Refactor Phase
-- One-time real `strings -a` timing on the 3.5.0 universal binary during T4 to confirm the ≤1.5s ceiling is comfortable (PRD §7 strategist-P3-E) — a manual/live note, not a unit test.
+- One-time real `strings -a` timing on the 3.5.0 universal binary during T4 to confirm the ≤1.5s ceiling is comfortable (PRD §7 architecture review-P3-E) — a manual/live note, not a unit test.
 
 ## 5. Edge Cases
 - E5 source build (case 6/13); E7 `0.0.0`-only (case 3); E16 file-not-dir share (case 14); E17 non-Mach-O (case 5); E15 relative command (case 7); #211 directory candidate (case 8).

@@ -86,7 +86,7 @@ Answer the "I granted it but it still fails" class: `permissions.launch_context`
 - [ ] array/count +2; no dead-`#expect`
 
 ## 7. Out of Scope (explicit)
-- **N10 default-on vs opt-in**: signed off **default-on** (D6/OQ-2). A boomer opt-in proposal routes to orchestrator escalation — **do not** unilaterally add a `--check-tcc` flag.
+- **N10 default-on vs opt-in**: signed off **default-on** (D6/OQ-2). A independent review opt-in proposal routes to orchestrator escalation — **do not** unilaterally add a `--check-tcc` flag.
 - **No live TCC.db in unit tests** — pure mappers on frozen fixtures; the real `immutable=1` open is validated in T9's live/release E2E.
 - **N10 never replaces the live probe** — enrichment only (D5).
 - **No server runtime / health change** (NG3/NG1). **`blocked_by` table + resolver** are **T1** (N9/N10 use `reason`, not `blocked_by` — environmental gates).

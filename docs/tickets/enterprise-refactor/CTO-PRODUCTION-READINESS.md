@@ -1,6 +1,6 @@
 # CTO Production-Readiness Review — v3.8.0 Enterprise Refactor
 
-**Reviewer**: Fable 5 (acting release owner / CTO lens) — independent of the boomer(codex) mechanical review
+**Reviewer**: Release-owner review, independent of the mechanical review
 **Date**: 2026-07-05
 **Branch**: `chore/enterprise-review-refactor-v3.8.0` @ HEAD (219 files, +14314/−10019 vs main `7bb8bf3`)
 **Verdict**: **SHIP-READY, conditional on the Phase-E version-bump checklist below.**

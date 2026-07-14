@@ -1,12 +1,12 @@
 # PRD: v3.9 Hardening & MIDI Read Path
 
-**Version**: 0.2 (boomer r1 반영: P1×7/P2×5 전건 수용)
-**Author**: Claude (Fable orchestrator) + Isaac
+**Version**: 0.2 (independent review r1 반영: P1×7/P2×5 전건 수용)
+**Author**: Product planning
 **Date**: 2026-07-06
 **Status**: Approved (Phase 2 수렴: r1 12건 반영, r2 11/12 RESOLVED, 잔여 1건 r2' PASS)
 **Size**: XL
 
-> 실행 모델: 모든 코드 구현은 codex gpt-5.5 xhigh(workspace-write)로 수행. 오케스트레이터는 판단/문서/리뷰 취합만. 리뷰 게이트는 boomer(codex xhigh read-only) + 오케스트레이터 셀프리뷰.
+> 실행 모델: 모든 코드 변경은 문서화된 검토 및 검증 게이트를 따른다.
 
 ---
 
@@ -52,23 +52,23 @@
 
 **AC:**
 - [ ] AC-1.1: release.yml build job에서 packaging **이전에** `swift test --no-parallel` 실행, 실패 시 job fail
-- [ ] AC-1.2: `Scripts/release.sh`가 (a) branch≠main 또는 HEAD≠origin/main이면 즉시 종료(release-stable.sh:53,66 동일), (b) tag push/GH release **이전에** `swift test --no-parallel` + `git diff --exit-code Package.resolved`를 자체 실행 — release.sh 단독 경로로도 미검증 발행 불가 (boomer#1)
+- [ ] AC-1.2: `Scripts/release.sh`가 (a) branch≠main 또는 HEAD≠origin/main이면 즉시 종료(release-stable.sh:53,66 동일), (b) tag push/GH release **이전에** `swift test --no-parallel` + `git diff --exit-code Package.resolved`를 자체 실행 — release.sh 단독 경로로도 미검증 발행 불가 (independent review#1)
 - [ ] AC-1.3: ci.yml에 `git diff --exit-code Package.resolved` 스텝 — resolve 후 lockfile 변동 시 fail
-- [ ] AC-1.4: timestamp SSOT = **CHANGELOG 최신 릴리스 헤딩의 UTC 날짜** (boomer#12). VersionConsistencyTests가 (a) 리소스가 실제로 노출하는 lastModified annotation == SSOT (private static 직접 비교 금지 — 공개 표면 기준), (b) README 버전 배지/참조 == `ServerConfig.serverVersion` 검증. 현재 stale 값(2026-06-23→2026-07-05) 수정 포함
+- [ ] AC-1.4: timestamp SSOT = **CHANGELOG 최신 릴리스 헤딩의 UTC 날짜** (independent review#12). VersionConsistencyTests가 (a) 리소스가 실제로 노출하는 lastModified annotation == SSOT (private static 직접 비교 금지 — 공개 표면 기준), (b) README 버전 배지/참조 == `ServerConfig.serverVersion` 검증. 현재 stale 값(2026-06-23→2026-07-05) 수정 포함
 - [ ] AC-1.5: 기존 release/tag 흐름의 다른 스텝은 무변경 (behavior-preserving 외 추가 게이트만)
 
 ### US-2 (WS2): HC 전역화 마감
 **As an** MCP client, **I want** 모든 mutating 커맨드 응답이 HC State A/B/C JSON이기를, **so that** verified/reason 필드를 전역 계약으로 신뢰할 수 있다.
 
 **AC:**
-- [ ] AC-2.1: **shape 변경 대상 전수 명시** (boomer#2): logic_midi mutating 커맨드 전부 — CoreMIDI 라우트(send_note/chord/cc/program_change/pitch_bend/aftertouch/sysex, mmc_play/stop/record/locate, play_sequence, step_input, create_virtual_port)와 **keycmd 라우트 포함**. 권위 목록은 RoutingTable의 `midi.*` mutating 세트에서 도출하고 T2 티켓+테스트로 고정. 제외(read-only, shape 불변): list_ports. import_file은 기존 HC 유지. 성공 응답은 State B(`reason:"send_only_no_readback"` 계열), 기존 정보(bytes 수 등)는 extras 보존
+- [ ] AC-2.1: **shape 변경 대상 전수 명시** (independent review#2): logic_midi mutating 커맨드 전부 — CoreMIDI 라우트(send_note/chord/cc/program_change/pitch_bend/aftertouch/sysex, mmc_play/stop/record/locate, play_sequence, step_input, create_virtual_port)와 **keycmd 라우트 포함**. 권위 목록은 RoutingTable의 `midi.*` mutating 세트에서 도출하고 T2 티켓+테스트로 고정. 제외(read-only, shape 불변): list_ports. import_file은 기존 HC 유지. 성공 응답은 State B(`reason:"send_only_no_readback"` 계열), 기존 정보(bytes 수 등)는 extras 보존
 - [ ] AC-2.2: 전역 HC invariant 테스트 — RoutingTable의 mutating op 전수를 순회하며 채널 응답이 HC JSON(schema: success/verified/state 필수 키)으로 파싱됨을 검증. 라이브 전용 op는 **명시 allowlist**로 skip하되, allowlist는 축소만 가능(ratchet: 크기 상한 고정 테스트)
 - [ ] AC-2.3: `Scripts/live-e2e-test.py`가 새 logic_midi 응답 shape를 검증하도록 갱신 (구 평문 핀 제거)
 - [ ] AC-2.4: CHANGELOG에 BREAKING(logic_midi 응답 shape 변경) 명시
 
 ### US-3 (WS3): 소형 수정 팩
 **AC:**
-- [ ] AC-3.1: MIDIPortManager — 같은 name·**같은 mode**는 기존대로 재사용(MCU restart가 bidirectional 재사용에 의존, LogicProServer.swift:1008-1018 — boomer#9), 같은 name·**다른 mode**는 명시적 `modeConflict` 에러로 fail-closed. cross-mode 테스트 2방향 + **restart 재사용 회귀 테스트** 추가
+- [ ] AC-3.1: MIDIPortManager — 같은 name·**같은 mode**는 기존대로 재사용(MCU restart가 bidirectional 재사용에 의존, LogicProServer.swift:1008-1018 — independent review#9), 같은 name·**다른 mode**는 명시적 `modeConflict` 에러로 fail-closed. cross-mode 테스트 2방향 + **restart 재사용 회귀 테스트** 추가
 - [ ] AC-3.2: `transport.toggle_autopunch` 신규 커맨드 — **AX 컨트롤바 Autopunch 버튼 우선**(버튼 상태 readback 가능 → State A), AX 미발견 시 honest State C `not_implemented`. keycmd 경로는 채택하지 않음(.logikcs 갱신은 자율 불가 — 에스컬레이션 대상이므로)
 - [ ] AC-3.3: `track.set_automation`이 docs/API.md tracks 커맨드 목록에 State B 시맨틱스와 함께 문서화
 - [ ] AC-3.4: help 텍스트/routing invariant 테스트가 신규 커맨드와 정합
@@ -76,11 +76,11 @@
 ### US-4 (WS4): MCP 프로토콜 팩
 **As a** Claude Desktop/Code user, **I want** 서버가 MCP 네이티브 알림·prompts·구조화 출력을 지원하기를, **so that** 폴링 없이 상태 변화를 받고 워크플로를 슬래시로 쓴다.
 
-**AC:** (SDK 0.12.1 지원 **확인됨** — outputSchema/structuredContent: swift-sdk `Sources/MCP/Server/Tools.swift:22-23,405-420`, subscribe/updated: `Resources.swift:409-445`, prompts: `Server.swift:89-126`. boomer#10 반영: "지원 시" 조건절 제거, spike는 런타임 프로브 검증으로 축소)
+**AC:** (SDK 0.12.1 지원 **확인됨** — outputSchema/structuredContent: swift-sdk `Sources/MCP/Server/Tools.swift:22-23,405-420`, subscribe/updated: `Resources.swift:409-445`, prompts: `Server.swift:89-126`. independent review#10 반영: "지원 시" 조건절 제거, spike는 런타임 프로브 검증으로 축소)
 - [ ] AC-4.1: T-spike(축소) — JSON-RPC stdio 프로브로 subscribe→updated 수신, prompts/list·get, structuredContent 왕복을 런타임 검증하는 통합 테스트. SDK bump 불필요 확인(0.12.1 그대로)
-- [ ] AC-4.2: resources capability `subscribe:true` + **알림 diff 계약** (boomer#4): 리소스별 콘텐츠 해시(payload data 기준, fetched_at/age 등 휘발 필드 제외)로 변경 판정 — 무변경 폴은 무알림(테스트 필수), 폴 사이클당 URI별 최대 1회 coalescing, cache-key→URI 팬아웃 매핑 명시, 세션별 구독 레지스트리 + 종료 시 정리
+- [ ] AC-4.2: resources capability `subscribe:true` + **알림 diff 계약** (independent review#4): 리소스별 콘텐츠 해시(payload data 기준, fetched_at/age 등 휘발 필드 제외)로 변경 판정 — 무변경 폴은 무알림(테스트 필수), 폴 사이클당 URI별 최대 1회 coalescing, cache-key→URI 팬아웃 매핑 명시, 세션별 구독 레지스트리 + 종료 시 정리
 - [ ] AC-4.3: prompts capability — workflow-skills-pack의 기존 워크플로를 MCP prompt로 노출 (ListPrompts/GetPrompt)
-- [ ] AC-4.4: **전 10개 툴 일괄** (boomer#3, OQ-1 해소): dispatcher 경계에서 응답 text가 유효 JSON object면 동일 내용을 structuredContent로 병행 발행. outputSchema는 툴별 선언 — mutating 툴은 HC envelope 스키마(success/verified/state 필수), read-성 툴은 generic object 스키마. 기존 JSON-in-text 하위호환 유지
+- [ ] AC-4.4: **전 10개 툴 일괄** (independent review#3, OQ-1 해소): dispatcher 경계에서 응답 text가 유효 JSON object면 동일 내용을 structuredContent로 병행 발행. outputSchema는 툴별 선언 — mutating 툴은 HC envelope 스키마(success/verified/state 필수), read-성 툴은 generic object 스키마. 기존 JSON-in-text 하위호환 유지
 - [ ] AC-4.5: 알림 발행이 SerializedStdioTransport 경유로 프레임 원자성 유지 (동시쓰기 corruption 회귀 방지 테스트)
 
 ### US-5 (WS5): MIDI 읽기 경로
@@ -88,14 +88,14 @@
 
 **AC:** — **T0 게이트 결과 2026-07-07: FAILED → AC-5.3/5.4/5.5(라이브 표면) honest-deferred. AC-5.2(SMFReader)+임시파일 매니저만 T5a로 출하.** 상세 증거: `docs/spikes/midi-export-t0-evidence.md`.
 - [x] AC-5.1 (게이트, **FAILED**): 라이브 스파이크로 File>Export>Selection as MIDI File 메뉴 도달·record_sequence sentinel·region 열거까지는 성공했으나, export **저장 패널이 out-of-process remote-view**라 (a) 내부 컨트롤 AX-불투명, (b) 합성 키보드 입력 미도달(Secure Input OFF 확인, osascript/cliclick/focus-click 3채널 검증), (c) 마우스만으로는 통제 디렉토리+파일명 입력 불가 → 통제-저장 계약 충족 불가. 자동화 시도가 Logic을 modal-stack hang으로 유발(force-quit 복구). 이 repo가 반복 honest-defer해온 라이브-UI 월과 동일 계열.
-- [ ] AC-5.2: `SMFReader` — format 0/1, tempo/time-sig meta, note on/off 페어링, division 기반 tick→bar/beat 변환. **필수 fixture** (boomer#8): running status, velocity-0 note-off, 동일 pitch/channel 중첩 노트, SMPTE division 거부, VLQ/track-length 경계, format-1 멀티트랙 tempo 병합, channel 1-based 출력. malformed SMF는 fail-closed(부분 결과 반환 금지)
-- [~] AC-5.3 (**DEFERRED**, T0 실패): `logic_midi.read_selection_notes` — **State A 조건 강화** (boomer#5): (a) export 파일이 신규 생성(사전 부재+mtime/size 검증), (b) 파싱 성공, (c) export 직전 AX로 선택 identity(region/track) 캡처 후 evidence에 포함. identity 캡처 불가 시 State B. 임시 파일은 **전용 export 레지스트리 매니저** (boomer#7: SMFWriter+TemporaryFiles 대칭 — 전용 디렉토리 생성, symlink escape 방지, 파싱 후 cleanup, 테스트 포함) 경유
-- [~] AC-5.4 (**DEFERRED**, T0 실패): `record_sequence verify_notes:true` (boomer#6 강화) — (a) 기존 선택/플레이헤드 캡처, (b) **생성된 region을 결정론적으로 선택**(기존 region-enumeration 결과의 identity 사용), 선택 검증 실패 시 export 시도 없이 State B, (c) export→파싱→요청 노트 대조 일치 시 State A(노트 evidence), (d) 이전 선택 복원. 기본값 false
+- [ ] AC-5.2: `SMFReader` — format 0/1, tempo/time-sig meta, note on/off 페어링, division 기반 tick→bar/beat 변환. **필수 fixture** (independent review#8): running status, velocity-0 note-off, 동일 pitch/channel 중첩 노트, SMPTE division 거부, VLQ/track-length 경계, format-1 멀티트랙 tempo 병합, channel 1-based 출력. malformed SMF는 fail-closed(부분 결과 반환 금지)
+- [~] AC-5.3 (**DEFERRED**, T0 실패): `logic_midi.read_selection_notes` — **State A 조건 강화** (independent review#5): (a) export 파일이 신규 생성(사전 부재+mtime/size 검증), (b) 파싱 성공, (c) export 직전 AX로 선택 identity(region/track) 캡처 후 evidence에 포함. identity 캡처 불가 시 State B. 임시 파일은 **전용 export 레지스트리 매니저** (independent review#7: SMFWriter+TemporaryFiles 대칭 — 전용 디렉토리 생성, symlink escape 방지, 파싱 후 cleanup, 테스트 포함) 경유
+- [~] AC-5.4 (**DEFERRED**, T0 실패): `record_sequence verify_notes:true` (independent review#6 강화) — (a) 기존 선택/플레이헤드 캡처, (b) **생성된 region을 결정론적으로 선택**(기존 region-enumeration 결과의 identity 사용), 선택 검증 실패 시 export 시도 없이 State B, (c) export→파싱→요청 노트 대조 일치 시 State A(노트 evidence), (d) 이전 선택 복원. 기본값 false
 - [~] AC-5.5 (**DEFERRED**, T0 실패): 선택이 없거나 MIDI region이 아닐 때 명시적 typed 에러(State C), 다이얼로그 잔류 없음(Escape 폴백)
 
 ### US-6 (WS6): Channel EQ verified 파라미터 확장
 **AC:**
-- [ ] AC-6.1: 라이브 census 스파이크 (boomer#11 강화) — **census artifact 문서** 산출: 파라미터별 canonical ID, AX role/description, 단위·범위·tolerance(dB/Hz/Q), 밴드 enable 동작, 플러그인 에디터 창 전제조건, 라이브 E2E 케이스 정의. 이 artifact가 registry 등재의 유일 근거
+- [ ] AC-6.1: 라이브 census 스파이크 (independent review#11 강화) — **census artifact 문서** 산출: 파라미터별 canonical ID, AX role/description, 단위·범위·tolerance(dB/Hz/Q), 밴드 enable 동작, 플러그인 에디터 창 전제조건, 라이브 E2E 케이스 정의. 이 artifact가 registry 등재의 유일 근거
 - [ ] AC-6.2: verified param registry(기존 `StockPluginParameterMetadata`/`VerifiedPluginCatalog` 패턴 확장, 신규 타입 금지)에 census 증명 파라미터 등재(최소: 1개 밴드 gain+freq). 단위별 readback tolerance 정의
 - [ ] AC-6.3: 미등재 파라미터는 기존과 동일하게 `unsupported_param_readback` fail-closed 유지
 - [x] AC-6.4: **완료(2026-07-06)** — applyback 델타 리포트 결과 unique 커밋 0(PR #24로 기머지), 흡수 대상 없음, origin/로컬 브랜치 삭제 완료
@@ -139,10 +139,10 @@
 | autopunch 경로 | keycmd / AX 버튼 / CGEvent | AX 버튼 | keycmd는 .logikcs 갱신 필요(자율 불가). AX 버튼은 상태 readback → State A 가능 |
 | 노트 읽기 노출 | 리소스 / 툴 커맨드 | 툴 커맨드만 | export는 AX 구동 side-effect — read-only 리소스 계약 위반 (NG4) |
 | record_sequence 검증 | 기본 on / opt-in | opt-in `verify_notes` | export 왕복은 지연+선택상태 변경+다이얼로그 리스크. 기본 동작 보존 |
-| SDK 갭 처리 | fork / major bump / defer | **bump 불필요 — 0.12.1 전 기능 지원 확인** | boomer#10: Tools.swift/Resources.swift/Server.swift 증거 |
-| structuredContent 적용 범위 | 일부 툴 / 전 툴 | 전 10개 툴 일괄 (dispatcher 경계 wrap) | boomer#3: 부분 적용은 계약 파편화. text JSON 미러링이라 증분 비용 균일 |
-| 알림 변경 판정 | 타임스탬프 / 콘텐츠 해시 | 휘발 필드 제외 콘텐츠 해시 | boomer#4: fetched_at 갱신만으로 오알림 방지, 무변경 폴=무알림 테스트 가능 |
-| release.sh 발행 권한 | Actions 위임 / 자체 게이트 | 자체 게이트(test+lockfile+branch) 추가 | boomer#1: 스크립트 단독 경로도 fail-closed. Actions 위임은 흐름 재설계라 과대수술 |
+| SDK 갭 처리 | fork / major bump / defer | **bump 불필요 — 0.12.1 전 기능 지원 확인** | independent review#10: Tools.swift/Resources.swift/Server.swift 증거 |
+| structuredContent 적용 범위 | 일부 툴 / 전 툴 | 전 10개 툴 일괄 (dispatcher 경계 wrap) | independent review#3: 부분 적용은 계약 파편화. text JSON 미러링이라 증분 비용 균일 |
+| 알림 변경 판정 | 타임스탬프 / 콘텐츠 해시 | 휘발 필드 제외 콘텐츠 해시 | independent review#4: fetched_at 갱신만으로 오알림 방지, 무변경 폴=무알림 테스트 가능 |
+| release.sh 발행 권한 | Actions 위임 / 자체 게이트 | 자체 게이트(test+lockfile+branch) 추가 | independent review#1: 스크립트 단독 경로도 fail-closed. Actions 위임은 흐름 재설계라 과대수술 |
 
 ## 5. Edge Cases & Error Handling
 
@@ -214,7 +214,7 @@ PR 단위 revert 가능하도록 각 PR 자기완결. WS5/6는 라이브 게이�
 ### 10.1 Dependencies
 | Dependency | Owner | Status | Risk if Delayed |
 |-----------|-------|--------|-----------------|
-| swift-sdk 0.12.1 기능 범위 | boomer r1 검증 | **확인됨(전 기능 지원)** | 없음 — spike는 런타임 프로브로 축소 |
+| swift-sdk 0.12.1 기능 범위 | independent review r1 검증 | **확인됨(전 기능 지원)** | 없음 — spike는 런타임 프로브로 축소 |
 | Logic Pro 12.3 라이브 세션 | Isaac Mac (자율 승인됨) | 가용 | WS5/6 defer |
 | Export 메뉴 locale/12.3 구조 | T0 스파이크 | 미확인 | WS5 전체 defer |
 | Channel EQ AX-settable census | 라이브 스파이크 | 미확인 | WS6 축소/defer |

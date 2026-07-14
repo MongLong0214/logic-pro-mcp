@@ -65,6 +65,6 @@ T1 (foundation)
 
 | Phase | Round | Verdict | P0 | P1 | P2 | Notes |
 |-------|-------|---------|----|----|-----|-------|
-| 4     | 1     | HAS ISSUE→CONVERGED | 0  | 1  | 3   | TR1-TR4 + OBJ-A~E (orchestrator direct gate; boomer=codex 401·opus killed → 연속성 지침) — 전건 반영, review-tickets-boomer-sub.md |
+| 4     | 1     | HAS ISSUE→CONVERGED | 0  | 1  | 3   | TR1-TR4 + OBJ-A~E (direct gate with continuity recovery) — 전건 반영 |
 | 6     | 1     | FAIL    | 0  | 5  | 1   | production-readiness review found T5 relative/regular/share-dir gaps, T7 launch/TCC privacy gaps, T9 docs/live-E2E gaps, and stale status evidence |
 | 6     | 2     | APPROVE | 0  | 0  | 0   | blocker fixes verified with final evidence under `.omo/evidence/doctor-v3-final-20260706T074353Z`; code-quality/security/QA/docs/final-gate all approved |

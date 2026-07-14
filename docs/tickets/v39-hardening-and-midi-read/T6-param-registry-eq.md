@@ -13,7 +13,7 @@
 Channel EQ 파라미터를 라이브 census 증거 기반으로 verified param registry에 등재하고, 같은 라이브 세션에서 rename_marker AX 가능성을 판정한다. (applyback 브랜치 처분은 완료됨 — 델타 0, 삭제됨)
 
 ## 2. Acceptance Criteria
-- [ ] AC-1 (게이트): 라이브 census 스파이크 — Channel EQ 에디터 AX 인벤토리. 산출물 `docs/spikes/channel-eq-census.md`: 파라미터별 canonical ID, AX role/description, 단위·범위·tolerance(dB/Hz/Q), 밴드 enable 동작, 에디터 창 전제조건, 라이브 E2E 케이스 정의. census 스크립트는 codex 작성(기존 PluginInspector 활용), 실행/판정은 오케스트레이터
+- [ ] AC-1 (게이트): 라이브 census 스파이크 — Channel EQ 에디터 AX 인벤토리. 산출물 `docs/spikes/channel-eq-census.md`: 파라미터별 canonical ID, AX role/description, 단위·범위·tolerance(dB/Hz/Q), 밴드 enable 동작, 에디터 창 전제조건, 라이브 E2E 케이스 정의. census 스크립트는 구현(기존 PluginInspector 활용), 실행/판정은 오케스트레이터
 - [ ] AC-2: registry 등재 — 기존 `StockPluginParameterMetadata`/`VerifiedPluginCatalog` 패턴 확장(신규 타입 금지), census 증명 파라미터만(최소: 1개 밴드 gain+freq). Channel EQ는 insert-allowlist 기등재(AccessibilityChannel+VerifiedPlugins.swift:2345)
 - [ ] AC-3: 미등재 파라미터 `unsupported_param_readback` fail-closed 유지 (기존 테스트 확장으로 가드)
 - [ ] AC-4: strict 라이브 E2E에 Channel EQ verified write ≥1 케이스
@@ -43,7 +43,7 @@ Channel EQ 파라미터를 라이브 census 증거 기반으로 verified param r
 |------|--------|
 | Sources/LogicProMCP/…/StockPluginCatalog.swift, VerifiedPluginCatalog.swift | EQ 엔트리 |
 | Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift | (필요 시) EQ 에디터 특이 처리 |
-| Scripts/spike-channel-eq-census.py (신규, codex 작성) | census 프로브 |
+| Scripts/spike-channel-eq-census.py (신규, 구현) | census 프로브 |
 | docs/spikes/channel-eq-census.md, docs/API.md, README.md 제한사항 문구 | 문서 |
 | Scripts/live-e2e-test.py | EQ 케이스 |
 

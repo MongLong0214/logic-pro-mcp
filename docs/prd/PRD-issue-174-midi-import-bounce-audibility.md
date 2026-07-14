@@ -1,7 +1,7 @@
 # PRD: Issue 174 MIDI Import Bounce Audibility Guard
 
 **Version**: 0.1
-**Author**: Codex
+**Author**: Product planning
 **Date**: 2026-06-23
 **Status**: Done
 **Size**: S

@@ -462,15 +462,15 @@ Dispatcher input validation is now uniformly fail-closed: values that were previ
 
 ### Added
 
-- `MCUChannel.mcuConnectionExtras()` — snapshot helper that injects `mcu_connected` (Bool), `mcu_registered` (Bool), and `mcu_last_feedback_age_ms` (Int? — `null` when no feedback has been observed; clamped to 0 to defend against system-clock-jump-induced negative intervals per Boomer BOOMER-6 / E review) into the HC envelope extras of every `set_volume`, `set_pan`, and `set_master_volume` response. State A and State B both carry the triplet so provenance logs remain uniform.
+- `MCUChannel.mcuConnectionExtras()` — snapshot helper that injects `mcu_connected` (Bool), `mcu_registered` (Bool), and `mcu_last_feedback_age_ms` (Int? — `null` when no feedback has been observed; clamped to 0 to defend against system-clock-jump-induced negative intervals per independent review / E review) into the HC envelope extras of every `set_volume`, `set_pan`, and `set_master_volume` response. State A and State B both carry the triplet so provenance logs remain uniform.
 - `MCUMixerWriteDiagnosticsTests` — 6 unit tests covering the disconnected default (no feedback ever), registered-and-fresh State A, registered-but-stale State B, the clock-jump clamp, and parity across all three mixer write paths.
 - `EndToEndTests` mixer additions — 4 wire-level E2E tests that walk `tools/call` → `MixerDispatcher` → `ChannelRouter` → MCU and pin the structured `channels_exhausted` State C envelope as the production wire shape when MCU is unavailable, plus a regression guard against the legacy "All channels exhausted" free-form string ever leaking back.
 
 ### Changed
 
-- `ChannelRouter.route` — when every channel in the chain is exhausted or skipped, the response is now `HonestContract.encodeStateC(error: .channelsExhausted, hint: lastError, extras: ["operation": op, "last_error": lastError])`. The new `.channelsExhausted` enum case is **semantically distinct from `.portUnavailable`** (Boomer BOOMER-6 / U review fix): `port_unavailable` is scoped to a single channel whose specific port is unwired (e.g. KeyCmd virtual port not yet published), while `channels_exhausted` is the chain-level aggregate signal when no channel in the chain could handle the operation. The previous wrap reused `port_unavailable` for both meanings, which would have caused a harness branching on `error: "port_unavailable"` to mis-diagnose a "Logic not running" exhaustion as a port-wiring problem. The previous free-form error string forced safety harnesses into regex-based root-cause detection.
+- `ChannelRouter.route` — when every channel in the chain is exhausted or skipped, the response is now `HonestContract.encodeStateC(error: .channelsExhausted, hint: lastError, extras: ["operation": op, "last_error": lastError])`. The new `.channelsExhausted` enum case is **semantically distinct from `.portUnavailable`** (independent review / U review fix): `port_unavailable` is scoped to a single channel whose specific port is unwired (e.g. KeyCmd virtual port not yet published), while `channels_exhausted` is the chain-level aggregate signal when no channel in the chain could handle the operation. The previous wrap reused `port_unavailable` for both meanings, which would have caused a harness branching on `error: "port_unavailable"` to mis-diagnose a "Logic not running" exhaustion as a port-wiring problem. The previous free-form error string forced safety harnesses into regex-based root-cause detection.
 - `HonestContract.FailureError` — new `.channelsExhausted` case (raw: `channels_exhausted`) added to `terminalErrorCodes` alongside `.portUnavailable`. Documented in the API reference.
-- `MCUChannel.pollFaderEcho` / `pollPanEcho` — TOCTOU fix (Boomer BOOMER-6 / B2 review). The two functions previously read `cache.getChannelStrip(...).volume` and `cache.getFaderUpdatedAt(...)` in two separate actor turns, which left a window where a concurrent MCU feedback event could pair an old value with a new timestamp and false-positive State A on a disconnected transport. Both functions now use the new atomic `StateCache.getFaderEchoSnapshot(strip:)` / `getPanEchoSnapshot(strip:)` helpers that return `(value, updatedAt)` in a single actor turn. Closes the race the `testSetVolumeStateAIncludesMCUDiagnostics_connectedFresh` test was flagging by tolerating either State A or State B.
+- `MCUChannel.pollFaderEcho` / `pollPanEcho` — TOCTOU fix (independent review / B2 review). The two functions previously read `cache.getChannelStrip(...).volume` and `cache.getFaderUpdatedAt(...)` in two separate actor turns, which left a window where a concurrent MCU feedback event could pair an old value with a new timestamp and false-positive State A on a disconnected transport. Both functions now use the new atomic `StateCache.getFaderEchoSnapshot(strip:)` / `getPanEchoSnapshot(strip:)` helpers that return `(value, updatedAt)` in a single actor turn. Closes the race the `testSetVolumeStateAIncludesMCUDiagnostics_connectedFresh` test was flagging by tolerating either State A or State B.
 - `StateCache` — new atomic snapshot helpers `getFaderEchoSnapshot(strip:) -> (volume: Double?, updatedAt: Date?)` and `getPanEchoSnapshot(strip:) -> (pan: Double?, updatedAt: Date?)`.
 
 ### Documentation
@@ -488,7 +488,7 @@ This change does not fix the underlying echo-timeout if one exists on Logic Pro 
 
 - `swift test` → 1124 / 1124 PASS locally (10 new tests added for this change).
 - `swift build` → clean.
-- Boomer (Codex gpt-5.5 xhigh) BOOMER-6 review → ALL PASS with 2 P2s addressed inline: clock-jump clamp landed in `mcuConnectionExtras`, and the additive wire-shape change is called out for harness operators in this CHANGELOG entry.
+- independent review → ALL PASS with 2 P2s addressed inline: clock-jump clamp landed in `mcuConnectionExtras`, and the additive wire-shape change is called out for harness operators in this CHANGELOG entry.
 
 ### Wire-shape note for harness operators
 
@@ -641,9 +641,9 @@ This hotfix only changes the test file and the version bump artifacts. No produc
 
 ## [3.4.1] — 2026-05-08
 
-**v3.4.0 Boomer P2 sweep — non-BREAKING fail-loud hardening.** The Boomer review of v3.4.0 catalogued five P2 items as "addressable in a v3.4.1 sweep but none blocks release." This patch closes four of them (the fifth — `nav.goto_marker` orphan routing entry — was already addressed inline in v3.4.0 with a clarifying comment in `ChannelRouter`).
+**v3.4.0 independent review P2 sweep — non-BREAKING fail-loud hardening.** The independent review of v3.4.0 catalogued five P2 items as "addressable in a v3.4.1 sweep but none blocks release." This patch closes four of them (the fifth — `nav.goto_marker` orphan routing entry — was already addressed inline in v3.4.0 with a clarifying comment in `ChannelRouter`).
 
-### Fixed (Boomer P2 from v3.4.0 review)
+### Fixed (independent review P2 from v3.4.0 review)
 
 - **P2-2 — `release.sh` lipo empty / garbled output now fails loud.** Pre-fix `lipo -info` returning nothing or an unparseable string silently produced `"architectures":[]` in `RELEASE-METADATA.json`. The metadata consumer would see that as a known-empty manifest. v3.4.1 exits non-zero before publishing if the binary's architecture(s) cannot be parsed.
 - **P2-3 — `ProjectDispatcher.AuditPhase.executed` contract documented.** The audit phase docstring now explicitly states that `executed` records *invocation intent* before `router.route(...)` fires, not the route's *outcome*. SIEM consumers who want outcome correlate the audit line with the channel response by timestamp + command name. This prevents future readers from misreading the contract.
@@ -656,7 +656,7 @@ This hotfix only changes the test file and the version bump artifacts. No produc
 
 ## [3.4.0] — 2026-05-08
 
-**Enterprise deferred-blocker closure: stdio launch parity, release governance, install rollback safety, audit-phase split, target-faithful navigation, AX hardening, docs realignment.** Closes the v3.3.0 honest-deferred set (RB-2, RB-4, RB-6, H-1..H-4, H-6) from the 2026-05-08 enterprise production-readiness review. Eight tickets, +15 regression tests (1110/1110 PASS), Boomer BOOMER-6 verdict pending Phase 6 final review. H-5 (swift-testing dep) re-deferred — Apple has not yet shipped the SwiftPM-side glue that makes the bundled Swift 6 Testing framework usable without the explicit package dependency (`_TestingInternals` missing on direct removal — confirmed twice).
+**Enterprise deferred-blocker closure: stdio launch parity, release governance, install rollback safety, audit-phase split, target-faithful navigation, AX hardening, docs realignment.** Closes the v3.3.0 honest-deferred set (RB-2, RB-4, RB-6, H-1..H-4, H-6) from the 2026-05-08 enterprise production-readiness review. Eight tickets, +15 regression tests (1110/1110 PASS), independent review verdict pending Phase 6 final review. H-5 (swift-testing dep) re-deferred — Apple has not yet shipped the SwiftPM-side glue that makes the bundled Swift 6 Testing framework usable without the explicit package dependency (`_TestingInternals` missing on direct removal — confirmed twice).
 
 ### ⚠️ BREAKING
 
@@ -782,7 +782,7 @@ These are tracked for v3.4.x.
 
 ## [3.2.0] — 2026-05-07
 
-**Marker provenance — Boomer P2-3 closed.** `MarkerState` now surfaces the origin of `position` in a machine-readable form (`position_source`: `parser` / `fallback` / `unknown`). When `goto_marker` routes to a fallback or unknown provenance marker, it adds `marker_position_uncertain: true` to the response extras so the caller can explicitly detect that a cache fallback position was used.
+**Marker provenance — independent review P2-3 closed.** `MarkerState` now surfaces the origin of `position` in a machine-readable form (`position_source`: `parser` / `fallback` / `unknown`). When `goto_marker` routes to a fallback or unknown provenance marker, it adds `marker_position_uncertain: true` to the response extras so the caller can explicitly detect that a cache fallback position was used.
 
 ### Honest deferred — NG10 sub-bar navigation accuracy
 
@@ -857,10 +857,10 @@ During v3.1.10 verification, the reporter identified two findings:
 `AXLogicProElements.parseMarkerListPosition` hardened with the following policies:
 
 1. **Trailing period / comma strip** (`while`-loop): absorbs Logic UI rendering artifacts.
-2. **Whitespace/tab-only separators** (NG7, Guardian P0-3): dots are meaningful only at the end. Mixed separators (`"1.1 1.1"`) are rejected — prevents manufacturing incorrect values.
-3. **ASCII digit narrowing** (NG9, Guardian P2-2): uses `Int(_: String)` failable initializer — rejects non-ASCII digits such as Arabic-Indic.
-4. **1-based validation** (NG8, Guardian P0-2): all components must be ≥ 1 — `"0 0 0 0"` is rejected.
-5. **Strict 4-component policy** (NG11, Boomer P1-1): lenient 1–3 component handling removed. Logic UI always exposes 4 components, so 1–3 components likely represent non-position cells (e.g. tempo) — no silent manufacturing of an incorrect bar value.
+2. **Whitespace/tab-only separators** (NG7, safety review P0-3): dots are meaningful only at the end. Mixed separators (`"1.1 1.1"`) are rejected — prevents manufacturing incorrect values.
+3. **ASCII digit narrowing** (NG9, safety review P2-2): uses `Int(_: String)` failable initializer — rejects non-ASCII digits such as Arabic-Indic.
+4. **1-based validation** (NG8, safety review P0-2): all components must be ≥ 1 — `"0 0 0 0"` is rejected.
+5. **Strict 4-component policy** (NG11, independent review P1-1): lenient 1–3 component handling removed. Logic UI always exposes 4 components, so 1–3 components likely represent non-position cells (e.g. tempo) — no silent manufacturing of an incorrect bar value.
 
 ### Behavior change (stated explicitly)
 
@@ -868,11 +868,11 @@ During v3.1.10 verification, the reporter identified two findings:
 - No observed Logic build uses 1–3 component notation, so user-facing impact is zero.
 - Theoretical impact: if a future build exposes a shortened header row → fallback `\(index+1).1.1.1` (no silent manufacturing of an incorrect bar value — honest).
 
-### Sub-bar navigation (NG10 separated, Guardian P0-1)
+### Sub-bar navigation (NG10 separated, safety review P0-1)
 
 `goto_marker { name: "VOCALS" }` correctly surfaces `position: "146.4.4.240"` from cache, but the AX `gotoPositionViaBarSlider` only extracts the first component (bar) and sets the slider — beat/div/tick are ignored. v3.1.11 scope ends at **cache accuracy**. Sub-bar navigation accuracy is separated into its own PRD (v3.2 — `gotoPositionViaBarSlider` extension).
 
-### TROUBLESHOOTING 13 locales (Boomer P1-2)
+### TROUBLESHOOTING 13 locales (independent review P1-2)
 
 The code already recognizes Marker List window titles in 13 locales (KR/EN/JA/FR/DE/ES/IT/ZH-S/ZH-T/RU/PT/NL), but v3.1.9 docs only listed KR/EN — users in other locales encountered the same discoverability gap. v3.1.11 docs add the 13-locale table and explicitly state "Navigate menu on all builds".
 
@@ -920,22 +920,22 @@ Existing `enumerateMarkers_unparseablePosition_usesIndexFallback` (caller fallba
 
 ### Review process
 
-PRD v0.3 = Strategist + Guardian + Boomer 3-agent integration. This fix consolidates 7 P0/P1 findings:
-- **Strategist**: parser line reduction, edge cases 25→14, language-switch safety procedure
-- **Guardian P0-1**: sub-bar navigation not feasible → separated as NG10
-- **Guardian P0-2**: reject 0-values (NG8)
-- **Guardian P0-3**: reject mixed separators (NG7)
-- **Guardian P2-2**: ASCII digit narrowing (NG9)
-- **Boomer P1-1**: lenient removed → strict 4 (NG11)
-- **Boomer P1-2**: 13-locale documentation integrated
+PRD v0.3 = architecture review + safety review + independent review multi-lane integration. This fix consolidates 7 P0/P1 findings:
+- **architecture review**: parser line reduction, edge cases 25→14, language-switch safety procedure
+- **safety review P0-1**: sub-bar navigation not feasible → separated as NG10
+- **safety review P0-2**: reject 0-values (NG8)
+- **safety review P0-3**: reject mixed separators (NG7)
+- **safety review P2-2**: ASCII digit narrowing (NG9)
+- **independent review P1-1**: lenient removed → strict 4 (NG11)
+- **independent review P1-2**: 13-locale documentation integrated
 
-Ticket review by 4 agents (boomer + strategist + tester + guardian):
-- **Tester**: added Korean whole-bar integration regression (G3 both-direction verification)
-- **Guardian**: added TODO/FIXME grep verification step (AC-4.2)
+Review lanes: independent, architecture, test, and safety:
+- **test review**: added Korean whole-bar integration regression (G3 both-direction verification)
+- **safety review**: added TODO/FIXME grep verification step (AC-4.2)
 
 ## [3.1.10] — 2026-05-07
 
-**boomer P1-1 hotfix on top of v3.1.9: `goto_marker` was a silent no-op relative to its parameter.** Final BOOMER-6 review caught that `NavigateDispatcher.handle("goto_marker", ...)` resolved the target marker correctly (by name from cache, or by index) and then routed `nav.goto_marker { index: <id> }` to `MIDIKeyCommandsChannel`, which ignores all params and fires fixed CC 38 — Logic's "go to next marker" hotkey. Both index- and name-based goto therefore advanced the marker pointer by one regardless of which marker the caller asked for. The cache lookup did its job; the routing throw the result away.
+**independent review P1-1 hotfix on top of v3.1.9: `goto_marker` was a silent no-op relative to its parameter.** Final independent review caught that `NavigateDispatcher.handle("goto_marker", ...)` resolved the target marker correctly (by name from cache, or by index) and then routed `nav.goto_marker { index: <id> }` to `MIDIKeyCommandsChannel`, which ignores all params and fires fixed CC 38 — Logic's "go to next marker" hotkey. Both index- and name-based goto therefore advanced the marker pointer by one regardless of which marker the caller asked for. The cache lookup did its job; the routing throw the result away.
 
 ### Fix
 
@@ -1120,7 +1120,7 @@ $ osascript -e 'tell application "Logic Pro" to return tempo of front document'
   3. Resolve leaf symlinks (`Alternatives/000/MetaData.plist`).
   4. Verify leaf real-path strict-prefix-matches the resolved bundle root (anti symlink-escape).
   5. Cap read at 10 MB.
-  6. **mtime-jitter retry**: read mtime, parse, re-read mtime; on diff sleep 50 ms + retry once. Persistent jitter → return nil. Mitigates the Logic-mid-save atomic-write window flagged by guardian review.
+  6. **mtime-jitter retry**: read mtime, parse, re-read mtime; on diff sleep 50 ms + retry once. Persistent jitter → return nil. Mitigates the Logic-mid-save atomic-write window flagged by safety review.
 
 - **`ResourceHandlers.wrapWithCacheEnvelope` `extras: [String: Any]?`** parameter (default nil → byte-identical envelope shape to v3.1.7). Used by tier-merging readers to expose `source` / `last_saved_age_sec` / `placeholder` flags. Keys serialised in deterministic (sorted) order; unsupported value types (NSDate, custom classes) silently filtered. Mixer's hand-rolled envelope (`readMixer:184`) migrated to share the same shape.
 
@@ -1153,8 +1153,8 @@ $ osascript -e 'tell application "Logic Pro" to return tempo of front document'
 
 - **Track names via project file** (NG1). `Alternatives/000/ProjectData` is a custom binary blob (verified `file` output `data` with header `#G\xc0\xab\xd0\x09`), not the XML the issue reporter conjectured. Reverse-engineering deferred to a future PRD.
 - **Marker positions / names via project file** (NG2). Same reason as NG1. Trigger to revisit (PRD OQ-5): 3+ user reports of `ax_occluded:true` on real markers, OR Logic 13 ships removing `markers` AX surface entirely.
-- **Per-section document-identity contract** (NG8 / boomer P1). Existing cache invalidation on `hasDocument:false` is sufficient for v3.1.8. Trigger to revisit (PRD OQ-6): user reports of cross-project state contamination.
-- **Tri-state marker result** (NG9 / boomer P1). Empty `[]` with `ax_occluded:true` is the existing untrusted-empty signal; preserved.
+- **Per-section document-identity contract** (NG8 / independent review P1). Existing cache invalidation on `hasDocument:false` is sufficient for v3.1.8. Trigger to revisit (PRD OQ-6): user reports of cross-project state contamination.
+- **Tri-state marker result** (NG9 / independent review P1). Empty `[]` with `ax_occluded:true` is the existing untrusted-empty signal; preserved.
 
 ## [3.1.7] — 2026-05-05
 
@@ -1347,7 +1347,7 @@ Migration: callers that scripted against pre-v3.1.6 must shift `ch` values by +1
 
 ## [3.1.2] — 2026-04-30
 
-**Honest Contract closure on remaining MCU surfaces + lifecycle cache hygiene.** Post-v3.1.1 transverse audit (3 independent agents converged) surfaced four production-blocking gaps that v3.1.1's AX-side promotion did not reach: three MCU responders still emitted free-form strings instead of the 3-state envelope, `record_sequence` had a verification-window vs. poll-interval mismatch that false-failed every successful import, project lifecycle ops left a stale tracks list in the cache for up to a minute, and `ChannelRouter` would silently fall through a terminal AX `element_not_found` State C into a vacuous MCU success.
+**Honest Contract closure on remaining MCU surfaces + lifecycle cache hygiene.** Post-v3.1.1 transverse audit (three independent reviews converged) surfaced four production-blocking gaps that v3.1.1's AX-side promotion did not reach: three MCU responders still emitted free-form strings instead of the 3-state envelope, `record_sequence` had a verification-window vs. poll-interval mismatch that false-failed every successful import, project lifecycle ops left a stale tracks list in the cache for up to a minute, and `ChannelRouter` would silently fall through a terminal AX `element_not_found` State C into a vacuous MCU success.
 
 ### P0 — fixed
 
@@ -1382,7 +1382,7 @@ Migration: callers that scripted against pre-v3.1.6 must shift `ch` values by +1
 
 ## [3.1.1] — 2026-04-26
 
-**Honest Contract Extension.** v3.1.0 introduced the 3-state contract (State A confirmed / State B uncertain w/ reason / State C failed w/ error) for 4 ops. Guardian's v3.1.0 production-readiness review identified 22 mutating `.success("…")` ad-hoc shapes still in `AccessibilityChannel.swift` plus the `transport/state` resource lacking the cache envelope. v3.1.1 closes those gaps for the AX-channel ops; MCU-routed `track.set_automation` and the V-Pot pan State-A enabler are deferred to v3.1.2 (PRD §2.1 group F + G).
+**Honest Contract Extension.** v3.1.0 introduced the 3-state contract (State A confirmed / State B uncertain w/ reason / State C failed w/ error) for 4 ops. safety review's v3.1.0 production-readiness review identified 22 mutating `.success("…")` ad-hoc shapes still in `AccessibilityChannel.swift` plus the `transport/state` resource lacking the cache envelope. v3.1.1 closes those gaps for the AX-channel ops; MCU-routed `track.set_automation` and the V-Pot pan State-A enabler are deferred to v3.1.2 (PRD §2.1 group F + G).
 
 ### Promoted to 3-state contract (v3.1.1)
 
@@ -1419,17 +1419,16 @@ Migration: callers that scripted against pre-v3.1.6 must shift `ch` values by +1
 
 - **Build**: `swift build -c release` clean.
 - **Tests**: 821 → **824** passing (3 new HC contract tests for `track.rename` and `track.set_mute` error envelopes).
-- **Code review**: orchestrator-fallback BOOMER-6 (codex CLI hung twice, `~/.claude/CLAUDE.md` §2 fallback applied) identified 3 follow-up notes incorporated into PRD-v311 v0.2; strategist iter1 REVISE addressed in same.
+- **Code review**: independent review identified 3 follow-up notes incorporated into PRD-v311 v0.2; architecture review findings were addressed in the same revision.
 - **Live verification**: deferred to user-driven session via `python3 /tmp/v310-live-verify.py` after MCP restart. No live cycles run automatically (per v3.0.9 CHANGELOG discipline, future live runs gated to Isaac's session).
 
 ### Known limitations
 
 - 5 CGEvent residual call sites retained intentionally (rec-arm 5-step ladder fallback, productionMouseClick for Library Panel, sendReturnKey for new-track dialog). Documented as "intentional ladder fallback" — replacement requires AX-direct alternative search (v3.1.2 backlog).
-- BOOMER-6+ via Codex CLI gpt-5.5 xhigh hung repeatedly on long prompts in this session — orchestrator-fallback critique applied per `~/.claude/CLAUDE.md` §2. Future runs should split critique into smaller prompts or use `model_reasoning_effort="medium"`.
 
 ## [3.1.0] — 2026-04-24
 
-**Honest Contract.** Every mutating operation now returns one of three explicit states so that an LLM caller can distinguish *confirmed* writes from *unconfirmable* writes from *failed* writes without heuristically parsing free-form text. This closes the class of bug the Guardian v3.0.9 audit flagged as systemic: multiple ops returned `"success:true"` while the underlying AX write was never read back, so a mismatch between Logic's internal state and the reported state could silently propagate to callers. See `docs/API.md` for the current wire contract.
+**Honest Contract.** Every mutating operation now returns one of three explicit states so that an LLM caller can distinguish *confirmed* writes from *unconfirmable* writes from *failed* writes without heuristically parsing free-form text. This closes the class of bug the safety review v3.0.9 audit flagged as systemic: multiple ops returned `"success:true"` while the underlying AX write was never read back, so a mismatch between Logic's internal state and the reported state could silently propagate to callers. See `docs/API.md` for the current wire contract.
 
 ### Wire-level contract (new)
 
@@ -1649,7 +1648,7 @@ Hotfix: `scan_library` dispatcher dropped the `mode` param on the floor.
 
 ## [3.0.6] — 2026-04-21
 
-Guardian round-1 (v3.0.5) blocker follow-up. v3.0.5 shipped the disk scan but three P0 regressions surfaced in review: (1) emitted disk paths did not match the Library Panel's flattened taxonomy, so `selectPath` failed at segment 0 on the majority of patches; (2) the default `mode` silently flipped from AX to disk, poisoning the actor's `lastScan` cache (and therefore every `resolve_path` / `set_instrument` follow-up) with Panel-invalid paths; (3) the on-disk `library-inventory.json` canonical file was silently overwritten with the disk-shape inventory with no version tag, so downstream consumers had no way to detect the format shift. v3.0.6 fixes all three: adds a disk→Panel taxonomy mapper, reverts the default mode to `ax`, and tags + separates the inventory files by source.
+safety review round-1 (v3.0.5) blocker follow-up. v3.0.5 shipped the disk scan but three P0 regressions surfaced in review: (1) emitted disk paths did not match the Library Panel's flattened taxonomy, so `selectPath` failed at segment 0 on the majority of patches; (2) the default `mode` silently flipped from AX to disk, poisoning the actor's `lastScan` cache (and therefore every `resolve_path` / `set_instrument` follow-up) with Panel-invalid paths; (3) the on-disk `library-inventory.json` canonical file was silently overwritten with the disk-shape inventory with no version tag, so downstream consumers had no way to detect the format shift. v3.0.6 fixes all three: adds a disk→Panel taxonomy mapper, reverts the default mode to `ax`, and tags + separates the inventory files by source.
 
 ### Added
 

@@ -1,7 +1,7 @@
 # PRD: MIDI Read-Back vNext
 
 **Version**: 0.1
-**Author**: CEO/CTO planning rail (Fable role model, execution by Codex)
+**Author**: Product planning
 **Date**: 2026-07-07
 **Status**: Draft-ready for ticket execution
 **Size**: L

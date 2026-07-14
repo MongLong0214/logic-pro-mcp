@@ -1,14 +1,14 @@
 # PRD: Doctor v4 — Intent-Aware, Source-Aware Readiness Platform
 
 **Version**: 0.2
-**Author**: CEO/CTO planning rail (draft: Codex GPT-5.5 xhigh; final review/revision: CTO Fable)
+**Author**: Product planning
 **Date**: 2026-07-07
 **Status**: CTO-reviewed v0.2 — final for ticket execution
 **Size**: XL
 
 **Changelog**
-- v0.2 (2026-07-07, CTO Fable): schema decision made (v4 bump, §5.0); profile-scoped aggregate calculus added (§5.1.1); capability status vocabulary corrected to fail-closed 4-state + derivation table added (§5.3); client detection precedence + resolution-basis honesty caveat (§5.2, §5.10); share-dir manifest / renderer v4 / marker sequencing sections added (§5.8–5.10); all Open Questions decided (§10).
-- v0.1 (2026-07-07, Codex draft): initial.
+- v0.2 (2026-07-07, CTO review): schema decision made (v4 bump, §5.0); profile-scoped aggregate calculus added (§5.1.1); capability status vocabulary corrected to fail-closed 4-state + derivation table added (§5.3); client detection precedence + resolution-basis honesty caveat (§5.2, §5.10); share-dir manifest / renderer v4 / marker sequencing sections added (§5.8–5.10); all Open Questions decided (§10).
+- v0.1 (2026-07-07, initial draft): initial.
 
 ## 1. Problem Statement
 

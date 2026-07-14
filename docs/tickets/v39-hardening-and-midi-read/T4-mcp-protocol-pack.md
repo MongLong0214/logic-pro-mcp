@@ -18,7 +18,7 @@ swift-sdk 0.12.1(확인 완료: outputSchema/structuredContent Tools.swift:22-23
 - [ ] AC-3: prompts capability — workflow-skills-pack의 기존 워크플로 데이터로 ListPrompts/GetPrompt 구현 (데이터 중복 정의 금지 — 기존 소스 재사용)
 - [ ] AC-4: 전 10개 툴 structuredContent — dispatcher 경계 공용 wrap: 응답 text가 유효 JSON object면 동일 내용을 structuredContent로 병행. outputSchema: mutating 툴은 HC envelope 스키마(success/verified/state), read-성 툴은 generic object. 기존 text 하위호환 유지
 - [ ] AC-5: 모든 알림 발행은 SerializedStdioTransport 경유 — 동시 대량 쓰기 프레임 원자성 회귀 테스트(#220 계열) 추가
-- [ ] AC-6: 런타임 프로브 통합 테스트 — **in-process TestTransport 하니스 신설**(boomer#3: Swift 테스트에 stdio probe 부재. SDK `Transport` 프로토콜 구현체로 JSON-RPC 프레임 주입/캡처, mock runtime으로 폴러 변경 트리거): initialize→subscribe→변경→updated 프레임 수신, prompts/list+get, tools/call structuredContent 확인. 실 stdio 검증은 `Scripts/live-e2e-test.py`에 케이스 추가로 보완
+- [ ] AC-6: 런타임 프로브 통합 테스트 — **in-process TestTransport 하니스 신설**(independent review#3: Swift 테스트에 stdio probe 부재. SDK `Transport` 프로토콜 구현체로 JSON-RPC 프레임 주입/캡처, mock runtime으로 폴러 변경 트리거): initialize→subscribe→변경→updated 프레임 수신, prompts/list+get, tools/call structuredContent 확인. 실 stdio 검증은 `Scripts/live-e2e-test.py`에 케이스 추가로 보완
 
 ## 3. TDD Spec (Red Phase)
 

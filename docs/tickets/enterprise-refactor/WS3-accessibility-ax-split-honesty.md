@@ -23,7 +23,7 @@ Split the 1799-line AXLogicProElements, fix the `logic://tracks` fabricated-data
 - Split: pure move, existing suite green.
 
 ## 4. Constraints
-- extractTrackState is the ONLY intended observable change — keep it value-only (boomer R4). If making a value honest would require a type change, STOP and report (do NOT introduce nullable/sentinel).
+- extractTrackState is the ONLY intended observable change — keep it value-only (independent review R4). If making a value honest would require a type change, STOP and report (do NOT introduce nullable/sentinel).
 - Marker/label relocations to AXLocalePolicy must be diacritic-sensitive (per repo memory — all 3 match modes diacritic-sensitive; add sensitivity assertions on LabelSet migrations).
 - Commit per unit (split / honesty / policy / dead-code separate).
 

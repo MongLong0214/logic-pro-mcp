@@ -13,7 +13,7 @@
 T0 라이브 게이트 통과 후 AX export 파이프라인과 공개 표면(`read_selection_notes`, `record_sequence verify_notes`)을 구현한다. T0 FAIL 시 이 티켓 전체 honest defer(PR-5는 T5a만 출하 여부를 오케스트레이터가 판단).
 
 ## 2. Acceptance Criteria
-- [ ] AC-1 (T0 게이트): 라이브 스파이크 — record_sequence sentinel region 생성 → region 선택 → File>Export>Selection as MIDI File(locale-agnostic) → save 다이얼로그 통제 디렉토리 유도 → 파일 생성 + SMFReader 파싱 노트가 sentinel 일치. 산출물 `docs/spikes/midi-export-t0-evidence.md`. 스파이크 스크립트는 codex 작성(`Scripts/spike-midi-export.py` — live-e2e probe 패턴: popen, initialized 핸드셰이크, tools/call args는 "params" 아래), 실행/판정 오케스트레이터. 사용자 프로젝트 파괴 금지: 신규 트랙에 생성, 종료 시 undo/트랙 삭제 원복
+- [ ] AC-1 (T0 게이트): 라이브 스파이크 — record_sequence sentinel region 생성 → region 선택 → File>Export>Selection as MIDI File(locale-agnostic) → save 다이얼로그 통제 디렉토리 유도 → 파일 생성 + SMFReader 파싱 노트가 sentinel 일치. 산출물 `docs/spikes/midi-export-t0-evidence.md`. 스파이크 스크립트는 구현(`Scripts/spike-midi-export.py` — live-e2e probe 패턴: popen, initialized 핸드셰이크, tools/call args는 "params" 아래), 실행/판정 오케스트레이터. 사용자 프로젝트 파괴 금지: 신규 트랙에 생성, 종료 시 undo/트랙 삭제 원복
 - [ ] AC-2: `logic_midi.read_selection_notes` — State A 조건: (a) export 파일 신규 생성(사전 부재+mtime/size), (b) 파싱 성공, (c) 선택 identity(region/track) 사전 AX 캡처 + evidence 포함. identity 불가 → State B. RoutingTable `midi.read_selection_notes` → [.accessibility]
 - [ ] AC-3: `record_sequence verify_notes:true`(기본 false) — 기존 선택/플레이헤드 캡처 → 생성 region 결정론 선택(기존 enumeration identity) → 선택 검증 실패 시 export 없이 State B → export→파싱→노트 대조 일치 State A(노트 evidence) → 이전 선택 복원. verify_notes=false 경로는 기존 동작 무변경
 - [ ] AC-4: 빈 선택/오디오 region → State C `no_midi_selection`, export 노트 0 → State B `export_empty`, 다이얼로그 잔류 금지(Escape 폴백)
