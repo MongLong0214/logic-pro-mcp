@@ -143,6 +143,21 @@ import Testing
     #expect(AXLogicProElements.menuItem(path: ["Edit", "Undo"], runtime: runtime) == nil)
 }
 
+@Test func testAXLogicProElementsDeriveLogicUILocaleOnlyFromCompleteUnambiguousMenus() {
+    #expect(AXLogicProElements.logicUILocaleIdentifier(
+        menuTitles: ["Logic Pro", "File", "Edit", "Track", "Navigate"]
+    ) == "en-US")
+    #expect(AXLogicProElements.logicUILocaleIdentifier(
+        menuTitles: ["Logic Pro", "파일", "편집", "트랙", "탐색"]
+    ) == "ko-KR")
+    #expect(AXLogicProElements.logicUILocaleIdentifier(
+        menuTitles: ["File", "Edit"]
+    ) == nil)
+    #expect(AXLogicProElements.logicUILocaleIdentifier(
+        menuTitles: ["File", "Edit", "Track", "파일", "편집", "트랙"]
+    ) == nil)
+}
+
 @Test func testAXLogicProElementsFallbacksResolveScrollAreasAndOutline() {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(21)

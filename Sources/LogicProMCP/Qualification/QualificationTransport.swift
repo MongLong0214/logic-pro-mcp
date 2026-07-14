@@ -1,0 +1,1414 @@
+import Foundation
+import Darwin
+
+struct QualificationDriveRequest: Sendable {
+    let executableURL: URL
+    let environment: [String: String]
+    let expectedOperationCount: Int
+    let operations: [OperationSpec]
+    let expectedExecutableSHA256: String?
+
+    init(
+        executableURL: URL,
+        environment: [String: String],
+        expectedOperationCount: Int,
+        operations: [OperationSpec] = [],
+        expectedExecutableSHA256: String? = nil
+    ) {
+        self.executableURL = executableURL
+        self.environment = environment
+        self.expectedOperationCount = expectedOperationCount
+        self.operations = operations
+        self.expectedExecutableSHA256 = expectedExecutableSHA256
+    }
+}
+
+struct QualificationHandshake: Equatable, Sendable {
+    let protocolVersion: String
+    let serverName: String
+    let serverVersion: String
+
+    var isValid: Bool {
+        !protocolVersion.isEmpty && !serverName.isEmpty && !serverVersion.isEmpty
+    }
+}
+
+struct QualificationHealth: Equatable, Sendable {
+    let logicProRunning: Bool
+    let logicProVersion: String
+    let logicProBundleID: String
+    let logicProVariant: String
+    let logicProUILocale: String
+    let processMetadataResolved: Bool
+    let variants: [QualificationVariantAvailability]
+
+    var isValid: Bool {
+        !logicProVersion.isEmpty
+            && !logicProVariant.isEmpty
+            && QualificationLocale(rawValue: logicProUILocale) != nil
+            && availabilityObservation != nil
+    }
+
+    var identifiesLiveLogic: Bool {
+        logicProRunning && processMetadataResolved && logicProVersion != "unknown"
+    }
+
+    var availabilityObservation: QualificationAvailabilityObservation? {
+        guard let activeVariant = Self.qualificationVariant(logicProVariant),
+              let uiLocale = QualificationLocale(rawValue: logicProUILocale),
+              variants.contains(where: {
+                  $0.variant == activeVariant
+                      && $0.bundleID == logicProBundleID
+                      && $0.running
+              }) else {
+            return nil
+        }
+        return QualificationAvailabilityObservation(
+            activeBundleID: logicProBundleID,
+            activeVariant: activeVariant,
+            logicUILocale: uiLocale,
+            variants: variants
+        )
+    }
+
+    private static func qualificationVariant(_ value: String) -> LogicVariant? {
+        switch value {
+        case LogicProVariant.desktop.rawValue: .desktop
+        case LogicProVariant.creatorStudio.rawValue: .creatorStudio
+        default: nil
+        }
+    }
+}
+
+struct QualificationTraceEntry: Equatable, Sendable {
+    let traceID: String
+    let operationID: String
+    let phaseCount: Int
+    let readbackState: String?
+}
+
+struct QualificationTraceList: Equatable, Sendable {
+    let traces: [QualificationTraceEntry]
+}
+
+struct QualificationTraceDetail: Equatable, Sendable {
+    let traceID: String
+    let operationID: String
+    let phases: [String]
+}
+
+struct QualificationOperationResult: Equatable, Sendable {
+    let operationID: String
+    let tool: String
+    let command: String
+    let mutability: Mutability
+    let requestID: String?
+    let responseData: Data?
+    let isError: Bool?
+    let state: String?
+    let error: String?
+    let writeAttempted: Bool?
+    let readbackSource: String?
+    let readbackRequestID: String?
+    let readbackData: Data?
+    let failureReason: String?
+
+    var responseArtifactData: Data? {
+        guard let requestID,
+              let responseData,
+              let isError,
+              let payload = String(data: responseData, encoding: .utf8) else {
+            return nil
+        }
+        return Self.encoded(QualificationOperationResponseArtifact(
+            operationID: operationID,
+            tool: tool,
+            command: command,
+            requestID: requestID,
+            isError: isError,
+            payload: payload
+        ))
+    }
+
+    var responseSHA256: String? {
+        responseArtifactData.map(SupportBundleBuilder.sha256)
+    }
+
+    var readbackArtifactData: Data? {
+        guard let readbackSource,
+              let readbackRequestID,
+              let readbackData,
+              let payload = String(data: readbackData, encoding: .utf8) else {
+            return nil
+        }
+        return Self.encoded(QualificationReadbackArtifact(
+            source: readbackSource,
+            requestID: readbackRequestID,
+            payload: payload
+        ))
+    }
+
+    var readback: QualificationReadbackEvidence? {
+        guard let readbackSource, let readbackRequestID, let readbackArtifactData else { return nil }
+        return QualificationReadbackEvidence(
+            source: readbackSource,
+            requestID: readbackRequestID,
+            verified: mutability == .mutating || semanticReadbackValidated == true,
+            sha256: SupportBundleBuilder.sha256(readbackArtifactData)
+        )
+    }
+
+    var status: QualificationStatus {
+        if failureReason != nil || responseData == nil || readbackArtifactData == nil {
+            return .failed
+        }
+        switch mutability {
+        case .readOnly:
+            guard isError == false else { return .notQualified }
+            switch semanticReadbackValidated {
+            case .some(true): return .passed
+            case .some(false): return .notQualified
+            case .none: return .protocolSmoke
+            }
+        case .mutating:
+            return isTypedZeroWriteRefusal ? .notQualified : .failed
+        }
+    }
+
+    var verified: Bool { status == .passed }
+
+    var verificationKind: QualificationVerificationKind {
+        switch status {
+        case .passed: .semanticReadback
+        case .protocolSmoke: .protocolSmoke
+        default: .typedDeferral
+        }
+    }
+
+    var deferral: QualificationDeferral? {
+        switch status {
+        case .notQualified where mutability == .mutating:
+            QualificationDeferral(
+                code: .liveMutationNotRun,
+                detail: "deferred to ADR-001-c: live mutation requires an operation-specific fixture and independent readback"
+            )
+        case .notQualified where isError == false && semanticReadbackValidated == false:
+            QualificationDeferral(
+                code: .semanticMismatch,
+                detail: "read-only response did not match its operation-specific independent readback"
+            )
+        case .notQualified:
+            QualificationDeferral(
+                code: .operationUnavailable,
+                detail: "read-only operation did not return a successful typed response on this host"
+            )
+        case .protocolSmoke:
+            QualificationDeferral(
+                code: .semanticValidatorUnavailable,
+                detail: "protocol transport succeeded without an operation-specific semantic validator"
+            )
+        default:
+            nil
+        }
+    }
+
+    private var semanticReadbackValidated: Bool? {
+        guard mutability == .readOnly,
+              let responseData,
+              let readbackData else {
+            return nil
+        }
+        return QualificationSemanticReadbackValidator.validate(
+            operationID: operationID,
+            responseData: responseData,
+            readbackData: readbackData
+        )
+    }
+
+    private var isTypedZeroWriteRefusal: Bool {
+        isError == true
+            && state == "C"
+            && error == "invalid_params"
+            && writeAttempted == false
+    }
+
+    private static func encoded<Value: Encodable>(_ value: Value) -> Data? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return try? encoder.encode(value)
+    }
+}
+
+enum QualificationSemanticReadbackValidator {
+    static func validate(
+        operationID: String,
+        responseData: Data,
+        readbackData: Data
+    ) -> Bool? {
+        switch OperationID(rawValue: operationID) {
+        case .systemHealth:
+            return healthMatches(responseData, readbackData)
+        default:
+            return nil
+        }
+    }
+
+    private static func healthMatches(_ responseData: Data, _ readbackData: Data) -> Bool {
+        guard let response = try? JSONDecoder().decode(HealthResult.self, from: responseData),
+              let readback = try? JSONDecoder().decode(HealthResult.self, from: readbackData) else {
+            return false
+        }
+        return response == readback
+    }
+}
+
+struct QualificationNegativeResult: Equatable, Sendable {
+    let toolIsError: Bool
+    let state: String
+    let error: String
+    let writeAttempted: Bool
+    let healthBefore: Data
+    let healthAfter: Data
+    let catalogBefore: Data
+    let catalogAfter: Data
+
+    var healthReadStable: Bool { healthBefore == healthAfter }
+    var catalogReadStable: Bool { catalogBefore == catalogAfter }
+
+    var isFailClosedAndStable: Bool {
+        // Health warms during cache polling and MCU registration; zero-write plus a stable catalog is dispositive.
+        toolIsError
+            && state == "C"
+            && error == "invalid_params"
+            && !writeAttempted
+            && catalogReadStable
+    }
+}
+
+struct QualificationDriveResult: Equatable, Sendable {
+    let handshake: QualificationHandshake?
+    let health: QualificationHealth?
+    let catalog: OperationCatalogSnapshot?
+    let expectedOperationCount: Int
+    let traceList: QualificationTraceList?
+    let traceDetail: QualificationTraceDetail?
+    let negative: QualificationNegativeResult?
+    let observedLocale: String
+    let operationResults: [String: QualificationOperationResult]
+    let failureReason: String?
+
+    init(
+        handshake: QualificationHandshake?,
+        health: QualificationHealth?,
+        catalog: OperationCatalogSnapshot?,
+        expectedOperationCount: Int,
+        traceList: QualificationTraceList?,
+        traceDetail: QualificationTraceDetail? = nil,
+        negative: QualificationNegativeResult?,
+        observedLocale: String,
+        operationResults: [String: QualificationOperationResult] = [:],
+        failureReason: String?
+    ) {
+        self.handshake = handshake
+        self.health = health
+        self.catalog = catalog
+        self.expectedOperationCount = expectedOperationCount
+        self.traceList = traceList
+        self.traceDetail = traceDetail
+        self.negative = negative
+        self.observedLocale = observedLocale
+        self.operationResults = operationResults
+        self.failureReason = failureReason
+    }
+
+    var handshakeOK: Bool { handshake?.isValid == true }
+    var healthOK: Bool { health?.isValid == true && health?.identifiesLiveLogic == true }
+    var catalogCountMatch: Bool {
+        guard let catalog else { return false }
+        return catalog.operationCount == expectedOperationCount
+            && catalog.operations.count == catalog.operationCount
+    }
+    var traceOK: Bool {
+        guard let traceDetail,
+              traceDetail.operationID == OperationID.systemSagaExecute.rawValue,
+              traceDetail.phases.first == TracePhase.requestReceived.rawValue,
+              traceDetail.phases.last == TracePhase.resultEmitted.rawValue,
+              let summary = traceList?.traces.first(where: {
+                  $0.traceID == traceDetail.traceID
+                      && $0.operationID == traceDetail.operationID
+              }) else {
+            return false
+        }
+        return summary.phaseCount > 0 && summary.phaseCount == traceDetail.phases.count
+    }
+    var negativeFailclosed: Bool { negative?.isFailClosedAndStable == true }
+    var allChecksPass: Bool {
+        handshakeOK && healthOK && catalogCountMatch && traceOK && negativeFailclosed
+    }
+    var observedVariant: String {
+        guard let identifier = health?.logicProVariant else { return "unknown" }
+        return identifier == LogicProVariant.creatorStudio.rawValue
+            ? LogicVariant.creatorStudio.rawValue
+            : identifier
+    }
+    var logicProVersion: String { health?.logicProVersion ?? "unknown" }
+    var identifiesLiveLogic: Bool { health?.identifiesLiveLogic == true }
+    var availabilityObservation: QualificationAvailabilityObservation? {
+        health?.availabilityObservation
+    }
+}
+
+enum QualificationTransportError: Error, Equatable, CustomStringConvertible, Sendable {
+    case requestTimeout(phase: String)
+    case nonZeroExit(status: Int32, stderr: String)
+    case malformedFrame(String)
+    case closedPipe(phase: String)
+    case launchFailed(String)
+    case protocolViolation(String)
+    case shutdownTimeout
+    case unimplemented
+
+    var description: String {
+        switch self {
+        case .requestTimeout(let phase): "qualification_transport_timeout:\(phase)"
+        case .nonZeroExit(let status, let stderr):
+            "qualification_transport_nonzero_exit:\(status):\(stderr)"
+        case .malformedFrame(let detail): "qualification_transport_malformed_frame:\(detail)"
+        case .closedPipe(let phase): "qualification_transport_closed_pipe:\(phase)"
+        case .launchFailed(let detail): "qualification_transport_launch_failed:\(detail)"
+        case .protocolViolation(let detail): "qualification_transport_protocol_violation:\(detail)"
+        case .shutdownTimeout: "qualification_transport_shutdown_timeout"
+        case .unimplemented: "qualification_transport_unimplemented"
+        }
+    }
+}
+
+struct QualificationTransport: Sendable {
+    let handshakeTimeout: TimeInterval
+    let requestTimeout: TimeInterval
+    let shutdownGrace: TimeInterval
+
+    init(
+        handshakeTimeout: TimeInterval = 45,
+        requestTimeout: TimeInterval = 10,
+        shutdownGrace: TimeInterval = 1
+    ) {
+        self.handshakeTimeout = handshakeTimeout
+        self.requestTimeout = requestTimeout
+        self.shutdownGrace = shutdownGrace
+    }
+
+    static func qualificationLocaleIdentifier(_ identifier: String) -> String {
+        switch Locale(identifier: identifier).language.languageCode?.identifier.lowercased() {
+        case "en": QualificationLocale.enUS.rawValue
+        case "ko": QualificationLocale.koKR.rawValue
+        default: identifier.replacingOccurrences(of: "_", with: "-")
+        }
+    }
+
+    func drive(_ request: QualificationDriveRequest) throws -> QualificationDriveResult {
+        let session = QualificationSubprocessSession(
+            request: request,
+            requestTimeout: requestTimeout,
+            shutdownGrace: shutdownGrace
+        )
+        try session.start()
+
+        do {
+            let handshake = try initialize(session)
+            let healthBefore = try health(session, id: 2, phase: "health_before")
+            let catalogBefore = try catalog(session, id: 3, phase: "catalog_before")
+            let baselineTraceList = try traces(session, id: 4)
+            let baselineTraceIDs = Set(baselineTraceList.traces.map(\.traceID))
+            let traceSeedBody = try traceSeed(session, id: 5)
+            let traceList = try traces(session, id: 6)
+            let seededTraces = traceList.traces.filter {
+                !baselineTraceIDs.contains($0.traceID)
+                    && $0.operationID == OperationID.systemSagaExecute.rawValue
+                    && $0.phaseCount > 0
+                    && TraceID.isValid($0.traceID)
+            }
+            guard seededTraces.count == 1, let traceSummary = seededTraces.first else {
+                throw QualificationTransportError.protocolViolation(
+                    "trace_roundtrip: expected one new traced operation with events"
+                )
+            }
+            let traceDetail = try trace(session, id: 7, traceID: traceSummary.traceID)
+            guard traceDetail.traceID == traceSummary.traceID,
+                  traceDetail.operationID == traceSummary.operationID,
+                  traceDetail.phases.first == TracePhase.requestReceived.rawValue,
+                  traceDetail.phases.last == TracePhase.resultEmitted.rawValue else {
+                throw QualificationTransportError.protocolViolation(
+                    "trace_roundtrip: trace identity or events mismatch"
+                )
+            }
+            let negativeBody = try negative(session, id: 8)
+
+            var nextID = 9
+            var operationResults: [String: QualificationOperationResult] = [:]
+            for spec in request.operations {
+                var response: (text: String, isError: Bool)?
+                var responseRequestID: String?
+                var responseFailure: String?
+                do {
+                    if spec.id == .systemSagaExecute {
+                        responseRequestID = "5"
+                        response = (traceSeedBody.text, traceSeedBody.toolIsError)
+                    } else if spec.id == .tracksRename {
+                        responseRequestID = "8"
+                        response = (negativeBody.text, negativeBody.toolIsError)
+                    } else {
+                        let responseID = nextID
+                        nextID += 1
+                        responseRequestID = String(responseID)
+                        response = try operation(
+                            session,
+                            id: responseID,
+                            spec: spec,
+                            traceID: traceSummary.traceID
+                        )
+                    }
+                } catch {
+                    responseFailure = String(describing: error)
+                }
+                let readbackRequestID = "operation-readback-\(nextID)"
+                let readbackSource = Self.readbackSource(for: spec)
+                var readbackData: Data?
+                var readbackFailure: String?
+                do {
+                    readbackData = try resourceReadback(
+                        session,
+                        id: nextID,
+                        uri: readbackSource,
+                        phase: readbackRequestID
+                    )
+                } catch {
+                    readbackFailure = String(describing: error)
+                }
+                nextID += 1
+                let typed = response.flatMap {
+                    try? Self.decodeInner(
+                        $0.text,
+                        phase: "operation_probe.\(spec.id.rawValue)"
+                    ) as OperationProbeResult
+                }
+                operationResults[spec.id.rawValue] = QualificationOperationResult(
+                    operationID: spec.id.rawValue,
+                    tool: spec.tool.rawValue,
+                    command: spec.command,
+                    mutability: spec.mutability,
+                    requestID: responseRequestID,
+                    responseData: response.map { Data($0.text.utf8) },
+                    isError: response?.isError,
+                    state: typed?.state,
+                    error: typed?.error,
+                    writeAttempted: typed?.writeAttempted,
+                    readbackSource: readbackSource,
+                    readbackRequestID: readbackRequestID,
+                    readbackData: readbackData,
+                    failureReason: responseFailure ?? readbackFailure
+                )
+            }
+            let healthAfter = try health(session, id: nextID, phase: "health_after")
+            nextID += 1
+            let catalogAfter = try catalog(session, id: nextID, phase: "catalog_after")
+            let negative = QualificationNegativeResult(
+                toolIsError: negativeBody.toolIsError,
+                state: negativeBody.body.state,
+                error: negativeBody.body.error,
+                writeAttempted: negativeBody.body.writeAttempted,
+                healthBefore: healthBefore.stableData,
+                healthAfter: healthAfter.stableData,
+                catalogBefore: catalogBefore.stableData,
+                catalogAfter: catalogAfter.stableData
+            )
+            let outcome = try session.shutdown()
+            guard !outcome.forced else {
+                throw QualificationTransportError.shutdownTimeout
+            }
+            guard outcome.status == 0 else {
+                throw QualificationTransportError.nonZeroExit(
+                    status: outcome.status,
+                    stderr: session.stderrTail
+                )
+            }
+            return QualificationDriveResult(
+                handshake: handshake,
+                health: healthBefore.value,
+                catalog: catalogBefore.value,
+                expectedOperationCount: request.expectedOperationCount,
+                traceList: traceList,
+                traceDetail: traceDetail,
+                negative: negative,
+                observedLocale: healthBefore.value.logicProUILocale,
+                operationResults: operationResults,
+                failureReason: nil
+            )
+        } catch {
+            let outcome: QualificationSubprocessSession.ShutdownOutcome
+            do {
+                outcome = try session.shutdown()
+            } catch {
+                throw error
+            }
+            if !outcome.forced, outcome.status != 0 {
+                throw QualificationTransportError.nonZeroExit(
+                    status: outcome.status,
+                    stderr: session.stderrTail
+                )
+            }
+            throw error
+        }
+    }
+
+    private func initialize(_ session: QualificationSubprocessSession) throws -> QualificationHandshake {
+        let result: InitializeResult = try session.request(
+            id: 1,
+            method: "initialize",
+            params: [
+                "protocolVersion": "2025-11-25",
+                "capabilities": [:] as [String: Any],
+                "clientInfo": ["name": "adr001b-qualification", "version": "1.0"],
+            ],
+            phase: "handshake",
+            timeout: handshakeTimeout
+        )
+        try session.notify(method: "notifications/initialized")
+        return QualificationHandshake(
+            protocolVersion: result.protocolVersion,
+            serverName: result.serverInfo.name,
+            serverVersion: result.serverInfo.version
+        )
+    }
+
+    private func health(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        phase: String
+    ) throws -> (value: QualificationHealth, stableData: Data) {
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: [
+                "name": "logic_system",
+                "arguments": ["command": "health", "params": [:] as [String: Any]],
+            ],
+            phase: phase
+        )
+        guard result.isError != true else {
+            throw QualificationTransportError.protocolViolation("\(phase): tool returned isError")
+        }
+        let text = try result.text(phase: phase)
+        let wire: HealthResult = try Self.decodeInner(text, phase: phase)
+        return (
+            QualificationHealth(
+                logicProRunning: wire.logicProRunning,
+                logicProVersion: wire.logicProVersion,
+                logicProBundleID: wire.logicProBundleID,
+                logicProVariant: wire.logicProVariant,
+                logicProUILocale: wire.logicProUILocale,
+                processMetadataResolved: wire.processMetadataResolved,
+                variants: wire.variants.compactMap { variant in
+                    let mapped: LogicVariant
+                    switch variant.variant {
+                    case LogicProVariant.desktop.rawValue:
+                        mapped = .desktop
+                    case LogicProVariant.creatorStudio.rawValue:
+                        mapped = .creatorStudio
+                    default:
+                        return nil
+                    }
+                    return QualificationVariantAvailability(
+                        variant: mapped,
+                        bundleID: variant.bundleID,
+                        installed: variant.installed,
+                        running: variant.running
+                    )
+                }
+            ),
+            try Self.stableHealthData(text, phase: phase)
+        )
+    }
+
+    private func catalog(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        phase: String
+    ) throws -> (value: OperationCatalogSnapshot, stableData: Data) {
+        let result: ResourceReadResult = try session.request(
+            id: id,
+            method: "resources/read",
+            params: ["uri": "logic://system/operations"],
+            phase: phase
+        )
+        guard let content = result.contents.first,
+              content.uri == "logic://system/operations",
+              let text = content.text else {
+            throw QualificationTransportError.protocolViolation("\(phase): missing operations content")
+        }
+        return (
+            try Self.decodeInner(text, phase: phase),
+            try Self.stableCatalogData(text, phase: phase)
+        )
+    }
+
+    private func traces(
+        _ session: QualificationSubprocessSession,
+        id: Int
+    ) throws -> QualificationTraceList {
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: [
+                "name": "logic_system",
+                "arguments": [
+                    "command": "list_recent_traces",
+                    "params": ["limit": 10],
+                ],
+            ],
+            phase: "trace_roundtrip"
+        )
+        guard result.isError != true else {
+            throw QualificationTransportError.protocolViolation(
+                "trace_roundtrip: \(try result.text(phase: "trace_roundtrip"))"
+            )
+        }
+        let wire: TraceListResult = try Self.decodeInner(
+            result.text(phase: "trace_roundtrip"),
+            phase: "trace_roundtrip"
+        )
+        guard wire.traceDisabled != true else {
+            throw QualificationTransportError.protocolViolation("trace_roundtrip: trace_disabled")
+        }
+        return QualificationTraceList(traces: wire.traces.map {
+            QualificationTraceEntry(
+                traceID: $0.traceID,
+                operationID: $0.operationID,
+                phaseCount: $0.phaseCount,
+                readbackState: $0.readbackState
+            )
+        })
+    }
+
+    private func trace(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        traceID: String
+    ) throws -> QualificationTraceDetail {
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: [
+                "name": "logic_system",
+                "arguments": [
+                    "command": "get_trace",
+                    "params": ["trace_id": traceID],
+                ],
+            ],
+            phase: "trace_get"
+        )
+        guard result.isError != true else {
+            throw QualificationTransportError.protocolViolation("trace_get: tool returned isError")
+        }
+        let wire: TraceDetailResult = try Self.decodeInner(
+            result.text(phase: "trace_get"),
+            phase: "trace_get"
+        )
+        return QualificationTraceDetail(
+            traceID: wire.traceID,
+            operationID: wire.operationID,
+            phases: wire.events.map(\.phase)
+        )
+    }
+
+    private func operation(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        spec: OperationSpec,
+        traceID: String
+    ) throws -> (text: String, isError: Bool) {
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: [
+                "name": spec.tool.rawValue,
+                "arguments": [
+                    "command": spec.command,
+                    "params": Self.probeParams(for: spec, traceID: traceID),
+                ],
+            ],
+            phase: "operation_probe.\(spec.id.rawValue)"
+        )
+        return (
+            try result.text(phase: "operation_probe.\(spec.id.rawValue)"),
+            result.isError == true
+        )
+    }
+
+    private static func probeParams(for spec: OperationSpec, traceID: String) -> [String: Any] {
+        if spec.mutability == .mutating {
+            return ["__adr001b_no_write_probe": true]
+        }
+        switch spec.id {
+        case .systemListRecentTraces:
+            return ["limit": 10]
+        case .systemGetTrace:
+            return ["trace_id": traceID]
+        case .systemClearTraces:
+            return ["confirmed": false]
+        case .systemHelp:
+            return ["category": "system"]
+        case .systemSagaPreflight:
+            return ["idempotency_key": "qualification-read-probe", "steps": []]
+        case .systemSagaStatus:
+            return ["idempotency_key": "qualification-read-probe"]
+        default:
+            return [:]
+        }
+    }
+
+    static func readbackSource(for spec: OperationSpec) -> String {
+        switch spec.tool {
+        case .logicTransport:
+            return "logic://transport/state"
+        case .logicMixer, .logicPlugins:
+            return "logic://mixer"
+        case .logicNavigate:
+            return "logic://markers"
+        case .logicEdit:
+            return "logic://tracks"
+        case .logicProject:
+            switch spec.id {
+            case .projectGetRegions:
+                return "logic://tracks"
+            case .projectAudit:
+                return "logic://project/audit"
+            case .projectCleanupPlan, .projectCleanupApply:
+                return "logic://project/cleanup-plan"
+            default:
+                return "logic://project/info"
+            }
+        case .logicMidi:
+            return "logic://midi/ports"
+        case .logicTracks:
+            switch spec.id {
+            case .tracksListLibrary, .tracksScanLibrary, .tracksResolvePath,
+                 .tracksScanPluginPresets:
+                return "logic://library/inventory"
+            default:
+                return "logic://tracks"
+            }
+        case .logicAudio:
+            return "logic://system/health"
+        case .logicSystem:
+            switch spec.id {
+            case .systemListRecentTraces, .systemGetTrace, .systemClearTraces, .systemHelp:
+                return "logic://system/operations"
+            default:
+                return "logic://system/health"
+            }
+        }
+    }
+
+    private func resourceReadback(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        uri: String,
+        phase: String
+    ) throws -> Data {
+        let result: ResourceReadResult = try session.request(
+            id: id,
+            method: "resources/read",
+            params: ["uri": uri],
+            phase: phase
+        )
+        guard let content = result.contents.first,
+              content.uri == uri,
+              let text = content.text else {
+            throw QualificationTransportError.protocolViolation("\(phase): missing readback content")
+        }
+        return Data(text.utf8)
+    }
+
+    private func negative(
+        _ session: QualificationSubprocessSession,
+        id: Int
+    ) throws -> (toolIsError: Bool, body: NegativeResult, text: String) {
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: [
+                "name": "logic_tracks",
+                "arguments": [
+                    "command": "rename",
+                    "params": ["track_index": 1],
+                ],
+            ],
+            phase: "negative_failclosed"
+        )
+        let text = try result.text(phase: "negative_failclosed")
+        let body: NegativeResult = try Self.decodeInner(
+            text,
+            phase: "negative_failclosed"
+        )
+        return (result.isError == true, body, text)
+    }
+
+    private func traceSeed(
+        _ session: QualificationSubprocessSession,
+        id: Int
+    ) throws -> (toolIsError: Bool, body: OperationProbeResult, text: String) {
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: [
+                "name": "logic_system",
+                "arguments": [
+                    "command": "saga_execute",
+                    "params": [:] as [String: Any],
+                ],
+            ],
+            phase: "trace_seed"
+        )
+        let text = try result.text(phase: "trace_seed")
+        let body: OperationProbeResult = try Self.decodeInner(text, phase: "trace_seed")
+        guard result.isError == true,
+              body.state == "C",
+              body.error == "invalid_params",
+              body.writeAttempted == false else {
+            throw QualificationTransportError.protocolViolation(
+                "trace_seed: expected typed zero-write refusal"
+            )
+        }
+        return (true, body, text)
+    }
+
+    private static func decodeInner<Value: Decodable>(
+        _ text: String,
+        phase: String
+    ) throws -> Value {
+        do {
+            return try JSONDecoder().decode(Value.self, from: Data(text.utf8))
+        } catch {
+            throw QualificationTransportError.protocolViolation("\(phase): invalid typed JSON")
+        }
+    }
+
+    private static func stableHealthData(_ text: String, phase: String) throws -> Data {
+        guard var object = try jsonObject(text, phase: phase) as? [String: Any] else {
+            throw QualificationTransportError.protocolViolation("\(phase): health is not an object")
+        }
+        object.removeValue(forKey: "process")
+        if var cache = object["cache"] as? [String: Any] {
+            cache.removeValue(forKey: "transport_age_sec")
+            object["cache"] = cache
+        }
+        if var mcu = object["mcu"] as? [String: Any] {
+            mcu.removeValue(forKey: "last_feedback_at")
+            mcu.removeValue(forKey: "feedback_stale")
+            object["mcu"] = mcu
+        }
+        if let channels = object["channels"] as? [[String: Any]] {
+            object["channels"] = channels.map { channel in
+                var stable = channel
+                stable.removeValue(forKey: "latency_ms")
+                return stable
+            }
+        }
+        return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    }
+
+    private static func stableCatalogData(_ text: String, phase: String) throws -> Data {
+        guard var object = try jsonObject(text, phase: phase) as? [String: Any] else {
+            throw QualificationTransportError.protocolViolation("\(phase): catalog is not an object")
+        }
+        object.removeValue(forKey: "generated_at")
+        return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+    }
+
+    private static func jsonObject(_ text: String, phase: String) throws -> Any {
+        do {
+            return try JSONSerialization.jsonObject(with: Data(text.utf8))
+        } catch {
+            throw QualificationTransportError.protocolViolation("\(phase): invalid JSON")
+        }
+    }
+}
+
+private struct InitializeResult: Decodable {
+    struct ServerInfo: Decodable {
+        let name: String
+        let version: String
+    }
+
+    let protocolVersion: String
+    let serverInfo: ServerInfo
+}
+
+private struct ToolCallResult: Decodable {
+    struct Content: Decodable {
+        let type: String
+        let text: String?
+    }
+
+    let content: [Content]
+    let isError: Bool?
+
+    func text(phase: String) throws -> String {
+        guard let content = content.first(where: { $0.type == "text" }),
+              let text = content.text else {
+            throw QualificationTransportError.protocolViolation("\(phase): missing text content")
+        }
+        return text
+    }
+}
+
+private struct ResourceReadResult: Decodable {
+    struct Content: Decodable {
+        let uri: String
+        let text: String?
+    }
+
+    let contents: [Content]
+}
+
+private struct HealthResult: Decodable, Equatable {
+    struct VariantAvailability: Decodable, Equatable {
+        let variant: String
+        let bundleID: String
+        let installed: Bool
+        let running: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case variant
+            case bundleID = "bundle_id"
+            case installed
+            case running
+        }
+    }
+
+    let logicProRunning: Bool
+    let logicProVersion: String
+    let logicProBundleID: String
+    let logicProVariant: String
+    let logicProUILocale: String
+    let processMetadataResolved: Bool
+    let variants: [VariantAvailability]
+
+    enum CodingKeys: String, CodingKey {
+        case logicProRunning = "logic_pro_running"
+        case logicProVersion = "logic_pro_version"
+        case logicProBundleID = "logic_pro_bundle_id"
+        case logicProVariant = "logic_pro_variant"
+        case logicProUILocale = "logic_pro_ui_locale"
+        case processMetadataResolved = "process_metadata_resolved"
+        case variants = "logic_pro_variants"
+    }
+}
+
+private struct TraceListResult: Decodable {
+    struct Trace: Decodable {
+        let traceID: String
+        let operationID: String
+        let phaseCount: Int
+        let readbackState: String?
+
+        enum CodingKeys: String, CodingKey {
+            case traceID = "trace_id"
+            case operationID = "operation_id"
+            case phaseCount = "phase_count"
+            case readbackState = "readback_state"
+        }
+    }
+
+    let traces: [Trace]
+    let traceDisabled: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case traces
+        case traceDisabled = "trace_disabled"
+    }
+}
+
+private struct TraceDetailResult: Decodable {
+    struct Event: Decodable {
+        let phase: String
+    }
+
+    let traceID: String
+    let operationID: String
+    let events: [Event]
+
+    enum CodingKeys: String, CodingKey {
+        case traceID = "trace_id"
+        case operationID = "operation_id"
+        case events
+    }
+}
+
+private struct OperationProbeResult: Decodable {
+    let state: String?
+    let error: String?
+    let writeAttempted: Bool?
+    let traceID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case state
+        case error
+        case writeAttempted = "write_attempted"
+        case traceID = "trace_id"
+    }
+}
+
+private struct NegativeResult: Decodable {
+    let state: String
+    let error: String
+    let writeAttempted: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case state
+        case error
+        case writeAttempted = "write_attempted"
+    }
+}
+
+private struct RPCResponse<Result: Decodable>: Decodable {
+    struct RPCError: Decodable {
+        let code: Int
+        let message: String
+    }
+
+    let jsonrpc: String
+    let id: Int
+    let result: Result?
+    let error: RPCError?
+}
+
+private final class QualificationSubprocessSession: @unchecked Sendable {
+    struct ShutdownOutcome {
+        let status: Int32
+        let forced: Bool
+    }
+
+    private let request: QualificationDriveRequest
+    private let requestTimeout: TimeInterval
+    private let shutdownGrace: TimeInterval
+    private let process = Process()
+    private let inputPipe = Pipe()
+    private let outputPipe = Pipe()
+    private let errorPipe = Pipe()
+    private let frames = QualificationFrameQueue()
+    private let stderr = QualificationStderrBuffer()
+    private let readers = DispatchGroup()
+    private let exit = QualificationProcessExit()
+    private let stateLock = NSLock()
+    private var started = false
+    private var shutdownOutcome: ShutdownOutcome?
+
+    init(
+        request: QualificationDriveRequest,
+        requestTimeout: TimeInterval,
+        shutdownGrace: TimeInterval
+    ) {
+        self.request = request
+        self.requestTimeout = requestTimeout
+        self.shutdownGrace = shutdownGrace
+    }
+
+    var stderrTail: String { stderr.text }
+
+    func start() throws {
+        guard FileManager.default.isExecutableFile(atPath: request.executableURL.path) else {
+            throw QualificationTransportError.launchFailed("not executable: \(request.executableURL.path)")
+        }
+        try verifyExecutableIdentity()
+        var environment = request.environment
+        environment["LOGIC_MCP_ADR002_TARGET_REF"] = "0"
+        environment["LOGIC_MCP_ADR003_STRICT_PARAMS"] = "1"
+        environment["LOGIC_MCP_ADR005_OPERATION_TRACE"] = "1"
+        process.executableURL = request.executableURL.standardizedFileURL
+        process.currentDirectoryURL = request.executableURL.deletingLastPathComponent()
+        process.environment = environment
+        process.standardInput = inputPipe
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+        exit.start(process)
+        do {
+            try process.run()
+            try verifyExecutableIdentity()
+        } catch {
+            if process.isRunning { process.terminate() }
+            throw QualificationTransportError.launchFailed(String(describing: error))
+        }
+        stateLock.lock()
+        started = true
+        stateLock.unlock()
+        startReaders()
+    }
+
+    private func verifyExecutableIdentity() throws {
+        guard let expected = request.expectedExecutableSHA256 else { return }
+        let data = try Data(contentsOf: request.executableURL, options: .mappedIfSafe)
+        guard SupportBundleBuilder.sha256(data) == expected else {
+            throw QualificationTransportError.launchFailed("qualification executable changed")
+        }
+    }
+
+    func request<Result: Decodable>(
+        id: Int,
+        method: String,
+        params: [String: Any],
+        phase: String,
+        timeout: TimeInterval? = nil
+    ) throws -> Result {
+        try writeJSON([
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": method,
+            "params": params,
+        ])
+        let data = try frames.response(id: id, phase: phase, timeout: timeout ?? requestTimeout)
+        let response: RPCResponse<Result>
+        do {
+            response = try JSONDecoder().decode(RPCResponse<Result>.self, from: data)
+        } catch {
+            throw QualificationTransportError.protocolViolation("\(phase): invalid response shape")
+        }
+        guard response.jsonrpc == "2.0", response.id == id else {
+            throw QualificationTransportError.protocolViolation("\(phase): mismatched JSON-RPC envelope")
+        }
+        if let error = response.error {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): rpc \(error.code) \(error.message)"
+            )
+        }
+        guard let result = response.result else {
+            throw QualificationTransportError.protocolViolation("\(phase): missing result")
+        }
+        return result
+    }
+
+    func notify(method: String) throws {
+        try writeJSON(["jsonrpc": "2.0", "method": method])
+    }
+
+    func shutdown() throws -> ShutdownOutcome {
+        stateLock.lock()
+        if let shutdownOutcome {
+            stateLock.unlock()
+            return shutdownOutcome
+        }
+        let didStart = started
+        stateLock.unlock()
+        guard didStart else { return ShutdownOutcome(status: 0, forced: false) }
+
+        try? inputPipe.fileHandleForWriting.close()
+        var forced = false
+        if !exit.wait(timeout: shutdownGrace) {
+            forced = true
+            process.terminate()
+            if !exit.wait(timeout: shutdownGrace) {
+                Darwin.kill(process.processIdentifier, SIGKILL)
+                guard exit.wait(timeout: shutdownGrace) else {
+                    throw QualificationTransportError.shutdownTimeout
+                }
+            }
+        }
+        if readers.wait(timeout: .now() + shutdownGrace) == .timedOut {
+            try? outputPipe.fileHandleForReading.close()
+            try? errorPipe.fileHandleForReading.close()
+            guard readers.wait(timeout: .now() + shutdownGrace) == .success else {
+                throw QualificationTransportError.shutdownTimeout
+            }
+        }
+        let outcome = ShutdownOutcome(status: exit.status, forced: forced)
+        stateLock.lock()
+        shutdownOutcome = outcome
+        stateLock.unlock()
+        return outcome
+    }
+
+    private func writeJSON(_ object: [String: Any]) throws {
+        let data: Data
+        do {
+            var encoded = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+            encoded.append(0x0A)
+            data = encoded
+        } catch {
+            throw QualificationTransportError.protocolViolation("request encoding failed")
+        }
+        do {
+            try inputPipe.fileHandleForWriting.write(contentsOf: data)
+        } catch {
+            throw QualificationTransportError.closedPipe(phase: "write")
+        }
+    }
+
+    private func startReaders() {
+        let output = outputPipe.fileHandleForReading
+        readers.enter()
+        DispatchQueue.global(qos: .userInitiated).async { [frames, readers] in
+            defer { readers.leave() }
+            var pending = Data()
+            do {
+                while true {
+                    let chunk = output.availableData
+                    guard !chunk.isEmpty else { break }
+                    pending.append(chunk)
+                    while let newline = pending.firstIndex(of: 0x0A) {
+                        let line = Data(pending[..<newline])
+                        pending.removeSubrange(...newline)
+                        if !line.isEmpty {
+                            try frames.append(line)
+                        }
+                    }
+                    if pending.count > QualificationFrameQueue.maximumFrameBytes {
+                        throw QualificationTransportError.malformedFrame("frame exceeds size limit")
+                    }
+                }
+                if pending.isEmpty {
+                    frames.finish()
+                } else {
+                    frames.fail(QualificationTransportError.malformedFrame("unterminated frame"))
+                }
+            } catch {
+                frames.fail(error)
+            }
+        }
+
+        let error = errorPipe.fileHandleForReading
+        readers.enter()
+        DispatchQueue.global(qos: .utility).async { [stderr, readers] in
+            defer { readers.leave() }
+            while true {
+                let chunk = error.availableData
+                guard !chunk.isEmpty else { break }
+                stderr.append(chunk)
+            }
+        }
+    }
+}
+
+private final class QualificationFrameQueue: @unchecked Sendable {
+    static let maximumFrameBytes = 8 * 1024 * 1024
+
+    private let condition = NSCondition()
+    private var responses: [Int: Data] = [:]
+    private var terminalError: Error?
+    private var finished = false
+
+    func append(_ data: Data) throws {
+        let object: [String: Any]
+        do {
+            guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw QualificationTransportError.malformedFrame("top-level frame is not an object")
+            }
+            object = decoded
+        } catch let error as QualificationTransportError {
+            fail(error)
+            throw error
+        } catch {
+            let malformed = QualificationTransportError.malformedFrame("invalid JSON")
+            fail(malformed)
+            throw malformed
+        }
+        guard object["jsonrpc"] as? String == "2.0" else {
+            let malformed = QualificationTransportError.malformedFrame("missing jsonrpc 2.0")
+            fail(malformed)
+            throw malformed
+        }
+        guard let number = object["id"] as? NSNumber else {
+            return
+        }
+        condition.lock()
+        responses[number.intValue] = data
+        condition.broadcast()
+        condition.unlock()
+    }
+
+    func response(id: Int, phase: String, timeout: TimeInterval) throws -> Data {
+        let deadline = DispatchTime.now() + timeout
+        condition.lock()
+        defer { condition.unlock() }
+        while true {
+            if let response = responses.removeValue(forKey: id) {
+                return response
+            }
+            if let terminalError {
+                throw terminalError
+            }
+            if finished {
+                throw QualificationTransportError.closedPipe(phase: phase)
+            }
+            let now = DispatchTime.now()
+            guard now < deadline else {
+                throw QualificationTransportError.requestTimeout(phase: phase)
+            }
+            let remaining = Double(deadline.uptimeNanoseconds - now.uptimeNanoseconds) / 1_000_000_000
+            _ = condition.wait(until: Date().addingTimeInterval(remaining))
+        }
+    }
+
+    func finish() {
+        condition.lock()
+        finished = true
+        condition.broadcast()
+        condition.unlock()
+    }
+
+    func fail(_ error: Error) {
+        condition.lock()
+        if terminalError == nil {
+            terminalError = error
+        }
+        condition.broadcast()
+        condition.unlock()
+    }
+}
+
+private final class QualificationStderrBuffer: @unchecked Sendable {
+    private static let maximumBytes = 64 * 1024
+    private let lock = NSLock()
+    private var data = Data()
+
+    var text: String {
+        lock.lock()
+        defer { lock.unlock() }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    func append(_ chunk: Data) {
+        lock.lock()
+        data.append(chunk)
+        if data.count > Self.maximumBytes {
+            data.removeFirst(data.count - Self.maximumBytes)
+        }
+        lock.unlock()
+    }
+}
+
+private final class QualificationProcessExit: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var exited = false
+    private(set) var status: Int32 = 0
+
+    func start(_ process: Process) {
+        process.terminationHandler = { [self] process in
+            condition.lock()
+            status = process.terminationStatus
+            exited = true
+            condition.broadcast()
+            condition.unlock()
+        }
+    }
+
+    func wait(timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        condition.lock()
+        defer { condition.unlock() }
+        while !exited {
+            guard condition.wait(until: deadline) else { return exited }
+        }
+        return true
+    }
+}
