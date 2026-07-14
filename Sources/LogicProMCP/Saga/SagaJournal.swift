@@ -160,7 +160,8 @@ enum SagaWire {
                 switch wireError {
                 case .invalid(let message): message
                 }
-            } ?? "invalid saga request"
+            } ?? "invalid saga request",
+            extras: ["write_attempted": false]
         )
     }
 

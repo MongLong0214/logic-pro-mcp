@@ -70,13 +70,43 @@ struct QualificationRunner: Sendable {
     }
 
     private struct EvidenceManifest: Codable {
+        enum Kind: String, Codable {
+            case caseEvidence = "case_evidence"
+            case operationResponse = "operation_response"
+            case readbackResponse = "readback_response"
+        }
+
         struct Entry: Codable {
             let path: String
             let sha256: String
+            let caseID: String
+            let binarySHA256: String
+            let axis: QualificationAxis
+            let kind: Kind
+
+            enum CodingKeys: String, CodingKey {
+                case path
+                case sha256
+                case caseID = "case_id"
+                case binarySHA256 = "binary_sha256"
+                case axis
+                case kind
+            }
         }
 
         let schema: String
+        let binarySHA256: String
+        let caseManifestPath: String
+        let caseManifestSHA256: String
         let files: [Entry]
+
+        enum CodingKeys: String, CodingKey {
+            case schema
+            case binarySHA256 = "binary_sha256"
+            case caseManifestPath = "case_manifest_path"
+            case caseManifestSHA256 = "case_manifest_sha256"
+            case files
+        }
     }
 
     private enum RunnerError: Error, CustomStringConvertible {
@@ -86,6 +116,9 @@ struct QualificationRunner: Sendable {
         case malformedWaiver(caseID: String, field: String)
         case duplicateWaiver(caseID: String)
         case releaseVersionMismatch(expected: String, actual: String)
+        case logicVariantMismatch(expected: String, actual: String)
+        case logicUILocaleMismatch(expected: String, actual: String)
+        case evidenceBindingMismatch(String)
         case executableUnavailable
 
         var description: String {
@@ -98,6 +131,12 @@ struct QualificationRunner: Sendable {
             case .duplicateWaiver(let caseID): "Duplicate waiver for caseID: \(caseID)"
             case .releaseVersionMismatch(let expected, let actual):
                 "Release version does not match this binary: expected \(expected), got \(actual)"
+            case .logicVariantMismatch(let expected, let actual):
+                "Logic Pro variant mismatch: expected \(expected), observed \(actual)"
+            case .logicUILocaleMismatch(let expected, let actual):
+                "Logic Pro UI locale mismatch: expected \(expected), observed \(actual)"
+            case .evidenceBindingMismatch(let detail):
+                "External evidence binding mismatch: \(detail)"
             case .executableUnavailable: "Unable to resolve the running executable"
             }
         }
@@ -142,6 +181,8 @@ struct QualificationRunner: Sendable {
 
     private func qualify(_ options: QualifyOptions) async throws {
         guard options.outputURL.lastPathComponent.caseInsensitiveCompare(Self.manifestFilename)
+            != .orderedSame,
+            options.outputURL.lastPathComponent.caseInsensitiveCompare(Self.caseManifestFilename)
             != .orderedSame
         else {
             throw RunnerError.invalidOption("--out", options.outputURL.path)
@@ -171,7 +212,8 @@ struct QualificationRunner: Sendable {
             driveResult = try await runtime.drive(QualificationDriveRequest(
                 executableURL: executableURL,
                 environment: environment,
-                expectedOperationCount: specs.count
+                expectedOperationCount: specs.count,
+                operations: specs
             ))
         } catch {
             driveResult = QualificationDriveResult(
@@ -187,14 +229,33 @@ struct QualificationRunner: Sendable {
         }
         let registryErrors = runtime.registryValidationErrors()
         let handlerErrors = runtime.handlerValidationErrors()
-        let traceStore = OperationTraceStore(
-            maximumTraceCount: max(OperationTraceStore.defaultMaximumTraceCount, specs.count + 4),
-            maximumBytes: OperationTraceStore.defaultMaximumBytes
+        guard let observedVariant = LogicVariant(rawValue: driveResult.observedVariant),
+              observedVariant == options.variant else {
+            throw RunnerError.logicVariantMismatch(
+                expected: options.variant.rawValue,
+                actual: driveResult.observedVariant
+            )
+        }
+        guard let observedLocale = QualificationLocale(rawValue: driveResult.observedLocale),
+              observedLocale == options.locale else {
+            throw RunnerError.logicUILocaleMismatch(
+                expected: options.locale.rawValue,
+                actual: driveResult.observedLocale
+            )
+        }
+        let observedAxis = QualificationAxis(
+            variant: observedVariant,
+            locale: observedLocale,
+            profile: options.profile,
+            cache: options.cache,
+            fixture: .empty
         )
         var cases: [QualificationCase] = []
         var manifestEntries: [EvidenceManifest.Entry] = []
         var registryEvidencePassed = true
         var handlerEvidencePassed = true
+        let operationResultsComplete = driveResult.operationResults.count == specs.count
+            && driveResult.operationResults.values.allSatisfy { $0.status != .failed }
 
         for spec in specs {
             let matchingSpecs = specs.filter {
@@ -207,22 +268,23 @@ struct QualificationRunner: Sendable {
                 && handlerErrors.isEmpty
             registryEvidencePassed = registryEvidencePassed && registrySpecFound
             handlerEvidencePassed = handlerEvidencePassed && handlerBound
-            let traceID = await traceStore.start(operationID: spec.id.rawValue)
-            let traceStarted = await traceStore.trace(traceID) != nil
-            await traceStore.complete(traceID)
-            let traceCompleted = await traceStore.trace(traceID)?.completedAt != nil
-            let passed = driveResult.allChecksPass
+            let operationResult = driveResult.operationResults[spec.id.rawValue]
+            let status = operationResult?.status ?? .failed
+            let passed = status == .passed
+            let traceID = spec.id.rawValue == driveResult.traceDetail?.operationID
+                ? driveResult.traceDetail?.traceID ?? ""
+                : ""
             let relativePath = "evidence/operation-\(spec.id.rawValue).json"
             let evidence = CaseEvidence(
-                schema: "qualification-case-evidence/v2",
+                schema: "qualification-case-evidence/v3",
                 caseID: "in-process/\(spec.id.rawValue)",
                 operationID: spec.id.rawValue,
                 tool: spec.tool.rawValue,
                 command: spec.command,
                 registrySpecFound: registrySpecFound,
                 handlerBound: handlerBound,
-                traceStarted: traceStarted,
-                traceCompleted: traceCompleted,
+                traceStarted: !traceID.isEmpty,
+                traceCompleted: !traceID.isEmpty && driveResult.traceOK,
                 handshakeOK: driveResult.handshakeOK,
                 healthOK: driveResult.healthOK,
                 catalogCountMatch: driveResult.catalogCountMatch,
@@ -234,7 +296,20 @@ struct QualificationRunner: Sendable {
                 negativeWriteAttempted: driveResult.negative?.writeAttempted,
                 healthReadStable: driveResult.negative?.healthReadStable ?? false,
                 catalogReadStable: driveResult.negative?.catalogReadStable ?? false,
-                failureReason: driveResult.failureReason
+                failureReason: operationResult?.failureReason ?? driveResult.failureReason,
+                binarySHA256: binarySHA256,
+                axis: observedAxis,
+                status: status,
+                verified: passed,
+                verificationKind: operationResult?.verificationKind ?? .typedDeferral,
+                deferral: operationResult?.deferral,
+                readback: operationResult?.readback,
+                operationResponseSHA256: operationResult?.responseSHA256,
+                operationRequestID: operationResult?.requestID,
+                operationIsError: operationResult?.isError,
+                operationState: operationResult?.state,
+                operationError: operationResult?.error,
+                operationWriteAttempted: operationResult?.writeAttempted
             )
             let evidenceData = try Self.encoded(evidence)
             try evidenceData.write(
@@ -243,59 +318,131 @@ struct QualificationRunner: Sendable {
             )
             manifestEntries.append(.init(
                 path: relativePath,
-                sha256: SupportBundleBuilder.sha256(evidenceData)
+                sha256: SupportBundleBuilder.sha256(evidenceData),
+                caseID: evidence.caseID,
+                binarySHA256: binarySHA256,
+                axis: observedAxis,
+                kind: .caseEvidence
             ))
+            var evidenceFiles = [relativePath]
+            if let responseData = operationResult?.responseArtifactData {
+                let responsePath = "evidence/operation-\(spec.id.rawValue)-response.json"
+                try responseData.write(
+                    to: outputDirectory.appendingPathComponent(responsePath),
+                    options: .atomic
+                )
+                manifestEntries.append(.init(
+                    path: responsePath,
+                    sha256: SupportBundleBuilder.sha256(responseData),
+                    caseID: evidence.caseID,
+                    binarySHA256: binarySHA256,
+                    axis: observedAxis,
+                    kind: .operationResponse
+                ))
+                evidenceFiles.append(responsePath)
+            }
+            if let readbackData = operationResult?.readbackArtifactData {
+                let readbackPath = "evidence/operation-\(spec.id.rawValue)-readback.json"
+                try readbackData.write(
+                    to: outputDirectory.appendingPathComponent(readbackPath),
+                    options: .atomic
+                )
+                manifestEntries.append(.init(
+                    path: readbackPath,
+                    sha256: SupportBundleBuilder.sha256(readbackData),
+                    caseID: evidence.caseID,
+                    binarySHA256: binarySHA256,
+                    axis: observedAxis,
+                    kind: .readbackResponse
+                ))
+                evidenceFiles.append(readbackPath)
+            }
             cases.append(QualificationCase(
                 id: evidence.caseID,
-                status: passed ? .passed : .failed,
+                status: status,
                 tool: spec.tool.rawValue,
                 command: spec.command,
-                traceID: traceID.rawValue,
+                traceID: traceID,
                 verified: passed,
-                evidenceFiles: [relativePath],
+                evidenceFiles: evidenceFiles,
                 reason: passed
                     ? nil
-                    : driveResult.failureReason ?? "live protocol checks failed"
+                    : operationResult?.deferral?.detail
+                        ?? operationResult?.failureReason
+                        ?? driveResult.failureReason
+                        ?? "operation-specific protocol evidence failed",
+                binarySHA256: binarySHA256,
+                axis: observedAxis,
+                operationID: spec.id.rawValue,
+                operationRequestID: operationResult?.requestID,
+                verificationKind: operationResult?.verificationKind ?? .typedDeferral,
+                deferral: operationResult?.deferral,
+                readback: operationResult?.readback
             ))
         }
 
-        let waiversByCaseID = Dictionary(uniqueKeysWithValues: waivers.map { ($0.caseID, $0) })
-        for axis in QualificationAxis.requiredCombinations {
-            let axisKey = "\(axis.variant.rawValue)/\(axis.locale.rawValue)/\(options.profile.rawValue)/\(options.cache.rawValue)"
-            let caseID = "\(axisKey)/empty"
-            let isObservedAxis = axis.variant.rawValue == driveResult.observedVariant
-                && axis.locale.rawValue == driveResult.observedLocale
+        for axis in QualificationAxis.requiredAxes(
+            profile: options.profile,
+            cache: options.cache,
+            fixture: .empty
+        ) {
+            let caseID = axis.key
+            let isObservedAxis = axis == observedAxis
             let status: QualificationStatus
             let reason: String?
+            let availabilityReason = Self.availabilityReason(for: axis, observedAxis: observedAxis)
             if let failureReason = driveResult.failureReason {
                 status = .failed
                 reason = failureReason
             } else if isObservedAxis {
-                status = driveResult.allChecksPass ? .passed : .failed
-                reason = driveResult.allChecksPass ? nil : "live protocol checks failed"
-            } else if waiversByCaseID[caseID]?.governsHostAxisAvailability == true {
-                status = .waived
-                reason = "required axis unavailable on this qualification host; governed by ADR-001-a waiver"
+                status = driveResult.allChecksPass && operationResultsComplete ? .passed : .failed
+                reason = status == .passed
+                    ? nil
+                    : operationResultsComplete
+                        ? "live protocol checks failed"
+                        : "one or more operation-specific protocol checks failed"
             } else {
-                status = .skipped
-                reason = "required axis unavailable on this qualification host"
+                status = .notQualified
+                reason = "required axis unavailable: different observed Logic variant or UI locale"
             }
             let passed = status == .passed
-            let traceID = await traceStore.start(operationID: "qualification.\(axisKey)")
-            let traceStarted = await traceStore.trace(traceID) != nil
-            await traceStore.complete(traceID)
-            let traceCompleted = await traceStore.trace(traceID)?.completedAt != nil
-            let relativePath = "evidence/axis-\(axisKey.replacingOccurrences(of: "/", with: "-")).json"
+            let deferral = status == .notQualified
+                ? QualificationDeferral(
+                    code: .operationUnavailable,
+                    detail: reason ?? "required axis unavailable"
+                )
+                : nil
+            let axisReadbackRequestID = "axis-health-\(axis.key)"
+            let axisReadbackData = driveResult.negative.flatMap { negative -> Data? in
+                guard let payload = String(data: negative.healthAfter, encoding: .utf8) else {
+                    return nil
+                }
+                return try? Self.encoded(QualificationReadbackArtifact(
+                    source: "logic://system/health",
+                    requestID: axisReadbackRequestID,
+                    payload: payload
+                ))
+            }
+            let axisReadback = axisReadbackData.map {
+                QualificationReadbackEvidence(
+                    source: "logic://system/health",
+                    requestID: axisReadbackRequestID,
+                    verified: isObservedAxis && (driveResult.negative?.healthReadStable == true),
+                    sha256: SupportBundleBuilder.sha256($0)
+                )
+            }
+            let traceID = driveResult.traceDetail?.traceID ?? ""
+            let relativePath = "evidence/axis-\(axis.key.replacingOccurrences(of: "/", with: "-")).json"
             let evidence = CaseEvidence(
-                schema: "qualification-case-evidence/v2",
+                schema: "qualification-case-evidence/v3",
                 caseID: caseID,
-                operationID: "qualification.\(axisKey)",
+                operationID: "qualification.\(axis.key)",
                 tool: "qualification",
                 command: "stdio_jsonrpc_drive",
                 registrySpecFound: registryEvidencePassed,
                 handlerBound: handlerEvidencePassed,
-                traceStarted: traceStarted,
-                traceCompleted: traceCompleted,
+                traceStarted: driveResult.traceDetail != nil,
+                traceCompleted: driveResult.traceOK,
                 handshakeOK: driveResult.handshakeOK,
                 healthOK: driveResult.healthOK,
                 catalogCountMatch: driveResult.catalogCountMatch,
@@ -307,7 +454,16 @@ struct QualificationRunner: Sendable {
                 negativeWriteAttempted: driveResult.negative?.writeAttempted,
                 healthReadStable: driveResult.negative?.healthReadStable ?? false,
                 catalogReadStable: driveResult.negative?.catalogReadStable ?? false,
-                failureReason: driveResult.failureReason
+                failureReason: driveResult.failureReason,
+                binarySHA256: binarySHA256,
+                axis: axis,
+                status: status,
+                verified: passed,
+                verificationKind: passed ? .independentReadback : .typedDeferral,
+                deferral: deferral,
+                readback: axisReadback,
+                availabilityReason: availabilityReason,
+                availabilityObservation: driveResult.availabilityObservation
             )
             let evidenceData = try Self.encoded(evidence)
             try evidenceData.write(
@@ -316,44 +472,195 @@ struct QualificationRunner: Sendable {
             )
             manifestEntries.append(.init(
                 path: relativePath,
-                sha256: SupportBundleBuilder.sha256(evidenceData)
+                sha256: SupportBundleBuilder.sha256(evidenceData),
+                caseID: evidence.caseID,
+                binarySHA256: binarySHA256,
+                axis: axis,
+                kind: .caseEvidence
             ))
+            var evidenceFiles = [relativePath]
+            if let healthData = axisReadbackData {
+                let healthPath = "evidence/axis-\(axis.key.replacingOccurrences(of: "/", with: "-"))-health.json"
+                try healthData.write(
+                    to: outputDirectory.appendingPathComponent(healthPath),
+                    options: .atomic
+                )
+                manifestEntries.append(.init(
+                    path: healthPath,
+                    sha256: SupportBundleBuilder.sha256(healthData),
+                    caseID: evidence.caseID,
+                    binarySHA256: binarySHA256,
+                    axis: axis,
+                    kind: .readbackResponse
+                ))
+                evidenceFiles.append(healthPath)
+            }
             cases.append(QualificationCase(
                 id: caseID,
                 status: status,
                 tool: evidence.tool,
                 command: evidence.command,
-                traceID: traceID.rawValue,
+                traceID: traceID,
                 verified: passed,
-                evidenceFiles: [relativePath],
-                reason: reason
+                evidenceFiles: evidenceFiles,
+                reason: reason,
+                binarySHA256: binarySHA256,
+                axis: axis,
+                operationID: evidence.operationID,
+                verificationKind: passed ? .independentReadback : .typedDeferral,
+                deferral: deferral,
+                readback: axisReadback,
+                availabilityReason: availabilityReason,
+                availabilityObservation: driveResult.availabilityObservation
             ))
         }
 
         if let externalCasesURL = options.externalCasesURL {
-            let externalCases = try JSONDecoder().decode(
-                [QualificationCase].self,
-                from: Data(contentsOf: externalCasesURL)
-            )
+            let externalManifest: QualificationCaseManifest
+            do {
+                externalManifest = try JSONDecoder().decode(
+                    QualificationCaseManifest.self,
+                    from: Data(contentsOf: externalCasesURL)
+                )
+            } catch {
+                throw RunnerError.evidenceBindingMismatch("invalid external case manifest")
+            }
+            guard externalManifest.schema == "qualification-case-manifest/v1",
+                  externalManifest.binarySHA256 == binarySHA256 else {
+                throw RunnerError.evidenceBindingMismatch("case manifest binary or schema")
+            }
+            let externalCases = externalManifest.cases
+            let externalCaseIDs = externalCases.map(\.id)
+            guard Set(externalCaseIDs).count == externalCaseIDs.count,
+                  Set(externalCaseIDs).isDisjoint(with: Set(cases.map(\.id))) else {
+                throw RunnerError.evidenceBindingMismatch("duplicate or colliding case id")
+            }
             let internalEvidencePaths = Set(manifestEntries.map(\.path))
-            let externalEvidencePaths = Set(externalCases.flatMap(\.evidenceFiles))
-                .subtracting(internalEvidencePaths)
-            for relativePath in externalEvidencePaths.sorted() {
+            let externalEvidencePaths = externalCases.flatMap(\.evidenceFiles)
+            guard Set(externalEvidencePaths).count == externalEvidencePaths.count,
+                  Set(externalEvidencePaths).isDisjoint(with: internalEvidencePaths) else {
+                throw RunnerError.evidenceBindingMismatch("duplicate or colliding evidence path")
+            }
+            for externalCase in externalCases {
+                guard externalCase.binarySHA256 == binarySHA256,
+                      let relativePath = externalCase.evidenceFiles.first else {
+                    throw RunnerError.evidenceBindingMismatch("case binary or evidence path")
+                }
                 let evidenceData = try Self.validatedEvidenceData(
                     relativePath: relativePath,
                     outputDirectory: outputDirectory
                 )
+                let externalEvidence: CaseEvidence
+                do {
+                    externalEvidence = try JSONDecoder().decode(CaseEvidence.self, from: evidenceData)
+                } catch {
+                    throw RunnerError.evidenceBindingMismatch("invalid evidence for \(externalCase.id)")
+                }
+                guard Self.evidence(externalEvidence, binds: externalCase),
+                      Self.evidenceShapeIsValid(externalEvidence) else {
+                    throw RunnerError.evidenceBindingMismatch("case/evidence mismatch for \(externalCase.id)")
+                }
                 manifestEntries.append(.init(
                     path: relativePath,
-                    sha256: SupportBundleBuilder.sha256(evidenceData)
+                    sha256: SupportBundleBuilder.sha256(evidenceData),
+                    caseID: externalCase.id,
+                    binarySHA256: binarySHA256,
+                    axis: externalCase.axis,
+                    kind: .caseEvidence
                 ))
+                var artifactIndex = 1
+                if let responseSHA256 = externalEvidence.operationResponseSHA256 {
+                    guard externalCase.evidenceFiles.indices.contains(artifactIndex) else {
+                        throw RunnerError.evidenceBindingMismatch(
+                            "missing operation response for \(externalCase.id)"
+                        )
+                    }
+                    let path = externalCase.evidenceFiles[artifactIndex]
+                    let data = try Self.validatedEvidenceData(
+                        relativePath: path,
+                        outputDirectory: outputDirectory
+                    )
+                    guard SupportBundleBuilder.sha256(data) == responseSHA256,
+                          let artifact = try? JSONDecoder().decode(
+                              QualificationOperationResponseArtifact.self,
+                              from: data
+                          ),
+                          Self.operationArtifact(artifact, binds: externalEvidence) else {
+                        throw RunnerError.evidenceBindingMismatch(
+                            "operation response digest for \(externalCase.id)"
+                        )
+                    }
+                    manifestEntries.append(.init(
+                        path: path,
+                        sha256: responseSHA256,
+                        caseID: externalCase.id,
+                        binarySHA256: binarySHA256,
+                        axis: externalCase.axis,
+                        kind: .operationResponse
+                    ))
+                    artifactIndex += 1
+                }
+                if let readbackSHA256 = externalEvidence.readback?.sha256 {
+                    guard externalCase.evidenceFiles.indices.contains(artifactIndex) else {
+                        throw RunnerError.evidenceBindingMismatch(
+                            "missing readback response for \(externalCase.id)"
+                        )
+                    }
+                    let path = externalCase.evidenceFiles[artifactIndex]
+                    let data = try Self.validatedEvidenceData(
+                        relativePath: path,
+                        outputDirectory: outputDirectory
+                    )
+                    guard SupportBundleBuilder.sha256(data) == readbackSHA256,
+                          let artifact = try? JSONDecoder().decode(
+                              QualificationReadbackArtifact.self,
+                              from: data
+                          ),
+                          artifact.source == externalEvidence.readback?.source,
+                          artifact.requestID == externalEvidence.readback?.requestID,
+                          Self.availabilityArtifactMatches(
+                              artifact,
+                              observation: externalEvidence.availabilityObservation
+                          ) else {
+                        throw RunnerError.evidenceBindingMismatch(
+                            "readback response digest for \(externalCase.id)"
+                        )
+                    }
+                    manifestEntries.append(.init(
+                        path: path,
+                        sha256: readbackSHA256,
+                        caseID: externalCase.id,
+                        binarySHA256: binarySHA256,
+                        axis: externalCase.axis,
+                        kind: .readbackResponse
+                    ))
+                    artifactIndex += 1
+                }
+                guard artifactIndex == externalCase.evidenceFiles.count else {
+                    throw RunnerError.evidenceBindingMismatch(
+                        "unexpected evidence artifact for \(externalCase.id)"
+                    )
+                }
             }
             cases.append(contentsOf: externalCases)
         }
 
+        let caseManifest = QualificationCaseManifest(
+            schema: "qualification-case-manifest/v1",
+            binarySHA256: binarySHA256,
+            cases: cases
+        )
+        let caseManifestData = try Self.encoded(caseManifest)
+        try caseManifestData.write(
+            to: outputDirectory.appendingPathComponent(Self.caseManifestFilename),
+            options: .atomic
+        )
         manifestEntries.sort { $0.path < $1.path }
         let manifest = EvidenceManifest(
-            schema: "qualification-evidence-manifest/v1",
+            schema: "qualification-evidence-manifest/v2",
+            binarySHA256: binarySHA256,
+            caseManifestPath: Self.caseManifestFilename,
+            caseManifestSHA256: SupportBundleBuilder.sha256(caseManifestData),
             files: manifestEntries
         )
         let manifestData = try Self.encoded(manifest)
@@ -361,18 +668,17 @@ struct QualificationRunner: Sendable {
             to: outputDirectory.appendingPathComponent(Self.manifestFilename),
             options: .atomic
         )
-        let attestedVariant = LogicVariant(rawValue: driveResult.observedVariant) ?? options.variant
-        let attestedLocale = QualificationLocale(rawValue: driveResult.observedLocale) ?? options.locale
-
         let attestation = ReleaseQualificationAttestation(
-            schema: "release-qualification-attestation/v1",
+            schema: "release-qualification-attestation/v2",
             serverVersion: options.releaseVersion,
             commitSHA: environment["GIT_COMMIT"] ?? "unknown",
             binarySHA256: binarySHA256,
-            logicVariant: attestedVariant,
+            logicVariant: observedVariant,
             logicVersion: driveResult.logicProVersion,
-            locale: attestedLocale,
+            locale: observedLocale,
             profile: options.profile,
+            cache: options.cache,
+            fixture: .empty,
             startedAt: startedAt,
             completedAt: runtime.now(),
             total: cases.count,
@@ -383,7 +689,7 @@ struct QualificationRunner: Sendable {
             waivers: waivers,
             evidenceManifestSHA256: SupportBundleBuilder.sha256(manifestData)
         )
-        try Self.attestationData(attestation, cache: options.cache).write(
+        try Self.encoded(attestation).write(
             to: options.outputURL,
             options: .atomic
         )
@@ -419,15 +725,16 @@ struct QualificationRunner: Sendable {
         let directory = options.attestationURL.deletingLastPathComponent()
         let manifestArtifact = Self.manifestFilename
         let requiredArtifacts = options.requiredArtifacts.union([manifestArtifact])
-        var presentArtifacts = Set(requiredArtifacts.filter { artifact in
+        let presentArtifacts = Set(requiredArtifacts.filter { artifact in
             let url = artifact.hasPrefix("/")
                 ? URL(fileURLWithPath: artifact)
                 : directory.appendingPathComponent(artifact)
             return Self.isReadableRegularFile(url)
         })
-        if !Self.evidenceIsIntact(attestation: attestation, directory: directory) {
-            presentArtifacts.remove(manifestArtifact)
-        }
+        let evidenceBindingIssue = Self.evidenceBindingIssue(
+            attestation: attestation,
+            directory: directory
+        )
         let decision = PromotionGate().evaluate(
             attestation: attestation,
             releaseVersion: options.releaseVersion,
@@ -441,6 +748,9 @@ struct QualificationRunner: Sendable {
         )
         let currentExecutableSHA256 = SupportBundleBuilder.sha256(currentExecutableData)
         var rejections = decision.rejections
+        if let evidenceBindingIssue {
+            rejections.append(.evidenceBindingMismatch(detail: evidenceBindingIssue))
+        }
         if currentExecutableSHA256 != options.expectedBinarySHA256 {
             let replacementRejection = PromotionRejectionReason.binarySHAMismatch(
                 expected: options.expectedBinarySHA256,
@@ -558,6 +868,11 @@ struct QualificationRunner: Sendable {
                 reason: "releaseVersionMismatch", caseID: nil, key: nil,
                 name: nil, expected: expected, actual: actual
             )
+        case .evidenceBindingMismatch(let detail):
+            VerificationOutput.Rejection(
+                reason: "evidenceBindingMismatch", caseID: nil, key: nil,
+                name: nil, expected: nil, actual: detail
+            )
         }
     }
 
@@ -604,6 +919,7 @@ struct QualificationRunner: Sendable {
     }
 
     private static let manifestFilename = "evidence-manifest.json"
+    private static let caseManifestFilename = "case-manifest.json"
 
     private static func loadWaivers(from url: URL?) throws -> [QualificationWaiver] {
         guard let url else { return [] }
@@ -626,6 +942,20 @@ struct QualificationRunner: Sendable {
         version.first == "v" || version.first == "V" ? version.dropFirst() : version[...]
     }
 
+    private static func availabilityReason(
+        for axis: QualificationAxis,
+        observedAxis: QualificationAxis
+    ) -> QualificationAvailabilityReason? {
+        let variantDiffers = axis.variant != observedAxis.variant
+        let localeDiffers = axis.locale != observedAxis.locale
+        switch (variantDiffers, localeDiffers) {
+        case (true, true): return .differentLogicVariantAndUILocale
+        case (true, false): return .differentLogicVariant
+        case (false, true): return .differentLogicUILocale
+        case (false, false): return nil
+        }
+    }
+
     private static func validatedEvidenceData(
         relativePath: String,
         outputDirectory: URL
@@ -638,37 +968,256 @@ struct QualificationRunner: Sendable {
         return try Data(contentsOf: url, options: .mappedIfSafe)
     }
 
-    private static func evidenceIsIntact(
+    private static func evidenceBindingIssue(
         attestation: ReleaseQualificationAttestation,
         directory: URL
-    ) -> Bool {
+    ) -> String? {
         let manifestURL = directory.appendingPathComponent(manifestFilename)
         guard isReadableRegularFile(manifestURL),
               let manifestData = try? Data(contentsOf: manifestURL, options: .mappedIfSafe),
               SupportBundleBuilder.sha256(manifestData) == attestation.evidenceManifestSHA256,
               let manifest = try? JSONDecoder().decode(EvidenceManifest.self, from: manifestData),
-              manifest.schema == "qualification-evidence-manifest/v1"
+              manifest.schema == "qualification-evidence-manifest/v2",
+              manifest.binarySHA256 == attestation.binarySHA256,
+              manifest.caseManifestPath == caseManifestFilename
         else {
-            return false
+            return "evidence manifest digest, schema, or binary"
         }
 
+        let caseManifestURL = directory.appendingPathComponent(caseManifestFilename)
+        guard isReadableRegularFile(caseManifestURL),
+              let caseManifestData = try? Data(contentsOf: caseManifestURL, options: .mappedIfSafe),
+              SupportBundleBuilder.sha256(caseManifestData) == manifest.caseManifestSHA256,
+              let caseManifest = try? JSONDecoder().decode(
+                  QualificationCaseManifest.self,
+                  from: caseManifestData
+              ),
+              caseManifest.schema == "qualification-case-manifest/v1",
+              caseManifest.binarySHA256 == attestation.binarySHA256,
+              caseManifest.cases == attestation.cases else {
+            return "case manifest digest or attestation binding"
+        }
+
+        let casesByID = Dictionary(grouping: attestation.cases, by: \.id)
+        guard casesByID.values.allSatisfy({ $0.count == 1 }),
+              attestation.cases.allSatisfy({
+                  $0.binarySHA256 == attestation.binarySHA256
+                      && !$0.evidenceFiles.isEmpty
+                      && Set($0.evidenceFiles).count == $0.evidenceFiles.count
+              }) else {
+            return "duplicate case id, binary, or evidence cardinality"
+        }
         let expectedPaths = Set(attestation.cases.flatMap(\.evidenceFiles))
         let manifestPaths = manifest.files.map(\.path)
         guard Set(manifestPaths).count == manifestPaths.count,
               Set(manifestPaths) == expectedPaths
         else {
-            return false
+            return "evidence path set"
         }
 
         for entry in manifest.files {
+            guard let qualificationCase = casesByID[entry.caseID]?.first,
+                  qualificationCase.evidenceFiles.contains(entry.path),
+                  entry.binarySHA256 == attestation.binarySHA256,
+                  entry.axis == qualificationCase.axis else {
+                return "manifest entry case, binary, or axis"
+            }
             guard let evidenceData = try? validatedEvidenceData(
                 relativePath: entry.path,
                 outputDirectory: directory
             ), SupportBundleBuilder.sha256(evidenceData) == entry.sha256 else {
-                return false
+                return "evidence digest"
             }
         }
-        return true
+
+        let entriesByCaseID = Dictionary(grouping: manifest.files, by: \.caseID)
+        for qualificationCase in attestation.cases {
+            guard let entries = entriesByCaseID[qualificationCase.id],
+                  Set(entries.map(\.path)) == Set(qualificationCase.evidenceFiles),
+                  let evidenceEntry = entries.first(where: { $0.kind == .caseEvidence }),
+                  entries.filter({ $0.kind == .caseEvidence }).count == 1,
+                  let evidenceData = try? validatedEvidenceData(
+                      relativePath: evidenceEntry.path,
+                      outputDirectory: directory
+                  ),
+                  let evidence = try? JSONDecoder().decode(CaseEvidence.self, from: evidenceData),
+                  Self.evidence(evidence, binds: qualificationCase),
+                  Self.evidenceShapeIsValid(evidence) else {
+                return "case evidence binding"
+            }
+            let responseEntries = entries.filter { $0.kind == .operationResponse }
+            if let expectedSHA256 = evidence.operationResponseSHA256 {
+                guard responseEntries.count == 1,
+                      responseEntries[0].sha256 == expectedSHA256,
+                      let data = try? validatedEvidenceData(
+                          relativePath: responseEntries[0].path,
+                          outputDirectory: directory
+                      ),
+                      let artifact = try? JSONDecoder().decode(
+                          QualificationOperationResponseArtifact.self,
+                          from: data
+                      ),
+                      Self.operationArtifact(artifact, binds: evidence) else {
+                    return "operation response binding"
+                }
+            } else if !responseEntries.isEmpty {
+                return "unexpected operation response"
+            }
+            let readbackEntries = entries.filter { $0.kind == .readbackResponse }
+            if let readback = evidence.readback {
+                guard readbackEntries.count == 1,
+                      readbackEntries[0].sha256 == readback.sha256,
+                      let data = try? validatedEvidenceData(
+                          relativePath: readbackEntries[0].path,
+                          outputDirectory: directory
+                      ),
+                      let artifact = try? JSONDecoder().decode(
+                          QualificationReadbackArtifact.self,
+                          from: data
+                      ),
+                      artifact.source == readback.source,
+                      artifact.requestID == readback.requestID,
+                      Self.availabilityArtifactMatches(
+                          artifact,
+                          observation: evidence.availabilityObservation
+                      ) else {
+                    return "readback response binding"
+                }
+            } else if !readbackEntries.isEmpty {
+                return "unexpected readback response"
+            }
+        }
+        return nil
+    }
+
+    private static func evidence(
+        _ evidence: CaseEvidence,
+        binds qualificationCase: QualificationCase
+    ) -> Bool {
+        evidence.schema == "qualification-case-evidence/v3"
+            && evidence.caseID == qualificationCase.id
+            && evidence.operationID == qualificationCase.operationID
+            && evidence.operationRequestID == qualificationCase.operationRequestID
+            && evidence.tool == qualificationCase.tool
+            && evidence.command == qualificationCase.command
+            && evidence.binarySHA256 == qualificationCase.binarySHA256
+            && evidence.axis == qualificationCase.axis
+            && evidence.status == qualificationCase.status
+            && evidence.verified == qualificationCase.verified
+            && evidence.verificationKind == qualificationCase.verificationKind
+            && evidence.deferral == qualificationCase.deferral
+            && evidence.readback == qualificationCase.readback
+            && evidence.availabilityReason == qualificationCase.availabilityReason
+            && evidence.availabilityObservation == qualificationCase.availabilityObservation
+    }
+
+    private static func operationArtifact(
+        _ artifact: QualificationOperationResponseArtifact,
+        binds evidence: CaseEvidence
+    ) -> Bool {
+        guard artifact.operationID == evidence.operationID,
+              artifact.tool == evidence.tool,
+              artifact.command == evidence.command,
+              artifact.requestID == evidence.operationRequestID,
+              artifact.isError == evidence.operationIsError,
+              let payloadData = artifact.payload.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+        else {
+            return false
+        }
+        return object["state"] as? String == evidence.operationState
+            && object["error"] as? String == evidence.operationError
+            && object["write_attempted"] as? Bool == evidence.operationWriteAttempted
+    }
+
+    private static func evidenceShapeIsValid(_ evidence: CaseEvidence) -> Bool {
+        switch evidence.verificationKind {
+        case .readResponse:
+            return evidence.status == .passed
+                && evidence.verified
+                && evidence.operationResponseSHA256 != nil
+                && evidence.operationRequestID != nil
+                && evidence.operationIsError == false
+                && evidence.readback != nil
+                && evidence.availabilityObservation == nil
+        case .independentReadback:
+            return evidence.status == .passed
+                && evidence.verified
+                && evidence.operationID.hasPrefix("qualification.")
+                && evidence.operationResponseSHA256 == nil
+                && evidence.operationRequestID == nil
+                && evidence.readback != nil
+                && evidence.availabilityObservation != nil
+        case .typedDeferral:
+            if evidence.status == .failed {
+                return !evidence.verified
+            }
+            guard evidence.status == .notQualified,
+                  !evidence.verified,
+                  evidence.deferral != nil,
+                  evidence.readback != nil else {
+                return false
+            }
+            if evidence.operationID.hasPrefix("qualification.") {
+                return evidence.operationResponseSHA256 == nil
+                    && evidence.operationRequestID == nil
+                    && evidence.availabilityReason != nil
+                    && evidence.availabilityObservation != nil
+            }
+            return evidence.operationResponseSHA256 != nil
+                && evidence.operationRequestID != nil
+                && evidence.operationIsError == true
+                && evidence.availabilityObservation == nil
+        }
+    }
+
+    private static func availabilityArtifact(
+        _ artifact: QualificationReadbackArtifact,
+        binds observation: QualificationAvailabilityObservation
+    ) -> Bool {
+        guard let data = artifact.payload.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object["logic_pro_running"] as? Bool == true,
+              object["process_metadata_resolved"] as? Bool == true,
+              object["logic_pro_bundle_id"] as? String == observation.activeBundleID,
+              object["logic_pro_ui_locale"] as? String == observation.logicUILocale.rawValue,
+              let rawVariant = object["logic_pro_variant"] as? String,
+              Self.qualificationVariant(rawVariant) == observation.activeVariant,
+              let rawVariants = object["logic_pro_variants"] as? [[String: Any]] else {
+            return false
+        }
+        let variants = rawVariants.compactMap { value -> QualificationVariantAvailability? in
+            guard let rawVariant = value["variant"] as? String,
+                  let variant = Self.qualificationVariant(rawVariant),
+                  let bundleID = value["bundle_id"] as? String,
+                  let installed = value["installed"] as? Bool,
+                  let running = value["running"] as? Bool else {
+                return nil
+            }
+            return QualificationVariantAvailability(
+                variant: variant,
+                bundleID: bundleID,
+                installed: installed,
+                running: running
+            )
+        }
+        return variants.count == rawVariants.count && variants == observation.variants
+    }
+
+    private static func availabilityArtifactMatches(
+        _ artifact: QualificationReadbackArtifact,
+        observation: QualificationAvailabilityObservation?
+    ) -> Bool {
+        guard let observation else { return true }
+        return availabilityArtifact(artifact, binds: observation)
+    }
+
+    private static func qualificationVariant(_ rawValue: String) -> LogicVariant? {
+        switch rawValue {
+        case LogicProVariant.desktop.rawValue: .desktop
+        case LogicProVariant.creatorStudio.rawValue: .creatorStudio
+        default: nil
+        }
     }
 
     private static func safeEvidenceURL(
@@ -678,7 +1227,8 @@ struct QualificationRunner: Sendable {
         guard !relativePath.isEmpty,
               !relativePath.hasPrefix("/"),
               !relativePath.split(separator: "/", omittingEmptySubsequences: false).contains(".."),
-              relativePath.caseInsensitiveCompare(manifestFilename) != .orderedSame
+              relativePath.caseInsensitiveCompare(manifestFilename) != .orderedSame,
+              relativePath.caseInsensitiveCompare(caseManifestFilename) != .orderedSame
         else {
             return nil
         }
@@ -708,18 +1258,6 @@ struct QualificationRunner: Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return try encoder.encode(value)
-    }
-
-    private static func attestationData(
-        _ attestation: ReleaseQualificationAttestation,
-        cache: CacheState
-    ) throws -> Data {
-        var object = try JSONSerialization.jsonObject(with: encoded(attestation)) as? [String: Any] ?? [:]
-        object["cache"] = cache.rawValue
-        return try JSONSerialization.data(
-            withJSONObject: object,
-            options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        )
     }
 
     private func failure(_ detail: String) -> QualificationCommandResult {

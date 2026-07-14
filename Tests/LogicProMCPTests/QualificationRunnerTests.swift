@@ -5,8 +5,133 @@ import Testing
 
 @Suite("ADR-001 qualification runner", .serialized)
 struct QualificationRunnerTests {
+    @Test func qualificationExecutesEachOperationAndBindsIndependentReadback() async throws {
+        let specs = [
+            try #require(OperationRegistry.specs.first { $0.id == .transportPlay }),
+            try #require(OperationRegistry.specs.first { $0.id == .mixerSetVolume }),
+        ]
+        let fixture = try Fixture(specs: specs)
+        defer { fixture.remove() }
+
+        let attestation = try await fixture.qualify()
+        let operationCases = attestation.cases.filter { $0.id.hasPrefix("in-process/") }
+        #expect(operationCases.count == specs.count)
+
+        var responseDigests: Set<String> = []
+        var operationRequestIDs: Set<String> = []
+        var readbackRequestIDs: Set<String> = []
+        var readbackSources: Set<String> = []
+        for operationCase in operationCases {
+            let evidence = try fixture.evidence(for: operationCase)
+            let responseDigest = try #require(evidence["operation_response_sha256"] as? String)
+            let operationRequestID = try #require(evidence["operation_request_id"] as? String)
+            let readback = try #require(evidence["readback"] as? [String: Any])
+            let readbackDigest = try #require(readback["sha256"] as? String)
+            let readbackRequestID = try #require(readback["request_id"] as? String)
+            let readbackSource = try #require(readback["source"] as? String)
+            #expect(responseDigest.count == 64)
+            #expect(readbackDigest.count == 64)
+            responseDigests.insert(responseDigest)
+            operationRequestIDs.insert(operationRequestID)
+            readbackRequestIDs.insert(readbackRequestID)
+            readbackSources.insert(readbackSource)
+        }
+
+        #expect(responseDigests.count == specs.count)
+        #expect(operationRequestIDs.count == specs.count)
+        #expect(readbackRequestIDs.count == specs.count)
+        #expect(readbackSources == ["logic://transport/state", "logic://mixer"])
+    }
+
+    @Test func operationQualificationClassifiesTwentyOneReadsAndEightySixTypedDeferrals() async throws {
+        let fixture = try Fixture(specs: OperationRegistry.specs)
+        defer { fixture.remove() }
+
+        let attestation = try await fixture.qualify()
+        let operationCases = attestation.cases.filter { $0.id.hasPrefix("in-process/") }
+
+        #expect(operationCases.count == 107)
+        #expect(operationCases.filter { $0.status == .passed }.count == 21)
+        #expect(operationCases.filter { $0.status == .notQualified }.count == 86)
+        #expect(operationCases.filter { $0.status == .failed }.isEmpty)
+        #expect(operationCases.filter { $0.status == .notQualified }.allSatisfy {
+            $0.verificationKind == .typedDeferral
+                && $0.deferral?.code == .liveMutationNotRun
+                && $0.deferral?.detail.contains("ADR-001-c") == true
+                && $0.readback != nil
+        })
+    }
+
+    @Test func operationFailurePreventsLiveAxisPromotion() async throws {
+        let specs = Array(OperationRegistry.specs.prefix(2))
+        let failedID = try #require(specs.last?.id)
+        let driveResult = Self.driveResult(specs: specs, failedOperationID: failedID)
+        let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
+        defer { fixture.remove() }
+
+        let attestation = try await fixture.qualify()
+        let liveAxis = try #require(attestation.cases.first { $0.id == QualificationAxis.defaultAxis.key })
+        #expect(liveAxis.status == .failed)
+        #expect(liveAxis.reason == "one or more operation-specific protocol checks failed")
+
+        let decision = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(decision.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(decision)).contains("requiredCaseFailed"))
+    }
+
+    @Test func emptyTraceListFailsWithoutObservedEvents() {
+        let empty = Self.driveResult(
+            specs: Array(OperationRegistry.specs.prefix(1)),
+            tracePresent: false
+        )
+        let zeroEvent = Self.driveResult(
+            specs: Array(OperationRegistry.specs.prefix(1)),
+            tracePhases: []
+        )
+        let incomplete = Self.driveResult(
+            specs: Array(OperationRegistry.specs.prefix(1)),
+            tracePhases: ["request.received"]
+        )
+        let staleOperation = Self.driveResult(
+            specs: Array(OperationRegistry.specs.prefix(1)),
+            traceOperationID: .tracksRename
+        )
+        let observed = Self.driveResult(specs: Array(OperationRegistry.specs.prefix(1)))
+
+        #expect(empty.traceList?.traces.isEmpty == true)
+        #expect(!empty.traceOK)
+        #expect(!empty.allChecksPass)
+        #expect(!zeroEvent.traceOK)
+        #expect(!incomplete.traceOK)
+        #expect(!staleOperation.traceOK)
+        #expect(observed.traceOK)
+    }
+
+    @Test func logicUILanguageMustMatchRequestedLocale() async throws {
+        let specs = Array(OperationRegistry.specs.prefix(1))
+        let driveResult = Self.driveResult(
+            specs: specs,
+            observedVariant: "desktop",
+            observedLocale: "en-US"
+        )
+        let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
+        defer { fixture.remove() }
+
+        let result = await fixture.runner.run(arguments: [
+            "LogicProMCP", "--qualify",
+            "--out", fixture.attestationURL.path,
+            "--variant", "desktop",
+            "--locale", "ko",
+            "--release-version", "1.2.3",
+        ])
+
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("Logic Pro UI locale"))
+        #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
+    }
+
     @Test func driveDerivesPassFromLiveProtocolNotRegistryBooleans() async throws {
-        let spec = try #require(OperationRegistry.specs.first)
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
         let fixture = try Fixture(
             specs: [spec],
             registryValidationErrors: ["synthetic registry failure"],
@@ -32,53 +157,52 @@ struct QualificationRunnerTests {
         #expect(evidence["handler_bound"] as? Bool == false)
     }
 
-    @Test func handshakeTimeoutYieldsFailedCaseNotPassed() async throws {
+    @Test func handshakeTimeoutStopsBeforeAttestation() async throws {
         let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)), drive: { _ in
             throw QualificationTransportError.requestTimeout(phase: "handshake")
         })
         defer { fixture.remove() }
 
-        let attestation = try await fixture.qualify()
-        #expect(attestation.cases.allSatisfy { $0.status == .failed && !$0.verified })
-        let evidence = try fixture.evidence(for: #require(attestation.cases.first))
-        #expect((evidence["failure_reason"] as? String)?.contains("timeout:handshake") == true)
-        #expect(evidence["handshake_ok"] as? Bool == false)
+        let result = await fixture.runQualification()
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("Logic Pro variant mismatch"))
+        #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
     }
 
-    @Test func nonZeroExitYieldsFailedCase() async throws {
+    @Test func nonZeroExitStopsBeforeAttestation() async throws {
         let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)), drive: { _ in
             throw QualificationTransportError.nonZeroExit(status: 17, stderr: "fixture exit")
         })
         defer { fixture.remove() }
 
-        let attestation = try await fixture.qualify()
-        #expect(attestation.cases.allSatisfy { $0.status == .failed && !$0.verified })
-        let evidence = try fixture.evidence(for: #require(attestation.cases.first))
-        #expect((evidence["failure_reason"] as? String)?.contains("nonzero_exit:17") == true)
+        let result = await fixture.runQualification()
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("Logic Pro variant mismatch"))
+        #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
     }
 
-    @Test func malformedFrameYieldsFailedCase() async throws {
+    @Test func malformedFrameStopsBeforeAttestation() async throws {
         let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)), drive: { _ in
             throw QualificationTransportError.malformedFrame("not-json")
         })
         defer { fixture.remove() }
 
-        let attestation = try await fixture.qualify()
-        #expect(attestation.cases.allSatisfy { $0.status == .failed && !$0.verified })
-        let evidence = try fixture.evidence(for: #require(attestation.cases.first))
-        #expect((evidence["failure_reason"] as? String)?.contains("malformed_frame") == true)
+        let result = await fixture.runQualification()
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("Logic Pro variant mismatch"))
+        #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
     }
 
-    @Test func closedPipeYieldsFailedCase() async throws {
+    @Test func closedPipeStopsBeforeAttestation() async throws {
         let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)), drive: { _ in
             throw QualificationTransportError.closedPipe(phase: "handshake")
         })
         defer { fixture.remove() }
 
-        let attestation = try await fixture.qualify()
-        #expect(attestation.cases.allSatisfy { $0.status == .failed && !$0.verified })
-        let evidence = try fixture.evidence(for: #require(attestation.cases.first))
-        #expect((evidence["failure_reason"] as? String)?.contains("closed_pipe:handshake") == true)
+        let result = await fixture.runQualification()
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("Logic Pro variant mismatch"))
+        #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
     }
 
     @Test func catalogCountMismatchFailsCase() async throws {
@@ -96,9 +220,13 @@ struct QualificationRunnerTests {
         })
         let evidence = try fixture.evidence(for: operationCase)
 
-        #expect(operationCase.status == .failed)
+        #expect(operationCase.status == .notQualified)
         #expect(!operationCase.verified)
         #expect(evidence["catalog_count_match"] as? Bool == false)
+        let observedAxis = try #require(attestation.cases.first {
+            $0.id == QualificationAxis.defaultAxis.key
+        })
+        #expect(observedAxis.status == .failed)
     }
 
     @Test func negativeFailclosedUsesCatalogAnchorDespiteHealthWarmup() {
@@ -151,7 +279,8 @@ struct QualificationRunnerTests {
         })
         let evidence = try fixture.evidence(for: operationCase)
 
-        #expect(operationCase.status == .passed)
+        #expect(operationCase.status == .notQualified)
+        #expect(!operationCase.verified)
         #expect(evidence["negative_failclosed"] as? Bool == true)
         #expect(evidence["negative_state"] as? String == "C")
         #expect(evidence["negative_write_attempted"] as? Bool == false)
@@ -159,7 +288,7 @@ struct QualificationRunnerTests {
         #expect(evidence["catalog_read_stable"] as? Bool == true)
     }
 
-    @Test func absentAxisEmitsSkippedGovernedByWaiver() async throws {
+    @Test func absentAxesEmitVerifierGovernedUnavailability() async throws {
         let specs = Array(OperationRegistry.specs.prefix(1))
         let fixture = try Fixture(specs: specs)
         defer { fixture.remove() }
@@ -167,28 +296,21 @@ struct QualificationRunnerTests {
         let withoutWaiver = try await fixture.qualify()
         let matchingID = "desktop/en-US/core/cold/empty"
         let matching = try #require(withoutWaiver.cases.first { $0.id == matchingID })
-        let skipped = withoutWaiver.cases.filter { $0.status == .skipped }
+        let unavailable = withoutWaiver.cases.filter {
+            QualificationAxis.requiredCombinations.map(\.key).contains($0.id)
+                && $0.status == .notQualified
+        }
 
         #expect(matching.status == .passed)
-        #expect(skipped.count == QualificationAxis.requiredCombinations.count - 1)
-        #expect(skipped.allSatisfy { $0.reason?.isEmpty == false })
-        let rejected = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(rejected.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(rejected)).contains(
-            "requiredCombinationNotQualified"
-        ))
-
-        let waivers = skipped.map {
-            Self.waiver(
-                caseID: $0.id,
-                userImpact: "Required axis is unavailable on this qualification host",
-                affectedCapability: "ADR-001-a host-axis availability"
-            )
-        }
-        try JSONEncoder().encode(waivers).write(to: fixture.waiversURL)
-        let withWaiver = try await fixture.qualify(waiversURL: fixture.waiversURL)
-        #expect(withWaiver.cases.filter { $0.status == .waived }.count == waivers.count)
-        #expect(withWaiver.waivers == waivers)
+        #expect(unavailable.count == QualificationAxis.requiredCombinations.count - 1)
+        #expect(unavailable.allSatisfy {
+            $0.reason?.hasPrefix("required axis unavailable:") == true
+                && $0.verificationKind == .typedDeferral
+                && $0.deferral?.code == .operationUnavailable
+                && $0.availabilityReason != nil
+                && $0.readback?.verified == false
+        })
+        #expect(withoutWaiver.waivers.isEmpty)
         let approved = await fixture.verify(expectedSHA256: fixture.binarySHA256)
         #expect(approved.exitCode == 0)
         #expect(try Self.resultObject(approved)["promotable"] as? Bool == true)
@@ -207,7 +329,18 @@ struct QualificationRunnerTests {
 
         #expect(QualificationTransport.qualificationLocaleIdentifier("en_US") == "en-US")
         #expect(observedLocale == "ko-KR")
-        let attestation = try await fixture.qualify()
+        let result = await fixture.runner.run(arguments: [
+            "LogicProMCP", "--qualify",
+            "--out", fixture.attestationURL.path,
+            "--variant", "creator",
+            "--locale", "ko",
+            "--release-version", "1.2.3",
+        ])
+        #expect(result.exitCode == 0)
+        let attestation = try JSONDecoder().decode(
+            ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL)
+        )
         let observed = try #require(attestation.cases.first {
             $0.id == "creator/ko-KR/core/cold/empty"
         })
@@ -242,6 +375,7 @@ struct QualificationRunnerTests {
                 expectedOperationCount: 0
             ))
             #expect(result.allChecksPass)
+            #expect(result.traceDetail?.operationID == OperationID.systemSagaExecute.rawValue)
         } catch {
             Issue.record("Handshake first frame within startup budget should succeed: \(error)")
         }
@@ -251,17 +385,45 @@ struct QualificationRunnerTests {
         if: FileManager.default.isExecutableFile(atPath: Self.releaseExecutableURL.path),
         "Requires `swift build -c release` before running the real-process qualification QA."
     ))
-    func realReleaseBinaryDeliversHandshakeCatalogAndTraceOverQualificationTransport() throws {
+    func realReleaseBinaryExecutesEveryOperationWithIndependentReadback() throws {
         let result = try QualificationTransport().drive(.init(
             executableURL: Self.releaseExecutableURL,
             environment: ProcessInfo.processInfo.environment,
-            expectedOperationCount: 107
+            expectedOperationCount: OperationRegistry.specs.count,
+            operations: OperationRegistry.specs
         ))
 
         #expect(result.handshakeOK)
         #expect(result.catalog?.operationCount == 107)
         #expect(result.catalogCountMatch)
         #expect(result.traceOK)
+
+        let operationResults = Array(result.operationResults.values)
+        let mutating = operationResults.filter { $0.mutability == .mutating }
+        let readOnly = operationResults.filter { $0.mutability == .readOnly }
+        let qualified = operationResults.filter { $0.status == .passed }
+        let deferred = operationResults.filter { $0.status == .notQualified }
+
+        #expect(operationResults.count == OperationRegistry.specs.count)
+        #expect(mutating.count == 86)
+        #expect(readOnly.count == 21)
+        #expect(operationResults.allSatisfy { $0.status != .failed })
+        #expect(operationResults.allSatisfy { $0.responseData != nil && $0.readback != nil })
+        #expect(Set(operationResults.compactMap(\.requestID)).count == operationResults.count)
+        #expect(Set(operationResults.compactMap(\.readbackRequestID)).count == operationResults.count)
+        #expect(mutating.allSatisfy {
+            $0.status == .notQualified
+                && $0.isError == true
+                && $0.state == "C"
+                && $0.error == "invalid_params"
+                && $0.writeAttempted == false
+                && $0.deferral?.code == .liveMutationNotRun
+        })
+        #expect(readOnly.allSatisfy { $0.status == .passed || $0.status == .notQualified })
+        print(
+            "qualification operation classification: "
+                + "qualified=\(qualified.count), deferred=\(deferred.count), failed=0"
+        )
     }
 
     @Test func handshakeStillFailsClosedBeyondStartupBudget() throws {
@@ -342,13 +504,19 @@ struct QualificationRunnerTests {
         let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
         let json = try Self.resultObject(result)
 
-        #expect(result.exitCode == 1)
-        #expect(json["promotable"] as? Bool == false)
-        #expect(Self.rejectionReasons(json).contains("requiredCombinationNotQualified"))
+        #expect(result.exitCode == 0)
+        #expect(json["promotable"] as? Bool == true)
+        #expect(Self.rejectionReasons(json).isEmpty)
     }
 
     @Test func runnerRecordsExactExecutableSHAAndCodableSchema() async throws {
-        let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)))
+        let specs = Array(OperationRegistry.specs.prefix(1))
+        let driveResult = Self.driveResult(
+            specs: specs,
+            observedVariant: "creator_studio",
+            observedLocale: "ko-KR"
+        )
+        let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
         defer { fixture.remove() }
 
         let result = await fixture.runner.run(arguments: [
@@ -372,14 +540,16 @@ struct QualificationRunnerTests {
         let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         #expect(attestation == roundTripped)
-        #expect(attestation.schema == "release-qualification-attestation/v1")
+        #expect(attestation.schema == "release-qualification-attestation/v2")
         #expect(attestation.serverVersion == "1.2.3")
         #expect(attestation.commitSHA == fixture.commitSHA)
         #expect(attestation.binarySHA256 == SupportBundleBuilder.sha256(fixture.executableData))
-        #expect(attestation.logicVariant == .desktop)
+        #expect(attestation.logicVariant == .creatorStudio)
         #expect(attestation.logicVersion == "11.2")
-        #expect(attestation.locale == .enUS)
+        #expect(attestation.locale == .koKR)
         #expect(attestation.profile == .full)
+        #expect(attestation.cache == .warm)
+        #expect(attestation.fixture == .empty)
         #expect(json["cache"] as? String == "warm")
         #expect(attestation.waivers.isEmpty)
         #expect(attestation.total == 5)
@@ -387,9 +557,18 @@ struct QualificationRunnerTests {
         let aggregateIDs = attestation.cases
             .filter { !$0.id.hasPrefix("in-process/") }
             .map(\.id)
-        #expect(aggregateIDs.allSatisfy { $0.contains("/full/warm/") })
-        let requiredIDs = Set(QualificationAxis.requiredCombinations.map { "\($0.key)/empty" })
-        #expect(requiredIDs.isDisjoint(with: aggregateIDs))
+        let expectedAxes = QualificationAxis.requiredCombinations.map {
+            QualificationAxis(
+                variant: $0.variant,
+                locale: $0.locale,
+                profile: .full,
+                cache: .warm,
+                fixture: .empty
+            )
+        }
+        #expect(aggregateIDs == expectedAxes.map(\.key))
+        let verification = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(verification.exitCode == 0)
     }
 
     @Test func inProcessCasesMatchRegistryHandlersAndTraces() async throws {
@@ -415,11 +594,13 @@ struct QualificationRunnerTests {
 
         #expect(operationCases.count == OperationRegistry.specs.count)
         #expect(actualOperations == expectedOperations, "missing operation cases: \(expectedOperations.subtracting(actualOperations).sorted())")
-        #expect(aggregateCases.map(\.id) == QualificationAxis.requiredCombinations.map { "\($0.key)/empty" })
+        #expect(aggregateCases.map(\.id) == QualificationAxis.requiredCombinations.map(\.key))
         #expect(attestation.cases.map(\.id).count == Set(attestation.cases.map(\.id)).count)
         #expect(aggregateCases.filter { $0.status == .passed }.count == 1)
-        #expect(aggregateCases.filter { $0.status == .skipped }.count == 3)
-        #expect(attestation.passed == operationCases.count + 1)
+        #expect(aggregateCases.filter { $0.status == .notQualified }.count == 3)
+        #expect(operationCases.filter { $0.status == .passed }.count == 21)
+        #expect(operationCases.filter { $0.status == .notQualified }.count == 86)
+        #expect(attestation.passed == 22)
         #expect(attestation.failed == 0)
 
         for qualificationCase in operationCases {
@@ -429,9 +610,23 @@ struct QualificationRunnerTests {
             ))
             #expect(qualificationCase.id == "in-process/\(spec.id.rawValue)")
             #expect(OperationHandlerRegistry.handler(tool: qualificationCase.tool, command: qualificationCase.command) != nil)
-            #expect(qualificationCase.status == .passed)
-            #expect(qualificationCase.verified)
-            #expect(TraceID.isValid(qualificationCase.traceID))
+            if spec.mutability == .readOnly {
+                #expect(qualificationCase.status == .passed)
+                #expect(qualificationCase.verified)
+                #expect(qualificationCase.verificationKind == .readResponse)
+            } else {
+                #expect(qualificationCase.status == .notQualified)
+                #expect(!qualificationCase.verified)
+                #expect(qualificationCase.verificationKind == .typedDeferral)
+                #expect(qualificationCase.deferral?.code == .liveMutationNotRun)
+                #expect(qualificationCase.deferral?.detail.contains("ADR-001-c") == true)
+            }
+            #expect(qualificationCase.readback != nil)
+            if spec.id == .systemSagaExecute {
+                #expect(TraceID.isValid(qualificationCase.traceID))
+            } else {
+                #expect(qualificationCase.traceID.isEmpty)
+            }
             let evidencePath = try #require(qualificationCase.evidenceFiles.first)
             let evidenceURL = fixture.directory.appendingPathComponent(evidencePath)
             let evidence = try #require(
@@ -439,7 +634,7 @@ struct QualificationRunnerTests {
             )
             #expect(evidence["registry_spec_found"] as? Bool ?? false)
             #expect(evidence["handler_bound"] as? Bool ?? false)
-            #expect(evidence["trace_started"] as? Bool ?? false)
+            #expect((evidence["trace_started"] as? Bool ?? false) == (spec.id == .systemSagaExecute))
         }
 
         #expect(FileManager.default.fileExists(atPath: fixture.manifestURL.path))
@@ -447,9 +642,35 @@ struct QualificationRunnerTests {
         #expect(attestation.evidenceManifestSHA256 == SupportBundleBuilder.sha256(manifestData))
     }
 
-    @Test func externalCasesAreInjectedWithoutTransformation() async throws {
+    @Test func externalCasesRequireExactManifestBinding() async throws {
         let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)))
         defer { fixture.remove() }
+        let responseArtifact = QualificationOperationResponseArtifact(
+            operationID: OperationID.systemHealth.rawValue,
+            tool: "logic_system",
+            command: "health",
+            requestID: "external-health-operation",
+            isError: false,
+            payload: #"{"success":true}"#
+        )
+        let responseData = try JSONEncoder().encode(responseArtifact)
+        let readbackArtifact = QualificationReadbackArtifact(
+            source: "logic://system/health",
+            requestID: "external-health-readback",
+            payload: #"{"logic_pro_running":true}"#
+        )
+        let readbackData = try JSONEncoder().encode(readbackArtifact)
+        let readback = QualificationReadbackEvidence(
+            source: "logic://system/health",
+            requestID: "external-health-readback",
+            verified: true,
+            sha256: SupportBundleBuilder.sha256(readbackData)
+        )
+        let evidenceFiles = [
+            "external/live-case.json",
+            "external/live-case-response.json",
+            "external/live-case-readback.json",
+        ]
         let external = QualificationCase(
             id: "external/live-case",
             status: .passed,
@@ -457,15 +678,51 @@ struct QualificationRunnerTests {
             command: "health",
             traceID: "lpmcp_00000000-0000-0000-0000-000000000000",
             verified: true,
-            evidenceFiles: ["external/live-case.json"]
+            evidenceFiles: evidenceFiles,
+            binarySHA256: fixture.binarySHA256,
+            axis: .defaultAxis,
+            operationID: OperationID.systemHealth.rawValue,
+            operationRequestID: responseArtifact.requestID,
+            verificationKind: .readResponse,
+            readback: readback
         )
         let externalEvidenceURL = fixture.directory.appendingPathComponent("external/live-case.json")
         try FileManager.default.createDirectory(
             at: externalEvidenceURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        try Data("external evidence".utf8).write(to: externalEvidenceURL)
-        try JSONEncoder().encode([external]).write(to: fixture.externalCasesURL)
+        let externalEvidence = CaseEvidence(
+            schema: "qualification-case-evidence/v3",
+            caseID: external.id,
+            operationID: external.operationID,
+            tool: external.tool,
+            command: external.command,
+            registrySpecFound: true,
+            handlerBound: true,
+            traceStarted: true,
+            traceCompleted: true,
+            binarySHA256: fixture.binarySHA256,
+            axis: external.axis,
+            status: .passed,
+            verified: true,
+            verificationKind: .readResponse,
+            readback: readback,
+            operationResponseSHA256: SupportBundleBuilder.sha256(responseData),
+            operationRequestID: responseArtifact.requestID,
+            operationIsError: false
+        )
+        try JSONEncoder().encode(externalEvidence).write(to: externalEvidenceURL)
+        try responseData.write(
+            to: fixture.directory.appendingPathComponent(evidenceFiles[1])
+        )
+        try readbackData.write(
+            to: fixture.directory.appendingPathComponent(evidenceFiles[2])
+        )
+        try JSONEncoder().encode(QualificationCaseManifest(
+            schema: "qualification-case-manifest/v1",
+            binarySHA256: fixture.binarySHA256,
+            cases: [external]
+        )).write(to: fixture.externalCasesURL)
 
         let result = await fixture.runner.run(arguments: [
             "LogicProMCP", "--qualify",
@@ -482,6 +739,136 @@ struct QualificationRunnerTests {
         )
         #expect(attestation.cases.last == external)
         #expect(attestation.total == 6)
+    }
+
+    @Test func tamperedExternalCaseBindingRejectsPromotion() async throws {
+        let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)))
+        defer { fixture.remove() }
+        let readback = QualificationReadbackEvidence(
+            source: "logic://system/health",
+            requestID: "tampered-axis-readback",
+            verified: true,
+            sha256: String(repeating: "e", count: 64)
+        )
+        let external = QualificationCase(
+            id: "external/tampered-case",
+            status: .passed,
+            tool: "logic_system",
+            command: "health",
+            traceID: "lpmcp_00000000-0000-0000-0000-000000000000",
+            verified: true,
+            evidenceFiles: ["external/tampered-case.json"],
+            binarySHA256: fixture.binarySHA256,
+            axis: .defaultAxis,
+            operationID: OperationID.systemHealth.rawValue,
+            verificationKind: .readResponse,
+            readback: readback
+        )
+        let evidenceURL = fixture.directory.appendingPathComponent("external/tampered-case.json")
+        try FileManager.default.createDirectory(
+            at: evidenceURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let swappedAxis = QualificationAxis(
+            variant: .creatorStudio,
+            locale: .koKR,
+            profile: .core,
+            cache: .cold,
+            fixture: .empty
+        )
+        try JSONEncoder().encode(CaseEvidence(
+            schema: "qualification-case-evidence/v3",
+            caseID: external.id,
+            operationID: external.operationID,
+            tool: external.tool,
+            command: external.command,
+            registrySpecFound: true,
+            handlerBound: true,
+            traceStarted: true,
+            traceCompleted: true,
+            binarySHA256: fixture.binarySHA256,
+            axis: swappedAxis,
+            status: .passed,
+            verified: true,
+            verificationKind: .readResponse,
+            readback: readback,
+            operationResponseSHA256: String(repeating: "f", count: 64)
+        )).write(to: evidenceURL)
+        try JSONEncoder().encode(QualificationCaseManifest(
+            schema: "qualification-case-manifest/v1",
+            binarySHA256: fixture.binarySHA256,
+            cases: [external]
+        )).write(to: fixture.externalCasesURL)
+
+        let result = await fixture.runner.run(arguments: [
+            "LogicProMCP", "--qualify",
+            "--out", fixture.attestationURL.path,
+            "--cases", fixture.externalCasesURL.path,
+            "--variant", "desktop",
+            "--locale", "en",
+            "--profile", "core",
+            "--cache", "cold",
+            "--release-version", "1.2.3",
+        ])
+
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("evidence binding"))
+        #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
+    }
+
+    @Test func passedExternalCaseWithoutResponseOrReadbackArtifactsRejects() async throws {
+        let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)))
+        defer { fixture.remove() }
+        let external = QualificationCase(
+            id: "external/missing-artifacts",
+            status: .passed,
+            tool: "logic_system",
+            command: "health",
+            traceID: "",
+            verified: true,
+            evidenceFiles: ["external/missing-artifacts.json"],
+            binarySHA256: fixture.binarySHA256,
+            axis: .defaultAxis,
+            operationID: OperationID.systemHealth.rawValue,
+            verificationKind: .readResponse
+        )
+        let evidenceURL = fixture.directory.appendingPathComponent(external.evidenceFiles[0])
+        try FileManager.default.createDirectory(
+            at: evidenceURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try JSONEncoder().encode(CaseEvidence(
+            schema: "qualification-case-evidence/v3",
+            caseID: external.id,
+            operationID: external.operationID,
+            tool: external.tool,
+            command: external.command,
+            registrySpecFound: true,
+            handlerBound: true,
+            traceStarted: false,
+            traceCompleted: false,
+            binarySHA256: fixture.binarySHA256,
+            axis: external.axis,
+            status: .passed,
+            verified: true,
+            verificationKind: .readResponse
+        )).write(to: evidenceURL)
+        try JSONEncoder().encode(QualificationCaseManifest(
+            schema: "qualification-case-manifest/v1",
+            binarySHA256: fixture.binarySHA256,
+            cases: [external]
+        )).write(to: fixture.externalCasesURL)
+
+        let result = await fixture.runner.run(arguments: [
+            "LogicProMCP", "--qualify",
+            "--out", fixture.attestationURL.path,
+            "--cases", fixture.externalCasesURL.path,
+            "--release-version", "1.2.3",
+        ])
+
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("evidence binding"))
+        #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
     }
 
     @Test func waiverIngestionEmbedsValidatedSet() async throws {
@@ -563,10 +950,7 @@ struct QualificationRunnerTests {
     @Test func sameSHAApprovesWithExitZero() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }
-        let initial = try await fixture.qualify()
-        let waivers = Self.hostAxisWaivers(for: initial)
-        try JSONEncoder().encode(waivers).write(to: fixture.waiversURL)
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        _ = try await fixture.qualify()
 
         let result = await fixture.verify(expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData))
         let json = try Self.resultObject(result)
@@ -647,7 +1031,7 @@ struct QualificationRunnerTests {
         let original = try await fixture.qualify()
         var cases = original.cases
         let aggregateIndex = try #require(cases.firstIndex {
-            $0.id == "\(QualificationAxis.requiredCombinations[0].key)/empty"
+            $0.id == QualificationAxis.requiredCombinations[0].key
         })
         let first = cases[aggregateIndex]
         cases[aggregateIndex] = QualificationCase(
@@ -788,15 +1172,11 @@ struct QualificationRunnerTests {
     @Test func vPrefixedReleaseTagMatchesBinaryVersion() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }
-        let initial = try await fixture.qualify()
-        let waivers = Self.hostAxisWaivers(for: initial)
-        try JSONEncoder().encode(waivers).write(to: fixture.waiversURL)
 
         let qualification = await fixture.runner.run(arguments: [
             "LogicProMCP", "--qualify",
             "--out", fixture.attestationURL.path,
             "--release-version", "v1.2.3",
-            "--waivers", fixture.waiversURL.path,
         ])
         let verification = await fixture.verify(
             releaseVersion: "v1.2.3",
@@ -820,7 +1200,24 @@ struct QualificationRunnerTests {
         let result = await fixture.verify(expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData))
 
         #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("missingArtifact"))
+        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("evidenceBindingMismatch"))
+    }
+
+    @Test func tamperedOperationResponseArtifactRejectsPromotion() async throws {
+        let fixture = try Fixture(specs: OperationRegistry.specs)
+        defer { fixture.remove() }
+        let attestation = try await fixture.qualify()
+        let operationCase = try #require(attestation.cases.first { $0.id.hasPrefix("in-process/") })
+        let responsePath = try #require(operationCase.evidenceFiles.dropFirst().first)
+        try Data(#"{"forged":true}"#.utf8).write(
+            to: fixture.directory.appendingPathComponent(responsePath),
+            options: .atomic
+        )
+
+        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+
+        #expect(result.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("evidenceBindingMismatch"))
     }
 
     @Test func tamperedManifestRejectsPromotion() async throws {
@@ -832,14 +1229,29 @@ struct QualificationRunnerTests {
         let result = await fixture.verify(expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData))
 
         #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("missingArtifact"))
+        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("evidenceBindingMismatch"))
+    }
+
+    @Test func tamperedCaseManifestRejectsPromotionWithTypedBindingReason() async throws {
+        let fixture = try Fixture(specs: OperationRegistry.specs)
+        defer { fixture.remove() }
+        _ = try await fixture.qualify()
+        try Data("tampered case manifest".utf8).write(to: fixture.caseManifestURL, options: .atomic)
+
+        let result = await fixture.verify(expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData))
+
+        #expect(result.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("evidenceBindingMismatch"))
     }
 
     @Test func reservedManifestOutputPathRejectsQualification() async throws {
         let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)))
         defer { fixture.remove() }
 
-        for filename in ["evidence-manifest.json", "EVIDENCE-MANIFEST.JSON"] {
+        for filename in [
+            "evidence-manifest.json", "EVIDENCE-MANIFEST.JSON",
+            "case-manifest.json", "CASE-MANIFEST.JSON",
+        ] {
             let outputURL = fixture.directory.appendingPathComponent(filename)
             let result = await fixture.runner.run(arguments: [
                 "LogicProMCP", "--qualify",
@@ -968,18 +1380,6 @@ struct QualificationRunnerTests {
         )
     }
 
-    private static func hostAxisWaivers(
-        for attestation: ReleaseQualificationAttestation
-    ) -> [QualificationWaiver] {
-        attestation.cases.filter { $0.status == .skipped }.map {
-            waiver(
-                caseID: $0.id,
-                userImpact: "Required axis is unavailable on this qualification host",
-                affectedCapability: QualificationWaiver.hostAxisAvailabilityCapability
-            )
-        }
-    }
-
     private static let releaseExecutableURL = URL(
         fileURLWithPath: FileManager.default.currentDirectoryPath,
         isDirectory: true
@@ -989,14 +1389,85 @@ struct QualificationRunnerTests {
         specs: [OperationSpec],
         catalogCount: Int? = nil,
         observedVariant: String = "desktop",
-        observedLocale: String = "en-US"
+        observedLocale: String = "en-US",
+        tracePresent: Bool = true,
+        traceOperationID: OperationID = .systemSagaExecute,
+        tracePhases: [String] = ["request.received", "result.emitted"],
+        failedOperationID: OperationID? = nil
     ) -> QualificationDriveResult {
         let expectedCount = specs.count
         let actualCount = catalogCount ?? expectedCount
         let catalogEntries = Array(OperationCatalog.snapshot(now: Date(timeIntervalSince1970: 1_000))
             .operations.prefix(actualCount))
-        let stableHealth = Data("{\"logic_pro_variant\":\"\(observedVariant)\"}".utf8)
         let stableCatalog = Data("{\"operation_count\":\(actualCount)}".utf8)
+        let traceID = "lpmcp_00000000-0000-0000-0000-000000000000"
+        let activeVariant: LogicVariant = observedVariant == LogicProVariant.creatorStudio.rawValue
+            ? .creatorStudio
+            : .desktop
+        let activeBundleID = activeVariant == .creatorStudio
+            ? LogicProVariant.creatorStudio.bundleID
+            : LogicProVariant.desktop.bundleID
+        let variantAvailability = LogicVariant.allCases.map { variant in
+            QualificationVariantAvailability(
+                variant: variant,
+                bundleID: variant == .creatorStudio
+                    ? LogicProVariant.creatorStudio.bundleID
+                    : LogicProVariant.desktop.bundleID,
+                installed: variant == activeVariant,
+                running: variant == activeVariant
+            )
+        }
+        let stableHealth = try! JSONSerialization.data(withJSONObject: [
+            "logic_pro_running": true,
+            "logic_pro_version": "11.2",
+            "logic_pro_bundle_id": activeBundleID,
+            "logic_pro_variant": observedVariant,
+            "logic_pro_ui_locale": observedLocale,
+            "logic_pro_variants": variantAvailability.map {
+                [
+                    "variant": $0.variant == .creatorStudio
+                        ? LogicProVariant.creatorStudio.rawValue
+                        : LogicProVariant.desktop.rawValue,
+                    "bundle_id": $0.bundleID,
+                    "installed": $0.installed,
+                    "running": $0.running,
+                ] as [String: Any]
+            },
+            "process_metadata_resolved": true,
+        ], options: [.sortedKeys])
+        let operationResults: [String: QualificationOperationResult] = Dictionary(
+            uniqueKeysWithValues: specs.map { spec in
+            let isMutation = spec.mutability == .mutating
+            let response = Data((isMutation
+                ? "{\"operation\":\"\(spec.id.rawValue)\",\"state\":\"C\",\"error\":\"invalid_params\",\"write_attempted\":false}"
+                : "{\"operation\":\"\(spec.id.rawValue)\",\"state\":\"A\",\"write_attempted\":false}"
+            ).utf8)
+            let readback = Data("{\"operation_readback\":\"\(spec.id.rawValue)\"}".utf8)
+            return (
+                spec.id.rawValue,
+                QualificationOperationResult(
+                    operationID: spec.id.rawValue,
+                    tool: spec.tool.rawValue,
+                    command: spec.command,
+                    mutability: spec.mutability,
+                    requestID: "fake-operation-\(spec.id.rawValue)",
+                    responseData: response,
+                    isError: isMutation,
+                    state: isMutation ? "C" : "A",
+                    error: isMutation ? "invalid_params" : nil,
+                    writeAttempted: false,
+                    readbackSource: spec.tool == .logicTransport
+                        ? "logic://transport/state"
+                        : spec.tool == .logicMixer
+                            ? "logic://mixer"
+                            : "logic://system/health",
+                    readbackRequestID: "fake-readback-\(spec.id.rawValue)",
+                    readbackData: readback,
+                    failureReason: spec.id == failedOperationID ? "synthetic operation failure" : nil
+                )
+            )
+            }
+        )
         return QualificationDriveResult(
             handshake: .init(
                 protocolVersion: "2025-11-25",
@@ -1006,8 +1477,11 @@ struct QualificationRunnerTests {
             health: .init(
                 logicProRunning: true,
                 logicProVersion: "11.2",
+                logicProBundleID: activeBundleID,
                 logicProVariant: observedVariant,
-                processMetadataResolved: true
+                logicProUILocale: observedLocale,
+                processMetadataResolved: true,
+                variants: variantAvailability
             ),
             catalog: .init(
                 schemaVersion: 1,
@@ -1016,7 +1490,19 @@ struct QualificationRunnerTests {
                 operations: catalogEntries
             ),
             expectedOperationCount: expectedCount,
-            traceList: .init(traces: []),
+            traceList: .init(traces: tracePresent ? [
+                .init(
+                    traceID: traceID,
+                    operationID: traceOperationID.rawValue,
+                    phaseCount: tracePhases.count,
+                    readbackState: "C"
+                ),
+            ] : []),
+            traceDetail: tracePresent ? .init(
+                traceID: traceID,
+                operationID: traceOperationID.rawValue,
+                phases: tracePhases
+            ) : nil,
             negative: .init(
                 toolIsError: true,
                 state: "C",
@@ -1028,6 +1514,7 @@ struct QualificationRunnerTests {
                 catalogAfter: stableCatalog
             ),
             observedLocale: observedLocale,
+            operationResults: operationResults,
             failureReason: nil
         )
     }
@@ -1051,13 +1538,18 @@ struct QualificationRunnerTests {
             IFS= read -r request_line || exit 0
             sleep "$HANDSHAKE_DELAY"
             /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","serverInfo":{"name":"fixture","version":"1.0"}}}'
-            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"{\"logic_pro_running\":true,\"logic_pro_version\":\"11.2\",\"logic_pro_variant\":\"desktop\",\"process_metadata_resolved\":true}"}]}}'
+            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"{\"logic_pro_running\":true,\"logic_pro_version\":\"11.2\",\"logic_pro_bundle_id\":\"com.apple.logic10\",\"logic_pro_variant\":\"desktop\",\"logic_pro_ui_locale\":\"en-US\",\"logic_pro_variants\":[{\"variant\":\"desktop\",\"bundle_id\":\"com.apple.logic10\",\"installed\":true,\"running\":true},{\"variant\":\"creator_studio\",\"bundle_id\":\"com.apple.mobilelogic\",\"installed\":false,\"running\":false}],\"process_metadata_resolved\":true}"}]}}'
             /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"contents":[{"uri":"logic://system/operations","text":"{\"schema_version\":1,\"generated_at\":\"1970-01-01T00:00:00Z\",\"operation_count\":0,\"operations\":[]}"}]}}'
-            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text","text":"{\"traces\":[]}"}]}}'
+            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text","text":"{\"traces\":[{\"trace_id\":\"lpmcp_00000000-0000-0000-0000-000000000001\",\"operation_id\":\"system.saga_execute\",\"phase_count\":3,\"readback_state\":\"C\"}]}"}]}}'
             /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":5,"result":{"isError":true,"content":[{"type":"text","text":"{\"state\":\"C\",\"error\":\"invalid_params\",\"write_attempted\":false}"}]}}'
-            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":6,"result":{"content":[{"type":"text","text":"{\"logic_pro_running\":true,\"logic_pro_version\":\"11.2\",\"logic_pro_variant\":\"desktop\",\"process_metadata_resolved\":true}"}]}}'
-            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":7,"result":{"contents":[{"uri":"logic://system/operations","text":"{\"schema_version\":1,\"generated_at\":\"1970-01-01T00:00:00Z\",\"operation_count\":0,\"operations\":[]}"}]}}'
+            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":6,"result":{"content":[{"type":"text","text":"{\"traces\":[{\"trace_id\":\"lpmcp_00000000-0000-0000-0000-000000000002\",\"operation_id\":\"system.saga_execute\",\"phase_count\":3,\"readback_state\":\"C\"},{\"trace_id\":\"lpmcp_00000000-0000-0000-0000-000000000001\",\"operation_id\":\"system.saga_execute\",\"phase_count\":3,\"readback_state\":\"C\"}]}"}]}}'
+            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":7,"result":{"content":[{"type":"text","text":"{\"trace_id\":\"lpmcp_00000000-0000-0000-0000-000000000002\",\"operation_id\":\"system.saga_execute\",\"events\":[{\"phase\":\"request.received\"},{\"phase\":\"verification.completed\"},{\"phase\":\"result.emitted\"}]}"}]}}'
+            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":8,"result":{"isError":true,"content":[{"type":"text","text":"{\"state\":\"C\",\"error\":\"invalid_params\",\"write_attempted\":false}"}]}}'
+            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":9,"result":{"content":[{"type":"text","text":"{\"logic_pro_running\":true,\"logic_pro_version\":\"11.2\",\"logic_pro_bundle_id\":\"com.apple.logic10\",\"logic_pro_variant\":\"desktop\",\"logic_pro_ui_locale\":\"en-US\",\"logic_pro_variants\":[{\"variant\":\"desktop\",\"bundle_id\":\"com.apple.logic10\",\"installed\":true,\"running\":true},{\"variant\":\"creator_studio\",\"bundle_id\":\"com.apple.mobilelogic\",\"installed\":false,\"running\":false}],\"process_metadata_resolved\":true}"}]}}'
+            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":10,"result":{"contents":[{"uri":"logic://system/operations","text":"{\"schema_version\":1,\"generated_at\":\"1970-01-01T00:00:00Z\",\"operation_count\":0,\"operations\":[]}"}]}}'
             exec 1>&-
+            IFS= read -r request_line || exit 0
+            IFS= read -r request_line || exit 0
             IFS= read -r request_line || exit 0
             IFS= read -r request_line || exit 0
             IFS= read -r request_line || exit 0
@@ -1084,6 +1576,7 @@ struct QualificationRunnerTests {
         let executableData = Data("qualification-binary-fixture".utf8)
         let attestationURL: URL
         let manifestURL: URL
+        let caseManifestURL: URL
         let externalCasesURL: URL
         let waiversURL: URL
         let commitSHA = String(repeating: "c", count: 40)
@@ -1107,6 +1600,7 @@ struct QualificationRunnerTests {
             executableURL = directory.appendingPathComponent("LogicProMCP")
             attestationURL = directory.appendingPathComponent("attestation.json")
             manifestURL = directory.appendingPathComponent("evidence-manifest.json")
+            caseManifestURL = directory.appendingPathComponent("case-manifest.json")
             externalCasesURL = directory.appendingPathComponent("cases.json")
             waiversURL = directory.appendingPathComponent("waivers.json")
             try executableData.write(to: executableURL)
@@ -1130,6 +1624,15 @@ struct QualificationRunnerTests {
         }
 
         func qualify(waiversURL: URL? = nil) async throws -> ReleaseQualificationAttestation {
+            let result = await runQualification(waiversURL: waiversURL)
+            #expect(result.exitCode == 0)
+            return try JSONDecoder().decode(
+                ReleaseQualificationAttestation.self,
+                from: Data(contentsOf: attestationURL)
+            )
+        }
+
+        func runQualification(waiversURL: URL? = nil) async -> QualificationCommandResult {
             var arguments = [
                 "LogicProMCP", "--qualify",
                 "--out", attestationURL.path,
@@ -1138,12 +1641,7 @@ struct QualificationRunnerTests {
             if let waiversURL {
                 arguments.append(contentsOf: ["--waivers", waiversURL.path])
             }
-            let result = await runner.run(arguments: arguments)
-            #expect(result.exitCode == 0)
-            return try JSONDecoder().decode(
-                ReleaseQualificationAttestation.self,
-                from: Data(contentsOf: attestationURL)
-            )
+            return await runner.run(arguments: arguments)
         }
 
         func evidence(for qualificationCase: QualificationCase) throws -> [String: Any] {
@@ -1190,6 +1688,8 @@ struct QualificationRunnerTests {
                 logicVersion: original.logicVersion,
                 locale: original.locale,
                 profile: original.profile,
+                cache: original.cache,
+                fixture: original.fixture,
                 startedAt: original.startedAt,
                 completedAt: original.completedAt,
                 total: copiedCases.count,

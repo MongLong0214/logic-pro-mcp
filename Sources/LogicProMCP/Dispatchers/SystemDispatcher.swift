@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import CoreGraphics
 import MCP
@@ -14,7 +15,39 @@ struct SystemDispatcher: OperationTraceDispatching {
         URL,
         @Sendable () async -> Void
     ) async throws -> SupportBundleBuilder.Result
+
+    struct LogicHealthObservation: Sendable, Equatable {
+        struct VariantAvailability: Sendable, Equatable {
+            let variant: LogicProVariant
+            let bundleID: String
+            let installed: Bool
+            let running: Bool
+        }
+
+        let running: Bool
+        let version: String
+        let bundleID: String
+        let variant: LogicProVariant
+        let uiLocale: String
+        let processMetadataResolved: Bool
+        let variants: [VariantAvailability]
+    }
+
     private struct HealthResponse: Encodable {
+        struct VariantAvailabilitySection: Encodable {
+            let variant: String
+            let bundleID: String
+            let installed: Bool
+            let running: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case variant
+                case bundleID = "bundle_id"
+                case installed
+                case running
+            }
+        }
+
         struct MCUSection: Encodable {
             let connected: Bool
             let registeredAsDevice: Bool
@@ -114,6 +147,8 @@ struct SystemDispatcher: OperationTraceDispatching {
         let logicProVersion: String
         let logicProBundleID: String
         let logicProVariant: String
+        let logicProUILocale: String
+        let logicProVariants: [VariantAvailabilitySection]
         let processMetadataResolved: Bool
         let mcu: MCUSection
         let channels: [ChannelSection]
@@ -128,6 +163,8 @@ struct SystemDispatcher: OperationTraceDispatching {
             case logicProVersion = "logic_pro_version"
             case logicProBundleID = "logic_pro_bundle_id"
             case logicProVariant = "logic_pro_variant"
+            case logicProUILocale = "logic_pro_ui_locale"
+            case logicProVariants = "logic_pro_variants"
             case processMetadataResolved = "process_metadata_resolved"
             case mcu
             case channels
@@ -185,7 +222,10 @@ struct SystemDispatcher: OperationTraceDispatching {
         dialogPresent: @escaping @Sendable () -> Bool = { false },
         sagaJournal: SagaJournal = SagaJournal(),
         mutationGate: LogicMutationGate? = nil,
-        sagaRefreshAfterWrite: (@Sendable () async -> Void)? = nil
+        sagaRefreshAfterWrite: (@Sendable () async -> Void)? = nil,
+        logicHealthObservation: @Sendable () -> LogicHealthObservation = {
+            productionLogicHealthObservation()
+        }
     ) async -> CallTool.Result {
         switch command {
         case "list_recent_traces", "get_trace", "clear_traces":
@@ -218,18 +258,26 @@ struct SystemDispatcher: OperationTraceDispatching {
             // two signals can never disagree. AppleScript availability is
             // already surfaced separately in the `channels` array; mixing it
             // into the running-state bit made the two truths drift.
-            let logicProRunning = ProcessUtils.isLogicProRunning
+            let logicObservation = logicHealthObservation()
             let logicProHasWindow = ProcessUtils.hasVisibleWindow()
             let logicProHasDocument = await cache.getHasDocument()
-            let resolvedTarget = LogicProTarget.current
             let health = HealthResponse(
-                logicProRunning: logicProRunning,
+                logicProRunning: logicObservation.running,
                 logicProHasWindow: logicProHasWindow,
                 logicProHasDocument: logicProHasDocument,
-                logicProVersion: ProcessUtils.logicProVersion() ?? "unknown",
-                logicProBundleID: resolvedTarget.bundleID,
-                logicProVariant: resolvedTarget.variantLabel,
-                processMetadataResolved: resolvedTarget.processMetadataResolved,
+                logicProVersion: logicObservation.version,
+                logicProBundleID: logicObservation.bundleID,
+                logicProVariant: logicObservation.variant.rawValue,
+                logicProUILocale: logicObservation.uiLocale,
+                logicProVariants: logicObservation.variants.map {
+                    .init(
+                        variant: $0.variant.rawValue,
+                        bundleID: $0.bundleID,
+                        installed: $0.installed,
+                        running: $0.running
+                    )
+                },
+                processMetadataResolved: logicObservation.processMetadataResolved,
                 mcu: .init(
                     connected: mcu.isConnected,
                     registeredAsDevice: mcu.registeredAsDevice,
@@ -587,6 +635,50 @@ struct SystemDispatcher: OperationTraceDispatching {
         }
     }
 
+    static func productionLogicHealthObservation() -> LogicHealthObservation {
+        let runtime = LogicProTarget.Runtime.production
+        let variants = LogicProTarget.knownVariants.map { variant in
+            let running = !runtime.runningApplications(variant.bundleID).isEmpty
+            return LogicHealthObservation.VariantAvailability(
+                variant: variant,
+                bundleID: variant.bundleID,
+                installed: running || runtime.installedApplicationURL(variant.bundleID) != nil,
+                running: running
+            )
+        }
+        guard let application = LogicProTarget.runningApplication(runtime: runtime),
+              let bundleID = application.bundleIdentifier,
+              let variant = LogicProVariant.from(bundleID: bundleID) else {
+            return LogicHealthObservation(
+                running: false,
+                version: "unknown",
+                bundleID: "unknown",
+                variant: .unknown,
+                uiLocale: "unknown",
+                processMetadataResolved: false,
+                variants: variants
+            )
+        }
+        let version = application.bundleURL
+            .flatMap(Bundle.init(url:))?
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? "unknown"
+        let pid = application.processIdentifier
+        let uiLocale = AXLogicProElements.logicUILocaleIdentifier(runtime: .init(
+            logicProPID: { pid },
+            ax: .production
+        )) ?? "unknown"
+        return LogicHealthObservation(
+            running: true,
+            version: version,
+            bundleID: bundleID,
+            variant: variant,
+            uiLocale: uiLocale,
+            processMetadataResolved: true,
+            variants: variants
+        )
+    }
+
     private static func defaultSupportBundleDirectory(createdAt: Date) -> URL {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -634,7 +726,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             logic: .init(
                 version: ProcessUtils.logicProVersion() ?? "unknown",
                 variant: target.variantLabel,
-                locale: Locale.current.identifier
+                locale: AXLogicProElements.logicUILocaleIdentifier() ?? "unknown"
             ),
             qualificationReference: "not_available",
             traces: await OperationTraceStore.shared.recent(limit: .max),

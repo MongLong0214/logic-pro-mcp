@@ -5,6 +5,19 @@ struct QualificationDriveRequest: Sendable {
     let executableURL: URL
     let environment: [String: String]
     let expectedOperationCount: Int
+    let operations: [OperationSpec]
+
+    init(
+        executableURL: URL,
+        environment: [String: String],
+        expectedOperationCount: Int,
+        operations: [OperationSpec] = []
+    ) {
+        self.executableURL = executableURL
+        self.environment = environment
+        self.expectedOperationCount = expectedOperationCount
+        self.operations = operations
+    }
 }
 
 struct QualificationHandshake: Equatable, Sendable {
@@ -20,15 +33,47 @@ struct QualificationHandshake: Equatable, Sendable {
 struct QualificationHealth: Equatable, Sendable {
     let logicProRunning: Bool
     let logicProVersion: String
+    let logicProBundleID: String
     let logicProVariant: String
+    let logicProUILocale: String
     let processMetadataResolved: Bool
+    let variants: [QualificationVariantAvailability]
 
     var isValid: Bool {
-        !logicProVersion.isEmpty && !logicProVariant.isEmpty
+        !logicProVersion.isEmpty
+            && !logicProVariant.isEmpty
+            && QualificationLocale(rawValue: logicProUILocale) != nil
+            && availabilityObservation != nil
     }
 
     var identifiesLiveLogic: Bool {
         logicProRunning && processMetadataResolved && logicProVersion != "unknown"
+    }
+
+    var availabilityObservation: QualificationAvailabilityObservation? {
+        guard let activeVariant = Self.qualificationVariant(logicProVariant),
+              let uiLocale = QualificationLocale(rawValue: logicProUILocale),
+              variants.contains(where: {
+                  $0.variant == activeVariant
+                      && $0.bundleID == logicProBundleID
+                      && $0.running
+              }) else {
+            return nil
+        }
+        return QualificationAvailabilityObservation(
+            activeBundleID: logicProBundleID,
+            activeVariant: activeVariant,
+            logicUILocale: uiLocale,
+            variants: variants
+        )
+    }
+
+    private static func qualificationVariant(_ value: String) -> LogicVariant? {
+        switch value {
+        case LogicProVariant.desktop.rawValue: .desktop
+        case LogicProVariant.creatorStudio.rawValue: .creatorStudio
+        default: nil
+        }
     }
 }
 
@@ -41,6 +86,118 @@ struct QualificationTraceEntry: Equatable, Sendable {
 
 struct QualificationTraceList: Equatable, Sendable {
     let traces: [QualificationTraceEntry]
+}
+
+struct QualificationTraceDetail: Equatable, Sendable {
+    let traceID: String
+    let operationID: String
+    let phases: [String]
+}
+
+struct QualificationOperationResult: Equatable, Sendable {
+    let operationID: String
+    let tool: String
+    let command: String
+    let mutability: Mutability
+    let requestID: String?
+    let responseData: Data?
+    let isError: Bool?
+    let state: String?
+    let error: String?
+    let writeAttempted: Bool?
+    let readbackSource: String?
+    let readbackRequestID: String?
+    let readbackData: Data?
+    let failureReason: String?
+
+    var responseArtifactData: Data? {
+        guard let requestID,
+              let responseData,
+              let isError,
+              let payload = String(data: responseData, encoding: .utf8) else {
+            return nil
+        }
+        return Self.encoded(QualificationOperationResponseArtifact(
+            operationID: operationID,
+            tool: tool,
+            command: command,
+            requestID: requestID,
+            isError: isError,
+            payload: payload
+        ))
+    }
+
+    var responseSHA256: String? {
+        responseArtifactData.map(SupportBundleBuilder.sha256)
+    }
+
+    var readbackArtifactData: Data? {
+        guard let readbackSource,
+              let readbackRequestID,
+              let readbackData,
+              let payload = String(data: readbackData, encoding: .utf8) else {
+            return nil
+        }
+        return Self.encoded(QualificationReadbackArtifact(
+            source: readbackSource,
+            requestID: readbackRequestID,
+            payload: payload
+        ))
+    }
+
+    var readback: QualificationReadbackEvidence? {
+        guard let readbackSource, let readbackRequestID, let readbackArtifactData else { return nil }
+        return QualificationReadbackEvidence(
+            source: readbackSource,
+            requestID: readbackRequestID,
+            verified: true,
+            sha256: SupportBundleBuilder.sha256(readbackArtifactData)
+        )
+    }
+
+    var status: QualificationStatus {
+        if failureReason != nil || responseData == nil || readback == nil {
+            return .failed
+        }
+        switch mutability {
+        case .readOnly:
+            return isError == false ? .passed : .notQualified
+        case .mutating:
+            return isTypedZeroWriteRefusal ? .notQualified : .failed
+        }
+    }
+
+    var verified: Bool { status == .passed }
+
+    var verificationKind: QualificationVerificationKind {
+        mutability == .readOnly && status == .passed ? .readResponse : .typedDeferral
+    }
+
+    var deferral: QualificationDeferral? {
+        guard status == .notQualified else { return nil }
+        let code: QualificationDeferralCode = mutability == .mutating
+            ? .liveMutationNotRun
+            : .operationUnavailable
+        return QualificationDeferral(
+            code: code,
+            detail: mutability == .mutating
+                ? "deferred to ADR-001-c: live mutation requires an operation-specific fixture and independent readback"
+                : "read-only operation did not return a successful typed response on this host"
+        )
+    }
+
+    private var isTypedZeroWriteRefusal: Bool {
+        isError == true
+            && state == "C"
+            && error == "invalid_params"
+            && writeAttempted == false
+    }
+
+    private static func encoded<Value: Encodable>(_ value: Value) -> Data? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return try? encoder.encode(value)
+    }
 }
 
 struct QualificationNegativeResult: Equatable, Sendable {
@@ -72,9 +229,35 @@ struct QualificationDriveResult: Equatable, Sendable {
     let catalog: OperationCatalogSnapshot?
     let expectedOperationCount: Int
     let traceList: QualificationTraceList?
+    let traceDetail: QualificationTraceDetail?
     let negative: QualificationNegativeResult?
     let observedLocale: String
+    let operationResults: [String: QualificationOperationResult]
     let failureReason: String?
+
+    init(
+        handshake: QualificationHandshake?,
+        health: QualificationHealth?,
+        catalog: OperationCatalogSnapshot?,
+        expectedOperationCount: Int,
+        traceList: QualificationTraceList?,
+        traceDetail: QualificationTraceDetail? = nil,
+        negative: QualificationNegativeResult?,
+        observedLocale: String,
+        operationResults: [String: QualificationOperationResult] = [:],
+        failureReason: String?
+    ) {
+        self.handshake = handshake
+        self.health = health
+        self.catalog = catalog
+        self.expectedOperationCount = expectedOperationCount
+        self.traceList = traceList
+        self.traceDetail = traceDetail
+        self.negative = negative
+        self.observedLocale = observedLocale
+        self.operationResults = operationResults
+        self.failureReason = failureReason
+    }
 
     var handshakeOK: Bool { handshake?.isValid == true }
     var healthOK: Bool { health?.isValid == true && health?.identifiesLiveLogic == true }
@@ -83,7 +266,19 @@ struct QualificationDriveResult: Equatable, Sendable {
         return catalog.operationCount == expectedOperationCount
             && catalog.operations.count == catalog.operationCount
     }
-    var traceOK: Bool { traceList != nil }
+    var traceOK: Bool {
+        guard let traceDetail,
+              traceDetail.operationID == OperationID.systemSagaExecute.rawValue,
+              traceDetail.phases.first == TracePhase.requestReceived.rawValue,
+              traceDetail.phases.last == TracePhase.resultEmitted.rawValue,
+              let summary = traceList?.traces.first(where: {
+                  $0.traceID == traceDetail.traceID
+                      && $0.operationID == traceDetail.operationID
+              }) else {
+            return false
+        }
+        return summary.phaseCount > 0 && summary.phaseCount == traceDetail.phases.count
+    }
     var negativeFailclosed: Bool { negative?.isFailClosedAndStable == true }
     var allChecksPass: Bool {
         handshakeOK && healthOK && catalogCountMatch && traceOK && negativeFailclosed
@@ -96,6 +291,9 @@ struct QualificationDriveResult: Equatable, Sendable {
     }
     var logicProVersion: String { health?.logicProVersion ?? "unknown" }
     var identifiesLiveLogic: Bool { health?.identifiesLiveLogic == true }
+    var availabilityObservation: QualificationAvailabilityObservation? {
+        health?.availabilityObservation
+    }
 }
 
 enum QualificationTransportError: Error, Equatable, CustomStringConvertible, Sendable {
@@ -158,10 +356,100 @@ struct QualificationTransport: Sendable {
             let handshake = try initialize(session)
             let healthBefore = try health(session, id: 2, phase: "health_before")
             let catalogBefore = try catalog(session, id: 3, phase: "catalog_before")
-            let traceList = try traces(session, id: 4)
-            let negativeBody = try negative(session, id: 5)
-            let healthAfter = try health(session, id: 6, phase: "health_after")
-            let catalogAfter = try catalog(session, id: 7, phase: "catalog_after")
+            let baselineTraceList = try traces(session, id: 4)
+            let baselineTraceIDs = Set(baselineTraceList.traces.map(\.traceID))
+            let traceSeedBody = try traceSeed(session, id: 5)
+            let traceList = try traces(session, id: 6)
+            let seededTraces = traceList.traces.filter {
+                !baselineTraceIDs.contains($0.traceID)
+                    && $0.operationID == OperationID.systemSagaExecute.rawValue
+                    && $0.phaseCount > 0
+                    && TraceID.isValid($0.traceID)
+            }
+            guard seededTraces.count == 1, let traceSummary = seededTraces.first else {
+                throw QualificationTransportError.protocolViolation(
+                    "trace_roundtrip: expected one new traced operation with events"
+                )
+            }
+            let traceDetail = try trace(session, id: 7, traceID: traceSummary.traceID)
+            guard traceDetail.traceID == traceSummary.traceID,
+                  traceDetail.operationID == traceSummary.operationID,
+                  traceDetail.phases.first == TracePhase.requestReceived.rawValue,
+                  traceDetail.phases.last == TracePhase.resultEmitted.rawValue else {
+                throw QualificationTransportError.protocolViolation(
+                    "trace_roundtrip: trace identity or events mismatch"
+                )
+            }
+            let negativeBody = try negative(session, id: 8)
+
+            var nextID = 9
+            var operationResults: [String: QualificationOperationResult] = [:]
+            for spec in request.operations {
+                var response: (text: String, isError: Bool)?
+                var responseRequestID: String?
+                var responseFailure: String?
+                do {
+                    if spec.id == .systemSagaExecute {
+                        responseRequestID = "5"
+                        response = (traceSeedBody.text, traceSeedBody.toolIsError)
+                    } else if spec.id == .tracksRename {
+                        responseRequestID = "8"
+                        response = (negativeBody.text, negativeBody.toolIsError)
+                    } else {
+                        let responseID = nextID
+                        nextID += 1
+                        responseRequestID = String(responseID)
+                        response = try operation(
+                            session,
+                            id: responseID,
+                            spec: spec,
+                            traceID: traceSummary.traceID
+                        )
+                    }
+                } catch {
+                    responseFailure = String(describing: error)
+                }
+                let readbackRequestID = "operation-readback-\(nextID)"
+                let readbackSource = Self.readbackSource(for: spec)
+                var readbackData: Data?
+                var readbackFailure: String?
+                do {
+                    readbackData = try resourceReadback(
+                        session,
+                        id: nextID,
+                        uri: readbackSource,
+                        phase: readbackRequestID
+                    )
+                } catch {
+                    readbackFailure = String(describing: error)
+                }
+                nextID += 1
+                let typed = response.flatMap {
+                    try? Self.decodeInner(
+                        $0.text,
+                        phase: "operation_probe.\(spec.id.rawValue)"
+                    ) as OperationProbeResult
+                }
+                operationResults[spec.id.rawValue] = QualificationOperationResult(
+                    operationID: spec.id.rawValue,
+                    tool: spec.tool.rawValue,
+                    command: spec.command,
+                    mutability: spec.mutability,
+                    requestID: responseRequestID,
+                    responseData: response.map { Data($0.text.utf8) },
+                    isError: response?.isError,
+                    state: typed?.state,
+                    error: typed?.error,
+                    writeAttempted: typed?.writeAttempted,
+                    readbackSource: readbackSource,
+                    readbackRequestID: readbackRequestID,
+                    readbackData: readbackData,
+                    failureReason: responseFailure ?? readbackFailure
+                )
+            }
+            let healthAfter = try health(session, id: nextID, phase: "health_after")
+            nextID += 1
+            let catalogAfter = try catalog(session, id: nextID, phase: "catalog_after")
             let negative = QualificationNegativeResult(
                 toolIsError: negativeBody.toolIsError,
                 state: negativeBody.body.state,
@@ -188,8 +476,10 @@ struct QualificationTransport: Sendable {
                 catalog: catalogBefore.value,
                 expectedOperationCount: request.expectedOperationCount,
                 traceList: traceList,
+                traceDetail: traceDetail,
                 negative: negative,
-                observedLocale: Self.qualificationLocaleIdentifier(Locale.current.identifier),
+                observedLocale: healthBefore.value.logicProUILocale,
+                operationResults: operationResults,
                 failureReason: nil
             )
         } catch {
@@ -252,8 +542,27 @@ struct QualificationTransport: Sendable {
             QualificationHealth(
                 logicProRunning: wire.logicProRunning,
                 logicProVersion: wire.logicProVersion,
+                logicProBundleID: wire.logicProBundleID,
                 logicProVariant: wire.logicProVariant,
-                processMetadataResolved: wire.processMetadataResolved
+                logicProUILocale: wire.logicProUILocale,
+                processMetadataResolved: wire.processMetadataResolved,
+                variants: wire.variants.compactMap { variant in
+                    let mapped: LogicVariant
+                    switch variant.variant {
+                    case LogicProVariant.desktop.rawValue:
+                        mapped = .desktop
+                    case LogicProVariant.creatorStudio.rawValue:
+                        mapped = .creatorStudio
+                    default:
+                        return nil
+                    }
+                    return QualificationVariantAvailability(
+                        variant: mapped,
+                        bundleID: variant.bundleID,
+                        installed: variant.installed,
+                        running: variant.running
+                    )
+                }
             ),
             try Self.stableHealthData(text, phase: phase)
         )
@@ -319,10 +628,150 @@ struct QualificationTransport: Sendable {
         })
     }
 
+    private func trace(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        traceID: String
+    ) throws -> QualificationTraceDetail {
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: [
+                "name": "logic_system",
+                "arguments": [
+                    "command": "get_trace",
+                    "params": ["trace_id": traceID],
+                ],
+            ],
+            phase: "trace_get"
+        )
+        guard result.isError != true else {
+            throw QualificationTransportError.protocolViolation("trace_get: tool returned isError")
+        }
+        let wire: TraceDetailResult = try Self.decodeInner(
+            result.text(phase: "trace_get"),
+            phase: "trace_get"
+        )
+        return QualificationTraceDetail(
+            traceID: wire.traceID,
+            operationID: wire.operationID,
+            phases: wire.events.map(\.phase)
+        )
+    }
+
+    private func operation(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        spec: OperationSpec,
+        traceID: String
+    ) throws -> (text: String, isError: Bool) {
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: [
+                "name": spec.tool.rawValue,
+                "arguments": [
+                    "command": spec.command,
+                    "params": Self.probeParams(for: spec, traceID: traceID),
+                ],
+            ],
+            phase: "operation_probe.\(spec.id.rawValue)"
+        )
+        return (
+            try result.text(phase: "operation_probe.\(spec.id.rawValue)"),
+            result.isError == true
+        )
+    }
+
+    private static func probeParams(for spec: OperationSpec, traceID: String) -> [String: Any] {
+        if spec.mutability == .mutating {
+            return ["__adr001b_no_write_probe": true]
+        }
+        switch spec.id {
+        case .systemListRecentTraces:
+            return ["limit": 10]
+        case .systemGetTrace:
+            return ["trace_id": traceID]
+        case .systemClearTraces:
+            return ["confirmed": false]
+        case .systemHelp:
+            return ["category": "system"]
+        case .systemSagaPreflight:
+            return ["idempotency_key": "qualification-read-probe", "steps": []]
+        case .systemSagaStatus:
+            return ["idempotency_key": "qualification-read-probe"]
+        default:
+            return [:]
+        }
+    }
+
+    static func readbackSource(for spec: OperationSpec) -> String {
+        switch spec.tool {
+        case .logicTransport:
+            return "logic://transport/state"
+        case .logicMixer, .logicPlugins:
+            return "logic://mixer"
+        case .logicNavigate:
+            return "logic://markers"
+        case .logicEdit:
+            return "logic://tracks"
+        case .logicProject:
+            switch spec.id {
+            case .projectGetRegions:
+                return "logic://tracks"
+            case .projectAudit:
+                return "logic://project/audit"
+            case .projectCleanupPlan, .projectCleanupApply:
+                return "logic://project/cleanup-plan"
+            default:
+                return "logic://project/info"
+            }
+        case .logicMidi:
+            return "logic://midi/ports"
+        case .logicTracks:
+            switch spec.id {
+            case .tracksListLibrary, .tracksScanLibrary, .tracksResolvePath,
+                 .tracksScanPluginPresets:
+                return "logic://library/inventory"
+            default:
+                return "logic://tracks"
+            }
+        case .logicAudio:
+            return "logic://system/health"
+        case .logicSystem:
+            switch spec.id {
+            case .systemListRecentTraces, .systemGetTrace, .systemClearTraces, .systemHelp:
+                return "logic://system/operations"
+            default:
+                return "logic://system/health"
+            }
+        }
+    }
+
+    private func resourceReadback(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        uri: String,
+        phase: String
+    ) throws -> Data {
+        let result: ResourceReadResult = try session.request(
+            id: id,
+            method: "resources/read",
+            params: ["uri": uri],
+            phase: phase
+        )
+        guard let content = result.contents.first,
+              content.uri == uri,
+              let text = content.text else {
+            throw QualificationTransportError.protocolViolation("\(phase): missing readback content")
+        }
+        return Data(text.utf8)
+    }
+
     private func negative(
         _ session: QualificationSubprocessSession,
         id: Int
-    ) throws -> (toolIsError: Bool, body: NegativeResult) {
+    ) throws -> (toolIsError: Bool, body: NegativeResult, text: String) {
         let result: ToolCallResult = try session.request(
             id: id,
             method: "tools/call",
@@ -330,16 +779,46 @@ struct QualificationTransport: Sendable {
                 "name": "logic_tracks",
                 "arguments": [
                     "command": "rename",
-                    "params": ["__adr001b_no_write_probe": true],
+                    "params": ["track_index": 1],
                 ],
             ],
             phase: "negative_failclosed"
         )
+        let text = try result.text(phase: "negative_failclosed")
         let body: NegativeResult = try Self.decodeInner(
-            result.text(phase: "negative_failclosed"),
+            text,
             phase: "negative_failclosed"
         )
-        return (result.isError == true, body)
+        return (result.isError == true, body, text)
+    }
+
+    private func traceSeed(
+        _ session: QualificationSubprocessSession,
+        id: Int
+    ) throws -> (toolIsError: Bool, body: OperationProbeResult, text: String) {
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: [
+                "name": "logic_system",
+                "arguments": [
+                    "command": "saga_execute",
+                    "params": [:] as [String: Any],
+                ],
+            ],
+            phase: "trace_seed"
+        )
+        let text = try result.text(phase: "trace_seed")
+        let body: OperationProbeResult = try Self.decodeInner(text, phase: "trace_seed")
+        guard result.isError == true,
+              body.state == "C",
+              body.error == "invalid_params",
+              body.writeAttempted == false else {
+            throw QualificationTransportError.protocolViolation(
+                "trace_seed: expected typed zero-write refusal"
+            )
+        }
+        return (true, body, text)
     }
 
     private static func decodeInner<Value: Decodable>(
@@ -432,16 +911,36 @@ private struct ResourceReadResult: Decodable {
 }
 
 private struct HealthResult: Decodable {
+    struct VariantAvailability: Decodable {
+        let variant: String
+        let bundleID: String
+        let installed: Bool
+        let running: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case variant
+            case bundleID = "bundle_id"
+            case installed
+            case running
+        }
+    }
+
     let logicProRunning: Bool
     let logicProVersion: String
+    let logicProBundleID: String
     let logicProVariant: String
+    let logicProUILocale: String
     let processMetadataResolved: Bool
+    let variants: [VariantAvailability]
 
     enum CodingKeys: String, CodingKey {
         case logicProRunning = "logic_pro_running"
         case logicProVersion = "logic_pro_version"
+        case logicProBundleID = "logic_pro_bundle_id"
         case logicProVariant = "logic_pro_variant"
+        case logicProUILocale = "logic_pro_ui_locale"
         case processMetadataResolved = "process_metadata_resolved"
+        case variants = "logic_pro_variants"
     }
 }
 
@@ -466,6 +965,36 @@ private struct TraceListResult: Decodable {
     enum CodingKeys: String, CodingKey {
         case traces
         case traceDisabled = "trace_disabled"
+    }
+}
+
+private struct TraceDetailResult: Decodable {
+    struct Event: Decodable {
+        let phase: String
+    }
+
+    let traceID: String
+    let operationID: String
+    let events: [Event]
+
+    enum CodingKeys: String, CodingKey {
+        case traceID = "trace_id"
+        case operationID = "operation_id"
+        case events
+    }
+}
+
+private struct OperationProbeResult: Decodable {
+    let state: String?
+    let error: String?
+    let writeAttempted: Bool?
+    let traceID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case state
+        case error
+        case writeAttempted = "write_attempted"
+        case traceID = "trace_id"
     }
 }
 

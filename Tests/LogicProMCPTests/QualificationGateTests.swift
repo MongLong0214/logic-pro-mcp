@@ -14,6 +14,70 @@ struct QualificationGateTests {
         #expect(decision.rejections.isEmpty)
     }
 
+    @Test func promotionGateDistinguishesGovernedAndUngovernedUnavailableAxes() {
+        let liveAxis = QualificationAxis.requiredCombinations[0]
+        let governedCases = QualificationAxis.requiredCombinations.map { axis in
+            qualificationCase(
+                id: axis.key,
+                status: axis == liveAxis ? .passed : .notQualified,
+                reason: axis == liveAxis
+                    ? nil
+                    : "required axis unavailable: different observed Logic variant or UI locale",
+                axis: axis,
+                availabilityReason: axis == liveAxis ? nil : availabilityReason(
+                    for: axis,
+                    observedAxis: liveAxis
+                )
+            )
+        }
+
+        let governed = evaluate(cases: governedCases)
+        #expect(governed.promotable)
+        #expect(governed.rejections.isEmpty)
+
+        let creatorInstalled = qualificationAvailabilityObservation(
+            for: liveAxis,
+            creatorInstalled: true
+        )
+        let unjustifiedVariantSkips = QualificationAxis.requiredCombinations.map { axis in
+            qualificationCase(
+                id: axis.key,
+                status: axis == liveAxis ? .passed : .notQualified,
+                reason: axis == liveAxis
+                    ? nil
+                    : "required axis unavailable: different observed Logic variant or UI locale",
+                axis: axis,
+                availabilityReason: axis == liveAxis ? nil : availabilityReason(
+                    for: axis,
+                    observedAxis: liveAxis
+                ),
+                availabilityObservation: creatorInstalled
+            )
+        }
+        #expect(!evaluate(cases: unjustifiedVariantSkips).promotable)
+
+        var arbitraryCases = governedCases
+        arbitraryCases[1] = qualificationCase(
+            id: arbitraryCases[1].id,
+            status: .notQualified,
+            reason: "operator excluded this axis",
+            axis: arbitraryCases[1].axis,
+            availabilityReason: arbitraryCases[1].availabilityReason
+        )
+        #expect(!evaluate(cases: arbitraryCases).promotable)
+
+        let noLiveCases = QualificationAxis.requiredCombinations.map { axis in
+            qualificationCase(
+                id: axis.key,
+                status: .notQualified,
+                reason: "required axis unavailable: different observed Logic variant or UI locale",
+                axis: axis,
+                availabilityReason: availabilityReason(for: axis, observedAxis: liveAxis)
+            )
+        }
+        #expect(!evaluate(cases: noLiveCases).promotable)
+    }
+
     @Test func missingRequiredCombinationRejects() {
         let missingKey = QualificationAxis.requiredCombinations[0].key
         let decision = evaluate(cases: Array(passedRequiredCases().dropFirst()))
@@ -23,7 +87,7 @@ struct QualificationGateTests {
     }
 
     @Test func failedRequiredCaseRejects() {
-        let failedKey = "\(QualificationAxis.requiredCombinations[0].key)/empty"
+        let failedKey = QualificationAxis.requiredCombinations[0].key
         var cases = passedRequiredCases()
         cases[0] = qualificationCase(id: failedKey, status: .failed)
 
@@ -61,9 +125,12 @@ struct QualificationGateTests {
         )
 
         #expect(!decision.promotable)
-        #expect(decision.rejections == [
-            .binarySHAMismatch(expected: "not-a-sha", actual: "not-a-sha"),
-        ])
+        #expect(decision.rejections.contains(
+            .binarySHAMismatch(expected: "not-a-sha", actual: "not-a-sha")
+        ))
+        #expect(QualificationAxis.requiredCombinations.allSatisfy { axis in
+            decision.rejections.contains(.requiredCombinationNotQualified(key: axis.key))
+        })
     }
 
     @Test func expiredWaiverAtReleaseVersionRejects() {
@@ -166,7 +233,7 @@ struct QualificationGateTests {
 
     @Test func waivedRequiredCombinationDoesNotCountAsPassed() {
         let requiredKey = QualificationAxis.requiredCombinations[0].key
-        let waivedKey = "\(requiredKey)/empty"
+        let waivedKey = requiredKey
         var cases = passedRequiredCases()
         cases[0] = qualificationCase(id: waivedKey, status: .waived)
 
@@ -181,7 +248,7 @@ struct QualificationGateTests {
 
     @Test func adr001aWaivedRequiredCombinationCountsAsQualified() {
         let requiredKey = QualificationAxis.requiredCombinations[0].key
-        let waivedKey = "\(requiredKey)/empty"
+        let waivedKey = requiredKey
         var cases = passedRequiredCases()
         cases[0] = qualificationCase(id: waivedKey, status: .waived)
 
@@ -194,13 +261,13 @@ struct QualificationGateTests {
             )]
         )
 
-        #expect(decision.promotable)
-        #expect(decision.rejections.isEmpty)
+        #expect(!decision.promotable)
+        #expect(decision.rejections.contains(.requiredCombinationNotQualified(key: requiredKey)))
     }
 
     @Test func adr001aWaiversCannotReplaceEveryLiveAxis() {
         let cases = QualificationAxis.requiredCombinations.map {
-            qualificationCase(id: "\($0.key)/empty", status: .waived)
+            qualificationCase(id: $0.key, status: .waived, axis: $0)
         }
         let waivers = cases.map {
             waiver(
@@ -222,7 +289,7 @@ struct QualificationGateTests {
         let requiredKey = QualificationAxis.requiredCombinations[0].key
         var cases = passedRequiredCases()
         cases[0] = qualificationCase(
-            id: "\(requiredKey)/empty",
+            id: requiredKey,
             status: .passed,
             verified: false
         )
@@ -237,7 +304,7 @@ struct QualificationGateTests {
         let requiredKey = QualificationAxis.requiredCombinations[0].key
         var cases = passedRequiredCases()
         cases[0] = qualificationCase(
-            id: "\(requiredKey)/empty",
+            id: requiredKey,
             status: .passed,
             evidenceFiles: []
         )
@@ -250,18 +317,18 @@ struct QualificationGateTests {
         ])
     }
 
-    @Test func failedFixtureBlocksPassedSiblingFixture() {
+    @Test func failedNonRequiredFixtureDoesNotReplaceRequiredAxis() {
         let requiredKey = QualificationAxis.requiredCombinations[0].key
         let failedID = "\(requiredKey)/medium"
         let decision = evaluate(
             cases: passedRequiredCases() + [qualificationCase(id: failedID, status: .failed)]
         )
 
-        #expect(!decision.promotable)
-        #expect(decision.rejections == [.requiredCaseFailed(caseID: failedID)])
+        #expect(decision.promotable)
+        #expect(decision.rejections.isEmpty)
     }
 
-    @Test func multipleFailedFixturesReportLexicallyFirstID() {
+    @Test func multipleNonRequiredFixtureFailuresDoNotAffectRequiredAxis() {
         let requiredKey = QualificationAxis.requiredCombinations[0].key
         let largeID = "\(requiredKey)/large"
         let mediumID = "\(requiredKey)/medium"
@@ -271,7 +338,8 @@ struct QualificationGateTests {
                 + [qualificationCase(id: largeID, status: .failed)]
         )
 
-        #expect(decision.rejections == [.requiredCaseFailed(caseID: largeID)])
+        #expect(decision.promotable)
+        #expect(decision.rejections.isEmpty)
     }
 
     @Test func duplicatePassedCaseIDDoesNotQualify() {
@@ -340,10 +408,10 @@ struct QualificationGateTests {
     @Test func requiredCombinationKeysAreExact() {
         #expect(QualificationAxis.requiredCombinations.count == 4)
         #expect(QualificationAxis.requiredCombinations.map(\.key) == [
-            "desktop/en-US/core/cold",
-            "desktop/ko-KR/core/cold",
-            "creator/en-US/core/cold",
-            "creator/ko-KR/core/cold",
+            "desktop/en-US/core/cold/empty",
+            "desktop/ko-KR/core/cold/empty",
+            "creator/en-US/core/cold/empty",
+            "creator/ko-KR/core/cold/empty",
         ])
     }
 
@@ -377,7 +445,7 @@ struct QualificationGateTests {
         waivers: [QualificationWaiver]
     ) -> ReleaseQualificationAttestation {
         ReleaseQualificationAttestation(
-            schema: "release-qualification-attestation/v1",
+            schema: "release-qualification-attestation/v2",
             serverVersion: serverVersion,
             commitSHA: String(repeating: "c", count: 40),
             binarySHA256: binarySHA256 ?? self.binarySHA256,
@@ -399,7 +467,7 @@ struct QualificationGateTests {
 
     private func passedRequiredCases() -> [QualificationCase] {
         QualificationAxis.requiredCombinations.map {
-            qualificationCase(id: "\($0.key)/empty", status: .passed)
+            qualificationCase(id: $0.key, status: .passed, axis: $0)
         }
     }
 
@@ -407,9 +475,28 @@ struct QualificationGateTests {
         id: String,
         status: QualificationStatus,
         verified: Bool? = nil,
-        evidenceFiles: [String]? = nil
+        evidenceFiles: [String]? = nil,
+        reason: String? = nil,
+        axis: QualificationAxis? = nil,
+        availabilityReason: QualificationAvailabilityReason? = nil,
+        availabilityObservation: QualificationAvailabilityObservation? = nil
     ) -> QualificationCase {
         let isVerified = verified ?? (status == QualificationStatus.passed)
+        let boundAxis = axis ?? QualificationAxis.requiredCombinations.first {
+            id == $0.key || id.hasPrefix($0.key + "/")
+        } ?? .defaultAxis
+        let readback = QualificationReadbackEvidence(
+            source: "logic://system/health",
+            requestID: "gate-test-\(id)",
+            verified: status == .passed,
+            sha256: String(repeating: "b", count: 64)
+        )
+        let deferral = status == .notQualified
+            ? QualificationDeferral(
+                code: .operationUnavailable,
+                detail: reason ?? "required axis unavailable: unspecified"
+            )
+            : nil
         return QualificationCase(
             id: id,
             status: status,
@@ -417,8 +504,56 @@ struct QualificationGateTests {
             command: "doctor",
             traceID: "lpmcp_00000000-0000-0000-0000-000000000000",
             verified: isVerified,
-            evidenceFiles: evidenceFiles ?? ["evidence/\(id).json"]
+            evidenceFiles: evidenceFiles ?? ["evidence/\(id).json"],
+            reason: reason,
+            binarySHA256: binarySHA256,
+            axis: boundAxis,
+            operationID: "qualification.\(boundAxis.key)",
+            verificationKind: status == .passed ? .independentReadback : .typedDeferral,
+            deferral: deferral,
+            readback: readback,
+            availabilityReason: availabilityReason,
+            availabilityObservation: availabilityObservation
+                ?? qualificationAvailabilityObservation(
+                    for: status == .passed ? boundAxis : .defaultAxis
+                )
         )
+    }
+
+    private func qualificationAvailabilityObservation(
+        for axis: QualificationAxis,
+        creatorInstalled: Bool = false
+    ) -> QualificationAvailabilityObservation {
+        QualificationAvailabilityObservation(
+            activeBundleID: axis.variant == .creatorStudio
+                ? LogicProVariant.creatorStudio.bundleID
+                : LogicProVariant.desktop.bundleID,
+            activeVariant: axis.variant,
+            logicUILocale: axis.locale,
+            variants: LogicVariant.allCases.map { variant in
+                let active = variant == axis.variant
+                return QualificationVariantAvailability(
+                    variant: variant,
+                    bundleID: variant == .creatorStudio
+                        ? LogicProVariant.creatorStudio.bundleID
+                        : LogicProVariant.desktop.bundleID,
+                    installed: active || (variant == .creatorStudio && creatorInstalled),
+                    running: active
+                )
+            }
+        )
+    }
+
+    private func availabilityReason(
+        for axis: QualificationAxis,
+        observedAxis: QualificationAxis
+    ) -> QualificationAvailabilityReason? {
+        switch (axis.variant != observedAxis.variant, axis.locale != observedAxis.locale) {
+        case (true, true): .differentLogicVariantAndUILocale
+        case (true, false): .differentLogicVariant
+        case (false, true): .differentLogicUILocale
+        case (false, false): nil
+        }
     }
 
     private func waiver(

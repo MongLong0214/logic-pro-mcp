@@ -30,6 +30,31 @@ private func toolText(_ result: CallTool.Result) -> String {
     return "{}"
 }
 
+private func qualificationHealthObservation() -> SystemDispatcher.LogicHealthObservation {
+    .init(
+        running: true,
+        version: "11.2",
+        bundleID: LogicProVariant.desktop.bundleID,
+        variant: .desktop,
+        uiLocale: "ko-KR",
+        processMetadataResolved: true,
+        variants: [
+            .init(
+                variant: .desktop,
+                bundleID: LogicProVariant.desktop.bundleID,
+                installed: true,
+                running: true
+            ),
+            .init(
+                variant: .creatorStudio,
+                bundleID: LogicProVariant.creatorStudio.bundleID,
+                installed: false,
+                running: false
+            ),
+        ]
+    )
+}
+
 private actor LiveTransportStateChannel: Channel {
     nonisolated let id: ChannelID = .accessibility
     private let json: String
@@ -326,7 +351,13 @@ func testHealthResponseMCUFields() async {
     await cache.updateMCUConnection(conn)
     let router = ChannelRouter()
 
-    let result = await SystemDispatcher.handle(command: "health", params: [:], router: router, cache: cache)
+    let result = await SystemDispatcher.handle(
+        command: "health",
+        params: [:],
+        router: router,
+        cache: cache,
+        logicHealthObservation: { qualificationHealthObservation() }
+    )
     let json = try! sharedParseJSON(toolText(result)) as! [String: Any]
     let mcu = (json["mcu"] as? [String: Any]) ?? [:]
     let connected = mcu["connected"] as? Bool
@@ -344,7 +375,13 @@ func testHealthResponseProcessFields() async {
     let cache = StateCache()
     let router = ChannelRouter()
 
-    let result = await SystemDispatcher.handle(command: "health", params: [:], router: router, cache: cache)
+    let result = await SystemDispatcher.handle(
+        command: "health",
+        params: [:],
+        router: router,
+        cache: cache,
+        logicHealthObservation: { qualificationHealthObservation() }
+    )
     let json = try! sharedParseJSON(toolText(result)) as! [String: Any]
     let process = (json["process"] as? [String: Any]) ?? [:]
     let memoryMB = process["memory_mb"] as? Double
@@ -456,12 +493,24 @@ func testHealthResponseFullSchema() async {
     let mockChannel = MockChannel(id: .mcu)
     await router.register(mockChannel)
 
-    let result = await SystemDispatcher.handle(command: "health", params: [:], router: router, cache: cache)
+    let result = await SystemDispatcher.handle(
+        command: "health",
+        params: [:],
+        router: router,
+        cache: cache,
+        logicHealthObservation: { qualificationHealthObservation() }
+    )
     let json = try! sharedParseJSON(toolText(result)) as! [String: Any]
     #expect(json["logic_pro_running"] as? Bool != nil)
     #expect(json["logic_pro_version"] as? String != nil)
     #expect(json["logic_pro_bundle_id"] as? String != nil)
-    #expect(json["logic_pro_variant"] as? String != nil)
+    #expect(json["logic_pro_bundle_id"] as? String == LogicProVariant.desktop.bundleID)
+    #expect(json["logic_pro_variant"] as? String == "desktop")
+    #expect(json["logic_pro_ui_locale"] as? String == "ko-KR")
+    let variants = json["logic_pro_variants"] as? [[String: Any]]
+    #expect(variants?.count == 2)
+    #expect(variants?.first(where: { $0["variant"] as? String == "desktop" })?["running"] as? Bool == true)
+    #expect(variants?.first(where: { $0["variant"] as? String == "creator_studio" })?["installed"] as? Bool == false)
     #expect(json["process_metadata_resolved"] as? Bool != nil)
     #expect(json["mcu"] as? [String: Any] != nil)
     #expect(json["channels"] as? [[String: Any]] != nil)

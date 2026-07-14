@@ -12,6 +12,7 @@ enum PromotionRejectionReason: Equatable, Sendable {
     case duplicateWaiver(caseID: String)
     case duplicateCaseID(caseID: String)
     case releaseVersionMismatch(expected: String, actual: String)
+    case evidenceBindingMismatch(detail: String)
 }
 
 struct PromotionDecision: Equatable, Sendable {
@@ -56,14 +57,11 @@ struct PromotionGate {
             rejections.append(.duplicateCaseID(caseID: caseID))
         }
         let waiverIssues = QualificationWaiverValidator.issues(in: attestation.waivers)
-        var invalidWaiverCaseIDs: Set<String> = []
         for issue in waiverIssues {
             switch issue {
             case .invalidField(let caseID, let field):
-                invalidWaiverCaseIDs.insert(caseID)
                 rejections.append(.invalidWaiver(caseID: caseID, field: field))
             case .duplicateCaseID(let caseID):
-                invalidWaiverCaseIDs.insert(caseID)
                 rejections.append(.duplicateWaiver(caseID: caseID))
             }
         }
@@ -93,27 +91,28 @@ struct PromotionGate {
         for caseID in expiredWaiverIDs.sorted() {
             rejections.append(.expiredWaiver(caseID: caseID))
         }
-        let hasLiveQualifiedAxis = attestation.cases.contains { qualificationCase in
-            qualificationCase.status == .passed
-                && qualificationCase.verified
-                && !qualificationCase.evidenceFiles.isEmpty
-                && QualificationAxis.requiredCombinations.contains { axis in
-                    Self.matchesRequiredAxis(caseID: qualificationCase.id, axis: axis)
-                }
+        let attestedAxis = QualificationAxis(
+            variant: attestation.logicVariant,
+            locale: attestation.locale,
+            profile: attestation.profile,
+            cache: attestation.cache,
+            fixture: attestation.fixture
+        )
+        let attestedLiveCase = attestation.cases.first {
+            Self.isLiveQualifiedCase(
+                $0,
+                axis: attestedAxis,
+                binarySHA256: attestation.binarySHA256
+            )
         }
-        let qualifyingAxisWaiverCaseIDs = hasLiveQualifiedAxis
-            ? Set(attestation.waivers.compactMap { waiver -> String? in
-                guard waiver.governsHostAxisAvailability,
-                      !invalidWaiverCaseIDs.contains(waiver.caseID),
-                      !expiredWaiverIDs.contains(waiver.caseID) else {
-                    return nil
-                }
-                return waiver.caseID
-            })
-            : []
-        for axis in QualificationAxis.requiredCombinations {
+        let liveAvailability = attestedLiveCase?.availabilityObservation
+        for axis in QualificationAxis.requiredAxes(
+            profile: attestation.profile,
+            cache: attestation.cache,
+            fixture: attestation.fixture
+        ) {
             let matchingCases = attestation.cases.filter {
-                Self.matchesRequiredAxis(caseID: $0.id, axis: axis)
+                $0.id == axis.key
             }
             let failedCaseID = matchingCases
                 .filter { $0.status == .failed }
@@ -125,11 +124,17 @@ struct PromotionGate {
             } else if matchingCases.contains(where: { duplicateCaseIDs.contains($0.id) }) {
                 continue
             } else if !matchingCases.contains(where: { qualificationCase in
-                (qualificationCase.status == .passed
-                    && qualificationCase.verified
-                    && !qualificationCase.evidenceFiles.isEmpty)
-                    || (qualificationCase.status == .waived
-                        && qualifyingAxisWaiverCaseIDs.contains(qualificationCase.id))
+                Self.isLiveQualifiedCase(
+                    qualificationCase,
+                    axis: axis,
+                    binarySHA256: attestation.binarySHA256
+                ) || (liveAvailability != nil && Self.isGovernedUnavailableCase(
+                    qualificationCase,
+                    axis: axis,
+                    observedAxis: attestedAxis,
+                    binarySHA256: attestation.binarySHA256,
+                    liveAvailability: liveAvailability
+                ))
             }) {
                 rejections.append(.requiredCombinationNotQualified(key: axis.key))
             }
@@ -149,12 +154,115 @@ struct PromotionGate {
         return expiry <= release
     }
 
-    private static func matchesRequiredAxis(
-        caseID: String,
+    private static func isLiveQualifiedCase(
+        _ qualificationCase: QualificationCase,
+        axis: QualificationAxis,
+        binarySHA256: String
+    ) -> Bool {
+        qualificationCase.id == axis.key
+            && qualificationCase.axis == axis
+            && qualificationCase.binarySHA256 == binarySHA256
+            && qualificationCase.status == .passed
+            && qualificationCase.verified
+            && qualificationCase.verificationKind == .independentReadback
+            && qualificationCase.deferral == nil
+            && qualificationCase.availabilityReason == nil
+            && qualificationCase.readback?.verified == true
+            && qualificationCase.readback?.source == "logic://system/health"
+            && qualificationCase.readback.map { Self.isSHA256($0.sha256) } == true
+            && Self.isValidLiveObservation(
+                qualificationCase.availabilityObservation,
+                axis: axis
+            )
+            && !qualificationCase.evidenceFiles.isEmpty
+    }
+
+    private static func isGovernedUnavailableCase(
+        _ qualificationCase: QualificationCase,
+        axis: QualificationAxis,
+        observedAxis: QualificationAxis,
+        binarySHA256: String,
+        liveAvailability: QualificationAvailabilityObservation?
+    ) -> Bool {
+        guard axis != observedAxis,
+              let liveAvailability,
+              qualificationCase.availabilityObservation == liveAvailability,
+              Self.isValidLiveObservation(liveAvailability, axis: observedAxis),
+              Self.provesUnavailable(axis: axis, observation: liveAvailability) else {
+            return false
+        }
+        return qualificationCase.id == axis.key
+            && qualificationCase.axis == axis
+            && qualificationCase.binarySHA256 == binarySHA256
+            && qualificationCase.status == .notQualified
+            && !qualificationCase.verified
+            && qualificationCase.verificationKind == .typedDeferral
+            && qualificationCase.deferral?.code == .operationUnavailable
+            && qualificationCase.deferral?.detail.isEmpty == false
+            && qualificationCase.deferral?.detail == qualificationCase.reason
+            && qualificationCase.reason?.hasPrefix("required axis unavailable:") == true
+            && qualificationCase.readback != nil
+            && qualificationCase.readback?.verified == false
+            && qualificationCase.readback?.source == "logic://system/health"
+            && qualificationCase.readback.map { Self.isSHA256($0.sha256) } == true
+            && qualificationCase.availabilityReason == availabilityReason(
+                for: axis,
+                observedAxis: observedAxis
+            )
+            && qualificationCase.reason?.isEmpty == false
+            && !qualificationCase.evidenceFiles.isEmpty
+    }
+
+    private static func isValidLiveObservation(
+        _ observation: QualificationAvailabilityObservation?,
         axis: QualificationAxis
     ) -> Bool {
-        caseID == axis.key || ProjectFixture.allCases.contains {
-            caseID == "\(axis.key)/\($0.rawValue)"
+        guard let observation,
+              observation.activeVariant == axis.variant,
+              observation.logicUILocale == axis.locale,
+              observation.activeBundleID == expectedBundleID(for: axis.variant),
+              observation.variants.count == LogicVariant.allCases.count,
+              Set(observation.variants.map(\.variant)) == Set(LogicVariant.allCases),
+              let active = observation.variants.first(where: { $0.variant == axis.variant }) else {
+            return false
+        }
+        return active.bundleID == observation.activeBundleID
+            && active.installed
+            && active.running
+            && observation.variants.allSatisfy {
+                $0.bundleID == expectedBundleID(for: $0.variant)
+            }
+    }
+
+    private static func provesUnavailable(
+        axis: QualificationAxis,
+        observation: QualificationAvailabilityObservation
+    ) -> Bool {
+        guard axis.variant != observation.activeVariant else {
+            return axis.locale != observation.logicUILocale
+        }
+        guard let variant = observation.variants.first(where: { $0.variant == axis.variant }) else {
+            return false
+        }
+        return !variant.installed && !variant.running
+    }
+
+    private static func expectedBundleID(for variant: LogicVariant) -> String {
+        switch variant {
+        case .desktop: LogicProVariant.desktop.bundleID
+        case .creatorStudio: LogicProVariant.creatorStudio.bundleID
+        }
+    }
+
+    private static func availabilityReason(
+        for axis: QualificationAxis,
+        observedAxis: QualificationAxis
+    ) -> QualificationAvailabilityReason? {
+        switch (axis.variant != observedAxis.variant, axis.locale != observedAxis.locale) {
+        case (true, true): .differentLogicVariantAndUILocale
+        case (true, false): .differentLogicVariant
+        case (false, true): .differentLogicUILocale
+        case (false, false): nil
         }
     }
 
