@@ -14,7 +14,7 @@ MIDIPortManager cross-mode 캐시 버그 수정, `transport.toggle_autopunch` �
 
 ## 2. Acceptance Criteria
 - [ ] AC-1: MIDIPortManager — 같은 name·같은 mode 요청은 기존 재사용 유지(MCU restart 의존: LogicProServer.swift:1008-1018), 같은 name·다른 mode는 `MIDIPortError.modeConflict`(신규 case) throw. 포트 저장 구조에 mode 표식 추가
-- [ ] AC-2: `logic_transport.toggle_autopunch` — TransportDispatcher 커맨드 + RoutingTable `transport.toggle_autopunch`만(→ [.accessibility]) — set_autopunch 등 추가 라우트 금지(boomer#5, 기존 toggle_* 패턴 준수). AX 경로: 컨트롤바 Autopunch 버튼을 locale-agnostic label(기존 AXLocalePolicy/LabelSet 패턴, 최소 영어 토큰 + 확장 여지)로 탐색 → AXPress → 버튼 상태 readback으로 State A / 요청과 불일치 시 State B / 미발견 시 State C `element_not_found`(기존 FailureError 재사용 — 동일 의미 신규 코드 금지) + remediation 힌트
+- [ ] AC-2: `logic_transport.toggle_autopunch` — TransportDispatcher 커맨드 + RoutingTable `transport.toggle_autopunch`만(→ [.accessibility]) — set_autopunch 등 추가 라우트 금지(independent review#5, 기존 toggle_* 패턴 준수). AX 경로: 컨트롤바 Autopunch 버튼을 locale-agnostic label(기존 AXLocalePolicy/LabelSet 패턴, 최소 영어 토큰 + 확장 여지)로 탐색 → AXPress → 버튼 상태 readback으로 State A / 요청과 불일치 시 State B / 미발견 시 State C `element_not_found`(기존 FailureError 재사용 — 동일 의미 신규 코드 금지) + remediation 힌트
 - [ ] AC-3: `track.set_automation`을 docs/API.md tracks 커맨드 목록에 State B(MCU, readback 불가) 시맨틱스와 함께 등재
 - [ ] AC-4: help 텍스트(SystemDispatcher)/routing audit invariant/surface census 테스트가 신규 커맨드와 정합 (기존 카운트 고정 테스트 갱신 포함)
 

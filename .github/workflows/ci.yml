@@ -95,7 +95,7 @@ jobs:
 
           # Extract TOTAL line — llvm-cov column order: regions, missed,
           # cover%, functions, missed, cover%, lines, missed, cover%.
-          # v3.4.1 (Boomer P2-4): validate extracted values match the
+          # v3.4.1 (independent review P2-4): validate extracted values match the
           # `<float>%` shape before threshold compare. A future LLVM
           # version that prepends a column (e.g. instantiation summary
           # in TOTAL) would silently grab a different field; the regex

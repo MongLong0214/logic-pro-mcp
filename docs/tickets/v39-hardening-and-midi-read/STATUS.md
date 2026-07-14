@@ -3,7 +3,7 @@
 **PRD**: docs/prd/PRD-v39-hardening-and-midi-read.md (v0.2)
 **Size**: XL
 **Current Phase**: 7 (완료) — 6 PR 전부 main 머지(#240-#245), 통합 검증 PASS
-**실행 모델**: 코드 100% codex gpt-5.5 xhigh / 오케스트레이터는 판단·문서·리뷰만 / 리뷰 게이트 boomer(codex xhigh)
+**실행 모델**: 문서화된 검토 및 검증 게이트
 
 ## Tickets
 

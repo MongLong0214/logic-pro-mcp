@@ -12,7 +12,7 @@
 > and adapt it to this project's Swift/macOS/Logic-Pro surface and its existing
 > read-only / run-before-startup Honest Contract.
 >
-> v0.2 folds in Phase-2 team review (strategist + guardian + boomer). Each P1/top-3
+> v0.2 folds in Phase-2 team review (architecture review + safety review + independent review). Each P1/top-3
 > resolution is tracked in §App-B.
 
 ---
@@ -362,7 +362,7 @@ The `summary` block + per-check `duration_ms` + stable check IDs are the scrapea
 
 ### 8.3 Edge Case + Backward-Compat Tests
 - Each §5 row (E1–E14) has a dedicated test.
-- **E10 superset guard (two-pronged, boomer #2 + guardian):**
+- **E10 superset guard (two-pronged, independent review #2 + safety review):**
   (a) assert the raw v2 JSON contains the literal v1 key strings `"id"`, `"domain"`, `"status"`, `"summary"`,
   `"evidence"`, `"remediation"` (per check) and `"schema"`, `"status"`, `"version"`, `"install_source"`,
   `"checks"` (top level) — catches an accidental rename that a decode-to-model test would miss;
@@ -399,7 +399,7 @@ renderer (T2) and the network check (T3). Reverting the PR restores v1 exactly.
 | Color codes leak into CI logs | Med | Low | TTY+`NO_COLOR` gating + non-TTY plain fallback (AC-5.4, E8) |
 | Timing flakiness | Med | Low | Injected monotonic clock (decision §4.4) |
 | Update check hangs | Low | Med | Bounded 3.0s; opt-in; timeout→skipped (E11) |
-| Over-engineering | Med | Med | `critical` dropped; every field maps 1:1 to lazycodex + a real gap; boomer gate |
+| Over-engineering | Med | Med | `critical` dropped; every field maps 1:1 to lazycodex + a real gap; independent review gate |
 
 ## 11. Success Metrics
 
@@ -418,12 +418,12 @@ renderer (T2) and the network check (T3). Reverting the PR restores v1 exactly.
       **now in scope** (T1, NG1 exception): probe seam widened to tri-state so an un-runnable probe maps to
       `.notVerifiable`, not `.notGranted`.
 - [ ] FOLLOW-UP-2 (declined for now, YAGNI): a `--json-v1` compatibility flag emitting the v1 schema string.
-      Declined: strategist found **zero** external schema-gating consumers in `Scripts/`, `.github/`, `tools/`;
+      Declined: architecture review found **zero** external schema-gating consumers in `Scripts/`, `.github/`, `tools/`;
       the prefix-match guidance (G6) + repo test updates suffice. Revisit only if a real strict consumer appears.
 
 ---
 
-## App-A: Ticket Split (strategist P1-2)
+## App-A: Ticket Split (architecture review P1-2)
 
 - **T1 — Data layer (highest risk):** schema v2 superset + explicit `Check` CodingKeys + `Summary` +
   `Category`/`Severity`/`duration_ms` + monotonic timing + monotonicity chokepoint + the 3 non-network
@@ -440,23 +440,23 @@ renderer (T2) and the network check (T3). Reverting the PR restores v1 exactly.
 
 | Source | Issue | Resolution |
 |--------|-------|------------|
-| boomer #1 | System Events `.notVerifiable` unreachable in production → AC dead | AC-1.4 reworded: total honest mapping, documented production yields pass/fail only, manual branch via injected state; §12 follow-up |
-| boomer #2 | `Check` has no CodingKeys; adding `duration_ms` risks renaming v1 keys | Explicit CodingKeys lists ALL keys (§4.2) + E10(a) literal-key + E10(b) frozen-struct tests |
-| boomer #3 / strategist P2-2 | `critical: Bool` redundant | Dropped (NG7) |
-| guardian P1-1 / strategist P2-6 | legacy external click dependency must not drift from runtime truth | Superseded by native CGEvent backend: the dependency check and resolver references are removed rather than kept as a fake green. |
-| guardian P1-2 | `allGranted` monotonicity emergent, not enforced | §4.2 explicit chokepoint guard + AC-1.5 per-input tests |
-| strategist P1-1 | schema string change breaks exact-equal consumers | G6 prefix-match guidance + v2-exact assertion test |
-| strategist P1-2 | split L into independently-revertable tickets | §App-A 4-ticket split |
-| strategist P2-1 | "order/position" guarantee unenforceable under `.sortedKeys` | G6 reworded: names+semantics+values, order not contractual |
-| strategist P2-3 | monotonic clock not wall-clock | §4.4 injected monotonic |
-| strategist P2-4 | reverse update source (curl primary) | §4.4 curl primary, gh fallback |
-| strategist P2-5 | `skipped→info` not warning | AC-4.1 total mapping `skipped→info` |
-| guardian P2 / boomer | exit-code standalone AC; status↔counts; --json precedence; E11/E12/E13 | AC-1.3, AC-3.5, AC-5.5/E14, E11/E12/E13 added |
-| guardian P2 (AC-6.4) | secret-leak guard for update check | AC-6.4 enumerated reasons + unauthenticated source |
-| boomer codex #1 (HIGH) | System Events `.notVerifiable` unreachable → false-RED on probe timeout | Probe seam widened to tri-state (NG1 exception, T1); AC-1.4 now live-reachable |
-| boomer codex #2 (HIGH) | v2 schema string is a real observable change for strict consumers | G6 documents it as observable + prefix-match; `--json-v1` declined (FOLLOW-UP-2, zero consumers) |
-| boomer codex #3 (HIGH) | `(()→String?)?` update seam collapses offline/parse/timeout → loses AC-6.3 reason | Typed `UpdateOutcome` enum seam (§4.1) carries enumerated reason |
-| boomer codex (MED) | opt-in `skipped` update degrades aggregate; not documented | AC-3.5 documents (consistent v1 semantics; `aggregateStatus` untouched) |
-| boomer codex (MED) | `--verbose` surfaces existing `evidence["command"]` (user's own local path, not a secret) | No new sensitive field introduced; verbose renders only existing non-credential evidence; AC-6.4 covers the one network field |
-| boomer codex (S3) | 3s default is not a hard bound under serial execution | §7 restated as empirical/typical, not a bound |
+| independent review #1 | System Events `.notVerifiable` unreachable in production → AC dead | AC-1.4 reworded: total honest mapping, documented production yields pass/fail only, manual branch via injected state; §12 follow-up |
+| independent review #2 | `Check` has no CodingKeys; adding `duration_ms` risks renaming v1 keys | Explicit CodingKeys lists ALL keys (§4.2) + E10(a) literal-key + E10(b) frozen-struct tests |
+| independent review #3 / architecture review P2-2 | `critical: Bool` redundant | Dropped (NG7) |
+| safety review P1-1 / architecture review P2-6 | legacy external click dependency must not drift from runtime truth | Superseded by native CGEvent backend: the dependency check and resolver references are removed rather than kept as a fake green. |
+| safety review P1-2 | `allGranted` monotonicity emergent, not enforced | §4.2 explicit chokepoint guard + AC-1.5 per-input tests |
+| architecture review P1-1 | schema string change breaks exact-equal consumers | G6 prefix-match guidance + v2-exact assertion test |
+| architecture review P1-2 | split L into independently-revertable tickets | §App-A 4-ticket split |
+| architecture review P2-1 | "order/position" guarantee unenforceable under `.sortedKeys` | G6 reworded: names+semantics+values, order not contractual |
+| architecture review P2-3 | monotonic clock not wall-clock | §4.4 injected monotonic |
+| architecture review P2-4 | reverse update source (curl primary) | §4.4 curl primary, gh fallback |
+| architecture review P2-5 | `skipped→info` not warning | AC-4.1 total mapping `skipped→info` |
+| safety review P2 / independent review | exit-code standalone AC; status↔counts; --json precedence; E11/E12/E13 | AC-1.3, AC-3.5, AC-5.5/E14, E11/E12/E13 added |
+| safety review P2 (AC-6.4) | secret-leak guard for update check | AC-6.4 enumerated reasons + unauthenticated source |
+| independent review #1 (HIGH) | System Events `.notVerifiable` unreachable → false-RED on probe timeout | Probe seam widened to tri-state (NG1 exception, T1); AC-1.4 now live-reachable |
+| independent review #2 (HIGH) | v2 schema string is a real observable change for strict consumers | G6 documents it as observable + prefix-match; `--json-v1` declined (FOLLOW-UP-2, zero consumers) |
+| independent review #3 (HIGH) | `(()→String?)?` update seam collapses offline/parse/timeout → loses AC-6.3 reason | Typed `UpdateOutcome` enum seam (§4.1) carries enumerated reason |
+| independent review (MED) | opt-in `skipped` update degrades aggregate; not documented | AC-3.5 documents (consistent v1 semantics; `aggregateStatus` untouched) |
+| independent review (MED) | `--verbose` surfaces existing `evidence["command"]` (user's own local path, not a secret) | No new sensitive field introduced; verbose renders only existing non-credential evidence; AC-6.4 covers the one network field |
+| independent review (S3) | 3s default is not a hard bound under serial execution | §7 restated as empirical/typical, not a bound |
 <!-- Sections not applicable to a local CLI diagnostic are marked N/A inline. -->

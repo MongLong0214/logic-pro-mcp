@@ -10,7 +10,7 @@
 
 ## 1. Objective
 
-Prove the fix against the real Logic Pro 12.3 with the same probes that reproduced the defect, on a **fresh audio track** (reporter parity; avoids the NG2 instrument-slot contamination — boomer R1-#6), and keep the strict live suite green.
+Prove the fix against the real Logic Pro 12.3 with the same probes that reproduced the defect, on a **fresh audio track** (reporter parity; avoids the NG2 instrument-slot contamination — independent review R1-#6), and keep the strict live suite green.
 
 ## 2. Acceptance Criteria
 

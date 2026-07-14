@@ -4,7 +4,7 @@
 **Priority**: P1 | **Size**: L (mechanical volume high) | **Risk**: M (wrong transform can mask a real regression)
 **Owns (EXCLUSIVE)**: EXISTING `Tests/*` + `docs/tickets/enterprise-refactor/DEAD-ASSERTION-LEDGER.md`, EXCLUDING the 7 Phase-1-created test files (SIGPIPERegressionTests, MCUFeedbackOrderingTests, MIDIFeedbackStatusByteTests, ExtractTrackStateHonestyTests, AXHelpersDowncastGuardTests, PermissionCheckerTriStateTests, SMFWriterDenominatorTests — those are owned by their WS and already follow the assertion rules). Runs ONLY after Phase-1 (WS1-7) is merged + green.
 **Depends on**: WS1-7 merged.
-**Structure (boomer ticket-R1 #5)**: 3 sub-units run SEQUENTIALLY by ONE agent (NOT parallel — test files cross-cut). Order: **WS8c → WS8a → WS8b**, full-suite green + commit after each.
+**Structure (independent review ticket-R1 #5)**: 3 sub-units run SEQUENTIALLY by ONE sequential owner (NOT parallel — test files cross-cut). Order: **WS8c → WS8a → WS8b**, full-suite green + commit after each.
 - **WS8c** (first): FakeAXRuntimeBuilder AX-helper promotion (into AccessibilityTestSupport.swift) + JSON-helper clone removal (→ sharedToolText/sharedJSONObject). First, so shared helpers exist before the assertion sweep edits the same files.
 - **WS8a** (second): the ~356 dead-assertion sweep + LEDGER + safety-critical flip-tests (AC1-AC4 below).
 - **WS8b** (third): new safety coverage in NEW files (AC5).

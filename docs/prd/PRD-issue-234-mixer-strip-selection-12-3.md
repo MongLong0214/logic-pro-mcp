@@ -1,7 +1,7 @@
 # PRD: Logic Pro 12.3 Mixer Strip Selection & Insert-Slot Enumeration Recovery (Issue #234)
 
-**Version**: 0.2 (post boomer R1)
-**Author**: Fable 5 (orchestrator) — implementation by codex gpt-5.5 xhigh
+**Version**: 0.2 (post independent review R1)
+**Author**: Product planning and implementation team
 **Date**: 2026-07-04
 **Status**: In Review
 **Size**: L
@@ -69,7 +69,7 @@ So the fix is **container selection + honesty**, not a rewrite of slot classific
 - [ ] G2: `logic_plugins get_inventory` on 12.3 returns the real insert chain (empty rows as `read_status:"empty"` items; occupied rows with names) — reproduction script flips from the §1.1 failures to successes.
 - [ ] G3: **Honesty gate**: `get_inventory` can never return State A with zero enumerated slots. Zero slots ⇒ State B `readback_unavailable` with a distinct `plugins_unknown_reason` (e.g. `insert_section_not_enumerable`) and a recovery hint. A healthy strip with a visible Audio FX section always exposes ≥ 1 slot item (the empty append row), so `plugins:[]` under State A becomes structurally impossible.
 - [ ] G4: `logic_mixer insert_plugin`, `logic_plugins insert_verified`, `logic_plugins set_param_verified` reach slot addressing on 12.3 (their pre-existing gates unchanged); live E2E inserts Gain on the scratch project and reads it back verified.
-- [ ] G5 (secondary, from issue): a plugin editor window (live 12.3 evidence: `AXWindow subrole=AXDialog`, title = track name, chrome incl. close-button attribute + `bypass`/`compare` checkboxes) is recognized as a plugin editor **internally** and excluded from blocking-dialog classification, so unrelated ops (`project.save`, `track.select`) are no longer refused while a plugin window is open. Public behavior (boomer R2b-#4): `dialogPresent()` → false, `blockingDialogInfo()` → nil, health reports no blocking dialog — no wire-shape addition. Unknown/unmatched window shapes keep the current fail-closed "blocking" classification.
+- [ ] G5 (secondary, from issue): a plugin editor window (live 12.3 evidence: `AXWindow subrole=AXDialog`, title = track name, chrome incl. close-button attribute + `bypass`/`compare` checkboxes) is recognized as a plugin editor **internally** and excluded from blocking-dialog classification, so unrelated ops (`project.save`, `track.select`) are no longer refused while a plugin window is open. Public behavior (independent review R2b-#4): `dialogPresent()` → false, `blockingDialogInfo()` → nil, health reports no blocking dialog — no wire-shape addition. Unknown/unmatched window shapes keep the current fail-closed "blocking" classification.
 - [ ] G6: Regression fixtures for both tree shapes (12.2-style and 12.3-style, built on `FakeAXRuntimeBuilder`) lock the selection, enumeration, honesty-gate, and dialog-classification behaviors; full suite + live 12.3 E2E green.
 
 ### 2.2 Non-Goals
@@ -79,8 +79,8 @@ So the fix is **container selection + honesty**, not a rewrite of slot classific
 - NG3: Localizing the new plugin-window chrome labels beyond the AXLocalePolicy pattern's known variants (English canonical + verified Korean where known). Unmatched locales conservatively remain "blocking" — no behavior regression.
 - NG4: Any new MCP tool/command surface or wire-shape breaking change. (`plugins_unknown_reason` gains one new enumerated value; State A payload shape unchanged.)
 - NG5: Logic ≤ 12.1 support beyond the existing legacy `AXIdentifier=="Mixer"` short-circuit (kept intact for fake trees / older builds).
-- NG6 (boomer R1-#1): Mixer **view-mode/filter index fidelity** (Single view or strip-type filters can make visible strip index diverge from project track index). This is a **pre-existing** property of `strips[track]` addressing on 12.2 and every prior release — not introduced or worsened by this fix. Out of scope; filed as a follow-up issue post-merge. Mitigation here: the live E2E preflight asserts the mixer is in "Tracks" view (12.3 exposes the toolbar radio group) so the release gate itself can't be silently mis-indexed.
-- NG7 (boomer R1-#2): Scanning a **detached mixer window** (Window > Open Mixer on another display). Pre-existing scope: `getMixerArea` searches `mainWindow()` only; when the in-window mixer pane is hidden the existing reveal path opens it via View > Show Mixer, restoring function regardless of a detached mixer's presence. Unchanged behavior; documented; follow-up only if user demand appears.
+- NG6 (independent review R1-#1): Mixer **view-mode/filter index fidelity** (Single view or strip-type filters can make visible strip index diverge from project track index). This is a **pre-existing** property of `strips[track]` addressing on 12.2 and every prior release — not introduced or worsened by this fix. Out of scope; filed as a follow-up issue post-merge. Mitigation here: the live E2E preflight asserts the mixer is in "Tracks" view (12.3 exposes the toolbar radio group) so the release gate itself can't be silently mis-indexed.
+- NG7 (independent review R1-#2): Scanning a **detached mixer window** (Window > Open Mixer on another display). Pre-existing scope: `getMixerArea` searches `mainWindow()` only; when the in-window mixer pane is hidden the existing reveal path opens it via View > Show Mixer, restoring function regardless of a detached mixer's presence. Unchanged behavior; documented; follow-up only if user demand appears.
 
 ## 3. User Stories & Acceptance Criteria
 
@@ -106,7 +106,7 @@ So the fix is **container selection + honesty**, not a rewrite of slot classific
 - [ ] AC-3.1: Given any strip whose enumeration yields 0 slots, when `get_inventory` runs, then response is State B `readback_unavailable` with `plugins_unknown_reason:"insert_section_not_enumerable"`, `safe_to_retry:true`, and a recovery hint naming the likely causes (mixer layout drift / strip type without inserts, e.g. Master).
 - [ ] AC-3.2: State A with `plugins:[]` is asserted impossible at the unit level (the State A encoder path for get_inventory requires ≥ 1 slot).
 - [ ] AC-3.3: The toolbar-selected-as-mixer scenario (12.3 tree + OLD selection behavior forced in a fixture) would flow into State B, not State A — proven by a fixture that feeds a zero-slot "strip" through the get_inventory path.
-- [ ] AC-3.4 (boomer R1-#3): The slot-addressing guards of the **write paths** (`insert_verified` ~line 1021, `set_param_verified` ~line 631, `liveInsertSlot` ~line 1588, legacy `insert_plugin` visible-slots error) distinguish **zero enumerable slots** from **index beyond a non-empty chain**: zero-slot failures stay State C (writes never soften to B) but carry `what_was_observed` naming `insert_section_not_enumerable` semantics plus the same recovery hint as AC-3.1, instead of the bare "slot N is out of range (0 slots)". `fullStripInventory` needs no gate: insert/param State A already requires post-write observed readback of the requested plugin at the requested slot, so a blind tree cannot false-succeed (OQ-2 resolved — rationale locked here).
+- [ ] AC-3.4 (independent review R1-#3): The slot-addressing guards of the **write paths** (`insert_verified` ~line 1021, `set_param_verified` ~line 631, `liveInsertSlot` ~line 1588, legacy `insert_plugin` visible-slots error) distinguish **zero enumerable slots** from **index beyond a non-empty chain**: zero-slot failures stay State C (writes never soften to B) but carry `what_was_observed` naming `insert_section_not_enumerable` semantics plus the same recovery hint as AC-3.1, instead of the bare "slot N is out of range (0 slots)". `fullStripInventory` needs no gate: insert/param State A already requires post-write observed readback of the requested plugin at the requested slot, so a blind tree cannot false-succeed (OQ-2 resolved — rationale locked here).
 
 ### US-4: Plugin editor window ≠ blocking modal (secondary, issue's "Secondary observation")
 **As a** user who leaves plugin editor windows open, **I want** unrelated ops to proceed, **so that** the v3.7.2 modal guard only blocks on true modals.
@@ -115,7 +115,7 @@ So the fix is **container selection + honesty**, not a rewrite of slot classific
 - [ ] AC-4.2: Given fixture windows for true modals (save sheet: AXDialog with OK/Cancel-style buttons and no plugin chrome; System Events dialog), classification remains **blocking** (regression).
 - [ ] AC-4.3: Live on 12.3: with a plugin editor window open, `project.save` succeeds; with it closed, behavior unchanged. (Reference evidence: live dump 2026-07-04 — editor window is `AXDialog`, title 'Deluxe Classic' = track name.)
 - [ ] AC-4.4: A window matching *some but not all* of the plugin-chrome signature stays blocking (fail-closed conservatism) — variants: bypass without compare-or-link, link/compare without bypass, full checkbox chrome but **no close-button attribute**, right labels on non-checkbox roles.
-- [ ] AC-4.5 (boomer R1-#4): `StatePoller` semantics are explicit and test-pinned: with a plugin-editor fixture window present, `dialogPresent()` reports **false** (cache lifecycle proceeds normally). Rationale for not splitting "blocking" from "occlusion": plugin editor windows predate 12.3 and were **never** AXDialog-classified before 12.3 (the v3.7.2 guard shipped against 12.2 where editors are plain windows — this is why the reporter hit the false-block only on 12.3). Excluding them from `dialogPresent` for *both* consumers restores the 12.2 baseline exactly; keeping them cache-occluding would *introduce* a new 12.3-only behavior divergence, not preserve one.
+- [ ] AC-4.5 (independent review R1-#4): `StatePoller` semantics are explicit and test-pinned: with a plugin-editor fixture window present, `dialogPresent()` reports **false** (cache lifecycle proceeds normally). Rationale for not splitting "blocking" from "occlusion": plugin editor windows predate 12.3 and were **never** AXDialog-classified before 12.3 (the v3.7.2 guard shipped against 12.2 where editors are plain windows — this is why the reporter hit the false-block only on 12.3). Excluding them from `dialogPresent` for *both* consumers restores the 12.2 baseline exactly; keeping them cache-occluding would *introduce* a new 12.3-only behavior divergence, not preserve one.
 
 ## 4. Technical Design
 
@@ -137,7 +137,7 @@ One fix point heals all consumers.
 
 ### 4.2 Data Model Changes
 
-None on disk. Wire: `plugins_unknown_reason` gains value `insert_section_not_enumerable` (State B). Plugin-editor recognition is **internal only** (boomer R2b-#4): editors simply stop appearing as blockers — `dialogPresent()` false, `blockingDialogInfo()` nil, no new wire field. No State A shape change.
+None on disk. Wire: `plugins_unknown_reason` gains value `insert_section_not_enumerable` (State B). Plugin-editor recognition is **internal only** (independent review R2b-#4): editors simply stop appearing as blockers — `dialogPresent()` false, `blockingDialogInfo()` nil, no new wire field. No State A shape change.
 
 ### 4.3 API Design
 
@@ -151,9 +151,9 @@ N/A — no new endpoints/commands. Behavior deltas only (G2/G3/G5), all in the h
 | D2: `mixerChannelStrips` all-children fallback | (a) delete fallback; (b) keep globally; (c) keep ONLY for the legacy `AXIdentifier=="Mixer"` path (and thus fake trees/old builds), never for name-based candidate discovery/ranking | (c) | Fake test trees and pre-12.2 builds rely on the identifier path; name-based candidate discovery is where the fallback lies about strip count (toolbar widgets counted as 8 "strips") |
 | D3: Honesty gate location | (a) inside `audioPluginInsertSlots`; (b) in `defaultGetPluginInventory` (and slot-addressing gates) where State is encoded | (b) | The enumerator legitimately returns [] for non-strip elements; only the op layer knows "this was supposed to be a track strip" and owns HC state encoding |
 | D4: Plugin-editor detection (amended 2026-07-05 after T4 live) | (a) window title == track name (needs track lookup, ambiguous); (b) chrome signature: AXDialog subrole + window exposes `kAXCloseButtonAttribute` (locale-neutral structural conjunct; live-evidenced — the 2026-07-04 probe closed the editor via exactly this attribute) + bypass-labeled toggle + **compare-OR-link**-labeled toggle, where a toggle is an `AXCheckBox` **or** `AXButton` direct child (LabelSets, conjunctive; T4 live evidence: `axwhy234.out` — a freshly-inserted Gain editor exposes only link+bypass, Compare being preset-state-dependent chrome; `axwhy234b.out` — the SAME window's toggles role-flap `AXCheckBox`↔`AXButton` with window key/focus state, so a checkbox-only role filter missed unfocused editors and live `project.save` was refused twice before this final form); (c) treat all AXDialogs with sliders as editors | (b) | (a) races renames and duplicates; (c) over-broad (a real modal could host a slider). (b) is Logic's own plugin-window chrome, stable across plugins, fail-closed on partial match, extensible per-locale via AXLocalePolicy. The close conjunct is the ATTRIBUTE, not the child button's localized `desc='close'` text (locale-fragile); true modal sheets do not expose a close button, adding a structural discriminator on top of the two checkbox labels |
-| D5: Where E2E truth comes from | (a) unit fixtures only; (b) fixtures + live 12.3 probe replay (same script as reproduction) — **on a fresh audio track** (boomer R1-#6: the scratch instrument strip's instrument slot has occupied-slot chrome and would contaminate Gain readback assertions; the reporter's setup is audio tracks) | (b) | This bug class (Apple AX drift) is exactly what fixtures can't discover — the repro script doubles as the verification harness, per repo live-verify practice |
-| D6: Zero-slot reason granularity (boomer R1-#5) | (a) split reasons (`insert_section_hidden` / `strip_has_no_inserts` / drift) with `safe_to_retry:false` for permanent strip types; (b) single `insert_section_not_enumerable` + `safe_to_retry:true` + hint naming both causes | (b) | (a) requires *distinguishing* Master-type strips from label/role drift — but the only distinguishing markers (audio plug-in / MIDI plug-in / EQ rows) are exactly the things drift destroys, and strip names are locale-dependent and user-renamable. Claiming `strip_has_no_inserts` on evidence we cannot verify would be a new false-confidence channel — the opposite of this PRD's honesty goal. Retry after revealing/reconfiguring is legitimately possible; retry on Master is a harmless no-op |
-| D7: Plugin-editor exclusion breadth (boomer R1-#4) | (a) non-blocking for dispatcher guard, still occluding for StatePoller; (b) excluded from `dialogPresent` for both consumers | (b) | Restores the pre-12.3 baseline (editors were plain windows on 12.2, never dialog-classified); (a) would introduce a novel 12.3-only cache behavior with no 12.2 precedent. AC-4.5 pins it with a StatePoller-level test |
+| D5: Where E2E truth comes from | (a) unit fixtures only; (b) fixtures + live 12.3 probe replay (same script as reproduction) — **on a fresh audio track** (independent review R1-#6: the scratch instrument strip's instrument slot has occupied-slot chrome and would contaminate Gain readback assertions; the reporter's setup is audio tracks) | (b) | This bug class (Apple AX drift) is exactly what fixtures can't discover — the repro script doubles as the verification harness, per repo live-verify practice |
+| D6: Zero-slot reason granularity (independent review R1-#5) | (a) split reasons (`insert_section_hidden` / `strip_has_no_inserts` / drift) with `safe_to_retry:false` for permanent strip types; (b) single `insert_section_not_enumerable` + `safe_to_retry:true` + hint naming both causes | (b) | (a) requires *distinguishing* Master-type strips from label/role drift — but the only distinguishing markers (audio plug-in / MIDI plug-in / EQ rows) are exactly the things drift destroys, and strip names are locale-dependent and user-renamable. Claiming `strip_has_no_inserts` on evidence we cannot verify would be a new false-confidence channel — the opposite of this PRD's honesty goal. Retry after revealing/reconfiguring is legitimately possible; retry on Master is a harmless no-op |
+| D7: Plugin-editor exclusion breadth (independent review R1-#4) | (a) non-blocking for dispatcher guard, still occluding for StatePoller; (b) excluded from `dialogPresent` for both consumers | (b) | Restores the pre-12.3 baseline (editors were plain windows on 12.2, never dialog-classified); (a) would introduce a novel 12.3-only cache behavior with no 12.2 precedent. AC-4.5 pins it with a StatePoller-level test |
 
 ## 5. Edge Cases & Error Handling
 
@@ -169,8 +169,8 @@ N/A — no new endpoints/commands. Behavior deltas only (G2/G3/G5), all in the h
 | E8 | True modal (save sheet / System Events) while G5 active | Still blocking (AC-4.2, fail-closed) | P0 |
 | E9 | Window matching partial plugin chrome (e.g. AXDialog with bypass but no compare) | Blocking (AC-4.4) | P1 |
 | E10 | Future Apple drift makes enumeration blind again | Honesty gate: State B with diagnostics, never false State A (US-3) | P0 |
-| E11 | Mixer in Single view / strip-type filters off (boomer R1-#1) | Pre-existing index-fidelity limitation (NG6): unchanged by this fix; live E2E preflight asserts Tracks view; follow-up issue filed post-merge | P2 (this PR) |
-| E12 | Detached mixer window on second display (boomer R1-#2) | Pre-existing scope (NG7): pane-reveal path restores function; unchanged; documented | P2 (this PR) |
+| E11 | Mixer in Single view / strip-type filters off (independent review R1-#1) | Pre-existing index-fidelity limitation (NG6): unchanged by this fix; live E2E preflight asserts Tracks view; follow-up issue filed post-merge | P2 (this PR) |
+| E12 | Detached mixer window on second display (independent review R1-#2) | Pre-existing scope (NG7): pane-reveal path restores function; unchanged; documented | P2 (this PR) |
 
 ## 6. Security & Permissions
 
@@ -203,7 +203,7 @@ Monitoring: State B `insert_section_not_enumerable` occurrences in the wild sign
 Each row of §5 maps to at least one test (E1-E5, E8-E10 unit; E6-E7 live).
 
 ### 8.4 Live E2E (Logic 12.3, scratch project — release gate)
-On a **fresh audio track** in the scratch project (boomer R1-#6; reporter parity — the instrument strip's instrument-slot chrome would contaminate readback assertions): preflight asserts mixer "Tracks" view via the 12.3 toolbar radio group (NG6 guard) → replay reproduction script post-fix: get_inventory (≥1 slot, all `read_status:"empty"`) → insert_verified Gain State A → get_inventory shows Gain occupied at insert 0 → set_param path reaches slot addressing → plugin window open + `project.save` OK and `dialogPresent` false (G5/AC-4.5) → strict live suite (`Scripts/live-e2e-test.py`) 352/352 baseline preserved (updating any pinned expectations that assert the old dishonest shapes). Instrument-strip inventory is additionally *recorded* (not asserted) as evidence for the NG2 follow-up issue.
+On a **fresh audio track** in the scratch project (independent review R1-#6; reporter parity — the instrument strip's instrument-slot chrome would contaminate readback assertions): preflight asserts mixer "Tracks" view via the 12.3 toolbar radio group (NG6 guard) → replay reproduction script post-fix: get_inventory (≥1 slot, all `read_status:"empty"`) → insert_verified Gain State A → get_inventory shows Gain occupied at insert 0 → set_param path reaches slot addressing → plugin window open + `project.save` OK and `dialogPresent` false (G5/AC-4.5) → strict live suite (`Scripts/live-e2e-test.py`) 352/352 baseline preserved (updating any pinned expectations that assert the old dishonest shapes). Instrument-strip inventory is additionally *recorded* (not asserted) as evidence for the NG2 follow-up issue.
 
 ## 9. Rollout Plan
 
@@ -222,7 +222,7 @@ Single revert of the PR restores v3.7.4 behavior. No data/state to unwind.
 | Dependency | Owner | Status | Risk if Delayed |
 |-----------|-------|--------|-----------------|
 | Live Logic 12.3 session for E2E gate | local (already running) | Ready | Can't certify G2/G4/G5 live |
-| codex gpt-5.5 xhigh (implementation) | pipeline | Ready | — |
+| implementation | pipeline | Ready | — |
 
 ### 10.2 Risks
 | Risk | Probability | Impact | Mitigation |
@@ -245,16 +245,16 @@ Single revert of the PR restores v3.7.4 behavior. No data/state to unwind.
 ## 12. Open Questions
 
 - [ ] OQ-1: Korean/localized label for the plugin-window `compare` checkbox (English UI confirmed live; other locales unverified). Conservative fallback (stay blocking) until confirmed — tracked in the dialog ticket.
-- [x] OQ-2: **Resolved** (boomer R1-#3 → AC-3.4): write-path slot-addressing guards gain zero-slot-distinct State C diagnostics in this PR; `fullStripInventory` unchanged (post-write observed-readback already makes false success impossible on a blind tree).
+- [x] OQ-2: **Resolved** (independent review R1-#3 → AC-3.4): write-path slot-addressing guards gain zero-slot-distinct State C diagnostics in this PR; `fullStripInventory` unchanged (post-write observed-readback already makes false success impossible on a blind tree).
 - [ ] OQ-3: File follow-up issues after merge: (a) instrument-slot misreport (NG2), (b) mixer view-mode/filter index fidelity (NG6).
 
 ## 13. Review History
 
 | Round | Reviewer | Verdict | Disposition |
 |-------|----------|---------|-------------|
-| R1 | boomer (codex gpt-5.5 xhigh, read-only) | HAS_ISSUES (4×P1, 3×P2) | #3→AC-3.4 accepted; #4→AC-4.5/D7 (both-consumer exclusion, 12.2-baseline rationale); #6→§8.4 audio-track gate; #7→`axdialog234.out` artifact + Appendix A; #1→NG6/E11 (pre-existing, follow-up); #2→NG7/E12 (pre-existing, documented); #5→D6 (split rejected: indistinguishable without a new false-confidence channel) |
+| R1 | independent review | HAS_ISSUES (4×P1, 3×P2) | #3→AC-3.4 accepted; #4→AC-4.5/D7 (both-consumer exclusion, 12.2-baseline rationale); #6→§8.4 audio-track gate; #7→`axdialog234.out` artifact + Appendix A; #1→NG6/E11 (pre-existing, follow-up); #2→NG7/E12 (pre-existing, documented); #5→D6 (split rejected: indistinguishable without a new false-confidence channel) |
 
-## Appendix A — Plugin-editor window live evidence (boomer R1-#7; `axdialog234.out`, 2026-07-04, Logic 12.3)
+## Appendix A — Plugin-editor window live evidence (independent review R1-#7; `axdialog234.out`, 2026-07-04, Logic 12.3)
 
 ```
 AXPress open -> success

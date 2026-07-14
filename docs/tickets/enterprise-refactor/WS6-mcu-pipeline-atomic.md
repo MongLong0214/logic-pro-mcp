@@ -2,7 +2,7 @@
 
 **PRD**: G1, §3.2 WS6, §4 E5/E5b
 **Priority**: P1 (concurrency correctness) | **Size**: M | **Risk**: L-M
-**Owns (EXCLUSIVE)**: `Channels/MCUChannel.swift` + `Server/LogicProServer.swift` (MCU fan-out only — WS6 owns ALL of this file so WS4 never touches it) + `MIDI/{MCUFeedbackParser.swift, MIDIFeedback.swift, MCUProtocol.swift}` + `State/StateCache.swift` (boomer ticket-R1 #1 — AC3 adds `updateMCUConnection(mutator:)`; **WS4 MUST NOT touch StateCache.swift**) + new test files `Tests/LogicProMCPTests/{MCUFeedbackOrderingTests,MIDIFeedbackStatusByteTests}.swift` (WS6-created, excluded from WS8). MUST NOT touch other MIDI/ files (→ WS5), other Channels (→ WS1/WS2), or existing test files.
+**Owns (EXCLUSIVE)**: `Channels/MCUChannel.swift` + `Server/LogicProServer.swift` (MCU fan-out only — WS6 owns ALL of this file so WS4 never touches it) + `MIDI/{MCUFeedbackParser.swift, MIDIFeedback.swift, MCUProtocol.swift}` + `State/StateCache.swift` (independent review ticket-R1 #1 — AC3 adds `updateMCUConnection(mutator:)`; **WS4 MUST NOT touch StateCache.swift**) + new test files `Tests/LogicProMCPTests/{MCUFeedbackOrderingTests,MIDIFeedbackStatusByteTests}.swift` (WS6-created, excluded from WS8). MUST NOT touch other MIDI/ files (→ WS5), other Channels (→ WS1/WS2), or existing test files.
 **Parallel-safe with**: WS1/2/3/4/5/7 (LogicProServer & the 3 MIDI files are WS6-exclusive).
 
 ## 1. Objective
@@ -16,7 +16,7 @@ Replace BOTH per-event unstructured `Task{}` fan-outs (MCUChannel:180 + LogicPro
 - AC5: Dead MCUProtocol HandshakeResult/parseDeviceResponse + unconstructable `.timeout` (audit #29) deleted.
 - AC6: `swift test --no-parallel` green + NEW parser/lifecycle tests (below). Severity note: this is P1 not P0 — set_volume/set_pan are [.accessibility]-primary with AX readback (insulated); only mixer.set_master_volume [.mcu] + get_state depend on the echo.
 
-## 3. TDD / Verification (boomer PRD-R2 #5 + R2 #3 REQUIRED before merge)
+## 3. TDD / Verification (independent review PRD-R2 #5 + R2 #3 REQUIRED before merge)
 NEW tests, RED-first:
 - MCU stream lifecycle (E5): **burst FIFO ordering** (feed e1,e2,e3 rapidly → parser sees them in order); **start-stop-start** (no crash, fresh stream); **post-stop feedback ignored** (events after stop() don't mutate cache); **no parser task leak** (task cancelled on stop).
 - MIDIFeedback status-byte (E5b): **realtime interleaving** (0xF8/0xFA mid-message must not corrupt running status); **System Common consumption** (0xF1-0xF6 consumed without dropping the following channel-voice event); the `[0xF8,0x90,0x3C,0x64]`→note-on trace.

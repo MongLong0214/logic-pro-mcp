@@ -14,7 +14,7 @@ Stop classifying Logic 12.3 plugin-editor windows (`AXWindow subrole=AXDialog`, 
 
 ## 2. Acceptance Criteria
 
-- [ ] AC-1 (PRD AC-4.1, D4 normative signature — boomer R2-#1): Plugin-editor fixture window (subrole `AXDialog` AND window exposes `kAXCloseButtonAttribute` AND direct-children chrome: bypass-labeled `AXCheckBox` AND compare-labeled `AXCheckBox`) → `dialogPresent()` false, `blockingDialogInfo()` nil — asserted through these **public** surfaces (boomer R2-#5: `isBlockingDialogWindow` is private; do not widen visibility unless unavoidable, and then only to `internal` with rationale).
+- [ ] AC-1 (PRD AC-4.1, D4 normative signature — independent review R2-#1): Plugin-editor fixture window (subrole `AXDialog` AND window exposes `kAXCloseButtonAttribute` AND direct-children chrome: bypass-labeled `AXCheckBox` AND compare-labeled `AXCheckBox`) → `dialogPresent()` false, `blockingDialogInfo()` nil — asserted through these **public** surfaces (independent review R2-#5: `isBlockingDialogWindow` is private; do not widen visibility unless unavoidable, and then only to `internal` with rationale).
 - [ ] AC-2 (PRD AC-4.2): True-modal fixtures stay blocking: (a) save sheet (`AXDialog`, buttons Save/Don't Save/Cancel, no close-button attribute, no plugin chrome); (b) `AXSystemDialog`; (c) titled dialog with OK/Cancel.
 - [ ] AC-3 (PRD AC-4.4): Partial chrome stays blocking: bypass without compare; compare without bypass; bypass+compare but **no `kAXCloseButtonAttribute`**; right labels on non-checkbox roles.
 - [ ] AC-4: Keyboard-layout overlay exception unchanged (existing tests green).
@@ -32,7 +32,7 @@ Stop classifying Logic 12.3 plugin-editor windows (`AXWindow subrole=AXDialog`, 
 | 2 | `testBlockingDialogInfoNilWithPluginEditor` | Unit | Same | `blockingDialogInfo() == nil` (FAILS on main) |
 | 3 | `testSaveSheetStillBlocking` | Unit | AXDialog + Save/Cancel buttons, no close attribute, no chrome | blocking (PASSES on main — regression pin) |
 | 4 | `testSystemDialogStillBlocking` | Unit | AXSystemDialog subrole | blocking (pin) |
-| 5 | `testPartialChromeStaysBlocking` | Unit (4 variants — boomer R2-#1) | bypass-only / compare-only / bypass+compare without close attribute / labels on non-checkbox roles | blocking (pins + fail-closed proof for new code) |
+| 5 | `testPartialChromeStaysBlocking` | Unit (4 variants — independent review R2-#1) | bypass-only / compare-only / bypass+compare without close attribute / labels on non-checkbox roles | blocking (pins + fail-closed proof for new code) |
 | 6 | `testEditorPlusRealDialogStillReportsDialog` | Unit | Editor window AND save sheet both present | `dialogPresent() == true`, info reports the sheet |
 | 7 | `testStatePollerCacheLifecycleWithEditorOpen` | Unit | StatePoller runtime with `dialogPresent` wired through the real classifier over the editor fixture | cache clear/poll proceeds (AC-5) |
 
@@ -55,7 +55,7 @@ Stop classifying Logic 12.3 plugin-editor windows (`AXWindow subrole=AXDialog`, 
 ### 4.2 Implementation Steps (Green Phase)
 
 1. `isPluginEditorWindow`: window subrole == AXDialog AND window exposes `kAXCloseButtonAttribute` AND among **direct children**: ≥1 `AXCheckBox` whose search text matches `pluginBypassControl` AND ≥1 `AXCheckBox` matching `pluginWindowCompareControl`. Conjunctive; any miss → not an editor (stays blocking). Close conjunct uses the ATTRIBUTE (locale-neutral; live-evidenced by `axdialog234.out` closing the window through it), never the child's `desc='close'` text.
-2. `isBlockingDialogWindow` (~163): `return !isKeyboardLayoutOverlayWindow(…) && !isPluginEditorWindow(…)`. Keep helpers private; tests assert via `dialogPresent()`/`blockingDialogInfo()` (boomer R2-#5).
+2. `isBlockingDialogWindow` (~163): `return !isKeyboardLayoutOverlayWindow(…) && !isPluginEditorWindow(…)`. Keep helpers private; tests assert via `dialogPresent()`/`blockingDialogInfo()` (independent review R2-#5).
 3. No signature change to `dialogPresent`/`blockingDialogInfo`/StatePoller wiring — the classifier fix heals `DispatcherSupport.swift:161`, `StatePoller.swift:51`, `LogicProServer.swift:330` consumers automatically (D7).
 
 ### 4.3 Refactor Phase
@@ -67,7 +67,7 @@ Stop classifying Logic 12.3 plugin-editor windows (`AXWindow subrole=AXDialog`, 
 - EC-3: unverified locale → conservative blocking (AC-6).
 
 ## 6. Review Checklist
-- [ ] Red: 테스트 #1/#2/#7 FAILED on this branch 확인 (#7은 main에서 editor가 blocking으로 분류되어 StatePoller가 캐시 갱신을 억제하므로 red); #3/#4/#5/#6 PASS (pins — boomer R2b-#3 corrected)
+- [ ] Red: 테스트 #1/#2/#7 FAILED on this branch 확인 (#7은 main에서 editor가 blocking으로 분류되어 StatePoller가 캐시 갱신을 억제하므로 red); #3/#4/#5/#6 PASS (pins — independent review R2b-#3 corrected)
 - [ ] Green: 전부 PASSED
 - [ ] AC 전부 충족
 - [ ] 기존 dialog-filter/StatePoller/#190 진단 테스트 무손상

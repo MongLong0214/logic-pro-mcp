@@ -10,7 +10,7 @@
 ---
 
 ## 1. Objective
-라이브 Logic 없이 완결되는 순수 유닛 파트: SMF 파서와 export 전용 임시파일 매니저. (boomer 티켓리뷰 #1로 T5에서 분할)
+라이브 Logic 없이 완결되는 순수 유닛 파트: SMF 파서와 export 전용 임시파일 매니저. (independent review 티켓리뷰 #1로 T5에서 분할)
 
 ## 2. Acceptance Criteria
 - [ ] AC-1: `SMFReader` — format 0/1, division(PPQN) tick→bar/beat, tempo/time-sig meta, note on/off 페어링. 노트 출력: `pitch, velocity, start_bar, start_beat, duration_beats, channel(1-based)`
