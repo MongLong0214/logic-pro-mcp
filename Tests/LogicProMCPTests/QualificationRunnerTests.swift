@@ -1735,7 +1735,7 @@ struct QualificationRunnerTests {
             owningIssue: owningIssue,
             userImpact: userImpact,
             affectedCapability: affectedCapability,
-            affectsDefaultProfile: false,
+            affectsDefaultProfile: true,
             expiryVersion: expiryVersion,
             releaseNoteVisible: true
         )

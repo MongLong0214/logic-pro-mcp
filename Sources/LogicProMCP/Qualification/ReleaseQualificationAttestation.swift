@@ -436,6 +436,9 @@ struct QualificationWaiverValidator {
             if waiver.affectedCapability.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 issues.append(.invalidField(caseID: caseID, field: "affectedCapability"))
             }
+            if !waiver.releaseNoteVisible {
+                issues.append(.invalidField(caseID: caseID, field: "releaseNoteVisible"))
+            }
             if SemanticVersion(waiver.expiryVersion) == nil {
                 issues.append(.invalidField(caseID: caseID, field: "expiryVersion"))
             }

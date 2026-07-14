@@ -559,6 +559,7 @@ struct QualificationGateTests {
         #expect(SemanticVersion("01.2.3") == nil)
         #expect(SemanticVersion("1.2.3-01") == nil)
         #expect(SemanticVersion("1.2.3-한글") == nil)
+        #expect(SemanticVersion("1.2.3+01") != nil)
     }
 
     @Test func oversizedNumericPrereleaseKeepsNumericPrecedence() throws {
@@ -749,7 +750,7 @@ struct QualificationGateTests {
             owningIssue: owningIssue,
             userImpact: "Optional capability unavailable",
             affectedCapability: affectedCapability,
-            affectsDefaultProfile: false,
+            affectsDefaultProfile: true,
             expiryVersion: expiryVersion,
             releaseNoteVisible: true
         )

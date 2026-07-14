@@ -116,7 +116,9 @@ struct PromotionGate {
                     waiver.governsOperation(
                         caseID: operationCase.id,
                         operationID: operationCase.operationID
-                    ) && !expiredWaiverIDs.contains(waiver.caseID)
+                    ) && waiver.affectsDefaultProfile
+                        && waiver.releaseNoteVisible
+                        && !expiredWaiverIDs.contains(waiver.caseID)
                 }
             if !operationPassed && !operationWaived {
                 rejections.append(.requiredOperationNotSatisfied(
@@ -234,6 +236,8 @@ struct PromotionGate {
         return waivers.contains {
             $0.caseID == axis.key
                 && $0.governsHostAxisAvailability
+                && $0.affectsDefaultProfile
+                && $0.releaseNoteVisible
                 && !expiredWaiverIDs.contains($0.caseID)
         }
     }
@@ -297,7 +301,9 @@ struct SemanticVersion: Comparable {
         let withoutBuild = value.split(separator: "+", maxSplits: 1, omittingEmptySubsequences: false)
         guard withoutBuild.count <= 2,
               withoutBuild.allSatisfy({ !$0.isEmpty }),
-              withoutBuild.dropFirst().allSatisfy({ Self.validIdentifiers($0) }) else {
+              withoutBuild.dropFirst().allSatisfy({
+                  Self.validIdentifiers($0, rejectNumericLeadingZero: false)
+              }) else {
             return nil
         }
         let releaseParts = withoutBuild[0].split(
@@ -307,7 +313,9 @@ struct SemanticVersion: Comparable {
         )
         guard releaseParts.count <= 2,
               releaseParts.allSatisfy({ !$0.isEmpty }),
-              releaseParts.dropFirst().allSatisfy({ Self.validIdentifiers($0) }) else {
+              releaseParts.dropFirst().allSatisfy({
+                  Self.validIdentifiers($0, rejectNumericLeadingZero: true)
+              }) else {
             return nil
         }
         let parts = releaseParts[0].split(separator: ".", omittingEmptySubsequences: false)
@@ -348,14 +356,18 @@ struct SemanticVersion: Comparable {
         return lhs.prerelease.count < rhs.prerelease.count
     }
 
-    private static func validIdentifiers(_ value: Substring) -> Bool {
+    private static func validIdentifiers(
+        _ value: Substring,
+        rejectNumericLeadingZero: Bool
+    ) -> Bool {
         value.split(separator: ".", omittingEmptySubsequences: false).allSatisfy { identifier in
             !identifier.isEmpty
                 && identifier.utf8.allSatisfy {
                     (48...57).contains($0) || (65...90).contains($0)
                         || (97...122).contains($0) || $0 == 45
                 }
-                && (!isASCIINumeric(identifier) || identifier == "0" || identifier.first != "0")
+                && (!rejectNumericLeadingZero || !isASCIINumeric(identifier)
+                    || identifier == "0" || identifier.first != "0")
         }
     }
 
