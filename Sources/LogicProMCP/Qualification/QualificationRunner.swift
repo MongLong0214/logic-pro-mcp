@@ -1335,12 +1335,12 @@ struct QualificationRunner: Sendable {
                 return false
             }
             switch evidence.deferral?.code {
-            case .liveMutationNotRun, .operationUnavailable:
+            case .some(.liveMutationNotRun), .some(.operationUnavailable):
                 return evidence.operationIsError == true
-            case .semanticMismatch, .semanticValidatorUnavailable:
+            case .some(.semanticMismatch), .some(.semanticValidatorUnavailable):
                 return evidence.operationIsError == false
                     && evidence.readback?.verified == false
-            case nil:
+            case .none:
                 return false
             }
         }

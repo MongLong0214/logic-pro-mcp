@@ -163,9 +163,9 @@ struct QualificationOperationResult: Equatable, Sendable {
         case .readOnly:
             guard isError == false else { return .notQualified }
             switch semanticReadbackValidated {
-            case true: return .passed
-            case false: return .notQualified
-            case nil: return .protocolSmoke
+            case .some(true): return .passed
+            case .some(false): return .notQualified
+            case .none: return .protocolSmoke
             }
         case .mutating:
             return isTypedZeroWriteRefusal ? .notQualified : .failed
