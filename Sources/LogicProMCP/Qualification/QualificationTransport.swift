@@ -150,18 +150,23 @@ struct QualificationOperationResult: Equatable, Sendable {
         return QualificationReadbackEvidence(
             source: readbackSource,
             requestID: readbackRequestID,
-            verified: true,
+            verified: mutability == .mutating || semanticReadbackValidated == true,
             sha256: SupportBundleBuilder.sha256(readbackArtifactData)
         )
     }
 
     var status: QualificationStatus {
-        if failureReason != nil || responseData == nil || readback == nil {
+        if failureReason != nil || responseData == nil || readbackArtifactData == nil {
             return .failed
         }
         switch mutability {
         case .readOnly:
-            return isError == false ? .passed : .notQualified
+            guard isError == false else { return .notQualified }
+            switch semanticReadbackValidated {
+            case true: return .passed
+            case false: return .notQualified
+            case nil: return .protocolSmoke
+            }
         case .mutating:
             return isTypedZeroWriteRefusal ? .notQualified : .failed
         }
@@ -170,19 +175,50 @@ struct QualificationOperationResult: Equatable, Sendable {
     var verified: Bool { status == .passed }
 
     var verificationKind: QualificationVerificationKind {
-        mutability == .readOnly && status == .passed ? .readResponse : .typedDeferral
+        switch status {
+        case .passed: .semanticReadback
+        case .protocolSmoke: .protocolSmoke
+        default: .typedDeferral
+        }
     }
 
     var deferral: QualificationDeferral? {
-        guard status == .notQualified else { return nil }
-        let code: QualificationDeferralCode = mutability == .mutating
-            ? .liveMutationNotRun
-            : .operationUnavailable
-        return QualificationDeferral(
-            code: code,
-            detail: mutability == .mutating
-                ? "deferred to ADR-001-c: live mutation requires an operation-specific fixture and independent readback"
-                : "read-only operation did not return a successful typed response on this host"
+        switch status {
+        case .notQualified where mutability == .mutating:
+            QualificationDeferral(
+                code: .liveMutationNotRun,
+                detail: "deferred to ADR-001-c: live mutation requires an operation-specific fixture and independent readback"
+            )
+        case .notQualified where isError == false && semanticReadbackValidated == false:
+            QualificationDeferral(
+                code: .semanticMismatch,
+                detail: "read-only response did not match its operation-specific independent readback"
+            )
+        case .notQualified:
+            QualificationDeferral(
+                code: .operationUnavailable,
+                detail: "read-only operation did not return a successful typed response on this host"
+            )
+        case .protocolSmoke:
+            QualificationDeferral(
+                code: .semanticValidatorUnavailable,
+                detail: "protocol transport succeeded without an operation-specific semantic validator"
+            )
+        default:
+            nil
+        }
+    }
+
+    private var semanticReadbackValidated: Bool? {
+        guard mutability == .readOnly,
+              let responseData,
+              let readbackData else {
+            return nil
+        }
+        return QualificationSemanticReadbackValidator.validate(
+            operationID: operationID,
+            responseData: responseData,
+            readbackData: readbackData
         )
     }
 
@@ -197,6 +233,29 @@ struct QualificationOperationResult: Equatable, Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         return try? encoder.encode(value)
+    }
+}
+
+enum QualificationSemanticReadbackValidator {
+    static func validate(
+        operationID: String,
+        responseData: Data,
+        readbackData: Data
+    ) -> Bool? {
+        switch OperationID(rawValue: operationID) {
+        case .systemHealth:
+            return healthMatches(responseData, readbackData)
+        default:
+            return nil
+        }
+    }
+
+    private static func healthMatches(_ responseData: Data, _ readbackData: Data) -> Bool {
+        guard let response = try? JSONDecoder().decode(HealthResult.self, from: responseData),
+              let readback = try? JSONDecoder().decode(HealthResult.self, from: readbackData) else {
+            return false
+        }
+        return response == readback
     }
 }
 
@@ -910,8 +969,8 @@ private struct ResourceReadResult: Decodable {
     let contents: [Content]
 }
 
-private struct HealthResult: Decodable {
-    struct VariantAvailability: Decodable {
+private struct HealthResult: Decodable, Equatable {
+    struct VariantAvailability: Decodable, Equatable {
         let variant: String
         let bundleID: String
         let installed: Bool

@@ -1,4 +1,6 @@
 import Foundation
+import CryptoKit
+import Darwin
 
 struct QualificationCommandResult: Sendable {
     let exitCode: Int
@@ -16,6 +18,7 @@ struct QualificationRunner: Sendable {
         let registryValidationErrors: @Sendable () -> [String]
         let handlerValidationErrors: @Sendable () -> [String]
         let handlerExists: @Sendable (String, String) -> Bool
+        let beforeEvidenceRead: @Sendable (URL) -> Void
         let drive: @Sendable (QualificationDriveRequest) async throws -> QualificationDriveResult
 
         static let production = Runtime(
@@ -31,6 +34,7 @@ struct QualificationRunner: Sendable {
                     $0.tool == tool && $0.command == command
                 }
             },
+            beforeEvidenceRead: { _ in },
             drive: { request in
                 try QualificationTransport().drive(request)
             }
@@ -98,6 +102,7 @@ struct QualificationRunner: Sendable {
         let binarySHA256: String
         let caseManifestPath: String
         let caseManifestSHA256: String
+        let waiversSHA256: String
         let files: [Entry]
 
         enum CodingKeys: String, CodingKey {
@@ -105,6 +110,7 @@ struct QualificationRunner: Sendable {
             case binarySHA256 = "binary_sha256"
             case caseManifestPath = "case_manifest_path"
             case caseManifestSHA256 = "case_manifest_sha256"
+            case waiversSHA256 = "waivers_sha256"
             case files
         }
     }
@@ -119,6 +125,9 @@ struct QualificationRunner: Sendable {
         case logicVariantMismatch(expected: String, actual: String)
         case logicUILocaleMismatch(expected: String, actual: String)
         case evidenceBindingMismatch(String)
+        case commitIdentityUnavailable
+        case signingKeyUnavailable
+        case invalidSigningKey
         case executableUnavailable
 
         var description: String {
@@ -137,6 +146,12 @@ struct QualificationRunner: Sendable {
                 "Logic Pro UI locale mismatch: expected \(expected), observed \(actual)"
             case .evidenceBindingMismatch(let detail):
                 "External evidence binding mismatch: \(detail)"
+            case .commitIdentityUnavailable:
+                "Qualification provenance commit identity is unavailable"
+            case .signingKeyUnavailable:
+                "Qualification provenance signing key is unavailable"
+            case .invalidSigningKey:
+                "Qualification provenance signing key is invalid"
             case .executableUnavailable: "Unable to resolve the running executable"
             }
         }
@@ -200,6 +215,11 @@ struct QualificationRunner: Sendable {
         let startedAt = runtime.now()
         let executableURL = try runtime.executableURL()
         let environment = runtime.environment()
+        let commitSHA = try Self.commitSHA(from: environment)
+        let signingKey = try Self.signingKey(from: environment)
+        var driveEnvironment = environment
+        driveEnvironment.removeValue(forKey: Self.signingKeyEnvironmentKey)
+        driveEnvironment.removeValue(forKey: Self.trustedPublicKeyEnvironmentKey)
         let executableData = try Data(contentsOf: executableURL, options: .mappedIfSafe)
         let binarySHA256 = SupportBundleBuilder.sha256(executableData)
         let outputDirectory = options.outputURL.deletingLastPathComponent()
@@ -211,7 +231,7 @@ struct QualificationRunner: Sendable {
         do {
             driveResult = try await runtime.drive(QualificationDriveRequest(
                 executableURL: executableURL,
-                environment: environment,
+                environment: driveEnvironment,
                 expectedOperationCount: specs.count,
                 operations: specs
             ))
@@ -254,8 +274,7 @@ struct QualificationRunner: Sendable {
         var manifestEntries: [EvidenceManifest.Entry] = []
         var registryEvidencePassed = true
         var handlerEvidencePassed = true
-        let operationResultsComplete = driveResult.operationResults.count == specs.count
-            && driveResult.operationResults.values.allSatisfy { $0.status != .failed }
+        var requiredOperationsSatisfied = driveResult.operationResults.count == specs.count
 
         for spec in specs {
             let matchingSpecs = specs.filter {
@@ -269,7 +288,20 @@ struct QualificationRunner: Sendable {
             registryEvidencePassed = registryEvidencePassed && registrySpecFound
             handlerEvidencePassed = handlerEvidencePassed && handlerBound
             let operationResult = driveResult.operationResults[spec.id.rawValue]
-            let status = operationResult?.status ?? .failed
+            let observedStatus = operationResult?.status ?? .failed
+            let caseID = "in-process/\(spec.id.rawValue)"
+            let operationWaived = (observedStatus == .notQualified
+                || observedStatus == .protocolSmoke)
+                && waivers.contains {
+                    $0.governsOperation(caseID: caseID, operationID: spec.id.rawValue)
+                        && Self.waiverIsUnexpired($0, at: options.releaseVersion)
+                }
+            let status: QualificationStatus = operationWaived ? .waived : observedStatus
+            let verificationKind: QualificationVerificationKind = operationWaived
+                ? .typedDeferral
+                : operationResult?.verificationKind ?? .typedDeferral
+            requiredOperationsSatisfied = requiredOperationsSatisfied
+                && (status == .passed || status == .waived)
             let passed = status == .passed
             let traceID = spec.id.rawValue == driveResult.traceDetail?.operationID
                 ? driveResult.traceDetail?.traceID ?? ""
@@ -277,7 +309,7 @@ struct QualificationRunner: Sendable {
             let relativePath = "evidence/operation-\(spec.id.rawValue).json"
             let evidence = CaseEvidence(
                 schema: "qualification-case-evidence/v3",
-                caseID: "in-process/\(spec.id.rawValue)",
+                caseID: caseID,
                 operationID: spec.id.rawValue,
                 tool: spec.tool.rawValue,
                 command: spec.command,
@@ -301,7 +333,7 @@ struct QualificationRunner: Sendable {
                 axis: observedAxis,
                 status: status,
                 verified: passed,
-                verificationKind: operationResult?.verificationKind ?? .typedDeferral,
+                verificationKind: verificationKind,
                 deferral: operationResult?.deferral,
                 readback: operationResult?.readback,
                 operationResponseSHA256: operationResult?.responseSHA256,
@@ -375,7 +407,7 @@ struct QualificationRunner: Sendable {
                 axis: observedAxis,
                 operationID: spec.id.rawValue,
                 operationRequestID: operationResult?.requestID,
-                verificationKind: operationResult?.verificationKind ?? .typedDeferral,
+                verificationKind: verificationKind,
                 deferral: operationResult?.deferral,
                 readback: operationResult?.readback
             ))
@@ -391,22 +423,31 @@ struct QualificationRunner: Sendable {
             let status: QualificationStatus
             let reason: String?
             let availabilityReason = Self.availabilityReason(for: axis, observedAxis: observedAxis)
+            let axisWaived = axis != observedAxis
+                && waivers.contains {
+                    $0.caseID == caseID
+                        && $0.governsHostAxisAvailability
+                        && Self.waiverIsUnexpired($0, at: options.releaseVersion)
+                }
             if let failureReason = driveResult.failureReason {
                 status = .failed
                 reason = failureReason
             } else if isObservedAxis {
-                status = driveResult.allChecksPass && operationResultsComplete ? .passed : .failed
+                status = driveResult.allChecksPass && requiredOperationsSatisfied ? .passed : .failed
                 reason = status == .passed
                     ? nil
-                    : operationResultsComplete
+                    : requiredOperationsSatisfied
                         ? "live protocol checks failed"
                         : "one or more operation-specific protocol checks failed"
+            } else if axisWaived {
+                status = .waived
+                reason = "required axis covered by a governed per-axis waiver"
             } else {
                 status = .notQualified
                 reason = "required axis unavailable: different observed Logic variant or UI locale"
             }
             let passed = status == .passed
-            let deferral = status == .notQualified
+            let deferral = status == .notQualified || status == .waived
                 ? QualificationDeferral(
                     code: .operationUnavailable,
                     detail: reason ?? "required axis unavailable"
@@ -657,10 +698,11 @@ struct QualificationRunner: Sendable {
         )
         manifestEntries.sort { $0.path < $1.path }
         let manifest = EvidenceManifest(
-            schema: "qualification-evidence-manifest/v2",
+            schema: "qualification-evidence-manifest/v3",
             binarySHA256: binarySHA256,
             caseManifestPath: Self.caseManifestFilename,
             caseManifestSHA256: SupportBundleBuilder.sha256(caseManifestData),
+            waiversSHA256: SupportBundleBuilder.sha256(try Self.encoded(waivers)),
             files: manifestEntries
         )
         let manifestData = try Self.encoded(manifest)
@@ -668,10 +710,24 @@ struct QualificationRunner: Sendable {
             to: outputDirectory.appendingPathComponent(Self.manifestFilename),
             options: .atomic
         )
+        let completedAt = runtime.now()
+        let manifestSHA256 = SupportBundleBuilder.sha256(manifestData)
+        let provenance = QualificationProvenanceRecord(
+            schema: "qualification-provenance/v1",
+            binarySHA256: binarySHA256,
+            commitSHA: commitSHA,
+            releaseVersion: options.releaseVersion,
+            axis: observedAxis,
+            runID: UUID().uuidString.lowercased(),
+            startedAt: startedAt,
+            completedAt: completedAt,
+            evidenceManifestSHA256: manifestSHA256
+        )
+        let provenanceSignature = try Self.sign(provenance, with: signingKey)
         let attestation = ReleaseQualificationAttestation(
             schema: "release-qualification-attestation/v2",
             serverVersion: options.releaseVersion,
-            commitSHA: environment["GIT_COMMIT"] ?? "unknown",
+            commitSHA: commitSHA,
             binarySHA256: binarySHA256,
             logicVariant: observedVariant,
             logicVersion: driveResult.logicProVersion,
@@ -680,14 +736,16 @@ struct QualificationRunner: Sendable {
             cache: options.cache,
             fixture: .empty,
             startedAt: startedAt,
-            completedAt: runtime.now(),
+            completedAt: completedAt,
             total: cases.count,
             passed: cases.filter { $0.status == .passed }.count,
             failed: cases.filter { $0.status == .failed }.count,
             waived: cases.filter { $0.status == .waived }.count,
             cases: cases,
             waivers: waivers,
-            evidenceManifestSHA256: SupportBundleBuilder.sha256(manifestData)
+            evidenceManifestSHA256: manifestSHA256,
+            provenance: provenance,
+            provenanceSignature: provenanceSignature
         )
         try Self.encoded(attestation).write(
             to: options.outputURL,
@@ -718,11 +776,16 @@ struct QualificationRunner: Sendable {
     }
 
     private func verify(_ options: VerifyOptions) throws -> QualificationCommandResult {
+        let directory = options.attestationURL.deletingLastPathComponent()
+        let attestationData = try Self.readNoFollow(
+            relativePath: options.attestationURL.lastPathComponent,
+            directory: directory,
+            beforeRead: runtime.beforeEvidenceRead
+        )
         let attestation = try JSONDecoder().decode(
             ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: options.attestationURL)
+            from: attestationData
         )
-        let directory = options.attestationURL.deletingLastPathComponent()
         let manifestArtifact = Self.manifestFilename
         let requiredArtifacts = options.requiredArtifacts.union([manifestArtifact])
         let presentArtifacts = Set(requiredArtifacts.filter { artifact in
@@ -733,14 +796,16 @@ struct QualificationRunner: Sendable {
         })
         let evidenceBindingIssue = Self.evidenceBindingIssue(
             attestation: attestation,
-            directory: directory
+            directory: directory,
+            beforeRead: runtime.beforeEvidenceRead
         )
         let decision = PromotionGate().evaluate(
             attestation: attestation,
             releaseVersion: options.releaseVersion,
             expectedBinarySHA256: options.expectedBinarySHA256,
             presentArtifacts: presentArtifacts,
-            requiredArtifacts: requiredArtifacts
+            requiredArtifacts: requiredArtifacts,
+            requiredOperationIDs: Set(runtime.specs().map { $0.id.rawValue })
         )
         let currentExecutableData = try Data(
             contentsOf: runtime.executableURL(),
@@ -750,6 +815,12 @@ struct QualificationRunner: Sendable {
         var rejections = decision.rejections
         if let evidenceBindingIssue {
             rejections.append(.evidenceBindingMismatch(detail: evidenceBindingIssue))
+        }
+        if let provenanceRejection = Self.provenanceRejection(
+            attestation: attestation,
+            environment: runtime.environment()
+        ) {
+            rejections.append(provenanceRejection)
         }
         if currentExecutableSHA256 != options.expectedBinarySHA256 {
             let replacementRejection = PromotionRejectionReason.binarySHAMismatch(
@@ -873,6 +944,26 @@ struct QualificationRunner: Sendable {
                 reason: "evidenceBindingMismatch", caseID: nil, key: nil,
                 name: nil, expected: nil, actual: detail
             )
+        case .requiredOperationNotSatisfied(let operationID):
+            VerificationOutput.Rejection(
+                reason: "requiredOperationNotSatisfied", caseID: nil, key: operationID,
+                name: nil, expected: nil, actual: nil
+            )
+        case .provenanceSignatureMissing:
+            VerificationOutput.Rejection(
+                reason: "provenanceSignatureMissing", caseID: nil, key: nil,
+                name: nil, expected: nil, actual: nil
+            )
+        case .provenanceSignatureInvalid:
+            VerificationOutput.Rejection(
+                reason: "provenanceSignatureInvalid", caseID: nil, key: nil,
+                name: nil, expected: nil, actual: nil
+            )
+        case .trustedProvenanceKeyUnavailable:
+            VerificationOutput.Rejection(
+                reason: "trustedProvenanceKeyUnavailable", caseID: nil, key: nil,
+                name: nil, expected: nil, actual: nil
+            )
         }
     }
 
@@ -920,6 +1011,10 @@ struct QualificationRunner: Sendable {
 
     private static let manifestFilename = "evidence-manifest.json"
     private static let caseManifestFilename = "case-manifest.json"
+    private static let signingKeyEnvironmentKey =
+        "LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY"
+    private static let trustedPublicKeyEnvironmentKey =
+        "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"
 
     private static func loadWaivers(from url: URL?) throws -> [QualificationWaiver] {
         guard let url else { return [] }
@@ -942,6 +1037,17 @@ struct QualificationRunner: Sendable {
         version.first == "v" || version.first == "V" ? version.dropFirst() : version[...]
     }
 
+    private static func waiverIsUnexpired(
+        _ waiver: QualificationWaiver,
+        at releaseVersion: String
+    ) -> Bool {
+        guard let expiry = SemanticVersion(waiver.expiryVersion),
+              let release = SemanticVersion(releaseVersion) else {
+            return false
+        }
+        return expiry > release
+    }
+
     private static func availabilityReason(
         for axis: QualificationAxis,
         observedAxis: QualificationAxis
@@ -958,35 +1064,51 @@ struct QualificationRunner: Sendable {
 
     private static func validatedEvidenceData(
         relativePath: String,
-        outputDirectory: URL
+        outputDirectory: URL,
+        beforeRead: @Sendable (URL) -> Void = { _ in }
     ) throws -> Data {
-        guard let url = safeEvidenceURL(relativePath: relativePath, outputDirectory: outputDirectory),
-              isReadableRegularFile(url)
-        else {
+        guard safeEvidenceURL(
+            relativePath: relativePath,
+            outputDirectory: outputDirectory
+        ) != nil else {
             throw RunnerError.invalidArguments("Invalid or unreadable evidence file: \(relativePath)")
         }
-        return try Data(contentsOf: url, options: .mappedIfSafe)
+        return try readNoFollow(
+            relativePath: relativePath,
+            directory: outputDirectory,
+            beforeRead: beforeRead
+        )
     }
 
     private static func evidenceBindingIssue(
         attestation: ReleaseQualificationAttestation,
-        directory: URL
+        directory: URL,
+        beforeRead: @Sendable (URL) -> Void
     ) -> String? {
-        let manifestURL = directory.appendingPathComponent(manifestFilename)
-        guard isReadableRegularFile(manifestURL),
-              let manifestData = try? Data(contentsOf: manifestURL, options: .mappedIfSafe),
-              SupportBundleBuilder.sha256(manifestData) == attestation.evidenceManifestSHA256,
+        guard let manifestData = try? readNoFollow(
+            relativePath: manifestFilename,
+            directory: directory,
+            beforeRead: beforeRead
+        ) else {
+            return "evidence manifest digest, schema, or binary"
+        }
+        guard SupportBundleBuilder.sha256(manifestData) == attestation.evidenceManifestSHA256,
               let manifest = try? JSONDecoder().decode(EvidenceManifest.self, from: manifestData),
-              manifest.schema == "qualification-evidence-manifest/v2",
+              manifest.schema == "qualification-evidence-manifest/v3",
               manifest.binarySHA256 == attestation.binarySHA256,
-              manifest.caseManifestPath == caseManifestFilename
+              manifest.caseManifestPath == caseManifestFilename,
+              manifest.waiversSHA256 == SupportBundleBuilder.sha256(
+                  (try? encoded(attestation.waivers)) ?? Data()
+              )
         else {
             return "evidence manifest digest, schema, or binary"
         }
 
-        let caseManifestURL = directory.appendingPathComponent(caseManifestFilename)
-        guard isReadableRegularFile(caseManifestURL),
-              let caseManifestData = try? Data(contentsOf: caseManifestURL, options: .mappedIfSafe),
+        guard let caseManifestData = try? readNoFollow(
+                  relativePath: caseManifestFilename,
+                  directory: directory,
+                  beforeRead: beforeRead
+              ),
               SupportBundleBuilder.sha256(caseManifestData) == manifest.caseManifestSHA256,
               let caseManifest = try? JSONDecoder().decode(
                   QualificationCaseManifest.self,
@@ -1024,7 +1146,8 @@ struct QualificationRunner: Sendable {
             }
             guard let evidenceData = try? validatedEvidenceData(
                 relativePath: entry.path,
-                outputDirectory: directory
+                outputDirectory: directory,
+                beforeRead: beforeRead
             ), SupportBundleBuilder.sha256(evidenceData) == entry.sha256 else {
                 return "evidence digest"
             }
@@ -1038,21 +1161,26 @@ struct QualificationRunner: Sendable {
                   entries.filter({ $0.kind == .caseEvidence }).count == 1,
                   let evidenceData = try? validatedEvidenceData(
                       relativePath: evidenceEntry.path,
-                      outputDirectory: directory
+                      outputDirectory: directory,
+                      beforeRead: beforeRead
                   ),
+                  SupportBundleBuilder.sha256(evidenceData) == evidenceEntry.sha256,
                   let evidence = try? JSONDecoder().decode(CaseEvidence.self, from: evidenceData),
                   Self.evidence(evidence, binds: qualificationCase),
                   Self.evidenceShapeIsValid(evidence) else {
                 return "case evidence binding"
             }
             let responseEntries = entries.filter { $0.kind == .operationResponse }
+            var responseArtifact: QualificationOperationResponseArtifact?
             if let expectedSHA256 = evidence.operationResponseSHA256 {
                 guard responseEntries.count == 1,
                       responseEntries[0].sha256 == expectedSHA256,
                       let data = try? validatedEvidenceData(
                           relativePath: responseEntries[0].path,
-                          outputDirectory: directory
+                          outputDirectory: directory,
+                          beforeRead: beforeRead
                       ),
+                      SupportBundleBuilder.sha256(data) == responseEntries[0].sha256,
                       let artifact = try? JSONDecoder().decode(
                           QualificationOperationResponseArtifact.self,
                           from: data
@@ -1060,17 +1188,21 @@ struct QualificationRunner: Sendable {
                       Self.operationArtifact(artifact, binds: evidence) else {
                     return "operation response binding"
                 }
+                responseArtifact = artifact
             } else if !responseEntries.isEmpty {
                 return "unexpected operation response"
             }
             let readbackEntries = entries.filter { $0.kind == .readbackResponse }
+            var readbackArtifact: QualificationReadbackArtifact?
             if let readback = evidence.readback {
                 guard readbackEntries.count == 1,
                       readbackEntries[0].sha256 == readback.sha256,
                       let data = try? validatedEvidenceData(
                           relativePath: readbackEntries[0].path,
-                          outputDirectory: directory
+                          outputDirectory: directory,
+                          beforeRead: beforeRead
                       ),
+                      SupportBundleBuilder.sha256(data) == readbackEntries[0].sha256,
                       let artifact = try? JSONDecoder().decode(
                           QualificationReadbackArtifact.self,
                           from: data
@@ -1079,12 +1211,24 @@ struct QualificationRunner: Sendable {
                       artifact.requestID == readback.requestID,
                       Self.availabilityArtifactMatches(
                           artifact,
-                          observation: evidence.availabilityObservation
-                      ) else {
+                              observation: evidence.availabilityObservation
+                          ) else {
                     return "readback response binding"
                 }
+                readbackArtifact = artifact
             } else if !readbackEntries.isEmpty {
                 return "unexpected readback response"
+            }
+            if evidence.verificationKind == .semanticReadback {
+                guard let responseData = responseArtifact?.payload.data(using: .utf8),
+                      let readbackData = readbackArtifact?.payload.data(using: .utf8),
+                      QualificationSemanticReadbackValidator.validate(
+                          operationID: evidence.operationID,
+                          responseData: responseData,
+                          readbackData: readbackData
+                      ) == true else {
+                    return "semantic readback binding"
+                }
             }
         }
         return nil
@@ -1125,6 +1269,9 @@ struct QualificationRunner: Sendable {
         else {
             return false
         }
+        if evidence.verificationKind == .semanticReadback {
+            return true
+        }
         return object["state"] as? String == evidence.operationState
             && object["error"] as? String == evidence.operationError
             && object["write_attempted"] as? Bool == evidence.operationWriteAttempted
@@ -1140,6 +1287,24 @@ struct QualificationRunner: Sendable {
                 && evidence.operationIsError == false
                 && evidence.readback != nil
                 && evidence.availabilityObservation == nil
+        case .semanticReadback:
+            return evidence.status == .passed
+                && evidence.verified
+                && !evidence.operationID.hasPrefix("qualification.")
+                && evidence.operationResponseSHA256 != nil
+                && evidence.operationRequestID != nil
+                && evidence.operationIsError == false
+                && evidence.readback?.verified == true
+                && evidence.availabilityObservation == nil
+        case .protocolSmoke:
+            return evidence.status == .protocolSmoke
+                && !evidence.verified
+                && evidence.operationResponseSHA256 != nil
+                && evidence.operationRequestID != nil
+                && evidence.operationIsError == false
+                && evidence.deferral?.code == .semanticValidatorUnavailable
+                && evidence.readback?.verified == false
+                && evidence.availabilityObservation == nil
         case .independentReadback:
             return evidence.status == .passed
                 && evidence.verified
@@ -1152,7 +1317,7 @@ struct QualificationRunner: Sendable {
             if evidence.status == .failed {
                 return !evidence.verified
             }
-            guard evidence.status == .notQualified,
+            guard evidence.status == .notQualified || evidence.status == .waived,
                   !evidence.verified,
                   evidence.deferral != nil,
                   evidence.readback != nil else {
@@ -1164,10 +1329,20 @@ struct QualificationRunner: Sendable {
                     && evidence.availabilityReason != nil
                     && evidence.availabilityObservation != nil
             }
-            return evidence.operationResponseSHA256 != nil
-                && evidence.operationRequestID != nil
-                && evidence.operationIsError == true
-                && evidence.availabilityObservation == nil
+            guard evidence.operationResponseSHA256 != nil,
+                  evidence.operationRequestID != nil,
+                  evidence.availabilityObservation == nil else {
+                return false
+            }
+            switch evidence.deferral?.code {
+            case .liveMutationNotRun, .operationUnavailable:
+                return evidence.operationIsError == true
+            case .semanticMismatch, .semanticValidatorUnavailable:
+                return evidence.operationIsError == false
+                    && evidence.readback?.verified == false
+            case nil:
+                return false
+            }
         }
     }
 
@@ -1252,6 +1427,156 @@ struct QualificationRunner: Sendable {
             return false
         }
         return isRegularFile && !isSymbolicLink
+    }
+
+    private static func readNoFollow(
+        relativePath: String,
+        directory: URL,
+        beforeRead: @Sendable (URL) -> Void
+    ) throws -> Data {
+        let components = relativePath.split(
+            separator: "/",
+            omittingEmptySubsequences: false
+        ).map(String.init)
+        guard !relativePath.hasPrefix("/"),
+              !components.isEmpty,
+              components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {
+            throw RunnerError.invalidArguments("Invalid evidence path")
+        }
+
+        let rootFD = open(
+            directory.path,
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW
+        )
+        guard rootFD >= 0 else {
+            throw RunnerError.invalidArguments("Unable to open evidence directory")
+        }
+        defer { close(rootFD) }
+
+        var directoryFD = rootFD
+        defer {
+            if directoryFD != rootFD {
+                close(directoryFD)
+            }
+        }
+        for component in components.dropLast() {
+            let nextFD = openat(
+                directoryFD,
+                component,
+                O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW
+            )
+            guard nextFD >= 0 else {
+                throw RunnerError.invalidArguments("Unable to open evidence directory component")
+            }
+            if directoryFD != rootFD {
+                close(directoryFD)
+            }
+            directoryFD = nextFD
+        }
+
+        guard let filename = components.last else {
+            throw RunnerError.invalidArguments("Invalid evidence path")
+        }
+        let fileFD = openat(
+            directoryFD,
+            filename,
+            O_RDONLY | O_CLOEXEC | O_NOFOLLOW
+        )
+        guard fileFD >= 0 else {
+            throw RunnerError.invalidArguments("Unable to open evidence file")
+        }
+        defer { close(fileFD) }
+
+        var opened = stat()
+        guard fstat(fileFD, &opened) == 0,
+              opened.st_mode & S_IFMT == S_IFREG else {
+            throw RunnerError.invalidArguments("Evidence path is not a regular file")
+        }
+        beforeRead(directory.appendingPathComponent(relativePath))
+        let handle = FileHandle(fileDescriptor: fileFD, closeOnDealloc: false)
+        let data = try handle.readToEnd() ?? Data()
+
+        var current = stat()
+        guard fstatat(directoryFD, filename, &current, AT_SYMLINK_NOFOLLOW) == 0,
+              current.st_mode & S_IFMT == S_IFREG,
+              current.st_dev == opened.st_dev,
+              current.st_ino == opened.st_ino else {
+            throw RunnerError.invalidArguments("Evidence path changed during read")
+        }
+        return data
+    }
+
+    private static func signingKey(
+        from environment: [String: String]
+    ) throws -> Curve25519.Signing.PrivateKey {
+        guard let encodedKey = environment[signingKeyEnvironmentKey] else {
+            throw RunnerError.signingKeyUnavailable
+        }
+        guard let rawKey = Data(base64Encoded: encodedKey),
+              let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: rawKey) else {
+            throw RunnerError.invalidSigningKey
+        }
+        return key
+    }
+
+    private static func commitSHA(from environment: [String: String]) throws -> String {
+        guard let commitSHA = environment["GIT_COMMIT"],
+              commitSHA.count == 40 || commitSHA.count == 64,
+              commitSHA.allSatisfy(\.isHexDigit) else {
+            throw RunnerError.commitIdentityUnavailable
+        }
+        return commitSHA
+    }
+
+    private static func sign(
+        _ provenance: QualificationProvenanceRecord,
+        with key: Curve25519.Signing.PrivateKey
+    ) throws -> QualificationProvenanceSignature {
+        QualificationProvenanceSignature(
+            algorithm: "ed25519",
+            keyID: SupportBundleBuilder.sha256(key.publicKey.rawRepresentation),
+            value: try key.signature(for: encoded(provenance)).base64EncodedString()
+        )
+    }
+
+    private static func provenanceRejection(
+        attestation: ReleaseQualificationAttestation,
+        environment: [String: String]
+    ) -> PromotionRejectionReason? {
+        guard let provenance = attestation.provenance,
+              let signature = attestation.provenanceSignature else {
+            return .provenanceSignatureMissing
+        }
+        guard let encodedKey = environment[trustedPublicKeyEnvironmentKey],
+              let rawKey = Data(base64Encoded: encodedKey),
+              let trustedKey = try? Curve25519.Signing.PublicKey(rawRepresentation: rawKey) else {
+            return .trustedProvenanceKeyUnavailable
+        }
+        let axis = QualificationAxis(
+            variant: attestation.logicVariant,
+            locale: attestation.locale,
+            profile: attestation.profile,
+            cache: attestation.cache,
+            fixture: attestation.fixture
+        )
+        guard provenance.schema == "qualification-provenance/v1",
+              provenance.binarySHA256 == attestation.binarySHA256,
+              provenance.commitSHA == attestation.commitSHA,
+              provenance.releaseVersion == attestation.serverVersion,
+              provenance.axis == axis,
+              UUID(uuidString: provenance.runID) != nil,
+              provenance.startedAt == attestation.startedAt,
+              provenance.completedAt == attestation.completedAt,
+              provenance.completedAt >= provenance.startedAt,
+              provenance.evidenceManifestSHA256 == attestation.evidenceManifestSHA256,
+              signature.algorithm == "ed25519",
+              signature.keyID == SupportBundleBuilder.sha256(rawKey),
+              let signatureData = Data(base64Encoded: signature.value),
+              let provenanceData = try? encoded(provenance),
+              trustedKey.isValidSignature(signatureData, for: provenanceData) else {
+            return .provenanceSignatureInvalid
+        }
+        return nil
     }
 
     private static func encoded<T: Encodable>(_ value: T) throws -> Data {

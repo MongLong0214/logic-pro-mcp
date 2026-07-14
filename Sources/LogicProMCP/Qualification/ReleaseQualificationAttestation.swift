@@ -6,6 +6,7 @@ enum QualificationStatus: String, Codable, Sendable {
     case waived
     case skipped
     case notQualified = "not_qualified"
+    case protocolSmoke = "protocol_smoke"
 }
 
 enum LogicVariant: String, Codable, CaseIterable, Sendable {
@@ -37,12 +38,16 @@ enum ProjectFixture: String, Codable, CaseIterable, Sendable {
 enum QualificationVerificationKind: String, Codable, Sendable {
     case readResponse = "read_response"
     case independentReadback = "independent_readback"
+    case semanticReadback = "semantic_readback"
+    case protocolSmoke = "protocol_smoke"
     case typedDeferral = "typed_deferral"
 }
 
 enum QualificationDeferralCode: String, Codable, Sendable {
     case liveMutationNotRun = "live_mutation_not_run"
     case operationUnavailable = "operation_unavailable"
+    case semanticMismatch = "semantic_mismatch"
+    case semanticValidatorUnavailable = "semantic_validator_unavailable"
 }
 
 struct QualificationDeferral: Codable, Equatable, Sendable {
@@ -375,6 +380,10 @@ struct QualificationCaseManifest: Codable, Equatable, Sendable {
 struct QualificationWaiver: Codable, Equatable, Sendable {
     static let hostAxisAvailabilityCapability = "ADR-001-a host-axis availability"
 
+    static func operationCapability(_ operationID: String) -> String {
+        "operation:\(operationID)"
+    }
+
     let caseID: String
     let reasonCode: String
     let owningIssue: String
@@ -386,6 +395,11 @@ struct QualificationWaiver: Codable, Equatable, Sendable {
 
     var governsHostAxisAvailability: Bool {
         affectedCapability == Self.hostAxisAvailabilityCapability
+    }
+
+    func governsOperation(caseID: String, operationID: String) -> Bool {
+        self.caseID == caseID
+            && affectedCapability == Self.operationCapability(operationID)
     }
 }
 
@@ -430,6 +444,24 @@ struct QualificationWaiverValidator {
     }
 }
 
+struct QualificationProvenanceRecord: Codable, Equatable, Sendable {
+    let schema: String
+    let binarySHA256: String
+    let commitSHA: String
+    let releaseVersion: String
+    let axis: QualificationAxis
+    let runID: String
+    let startedAt: Date
+    let completedAt: Date
+    let evidenceManifestSHA256: String
+}
+
+struct QualificationProvenanceSignature: Codable, Equatable, Sendable {
+    let algorithm: String
+    let keyID: String
+    let value: String
+}
+
 struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
     let schema: String
     let serverVersion: String
@@ -450,6 +482,8 @@ struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
     let cases: [QualificationCase]
     let waivers: [QualificationWaiver]
     let evidenceManifestSHA256: String
+    let provenance: QualificationProvenanceRecord?
+    let provenanceSignature: QualificationProvenanceSignature?
 
     init(
         schema: String,
@@ -470,7 +504,9 @@ struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
         waived: Int,
         cases: [QualificationCase],
         waivers: [QualificationWaiver],
-        evidenceManifestSHA256: String
+        evidenceManifestSHA256: String,
+        provenance: QualificationProvenanceRecord? = nil,
+        provenanceSignature: QualificationProvenanceSignature? = nil
     ) {
         self.schema = schema
         self.serverVersion = serverVersion
@@ -491,6 +527,8 @@ struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
         self.cases = cases
         self.waivers = waivers
         self.evidenceManifestSHA256 = evidenceManifestSHA256
+        self.provenance = provenance
+        self.provenanceSignature = provenanceSignature
     }
 }
 

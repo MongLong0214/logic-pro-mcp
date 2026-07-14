@@ -13,6 +13,10 @@ enum PromotionRejectionReason: Equatable, Sendable {
     case duplicateCaseID(caseID: String)
     case releaseVersionMismatch(expected: String, actual: String)
     case evidenceBindingMismatch(detail: String)
+    case requiredOperationNotSatisfied(operationID: String)
+    case provenanceSignatureMissing
+    case provenanceSignatureInvalid
+    case trustedProvenanceKeyUnavailable
 }
 
 struct PromotionDecision: Equatable, Sendable {
@@ -26,7 +30,8 @@ struct PromotionGate {
         releaseVersion: String,
         expectedBinarySHA256: String,
         presentArtifacts: Set<String>,
-        requiredArtifacts: Set<String>
+        requiredArtifacts: Set<String>,
+        requiredOperationIDs: Set<String>
     ) -> PromotionDecision {
         var rejections: [PromotionRejectionReason] = []
 
@@ -91,6 +96,34 @@ struct PromotionGate {
         for caseID in expiredWaiverIDs.sorted() {
             rejections.append(.expiredWaiver(caseID: caseID))
         }
+        for operationID in requiredOperationIDs.sorted() {
+            let operationCases = attestation.cases.filter {
+                $0.id == "in-process/\(operationID)" && $0.operationID == operationID
+            }
+            guard operationCases.count == 1, let operationCase = operationCases.first else {
+                rejections.append(.requiredOperationNotSatisfied(operationID: operationID))
+                continue
+            }
+            let operationPassed = operationCase.status == .passed
+                && operationCase.verified
+                && operationCase.verificationKind == .semanticReadback
+                && operationCase.readback?.verified == true
+            let operationWaived = operationCase.status == .waived
+                && !operationCase.verified
+                && operationCase.verificationKind == .typedDeferral
+                && operationCase.deferral != nil
+                && attestation.waivers.contains { waiver in
+                    waiver.governsOperation(
+                        caseID: operationCase.id,
+                        operationID: operationCase.operationID
+                    ) && !expiredWaiverIDs.contains(waiver.caseID)
+                }
+            if !operationPassed && !operationWaived {
+                rejections.append(.requiredOperationNotSatisfied(
+                    operationID: operationID
+                ))
+            }
+        }
         let attestedAxis = QualificationAxis(
             variant: attestation.logicVariant,
             locale: attestation.locale,
@@ -128,7 +161,14 @@ struct PromotionGate {
                     qualificationCase,
                     axis: axis,
                     binarySHA256: attestation.binarySHA256
-                ) || (liveAvailability != nil && Self.isGovernedUnavailableCase(
+                ) || (attestedLiveCase != nil && Self.isGovernedWaivedCase(
+                    qualificationCase,
+                    axis: axis,
+                    observedAxis: attestedAxis,
+                    binarySHA256: attestation.binarySHA256,
+                    waivers: attestation.waivers,
+                    expiredWaiverIDs: expiredWaiverIDs
+                )) || (liveAvailability != nil && Self.isGovernedUnavailableCase(
                     qualificationCase,
                     axis: axis,
                     observedAxis: attestedAxis,
@@ -213,6 +253,34 @@ struct PromotionGate {
             && !qualificationCase.evidenceFiles.isEmpty
     }
 
+    private static func isGovernedWaivedCase(
+        _ qualificationCase: QualificationCase,
+        axis: QualificationAxis,
+        observedAxis: QualificationAxis,
+        binarySHA256: String,
+        waivers: [QualificationWaiver],
+        expiredWaiverIDs: Set<String>
+    ) -> Bool {
+        guard axis != observedAxis,
+              qualificationCase.id == axis.key,
+              qualificationCase.axis == axis,
+              qualificationCase.binarySHA256 == binarySHA256,
+              qualificationCase.status == .waived,
+              !qualificationCase.verified,
+              qualificationCase.verificationKind == .typedDeferral,
+              qualificationCase.deferral?.code == .operationUnavailable,
+              qualificationCase.deferral?.detail == qualificationCase.reason,
+              qualificationCase.readback?.verified == false,
+              !qualificationCase.evidenceFiles.isEmpty else {
+            return false
+        }
+        return waivers.contains {
+            $0.caseID == axis.key
+                && $0.governsHostAxisAvailability
+                && !expiredWaiverIDs.contains($0.caseID)
+        }
+    }
+
     private static func isValidLiveObservation(
         _ observation: QualificationAvailabilityObservation?,
         axis: QualificationAxis
@@ -238,9 +306,7 @@ struct PromotionGate {
         axis: QualificationAxis,
         observation: QualificationAvailabilityObservation
     ) -> Bool {
-        guard axis.variant != observation.activeVariant else {
-            return axis.locale != observation.logicUILocale
-        }
+        guard axis.variant != observation.activeVariant else { return false }
         guard let variant = observation.variants.first(where: { $0.variant == axis.variant }) else {
             return false
         }

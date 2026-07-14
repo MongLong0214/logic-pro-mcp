@@ -19,12 +19,12 @@ struct QualificationGateTests {
         let governedCases = QualificationAxis.requiredCombinations.map { axis in
             qualificationCase(
                 id: axis.key,
-                status: axis == liveAxis ? .passed : .notQualified,
-                reason: axis == liveAxis
+                status: axis.variant == liveAxis.variant ? .passed : .notQualified,
+                reason: axis.variant == liveAxis.variant
                     ? nil
                     : "required axis unavailable: different observed Logic variant or UI locale",
                 axis: axis,
-                availabilityReason: axis == liveAxis ? nil : availabilityReason(
+                availabilityReason: axis.variant == liveAxis.variant ? nil : availabilityReason(
                     for: axis,
                     observedAxis: liveAxis
                 )
@@ -76,6 +76,148 @@ struct QualificationGateTests {
             )
         }
         #expect(!evaluate(cases: noLiveCases).promotable)
+    }
+
+    @Test func localeDifferentAxisWithoutWaiverRejectsPromotion() {
+        let liveAxis = QualificationAxis.requiredCombinations[0]
+        let cases = QualificationAxis.requiredCombinations.map { axis in
+            qualificationCase(
+                id: axis.key,
+                status: axis == liveAxis ? .passed : .notQualified,
+                reason: axis == liveAxis
+                    ? nil
+                    : "required axis unavailable: different observed Logic variant or UI locale",
+                axis: axis,
+                availabilityReason: axis == liveAxis ? nil : availabilityReason(
+                    for: axis,
+                    observedAxis: liveAxis
+                )
+            )
+        }
+        let localeAxis = QualificationAxis.requiredCombinations[1]
+
+        let decision = evaluate(cases: cases)
+
+        #expect(!decision.promotable)
+        #expect(decision.rejections.contains(
+            .requiredCombinationNotQualified(key: localeAxis.key)
+        ))
+    }
+
+    @Test func localeDifferentAxisWithPerAxisWaiverPromotes() {
+        let liveAxis = QualificationAxis.requiredCombinations[0]
+        let localeAxis = QualificationAxis.requiredCombinations[1]
+        let cases = QualificationAxis.requiredCombinations.map { axis in
+            qualificationCase(
+                id: axis.key,
+                status: axis == liveAxis ? .passed : axis == localeAxis ? .waived : .notQualified,
+                reason: axis == liveAxis
+                    ? nil
+                    : "required axis unavailable: different observed Logic variant or UI locale",
+                axis: axis,
+                availabilityReason: axis == liveAxis ? nil : availabilityReason(
+                    for: axis,
+                    observedAxis: liveAxis
+                )
+            )
+        }
+        let waiver = waiver(
+            caseID: localeAxis.key,
+            expiryVersion: "1.3.0",
+            affectedCapability: QualificationWaiver.hostAxisAvailabilityCapability
+        )
+
+        let decision = evaluate(cases: cases, waivers: [waiver])
+
+        #expect(decision.promotable)
+        #expect(decision.rejections.isEmpty)
+    }
+
+    @Test func localeDifferentAxisWithLiveCasePromotes() {
+        let decision = evaluate(cases: passedRequiredCases())
+
+        #expect(decision.promotable)
+        #expect(decision.rejections.isEmpty)
+    }
+
+    @Test func trulyUninstalledVariantRemainsGovernedUnavailable() {
+        let liveAxis = QualificationAxis.requiredCombinations[0]
+        let secondLiveLocale = QualificationAxis.requiredCombinations[1]
+        let cases = QualificationAxis.requiredCombinations.map { axis in
+            qualificationCase(
+                id: axis.key,
+                status: axis.variant == .desktop ? .passed : .notQualified,
+                reason: axis.variant == .desktop
+                    ? nil
+                    : "required axis unavailable: different observed Logic variant or UI locale",
+                axis: axis,
+                availabilityReason: axis.variant == .desktop ? nil : availabilityReason(
+                    for: axis,
+                    observedAxis: liveAxis
+                ),
+                availabilityObservation: axis == secondLiveLocale
+                    ? qualificationAvailabilityObservation(for: secondLiveLocale)
+                    : qualificationAvailabilityObservation(for: liveAxis)
+            )
+        }
+
+        let decision = evaluate(cases: cases)
+
+        #expect(decision.promotable)
+        #expect(decision.rejections.isEmpty)
+    }
+
+    @Test func promotionDoesNotCountProtocolSmokeAsQualified() throws {
+        let smokeStatus = try JSONDecoder().decode(
+            QualificationStatus.self,
+            from: Data(#""protocol_smoke""#.utf8)
+        )
+        let smokeKind = try JSONDecoder().decode(
+            QualificationVerificationKind.self,
+            from: Data(#""protocol_smoke""#.utf8)
+        )
+        let smokeCase = QualificationCase(
+            id: "in-process/\(OperationID.systemPermissions.rawValue)",
+            status: smokeStatus,
+            tool: ToolID.logicSystem.rawValue,
+            command: "permissions",
+            traceID: "",
+            verified: false,
+            evidenceFiles: ["evidence/operation-system.permissions.json"],
+            reason: "protocol transport succeeded without an operation-specific semantic validator",
+            binarySHA256: binarySHA256,
+            axis: .defaultAxis,
+            operationID: OperationID.systemPermissions.rawValue,
+            operationRequestID: "smoke-response",
+            verificationKind: smokeKind,
+            readback: QualificationReadbackEvidence(
+                source: "logic://system/health",
+                requestID: "smoke-readback",
+                verified: false,
+                sha256: String(repeating: "b", count: 64)
+            )
+        )
+
+        let decision = evaluate(cases: passedRequiredCases() + [smokeCase])
+
+        #expect(!decision.promotable)
+        #expect(decision.rejections.contains(
+            .requiredOperationNotSatisfied(operationID: OperationID.systemPermissions.rawValue)
+        ))
+    }
+
+    @Test func missingRequiredOperationCaseRejectsPromotion() {
+        let operationID = OperationID.systemHealth.rawValue
+
+        let decision = evaluate(
+            cases: passedRequiredCases(),
+            requiredOperationIDs: [operationID]
+        )
+
+        #expect(!decision.promotable)
+        #expect(decision.rejections.contains(
+            .requiredOperationNotSatisfied(operationID: operationID)
+        ))
     }
 
     @Test func missingRequiredCombinationRejects() {
@@ -422,7 +564,8 @@ struct QualificationGateTests {
         releaseVersion: String = "1.2.3",
         expectedBinarySHA256: String? = nil,
         presentArtifacts: Set<String>? = nil,
-        attestationSHA256: String? = nil
+        attestationSHA256: String? = nil,
+        requiredOperationIDs: Set<String>? = nil
     ) -> PromotionDecision {
         PromotionGate().evaluate(
             attestation: attestation(
@@ -434,7 +577,10 @@ struct QualificationGateTests {
             releaseVersion: releaseVersion,
             expectedBinarySHA256: expectedBinarySHA256 ?? binarySHA256,
             presentArtifacts: presentArtifacts ?? requiredArtifacts,
-            requiredArtifacts: requiredArtifacts
+            requiredArtifacts: requiredArtifacts,
+            requiredOperationIDs: requiredOperationIDs ?? Set(
+                cases.filter { $0.id.hasPrefix("in-process/") }.map(\.operationID)
+            )
         )
     }
 
@@ -491,7 +637,7 @@ struct QualificationGateTests {
             verified: status == .passed,
             sha256: String(repeating: "b", count: 64)
         )
-        let deferral = status == .notQualified
+        let deferral = status == .notQualified || status == .waived
             ? QualificationDeferral(
                 code: .operationUnavailable,
                 detail: reason ?? "required axis unavailable: unspecified"

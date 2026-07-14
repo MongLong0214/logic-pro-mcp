@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import CryptoKit
 import Testing
 @testable import LogicProMCP
 
@@ -43,7 +44,7 @@ struct QualificationRunnerTests {
         #expect(readbackSources == ["logic://transport/state", "logic://mixer"])
     }
 
-    @Test func operationQualificationClassifiesTwentyOneReadsAndEightySixTypedDeferrals() async throws {
+    @Test func operationQualificationSeparatesSemanticReadSmokeAndTypedDeferrals() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }
 
@@ -51,15 +52,120 @@ struct QualificationRunnerTests {
         let operationCases = attestation.cases.filter { $0.id.hasPrefix("in-process/") }
 
         #expect(operationCases.count == 107)
-        #expect(operationCases.filter { $0.status == .passed }.count == 21)
+        #expect(operationCases.filter { $0.status == .passed }.count == 1)
+        #expect(operationCases.filter { $0.status == .protocolSmoke }.count == 20)
         #expect(operationCases.filter { $0.status == .notQualified }.count == 86)
         #expect(operationCases.filter { $0.status == .failed }.isEmpty)
+        #expect(operationCases.filter { $0.status == .protocolSmoke }.allSatisfy {
+            $0.verificationKind == .protocolSmoke
+                && $0.deferral?.code == .semanticValidatorUnavailable
+                && $0.readback?.verified == false
+        })
         #expect(operationCases.filter { $0.status == .notQualified }.allSatisfy {
             $0.verificationKind == .typedDeferral
                 && $0.deferral?.code == .liveMutationNotRun
                 && $0.deferral?.detail.contains("ADR-001-c") == true
                 && $0.readback != nil
         })
+    }
+
+    @Test func semanticMismatchCannotPassReadOperation() throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let response = Data(#"{"logic_pro_running":true,"logic_pro_version":"11.2","logic_pro_bundle_id":"com.apple.logic10","logic_pro_variant":"desktop","logic_pro_ui_locale":"en-US","process_metadata_resolved":true,"logic_pro_variants":[{"variant":"desktop","bundle_id":"com.apple.logic10","installed":true,"running":true},{"variant":"creator_studio","bundle_id":"com.apple.logicpro","installed":false,"running":false}]}"#.utf8)
+        let mismatchedReadback = Data(#"{"logic_pro_running":false,"logic_pro_version":"11.2","logic_pro_bundle_id":"com.apple.logic10","logic_pro_variant":"desktop","logic_pro_ui_locale":"en-US","process_metadata_resolved":true,"logic_pro_variants":[{"variant":"desktop","bundle_id":"com.apple.logic10","installed":true,"running":true},{"variant":"creator_studio","bundle_id":"com.apple.logicpro","installed":false,"running":false}]}"#.utf8)
+        let result = QualificationOperationResult(
+            operationID: spec.id.rawValue,
+            tool: spec.tool.rawValue,
+            command: spec.command,
+            mutability: spec.mutability,
+            requestID: "semantic-response",
+            responseData: response,
+            isError: false,
+            state: "A",
+            error: nil,
+            writeAttempted: false,
+            readbackSource: "logic://system/health",
+            readbackRequestID: "semantic-readback",
+            readbackData: mismatchedReadback,
+            failureReason: nil
+        )
+
+        #expect(result.status != .passed)
+        #expect(!result.verified)
+        #expect(result.readback?.verified == false)
+    }
+
+    @Test func readOperationWithoutValidatorIsProtocolSmoke() throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemPermissions })
+        let result = QualificationOperationResult(
+            operationID: spec.id.rawValue,
+            tool: spec.tool.rawValue,
+            command: spec.command,
+            mutability: spec.mutability,
+            requestID: "smoke-response",
+            responseData: Data(#"{"state":"A","permissions":[]}"#.utf8),
+            isError: false,
+            state: "A",
+            error: nil,
+            writeAttempted: false,
+            readbackSource: "logic://system/health",
+            readbackRequestID: "smoke-readback",
+            readbackData: Data(#"{"logic_pro_running":true}"#.utf8),
+            failureReason: nil
+        )
+
+        #expect(result.status.rawValue == "protocol_smoke")
+        #expect(!result.verified)
+        #expect(result.readback?.verified == false)
+    }
+
+    @Test func readErrorIsNotLabeledSemanticMismatch() throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemPermissions })
+        let result = QualificationOperationResult(
+            operationID: spec.id.rawValue,
+            tool: spec.tool.rawValue,
+            command: spec.command,
+            mutability: spec.mutability,
+            requestID: "error-response",
+            responseData: Data(#"{"state":"C","error":"unavailable","write_attempted":false}"#.utf8),
+            isError: true,
+            state: "C",
+            error: "unavailable",
+            writeAttempted: false,
+            readbackSource: "logic://system/health",
+            readbackRequestID: "error-readback",
+            readbackData: Data(#"{"logic_pro_running":true}"#.utf8),
+            failureReason: nil
+        )
+
+        #expect(result.status == .notQualified)
+        #expect(result.deferral?.code == .operationUnavailable)
+    }
+
+    @Test func matchingHealthSemanticReadbackPasses() throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let health = Data(#"{"logic_pro_running":true,"logic_pro_version":"11.2","logic_pro_bundle_id":"com.apple.logic10","logic_pro_variant":"desktop","logic_pro_ui_locale":"en-US","process_metadata_resolved":true,"logic_pro_variants":[{"variant":"desktop","bundle_id":"com.apple.logic10","installed":true,"running":true},{"variant":"creator_studio","bundle_id":"com.apple.logicpro","installed":false,"running":false}]}"#.utf8)
+        let result = QualificationOperationResult(
+            operationID: spec.id.rawValue,
+            tool: spec.tool.rawValue,
+            command: spec.command,
+            mutability: spec.mutability,
+            requestID: "semantic-response",
+            responseData: health,
+            isError: false,
+            state: "A",
+            error: nil,
+            writeAttempted: false,
+            readbackSource: "logic://system/health",
+            readbackRequestID: "semantic-readback",
+            readbackData: health,
+            failureReason: nil
+        )
+
+        #expect(result.status == .passed)
+        #expect(result.verified)
+        #expect(result.verificationKind == .semanticReadback)
+        #expect(result.readback?.verified == true)
     }
 
     @Test func operationFailurePreventsLiveAxisPromotion() async throws {
@@ -77,6 +183,211 @@ struct QualificationRunnerTests {
         let decision = await fixture.verify(expectedSHA256: fixture.binarySHA256)
         #expect(decision.exitCode != 0)
         #expect(Self.rejectionReasons(try Self.resultObject(decision)).contains("requiredCaseFailed"))
+    }
+
+    @Test func zeroOf107QualifiedOperationsRejectsPromotion() async throws {
+        let specs = OperationRegistry.specs
+        let driveResult = Self.driveResult(specs: specs, qualifiedReadOperationCount: 0)
+        #expect(driveResult.operationResults.values.filter { $0.status == .passed }.isEmpty)
+        #expect(driveResult.operationResults.values.filter { $0.status == .notQualified }.count == 107)
+        let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
+        defer { fixture.remove() }
+
+        let attestation = try await fixture.qualify()
+        let liveAxis = try #require(attestation.cases.first {
+            $0.id == QualificationAxis.defaultAxis.key
+        })
+        #expect(liveAxis.status == .failed)
+
+        let decision = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(decision.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(decision)).contains(
+            "requiredOperationNotSatisfied"
+        ))
+    }
+
+    @Test func thirteenLegacyTransportSuccessesAndNinetyFourDeferralsRejectPromotion() async throws {
+        let specs = OperationRegistry.specs
+        let driveResult = Self.driveResult(specs: specs, qualifiedReadOperationCount: 13)
+        #expect(driveResult.operationResults.values.filter { $0.isError == false }.count == 13)
+        #expect(driveResult.operationResults.values.filter { $0.isError == true }.count == 94)
+        let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
+        defer { fixture.remove() }
+
+        let attestation = try await fixture.qualify()
+        let liveAxis = try #require(attestation.cases.first {
+            $0.id == QualificationAxis.defaultAxis.key
+        })
+        #expect(liveAxis.status == .failed)
+
+        let decision = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(decision.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(decision)).contains(
+            "requiredOperationNotSatisfied"
+        ))
+    }
+
+    @Test func individualGovernedOperationWaiverSatisfiesRequiredOperation() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.mutability == .mutating })
+        let fixture = try Fixture(specs: [spec])
+        defer { fixture.remove() }
+        let waiver = Self.waiver(
+            caseID: "in-process/\(spec.id.rawValue)",
+            affectedCapability: "operation:\(spec.id.rawValue)"
+        )
+        try JSONEncoder().encode([waiver] + Self.axisWaivers())
+            .write(to: fixture.waiversURL)
+
+        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let operationCase = try #require(attestation.cases.first {
+            $0.id == waiver.caseID
+        })
+        #expect(operationCase.status == .waived)
+        #expect(!operationCase.verified)
+        let liveAxis = try #require(attestation.cases.first {
+            $0.id == QualificationAxis.defaultAxis.key
+        })
+        #expect(liveAxis.status == .passed)
+
+        let decision = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(decision.exitCode == 0)
+        #expect(try Self.resultObject(decision)["promotable"] as? Bool == true)
+    }
+
+    @Test func individualGovernedProtocolSmokeWaiverSatisfiesRequiredOperation() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemPermissions })
+        let fixture = try Fixture(specs: [spec])
+        defer { fixture.remove() }
+        let waiver = Self.waiver(
+            caseID: "in-process/\(spec.id.rawValue)",
+            affectedCapability: "operation:\(spec.id.rawValue)"
+        )
+        try JSONEncoder().encode([waiver] + Self.axisWaivers())
+            .write(to: fixture.waiversURL)
+
+        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let operationCase = try #require(attestation.cases.first { $0.id == waiver.caseID })
+        #expect(operationCase.status == .waived)
+        #expect(operationCase.verificationKind == .typedDeferral)
+        #expect(operationCase.deferral?.code == .semanticValidatorUnavailable)
+
+        let decision = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(decision.exitCode == 0)
+        #expect(try Self.resultObject(decision)["promotable"] as? Bool == true)
+    }
+
+    @Test func forgedCoherentBundleWithoutTrustedSignatureRejectsPromotion() async throws {
+        let fixture = try promotableFixture()
+        defer { fixture.remove() }
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        var object = try #require(JSONSerialization.jsonObject(
+            with: Data(contentsOf: fixture.attestationURL)
+        ) as? [String: Any])
+        let forgedCommit = String(repeating: "f", count: 40)
+        object["commitSHA"] = forgedCommit
+        if var provenance = object["provenance"] as? [String: Any] {
+            provenance["commitSHA"] = forgedCommit
+            object["provenance"] = provenance
+        }
+        try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+            .write(to: fixture.attestationURL)
+
+        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+
+        #expect(result.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
+            "provenanceSignatureInvalid"
+        ))
+    }
+
+    @Test func foreignSigningKeyCannotSatisfyPinnedVerifier() async throws {
+        let foreignKey = try Curve25519.Signing.PrivateKey(
+            rawRepresentation: Data(repeating: 9, count: 32)
+        )
+        let fixture = try promotableFixture(
+            trustedPublicKeyData: foreignKey.publicKey.rawRepresentation
+        )
+        defer { fixture.remove() }
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+
+        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+
+        #expect(result.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
+            "provenanceSignatureInvalid"
+        ))
+    }
+
+    @Test func trustedSignedProvenancePromotes() async throws {
+        let fixture = try promotableFixture()
+        defer { fixture.remove() }
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+
+        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+
+        #expect(result.exitCode == 0, "\(result.stdout)")
+        #expect(try Self.resultObject(result)["promotable"] as? Bool == true)
+    }
+
+    @Test func qualificationRequiresCommitIdentityForSignedProvenance() async throws {
+        let fixture = try Fixture(
+            specs: Array(OperationRegistry.specs.prefix(1)),
+            commitSHA: "unknown"
+        )
+        defer { fixture.remove() }
+
+        let result = await fixture.runQualification()
+
+        #expect(result.exitCode != 0)
+        #expect(result.stderr.contains("commit identity"))
+        #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
+    }
+
+    @Test func signingKeyIsNotForwardedToQualificationSubprocess() async throws {
+        let specs = Array(OperationRegistry.specs.prefix(1))
+        let driveResult = Self.driveResult(specs: specs)
+        let fixture = try Fixture(specs: specs, drive: { request in
+            #expect(request.environment["LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY"] == nil)
+            #expect(request.environment["LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"] == nil)
+            return driveResult
+        })
+        defer { fixture.remove() }
+
+        let result = await fixture.runQualification()
+
+        #expect(result.exitCode == 0)
+    }
+
+    @Test func symlinkSwapAtEvidenceReadBoundaryRejectsBundle() async throws {
+        let swapper = EvidenceSymlinkSwap(targetName: "evidence-manifest.json")
+        let fixture = try promotableFixture(beforeEvidenceRead: swapper.swap)
+        defer { fixture.remove() }
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+
+        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+
+        #expect(swapper.didSwap)
+        #expect(result.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
+            "evidenceBindingMismatch"
+        ))
+    }
+
+    @Test func evidenceReplacedBetweenHashAndDecodeRejectsBundle() async throws {
+        let replacer = EvidenceRegularFileReplacement(
+            targetName: "operation-system.health-readback.json"
+        )
+        let fixture = try promotableFixture(beforeEvidenceRead: replacer.replaceAfterFirstRead)
+        defer { fixture.remove() }
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+
+        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+
+        #expect(replacer.didReplace)
+        #expect(result.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
+            "evidenceBindingMismatch"
+        ))
     }
 
     @Test func emptyTraceListFailsWithoutObservedEvents() {
@@ -288,8 +599,8 @@ struct QualificationRunnerTests {
         #expect(evidence["catalog_read_stable"] as? Bool == true)
     }
 
-    @Test func absentAxesEmitVerifierGovernedUnavailability() async throws {
-        let specs = Array(OperationRegistry.specs.prefix(1))
+    @Test func absentAxesRequireLocaleEvidenceOrWaiver() async throws {
+        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
         let fixture = try Fixture(specs: specs)
         defer { fixture.remove() }
 
@@ -311,13 +622,15 @@ struct QualificationRunnerTests {
                 && $0.readback?.verified == false
         })
         #expect(withoutWaiver.waivers.isEmpty)
-        let approved = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(approved.exitCode == 0)
-        #expect(try Self.resultObject(approved)["promotable"] as? Bool == true)
+        let rejected = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(rejected.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(rejected)).contains(
+            "requiredCombinationNotQualified"
+        ))
     }
 
     @Test func productionAxisVocabularyCanonicalizesCreatorAndKoreanLocale() async throws {
-        let specs = Array(OperationRegistry.specs.prefix(1))
+        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
         let observedLocale = QualificationTransport.qualificationLocaleIdentifier("ko_KR")
         let driveResult = Self.driveResult(
             specs: specs,
@@ -403,6 +716,7 @@ struct QualificationRunnerTests {
         let readOnly = operationResults.filter { $0.mutability == .readOnly }
         let qualified = operationResults.filter { $0.status == .passed }
         let deferred = operationResults.filter { $0.status == .notQualified }
+        let smoke = operationResults.filter { $0.status == .protocolSmoke }
 
         #expect(operationResults.count == OperationRegistry.specs.count)
         #expect(mutating.count == 86)
@@ -419,10 +733,13 @@ struct QualificationRunnerTests {
                 && $0.writeAttempted == false
                 && $0.deferral?.code == .liveMutationNotRun
         })
-        #expect(readOnly.allSatisfy { $0.status == .passed || $0.status == .notQualified })
+        #expect(readOnly.allSatisfy {
+            $0.status == .passed || $0.status == .notQualified || $0.status == .protocolSmoke
+        })
         print(
             "qualification operation classification: "
-                + "qualified=\(qualified.count), deferred=\(deferred.count), failed=0"
+                + "qualified=\(qualified.count), protocol_smoke=\(smoke.count), "
+                + "deferred=\(deferred.count), failed=0"
         )
     }
 
@@ -496,10 +813,10 @@ struct QualificationRunnerTests {
     }
 
     @Test func fakeTransportQualificationToPromotionIntegration() async throws {
-        let fixture = try Fixture(specs: OperationRegistry.specs)
+        let fixture = try promotableFixture()
         defer { fixture.remove() }
 
-        let attestation = try await fixture.qualify()
+        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
         #expect(attestation.cases.allSatisfy { $0.command != "registry_handler_trace" })
         let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
         let json = try Self.resultObject(result)
@@ -510,7 +827,14 @@ struct QualificationRunnerTests {
     }
 
     @Test func runnerRecordsExactExecutableSHAAndCodableSchema() async throws {
-        let specs = Array(OperationRegistry.specs.prefix(1))
+        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
+        let observedAxis = QualificationAxis(
+            variant: .creatorStudio,
+            locale: .koKR,
+            profile: .full,
+            cache: .warm,
+            fixture: .empty
+        )
         let driveResult = Self.driveResult(
             specs: specs,
             observedVariant: "creator_studio",
@@ -518,10 +842,13 @@ struct QualificationRunnerTests {
         )
         let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
         defer { fixture.remove() }
+        let waivers = Self.axisWaivers(observedAxis: observedAxis)
+        try JSONEncoder().encode(waivers).write(to: fixture.waiversURL)
 
         let result = await fixture.runner.run(arguments: [
             "LogicProMCP", "--qualify",
             "--out", fixture.attestationURL.path,
+            "--waivers", fixture.waiversURL.path,
             "--release-version", "1.2.3",
             "--variant", "creator",
             "--locale", "ko",
@@ -551,7 +878,7 @@ struct QualificationRunnerTests {
         #expect(attestation.cache == .warm)
         #expect(attestation.fixture == .empty)
         #expect(json["cache"] as? String == "warm")
-        #expect(attestation.waivers.isEmpty)
+        #expect(attestation.waivers == waivers)
         #expect(attestation.total == 5)
         #expect(attestation.total == attestation.cases.count)
         let aggregateIDs = attestation.cases
@@ -596,12 +923,14 @@ struct QualificationRunnerTests {
         #expect(actualOperations == expectedOperations, "missing operation cases: \(expectedOperations.subtracting(actualOperations).sorted())")
         #expect(aggregateCases.map(\.id) == QualificationAxis.requiredCombinations.map(\.key))
         #expect(attestation.cases.map(\.id).count == Set(attestation.cases.map(\.id)).count)
-        #expect(aggregateCases.filter { $0.status == .passed }.count == 1)
+        #expect(aggregateCases.filter { $0.status == .passed }.isEmpty)
+        #expect(aggregateCases.filter { $0.status == .failed }.count == 1)
         #expect(aggregateCases.filter { $0.status == .notQualified }.count == 3)
-        #expect(operationCases.filter { $0.status == .passed }.count == 21)
+        #expect(operationCases.filter { $0.status == .passed }.count == 1)
+        #expect(operationCases.filter { $0.status == .protocolSmoke }.count == 20)
         #expect(operationCases.filter { $0.status == .notQualified }.count == 86)
-        #expect(attestation.passed == 22)
-        #expect(attestation.failed == 0)
+        #expect(attestation.passed == 1)
+        #expect(attestation.failed == 1)
 
         for qualificationCase in operationCases {
             let spec = try #require(OperationRegistry.spec(
@@ -610,10 +939,15 @@ struct QualificationRunnerTests {
             ))
             #expect(qualificationCase.id == "in-process/\(spec.id.rawValue)")
             #expect(OperationHandlerRegistry.handler(tool: qualificationCase.tool, command: qualificationCase.command) != nil)
-            if spec.mutability == .readOnly {
+            if spec.id == .systemHealth {
                 #expect(qualificationCase.status == .passed)
                 #expect(qualificationCase.verified)
-                #expect(qualificationCase.verificationKind == .readResponse)
+                #expect(qualificationCase.verificationKind == .semanticReadback)
+            } else if spec.mutability == .readOnly {
+                #expect(qualificationCase.status == .protocolSmoke)
+                #expect(!qualificationCase.verified)
+                #expect(qualificationCase.verificationKind == .protocolSmoke)
+                #expect(qualificationCase.deferral?.code == .semanticValidatorUnavailable)
             } else {
                 #expect(qualificationCase.status == .notQualified)
                 #expect(!qualificationCase.verified)
@@ -948,9 +1282,9 @@ struct QualificationRunnerTests {
     }
 
     @Test func sameSHAApprovesWithExitZero() async throws {
-        let fixture = try Fixture(specs: OperationRegistry.specs)
+        let fixture = try promotableFixture()
         defer { fixture.remove() }
-        _ = try await fixture.qualify()
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
 
         let result = await fixture.verify(expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData))
         let json = try Self.resultObject(result)
@@ -1080,7 +1414,7 @@ struct QualificationRunnerTests {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }
         let original = try await fixture.qualify()
-        let passedCase = try #require(original.cases.first)
+        let passedCase = try #require(original.cases.first { $0.status == .passed })
         let changed = fixture.copy(
             original,
             cases: original.cases + [passedCase],
@@ -1170,12 +1504,13 @@ struct QualificationRunnerTests {
     }
 
     @Test func vPrefixedReleaseTagMatchesBinaryVersion() async throws {
-        let fixture = try Fixture(specs: OperationRegistry.specs)
+        let fixture = try promotableFixture()
         defer { fixture.remove() }
 
         let qualification = await fixture.runner.run(arguments: [
             "LogicProMCP", "--qualify",
             "--out", fixture.attestationURL.path,
+            "--waivers", fixture.waiversURL.path,
             "--release-version", "v1.2.3",
         ])
         let verification = await fixture.verify(
@@ -1380,6 +1715,105 @@ struct QualificationRunnerTests {
         )
     }
 
+    private func promotableFixture(
+        trustedPublicKeyData: Data? = nil,
+        beforeEvidenceRead: @escaping @Sendable (URL) -> Void = { _ in }
+    ) throws -> Fixture {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let fixture = try Fixture(
+            specs: [spec],
+            trustedPublicKeyData: trustedPublicKeyData,
+            beforeEvidenceRead: beforeEvidenceRead
+        )
+        try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
+        return fixture
+    }
+
+    private static func axisWaivers(
+        observedAxis: QualificationAxis = .defaultAxis
+    ) -> [QualificationWaiver] {
+        QualificationAxis.requiredAxes(
+            profile: observedAxis.profile,
+            cache: observedAxis.cache,
+            fixture: observedAxis.fixture
+        ).filter { $0 != observedAxis }.map {
+            waiver(
+                caseID: $0.key,
+                affectedCapability: QualificationWaiver.hostAxisAvailabilityCapability
+            )
+        }
+    }
+
+    private final class EvidenceSymlinkSwap: @unchecked Sendable {
+        private let targetName: String
+        private let lock = NSLock()
+        private var swapped = false
+
+        init(targetName: String) {
+            self.targetName = targetName
+        }
+
+        var didSwap: Bool {
+            lock.withLock { swapped }
+        }
+
+        func swap(_ url: URL) {
+            lock.withLock {
+                guard !swapped, url.lastPathComponent == targetName else { return }
+                let replacement = url.deletingLastPathComponent()
+                    .appendingPathComponent("symlink-swap-replacement.json")
+                guard let data = try? Data(contentsOf: url),
+                      (try? data.write(to: replacement, options: .atomic)) != nil,
+                      (try? FileManager.default.removeItem(at: url)) != nil,
+                      (try? FileManager.default.createSymbolicLink(
+                          at: url,
+                          withDestinationURL: replacement
+                      )) != nil else {
+                    return
+                }
+                swapped = true
+            }
+        }
+    }
+
+    private final class EvidenceRegularFileReplacement: @unchecked Sendable {
+        private let targetName: String
+        private let lock = NSLock()
+        private var targetURL: URL?
+        private var replaced = false
+
+        init(targetName: String) {
+            self.targetName = targetName
+        }
+
+        var didReplace: Bool {
+            lock.withLock { replaced }
+        }
+
+        func replaceAfterFirstRead(_ url: URL) {
+            lock.withLock {
+                if url.lastPathComponent == targetName {
+                    targetURL = targetURL ?? url
+                    return
+                }
+                guard let targetURL, !replaced,
+                      let data = try? Data(contentsOf: targetURL),
+                      var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                else {
+                    return
+                }
+                object["untrusted_replacement"] = true
+                guard let replacement = try? JSONSerialization.data(
+                    withJSONObject: object,
+                    options: [.sortedKeys]
+                ), (try? replacement.write(to: targetURL, options: .atomic)) != nil else {
+                    return
+                }
+                replaced = true
+            }
+        }
+    }
+
     private static let releaseExecutableURL = URL(
         fileURLWithPath: FileManager.default.currentDirectoryPath,
         isDirectory: true
@@ -1393,7 +1827,8 @@ struct QualificationRunnerTests {
         tracePresent: Bool = true,
         traceOperationID: OperationID = .systemSagaExecute,
         tracePhases: [String] = ["request.received", "result.emitted"],
-        failedOperationID: OperationID? = nil
+        failedOperationID: OperationID? = nil,
+        qualifiedReadOperationCount: Int? = nil
     ) -> QualificationDriveResult {
         let expectedCount = specs.count
         let actualCount = catalogCount ?? expectedCount
@@ -1435,14 +1870,23 @@ struct QualificationRunnerTests {
             },
             "process_metadata_resolved": true,
         ], options: [.sortedKeys])
+        var remainingQualifiedReads = qualifiedReadOperationCount
         let operationResults: [String: QualificationOperationResult] = Dictionary(
             uniqueKeysWithValues: specs.map { spec in
             let isMutation = spec.mutability == .mutating
-            let response = Data((isMutation
-                ? "{\"operation\":\"\(spec.id.rawValue)\",\"state\":\"C\",\"error\":\"invalid_params\",\"write_attempted\":false}"
-                : "{\"operation\":\"\(spec.id.rawValue)\",\"state\":\"A\",\"write_attempted\":false}"
-            ).utf8)
-            let readback = Data("{\"operation_readback\":\"\(spec.id.rawValue)\"}".utf8)
+            let readIsQualified = !isMutation && (remainingQualifiedReads.map { $0 > 0 } ?? true)
+            if !isMutation, remainingQualifiedReads != nil {
+                remainingQualifiedReads? -= 1
+            }
+            let response = spec.id == .systemHealth
+                ? stableHealth
+                : Data((isMutation
+                    ? "{\"operation\":\"\(spec.id.rawValue)\",\"state\":\"C\",\"error\":\"invalid_params\",\"write_attempted\":false}"
+                    : "{\"operation\":\"\(spec.id.rawValue)\",\"state\":\"A\",\"write_attempted\":false}"
+                ).utf8)
+            let readback = spec.id == .systemHealth
+                ? stableHealth
+                : Data("{\"operation_readback\":\"\(spec.id.rawValue)\"}".utf8)
             return (
                 spec.id.rawValue,
                 QualificationOperationResult(
@@ -1452,7 +1896,7 @@ struct QualificationRunnerTests {
                     mutability: spec.mutability,
                     requestID: "fake-operation-\(spec.id.rawValue)",
                     responseData: response,
-                    isError: isMutation,
+                    isError: isMutation || !readIsQualified,
                     state: isMutation ? "C" : "A",
                     error: isMutation ? "invalid_params" : nil,
                     writeAttempted: false,
@@ -1579,7 +2023,7 @@ struct QualificationRunnerTests {
         let caseManifestURL: URL
         let externalCasesURL: URL
         let waiversURL: URL
-        let commitSHA = String(repeating: "c", count: 40)
+        let commitSHA: String
         let runner: QualificationRunner
 
         var binarySHA256: String { SupportBundleBuilder.sha256(executableData) }
@@ -1592,8 +2036,12 @@ struct QualificationRunnerTests {
             handlerExists: @escaping @Sendable (String, String) -> Bool = {
                 OperationHandlerRegistry.handler(tool: $0, command: $1) != nil
             },
+            commitSHA: String = String(repeating: "c", count: 40),
+            trustedPublicKeyData: Data? = nil,
+            beforeEvidenceRead: @escaping @Sendable (URL) -> Void = { _ in },
             drive: (@Sendable (QualificationDriveRequest) async throws -> QualificationDriveResult)? = nil
         ) throws {
+            self.commitSHA = commitSHA
             directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("qualification-runner-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -1604,17 +2052,30 @@ struct QualificationRunnerTests {
             externalCasesURL = directory.appendingPathComponent("cases.json")
             waiversURL = directory.appendingPathComponent("waivers.json")
             try executableData.write(to: executableURL)
+            let signingKeyData = Data(repeating: 7, count: 32)
+            let signingKey = try Curve25519.Signing.PrivateKey(
+                rawRepresentation: signingKeyData
+            )
+            let trustedKeyData = trustedPublicKeyData
+                ?? signingKey.publicKey.rawRepresentation
+            let signingKeyBase64 = signingKeyData.base64EncodedString()
+            let trustedKeyBase64 = trustedKeyData.base64EncodedString()
             let defaultDriveResult = QualificationRunnerTests.driveResult(specs: specs)
             let drive = drive ?? { _ in defaultDriveResult }
             runner = QualificationRunner(runtime: .init(
                 executableURL: { [executableURL] in executableURL },
-                environment: { [commitSHA] in ["GIT_COMMIT": commitSHA] },
+                environment: { [commitSHA] in [
+                    "GIT_COMMIT": commitSHA,
+                    "LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY": signingKeyBase64,
+                    "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": trustedKeyBase64,
+                ] },
                 now: { Date(timeIntervalSince1970: 1_000) },
                 serverVersion: { binaryVersion },
                 specs: { specs },
                 registryValidationErrors: { registryValidationErrors },
                 handlerValidationErrors: { handlerValidationErrors },
                 handlerExists: handlerExists,
+                beforeEvidenceRead: beforeEvidenceRead,
                 drive: drive
             ))
         }
@@ -1698,7 +2159,9 @@ struct QualificationRunnerTests {
                 waived: copiedCases.filter { $0.status == .waived }.count,
                 cases: copiedCases,
                 waivers: waivers ?? original.waivers,
-                evidenceManifestSHA256: original.evidenceManifestSHA256
+                evidenceManifestSHA256: original.evidenceManifestSHA256,
+                provenance: original.provenance,
+                provenanceSignature: original.provenanceSignature
             )
         }
     }
