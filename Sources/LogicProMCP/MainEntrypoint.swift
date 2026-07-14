@@ -200,6 +200,11 @@ enum MainEntrypoint {
             return status.allGranted ? 0 : 1
         }
 
+        if let option = arguments.dropFirst().first, option.hasPrefix("-") {
+            writeStderr("Unknown option: \(option)\n")
+            return 1
+        }
+
         let server = serverFactory()
 
         // SIGTERM / SIGINT → coordinated shutdown, then exit. Pre-fix the
@@ -269,7 +274,7 @@ enum MainEntrypoint {
           LogicProMCP --qualify --out <attestation.json> [--cases <cases.json>] [--waivers <waivers.json>] [--release-version <version>] [--variant <desktop|creator>] [--locale <en|ko>] [--profile <core|full>] [--cache <cold|warm>]
                                                Drive the packaged binary over stdio and write a live qualification attestation
           LogicProMCP --verify-promotion --attestation <attestation.json> --release-version <version> --expected-binary-sha256 <hex> [--required-artifacts <path,...>]
-                                               Evaluate the release promotion gate and emit a JSON decision
+                                               Evaluate local promotion prerequisites and emit a JSON decision
           LogicProMCP --list-approvals         List manual channel approvals and exit
           LogicProMCP --approve-channel <MIDIKeyCommands|Scripter> [--approval-note <note>]
                                                Record a manual channel approval and exit

@@ -109,6 +109,22 @@ private actor MockMainServer: ServerStarting {
     #expect(stdout.contains("USAGE:"))
 }
 
+@Test func testMainEntrypointRejectsUnknownTopLevelOptionWithoutStartingServer() async {
+    var stderr = ""
+    let exitCode = await MainEntrypoint.run(
+        arguments: ["LogicProMCP", "--definitely-invalid"],
+        serverFactory: {
+            Issue.record("Unknown options must not start the MCP server")
+            return MockMainServer()
+        },
+        writeStdout: { _ in },
+        writeStderr: { stderr += $0 }
+    )
+
+    #expect(exitCode == 1)
+    #expect(stderr.contains("Unknown option: --definitely-invalid"))
+}
+
 @Test func testMainEntrypointReturnsSuccessForGrantedPermissions() async {
     var stderr = ""
     let exitCode = await MainEntrypoint.run(

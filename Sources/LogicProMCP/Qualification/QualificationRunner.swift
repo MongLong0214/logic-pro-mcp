@@ -213,13 +213,15 @@ struct QualificationRunner: Sendable {
         }
         let waivers = try Self.loadWaivers(from: options.waiversURL)
         let startedAt = runtime.now()
-        let executableURL = try runtime.executableURL()
+        let sourceExecutableURL = try runtime.executableURL()
         let environment = runtime.environment()
         let commitSHA = try Self.commitSHA(from: environment)
         let signingKey = try Self.signingKey(from: environment)
         var driveEnvironment = environment
         driveEnvironment.removeValue(forKey: Self.signingKeyEnvironmentKey)
         driveEnvironment.removeValue(forKey: Self.trustedPublicKeyEnvironmentKey)
+        let executableURL = try Self.snapshotExecutable(sourceExecutableURL)
+        defer { try? FileManager.default.removeItem(at: executableURL.deletingLastPathComponent()) }
         let executableData = try Data(contentsOf: executableURL, options: .mappedIfSafe)
         let binarySHA256 = SupportBundleBuilder.sha256(executableData)
         let outputDirectory = options.outputURL.deletingLastPathComponent()
@@ -1432,7 +1434,8 @@ struct QualificationRunner: Sendable {
     private static func readNoFollow(
         relativePath: String,
         directory: URL,
-        beforeRead: @Sendable (URL) -> Void
+        beforeRead: @Sendable (URL) -> Void,
+        maxBytes: Int64 = 16 * 1024 * 1024
     ) throws -> Data {
         let components = relativePath.split(
             separator: "/",
@@ -1489,7 +1492,10 @@ struct QualificationRunner: Sendable {
 
         var opened = stat()
         guard fstat(fileFD, &opened) == 0,
-              opened.st_mode & S_IFMT == S_IFREG else {
+              opened.st_mode & S_IFMT == S_IFREG,
+              opened.st_nlink == 1,
+              opened.st_size >= 0,
+              opened.st_size <= maxBytes else {
             throw RunnerError.invalidArguments("Evidence path is not a regular file")
         }
         beforeRead(directory.appendingPathComponent(relativePath))
@@ -1504,6 +1510,37 @@ struct QualificationRunner: Sendable {
             throw RunnerError.invalidArguments("Evidence path changed during read")
         }
         return data
+    }
+
+    private static func snapshotExecutable(_ sourceURL: URL) throws -> URL {
+        let sourceDirectory = sourceURL.deletingLastPathComponent()
+        let sourceData = try readNoFollow(
+            relativePath: sourceURL.lastPathComponent,
+            directory: sourceDirectory,
+            beforeRead: { _ in },
+            maxBytes: 256 * 1024 * 1024
+        )
+        let snapshotDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "qualification-executable-snapshot-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: snapshotDirectory,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        do {
+            let snapshotURL = snapshotDirectory.appendingPathComponent(sourceURL.lastPathComponent)
+            try sourceData.write(to: snapshotURL, options: .withoutOverwriting)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o500],
+                ofItemAtPath: snapshotURL.path
+            )
+            return snapshotURL
+        } catch {
+            try? FileManager.default.removeItem(at: snapshotDirectory)
+            throw error
+        }
     }
 
     private static func signingKey(

@@ -138,7 +138,6 @@ struct PromotionGate {
                 binarySHA256: attestation.binarySHA256
             )
         }
-        let liveAvailability = attestedLiveCase?.availabilityObservation
         for axis in QualificationAxis.requiredAxes(
             profile: attestation.profile,
             cache: attestation.cache,
@@ -168,12 +167,6 @@ struct PromotionGate {
                     binarySHA256: attestation.binarySHA256,
                     waivers: attestation.waivers,
                     expiredWaiverIDs: expiredWaiverIDs
-                )) || (liveAvailability != nil && Self.isGovernedUnavailableCase(
-                    qualificationCase,
-                    axis: axis,
-                    observedAxis: attestedAxis,
-                    binarySHA256: attestation.binarySHA256,
-                    liveAvailability: liveAvailability
                 ))
             }) {
                 rejections.append(.requiredCombinationNotQualified(key: axis.key))
@@ -214,42 +207,6 @@ struct PromotionGate {
                 qualificationCase.availabilityObservation,
                 axis: axis
             )
-            && !qualificationCase.evidenceFiles.isEmpty
-    }
-
-    private static func isGovernedUnavailableCase(
-        _ qualificationCase: QualificationCase,
-        axis: QualificationAxis,
-        observedAxis: QualificationAxis,
-        binarySHA256: String,
-        liveAvailability: QualificationAvailabilityObservation?
-    ) -> Bool {
-        guard axis != observedAxis,
-              let liveAvailability,
-              qualificationCase.availabilityObservation == liveAvailability,
-              Self.isValidLiveObservation(liveAvailability, axis: observedAxis),
-              Self.provesUnavailable(axis: axis, observation: liveAvailability) else {
-            return false
-        }
-        return qualificationCase.id == axis.key
-            && qualificationCase.axis == axis
-            && qualificationCase.binarySHA256 == binarySHA256
-            && qualificationCase.status == .notQualified
-            && !qualificationCase.verified
-            && qualificationCase.verificationKind == .typedDeferral
-            && qualificationCase.deferral?.code == .operationUnavailable
-            && qualificationCase.deferral?.detail.isEmpty == false
-            && qualificationCase.deferral?.detail == qualificationCase.reason
-            && qualificationCase.reason?.hasPrefix("required axis unavailable:") == true
-            && qualificationCase.readback != nil
-            && qualificationCase.readback?.verified == false
-            && qualificationCase.readback?.source == "logic://system/health"
-            && qualificationCase.readback.map { Self.isSHA256($0.sha256) } == true
-            && qualificationCase.availabilityReason == availabilityReason(
-                for: axis,
-                observedAxis: observedAxis
-            )
-            && qualificationCase.reason?.isEmpty == false
             && !qualificationCase.evidenceFiles.isEmpty
     }
 
@@ -302,17 +259,6 @@ struct PromotionGate {
             }
     }
 
-    private static func provesUnavailable(
-        axis: QualificationAxis,
-        observation: QualificationAvailabilityObservation
-    ) -> Bool {
-        guard axis.variant != observation.activeVariant else { return false }
-        guard let variant = observation.variants.first(where: { $0.variant == axis.variant }) else {
-            return false
-        }
-        return !variant.installed && !variant.running
-    }
-
     private static func expectedBundleID(for variant: LogicVariant) -> String {
         switch variant {
         case .desktop: LogicProVariant.desktop.bundleID
@@ -341,13 +287,30 @@ struct SemanticVersion: Comparable {
     let major: Int
     let minor: Int
     let patch: Int
+    let prerelease: [Substring]
 
     init?(_ rawValue: String) {
         var value = rawValue
         if value.first == "v" || value.first == "V" {
             value.removeFirst()
         }
-        let parts = value.split(separator: ".", omittingEmptySubsequences: false)
+        let withoutBuild = value.split(separator: "+", maxSplits: 1, omittingEmptySubsequences: false)
+        guard withoutBuild.count <= 2,
+              withoutBuild.allSatisfy({ !$0.isEmpty }),
+              withoutBuild.dropFirst().allSatisfy({ Self.validIdentifiers($0) }) else {
+            return nil
+        }
+        let releaseParts = withoutBuild[0].split(
+            separator: "-",
+            maxSplits: 1,
+            omittingEmptySubsequences: false
+        )
+        guard releaseParts.count <= 2,
+              releaseParts.allSatisfy({ !$0.isEmpty }),
+              releaseParts.dropFirst().allSatisfy({ Self.validIdentifiers($0) }) else {
+            return nil
+        }
+        let parts = releaseParts[0].split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 3,
               parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }),
               let major = Int(parts[0]),
@@ -358,11 +321,31 @@ struct SemanticVersion: Comparable {
         self.major = major
         self.minor = minor
         self.patch = patch
+        prerelease = releaseParts.count == 2
+            ? releaseParts[1].split(separator: ".", omittingEmptySubsequences: false)
+            : []
     }
 
     static func < (lhs: SemanticVersion, rhs: SemanticVersion) -> Bool {
         if lhs.major != rhs.major { return lhs.major < rhs.major }
         if lhs.minor != rhs.minor { return lhs.minor < rhs.minor }
-        return lhs.patch < rhs.patch
+        if lhs.patch != rhs.patch { return lhs.patch < rhs.patch }
+        if lhs.prerelease.isEmpty { return false }
+        if rhs.prerelease.isEmpty { return true }
+        for (left, right) in zip(lhs.prerelease, rhs.prerelease) where left != right {
+            switch (Int(left), Int(right)) {
+            case let (.some(leftNumber), .some(rightNumber)): return leftNumber < rightNumber
+            case (.some, .none): return true
+            case (.none, .some): return false
+            case (.none, .none): return left.lexicographicallyPrecedes(right)
+            }
+        }
+        return lhs.prerelease.count < rhs.prerelease.count
+    }
+
+    private static func validIdentifiers(_ value: Substring) -> Bool {
+        value.split(separator: ".", omittingEmptySubsequences: false).allSatisfy { identifier in
+            !identifier.isEmpty && identifier.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" }
+        }
     }
 }

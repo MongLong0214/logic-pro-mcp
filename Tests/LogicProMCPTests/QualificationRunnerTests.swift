@@ -358,6 +358,24 @@ struct QualificationRunnerTests {
         #expect(result.exitCode == 0)
     }
 
+    @Test func qualificationDrivesImmutableSnapshotOfHashedExecutable() async throws {
+        let specs = Array(OperationRegistry.specs.prefix(1))
+        let originalData = Data("qualification-binary-fixture".utf8)
+        let fixture = try Fixture(specs: specs, drive: { request in
+            #expect(request.executableURL.deletingLastPathComponent().lastPathComponent.hasPrefix(
+                "qualification-executable-snapshot-"
+            ))
+            let snapshotData = try Data(contentsOf: request.executableURL)
+            #expect(snapshotData == originalData)
+            return Self.driveResult(specs: specs)
+        })
+        defer { fixture.remove() }
+
+        let attestation = try await fixture.qualify()
+
+        #expect(attestation.binarySHA256 == SupportBundleBuilder.sha256(originalData))
+    }
+
     @Test func symlinkSwapAtEvidenceReadBoundaryRejectsBundle() async throws {
         let swapper = EvidenceSymlinkSwap(targetName: "evidence-manifest.json")
         let fixture = try promotableFixture(beforeEvidenceRead: swapper.swap)
@@ -384,6 +402,21 @@ struct QualificationRunnerTests {
         let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
 
         #expect(replacer.didReplace)
+        #expect(result.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
+            "evidenceBindingMismatch"
+        ))
+    }
+
+    @Test func hardLinkedEvidenceFileRejectsBundle() async throws {
+        let fixture = try promotableFixture()
+        defer { fixture.remove() }
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let alias = fixture.directory.appendingPathComponent("manifest-hardlink.json")
+        #expect(link(fixture.manifestURL.path, alias.path) == 0)
+
+        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+
         #expect(result.exitCode != 0)
         #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
             "evidenceBindingMismatch"
@@ -1656,25 +1689,18 @@ struct QualificationRunnerTests {
         #expect(stdout.contains("--expected-binary-sha256 <hex>"))
     }
 
-    @Test func releaseWorkflowQualifiesFinalBinaryBeforePublication() throws {
+    @Test func releaseWorkflowDoesNotTrustCandidateSelfQualification() throws {
         let workflow = try scriptContents(".github/workflows/release.yml")
         let package = try #require(workflow.range(of: "name: Package"))
         let formula = try #require(workflow.range(of: "name: Verify Formula install paths against tarball"))
-        let gate = try #require(workflow.range(of: "name: Qualify and verify promotion"))
         let release = try #require(workflow.range(of: "name: Create GitHub Release"))
-        let gateText = String(workflow[gate.lowerBound..<release.lowerBound])
 
-        #expect(package.lowerBound < gate.lowerBound)
-        #expect(formula.lowerBound < gate.lowerBound)
-        #expect(gate.lowerBound < release.lowerBound)
-        #expect(gateText.contains("shasum -a 256 LogicProMCP"))
-        #expect(gateText.contains("./LogicProMCP --qualify"))
-        #expect(gateText.contains("--out release-qualification-attestation.json"))
-        #expect(gateText.contains("--waivers .github/qualification/waivers.json"))
-        #expect(gateText.contains("./LogicProMCP --verify-promotion"))
-        #expect(gateText.contains("--expected-binary-sha256 \"$binary_sha256\""))
-        #expect(gateText.contains("--release-version \"$RELEASE_VERSION\""))
-        #expect(!gateText.contains("swift build"))
+        #expect(package.lowerBound < formula.lowerBound)
+        #expect(formula.lowerBound < release.lowerBound)
+        #expect(!workflow.contains("LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY"))
+        #expect(!workflow.contains("LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"))
+        #expect(!workflow.contains("./LogicProMCP --qualify"))
+        #expect(!workflow.contains("./LogicProMCP --verify-promotion"))
         let waiverData = try Data(contentsOf: URL(
             fileURLWithPath: ".github/qualification/waivers.json"
         ))

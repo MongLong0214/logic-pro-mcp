@@ -32,8 +32,12 @@ struct QualificationGateTests {
         }
 
         let governed = evaluate(cases: governedCases)
-        #expect(governed.promotable)
-        #expect(governed.rejections.isEmpty)
+        #expect(!governed.promotable)
+        for axis in QualificationAxis.requiredCombinations where axis.variant != liveAxis.variant {
+            #expect(governed.rejections.contains(
+                .requiredCombinationNotQualified(key: axis.key)
+            ))
+        }
 
         let creatorInstalled = qualificationAvailabilityObservation(
             for: liveAxis,
@@ -104,13 +108,12 @@ struct QualificationGateTests {
         ))
     }
 
-    @Test func localeDifferentAxisWithPerAxisWaiverPromotes() {
+    @Test func everyMissingAxisWithPerAxisWaiverPromotes() {
         let liveAxis = QualificationAxis.requiredCombinations[0]
-        let localeAxis = QualificationAxis.requiredCombinations[1]
         let cases = QualificationAxis.requiredCombinations.map { axis in
             qualificationCase(
                 id: axis.key,
-                status: axis == liveAxis ? .passed : axis == localeAxis ? .waived : .notQualified,
+                status: axis == liveAxis ? .passed : .waived,
                 reason: axis == liveAxis
                     ? nil
                     : "required axis unavailable: different observed Logic variant or UI locale",
@@ -121,13 +124,17 @@ struct QualificationGateTests {
                 )
             )
         }
-        let waiver = waiver(
-            caseID: localeAxis.key,
-            expiryVersion: "1.3.0",
-            affectedCapability: QualificationWaiver.hostAxisAvailabilityCapability
-        )
+        let waivers = QualificationAxis.requiredCombinations
+            .filter { $0 != liveAxis }
+            .map { axis in
+                waiver(
+                    caseID: axis.key,
+                    expiryVersion: "1.3.0",
+                    affectedCapability: QualificationWaiver.hostAxisAvailabilityCapability
+                )
+            }
 
-        let decision = evaluate(cases: cases, waivers: [waiver])
+        let decision = evaluate(cases: cases, waivers: waivers)
 
         #expect(decision.promotable)
         #expect(decision.rejections.isEmpty)
@@ -140,7 +147,7 @@ struct QualificationGateTests {
         #expect(decision.rejections.isEmpty)
     }
 
-    @Test func trulyUninstalledVariantRemainsGovernedUnavailable() {
+    @Test func trulyUninstalledVariantStillRequiresExplicitWaiver() {
         let liveAxis = QualificationAxis.requiredCombinations[0]
         let secondLiveLocale = QualificationAxis.requiredCombinations[1]
         let cases = QualificationAxis.requiredCombinations.map { axis in
@@ -163,8 +170,12 @@ struct QualificationGateTests {
 
         let decision = evaluate(cases: cases)
 
-        #expect(decision.promotable)
-        #expect(decision.rejections.isEmpty)
+        #expect(!decision.promotable)
+        for axis in QualificationAxis.requiredCombinations where axis.variant == .creatorStudio {
+            #expect(decision.rejections.contains(
+                .requiredCombinationNotQualified(key: axis.key)
+            ))
+        }
     }
 
     @Test func promotionDoesNotCountProtocolSmokeAsQualified() throws {
@@ -518,6 +529,17 @@ struct QualificationGateTests {
 
         #expect(!decision.promotable)
         #expect(decision.rejections.contains(.releaseVersionMismatch(expected: "1.2.3", actual: "1.2.2")))
+    }
+
+    @Test func matchingPrereleaseVersionPromotes() {
+        let decision = evaluate(
+            cases: passedRequiredCases(),
+            attestationVersion: "1.2.3-rc.1",
+            releaseVersion: "1.2.3-rc.1"
+        )
+
+        #expect(decision.promotable)
+        #expect(decision.rejections.isEmpty)
     }
 
     @Test func equalInvalidReleaseVersionsReject() {

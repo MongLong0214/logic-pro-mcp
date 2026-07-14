@@ -327,16 +327,6 @@ For live attestation on a configured Logic Pro host:
 LOGIC_PRO_MCP_STRICT_LIVE=1 Scripts/live-e2e-test.sh
 ```
 
-Release qualification requires externally managed Ed25519 keys. Set
-`LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY` to the base64-encoded 32-byte raw
-private key for `--qualify`, and pin the matching base64-encoded raw public key
-in `LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY` for
-`--verify-promotion`. Qualification fails when the signing key is unavailable;
-verification is non-promotable when the pinned key or a valid provenance
-signature is unavailable. Key custody, access control, and rotation remain
-outside this repository. A valid signature authenticates the emitted evidence
-bundle; it does not substitute for unexecuted live operation or matrix cases.
-
 ## License
 
 MIT. See [LICENSE](LICENSE).
