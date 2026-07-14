@@ -169,6 +169,8 @@ jobs:
         env:
           GIT_COMMIT: ${{ github.sha }}
           RELEASE_VERSION: ${{ github.ref_name }}
+          LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY: ${{ secrets.LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY }}
+          LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY: ${{ vars.LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY }}
         run: |
           set -euo pipefail
           binary_sha256="$(shasum -a 256 LogicProMCP | awk '{print $1}')"
