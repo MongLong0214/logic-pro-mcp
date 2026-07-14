@@ -55,11 +55,15 @@ struct PromotionGate {
         for caseID in duplicateCaseIDs.sorted() {
             rejections.append(.duplicateCaseID(caseID: caseID))
         }
-        for issue in QualificationWaiverValidator.issues(in: attestation.waivers) {
+        let waiverIssues = QualificationWaiverValidator.issues(in: attestation.waivers)
+        var invalidWaiverCaseIDs: Set<String> = []
+        for issue in waiverIssues {
             switch issue {
             case .invalidField(let caseID, let field):
+                invalidWaiverCaseIDs.insert(caseID)
                 rejections.append(.invalidWaiver(caseID: caseID, field: field))
             case .duplicateCaseID(let caseID):
+                invalidWaiverCaseIDs.insert(caseID)
                 rejections.append(.duplicateWaiver(caseID: caseID))
             }
         }
@@ -89,6 +93,24 @@ struct PromotionGate {
         for caseID in expiredWaiverIDs.sorted() {
             rejections.append(.expiredWaiver(caseID: caseID))
         }
+        let hasLiveQualifiedAxis = attestation.cases.contains { qualificationCase in
+            qualificationCase.status == .passed
+                && qualificationCase.verified
+                && !qualificationCase.evidenceFiles.isEmpty
+                && QualificationAxis.requiredCombinations.contains { axis in
+                    Self.matchesRequiredAxis(caseID: qualificationCase.id, axis: axis)
+                }
+        }
+        let qualifyingAxisWaiverCaseIDs = hasLiveQualifiedAxis
+            ? Set(attestation.waivers.compactMap { waiver -> String? in
+                guard waiver.governsHostAxisAvailability,
+                      !invalidWaiverCaseIDs.contains(waiver.caseID),
+                      !expiredWaiverIDs.contains(waiver.caseID) else {
+                    return nil
+                }
+                return waiver.caseID
+            })
+            : []
         for axis in QualificationAxis.requiredCombinations {
             let matchingCases = attestation.cases.filter {
                 Self.matchesRequiredAxis(caseID: $0.id, axis: axis)
@@ -102,8 +124,12 @@ struct PromotionGate {
                 rejections.append(.requiredCaseFailed(caseID: failedCaseID))
             } else if matchingCases.contains(where: { duplicateCaseIDs.contains($0.id) }) {
                 continue
-            } else if !matchingCases.contains(where: {
-                $0.status == .passed && $0.verified && !$0.evidenceFiles.isEmpty
+            } else if !matchingCases.contains(where: { qualificationCase in
+                (qualificationCase.status == .passed
+                    && qualificationCase.verified
+                    && !qualificationCase.evidenceFiles.isEmpty)
+                    || (qualificationCase.status == .waived
+                        && qualifyingAxisWaiverCaseIDs.contains(qualificationCase.id))
             }) {
                 rejections.append(.requiredCombinationNotQualified(key: axis.key))
             }

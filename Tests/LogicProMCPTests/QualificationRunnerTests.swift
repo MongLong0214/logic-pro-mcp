@@ -1,9 +1,352 @@
 import Foundation
+import Darwin
 import Testing
 @testable import LogicProMCP
 
 @Suite("ADR-001 qualification runner", .serialized)
 struct QualificationRunnerTests {
+    @Test func driveDerivesPassFromLiveProtocolNotRegistryBooleans() async throws {
+        let spec = try #require(OperationRegistry.specs.first)
+        let fixture = try Fixture(
+            specs: [spec],
+            registryValidationErrors: ["synthetic registry failure"],
+            handlerValidationErrors: ["synthetic handler failure"],
+            handlerExists: { _, _ in false }
+        )
+        defer { fixture.remove() }
+
+        let attestation = try await fixture.qualify()
+        let operationCase = try #require(attestation.cases.first {
+            $0.tool == spec.tool.rawValue && $0.command == spec.command
+        })
+        let evidence = try fixture.evidence(for: operationCase)
+
+        #expect(operationCase.status == .passed)
+        #expect(operationCase.verified)
+        #expect(evidence["handshake_ok"] as? Bool == true)
+        #expect(evidence["health_ok"] as? Bool == true)
+        #expect(evidence["catalog_count_match"] as? Bool == true)
+        #expect(evidence["trace_ok"] as? Bool == true)
+        #expect(evidence["negative_failclosed"] as? Bool == true)
+        #expect(evidence["registry_spec_found"] as? Bool == false)
+        #expect(evidence["handler_bound"] as? Bool == false)
+    }
+
+    @Test func handshakeTimeoutYieldsFailedCaseNotPassed() async throws {
+        let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)), drive: { _ in
+            throw QualificationTransportError.requestTimeout(phase: "handshake")
+        })
+        defer { fixture.remove() }
+
+        let attestation = try await fixture.qualify()
+        #expect(attestation.cases.allSatisfy { $0.status == .failed && !$0.verified })
+        let evidence = try fixture.evidence(for: #require(attestation.cases.first))
+        #expect((evidence["failure_reason"] as? String)?.contains("timeout:handshake") == true)
+        #expect(evidence["handshake_ok"] as? Bool == false)
+    }
+
+    @Test func nonZeroExitYieldsFailedCase() async throws {
+        let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)), drive: { _ in
+            throw QualificationTransportError.nonZeroExit(status: 17, stderr: "fixture exit")
+        })
+        defer { fixture.remove() }
+
+        let attestation = try await fixture.qualify()
+        #expect(attestation.cases.allSatisfy { $0.status == .failed && !$0.verified })
+        let evidence = try fixture.evidence(for: #require(attestation.cases.first))
+        #expect((evidence["failure_reason"] as? String)?.contains("nonzero_exit:17") == true)
+    }
+
+    @Test func malformedFrameYieldsFailedCase() async throws {
+        let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)), drive: { _ in
+            throw QualificationTransportError.malformedFrame("not-json")
+        })
+        defer { fixture.remove() }
+
+        let attestation = try await fixture.qualify()
+        #expect(attestation.cases.allSatisfy { $0.status == .failed && !$0.verified })
+        let evidence = try fixture.evidence(for: #require(attestation.cases.first))
+        #expect((evidence["failure_reason"] as? String)?.contains("malformed_frame") == true)
+    }
+
+    @Test func closedPipeYieldsFailedCase() async throws {
+        let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)), drive: { _ in
+            throw QualificationTransportError.closedPipe(phase: "handshake")
+        })
+        defer { fixture.remove() }
+
+        let attestation = try await fixture.qualify()
+        #expect(attestation.cases.allSatisfy { $0.status == .failed && !$0.verified })
+        let evidence = try fixture.evidence(for: #require(attestation.cases.first))
+        #expect((evidence["failure_reason"] as? String)?.contains("closed_pipe:handshake") == true)
+    }
+
+    @Test func catalogCountMismatchFailsCase() async throws {
+        let specs = Array(OperationRegistry.specs.prefix(1))
+        let driveResult = Self.driveResult(
+            specs: specs,
+            catalogCount: specs.count + 1
+        )
+        let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
+        defer { fixture.remove() }
+
+        let attestation = try await fixture.qualify()
+        let operationCase = try #require(attestation.cases.first {
+            $0.tool == specs[0].tool.rawValue && $0.command == specs[0].command
+        })
+        let evidence = try fixture.evidence(for: operationCase)
+
+        #expect(operationCase.status == .failed)
+        #expect(!operationCase.verified)
+        #expect(evidence["catalog_count_match"] as? Bool == false)
+    }
+
+    @Test func negativeFailclosedUsesCatalogAnchorDespiteHealthWarmup() {
+        let healthBefore = Data(
+            #"{"cache":{"track_count":0},"mcu":{"connected":false,"registered_as_device":false}}"#.utf8
+        )
+        let healthAfter = Data(
+            #"{"cache":{"track_count":2},"mcu":{"connected":true,"registered_as_device":true}}"#.utf8
+        )
+        let catalog = Data(#"{"operation_count":107}"#.utf8)
+
+        func result(
+            state: String = "C",
+            writeAttempted: Bool = false,
+            catalogAfter: Data? = nil
+        ) -> QualificationNegativeResult {
+            QualificationNegativeResult(
+                toolIsError: true,
+                state: state,
+                error: "invalid_params",
+                writeAttempted: writeAttempted,
+                healthBefore: healthBefore,
+                healthAfter: healthAfter,
+                catalogBefore: catalog,
+                catalogAfter: catalogAfter ?? catalog
+            )
+        }
+
+        let failClosed = result()
+        #expect(!failClosed.healthReadStable)
+        #expect(failClosed.catalogReadStable)
+        #expect(failClosed.isFailClosedAndStable)
+        #expect(!result(writeAttempted: true).isFailClosedAndStable)
+        #expect(!result(catalogAfter: Data(#"{"operation_count":106}"#.utf8)).isFailClosedAndStable)
+        #expect(!result(state: "B").isFailClosedAndStable)
+    }
+
+    @Test func negativeMutatingCallOverTransportIsStateCZeroWrite() async throws {
+        let spec = try #require(OperationRegistry.specs.first)
+        let fixture = try Fixture(
+            specs: [spec],
+            registryValidationErrors: ["secondary registry evidence must not gate"],
+            handlerExists: { _, _ in false }
+        )
+        defer { fixture.remove() }
+
+        let attestation = try await fixture.qualify()
+        let operationCase = try #require(attestation.cases.first {
+            $0.tool == spec.tool.rawValue && $0.command == spec.command
+        })
+        let evidence = try fixture.evidence(for: operationCase)
+
+        #expect(operationCase.status == .passed)
+        #expect(evidence["negative_failclosed"] as? Bool == true)
+        #expect(evidence["negative_state"] as? String == "C")
+        #expect(evidence["negative_write_attempted"] as? Bool == false)
+        #expect(evidence["health_read_stable"] as? Bool == true)
+        #expect(evidence["catalog_read_stable"] as? Bool == true)
+    }
+
+    @Test func absentAxisEmitsSkippedGovernedByWaiver() async throws {
+        let specs = Array(OperationRegistry.specs.prefix(1))
+        let fixture = try Fixture(specs: specs)
+        defer { fixture.remove() }
+
+        let withoutWaiver = try await fixture.qualify()
+        let matchingID = "desktop/en-US/core/cold/empty"
+        let matching = try #require(withoutWaiver.cases.first { $0.id == matchingID })
+        let skipped = withoutWaiver.cases.filter { $0.status == .skipped }
+
+        #expect(matching.status == .passed)
+        #expect(skipped.count == QualificationAxis.requiredCombinations.count - 1)
+        #expect(skipped.allSatisfy { $0.reason?.isEmpty == false })
+        let rejected = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(rejected.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(rejected)).contains(
+            "requiredCombinationNotQualified"
+        ))
+
+        let waivers = skipped.map {
+            Self.waiver(
+                caseID: $0.id,
+                userImpact: "Required axis is unavailable on this qualification host",
+                affectedCapability: "ADR-001-a host-axis availability"
+            )
+        }
+        try JSONEncoder().encode(waivers).write(to: fixture.waiversURL)
+        let withWaiver = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        #expect(withWaiver.cases.filter { $0.status == .waived }.count == waivers.count)
+        #expect(withWaiver.waivers == waivers)
+        let approved = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(approved.exitCode == 0)
+        #expect(try Self.resultObject(approved)["promotable"] as? Bool == true)
+    }
+
+    @Test func productionAxisVocabularyCanonicalizesCreatorAndKoreanLocale() async throws {
+        let specs = Array(OperationRegistry.specs.prefix(1))
+        let observedLocale = QualificationTransport.qualificationLocaleIdentifier("ko_KR")
+        let driveResult = Self.driveResult(
+            specs: specs,
+            observedVariant: "creator_studio",
+            observedLocale: observedLocale
+        )
+        let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
+        defer { fixture.remove() }
+
+        #expect(QualificationTransport.qualificationLocaleIdentifier("en_US") == "en-US")
+        #expect(observedLocale == "ko-KR")
+        let attestation = try await fixture.qualify()
+        let observed = try #require(attestation.cases.first {
+            $0.id == "creator/ko-KR/core/cold/empty"
+        })
+        let evidence = try fixture.evidence(for: observed)
+
+        #expect(observed.status == .passed)
+        #expect(observed.verified)
+        #expect(attestation.logicVariant == .creatorStudio)
+        #expect(attestation.logicVersion == "11.2")
+        #expect(attestation.locale == .koKR)
+        #expect(evidence["observed_variant"] as? String == "creator")
+        #expect(evidence["observed_locale"] as? String == "ko-KR")
+    }
+
+    @Test func handshakeSucceedsWhenFirstFrameArrivesAfterPerCallButWithinStartupBudget() throws {
+        let fixture = try SlowHandshakeFixture()
+        defer { fixture.remove() }
+        var environment = ProcessInfo.processInfo.environment
+        environment["HANDSHAKE_DELAY"] = "0.2"
+        let productionTransport = QualificationTransport()
+        #expect(productionTransport.handshakeTimeout >= 30)
+        #expect(productionTransport.requestTimeout == 10)
+
+        do {
+            let result = try QualificationTransport(
+                handshakeTimeout: 5,
+                requestTimeout: 0.1,
+                shutdownGrace: 1
+            ).drive(.init(
+                executableURL: fixture.executableURL,
+                environment: environment,
+                expectedOperationCount: 0
+            ))
+            #expect(result.allChecksPass)
+        } catch {
+            Issue.record("Handshake first frame within startup budget should succeed: \(error)")
+        }
+    }
+
+    @Test(.enabled(
+        if: FileManager.default.isExecutableFile(atPath: Self.releaseExecutableURL.path),
+        "Requires `swift build -c release` before running the real-process qualification QA."
+    ))
+    func realReleaseBinaryDeliversHandshakeCatalogAndTraceOverQualificationTransport() throws {
+        let result = try QualificationTransport().drive(.init(
+            executableURL: Self.releaseExecutableURL,
+            environment: ProcessInfo.processInfo.environment,
+            expectedOperationCount: 107
+        ))
+
+        #expect(result.handshakeOK)
+        #expect(result.catalog?.operationCount == 107)
+        #expect(result.catalogCountMatch)
+        #expect(result.traceOK)
+    }
+
+    @Test func handshakeStillFailsClosedBeyondStartupBudget() throws {
+        let fixture = try SlowHandshakeFixture()
+        defer { fixture.remove() }
+        var environment = ProcessInfo.processInfo.environment
+        environment["HANDSHAKE_DELAY"] = "0.2"
+
+        do {
+            _ = try QualificationTransport(
+                handshakeTimeout: 0.1,
+                requestTimeout: 0.05,
+                shutdownGrace: 1
+            ).drive(.init(
+                executableURL: fixture.executableURL,
+                environment: environment,
+                expectedOperationCount: 0
+            ))
+            Issue.record("A first frame beyond the startup budget must fail closed")
+        } catch let error as QualificationTransportError {
+            #expect(error == .requestTimeout(phase: "handshake"))
+        } catch {
+            Issue.record("Unexpected subprocess error: \(error)")
+        }
+    }
+
+    @Test func subprocessAlwaysReapedNoOrphan() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qualification-reap-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let scriptURL = directory.appendingPathComponent("hang.sh")
+        let pidURL = directory.appendingPathComponent("pid")
+        try Data("#!/bin/sh\necho $$ > \"$PID_FILE\"\ntrap '' TERM\nwhile :; do :; done\n".utf8)
+            .write(to: scriptURL)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: scriptURL.path
+        )
+
+        var environment = ProcessInfo.processInfo.environment
+        environment["PID_FILE"] = pidURL.path
+        do {
+            _ = try QualificationTransport(
+                handshakeTimeout: 0.5,
+                requestTimeout: 0.5,
+                shutdownGrace: 2
+            ).drive(.init(
+                executableURL: scriptURL,
+                environment: environment,
+                expectedOperationCount: 0
+            ))
+            Issue.record("A helper that never handshakes must time out")
+        } catch let error as QualificationTransportError {
+            #expect(error == .requestTimeout(phase: "handshake"))
+        } catch {
+            Issue.record("Unexpected subprocess error: \(error)")
+        }
+
+        let deadline = Date().addingTimeInterval(1)
+        while !FileManager.default.fileExists(atPath: pidURL.path), Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        let pidText = try String(contentsOf: pidURL, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let pid = try #require(Int32(pidText))
+        errno = 0
+        #expect(kill(pid, 0) == -1)
+        #expect(errno == ESRCH)
+    }
+
+    @Test func fakeTransportQualificationToPromotionIntegration() async throws {
+        let fixture = try Fixture(specs: OperationRegistry.specs)
+        defer { fixture.remove() }
+
+        let attestation = try await fixture.qualify()
+        #expect(attestation.cases.allSatisfy { $0.command != "registry_handler_trace" })
+        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        let json = try Self.resultObject(result)
+
+        #expect(result.exitCode == 1)
+        #expect(json["promotable"] as? Bool == false)
+        #expect(Self.rejectionReasons(json).contains("requiredCombinationNotQualified"))
+    }
+
     @Test func runnerRecordsExactExecutableSHAAndCodableSchema() async throws {
         let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)))
         defer { fixture.remove() }
@@ -33,8 +376,9 @@ struct QualificationRunnerTests {
         #expect(attestation.serverVersion == "1.2.3")
         #expect(attestation.commitSHA == fixture.commitSHA)
         #expect(attestation.binarySHA256 == SupportBundleBuilder.sha256(fixture.executableData))
-        #expect(attestation.logicVariant == .creatorStudio)
-        #expect(attestation.locale == .koKR)
+        #expect(attestation.logicVariant == .desktop)
+        #expect(attestation.logicVersion == "11.2")
+        #expect(attestation.locale == .enUS)
         #expect(attestation.profile == .full)
         #expect(json["cache"] as? String == "warm")
         #expect(attestation.waivers.isEmpty)
@@ -73,7 +417,9 @@ struct QualificationRunnerTests {
         #expect(actualOperations == expectedOperations, "missing operation cases: \(expectedOperations.subtracting(actualOperations).sorted())")
         #expect(aggregateCases.map(\.id) == QualificationAxis.requiredCombinations.map { "\($0.key)/empty" })
         #expect(attestation.cases.map(\.id).count == Set(attestation.cases.map(\.id)).count)
-        #expect(attestation.passed == attestation.total)
+        #expect(aggregateCases.filter { $0.status == .passed }.count == 1)
+        #expect(aggregateCases.filter { $0.status == .skipped }.count == 3)
+        #expect(attestation.passed == operationCases.count + 1)
         #expect(attestation.failed == 0)
 
         for qualificationCase in operationCases {
@@ -217,7 +563,10 @@ struct QualificationRunnerTests {
     @Test func sameSHAApprovesWithExitZero() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }
-        _ = try await fixture.qualify()
+        let initial = try await fixture.qualify()
+        let waivers = Self.hostAxisWaivers(for: initial)
+        try JSONEncoder().encode(waivers).write(to: fixture.waiversURL)
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
 
         let result = await fixture.verify(expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData))
         let json = try Self.resultObject(result)
@@ -439,11 +788,15 @@ struct QualificationRunnerTests {
     @Test func vPrefixedReleaseTagMatchesBinaryVersion() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }
+        let initial = try await fixture.qualify()
+        let waivers = Self.hostAxisWaivers(for: initial)
+        try JSONEncoder().encode(waivers).write(to: fixture.waiversURL)
 
         let qualification = await fixture.runner.run(arguments: [
             "LogicProMCP", "--qualify",
             "--out", fixture.attestationURL.path,
             "--release-version", "v1.2.3",
+            "--waivers", fixture.waiversURL.path,
         ])
         let verification = await fixture.verify(
             releaseVersion: "v1.2.3",
@@ -615,9 +968,114 @@ struct QualificationRunnerTests {
         )
     }
 
+    private static func hostAxisWaivers(
+        for attestation: ReleaseQualificationAttestation
+    ) -> [QualificationWaiver] {
+        attestation.cases.filter { $0.status == .skipped }.map {
+            waiver(
+                caseID: $0.id,
+                userImpact: "Required axis is unavailable on this qualification host",
+                affectedCapability: QualificationWaiver.hostAxisAvailabilityCapability
+            )
+        }
+    }
+
+    private static let releaseExecutableURL = URL(
+        fileURLWithPath: FileManager.default.currentDirectoryPath,
+        isDirectory: true
+    ).appendingPathComponent(".build/release/LogicProMCP")
+
+    private static func driveResult(
+        specs: [OperationSpec],
+        catalogCount: Int? = nil,
+        observedVariant: String = "desktop",
+        observedLocale: String = "en-US"
+    ) -> QualificationDriveResult {
+        let expectedCount = specs.count
+        let actualCount = catalogCount ?? expectedCount
+        let catalogEntries = Array(OperationCatalog.snapshot(now: Date(timeIntervalSince1970: 1_000))
+            .operations.prefix(actualCount))
+        let stableHealth = Data("{\"logic_pro_variant\":\"\(observedVariant)\"}".utf8)
+        let stableCatalog = Data("{\"operation_count\":\(actualCount)}".utf8)
+        return QualificationDriveResult(
+            handshake: .init(
+                protocolVersion: "2025-11-25",
+                serverName: "logic-pro-mcp",
+                serverVersion: "1.2.3"
+            ),
+            health: .init(
+                logicProRunning: true,
+                logicProVersion: "11.2",
+                logicProVariant: observedVariant,
+                processMetadataResolved: true
+            ),
+            catalog: .init(
+                schemaVersion: 1,
+                generatedAt: "1970-01-01T00:16:40Z",
+                operationCount: actualCount,
+                operations: catalogEntries
+            ),
+            expectedOperationCount: expectedCount,
+            traceList: .init(traces: []),
+            negative: .init(
+                toolIsError: true,
+                state: "C",
+                error: "invalid_params",
+                writeAttempted: false,
+                healthBefore: stableHealth,
+                healthAfter: stableHealth,
+                catalogBefore: stableCatalog,
+                catalogAfter: stableCatalog
+            ),
+            observedLocale: observedLocale,
+            failureReason: nil
+        )
+    }
+
     private actor MockQualificationServer: ServerStarting {
         func start() async throws {}
         func stop() async {}
+    }
+
+    private struct SlowHandshakeFixture {
+        let directory: URL
+        let executableURL: URL
+
+        init() throws {
+            directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("qualification-slow-handshake-\(UUID().uuidString)", isDirectory: true)
+            executableURL = directory.appendingPathComponent("server.sh")
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let script = #"""
+            #!/bin/sh
+            IFS= read -r request_line || exit 0
+            sleep "$HANDSHAKE_DELAY"
+            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","serverInfo":{"name":"fixture","version":"1.0"}}}'
+            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"{\"logic_pro_running\":true,\"logic_pro_version\":\"11.2\",\"logic_pro_variant\":\"desktop\",\"process_metadata_resolved\":true}"}]}}'
+            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"contents":[{"uri":"logic://system/operations","text":"{\"schema_version\":1,\"generated_at\":\"1970-01-01T00:00:00Z\",\"operation_count\":0,\"operations\":[]}"}]}}'
+            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":4,"result":{"content":[{"type":"text","text":"{\"traces\":[]}"}]}}'
+            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":5,"result":{"isError":true,"content":[{"type":"text","text":"{\"state\":\"C\",\"error\":\"invalid_params\",\"write_attempted\":false}"}]}}'
+            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":6,"result":{"content":[{"type":"text","text":"{\"logic_pro_running\":true,\"logic_pro_version\":\"11.2\",\"logic_pro_variant\":\"desktop\",\"process_metadata_resolved\":true}"}]}}'
+            /usr/bin/printf '%s\n' '{"jsonrpc":"2.0","id":7,"result":{"contents":[{"uri":"logic://system/operations","text":"{\"schema_version\":1,\"generated_at\":\"1970-01-01T00:00:00Z\",\"operation_count\":0,\"operations\":[]}"}]}}'
+            exec 1>&-
+            IFS= read -r request_line || exit 0
+            IFS= read -r request_line || exit 0
+            IFS= read -r request_line || exit 0
+            IFS= read -r request_line || exit 0
+            IFS= read -r request_line || exit 0
+            IFS= read -r request_line || exit 0
+            IFS= read -r request_line || exit 0
+            """#
+            try Data(script.utf8).write(to: executableURL)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755],
+                ofItemAtPath: executableURL.path
+            )
+        }
+
+        func remove() {
+            try? FileManager.default.removeItem(at: directory)
+        }
     }
 
     private final class Fixture: @unchecked Sendable {
@@ -631,7 +1089,18 @@ struct QualificationRunnerTests {
         let commitSHA = String(repeating: "c", count: 40)
         let runner: QualificationRunner
 
-        init(specs: [OperationSpec], binaryVersion: String = "1.2.3") throws {
+        var binarySHA256: String { SupportBundleBuilder.sha256(executableData) }
+
+        init(
+            specs: [OperationSpec],
+            binaryVersion: String = "1.2.3",
+            registryValidationErrors: [String] = [],
+            handlerValidationErrors: [String] = [],
+            handlerExists: @escaping @Sendable (String, String) -> Bool = {
+                OperationHandlerRegistry.handler(tool: $0, command: $1) != nil
+            },
+            drive: (@Sendable (QualificationDriveRequest) async throws -> QualificationDriveResult)? = nil
+        ) throws {
             directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("qualification-runner-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -641,15 +1110,18 @@ struct QualificationRunnerTests {
             externalCasesURL = directory.appendingPathComponent("cases.json")
             waiversURL = directory.appendingPathComponent("waivers.json")
             try executableData.write(to: executableURL)
+            let defaultDriveResult = QualificationRunnerTests.driveResult(specs: specs)
+            let drive = drive ?? { _ in defaultDriveResult }
             runner = QualificationRunner(runtime: .init(
                 executableURL: { [executableURL] in executableURL },
                 environment: { [commitSHA] in ["GIT_COMMIT": commitSHA] },
                 now: { Date(timeIntervalSince1970: 1_000) },
                 serverVersion: { binaryVersion },
                 specs: { specs },
-                registryValidationErrors: { OperationRegistry.validationErrors() },
-                handlerValidationErrors: { OperationHandlerRegistry.validationErrors() },
-                handlerExists: { OperationHandlerRegistry.handler(tool: $0, command: $1) != nil }
+                registryValidationErrors: { registryValidationErrors },
+                handlerValidationErrors: { handlerValidationErrors },
+                handlerExists: handlerExists,
+                drive: drive
             ))
         }
 
@@ -657,17 +1129,27 @@ struct QualificationRunnerTests {
             try? FileManager.default.removeItem(at: directory)
         }
 
-        func qualify() async throws -> ReleaseQualificationAttestation {
-            let result = await runner.run(arguments: [
+        func qualify(waiversURL: URL? = nil) async throws -> ReleaseQualificationAttestation {
+            var arguments = [
                 "LogicProMCP", "--qualify",
                 "--out", attestationURL.path,
                 "--release-version", "1.2.3",
-            ])
+            ]
+            if let waiversURL {
+                arguments.append(contentsOf: ["--waivers", waiversURL.path])
+            }
+            let result = await runner.run(arguments: arguments)
             #expect(result.exitCode == 0)
             return try JSONDecoder().decode(
                 ReleaseQualificationAttestation.self,
                 from: Data(contentsOf: attestationURL)
             )
+        }
+
+        func evidence(for qualificationCase: QualificationCase) throws -> [String: Any] {
+            let relativePath = try #require(qualificationCase.evidenceFiles.first)
+            let data = try Data(contentsOf: directory.appendingPathComponent(relativePath))
+            return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         }
 
         func verify(

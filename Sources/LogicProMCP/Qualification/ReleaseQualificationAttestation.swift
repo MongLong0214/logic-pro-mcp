@@ -4,6 +4,7 @@ enum QualificationStatus: String, Codable, Sendable {
     case passed
     case failed
     case waived
+    case skipped
     case notQualified = "not_qualified"
 }
 
@@ -41,6 +42,27 @@ struct QualificationCase: Codable, Equatable, Sendable {
     let traceID: String
     let verified: Bool
     let evidenceFiles: [String]
+    let reason: String?
+
+    init(
+        id: String,
+        status: QualificationStatus,
+        tool: String,
+        command: String,
+        traceID: String,
+        verified: Bool,
+        evidenceFiles: [String],
+        reason: String? = nil
+    ) {
+        self.id = id
+        self.status = status
+        self.tool = tool
+        self.command = command
+        self.traceID = traceID
+        self.verified = verified
+        self.evidenceFiles = evidenceFiles
+        self.reason = reason
+    }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -50,10 +72,107 @@ struct QualificationCase: Codable, Equatable, Sendable {
         case traceID = "trace_id"
         case verified
         case evidenceFiles = "evidence_files"
+        case reason
+    }
+}
+
+struct CaseEvidence: Codable, Sendable {
+    let schema: String
+    let caseID: String
+    let operationID: String
+    let tool: String
+    let command: String
+    let registrySpecFound: Bool
+    let handlerBound: Bool
+    let traceStarted: Bool
+    let traceCompleted: Bool
+    let handshakeOK: Bool
+    let healthOK: Bool
+    let catalogCountMatch: Bool
+    let traceOK: Bool
+    let negativeFailclosed: Bool
+    let observedVariant: String
+    let observedLocale: String
+    let negativeState: String?
+    let negativeWriteAttempted: Bool?
+    let healthReadStable: Bool
+    let catalogReadStable: Bool
+    let failureReason: String?
+
+    init(
+        schema: String,
+        caseID: String,
+        operationID: String,
+        tool: String,
+        command: String,
+        registrySpecFound: Bool,
+        handlerBound: Bool,
+        traceStarted: Bool,
+        traceCompleted: Bool,
+        handshakeOK: Bool = false,
+        healthOK: Bool = false,
+        catalogCountMatch: Bool = false,
+        traceOK: Bool = false,
+        negativeFailclosed: Bool = false,
+        observedVariant: String = "unknown",
+        observedLocale: String = "unknown",
+        negativeState: String? = nil,
+        negativeWriteAttempted: Bool? = nil,
+        healthReadStable: Bool = false,
+        catalogReadStable: Bool = false,
+        failureReason: String? = nil
+    ) {
+        self.schema = schema
+        self.caseID = caseID
+        self.operationID = operationID
+        self.tool = tool
+        self.command = command
+        self.registrySpecFound = registrySpecFound
+        self.handlerBound = handlerBound
+        self.traceStarted = traceStarted
+        self.traceCompleted = traceCompleted
+        self.handshakeOK = handshakeOK
+        self.healthOK = healthOK
+        self.catalogCountMatch = catalogCountMatch
+        self.traceOK = traceOK
+        self.negativeFailclosed = negativeFailclosed
+        self.observedVariant = observedVariant
+        self.observedLocale = observedLocale
+        self.negativeState = negativeState
+        self.negativeWriteAttempted = negativeWriteAttempted
+        self.healthReadStable = healthReadStable
+        self.catalogReadStable = catalogReadStable
+        self.failureReason = failureReason
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case caseID = "case_id"
+        case operationID = "operation_id"
+        case tool
+        case command
+        case registrySpecFound = "registry_spec_found"
+        case handlerBound = "handler_bound"
+        case traceStarted = "trace_started"
+        case traceCompleted = "trace_completed"
+        case handshakeOK = "handshake_ok"
+        case healthOK = "health_ok"
+        case catalogCountMatch = "catalog_count_match"
+        case traceOK = "trace_ok"
+        case negativeFailclosed = "negative_failclosed"
+        case observedVariant = "observed_variant"
+        case observedLocale = "observed_locale"
+        case negativeState = "negative_state"
+        case negativeWriteAttempted = "negative_write_attempted"
+        case healthReadStable = "health_read_stable"
+        case catalogReadStable = "catalog_read_stable"
+        case failureReason = "failure_reason"
     }
 }
 
 struct QualificationWaiver: Codable, Equatable, Sendable {
+    static let hostAxisAvailabilityCapability = "ADR-001-a host-axis availability"
+
     let caseID: String
     let reasonCode: String
     let owningIssue: String
@@ -62,6 +181,10 @@ struct QualificationWaiver: Codable, Equatable, Sendable {
     let affectsDefaultProfile: Bool
     let expiryVersion: String
     let releaseNoteVisible: Bool
+
+    var governsHostAxisAvailability: Bool {
+        affectedCapability == Self.hostAxisAvailabilityCapability
+    }
 }
 
 enum QualificationWaiverReasonCode: String, CaseIterable, Sendable {

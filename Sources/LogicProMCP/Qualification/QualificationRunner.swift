@@ -16,6 +16,7 @@ struct QualificationRunner: Sendable {
         let registryValidationErrors: @Sendable () -> [String]
         let handlerValidationErrors: @Sendable () -> [String]
         let handlerExists: @Sendable (String, String) -> Bool
+        let drive: @Sendable (QualificationDriveRequest) async throws -> QualificationDriveResult
 
         static let production = Runtime(
             executableURL: { try QualificationRunner.currentExecutableURL() },
@@ -29,6 +30,9 @@ struct QualificationRunner: Sendable {
                 OperationHandlerRegistry.bindings.contains {
                     $0.tool == tool && $0.command == command
                 }
+            },
+            drive: { request in
+                try QualificationTransport().drive(request)
             }
         )
     }
@@ -63,30 +67,6 @@ struct QualificationRunner: Sendable {
 
         let promotable: Bool
         let rejections: [Rejection]
-    }
-
-    private struct CaseEvidence: Codable {
-        let schema: String
-        let caseID: String
-        let operationID: String
-        let tool: String
-        let command: String
-        let registrySpecFound: Bool
-        let handlerBound: Bool
-        let traceStarted: Bool
-        let traceCompleted: Bool
-
-        enum CodingKeys: String, CodingKey {
-            case schema
-            case caseID = "case_id"
-            case operationID = "operation_id"
-            case tool
-            case command
-            case registrySpecFound = "registry_spec_found"
-            case handlerBound = "handler_bound"
-            case traceStarted = "trace_started"
-            case traceCompleted = "trace_completed"
-        }
     }
 
     private struct EvidenceManifest: Codable {
@@ -177,13 +157,34 @@ struct QualificationRunner: Sendable {
         }
         let waivers = try Self.loadWaivers(from: options.waiversURL)
         let startedAt = runtime.now()
-        let executableData = try Data(contentsOf: runtime.executableURL(), options: .mappedIfSafe)
+        let executableURL = try runtime.executableURL()
+        let environment = runtime.environment()
+        let executableData = try Data(contentsOf: executableURL, options: .mappedIfSafe)
         let binarySHA256 = SupportBundleBuilder.sha256(executableData)
         let outputDirectory = options.outputURL.deletingLastPathComponent()
         let evidenceDirectory = outputDirectory.appendingPathComponent("evidence", isDirectory: true)
         try FileManager.default.createDirectory(at: evidenceDirectory, withIntermediateDirectories: true)
 
         let specs = runtime.specs().sorted { $0.id.rawValue < $1.id.rawValue }
+        let driveResult: QualificationDriveResult
+        do {
+            driveResult = try await runtime.drive(QualificationDriveRequest(
+                executableURL: executableURL,
+                environment: environment,
+                expectedOperationCount: specs.count
+            ))
+        } catch {
+            driveResult = QualificationDriveResult(
+                handshake: nil,
+                health: nil,
+                catalog: nil,
+                expectedOperationCount: specs.count,
+                traceList: nil,
+                negative: nil,
+                observedLocale: "unknown",
+                failureReason: String(describing: error)
+            )
+        }
         let registryErrors = runtime.registryValidationErrors()
         let handlerErrors = runtime.handlerValidationErrors()
         let traceStore = OperationTraceStore(
@@ -192,6 +193,8 @@ struct QualificationRunner: Sendable {
         )
         var cases: [QualificationCase] = []
         var manifestEntries: [EvidenceManifest.Entry] = []
+        var registryEvidencePassed = true
+        var handlerEvidencePassed = true
 
         for spec in specs {
             let matchingSpecs = specs.filter {
@@ -202,14 +205,16 @@ struct QualificationRunner: Sendable {
             let registrySpecFound = matchingSpecs.count == 1 && registryErrors.isEmpty
             let handlerBound = runtime.handlerExists(spec.tool.rawValue, spec.command)
                 && handlerErrors.isEmpty
+            registryEvidencePassed = registryEvidencePassed && registrySpecFound
+            handlerEvidencePassed = handlerEvidencePassed && handlerBound
             let traceID = await traceStore.start(operationID: spec.id.rawValue)
             let traceStarted = await traceStore.trace(traceID) != nil
             await traceStore.complete(traceID)
             let traceCompleted = await traceStore.trace(traceID)?.completedAt != nil
-            let passed = registrySpecFound && handlerBound && traceStarted && traceCompleted
+            let passed = driveResult.allChecksPass
             let relativePath = "evidence/operation-\(spec.id.rawValue).json"
             let evidence = CaseEvidence(
-                schema: "qualification-case-evidence/v1",
+                schema: "qualification-case-evidence/v2",
                 caseID: "in-process/\(spec.id.rawValue)",
                 operationID: spec.id.rawValue,
                 tool: spec.tool.rawValue,
@@ -217,7 +222,19 @@ struct QualificationRunner: Sendable {
                 registrySpecFound: registrySpecFound,
                 handlerBound: handlerBound,
                 traceStarted: traceStarted,
-                traceCompleted: traceCompleted
+                traceCompleted: traceCompleted,
+                handshakeOK: driveResult.handshakeOK,
+                healthOK: driveResult.healthOK,
+                catalogCountMatch: driveResult.catalogCountMatch,
+                traceOK: driveResult.traceOK,
+                negativeFailclosed: driveResult.negativeFailclosed,
+                observedVariant: driveResult.observedVariant,
+                observedLocale: driveResult.observedLocale,
+                negativeState: driveResult.negative?.state,
+                negativeWriteAttempted: driveResult.negative?.writeAttempted,
+                healthReadStable: driveResult.negative?.healthReadStable ?? false,
+                catalogReadStable: driveResult.negative?.catalogReadStable ?? false,
+                failureReason: driveResult.failureReason
             )
             let evidenceData = try Self.encoded(evidence)
             try evidenceData.write(
@@ -235,32 +252,62 @@ struct QualificationRunner: Sendable {
                 command: spec.command,
                 traceID: traceID.rawValue,
                 verified: passed,
-                evidenceFiles: [relativePath]
+                evidenceFiles: [relativePath],
+                reason: passed
+                    ? nil
+                    : driveResult.failureReason ?? "live protocol checks failed"
             ))
         }
 
-        let operationCasesPassed = cases.allSatisfy {
-            $0.status == .passed && $0.verified && !$0.evidenceFiles.isEmpty
-        }
+        let waiversByCaseID = Dictionary(uniqueKeysWithValues: waivers.map { ($0.caseID, $0) })
         for axis in QualificationAxis.requiredCombinations {
             let axisKey = "\(axis.variant.rawValue)/\(axis.locale.rawValue)/\(options.profile.rawValue)/\(options.cache.rawValue)"
+            let caseID = "\(axisKey)/empty"
+            let isObservedAxis = axis.variant.rawValue == driveResult.observedVariant
+                && axis.locale.rawValue == driveResult.observedLocale
+            let status: QualificationStatus
+            let reason: String?
+            if let failureReason = driveResult.failureReason {
+                status = .failed
+                reason = failureReason
+            } else if isObservedAxis {
+                status = driveResult.allChecksPass ? .passed : .failed
+                reason = driveResult.allChecksPass ? nil : "live protocol checks failed"
+            } else if waiversByCaseID[caseID]?.governsHostAxisAvailability == true {
+                status = .waived
+                reason = "required axis unavailable on this qualification host; governed by ADR-001-a waiver"
+            } else {
+                status = .skipped
+                reason = "required axis unavailable on this qualification host"
+            }
+            let passed = status == .passed
             let traceID = await traceStore.start(operationID: "qualification.\(axisKey)")
             let traceStarted = await traceStore.trace(traceID) != nil
             await traceStore.complete(traceID)
             let traceCompleted = await traceStore.trace(traceID)?.completedAt != nil
-            let passed = operationCasesPassed && traceStarted && traceCompleted
-            let caseID = "\(axisKey)/empty"
             let relativePath = "evidence/axis-\(axisKey.replacingOccurrences(of: "/", with: "-")).json"
             let evidence = CaseEvidence(
-                schema: "qualification-case-evidence/v1",
+                schema: "qualification-case-evidence/v2",
                 caseID: caseID,
                 operationID: "qualification.\(axisKey)",
                 tool: "qualification",
-                command: "registry_handler_trace",
-                registrySpecFound: operationCasesPassed,
-                handlerBound: operationCasesPassed,
+                command: "stdio_jsonrpc_drive",
+                registrySpecFound: registryEvidencePassed,
+                handlerBound: handlerEvidencePassed,
                 traceStarted: traceStarted,
-                traceCompleted: traceCompleted
+                traceCompleted: traceCompleted,
+                handshakeOK: driveResult.handshakeOK,
+                healthOK: driveResult.healthOK,
+                catalogCountMatch: driveResult.catalogCountMatch,
+                traceOK: driveResult.traceOK,
+                negativeFailclosed: driveResult.negativeFailclosed,
+                observedVariant: driveResult.observedVariant,
+                observedLocale: driveResult.observedLocale,
+                negativeState: driveResult.negative?.state,
+                negativeWriteAttempted: driveResult.negative?.writeAttempted,
+                healthReadStable: driveResult.negative?.healthReadStable ?? false,
+                catalogReadStable: driveResult.negative?.catalogReadStable ?? false,
+                failureReason: driveResult.failureReason
             )
             let evidenceData = try Self.encoded(evidence)
             try evidenceData.write(
@@ -273,12 +320,13 @@ struct QualificationRunner: Sendable {
             ))
             cases.append(QualificationCase(
                 id: caseID,
-                status: passed ? .passed : .failed,
+                status: status,
                 tool: evidence.tool,
                 command: evidence.command,
                 traceID: traceID.rawValue,
                 verified: passed,
-                evidenceFiles: [relativePath]
+                evidenceFiles: [relativePath],
+                reason: reason
             ))
         }
 
@@ -313,15 +361,17 @@ struct QualificationRunner: Sendable {
             to: outputDirectory.appendingPathComponent(Self.manifestFilename),
             options: .atomic
         )
+        let attestedVariant = LogicVariant(rawValue: driveResult.observedVariant) ?? options.variant
+        let attestedLocale = QualificationLocale(rawValue: driveResult.observedLocale) ?? options.locale
 
         let attestation = ReleaseQualificationAttestation(
             schema: "release-qualification-attestation/v1",
             serverVersion: options.releaseVersion,
-            commitSHA: runtime.environment()["GIT_COMMIT"] ?? "unknown",
+            commitSHA: environment["GIT_COMMIT"] ?? "unknown",
             binarySHA256: binarySHA256,
-            logicVariant: options.variant,
-            logicVersion: "unknown",
-            locale: options.locale,
+            logicVariant: attestedVariant,
+            logicVersion: driveResult.logicProVersion,
+            locale: attestedLocale,
             profile: options.profile,
             startedAt: startedAt,
             completedAt: runtime.now(),

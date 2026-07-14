@@ -179,6 +179,45 @@ struct QualificationGateTests {
         #expect(decision.rejections.contains(.requiredCombinationNotQualified(key: requiredKey)))
     }
 
+    @Test func adr001aWaivedRequiredCombinationCountsAsQualified() {
+        let requiredKey = QualificationAxis.requiredCombinations[0].key
+        let waivedKey = "\(requiredKey)/empty"
+        var cases = passedRequiredCases()
+        cases[0] = qualificationCase(id: waivedKey, status: .waived)
+
+        let decision = evaluate(
+            cases: cases,
+            waivers: [waiver(
+                caseID: waivedKey,
+                expiryVersion: "1.3.0",
+                affectedCapability: QualificationWaiver.hostAxisAvailabilityCapability
+            )]
+        )
+
+        #expect(decision.promotable)
+        #expect(decision.rejections.isEmpty)
+    }
+
+    @Test func adr001aWaiversCannotReplaceEveryLiveAxis() {
+        let cases = QualificationAxis.requiredCombinations.map {
+            qualificationCase(id: "\($0.key)/empty", status: .waived)
+        }
+        let waivers = cases.map {
+            waiver(
+                caseID: $0.id,
+                expiryVersion: "1.3.0",
+                affectedCapability: QualificationWaiver.hostAxisAvailabilityCapability
+            )
+        }
+
+        let decision = evaluate(cases: cases, waivers: waivers)
+
+        #expect(!decision.promotable)
+        #expect(decision.rejections.contains(
+            .requiredCombinationNotQualified(key: QualificationAxis.requiredCombinations[0].key)
+        ))
+    }
+
     @Test func unverifiedPassedRequiredCombinationDoesNotCountAsPassed() {
         let requiredKey = QualificationAxis.requiredCombinations[0].key
         var cases = passedRequiredCases()
@@ -386,14 +425,15 @@ struct QualificationGateTests {
         caseID: String,
         expiryVersion: String,
         reasonCode: String = "known-limitation",
-        owningIssue: String = "#284"
+        owningIssue: String = "#284",
+        affectedCapability: String = "optional-capability"
     ) -> QualificationWaiver {
         QualificationWaiver(
             caseID: caseID,
             reasonCode: reasonCode,
             owningIssue: owningIssue,
             userImpact: "Optional capability unavailable",
-            affectedCapability: "optional-capability",
+            affectedCapability: affectedCapability,
             affectsDefaultProfile: false,
             expiryVersion: expiryVersion,
             releaseNoteVisible: true
