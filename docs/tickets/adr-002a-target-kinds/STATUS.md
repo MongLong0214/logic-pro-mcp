@@ -2,9 +2,9 @@
 
 **Epic / issue**: [#285](https://github.com/MongLong0214/logic-pro-mcp/issues/285) — ADR-002: Session-scoped Stable Target Reference (OPEN, `epic`, `priority: p0`)
 **Program**: [#308](https://github.com/MongLong0214/logic-pro-mcp/issues/308) — Train A, first step
-**Branch**: `feat/adr002a-target-kinds-20260715`
+**Landed branch**: `feat/adr002a-target-kinds-20260715` via PR #370
 **Baseline head at directive time**: `11f0985` (integrated Train-A head)
-**Increment status**: Code-complete on this branch. All four first-class target kinds are wired: `track_ref`, `mixer_strip_ref`, `plugin_insert_ref` (slice a), and `project_ref` + project-epoch lifecycle invalidation (slice b). The #268 automatic plugin-editor acquisition fix (slot-verified identity, fail-closed write) is committed at `40844ac`. `project_ref` is scoped to stable-target operations only (schema == runtime parity). Remaining before merge: the exact-head full-suite / release-build checkpoint and the real-Logic-12.3 live qualification gate (H) — see the ledger below.
+**Increment status**: **Production-terminal PASS.** PR #370 candidate `b60e6a5c2558d11afa468c66ae59d601079cca74` merged as `44c69cff62801960f2534aaef5314fe81cd5fc62`. Focused tests, exact-head full CI, release build, exact-artifact Logic Pro 12.3 qualification, security review, CTO/CEO gates, post-merge main CI, and the public completion receipt all passed. The next canonical step is PR #367 / `LPMCP-PRD-001` remediation; #286 remains blocked until that step is terminal.
 
 > Authoritative ADR-002 status summary: `docs/adr/README.md` §"ADR-002 — Session-scoped Stable Target Reference". This board is the active acceptance surface for the current ADR-002-a increment.
 
@@ -14,7 +14,7 @@
 
 **#268 must not be omitted.** It is pulled forward into the current Train A first step (#285 ADR-002-a) acceptance. The GitHub issues (#268, #285) already carry the pull-forward ordering.
 
-**Related issue**: [#268](https://github.com/MongLong0214/logic-pro-mcp/issues/268) — `set_param_verified` fails to acquire Compressor editor window on Logic Pro 12.3 (OPEN, `bug`, `priority: p1`). NOTE: the earlier `docs/tickets/issue-268-plugin-window-opener/` pipeline (PR #271, including `f3fc857`) did land and is an ancestor of current main, but it did not resolve the reopened Logic 12.3 environment-specific regression. The remaining correction is now owned by this ADR-002-a step.
+**Related issue**: [#268](https://github.com/MongLong0214/logic-pro-mcp/issues/268) — terminally resolved by PR #370 after the earlier PR #271 fix proved environment-sensitive on Logic Pro 12.3.
 
 ### Canonical insertion (do not reorder)
 
@@ -57,14 +57,27 @@
 | #268 GREEN (code) | A, E | closed-editor → auto-open → State A on fake-AX tree; `PluginSetParamVerifiedLiveTests` | Deterministic PASS |
 | #268 negative / fail-closed | C, D | wrong plugin / wrong param / ambiguous window → State C, `write_attempted:false`, zero write; window+slider identity re-verified immediately before the AX write | Deterministic PASS |
 | Adversarial hardening | — | 3 review rounds converged: plugin-insert delimiter injection, resource + `get_inventory` emission TOCTOU, resolve→write use-time epoch race, and `save_as` flag-off invariance all closed; final adversarial pass returned PROCEED with no new blockers | Deterministic PASS |
-| Final exact-head full suite | F | env-neutral CI green (2750 tests) — two Logic-coupled tests fail only under a live degraded Logic locally and pass with no Logic | CI green |
-| Final exact-head release build | G | `swift build -c release` | PASS |
-| #268 live A / B | A, B | closed-editor → A, manual-preopen → A on Logic 12.3 | **Pending healthy Logic (env)** |
-| #268 live negative | H | negative/ambiguous → zero-write; raw transcript | **Pending healthy Logic (env)** |
-| ADR-002 live continuity | — | project switch / restart → prior refs `stale_target_reference` on live | **Pending healthy Logic (env)** |
-| CTO exhaustive review | I | full code review + 3 adversarial rounds converged | Code PASS (live-gated part pending H) |
-| CEO exact-head gate | I | production-readiness PASS (no merge before this) | Pending report |
-| Evidence recorded | J | public-safe notes on #268 / #285 / #308 / PR | In progress |
+| Final exact-head full suite | F | CI `29453924650`, 2,768/2,768 tests plus coverage on `b60e6a5` | PASS |
+| Final exact-head release build | G | 18,862,696-byte binary, SHA-256 `b252ee5e518435351ec03be606b8ad083fa6426b85f2ffd6c58f125ac73513fc` | PASS |
+| #268 live A / B | A, B | closed-editor and manual-preopen → State A on Logic Pro 12.3; independent identity readback; original value restored | PASS (10/10) |
+| #268 live negative | H | wrong plugin/parameter/acquisition and ambiguity boundaries fail closed with zero wrong-target writes | PASS |
+| ADR-002 live continuity | — | foreign and server-restart references fail closed; duplicate-name ambiguity 6/6 with zero-write readback and invariant topology | PASS |
+| CTO exhaustive review | I | exact-head review bound to `b60e6a5` | PASS |
+| CEO exact-head gate | I | exact-head production-readiness verdict bound to `b60e6a5` | PASS |
+| Evidence recorded | J | PR #370 completion receipt plus exact-artifact raw transcript revision `7fc51a142224fe851c0d3ec81ed90ea3322b70c5` | PASS |
+
+### Production completion receipt (2026-07-16)
+
+- Candidate head: `b60e6a5c2558d11afa468c66ae59d601079cca74`
+- Merge commit / verified main: `44c69cff62801960f2534aaef5314fe81cd5fc62`
+- Exact-head CI: `29453924650` (2,768/2,768 plus coverage)
+- Post-merge main CI: `29457195051` (PASS on the merge commit)
+- Qualified artifact: 18,862,696 bytes; SHA-256 `b252ee5e518435351ec03be606b8ad083fa6426b85f2ffd6c58f125ac73513fc`
+- Exact-artifact Logic Pro 12.3 replay: 10/10 PASS with State-A write/readback, original-value restore, and unchanged topology
+- Published raw JSON-RPC transcript: <https://gist.github.com/MongLong0214/f2eda8f630c029ef16e18d309865b557/7fc51a142224fe851c0d3ec81ed90ea3322b70c5>
+- PR completion receipt: <https://github.com/MongLong0214/logic-pro-mcp/pull/370#issuecomment-4986173457>
+
+The remaining notes below preserve the pre-terminal investigation history. Their pending/hold language is superseded by the verified receipt above.
 
 ### External Logic UI edit boundary
 
