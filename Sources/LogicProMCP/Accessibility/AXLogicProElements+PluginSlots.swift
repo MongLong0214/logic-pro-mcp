@@ -363,6 +363,22 @@ extension AXLogicProElements {
         return trimmed
     }
 
+    static func trackNames(runtime: Runtime = .production) -> [Int: String]? {
+        let headers = allTrackHeaders(runtime: runtime)
+        guard !headers.isEmpty else { return nil }
+        var names: [Int: String] = [:]
+        for (index, header) in headers.enumerated() {
+            let name = AXValueExtractors.extractTrackState(
+                from: header,
+                index: index,
+                runtime: runtime.ax
+            ).name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, name != "Untitled" else { return nil }
+            names[index] = name
+        }
+        return names
+    }
+
     /// Find an OPEN plugin window whose AX title equals `trackName` AND which
     /// exposes a 1-level `AXSlider` matching `axDescription`. T0 evidence: a
     /// stock-effect plugin window is a separate `AXWindow`/`AXDialog` titled with

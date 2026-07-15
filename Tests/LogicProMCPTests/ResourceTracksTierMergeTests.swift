@@ -98,6 +98,41 @@ func cacheEmpty_fileCount31_emits31Placeholders() async throws {
 }
 
 @Test
+func placeholderRowsDoNotEmitTargetRefs() async throws {
+    let cache = StateCache()
+    _ = ensureTrackBundle(at: URL(fileURLWithPath: "/tmp/PlaceholderBundle.logicx"))
+    let runtime = tracksFileReaderRuntime(trackCount: 1)
+    let registry = TargetRegistry()
+
+    try await FeatureFlags.withAdr002TargetRefForTests(true) {
+        let tracksResult = try await ResourceHandlers.read(
+            uri: "logic://tracks",
+            cache: cache,
+            router: ChannelRouter(),
+            targetRegistry: registry,
+            fileReader: runtime
+        )
+        let tracks = try #require(
+            (sharedJSONObject(sharedResourceText(tracksResult))?["data"] as? [[String: Any]])?.first
+        )
+        #expect(tracks["placeholder"] as? Bool == true)
+        #expect(tracks["track_ref"] == nil)
+
+        await cache.updateChannelStrips([ChannelStripState(trackIndex: 0)])
+        let mixerResult = try await ResourceHandlers.read(
+            uri: "logic://mixer",
+            cache: cache,
+            router: ChannelRouter(),
+            targetRegistry: registry
+        )
+        let strip = try #require(
+            (sharedJSONObject(sharedResourceText(mixerResult))?["strips"] as? [[String: Any]])?.first
+        )
+        #expect(strip["mixer_strip_ref"] == nil)
+    }
+}
+
+@Test
 func cacheEmpty_fileMissing_emitsEmptyDefault() async throws {
     let cache = StateCache()
     let runtime = tracksFileReaderRuntime(pathReturnsNil: true)

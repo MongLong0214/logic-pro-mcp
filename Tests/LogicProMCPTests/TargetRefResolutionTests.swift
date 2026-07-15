@@ -959,11 +959,6 @@ struct TargetRefResolutionTests {
         }
     }
 
-    /// Duplicate-name reorder: two tracks named "Bass". The cache is stale and
-    /// still shows "Bass" at the bound index 1 (drift passes). A live reorder
-    /// moved a *different* track into index 1 while a "Bass" survives at index 2
-    /// — a name-anywhere search would wrongly pass, so the guard must check the
-    /// BOUND index specifically and fail closed.
     @Test
     func testTrackTargetRefDuplicateNameReorderFailsClosedAndDoesNotWrite() async {
         await FeatureFlags.withAdr002TargetRefForTests(true) {
@@ -987,11 +982,14 @@ struct TargetRefResolutionTests {
                 router: router,
                 cache: cache,
                 targetRegistry: registry,
-                liveTrackName: { idx in [0: "Bass", 1: "Drums", 2: "Bass"][idx] }
+                liveTrackName: { idx in [0: "Drums", 1: "Bass", 2: "Bass"][idx] },
+                liveTrackNames: { [0: "Drums", 1: "Bass", 2: "Bass"] }
             )
             #expect(errorCode(result) == "stale_target_reference")
             #expect(body(result)["write_attempted"] as? Bool == false)
-            #expect(body(result)["observed_track_name"] as? String == "Drums")
+            #expect(body(result)["expected_track_name"] as? String == "Bass")
+            #expect(body(result)["ambiguous_live_track_name"] as? Bool == true)
+            #expect(body(result)["ambiguous_track_indices"] as? [Int] == [2])
             #expect(await allOps(channels).isEmpty, "no wrong-target write")
         }
     }
@@ -1029,7 +1027,8 @@ struct TargetRefResolutionTests {
                 router: router,
                 cache: cache,
                 targetRegistry: registry,
-                liveTrackName: { _ in nil }
+                liveTrackName: { _ in nil },
+                liveTrackNames: { nil }
             )
             #expect(errorCode(result) == "stale_target_reference")
             #expect(body(result)["write_attempted"] as? Bool == false)
@@ -1051,7 +1050,8 @@ struct TargetRefResolutionTests {
                 router: router,
                 cache: cache,
                 targetRegistry: registry,
-                liveTrackName: { _ in "Bass" }
+                liveTrackName: { _ in "Bass" },
+                liveTrackNames: { [2: "Bass"] }
             )
             #expect(result.isError == false)
             #expect(echoedTargetRef(result) == reference.rawValue)
@@ -1070,7 +1070,8 @@ struct TargetRefResolutionTests {
                 router: router,
                 cache: cache,
                 targetRegistry: registry,
-                liveTrackName: { _ in "Bass" }
+                liveTrackName: { _ in "Bass" },
+                liveTrackNames: { [2: "Bass"] }
             )
             #expect(result.isError == false)
             #expect(echoedTargetRef(result) == reference.rawValue)

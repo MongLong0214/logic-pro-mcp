@@ -72,6 +72,10 @@ Direct track reorder/delete and plugin-slot replacement in Logic's UI are bounde
 
 The resolver also performs a final registry recheck immediately before returning a resolved mutation target, including `project_ref` validation. A residual non-atomic window remains between that return and the live AX write because registry validation and the external AX write cannot be one atomic operation; live H must switch projects in that window and require fail-closed `stale_target_reference` rather than treating the registry check as a write lock.
 
+Mixer-strip references are bounded to cache rows with a real, non-placeholder arrange-track identity. AX mixer layout positions may include aux/output/master strips and are not a complete arrange-track index model; interleaved non-track strips therefore remain an external Logic UI edit boundary. Live H must include a non-track strip and require that no `mix_` reference is emitted for the position, or that a supplied reference fails closed.
+
+The synchronous `liveTrackName` / live-header scan has the same bounded latency characteristic as the existing synchronous AX calls in the dispatcher path.
+
 ### CTO live-qualification note
 
 The deterministic (fake-AX / registry) acceptance for all four target kinds, the project-epoch

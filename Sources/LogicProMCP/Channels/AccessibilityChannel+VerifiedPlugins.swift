@@ -671,8 +671,23 @@ extension AccessibilityChannel {
     ) -> ChannelResult? {
         guard let expectedTrackName else { return nil }
         let expected = expectedTrackName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let live = AXLogicProElements.trackName(at: track, runtime: runtime)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let scannedNames = AXLogicProElements.trackNames(runtime: runtime) else {
+            return .error(HonestContract.encodeV2StateC(
+                error: .staleTargetReference,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "expected_track_name": expectedTrackName,
+                    "observed_track_name": NSNull(),
+                    "what_was_attempted": "confirm the live track at index \(track) still matches the referenced track before writing",
+                    "what_was_observed": "live track headers were unreadable",
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
+        }
+        let names = scannedNames.mapValues { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let live = names[track]
         guard let live, live == expected else {
             return .error(HonestContract.encodeV2StateC(
                 error: .staleTargetReference,
@@ -684,6 +699,27 @@ extension AccessibilityChannel {
                     "what_was_attempted": "confirm the live track at index \(track) still matches the referenced track before writing",
                     "what_was_observed": live.map { "index \(track) live track name is '\($0)'" }
                         ?? "index \(track) live track name was unreadable",
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
+        }
+        let ambiguousIndices = names
+            .filter { $0.key != track && $0.value == expected }
+            .map(\.key)
+            .sorted()
+        guard ambiguousIndices.isEmpty else {
+            return .error(HonestContract.encodeV2StateC(
+                error: .staleTargetReference,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "expected_track_name": expectedTrackName,
+                    "observed_track_name": live,
+                    "ambiguous_live_track_name": true,
+                    "ambiguous_track_indices": ambiguousIndices,
+                    "what_was_attempted": "confirm the live track at index \(track) is uniquely identified before writing",
+                    "what_was_observed": "live track name '\(expected)' also appeared at indices \(ambiguousIndices.map(String.init).joined(separator: ", "))",
                     "safe_to_retry": false,
                     "write_attempted": false,
                 ]

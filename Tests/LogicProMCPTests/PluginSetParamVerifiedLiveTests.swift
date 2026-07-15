@@ -47,6 +47,7 @@ private final class LiveFixture: @unchecked Sendable {
         openWindowOnSlotPress: Bool = false,
         forcedAfterValue: Double? = nil,
         otherTracks: Int = 0,
+        duplicateTrackNameAt: Int? = nil,
         emptyInsertChain: Bool = false
     ) {
         let b = builder
@@ -69,7 +70,8 @@ private final class LiveFixture: @unchecked Sendable {
             b.setAttribute(row, kAXRoleAttribute as String, kAXLayoutItemRole as String)
             // Track name is surfaced via the header's AXDescription (quoted),
             // matching how extractTrackName reads live Logic headers.
-            b.setAttribute(row, kAXDescriptionAttribute as String, "1개의 ‘\(i == track ? trackName : "Other \(i)")’ 트랙")
+            let name = i == track || i == duplicateTrackNameAt ? trackName : "Other \(i)"
+            b.setAttribute(row, kAXDescriptionAttribute as String, "1개의 ‘\(name)’ 트랙")
             b.setAttribute(row, kAXSelectedAttribute as String, (i == track && trackSelected))
             headerRows.append(row)
         }
@@ -422,6 +424,20 @@ private func runChannelEQFixture(
     #expect(obj["state"] as? String == "A")
     #expect((obj["verified"] as? Bool)!)
     #expect(fixture.currentSliderValue == 60)
+}
+
+@Test func testDuplicateLiveTrackNameFailsClosedBeforeWrite() async {
+    let fixture = LiveFixture(beforeValue: 51, otherTracks: 1, duplicateTrackNameAt: 1)
+    var params = thresholdParams(value: "60")
+    params["expected_track_name"] = trackName
+    let obj = await runLive(fixture: fixture, params: params)
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "stale_target_reference")
+    #expect((obj["write_attempted"] as? Bool) == false)
+    #expect(obj["ambiguous_live_track_name"] as? Bool == true)
+    #expect(obj["ambiguous_track_indices"] as? [Int] == [1])
+    #expect(fixture.currentSliderValue == 51)
 }
 
 @Test func testAbsentExpectedTrackNameIsByteInvariant() async {

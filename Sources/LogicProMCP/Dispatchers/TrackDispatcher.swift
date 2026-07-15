@@ -39,7 +39,8 @@ struct TrackDispatcher: OperationTraceDispatching {
         // at the single dispatch chokepoint (server + saga). When nil the guard
         // is a no-op — but the target_ref path is only reachable behind the
         // off-by-default flag, and every production entry point supplies it.
-        liveTrackName: (@Sendable (Int) -> String?)? = nil
+        liveTrackName: (@Sendable (Int) -> String?)? = nil,
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil
     ) async -> CallTool.Result {
         if let projectFailure = await TargetRefResolver.validateProjectReference(
             params,
@@ -73,7 +74,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                         "select requires 'index' or 'name' param",
                         extras: ["operation": "track.select"]
                     ),
-                    liveTrackName: liveTrackName
+                    liveTrackName: liveTrackName,
+                    liveTrackNames: liveTrackNames
                 ) {
                 case .success(let resolved):
                     let traceID = await startTraceIfEnabled(command: command)
@@ -167,7 +169,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                     "delete requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.delete"]
                 ),
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
             case .success(let resolved):
                 index = resolved.index
@@ -235,7 +238,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                     "duplicate requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.duplicate"]
                 ),
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
             case .success(let resolved):
                 index = resolved.index
@@ -302,7 +306,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                     "rename requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.rename"]
                 ),
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
             case .success(let resolved):
                 index = resolved.index
@@ -410,6 +415,7 @@ struct TrackDispatcher: OperationTraceDispatching {
                 cache: cache,
                 targetRegistry: targetRegistry,
                 liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames,
                 traceID: traceID
             )
             return await finalizeTrace(result, traceID: traceID)
@@ -424,6 +430,7 @@ struct TrackDispatcher: OperationTraceDispatching {
                 cache: cache,
                 targetRegistry: targetRegistry,
                 liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames,
                 traceID: traceID
             )
             return await finalizeTrace(result, traceID: traceID)
@@ -438,6 +445,7 @@ struct TrackDispatcher: OperationTraceDispatching {
                 cache: cache,
                 targetRegistry: targetRegistry,
                 liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames,
                 traceID: traceID
             )
             return await finalizeTrace(result, traceID: traceID)
@@ -468,7 +476,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                     "arm_only requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.arm_only"]
                 ),
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
             case .success(let resolved):
                 index = resolved.index
@@ -600,7 +609,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                     "set_automation requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.set_automation"]
                 ),
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
             case .success(let resolved):
                 index = resolved.index
@@ -652,7 +662,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                     "set_instrument requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.set_instrument"]
                 ),
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
             case .success(let resolved):
                 index = resolved.index
@@ -794,6 +805,7 @@ struct TrackDispatcher: OperationTraceDispatching {
         cache: StateCache,
         targetRegistry: TargetRegistry?,
         liveTrackName: (@Sendable (Int) -> String?)? = nil,
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil,
         traceID: TraceID? = nil
     ) async -> CallTool.Result {
         let index: Int
@@ -808,7 +820,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                 "\(command) requires explicit 'index' (Int ≥ 0)",
                 extras: ["operation": operation]
             ),
-            liveTrackName: liveTrackName
+            liveTrackName: liveTrackName,
+            liveTrackNames: liveTrackNames
         ) {
         case .success(let resolved):
             index = resolved.index

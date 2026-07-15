@@ -193,17 +193,19 @@ extension ResourceHandlers {
             var payload: [[String: Any]] = []
             payload.reserveCapacity(tracksOut.count)
             for track in tracksOut {
-                let descriptor = TargetDescriptor(trackIndex: track.id, trackName: track.name)
-                guard let reference = await targetRegistry.bind(
-                    kind: .track,
-                    descriptor: descriptor,
-                    fingerprint: descriptor.fingerprint,
-                    snapshot: targetSnapshot
-                ) else {
-                    throw MCPError.internalError("track target snapshot became stale during resource emission")
-                }
                 var object = jsonObject(track) as? [String: Any] ?? [:]
-                object["track_ref"] = reference.rawValue
+                if track.placeholder != true {
+                    let descriptor = TargetDescriptor(trackIndex: track.id, trackName: track.name)
+                    guard let reference = await targetRegistry.bind(
+                        kind: .track,
+                        descriptor: descriptor,
+                        fingerprint: descriptor.fingerprint,
+                        snapshot: targetSnapshot
+                    ) else {
+                        throw MCPError.internalError("track target snapshot became stale during resource emission")
+                    }
+                    object["track_ref"] = reference.rawValue
+                }
                 payload.append(object)
             }
             body = encodeJSONObject(payload)
@@ -314,21 +316,22 @@ extension ResourceHandlers {
             payload.reserveCapacity(strips.count)
             for strip in strips {
                 var object = jsonObject(strip) as? [String: Any] ?? [:]
-                let trackName = tracks.first(where: { $0.id == strip.trackIndex })?.name
-                    ?? "Track \(strip.trackIndex + 1)"
-                let descriptor = TargetDescriptor(
-                    trackIndex: strip.trackIndex,
-                    trackName: trackName
-                )
-                guard let reference = await targetRegistry.bind(
-                    kind: .mixerStrip,
-                    descriptor: descriptor,
-                    fingerprint: descriptor.fingerprint,
-                    snapshot: targetSnapshot
-                ) else {
-                    throw MCPError.internalError("mixer target snapshot became stale during resource emission")
+                if let track = tracks.first(where: { $0.id == strip.trackIndex }),
+                   track.placeholder != true {
+                    let descriptor = TargetDescriptor(
+                        trackIndex: strip.trackIndex,
+                        trackName: track.name
+                    )
+                    guard let reference = await targetRegistry.bind(
+                        kind: .mixerStrip,
+                        descriptor: descriptor,
+                        fingerprint: descriptor.fingerprint,
+                        snapshot: targetSnapshot
+                    ) else {
+                        throw MCPError.internalError("mixer target snapshot became stale during resource emission")
+                    }
+                    object["mixer_strip_ref"] = reference.rawValue
                 }
-                object["mixer_strip_ref"] = reference.rawValue
                 payload.append(object)
             }
             stripsJSON = encodeJSONObject(payload)
@@ -652,21 +655,22 @@ extension ResourceHandlers {
         if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot {
             var object = jsonObject(strip) as? [String: Any] ?? [:]
             let tracks = await cache.getTracks()
-            let trackName = tracks.first(where: { $0.id == strip.trackIndex })?.name
-                ?? "Track \(strip.trackIndex + 1)"
-            let descriptor = TargetDescriptor(
-                trackIndex: strip.trackIndex,
-                trackName: trackName
-            )
-            guard let reference = await targetRegistry.bind(
-                kind: .mixerStrip,
-                descriptor: descriptor,
-                fingerprint: descriptor.fingerprint,
-                snapshot: targetSnapshot
-            ) else {
-                throw MCPError.internalError("mixer target snapshot became stale during resource emission")
+            if let track = tracks.first(where: { $0.id == strip.trackIndex }),
+               track.placeholder != true {
+                let descriptor = TargetDescriptor(
+                    trackIndex: strip.trackIndex,
+                    trackName: track.name
+                )
+                guard let reference = await targetRegistry.bind(
+                    kind: .mixerStrip,
+                    descriptor: descriptor,
+                    fingerprint: descriptor.fingerprint,
+                    snapshot: targetSnapshot
+                ) else {
+                    throw MCPError.internalError("mixer target snapshot became stale during resource emission")
+                }
+                object["mixer_strip_ref"] = reference.rawValue
             }
-            object["mixer_strip_ref"] = reference.rawValue
             stripJSON = encodeJSONObject(object)
         } else {
             stripJSON = encodeJSON(strip)

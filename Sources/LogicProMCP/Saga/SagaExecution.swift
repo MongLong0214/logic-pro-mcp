@@ -19,19 +19,22 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
     // on an out-of-band reorder. nil by default (saga tests stay deterministic);
     // production construction supplies the real reader.
     private let liveTrackName: (@Sendable (Int) -> String?)?
+    private let liveTrackNames: (@Sendable () -> [Int: String]?)?
 
     init(
         router: ChannelRouter,
         cache: StateCache,
         targetRegistry: TargetRegistry,
         dialogPresent: @escaping @Sendable () -> Bool,
-        liveTrackName: (@Sendable (Int) -> String?)? = nil
+        liveTrackName: (@Sendable (Int) -> String?)? = nil,
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil
     ) {
         self.router = router
         self.cache = cache
         self.targetRegistry = targetRegistry
         self.dialogPresent = dialogPresent
         self.liveTrackName = liveTrackName
+        self.liveTrackNames = liveTrackNames
     }
 
     func run(_ step: SagaStep) async -> StepResult {
@@ -66,7 +69,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
                 cache: cache,
                 targetRegistry: targetRegistry,
                 dialogPresent: dialogPresent,
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             )
         case .mixerSetVolume:
             response = await MixerDispatcher.handle(
@@ -75,7 +79,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
                 router: router,
                 cache: cache,
                 targetRegistry: targetRegistry,
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             )
         case .mixerSetPan:
             response = await MixerDispatcher.handle(
@@ -84,7 +89,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
                 router: router,
                 cache: cache,
                 targetRegistry: targetRegistry,
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             )
         case .tracksMute:
             response = await TrackDispatcher.handle(
@@ -94,7 +100,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
                 cache: cache,
                 targetRegistry: targetRegistry,
                 dialogPresent: dialogPresent,
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             )
         case .tracksSolo:
             response = await TrackDispatcher.handle(
@@ -104,7 +111,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
                 cache: cache,
                 targetRegistry: targetRegistry,
                 dialogPresent: dialogPresent,
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             )
         case .tracksArm:
             response = await TrackDispatcher.handle(
@@ -114,7 +122,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
                 cache: cache,
                 targetRegistry: targetRegistry,
                 dialogPresent: dialogPresent,
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             )
         default:
             return StepResult(

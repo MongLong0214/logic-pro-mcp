@@ -214,7 +214,8 @@ enum OperationHandlerRegistry {
                     // ADR-002 F5 — production dispatch supplies the live AX
                     // track-header reader so the target_ref mutation boundary
                     // fails closed on an out-of-band reorder.
-                    liveTrackName: { AXLogicProElements.trackName(at: $0) }
+                    liveTrackName: { AXLogicProElements.trackName(at: $0) },
+                    liveTrackNames: { AXLogicProElements.trackNames() }
                 )
             }
         case .logicNavigate:
@@ -246,7 +247,8 @@ enum OperationHandlerRegistry {
                     // ADR-002 F5 — production dispatch supplies the live AX
                     // track-header reader so saga-replayed target_ref track/mixer
                     // steps fail closed on an out-of-band reorder.
-                    liveTrackName: { AXLogicProElements.trackName(at: $0) }
+                    liveTrackName: { AXLogicProElements.trackName(at: $0) },
+                    liveTrackNames: { AXLogicProElements.trackNames() }
                 )
             }
         case .logicPlugins:
@@ -306,7 +308,8 @@ enum OperationHandlerRegistry {
                     // ADR-002 F5 — production dispatch supplies the live AX
                     // track-header reader so the target_ref mutation boundary
                     // fails closed on an out-of-band reorder.
-                    liveTrackName: { AXLogicProElements.trackName(at: $0) }
+                    liveTrackName: { AXLogicProElements.trackName(at: $0) },
+                    liveTrackNames: { AXLogicProElements.trackNames() }
                 )
             }
         }

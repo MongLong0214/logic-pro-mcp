@@ -73,6 +73,7 @@ enum TargetRefResolver {
         invalidIndexResult: @autoclosure () -> CallTool.Result,
         acceptedKinds: [TargetKind]? = nil,
         liveTrackName: (@Sendable (Int) -> String?)? = nil,
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil,
         beforeFinalValidation: (@Sendable () async -> Void)? = nil
     ) async -> Outcome {
         if let projectFailure = await validateProjectReference(
@@ -136,7 +137,8 @@ enum TargetRefResolver {
                 binding: binding,
                 rawReference: rawReference,
                 operation: operation,
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
                 return .failure(liveIdentityFailure)
             }
@@ -245,14 +247,25 @@ enum TargetRefResolver {
         binding: TargetBinding,
         rawReference: String?,
         operation: String,
-        liveTrackName: (@Sendable (Int) -> String?)?
+        liveTrackName: (@Sendable (Int) -> String?)?,
+        liveTrackNames: (@Sendable () -> [Int: String]?)?
     ) -> CallTool.Result? {
-        guard let liveTrackName else { return nil }
+        guard liveTrackName != nil || liveTrackNames != nil else { return nil }
         let index = binding.descriptor.trackIndex
         let expected = binding.descriptor.trackName
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let live = liveTrackName(index)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let scanned = liveTrackNames?() else {
+            let live = liveTrackName?(index)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return staleLiveIdentityResult(
+                rawReference,
+                operation: operation,
+                index: index,
+                expected: binding.descriptor.trackName,
+                observed: live
+            )
+        }
+        let names = scanned.mapValues { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let live = names[index]
         guard let live, live == expected else {
             return staleLiveIdentityResult(
                 rawReference,
@@ -260,6 +273,20 @@ enum TargetRefResolver {
                 index: index,
                 expected: binding.descriptor.trackName,
                 observed: live
+            )
+        }
+        let ambiguousIndices = names
+            .filter { $0.key != index && $0.value == expected }
+            .map(\.key)
+            .sorted()
+        guard ambiguousIndices.isEmpty else {
+            return staleLiveIdentityResult(
+                rawReference,
+                operation: operation,
+                index: index,
+                expected: binding.descriptor.trackName,
+                observed: live,
+                ambiguousIndices: ambiguousIndices
             )
         }
         return nil
@@ -274,22 +301,29 @@ enum TargetRefResolver {
         operation: String,
         index: Int,
         expected: String,
-        observed: String?
+        observed: String?,
+        ambiguousIndices: [Int] = []
     ) -> CallTool.Result {
-        toolStateCResult(
+        var extras: [String: Any] = [
+            "operation": operation,
+            "target_ref": rawReference ?? "",
+            "expected_track_name": expected,
+            "observed_track_name": observed as Any? ?? NSNull(),
+            "what_was_attempted": "confirm the live track at index \(index) still matches the referenced track before writing",
+            "what_was_observed": observed.map { "index \(index) live track name is '\($0)'" }
+                ?? "index \(index) live track name was unreadable",
+            "safe_to_retry": false,
+            "write_attempted": false,
+        ]
+        if !ambiguousIndices.isEmpty {
+            extras["ambiguous_live_track_name"] = true
+            extras["ambiguous_track_indices"] = ambiguousIndices
+            extras["what_was_observed"] = "live track name '\(expected)' also appeared at indices \(ambiguousIndices.map(String.init).joined(separator: ", "))"
+        }
+        return toolStateCResult(
             .staleTargetReference,
             hint: "target_ref no longer names the live track at its bound index (out-of-band reorder)",
-            extras: [
-                "operation": operation,
-                "target_ref": rawReference ?? "",
-                "expected_track_name": expected,
-                "observed_track_name": observed as Any? ?? NSNull(),
-                "what_was_attempted": "confirm the live track at index \(index) still matches the referenced track before writing",
-                "what_was_observed": observed.map { "index \(index) live track name is '\($0)'" }
-                    ?? "index \(index) live track name was unreadable",
-                "safe_to_retry": false,
-                "write_attempted": false,
-            ]
+            extras: extras
         )
     }
 

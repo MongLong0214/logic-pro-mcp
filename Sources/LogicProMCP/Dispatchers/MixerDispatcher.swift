@@ -28,7 +28,8 @@ struct MixerDispatcher: OperationTraceDispatching {
         // at the single dispatch chokepoint (server + saga). When nil the guard
         // is a no-op — but the target_ref path is only reachable behind the
         // off-by-default flag, and every production entry point supplies it.
-        liveTrackName: (@Sendable (Int) -> String?)? = nil
+        liveTrackName: (@Sendable (Int) -> String?)? = nil,
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil
     ) async -> CallTool.Result {
         if let projectFailure = await TargetRefResolver.validateProjectReference(
             params,
@@ -57,7 +58,8 @@ struct MixerDispatcher: OperationTraceDispatching {
                     "set_volume requires explicit 'track' or non-conflicting 'index' (Int >= 0)"
                 ),
                 acceptedKinds: [.track, .mixerStrip],
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
             case .success(let resolved):
                 index = resolved.index
@@ -103,7 +105,8 @@ struct MixerDispatcher: OperationTraceDispatching {
                     "set_pan requires explicit 'track' or non-conflicting 'index' (Int >= 0)"
                 ),
                 acceptedKinds: [.track, .mixerStrip],
-                liveTrackName: liveTrackName
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
             case .success(let resolved):
                 index = resolved.index
