@@ -343,6 +343,12 @@ extension AXLogicProElements {
 
     // MARK: - Plugin Windows (verified parameter write — T5)
 
+    enum PluginWindowMatch {
+        case none
+        case unique(AXUIElement)
+        case ambiguous
+    }
+
     /// Resolve the display name of the track header at `index` (0-based), or nil
     /// when the header is absent / unnamed. The verified parameter write matches
     /// the open plugin window by this name (T0 evidence: a stock-effect plugin
@@ -363,29 +369,54 @@ extension AXLogicProElements {
     /// the track name; its parameter controls are flat `AXSlider`s at the
     /// window's first child level, and only `AXDescription` is a stable matcher.
     ///
-    /// Returns nil when no such window is open (the caller then attempts to open
-    /// one, or fails closed). Both the title match and the slider presence are
-    /// required so an unrelated same-titled window is never mistaken for the
-    /// plugin window.
+    /// Returns nil when no such window is open or when more than one candidate
+    /// matches (the caller then attempts to open one, or fails closed). Both the
+    /// window role/title and slider presence are required so an unrelated or
+    /// ambiguous same-titled window is never mistaken for the plugin window.
     static func openPluginWindow(
         forTrackName trackName: String,
         matchingSliderDescription axDescription: String,
         runtime: Runtime = .production
     ) -> AXUIElement? {
-        guard let app = appRoot(runtime: runtime) else { return nil }
+        if case let .unique(window) = pluginWindowMatch(
+            forTrackName: trackName,
+            matchingSliderDescription: axDescription,
+            runtime: runtime
+        ) {
+            return window
+        }
+        return nil
+    }
+
+    static func pluginWindowMatch(
+        forTrackName trackName: String,
+        matchingSliderDescription axDescription: String,
+        runtime: Runtime = .production
+    ) -> PluginWindowMatch {
+        guard let app = appRoot(runtime: runtime) else { return .none }
         let windows: [AXUIElement] = AXHelpers.getAttribute(
             app, kAXWindowsAttribute, runtime: runtime.ax
         ) ?? []
         let target = trackName.trimmingCharacters(in: .whitespacesAndNewlines)
+        var match: AXUIElement?
         for window in windows {
+            guard isPluginEditorWindow(window, runtime: runtime.ax) else { continue }
+            guard AXHelpers.getRole(window, runtime: runtime.ax) == (kAXWindowRole as String) else { continue }
             let title = (AXHelpers.getTitle(window, runtime: runtime.ax) ?? "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard title == target else { continue }
-            if pluginWindowSlider(in: window, axDescription: axDescription, runtime: runtime.ax) != nil {
-                return window
+            switch pluginWindowSliderMatch(in: window, axDescription: axDescription, runtime: runtime.ax) {
+            case .none:
+                continue
+            case .ambiguous:
+                return .ambiguous
+            case .unique:
+                guard match == nil else { return .ambiguous }
+                match = window
             }
         }
-        return nil
+        guard let match else { return .none }
+        return .unique(match)
     }
 
     /// Find the parameter `AXSlider` inside a plugin window by its
@@ -398,16 +429,39 @@ extension AXLogicProElements {
         axDescription: String,
         runtime: AXHelpers.Runtime = .production
     ) -> AXUIElement? {
+        if case let .unique(slider) = pluginWindowSliderMatch(
+            in: window,
+            axDescription: axDescription,
+            runtime: runtime
+        ) {
+            return slider
+        }
+        return nil
+    }
+
+    private enum PluginSliderMatch {
+        case none
+        case unique(AXUIElement)
+        case ambiguous
+    }
+
+    private static func pluginWindowSliderMatch(
+        in window: AXUIElement,
+        axDescription: String,
+        runtime: AXHelpers.Runtime
+    ) -> PluginSliderMatch {
         let target = axDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !target.isEmpty else { return nil }
+        guard !target.isEmpty else { return .none }
         let sliders = AXHelpers.findAllDescendants(
             of: window, role: kAXSliderRole, maxDepth: 4, runtime: runtime
         )
-        return sliders.first { slider in
+        let matches = sliders.filter { slider in
             let desc = (AXHelpers.getDescription(slider, runtime: runtime) ?? "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             return desc.caseInsensitiveCompare(target) == .orderedSame
         }
+        guard let first = matches.first else { return .none }
+        return matches.count == 1 ? .unique(first) : .ambiguous
     }
 
 }

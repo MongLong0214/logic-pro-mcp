@@ -4,7 +4,7 @@
 **Program**: [#308](https://github.com/MongLong0214/logic-pro-mcp/issues/308) — Train A, first step
 **Branch**: `feat/adr002a-target-kinds-20260715`
 **Baseline head at directive time**: `11f0985` (integrated Train-A head)
-**Increment status**: In implementation — ADR-002-a target-kind resolution is in-flight (uncommitted) across the track/mixer/plugins dispatchers, `TargetRefResolution`, resource state readers, the operation registry, plus `Sources/LogicProMCP/Dispatchers/PluginsDispatcher+TargetReferences.swift` and `Tests/LogicProMCPTests/ADR002ATargetKindTests.swift`.
+**Increment status**: In implementation — the ADR-002-a target-kind slice (first-class `mixer_strip_ref` / `plugin_insert_ref` target kinds + topology invalidation + the plugin-insert target-reference helper) is committed at head `2f9fbb9` on this branch. Remaining before release: finish the full-suite checkpoint, then the #268 automatic plugin-editor acquisition fix and the blocking acceptance gates below. The #268 fix is NOT yet in this branch.
 
 > Authoritative ADR-002 status summary: `docs/adr/README.md` §"ADR-002 — Session-scoped Stable Target Reference". This board is the active acceptance surface for the current ADR-002-a increment.
 
@@ -14,7 +14,7 @@
 
 **#268 must not be omitted.** It is pulled forward into the current Train A first step (#285 ADR-002-a) acceptance. The GitHub issues (#268, #285) already carry the pull-forward ordering.
 
-**Related issue**: [#268](https://github.com/MongLong0214/logic-pro-mcp/issues/268) — `set_param_verified` fails to acquire Compressor editor window on Logic Pro 12.3 (OPEN, `bug`, `priority: p1`). NOTE: the earlier `docs/tickets/issue-268-plugin-window-opener/` pipeline (PR #271) did not land on the current train; #268 is OPEN at the current head and its fix is now owned by this ADR-002-a step.
+**Related issue**: [#268](https://github.com/MongLong0214/logic-pro-mcp/issues/268) — `set_param_verified` fails to acquire Compressor editor window on Logic Pro 12.3 (OPEN, `bug`, `priority: p1`). NOTE: the earlier `docs/tickets/issue-268-plugin-window-opener/` pipeline (PR #271, including `f3fc857`) did land and is an ancestor of current main, but it did not resolve the reopened Logic 12.3 environment-specific regression. The remaining correction is now owned by this ADR-002-a step.
 
 ### Canonical insertion (do not reorder)
 
@@ -22,6 +22,7 @@
 2. Before the release build, fix #268 automatic plugin editor acquisition.
 3. On the #285 final exact head, run in order: focused tests → full suite → release build → real Logic 12.3 live qualification → CTO exhaustive review → CEO exact-head production-readiness gate.
 4. Never defer #268 until after #285, and never push it to the final current-main debt pass.
+5. After #285/#268 is verified and merged, stop before #286 and close PR #367's remaining production-readiness debt (`LPMCP-PRD-001`): independent exact-artifact live qualification, the approved Desktop en/ko managed-fixture matrix, semantic operation coverage or explicit bounded waivers, mutation/readback/restore/compensation evidence, independent verification/provenance, published immutable evidence, CTO review, and CEO exact-head PASS. Only then advance to #286.
 
 ### Root-cause boundary (#268)
 
