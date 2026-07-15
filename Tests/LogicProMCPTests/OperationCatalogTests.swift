@@ -185,7 +185,7 @@ struct OperationCatalogTests {
     ]
 
     private static func expectedAllowedParams(for spec: OperationSpec) -> Set<String> {
-        var expected = spec.allowedParams.intersection(["index", "track"])
+        var expected = spec.allowedParams.intersection(["index", "project_ref", "track"])
         if spec.target == .requiresStableTarget {
             expected.insert("target_ref")
         }
@@ -745,7 +745,7 @@ struct OperationCatalogTests {
         #expect(actualIndex.count == 17)
         #expect(actualTrack.count == 16)
         #expect(actualTargetRef == targetBearing)
-        #expect(actualTargetRef.count == 13)
+        #expect(actualTargetRef.count == 14)
         for spec in OperationRegistry.specs {
             #expect(
                 spec.allowedParams.isDisjoint(

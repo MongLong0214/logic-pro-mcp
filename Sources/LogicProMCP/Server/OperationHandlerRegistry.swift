@@ -210,7 +210,12 @@ enum OperationHandlerRegistry {
                     params: params,
                     router: dependencies.router,
                     cache: dependencies.cache,
-                    targetRegistry: dependencies.targetRegistry
+                    targetRegistry: dependencies.targetRegistry,
+                    // ADR-002 F5 — production dispatch supplies the live AX
+                    // track-header reader so the target_ref mutation boundary
+                    // fails closed on an out-of-band reorder.
+                    liveTrackName: { AXLogicProElements.trackName(at: $0) },
+                    liveTrackNames: { AXLogicProElements.trackNames() }
                 )
             }
         case .logicNavigate:
@@ -238,7 +243,12 @@ enum OperationHandlerRegistry {
                     targetRegistry: dependencies.targetRegistry,
                     dialogPresent: dependencies.dialogPresent,
                     sagaJournal: dependencies.sagaJournal,
-                    mutationGate: dependencies.mutationGate
+                    mutationGate: dependencies.mutationGate,
+                    // ADR-002 F5 — production dispatch supplies the live AX
+                    // track-header reader so saga-replayed target_ref track/mixer
+                    // steps fail closed on an out-of-band reorder.
+                    liveTrackName: { AXLogicProElements.trackName(at: $0) },
+                    liveTrackNames: { AXLogicProElements.trackNames() }
                 )
             }
         case .logicPlugins:
@@ -273,12 +283,18 @@ enum OperationHandlerRegistry {
             }
         case .logicMidi:
             return { dependencies, params in
-                await MIDIDispatcher.handle(
+                let result = await MIDIDispatcher.handle(
                     command: command,
                     params: params,
                     router: dependencies.router,
                     cache: dependencies.cache
                 )
+                if command == "import_file",
+                   FeatureFlags.adr002TargetRef,
+                   toolResultIsVerified(result) {
+                    await dependencies.targetRegistry.bumpTopologyGeneration()
+                }
+                return result
             }
         case .logicTracks:
             return { dependencies, params in
@@ -288,7 +304,12 @@ enum OperationHandlerRegistry {
                     router: dependencies.router,
                     cache: dependencies.cache,
                     targetRegistry: dependencies.targetRegistry,
-                    dialogPresent: dependencies.dialogPresent
+                    dialogPresent: dependencies.dialogPresent,
+                    // ADR-002 F5 — production dispatch supplies the live AX
+                    // track-header reader so the target_ref mutation boundary
+                    // fails closed on an out-of-band reorder.
+                    liveTrackName: { AXLogicProElements.trackName(at: $0) },
+                    liveTrackNames: { AXLogicProElements.trackNames() }
                 )
             }
         }

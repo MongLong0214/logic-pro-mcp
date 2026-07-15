@@ -92,6 +92,7 @@ actor AccessibilityChannel: Channel {
         let setTempo: @Sendable ([String: String]) -> ChannelResult
         let setCycleRange: @Sendable ([String: String]) -> ChannelResult
         let tracks: @Sendable () -> ChannelResult
+        let trackStates: @Sendable () -> [TrackState]?
         let selectedTrack: @Sendable () -> ChannelResult
         let selectTrack: @Sendable ([String: String]) async -> ChannelResult
         let setTrackToggle: @Sendable ([String: String], String) -> ChannelResult
@@ -124,6 +125,7 @@ actor AccessibilityChannel: Channel {
             setTempo: @escaping @Sendable ([String: String]) -> ChannelResult,
             setCycleRange: @escaping @Sendable ([String: String]) -> ChannelResult,
             tracks: @escaping @Sendable () -> ChannelResult,
+            trackStates: @escaping @Sendable () -> [TrackState]? = { nil },
             selectedTrack: @escaping @Sendable () -> ChannelResult,
             selectTrack: @escaping @Sendable ([String: String]) async -> ChannelResult,
             setTrackToggle: @escaping @Sendable ([String: String], String) -> ChannelResult,
@@ -154,6 +156,7 @@ actor AccessibilityChannel: Channel {
             self.setTempo = setTempo
             self.setCycleRange = setCycleRange
             self.tracks = tracks
+            self.trackStates = trackStates
             self.selectedTrack = selectedTrack
             self.selectTrack = selectTrack
             self.setTrackToggle = setTrackToggle
@@ -215,6 +218,7 @@ actor AccessibilityChannel: Channel {
                 },
                 setCycleRange: { AccessibilityChannel.defaultSetCycleRange(params: $0, runtime: logicRuntime) },
                 tracks: { AccessibilityChannel.defaultGetTracks(runtime: logicRuntime) },
+                trackStates: { AccessibilityChannel.defaultGetTrackStates(runtime: logicRuntime) },
                 selectedTrack: { AccessibilityChannel.defaultGetSelectedTrack(runtime: logicRuntime) },
                 selectTrack: { await AccessibilityChannel.defaultSelectTrack(params: $0, runtime: logicRuntime) },
                 setTrackToggle: { AccessibilityChannel.defaultSetTrackToggle(params: $0, button: $1, runtime: logicRuntime) },
@@ -250,6 +254,10 @@ actor AccessibilityChannel: Channel {
 
     init(runtime: Runtime = .production) {
         self.runtime = runtime
+    }
+
+    func readTrackStates() -> [TrackState]? {
+        runtime.trackStates()
     }
 
     func start() async throws {

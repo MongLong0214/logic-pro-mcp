@@ -192,7 +192,7 @@ enum AXLogicProElements {
     /// none of bypass/compare/link nor a close-button attribute. Follows the
     /// `isKeyboardLayoutOverlayWindow` exclusion precedent; compare/link labels
     /// are English-only (OQ-1) so non-EN locales stay blocking.
-    private static func isPluginEditorWindow(
+    static func isPluginEditorWindow(
         _ window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Bool {

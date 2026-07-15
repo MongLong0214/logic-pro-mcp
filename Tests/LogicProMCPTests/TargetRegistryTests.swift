@@ -73,6 +73,44 @@ struct TargetRegistryTests {
     }
 
     @Test
+    func testSnapshotBindingRejectsGenerationBumpBetweenSnapshotAndBind() async {
+        let registry = TargetRegistry(serverSessionID: UUID())
+        let descriptor = descriptor()
+        let snapshot = await registry.currentSnapshot
+
+        await registry.bumpTopologyGeneration()
+
+        let reference = await registry.bind(
+            kind: .track,
+            descriptor: descriptor,
+            fingerprint: descriptor.fingerprint,
+            snapshot: snapshot
+        )
+
+        #expect(reference == nil)
+        #expect(await registry.currentTopologyGeneration == 1)
+    }
+
+    @Test
+    func testSnapshotBindingRejectsEpochBumpBetweenSnapshotAndBind() async {
+        let registry = TargetRegistry(serverSessionID: UUID())
+        let descriptor = descriptor()
+        let snapshot = await registry.currentSnapshot
+
+        await registry.bumpProjectEpoch()
+
+        let reference = await registry.bind(
+            kind: .pluginInsert,
+            descriptor: descriptor,
+            fingerprint: "\(descriptor.fingerprint)|insert=0|plugin=G",
+            snapshot: snapshot
+        )
+
+        #expect(reference == nil)
+        #expect(await registry.currentProjectEpoch == 1)
+    }
+
+    @Test
     func testProjectEpochInvalidatesBinding() async {
         let registry = TargetRegistry(serverSessionID: UUID())
         let descriptor = descriptor()

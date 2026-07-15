@@ -45,6 +45,31 @@ struct TrackState: Sendable, Codable, Identifiable {
     /// rows from the AX scrape have this nil/absent (Codable backward
     /// compat: pre-v3.1.8 JSON snapshots lacking the field decode cleanly).
     var placeholder: Bool?
+    var liveIdentityBacked: Bool = true
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, type, isMuted, isSoloed, isArmed, isSelected
+        case volume, pan, automationMode, color, placeholder
+    }
+}
+
+extension TrackState {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        type = try container.decode(TrackType.self, forKey: .type)
+        isMuted = try container.decode(Bool.self, forKey: .isMuted)
+        isSoloed = try container.decode(Bool.self, forKey: .isSoloed)
+        isArmed = try container.decode(Bool.self, forKey: .isArmed)
+        isSelected = try container.decode(Bool.self, forKey: .isSelected)
+        volume = try container.decode(Double.self, forKey: .volume)
+        pan = try container.decode(Double.self, forKey: .pan)
+        automationMode = try container.decode(AutomationMode.self, forKey: .automationMode)
+        color = try container.decodeIfPresent(String.self, forKey: .color)
+        placeholder = try container.decodeIfPresent(Bool.self, forKey: .placeholder)
+        liveIdentityBacked = false
+    }
 }
 
 /// Mixer channel strip state (extends track with routing info).

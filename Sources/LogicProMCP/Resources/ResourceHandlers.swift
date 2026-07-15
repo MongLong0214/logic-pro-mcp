@@ -84,7 +84,12 @@ extension ResourceHandlers {
         if uri.hasPrefix("logic://mixer/") {
             let indexStr = String(uri.dropFirst("logic://mixer/".count))
             if let index = Int(indexStr) {
-                return try await readMixerStrip(at: index, cache: cache, uri: uri)
+                return try await readMixerStrip(
+                    at: index,
+                    cache: cache,
+                    uri: uri,
+                    targetRegistry: targetRegistry
+                )
             }
         }
 

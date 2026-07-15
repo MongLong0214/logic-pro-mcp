@@ -132,6 +132,11 @@ func routedTextResult(
     toolTextResult(await router.route(operation: operation, params: params))
 }
 
+func toolResultIsVerified(_ result: CallTool.Result) -> Bool {
+    guard result.isError != true else { return false }
+    return result.structuredContent?.objectValue?["verified"]?.boolValue == true
+}
+
 private let dispatcherJSONDecoder: JSONDecoder = {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601

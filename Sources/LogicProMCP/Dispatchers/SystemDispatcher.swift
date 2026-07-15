@@ -225,7 +225,13 @@ struct SystemDispatcher: OperationTraceDispatching {
         sagaRefreshAfterWrite: (@Sendable () async -> Void)? = nil,
         logicHealthObservation: @Sendable () -> LogicHealthObservation = {
             productionLogicHealthObservation()
-        }
+        },
+        // ADR-002 F5 — live AX track-header reader forwarded to the saga
+        // executor so target_ref track/mixer steps fail closed on out-of-band
+        // reorder. nil by default (saga surface tests stay deterministic);
+        // production dispatch supplies the real reader.
+        liveTrackName: (@Sendable (Int) -> String?)? = nil,
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil
     ) async -> CallTool.Result {
         switch command {
         case "list_recent_traces", "get_trace", "clear_traces":
@@ -400,7 +406,9 @@ struct SystemDispatcher: OperationTraceDispatching {
                 router: router,
                 cache: cache,
                 targetRegistry: targetRegistry,
-                dialogPresent: dialogPresent
+                dialogPresent: dialogPresent,
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             )
             let preflight = await MutationSaga(targetRegistry: targetRegistry).preflight(plan)
             let availability = await executor.captureBeforeStateAvailability(plan: plan)
@@ -484,7 +492,9 @@ struct SystemDispatcher: OperationTraceDispatching {
                     router: router,
                     cache: cache,
                     targetRegistry: targetRegistry,
-                    dialogPresent: dialogPresent
+                    dialogPresent: dialogPresent,
+                    liveTrackName: liveTrackName,
+                    liveTrackNames: liveTrackNames
                 )
                 let saga = MutationSaga(targetRegistry: targetRegistry)
                 let preflight = await saga.preflight(plan)

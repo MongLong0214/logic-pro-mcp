@@ -7,20 +7,14 @@ extension AccessibilityChannel {
     // MARK: - Tracks
 
     static func defaultGetTracks(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
+        encodeResult(defaultGetTrackStates(runtime: runtime))
+    }
+
+    static func defaultGetTrackStates(runtime: AXLogicProElements.Runtime = .production) -> [TrackState] {
         let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
-        if headers.isEmpty {
-            // Empty is a valid steady state (no project open / project picker
-            // front). Return an empty list so the StatePoller can overwrite
-            // stale cache from a prior session instead of silently holding
-            // onto ghost tracks that break rename/mute/arm ops on index 0.
-            return encodeResult([TrackState]())
+        return headers.enumerated().map { index, header in
+            AXValueExtractors.extractTrackState(from: header, index: index, runtime: runtime.ax)
         }
-        var tracks: [TrackState] = []
-        for (index, header) in headers.enumerated() {
-            let track = AXValueExtractors.extractTrackState(from: header, index: index, runtime: runtime.ax)
-            tracks.append(track)
-        }
-        return encodeResult(tracks)
     }
 
     static func defaultGetSelectedTrack(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {

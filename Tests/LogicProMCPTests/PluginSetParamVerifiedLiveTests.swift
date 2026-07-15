@@ -32,6 +32,8 @@ private let trackName = "Acid Wash Bass"
 /// pads the header/strip count so a non-zero target track index is realistic.
 private final class LiveFixture: @unchecked Sendable {
     let builder = FakeAXRuntimeBuilder()
+    let app: AXUIElement
+    let windowsAddedOnSlotPress: MutableBox<[AXUIElement]>
     let runtime: AXLogicProElements.Runtime
 
     init(
@@ -45,15 +47,21 @@ private final class LiveFixture: @unchecked Sendable {
         openWindowOnSlotPress: Bool = false,
         forcedAfterValue: Double? = nil,
         otherTracks: Int = 0,
-        emptyInsertChain: Bool = false
+        duplicateTrackNameAt: Int? = nil,
+        emptyInsertChain: Bool = false,
+        pluginWindowRejectsDirectDemotion: Bool = false
     ) {
         let b = builder
+        let windowsAddedOnSlotPress = MutableBox<[AXUIElement]>([])
         let app = b.element(1000)
         let arrangeWindow = b.element(1001)
         let headersGroup = b.element(1002)
         let mixer = b.element(1003)
         let pluginWindow = b.element(1004)
         let slider = b.element(1005)
+        let pluginClose = b.element(1006)
+        let pluginBypass = b.element(1007)
+        let pluginLink = b.element(1008)
 
         // --- Track headers: one row per track, selected-state on the target. ---
         var headerRows: [AXUIElement] = []
@@ -63,7 +71,8 @@ private final class LiveFixture: @unchecked Sendable {
             b.setAttribute(row, kAXRoleAttribute as String, kAXLayoutItemRole as String)
             // Track name is surfaced via the header's AXDescription (quoted),
             // matching how extractTrackName reads live Logic headers.
-            b.setAttribute(row, kAXDescriptionAttribute as String, "1개의 ‘\(i == track ? trackName : "Other \(i)")’ 트랙")
+            let name = i == track || i == duplicateTrackNameAt ? trackName : "Other \(i)"
+            b.setAttribute(row, kAXDescriptionAttribute as String, "1개의 ‘\(name)’ 트랙")
             b.setAttribute(row, kAXSelectedAttribute as String, (i == track && trackSelected))
             headerRows.append(row)
         }
@@ -118,10 +127,18 @@ private final class LiveFixture: @unchecked Sendable {
         b.setAttribute(slider, kAXMinValueAttribute as String, 0.0)
         b.setAttribute(slider, kAXMaxValueAttribute as String, 100.0)
         b.setAttribute(slider, kAXValueDescriptionAttribute as String, "\(Int(beforeValue)) %")
+        b.setAttribute(pluginClose, kAXRoleAttribute as String, kAXButtonRole as String)
+        b.setAttribute(pluginBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        b.setAttribute(pluginBypass, kAXDescriptionAttribute as String, "bypass")
+        b.setAttribute(pluginLink, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        b.setAttribute(pluginLink, kAXDescriptionAttribute as String, "link")
         b.setAttribute(pluginWindow, kAXRoleAttribute as String, kAXWindowRole as String)
         b.setAttribute(pluginWindow, kAXSubroleAttribute as String, kAXDialogSubrole as String)
         b.setAttribute(pluginWindow, kAXTitleAttribute as String, trackName)
-        b.setChildren(pluginWindow, [slider])
+        b.setAttribute(pluginWindow, kAXCloseButtonAttribute as String, pluginClose)
+        b.setAttribute(pluginWindow, kAXMainAttribute as String, pluginWindowPresent)
+        b.setAttribute(pluginWindow, kAXFocusedAttribute as String, pluginWindowPresent)
+        b.setChildren(pluginWindow, [pluginBypass, pluginLink, slider])
 
         let windows = pluginWindowPresent ? [arrangeWindow, pluginWindow] : [arrangeWindow]
         b.setAttribute(app, kAXWindowsAttribute as String, windows)
@@ -138,6 +155,12 @@ private final class LiveFixture: @unchecked Sendable {
         let runtime = b.makeLogicRuntime(
             appElement: app,
             setAttributeHandler: { [b] el, attribute, value in
+                if pluginWindowRejectsDirectDemotion,
+                   b.elementID(el) == b.elementID(pluginWindow),
+                   attribute == (kAXMainAttribute as String) || attribute == (kAXFocusedAttribute as String),
+                   (value as? NSNumber)?.boolValue == false {
+                    return true
+                }
                 guard b.elementID(el) == sliderKey, attribute == (kAXValueAttribute as String) else {
                     b.setAttribute(el, attribute, value)
                     return true
@@ -149,16 +172,34 @@ private final class LiveFixture: @unchecked Sendable {
                 return true
             },
             performActionHandler: { [b] el, action in
-                guard openWindowOnSlotPress, action == (kAXPressAction as String) else {
+                if pluginWindowRejectsDirectDemotion,
+                   b.elementID(el) == b.elementID(arrangeWindow),
+                   action == (kAXRaiseAction as String) {
+                    b.setAttribute(pluginWindow, kAXMainAttribute as String, false)
+                    b.setAttribute(pluginWindow, kAXFocusedAttribute as String, false)
+                    return true
+                }
+                guard action == (kAXPressAction as String) else {
                     return true
                 }
                 let key = b.elementID(el)
-                if key == targetSlotKey || key == targetOpenButtonKey {
-                    b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow, pluginWindow])
+                guard key == targetSlotKey || key == targetOpenButtonKey else {
+                    return true
                 }
+                if openWindowOnSlotPress {
+                    b.setAttribute(
+                        app,
+                        kAXWindowsAttribute as String,
+                        [arrangeWindow, pluginWindow] + windowsAddedOnSlotPress.value
+                    )
+                }
+                b.setAttribute(pluginWindow, kAXMainAttribute as String, true)
+                b.setAttribute(pluginWindow, kAXFocusedAttribute as String, true)
                 return true
             }
         )
+        self.app = app
+        self.windowsAddedOnSlotPress = windowsAddedOnSlotPress
         self.runtime = runtime
     }
 
@@ -362,6 +403,65 @@ private func runChannelEQFixture(
     #expect(obj["observed_normalized"] as? Double == 60.7)
 }
 
+// MARK: - ADR-002 F1: live track-name cross-check for target_ref resolutions
+
+// The `target_ref` path threads the reference's bound track name in as
+// `expected_track_name`. When the live AX header at the positional index no
+// longer reads back that name (out-of-band UI reorder, stale cache), the write
+// must fail closed with stale_target_reference BEFORE any AXValue write —
+// otherwise a same-index/same-plugin collision would land a wrong-target write.
+
+@Test func testExpectedTrackNameMismatchFailsClosedStaleAndDoesNotWrite() async {
+    // Live header at index 0 is "Acid Wash Bass"; the ref was bound to a track
+    // whose name has since changed (its live index now holds a different track).
+    let fixture = LiveFixture(beforeValue: 51)
+    var params = thresholdParams(value: "60")
+    params["expected_track_name"] = "Kick Bus"
+    let obj = await runLive(fixture: fixture, params: params)
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "stale_target_reference")
+    #expect((obj["write_attempted"] as? Bool) == false)
+    #expect(obj["expected_track_name"] as? String == "Kick Bus")
+    #expect(obj["observed_track_name"] as? String == "Acid Wash Bass")
+    // The live slider was NEVER written — zero wrong-target write.
+    #expect(fixture.currentSliderValue == 51)
+}
+
+@Test func testExpectedTrackNameMatchStillReachesStateA() async {
+    // The bound name still matches the live header → guard is a no-op passthrough.
+    let fixture = LiveFixture(beforeValue: 51)
+    var params = thresholdParams(value: "60")
+    params["expected_track_name"] = trackName
+    let obj = await runLive(fixture: fixture, params: params)
+
+    #expect(obj["state"] as? String == "A")
+    #expect((obj["verified"] as? Bool)!)
+    #expect(fixture.currentSliderValue == 60)
+}
+
+@Test func testDuplicateLiveTrackNameFailsClosedBeforeWrite() async {
+    let fixture = LiveFixture(beforeValue: 51, otherTracks: 1, duplicateTrackNameAt: 1)
+    var params = thresholdParams(value: "60")
+    params["expected_track_name"] = trackName
+    let obj = await runLive(fixture: fixture, params: params)
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "stale_target_reference")
+    #expect((obj["write_attempted"] as? Bool) == false)
+    #expect(obj["ambiguous_live_track_name"] as? Bool == true)
+    #expect(obj["ambiguous_track_indices"] as? [Int] == [1])
+    #expect(fixture.currentSliderValue == 51)
+}
+
+@Test func testAbsentExpectedTrackNameIsByteInvariant() async {
+    // Explicit-index / flag-off path: no expected_track_name → unchanged State A.
+    let fixture = LiveFixture(beforeValue: 51)
+    let obj = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
+}
+
 @Test func testChannelEQFixtureParamResolvesAndVerifiesStateAWithinTolerance() async throws {
     let canonical = VerifiedPluginCatalog.canonicalParamKey(
         pluginID: "logic.stock.effect.channel_eq",
@@ -474,6 +574,15 @@ private func runChannelEQFixture(
     #expect(fixture.currentSliderValue == 60)
 }
 
+@Test func testManualPreopenFallsBackToRaisingArrangeWhenFocusedCannotBeClearedDirectly() async {
+    let fixture = LiveFixture(beforeValue: 51, pluginWindowRejectsDirectDemotion: true)
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(obj["observed_normalized"] as? Double == 60)
+    #expect(fixture.currentSliderValue == 60)
+}
+
 @Test func testProductionOpenerRejectsOpenedWindowWithoutRequestedSlider() async {
     let fixture = LiveFixture(
         thresholdDescription: "Output Gain",
@@ -493,6 +602,139 @@ private func runChannelEQFixture(
     #expect(fixture.currentSliderValue == 51)
 }
 
+@Test func testWrongObservedPluginFailsClosedBeforeWindowAcquisition() async {
+    let fixture = LiveFixture(
+        pluginSlotName: "Gain",
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "target_plugin_mismatch")
+    #expect(obj["write_attempted"] as? Bool == false)
+    #expect(fixture.currentSliderValue == 51)
+}
+
+@Test func testAmbiguousSameTrackParameterWindowsFailClosed() async {
+    let fixture = LiveFixture(beforeValue: 51)
+    let b = fixture.builder
+    let duplicateWindow = b.element(3000)
+    let duplicateSlider = b.element(3001)
+    b.setAttribute(duplicateSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    b.setAttribute(duplicateSlider, kAXDescriptionAttribute as String, "Threshold")
+    b.setAttribute(duplicateSlider, kAXValueAttribute as String, 51.0)
+    b.setAttribute(duplicateWindow, kAXRoleAttribute as String, kAXWindowRole as String)
+    b.setAttribute(duplicateWindow, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    b.setAttribute(duplicateWindow, kAXTitleAttribute as String, trackName)
+    let duplicateClose = b.element(3002)
+    let duplicateBypass = b.element(3003)
+    let duplicateLink = b.element(3004)
+    b.setAttribute(duplicateClose, kAXRoleAttribute as String, kAXButtonRole as String)
+    b.setAttribute(duplicateBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    b.setAttribute(duplicateBypass, kAXDescriptionAttribute as String, "bypass")
+    b.setAttribute(duplicateLink, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    b.setAttribute(duplicateLink, kAXDescriptionAttribute as String, "link")
+    b.setAttribute(duplicateWindow, kAXCloseButtonAttribute as String, duplicateClose)
+    b.setChildren(duplicateWindow, [duplicateBypass, duplicateLink, duplicateSlider])
+    b.setAttribute(fixture.app, kAXWindowsAttribute as String, [
+        b.element(1001), b.element(1004), duplicateWindow,
+    ])
+
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "window_identity_unresolved")
+    #expect(obj["write_attempted"] as? Bool == false)
+    #expect(fixture.currentSliderValue == 51)
+}
+
+@Test func testWrongWindowIdentityFailsClosed() async {
+    let fixture = LiveFixture(beforeValue: 51, pluginWindowPresent: false)
+    let b = fixture.builder
+    let wrongWindow = b.element(3100)
+    let wrongSlider = b.element(3101)
+    let wrongClose = b.element(3102)
+    let wrongBypass = b.element(3103)
+    let wrongLink = b.element(3104)
+    b.setAttribute(wrongSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    b.setAttribute(wrongSlider, kAXDescriptionAttribute as String, "Threshold")
+    b.setAttribute(wrongSlider, kAXValueAttribute as String, 51.0)
+    b.setAttribute(wrongClose, kAXRoleAttribute as String, kAXButtonRole as String)
+    b.setAttribute(wrongBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    b.setAttribute(wrongBypass, kAXDescriptionAttribute as String, "bypass")
+    b.setAttribute(wrongLink, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    b.setAttribute(wrongLink, kAXDescriptionAttribute as String, "link")
+    b.setAttribute(wrongWindow, kAXRoleAttribute as String, kAXWindowRole as String)
+    b.setAttribute(wrongWindow, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    b.setAttribute(wrongWindow, kAXTitleAttribute as String, trackName)
+    b.setAttribute(wrongWindow, kAXCloseButtonAttribute as String, wrongClose)
+    b.setAttribute(wrongWindow, kAXMainAttribute as String, true)
+    b.setAttribute(wrongWindow, kAXFocusedAttribute as String, true)
+    b.setChildren(wrongWindow, [wrongBypass, wrongLink, wrongSlider])
+    b.setAttribute(fixture.app, kAXWindowsAttribute as String, [b.element(1001), wrongWindow])
+
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "window_open_failed")
+    #expect(obj["write_attempted"] as? Bool == false)
+    #expect(fixture.currentSliderValue == 51)
+    #expect(b.attributeValue(wrongSlider, kAXValueAttribute as String) as? Double == 51)
+}
+
+@Test func testAmbiguousWindowAppearingAfterSlotPressFailsClosed() async {
+    let fixture = LiveFixture(beforeValue: 51, openWindowOnSlotPress: true)
+    let b = fixture.builder
+    let duplicateWindow = b.element(3300)
+    let duplicateSlider = b.element(3301)
+    let duplicateClose = b.element(3302)
+    let duplicateBypass = b.element(3303)
+    let duplicateLink = b.element(3304)
+    b.setAttribute(duplicateSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    b.setAttribute(duplicateSlider, kAXDescriptionAttribute as String, "Threshold")
+    b.setAttribute(duplicateSlider, kAXValueAttribute as String, 51.0)
+    b.setAttribute(duplicateClose, kAXRoleAttribute as String, kAXButtonRole as String)
+    b.setAttribute(duplicateBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    b.setAttribute(duplicateBypass, kAXDescriptionAttribute as String, "bypass")
+    b.setAttribute(duplicateLink, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    b.setAttribute(duplicateLink, kAXDescriptionAttribute as String, "link")
+    b.setAttribute(duplicateWindow, kAXRoleAttribute as String, kAXWindowRole as String)
+    b.setAttribute(duplicateWindow, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    b.setAttribute(duplicateWindow, kAXTitleAttribute as String, trackName)
+    b.setAttribute(duplicateWindow, kAXCloseButtonAttribute as String, duplicateClose)
+    b.setAttribute(duplicateWindow, kAXMainAttribute as String, true)
+    b.setAttribute(duplicateWindow, kAXFocusedAttribute as String, true)
+    b.setChildren(duplicateWindow, [duplicateBypass, duplicateLink, duplicateSlider])
+    fixture.windowsAddedOnSlotPress.value = [duplicateWindow]
+
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "window_identity_unresolved")
+    #expect(obj["write_attempted"] as? Bool == false)
+    #expect(fixture.currentSliderValue == 51)
+    #expect(b.attributeValue(duplicateSlider, kAXValueAttribute as String) as? Double == 51)
+}
+
+@Test func testAmbiguousRequestedSlidersFailClosed() async {
+    let fixture = LiveFixture(beforeValue: 51)
+    let b = fixture.builder
+    let duplicateSlider = b.element(3200)
+    b.setAttribute(duplicateSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    b.setAttribute(duplicateSlider, kAXDescriptionAttribute as String, "Threshold")
+    b.setAttribute(duplicateSlider, kAXValueAttribute as String, 51.0)
+    b.setChildren(b.element(1004), [b.element(1007), b.element(1008), b.element(1005), duplicateSlider])
+
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "window_identity_unresolved")
+    #expect(obj["write_attempted"] as? Bool == false)
+    #expect(fixture.currentSliderValue == 51)
+}
+
 @Test func testOpenerFallbackProducesStateA() async {
     // No already-open window, but the injected opener supplies one → write
     // proceeds to State A. Proves step 8b is wired.
@@ -505,9 +747,22 @@ private func runChannelEQFixture(
     b.setAttribute(openedSlider, kAXDescriptionAttribute as String, "Threshold")
     b.setAttribute(openedSlider, kAXValueAttribute as String, 51.0)
     b.setAttribute(openedSlider, kAXValueDescriptionAttribute as String, "51 %")
+    let openedClose = b.element(2002)
+    let openedBypass = b.element(2003)
+    let openedLink = b.element(2004)
+    b.setAttribute(openedClose, kAXRoleAttribute as String, kAXButtonRole as String)
+    b.setAttribute(openedBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    b.setAttribute(openedBypass, kAXDescriptionAttribute as String, "bypass")
+    b.setAttribute(openedLink, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    b.setAttribute(openedLink, kAXDescriptionAttribute as String, "link")
     b.setAttribute(openedWindow, kAXRoleAttribute as String, kAXWindowRole as String)
+    b.setAttribute(openedWindow, kAXSubroleAttribute as String, kAXDialogSubrole as String)
     b.setAttribute(openedWindow, kAXTitleAttribute as String, trackName)
-    b.setChildren(openedWindow, [openedSlider])
+    b.setAttribute(openedWindow, kAXCloseButtonAttribute as String, openedClose)
+    b.setAttribute(openedWindow, kAXMainAttribute as String, true)
+    b.setAttribute(openedWindow, kAXFocusedAttribute as String, true)
+    b.setChildren(openedWindow, [openedBypass, openedLink, openedSlider])
+    b.setAttribute(fixture.app, kAXWindowsAttribute as String, [b.element(1001), openedWindow])
     let sendable = AXUIElementSendable(openedWindow)
 
     let obj = await runLive(
@@ -689,8 +944,20 @@ private final class OneShotStickyFixture: @unchecked Sendable {
         b.setAttribute(slider, kAXValueAttribute as String, beforeValue)
         b.setAttribute(slider, kAXValueDescriptionAttribute as String, "\(Int(beforeValue)) %")
         b.setAttribute(pluginWindow, kAXRoleAttribute as String, kAXWindowRole as String)
+        b.setAttribute(pluginWindow, kAXSubroleAttribute as String, kAXDialogSubrole as String)
         b.setAttribute(pluginWindow, kAXTitleAttribute as String, trackName)
-        b.setChildren(pluginWindow, [slider])
+        let pluginClose = b.element(3006)
+        let pluginBypass = b.element(3007)
+        let pluginLink = b.element(3008)
+        b.setAttribute(pluginClose, kAXRoleAttribute as String, kAXButtonRole as String)
+        b.setAttribute(pluginBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        b.setAttribute(pluginBypass, kAXDescriptionAttribute as String, "bypass")
+        b.setAttribute(pluginLink, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        b.setAttribute(pluginLink, kAXDescriptionAttribute as String, "link")
+        b.setAttribute(pluginWindow, kAXCloseButtonAttribute as String, pluginClose)
+        b.setAttribute(pluginWindow, kAXMainAttribute as String, true)
+        b.setAttribute(pluginWindow, kAXFocusedAttribute as String, true)
+        b.setChildren(pluginWindow, [pluginBypass, pluginLink, slider])
 
         b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow, pluginWindow])
         b.setAttribute(app, kAXMainWindowAttribute as String, arrangeWindow)
@@ -711,7 +978,12 @@ private final class OneShotStickyFixture: @unchecked Sendable {
                 b.setAttribute(el, kAXValueDescriptionAttribute as String, "\(Int(landed.rounded())) %")
                 return true
             },
-            performActionHandler: nil
+            performActionHandler: { [b] _, action in
+                guard action == (kAXPressAction as String) else { return true }
+                b.setAttribute(pluginWindow, kAXMainAttribute as String, true)
+                b.setAttribute(pluginWindow, kAXFocusedAttribute as String, true)
+                return true
+            }
         )
     }
 

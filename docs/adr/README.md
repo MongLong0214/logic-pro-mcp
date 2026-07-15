@@ -3,8 +3,8 @@
 ## Most Important Conclusion
 
 Phase 0 freezes governance and the current baseline before any ADR runtime implementation begins.
-The core execution order is ADR-002 → ADR-003 → ADR-004 → ADR-001.
-ADR-005 is cross-cutting and applies throughout the entire sequence.
+The binding core execution order is ADR-002/#285 (including pulled-forward #268) → ADR-001/#367 `LPMCP-PRD-001` remediation → ADR-003/#286 → ADR-005/#288 → ADR-004/#287 → ADR-001/#284 terminal closure.
+The inserted #367 remediation is a blocking production-readiness gate: #286 cannot start until its CTO review and CEO exact-head PASS are recorded. ADR-005 remains cross-cutting even though its own terminal increment is ordered after #286.
 Every ADR starts in `Proposed` status and advances only with its own implementation and qualification evidence.
 
 The kernel ADRs are being delivered incrementally; their individual status entries below are authoritative. ADR-001 currently provides a fail-closed qualification foundation only: independent release authority, the complete real-Logic fixture matrix, and published release evidence remain deferred. Earlier live qualification receipts cover their stated historical heads and feature-flag combinations, not completion of the ADR-001 assurance chain or current-head release promotion.
@@ -61,8 +61,11 @@ Kernel increments merged to `main`. State-changing pilot paths stay behind their
 - Merged: #316, #319, #321, #324, #325, #326, #327, #328.
 
 ### ADR-002 — Session-scoped Stable Target Reference (`In Implementation`)
+- **Active acceptance addendum (CTO directive, binding):** issue #268 (automatic plugin-editor acquisition for `set_param_verified`) is pulled forward into the current ADR-002-a increment's acceptance — see `docs/tickets/adr-002a-target-kinds/STATUS.md`. The #268 fix must land before the ADR-002-a release build and is never deferred past #285 or to a later debt pass.
 - `TargetRegistry` actor (server session + project epoch + topology generation + live fingerprint), opaque `track_ref` on the tracks resource, `tracks.rename` piloted end-to-end behind `FeatureFlags.adr002TargetRef`.
 - Live negative-qualification against real Logic Pro: valid ref → State A verified; stale-after-topology-bump / bogus / target_ref-index mismatch → State C `stale_target_reference` with zero writes (neighbor track provably untouched).
+- **Bounded external-edit limit:** direct track reorder/delete or plugin-slot replacement in Logic's UI is detected by fingerprint drift only after the next state-cache poll; until that poll, a stale reference can match the stale cache. Server-mediated mutations bump the relevant generation immediately; verified track rename also updates the cache before rebind, while other topology writes rely on the next poll after invalidation. Live H must include UI reorder followed by stale-ref use and require fail-closed `stale_target_reference`.
+- **Resolver/write boundary:** mutation resolution rechecks the live registry immediately before returning, including `project_ref`; the subsequent live AX write remains a separate non-atomic operation. Live H must switch projects in that residual window and require `stale_target_reference`; the registry check is not a write lock.
 - Merged: #318.
 
 ### ADR-005 — Operation Trace and Support Bundle (`In Implementation`)
@@ -91,6 +94,7 @@ Kernel increments merged to `main`. State-changing pilot paths stay behind their
 - `Scripts/live-qualification-runner.py` is a **non-live skeleton** — it emits the attestation shape with `not_qualified` placeholders and a `TODO(#284)` marking where the real matrix run plugs in. It performs no Logic / MCP calls.
 - Deterministic tests cover the complete promotion rejection surface, fail-closed malformed and duplicate waiver input, verifier-side attestation tampering, `Codable` round trips, and exact required-combination keys.
 - Deferred (honest scope): an independently trusted signer/verifier, descriptor-bound or otherwise independently attested executed-image identity, a canonical operation manifest outside candidate control, the full real-Logic fixture matrix, release-asset hash binding, and publishing attestation/evidence links on the release page. The current private snapshot and launch-adjacent hash checks are defense in depth, not a same-UID trust boundary. Until those items land after the ADR-002/003/005/004 dependency chain, this CLI is a fail-closed qualification foundation and is not wired into release promotion.
+- **Execution-order override (2026-07-15):** after the current ADR-002-a/#268 acceptance is verified and merged, the remaining PR #367 / `LPMCP-PRD-001` production-readiness debt is the next blocking step, before ADR-003 #286. It must close the independent exact-artifact qualification, approved Desktop en/ko managed-fixture, semantic-operation or bounded-waiver, mutation/readback/restore/compensation, immutable evidence-publication, CTO-review, and CEO exact-head gates. A green build or CI run is not a substitute.
 
 ### ADR-007 — AX Selector Atlas and UI Drift Detector (`In Implementation`)
 - Pure selector-atlas core only, behind `FeatureFlags.adr007SelectorAtlas` (default off), with no runtime path (the server does not call it yet).

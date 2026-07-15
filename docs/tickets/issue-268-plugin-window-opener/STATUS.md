@@ -1,5 +1,13 @@
 # Pipeline Status: issue-268 plugin window opener
 
+> **SUPERSEDED / REOPENED.** This board records a prior pipeline (PR #271) that
+> did not land on the current Train-A head. Issue #268 is **OPEN** and, per the
+> current CTO directive, is pulled forward into the #285 ADR-002-a acceptance and
+> owned there. The active, binding work board is
+> `docs/tickets/adr-002a-target-kinds/STATUS.md`. Do not treat the "Verified"
+> rows below as current-head evidence.
+
+
 **PRD**: `docs/prd/PRD-issue-268-plugin-window-opener.md`
 **Issue**: https://github.com/MongLong0214/logic-pro-mcp/issues/268
 **Branch**: `fix/issue-268-plugin-window-opener`

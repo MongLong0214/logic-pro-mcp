@@ -32,8 +32,24 @@ struct TrackDispatcher: OperationTraceDispatching {
         router: ChannelRouter,
         cache: StateCache,
         targetRegistry: TargetRegistry? = nil,
-        dialogPresent: @escaping @Sendable () -> Bool = { false }
+        dialogPresent: @escaping @Sendable () -> Bool = { false },
+        // ADR-002 F5 — live AX track-header reader for the mutation-boundary
+        // identity cross-check. Deliberately nil by default so the deterministic
+        // test suite never reaches into live AX; production wires the real reader
+        // at the single dispatch chokepoint (server + saga). When nil the guard
+        // is a no-op — but the target_ref path is only reachable behind the
+        // off-by-default flag, and every production entry point supplies it.
+        liveTrackName: (@Sendable (Int) -> String?)? = nil,
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil
     ) async -> CallTool.Result {
+        if let projectFailure = await TargetRefResolver.validateProjectReference(
+            params,
+            targetRegistry: targetRegistry,
+            operation: "track.\(command)"
+        ) {
+            return projectFailure
+        }
+
         if let operation = modalGuardedTrackOperation(for: command), dialogPresent() {
             let traceID = await startTraceIfEnabled(command: command)
             return await finalizeTrace(
@@ -57,7 +73,9 @@ struct TrackDispatcher: OperationTraceDispatching {
                     invalidIndexResult: toolInvalidParamsResult(
                         "select requires 'index' or 'name' param",
                         extras: ["operation": "track.select"]
-                    )
+                    ),
+                    liveTrackName: liveTrackName,
+                    liveTrackNames: liveTrackNames
                 ) {
                 case .success(let resolved):
                     let traceID = await startTraceIfEnabled(command: command)
@@ -67,7 +85,11 @@ struct TrackDispatcher: OperationTraceDispatching {
                         params: ["index": String(resolved.index)]
                     )
                     return await finalizeTrace(
-                        TargetRefResolver.addEvidence(resolved.reference, to: toolTextResult(result)),
+                        TargetRefResolver.addEvidence(
+                            resolved.reference,
+                            fingerprint: resolved.binding?.observedFingerprint,
+                            to: toolTextResult(result)
+                        ),
                         traceID: traceID
                     )
                 case .failure(let result):
@@ -137,6 +159,7 @@ struct TrackDispatcher: OperationTraceDispatching {
         case "delete":
             let index: Int
             let resolvedReference: TargetReference?
+            let resolvedFingerprint: String?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -145,11 +168,14 @@ struct TrackDispatcher: OperationTraceDispatching {
                 invalidIndexResult: toolInvalidParamsResult(
                     "delete requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.delete"]
-                )
+                ),
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
             case .success(let resolved):
                 index = resolved.index
                 resolvedReference = resolved.reference
+                resolvedFingerprint = resolved.binding?.observedFingerprint
             case .failure(let result):
                 return result
             }
@@ -191,13 +217,18 @@ struct TrackDispatcher: OperationTraceDispatching {
                 await targetRegistry?.bumpTopologyGeneration()
             }
             return await finalizeTrace(
-                TargetRefResolver.addEvidence(resolvedReference, to: toolTextResult(result)),
+                TargetRefResolver.addEvidence(
+                    resolvedReference,
+                    fingerprint: resolvedFingerprint,
+                    to: toolTextResult(result)
+                ),
                 traceID: traceID
             )
 
         case "duplicate":
             let index: Int
             let resolvedReference: TargetReference?
+            let resolvedFingerprint: String?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -206,11 +237,14 @@ struct TrackDispatcher: OperationTraceDispatching {
                 invalidIndexResult: toolInvalidParamsResult(
                     "duplicate requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.duplicate"]
-                )
+                ),
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
             case .success(let resolved):
                 index = resolved.index
                 resolvedReference = resolved.reference
+                resolvedFingerprint = resolved.binding?.observedFingerprint
             case .failure(let result):
                 return result
             }
@@ -251,13 +285,18 @@ struct TrackDispatcher: OperationTraceDispatching {
                 await targetRegistry?.bumpTopologyGeneration()
             }
             return await finalizeTrace(
-                TargetRefResolver.addEvidence(resolvedReference, to: toolTextResult(result)),
+                TargetRefResolver.addEvidence(
+                    resolvedReference,
+                    fingerprint: resolvedFingerprint,
+                    to: toolTextResult(result)
+                ),
                 traceID: traceID
             )
 
         case "rename":
             let index: Int
             let resolvedReference: TargetReference?
+            var resolvedFingerprint: String? = nil
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -266,11 +305,14 @@ struct TrackDispatcher: OperationTraceDispatching {
                 invalidIndexResult: toolInvalidParamsResult(
                     "rename requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.rename"]
-                )
+                ),
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
             case .success(let resolved):
                 index = resolved.index
                 resolvedReference = resolved.reference
+                resolvedFingerprint = resolved.binding?.observedFingerprint
             case .failure(let result):
                 return result
             }
@@ -349,12 +391,14 @@ struct TrackDispatcher: OperationTraceDispatching {
                     resolvedReference,
                     to: TargetDescriptor(trackIndex: index, trackName: name)
                 )
+                resolvedFingerprint = TargetDescriptor(trackIndex: index, trackName: name).fingerprint
             }
             return await finalizeTrace(
                 // legacyTrackRefAlias: rename shipped the `track_ref` echo before the
                 // uniform `target_ref` evidence key existed — keep both (G8 compat).
                 TargetRefResolver.addEvidence(
                     resolvedReference,
+                    fingerprint: resolvedFingerprint,
                     to: toolTextResult(result),
                     legacyTrackRefAlias: true
                 ),
@@ -370,6 +414,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                 router: router,
                 cache: cache,
                 targetRegistry: targetRegistry,
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames,
                 traceID: traceID
             )
             return await finalizeTrace(result, traceID: traceID)
@@ -383,6 +429,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                 router: router,
                 cache: cache,
                 targetRegistry: targetRegistry,
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames,
                 traceID: traceID
             )
             return await finalizeTrace(result, traceID: traceID)
@@ -396,6 +444,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                 router: router,
                 cache: cache,
                 targetRegistry: targetRegistry,
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames,
                 traceID: traceID
             )
             return await finalizeTrace(result, traceID: traceID)
@@ -416,6 +466,7 @@ struct TrackDispatcher: OperationTraceDispatching {
         case "arm_only":
             let index: Int
             let resolvedReference: TargetReference?
+            let resolvedFingerprint: String?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -424,11 +475,14 @@ struct TrackDispatcher: OperationTraceDispatching {
                 invalidIndexResult: toolInvalidParamsResult(
                     "arm_only requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.arm_only"]
-                )
+                ),
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
             case .success(let resolved):
                 index = resolved.index
                 resolvedReference = resolved.reference
+                resolvedFingerprint = resolved.binding?.observedFingerprint
             case .failure(let result):
                 return result
             }
@@ -521,6 +575,7 @@ struct TrackDispatcher: OperationTraceDispatching {
             return await finalizeTrace(
                 TargetRefResolver.addEvidence(
                     resolvedReference,
+                    fingerprint: resolvedFingerprint,
                     to: toolTextResult(.success(
                         HonestContract.encodeStateA(
                             extras: armOnlyExtras(
@@ -544,6 +599,7 @@ struct TrackDispatcher: OperationTraceDispatching {
         case "set_automation":
             let index: Int
             let resolvedReference: TargetReference?
+            let resolvedFingerprint: String?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -552,11 +608,14 @@ struct TrackDispatcher: OperationTraceDispatching {
                 invalidIndexResult: toolInvalidParamsResult(
                     "set_automation requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.set_automation"]
-                )
+                ),
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
             case .success(let resolved):
                 index = resolved.index
                 resolvedReference = resolved.reference
+                resolvedFingerprint = resolved.binding?.observedFingerprint
             case .failure(let result):
                 return result
             }
@@ -581,13 +640,18 @@ struct TrackDispatcher: OperationTraceDispatching {
                 params: ["index": String(index), "mode": mode]
             )
             return await finalizeTrace(
-                TargetRefResolver.addEvidence(resolvedReference, to: toolTextResult(result)),
+                TargetRefResolver.addEvidence(
+                    resolvedReference,
+                    fingerprint: resolvedFingerprint,
+                    to: toolTextResult(result)
+                ),
                 traceID: traceID
             )
 
         case "set_instrument":
             let index: Int
             let resolvedReference: TargetReference?
+            let resolvedFingerprint: String?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -597,11 +661,14 @@ struct TrackDispatcher: OperationTraceDispatching {
                 invalidIndexResult: toolInvalidParamsResult(
                     "set_instrument requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.set_instrument"]
-                )
+                ),
+                liveTrackName: liveTrackName,
+                liveTrackNames: liveTrackNames
             ) {
             case .success(let resolved):
                 index = resolved.index
                 resolvedReference = resolved.reference
+                resolvedFingerprint = resolved.binding?.observedFingerprint
             case .failure(let result):
                 return result
             }
@@ -630,6 +697,9 @@ struct TrackDispatcher: OperationTraceDispatching {
                 operation: "track.set_instrument",
                 params: routeParams
             )
+            if FeatureFlags.adr002TargetRef, channelResultIsVerified(result) {
+                await targetRegistry?.bumpTopologyGeneration()
+            }
             // ADR-002 (#353): unlike `rename`, set_instrument does NOT rebind the
             // target_ref. Loading a patch CAN make Logic auto-rename the track, but
             // this path neither reads back the track's NEW name nor refreshes the
@@ -639,7 +709,11 @@ struct TrackDispatcher: OperationTraceDispatching {
             // honestly defer: an auto-rename here fails the next same-ref op closed,
             // which is correct — the server cannot cheaply prove the new identity.
             return await finalizeTrace(
-                TargetRefResolver.addEvidence(resolvedReference, to: toolTextResult(result)),
+                TargetRefResolver.addEvidence(
+                    resolvedReference,
+                    fingerprint: resolvedFingerprint,
+                    to: toolTextResult(result)
+                ),
                 traceID: traceID
             )
 
@@ -730,10 +804,13 @@ struct TrackDispatcher: OperationTraceDispatching {
         router: ChannelRouter,
         cache: StateCache,
         targetRegistry: TargetRegistry?,
+        liveTrackName: (@Sendable (Int) -> String?)? = nil,
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil,
         traceID: TraceID? = nil
     ) async -> CallTool.Result {
         let index: Int
         let resolvedReference: TargetReference?
+        let resolvedFingerprint: String?
         switch await TargetRefResolver.resolveMutationIndex(
             params,
             targetRegistry: targetRegistry,
@@ -742,11 +819,14 @@ struct TrackDispatcher: OperationTraceDispatching {
             invalidIndexResult: toolInvalidParamsResult(
                 "\(command) requires explicit 'index' (Int ≥ 0)",
                 extras: ["operation": operation]
-            )
+            ),
+            liveTrackName: liveTrackName,
+            liveTrackNames: liveTrackNames
         ) {
         case .success(let resolved):
             index = resolved.index
             resolvedReference = resolved.reference
+            resolvedFingerprint = resolved.binding?.observedFingerprint
         case .failure(let result):
             return result
         }
@@ -772,7 +852,11 @@ struct TrackDispatcher: OperationTraceDispatching {
         if result.isSuccess, !trackToggleResultIsVerified(result) {
             return toolTextResult(result.message, isError: true)
         }
-        return TargetRefResolver.addEvidence(resolvedReference, to: toolTextResult(result))
+        return TargetRefResolver.addEvidence(
+            resolvedReference,
+            fingerprint: resolvedFingerprint,
+            to: toolTextResult(result)
+        )
     }
 
     private static func modalGuardedTrackOperation(for command: String) -> String? {

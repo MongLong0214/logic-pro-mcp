@@ -251,9 +251,10 @@ enum AXValueExtractors {
     ///
     /// WS3 AC2 (value-only honesty fix): `volume`/`pan`/`automationMode` now
     /// report the REAL track-header values instead of the fabricated
-    /// `0.0`/`0.0`/`.off`. The `TrackState` type is UNCHANGED — the fields stay
-    /// non-optional `Double`/`Double`/`AutomationMode` with no sentinel, no
-    /// nullable, and no new enum case. On a rare AX-read failure each reader
+    /// `0.0`/`0.0`/`.off`. The public `TrackState` fields remain unchanged —
+    /// they stay non-optional `Double`/`Double`/`AutomationMode` with no
+    /// sentinel, no nullable, and no new enum case. Internal AX provenance is
+    /// excluded from Codable output. On a rare AX-read failure each reader
     /// returns the SAME default the resource fabricated before this fix, so no
     /// new unreadable representation is introduced (the resource's existing
     /// `source`/`ax_occluded` fields already flag degraded reads). `volume`/`pan`
@@ -264,7 +265,7 @@ enum AXValueExtractors {
         index: Int,
         runtime: AXHelpers.Runtime = .production
     ) -> TrackState {
-        let name = extractTrackName(from: header, runtime: runtime)
+        let extractedName = extractTrackName(from: header, runtime: runtime)
         let muted = extractTrackButtonState(from: header, prefix: "Mute", runtime: runtime) ?? false
         let soloed = extractTrackButtonState(from: header, prefix: "Solo", runtime: runtime) ?? false
         let armed = extractTrackButtonState(from: header, prefix: "Record", runtime: runtime) ?? false
@@ -273,7 +274,7 @@ enum AXValueExtractors {
 
         return TrackState(
             id: index,
-            name: name,
+            name: extractedName.name,
             type: trackType,
             isMuted: muted,
             isSoloed: soloed,
@@ -282,7 +283,8 @@ enum AXValueExtractors {
             volume: extractTrackHeaderVolume(from: header, runtime: runtime),
             pan: extractTrackHeaderPan(from: header, runtime: runtime),
             automationMode: extractTrackAutomationMode(from: header, runtime: runtime),
-            color: extractTrackColor(from: header, runtime: runtime)
+            color: extractTrackColor(from: header, runtime: runtime),
+            liveIdentityBacked: extractedName.liveIdentityBacked
         )
     }
 
@@ -421,7 +423,10 @@ enum AXValueExtractors {
 
     // MARK: - Private helpers
 
-    private static func extractTrackName(from header: AXUIElement, runtime: AXHelpers.Runtime) -> String {
+    private static func extractTrackName(
+        from header: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> (name: String, liveIdentityBacked: Bool) {
         // Logic 12.2 commonly exposes the authoritative live name on an
         // AXTextField's description while AXValue stays the numeric placeholder
         // "0". Prefer text-field metadata when it contains a real name; fall
@@ -437,7 +442,7 @@ enum AXValueExtractors {
             ]
             for candidate in candidates.compactMap({ $0?.trimmingCharacters(in: .whitespacesAndNewlines) }) {
                 if !candidate.isEmpty, candidate != "0" {
-                    return candidate
+                    return (candidate, true)
                 }
             }
         }
@@ -447,20 +452,20 @@ enum AXValueExtractors {
         ),
            let name = extractTextValue(text, runtime: runtime)?.trimmingCharacters(in: .whitespacesAndNewlines),
            !name.isEmpty {
-            return name
+            return (name, true)
         }
 
         // AXLayoutItem headers commonly describe themselves as `4개의 ‘Holographic Squares’ 트랙`.
         if let desc = AXHelpers.getDescription(header, runtime: runtime),
            let quotedName = extractQuotedTrackName(from: desc) {
-            return quotedName
+            return (quotedName, true)
         }
 
         if let title = AXHelpers.getTitle(header, runtime: runtime)?.trimmingCharacters(in: .whitespacesAndNewlines),
            !title.isEmpty {
-            return title
+            return (title, true)
         }
-        return "Untitled"
+        return ("Untitled", false)
     }
 
     private static func extractTrackButtonState(
@@ -498,7 +503,7 @@ enum AXValueExtractors {
             AXHelpers.getTitle(header, runtime: runtime),
             AXHelpers.getIdentifier(header, runtime: runtime),
             AXHelpers.getHelp(header, runtime: runtime),
-            extractTrackName(from: header, runtime: runtime)
+            extractTrackName(from: header, runtime: runtime).name
         ]
         let descendants = AXHelpers.findAllDescendants(of: header, maxDepth: 4, runtime: runtime)
         for element in descendants {
