@@ -109,6 +109,12 @@ struct PluginsDispatcher: OperationTraceDispatching {
                         writeParams["track"] = String(resolved.index)
                         resolvedReference = resolved.reference
                         resolvedFingerprint = resolved.binding?.observedFingerprint
+                        // ADR-002 F1: thread the ref's bound track name so the AX
+                        // write can cross-check it against the live header before
+                        // writing (defends the stale-cache/out-of-band-reorder window).
+                        if let boundTrackName = resolved.binding?.descriptor.trackName {
+                            writeParams["expected_track_name"] = boundTrackName
+                        }
                         if let failure = applyPluginInsertBinding(
                             resolved,
                             params: params,
@@ -156,6 +162,12 @@ struct PluginsDispatcher: OperationTraceDispatching {
                         writeParams["track"] = String(resolved.index)
                         resolvedReference = resolved.reference
                         resolvedFingerprint = resolved.binding?.observedFingerprint
+                        // ADR-002 F1: thread the ref's bound track name so the AX
+                        // insert can cross-check it against the live header before
+                        // mutating topology (defends the stale-cache/reorder window).
+                        if let boundTrackName = resolved.binding?.descriptor.trackName {
+                            writeParams["expected_track_name"] = boundTrackName
+                        }
                         if let failure = applyPluginInsertBinding(
                             resolved,
                             params: params,

@@ -559,6 +559,24 @@ extension AccessibilityChannel {
             return .error(gate)
         }
 
+        // ADR-002 F1 — when the target was resolved from a session-stable
+        // `target_ref`, the caller's bound track name is threaded in as
+        // `expected_track_name`. Require the LIVE AX header at this positional
+        // index to still read back that exact name before any selection or write,
+        // so an out-of-band UI track reorder fails closed with
+        // `stale_target_reference` instead of a wrong-target write during the
+        // state-cache latency window. Absent (explicit-index path) it is a no-op,
+        // so the default/flag-off behaviour is byte-invariant.
+        if let guardResult = targetTrackNameGuard(
+            operation: operation,
+            track: track,
+            expectedTrackName: params["expected_track_name"],
+            identity: preResolutionIdentity,
+            runtime: runtime
+        ) {
+            return guardResult
+        }
+
         // Step 4 — identity alias resolution (canonical id needed for step 5).
         guard let pluginID = VerifiedPluginCatalog.canonicalPluginID(from: pluginAlias) else {
             return .error(HonestContract.encodeV2StateC(
@@ -633,6 +651,45 @@ extension AccessibilityChannel {
                 pluginWindowOpener: pluginWindowOpener
             )
         }
+    }
+
+    /// ADR-002 F1 — live track-identity cross-check for `target_ref`-resolved
+    /// verified mutations. `expectedTrackName` is the reference's bound track
+    /// name, threaded down only on the `target_ref` path. Reads the LIVE AX track
+    /// header at the positional `track` index and requires an exact (trimmed)
+    /// match. A mismatch — or an unreadable live name — fails closed with
+    /// `stale_target_reference` and no write, making the live AX read authoritative
+    /// over a possibly-stale state cache (closes the out-of-band-reorder window).
+    /// Returns nil (proceed) when `expectedTrackName` is absent, so the
+    /// explicit-index / flag-off path is unchanged.
+    static func targetTrackNameGuard(
+        operation: String,
+        track: Int,
+        expectedTrackName: String?,
+        identity: [String: Any],
+        runtime: AXLogicProElements.Runtime
+    ) -> ChannelResult? {
+        guard let expectedTrackName else { return nil }
+        let expected = expectedTrackName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let live = AXLogicProElements.trackName(at: track, runtime: runtime)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let live, live == expected else {
+            return .error(HonestContract.encodeV2StateC(
+                error: .staleTargetReference,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "expected_track_name": expectedTrackName,
+                    "observed_track_name": live as Any? ?? NSNull(),
+                    "what_was_attempted": "confirm the live track at index \(track) still matches the referenced track before writing",
+                    "what_was_observed": live.map { "index \(track) live track name is '\($0)'" }
+                        ?? "index \(track) live track name was unreadable",
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
+        }
+        return nil
     }
 
     // MARK: - set_param_verified live write/readback (R6 steps 6-13)
@@ -1427,6 +1484,20 @@ extension AccessibilityChannel {
             frontDocumentPath: frontDocumentPath
         ) {
             return .error(gate)
+        }
+
+        // ADR-002 F1 — same live track-identity cross-check as set_param_verified.
+        // A wrong-target insert mutates topology, so the `target_ref` path must
+        // fail closed before any selection/insert when the live AX header no
+        // longer matches the bound track name. No-op on the explicit-index path.
+        if let guardResult = targetTrackNameGuard(
+            operation: operation,
+            track: track,
+            expectedTrackName: params["expected_track_name"],
+            identity: preResolutionIdentity,
+            runtime: runtime
+        ) {
+            return guardResult
         }
 
         // Step 4 — identity (insert allowlist excludes Noise Gate, R5/R7).

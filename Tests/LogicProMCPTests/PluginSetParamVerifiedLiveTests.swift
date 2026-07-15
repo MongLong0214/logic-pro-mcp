@@ -387,6 +387,51 @@ private func runChannelEQFixture(
     #expect(obj["observed_normalized"] as? Double == 60.7)
 }
 
+// MARK: - ADR-002 F1: live track-name cross-check for target_ref resolutions
+
+// The `target_ref` path threads the reference's bound track name in as
+// `expected_track_name`. When the live AX header at the positional index no
+// longer reads back that name (out-of-band UI reorder, stale cache), the write
+// must fail closed with stale_target_reference BEFORE any AXValue write —
+// otherwise a same-index/same-plugin collision would land a wrong-target write.
+
+@Test func testExpectedTrackNameMismatchFailsClosedStaleAndDoesNotWrite() async {
+    // Live header at index 0 is "Acid Wash Bass"; the ref was bound to a track
+    // whose name has since changed (its live index now holds a different track).
+    let fixture = LiveFixture(beforeValue: 51)
+    var params = thresholdParams(value: "60")
+    params["expected_track_name"] = "Kick Bus"
+    let obj = await runLive(fixture: fixture, params: params)
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "stale_target_reference")
+    #expect((obj["write_attempted"] as? Bool) == false)
+    #expect(obj["expected_track_name"] as? String == "Kick Bus")
+    #expect(obj["observed_track_name"] as? String == "Acid Wash Bass")
+    // The live slider was NEVER written — zero wrong-target write.
+    #expect(fixture.currentSliderValue == 51)
+}
+
+@Test func testExpectedTrackNameMatchStillReachesStateA() async {
+    // The bound name still matches the live header → guard is a no-op passthrough.
+    let fixture = LiveFixture(beforeValue: 51)
+    var params = thresholdParams(value: "60")
+    params["expected_track_name"] = trackName
+    let obj = await runLive(fixture: fixture, params: params)
+
+    #expect(obj["state"] as? String == "A")
+    #expect((obj["verified"] as? Bool)!)
+    #expect(fixture.currentSliderValue == 60)
+}
+
+@Test func testAbsentExpectedTrackNameIsByteInvariant() async {
+    // Explicit-index / flag-off path: no expected_track_name → unchanged State A.
+    let fixture = LiveFixture(beforeValue: 51)
+    let obj = await runLive(fixture: fixture, params: thresholdParams(value: "60"))
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
+}
+
 @Test func testChannelEQFixtureParamResolvesAndVerifiesStateAWithinTolerance() async throws {
     let canonical = VerifiedPluginCatalog.canonicalParamKey(
         pluginID: "logic.stock.effect.channel_eq",

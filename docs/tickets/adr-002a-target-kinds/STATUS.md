@@ -87,3 +87,69 @@ known source of false live results — running the live qualification against it
 untrustworthy evidence. These gates are therefore held **pending a healthy Logic session** and will
 be executed as a batch with a raw transcript once the environment recovers, before the flag is
 enabled in any release. No live gate is marked passed without its transcript.
+
+### CTO exact-artifact live-QA attempt + F1 hardening (2026-07-15)
+
+Exact-SHA release-binary live QA (flag on) against the running Logic 12.3 session could not
+complete the mutation gates: arrange track-header AX enumeration returned zero
+(`logic_tracks.select {index:*}` → `element_not_found` for every index; `logic://tracks` →
+placeholder/unknown rows with per-poll identity churn; health cache `track_count:0`). Consequently
+`insert_verified` fails closed with `track_selection_failed`, `write_attempted:false` — a genuine
+live fail-closed zero-write observation, but no State-A mutation gate can be exercised. The mixer AX
+subtree **is** reachable (inventory reveal read a real occupied insert), isolating the fault to
+arrange track selection. Recovery attempts (app activation, cache re-poll, mixer reveal, verified
+display awake/unlocked, server-mediated track create; no sheet/modal on the window) did not restore
+enumeration. This matches the documented "degraded Logic" hold, not a defect in this PR. **Release
+condition:** a healthy Logic 12.3 session where `logic_tracks.select {index:0}` succeeds and
+`logic://tracks` returns non-placeholder tracks with stable refs; the batch then runs on the
+F1-hardened head with a raw transcript.
+
+The CTO exhaustive exact-head review (security / privacy / fail-closed / wrong-target / ambiguity /
+timeout / partial-state / evidence-integrity), corroborated by an independent adversarial pass,
+found the gated code fail-closed and free of a net-new wrong-target write, with one finding elevated
+to fix-before-completion:
+
+- **F1 (MEDIUM, flag-ON):** the `target_ref` → `set_param_verified` / `insert_verified` write trusted
+  the positional `track` index into live AX without asserting the live header name equals the
+  reference's *bound* track name. Under a stale state cache after an out-of-band UI track reorder,
+  a same-index/same-plugin collision could land a State-A write on the wrong track during the
+  cache-latency window (the same window the "External Logic UI edit boundary" documents). **Fixed on
+  this branch:** the bound track name is threaded down as `expected_track_name` and the live AX
+  header is required to match (trimmed, exact) before any selection/write; a mismatch or unreadable
+  live name fails closed `stale_target_reference`, `write_attempted:false`. This makes the live AX
+  read authoritative over the cache and renders the live-H UI-reorder gate deterministic rather than
+  poll-timing-dependent. Deterministic RED→GREEN coverage added
+  (`testExpectedTrackNameMismatchFailsClosedStaleAndDoesNotWrite` + match/absent invariance).
+- **F2 / F3 (LOW):** out-of-band project switch keeping non-project bindings alive, and
+  `target_fingerprint` naming a since-changed plugin on an otherwise-correct write — the same
+  undetectable out-of-band class / evidence-accuracy only. F1's live-name cross-check substantially
+  mitigates F2. Documented residuals, not merge blockers.
+
+Head changes from the F1 fix trigger a full re-run (focused → full suite → release build →
+binary hash → live → security → CTO → CEO → CI) before the CEO exact-head gate. No merge before CEO PASS.
+
+### Exact-head re-binding — F1 committed (2026-07-15)
+
+The F1 hardening is committed on this branch as fix-before-completion, so the prior deterministic
+evidence bundle bound to head `c7d0cfa` (focused 102/102, full/CI 2750, release artifact SHA-256
+`34f51d3d…8319e2c818c86…`) is **INVALIDATED / SUPERSEDED** and re-run against the F1-inclusive head.
+Deterministic re-run results on the F1 head:
+
+- **Focused F1 (E, C, D, byte-invariance):** `testExpectedTrackNameMismatchFailsClosedStaleAndDoesNotWrite`
+  + `testExpectedTrackNameMatchStillReachesStateA` + `testAbsentExpectedTrackNameIsByteInvariant` →
+  3/3 GREEN. Mismatch fails closed `stale_target_reference`, `write_attempted:false`, slider unchanged
+  (zero wrong-target write); match reaches State A; absent = byte-invariant State A.
+- **Full suite (F):** 2753 tests (2750 baseline + 3 F1). The **only** local non-pass is the
+  documented environment-coupled false-RED
+  `LogicProServerHandlerTests.testLogicProServerHandlersReadResourcesWithoutRegisteredTransport` —
+  it read 58 `placeholder:1`/`type:unknown` rows from the degraded live Logic session instead of the
+  expected empty set (the same arrange-enumeration degradation the live-QA note documents). This test
+  does not exercise F1 (verified-plugin write path); it is CI env-neutral GREEN and would fail
+  identically pre-F1. The release-binary QA test is skipped pending the release build (expected).
+- **Release build (G) + artifact SHA-256:** built from the F1 head; the exact SHA-256 is recorded in
+  the PR #370 CTO gate comment (docs are binary-invariant).
+
+The live gates (A/B/H, reorder→stale-ref, project switch/restart continuity, independent readback,
+restore/compensation, raw transcript) remain **env-blocked** on the degraded Logic 12.3 session and
+are held pending an approved/managed healthy fixture, per the release condition above. No merge
+before CEO exact-head PASS.
