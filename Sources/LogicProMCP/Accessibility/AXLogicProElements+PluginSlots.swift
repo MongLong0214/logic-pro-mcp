@@ -355,11 +355,10 @@ extension AXLogicProElements {
     /// window's AX title is the TRACK name, not the plugin name).
     static func trackName(at index: Int, runtime: Runtime = .production) -> String? {
         guard let header = findTrackHeader(at: index, runtime: runtime) else { return nil }
-        let name = AXValueExtractors.extractTrackState(from: header, index: index, runtime: runtime.ax).name
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        // `extractTrackState` falls back to "Untitled" when no name is readable;
-        // treat that as "no resolvable name" rather than a window-title match key.
-        guard !trimmed.isEmpty, trimmed != "Untitled" else { return nil }
+        let track = AXValueExtractors.extractTrackState(from: header, index: index, runtime: runtime.ax)
+        guard track.liveIdentityBacked else { return nil }
+        let trimmed = track.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
         return trimmed
     }
 
@@ -368,12 +367,14 @@ extension AXLogicProElements {
         guard !headers.isEmpty else { return nil }
         var names: [Int: String] = [:]
         for (index, header) in headers.enumerated() {
-            let name = AXValueExtractors.extractTrackState(
+            let track = AXValueExtractors.extractTrackState(
                 from: header,
                 index: index,
                 runtime: runtime.ax
-            ).name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty, name != "Untitled" else { return nil }
+            )
+            guard track.liveIdentityBacked else { return nil }
+            let name = track.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return nil }
             names[index] = name
         }
         return names

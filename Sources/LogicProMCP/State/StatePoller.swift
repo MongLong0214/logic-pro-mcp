@@ -167,10 +167,16 @@ actor StatePoller {
             axChannel: axChannel, cache: cache, as: ProjectInfo.self
         ) { cache, info in await cache.updateProject(info) }
         if projectReady { cacheKeys.append(.project) }
-        let tracksReady = await poll(
-            operation: "track.get_tracks", label: "Track",
-            axChannel: axChannel, cache: cache, as: [TrackState].self
-        ) { cache, tracks in await cache.updateTracks(tracks) }
+        let tracksReady: Bool
+        if let tracks = await axChannel.readTrackStates() {
+            await cache.updateTracks(tracks)
+            tracksReady = true
+        } else {
+            tracksReady = await poll(
+                operation: "track.get_tracks", label: "Track",
+                axChannel: axChannel, cache: cache, as: [TrackState].self
+            ) { cache, tracks in await cache.updateTracks(tracks) }
+        }
         if tracksReady { cacheKeys.append(.tracks) }
         let hasDocument = projectReady || tracksReady
         if hasDocument {

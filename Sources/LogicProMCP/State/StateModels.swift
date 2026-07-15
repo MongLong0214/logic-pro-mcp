@@ -45,6 +45,12 @@ struct TrackState: Sendable, Codable, Identifiable {
     /// rows from the AX scrape have this nil/absent (Codable backward
     /// compat: pre-v3.1.8 JSON snapshots lacking the field decode cleanly).
     var placeholder: Bool?
+    var liveIdentityBacked: Bool = true
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, type, isMuted, isSoloed, isArmed, isSelected
+        case volume, pan, automationMode, color, placeholder
+    }
 }
 
 /// Mixer channel strip state (extends track with routing info).

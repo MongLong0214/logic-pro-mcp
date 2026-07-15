@@ -58,6 +58,7 @@ private func makeStatePollerAccessibilityRuntime(
     projectInfoResult: ChannelResult,
     transportResult: ChannelResult = .success("{}"),
     tracksResult: ChannelResult = .success("[]"),
+    trackStates: [TrackState]? = nil,
     mixerResult: ChannelResult = .success("[]"),
     markersResult: ChannelResult = .success("[]")
 ) -> AccessibilityChannel.Runtime {
@@ -70,6 +71,7 @@ private func makeStatePollerAccessibilityRuntime(
         setTempo: { _ in .success("{}") },
         setCycleRange: { _ in .success("{}") },
         tracks: { tracksResult },
+        trackStates: { trackStates },
         selectedTrack: { .success("{}") },
         selectTrack: { _ in .success("{}") },
         setTrackToggle: { _, _ in .success("{}") },
@@ -80,6 +82,29 @@ private func makeStatePollerAccessibilityRuntime(
         projectInfo: { projectInfoResult },
         markers: { markersResult }
     )
+}
+
+@Test func testStatePollerPreservesAXTrackIdentityProvenance() async {
+    let cache = StateCache()
+    let tracks = [TrackState(id: 0, name: "Untitled", type: .unknown, liveIdentityBacked: false)]
+    let channel = AccessibilityChannel(
+        runtime: makeStatePollerAccessibilityRuntime(
+            projectInfoResult: .success(#"{"name":"Identity Test","sampleRate":44100,"bitDepth":24,"tempo":120,"timeSignature":"4/4","trackCount":1,"filePath":null,"lastUpdated":"2026-04-16T00:00:00Z"}"#),
+            tracksResult: .success("invalid-json"),
+            trackStates: tracks
+        )
+    )
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(hasVisibleWindow: { true })
+    )
+
+    await poller.refreshNow()
+
+    let cached = await cache.getTracks()
+    #expect(cached.count == 1)
+    #expect(!cached[0].liveIdentityBacked)
 }
 
 @Test func testStatePollerUpdatesProjectInfoOnInitialPoll() async throws {

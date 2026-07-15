@@ -194,7 +194,7 @@ extension ResourceHandlers {
             payload.reserveCapacity(tracksOut.count)
             for track in tracksOut {
                 var object = jsonObject(track) as? [String: Any] ?? [:]
-                if track.placeholder != true {
+                if canEmitTrackTargetReference(track, source: source) {
                     let descriptor = TargetDescriptor(trackIndex: track.id, trackName: track.name)
                     guard let reference = await targetRegistry.bind(
                         kind: .track,
@@ -317,7 +317,7 @@ extension ResourceHandlers {
             for strip in strips {
                 var object = jsonObject(strip) as? [String: Any] ?? [:]
                 if let track = tracks.first(where: { $0.id == strip.trackIndex }),
-                   track.placeholder != true {
+                   canEmitTrackTargetReference(track) {
                     let descriptor = TargetDescriptor(
                         trackIndex: strip.trackIndex,
                         trackName: track.name
@@ -656,7 +656,7 @@ extension ResourceHandlers {
             var object = jsonObject(strip) as? [String: Any] ?? [:]
             let tracks = await cache.getTracks()
             if let track = tracks.first(where: { $0.id == strip.trackIndex }),
-               track.placeholder != true {
+               canEmitTrackTargetReference(track) {
                 let descriptor = TargetDescriptor(
                     trackIndex: strip.trackIndex,
                     trackName: track.name
@@ -681,6 +681,14 @@ extension ResourceHandlers {
         return ReadResource.Result(
             contents: [.text(json, uri: uri, mimeType: "application/json")]
         )
+    }
+
+    private static func canEmitTrackTargetReference(
+        _ track: TrackState,
+        source: String? = nil
+    ) -> Bool {
+        guard track.liveIdentityBacked, track.placeholder != true else { return false }
+        return source.map { $0 == "ax_live" } ?? true
     }
 
     /// v3.1.8 (Issue #7) — markers wrapped in cache envelope with source attribution.

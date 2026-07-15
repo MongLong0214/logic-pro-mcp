@@ -131,7 +131,7 @@ enum TargetRefResolver {
             // state cache, which lags an out-of-band UI reorder by the poll
             // interval; this final check makes the LIVE AX header authoritative
             // over that possibly-stale cache before the write target is returned.
-            // No-op when `liveTrackName` is nil (plugin / resolver-unit path) —
+            // No-op when both live-track probes are nil (plugin / resolver-unit path) —
             // the explicit-index and flag-off paths never reach here at all.
             if let liveIdentityFailure = liveTrackIdentityGuard(
                 binding: binding,
@@ -233,14 +233,15 @@ enum TargetRefResolver {
     }
 
     /// ADR-002 F5 — F1-equivalent live track-identity cross-check for
-    /// `target_ref`-resolved track / mixer mutations. `liveTrackName` reads the
-    /// LIVE AX track header at a positional index; it is threaded down only by
-    /// the track / mixer dispatchers (plugins carry the equivalent F1 guard
+    /// `target_ref`-resolved track / mixer mutations. `liveTrackNames` scans all
+    /// LIVE AX track headers and checks the bound index plus same-name indices;
+    /// it is threaded down only by the track / mixer dispatchers (plugins carry the equivalent F1 guard
     /// inside their own AX write, and pass nil here). When nil this is a no-op,
     /// so the resolver stays AX-agnostic and the explicit-index path is
     /// unaffected. Requires the live header at the reference's bound index to
-    /// still read back its bound track name (trimmed, exact). A mismatch — or an
-    /// unreadable live name — fails closed with `stale_target_reference`,
+    /// still read back its bound track name (trimmed, exact), with no matching
+    /// name at any other index. A mismatch, ambiguity, or unreadable live name
+    /// fails closed with `stale_target_reference`,
     /// `write_attempted:false`, and no write, making the live read authoritative
     /// over a state cache that may lag an out-of-band UI reorder.
     private static func liveTrackIdentityGuard(

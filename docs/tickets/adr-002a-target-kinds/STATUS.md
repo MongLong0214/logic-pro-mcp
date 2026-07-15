@@ -168,8 +168,9 @@ so the prior `03d4b07` deterministic evidence bundle (focused 3/3, full 2753, re
 
 **What changed.** The shared `TargetRefResolver.resolveMutationIndex` gained a final, opt-in live
 track-identity cross-check on the `target_ref` (binding) path: immediately before the resolved write
-target is returned, the reference's bound track name is compared against the LIVE AX header at the
-bound index (`liveTrackName` probe). A mismatch — or an unreadable live name — fails closed with
+target is returned, the reference's bound track name is compared against a full LIVE AX header scan
+at the bound index (`liveTrackNames` probe), and any same-name match at another index is ambiguous.
+A mismatch, ambiguity, or unreadable live name fails closed with
 `stale_target_reference`, `write_attempted:false`, zero write, making the live read authoritative
 over a state cache that may lag an out-of-band UI reorder (the same window F1 closed for the plugin
 write path). The guard emits the same evidence fields F1 does (`expected_track_name` /

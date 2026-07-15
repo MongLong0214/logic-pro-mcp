@@ -191,7 +191,8 @@ actor StateCache {
                 TrackState(
                     id: nextIndex,
                     name: "Track \(nextIndex + 1)",
-                    type: .unknown
+                    type: .unknown,
+                    liveIdentityBacked: false
                 )
             )
         }

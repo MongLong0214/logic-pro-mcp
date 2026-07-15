@@ -117,6 +117,18 @@ import Testing
     #expect(track.color == "Audio color blue")
 }
 
+@Test func testAXValueExtractorsMarksUnreadableTrackIdentity() {
+    let builder = FakeAXRuntimeBuilder()
+    let track = AXValueExtractors.extractTrackState(
+        from: builder.element(6),
+        index: 0,
+        runtime: builder.makeAXRuntime()
+    )
+
+    #expect(track.name == "Untitled")
+    #expect(!track.liveIdentityBacked)
+}
+
 @Test func testAXValueExtractorsBuildTransportStateFromButtonsAndTexts() {
     let builder = FakeAXRuntimeBuilder()
     let transport = builder.element(1)

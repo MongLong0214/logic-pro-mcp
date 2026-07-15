@@ -133,6 +133,74 @@ func placeholderRowsDoNotEmitTargetRefs() async throws {
 }
 
 @Test
+func fallbackNamedRowsDoNotEmitTargetRefs_butExactLiveNameDoes() async throws {
+    let cache = StateCache()
+    await cache.updateTracks([
+        TrackState(id: 0, name: "Track 5", type: .audio),
+        TrackState(id: 1, name: "Untitled", type: .unknown, liveIdentityBacked: false),
+    ])
+    await cache.selectOnly(trackAt: 2)
+    await cache.updateChannelStrips([
+        ChannelStripState(trackIndex: 0),
+        ChannelStripState(trackIndex: 1),
+        ChannelStripState(trackIndex: 2),
+    ])
+    let registry = TargetRegistry()
+
+    try await FeatureFlags.withAdr002TargetRefForTests(true) {
+        let tracksResult = try await ResourceHandlers.read(
+            uri: "logic://tracks",
+            cache: cache,
+            router: ChannelRouter(),
+            targetRegistry: registry,
+            fileReader: tracksFileReaderRuntime(pathReturnsNil: true)
+        )
+        let (_, tracks) = try parseTracksEnvelope(tracksResult)
+        #expect(tracks[0]["name"] as? String == "Track 5")
+        #expect(tracks[0]["track_ref"] as? String != nil)
+        #expect(tracks[0]["liveIdentityBacked"] == nil)
+        #expect(tracks[1]["name"] as? String == "Untitled")
+        #expect(tracks[1]["track_ref"] == nil)
+        #expect(tracks[2]["name"] as? String == "Track 3")
+        #expect(tracks[2]["track_ref"] == nil)
+        let healthyReference = try #require(tracks[0]["track_ref"] as? String)
+        let outcome = await TargetRefResolver.resolveMutationIndex(
+            ["target_ref": .string(healthyReference)],
+            targetRegistry: registry,
+            cache: cache,
+            operation: "track.rename",
+            invalidIndexResult: toolInvalidParamsResult("test"),
+            liveTrackNames: { [0: "Track 5"] }
+        )
+        guard case .success(let resolved) = outcome else {
+            Issue.record("expected the live track reference to pass the healthy scan")
+            return
+        }
+        #expect(resolved.index == 0)
+
+        let mixerResult = try await ResourceHandlers.read(
+            uri: "logic://mixer",
+            cache: cache,
+            router: ChannelRouter(),
+            targetRegistry: registry
+        )
+        let mixer = try #require(sharedJSONObject(sharedResourceText(mixerResult))?["strips"] as? [[String: Any]])
+        #expect(mixer[0]["mixer_strip_ref"] as? String != nil)
+        #expect(mixer[1]["mixer_strip_ref"] == nil)
+        #expect(mixer[2]["mixer_strip_ref"] == nil)
+
+        let singleResult = try await ResourceHandlers.read(
+            uri: "logic://mixer/1",
+            cache: cache,
+            router: ChannelRouter(),
+            targetRegistry: registry
+        )
+        let single = try #require(sharedJSONObject(sharedResourceText(singleResult))?["strip"] as? [String: Any])
+        #expect(single["mixer_strip_ref"] == nil)
+    }
+}
+
+@Test
 func cacheEmpty_fileMissing_emitsEmptyDefault() async throws {
     let cache = StateCache()
     let runtime = tracksFileReaderRuntime(pathReturnsNil: true)
