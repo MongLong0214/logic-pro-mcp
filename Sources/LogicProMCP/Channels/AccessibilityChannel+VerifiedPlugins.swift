@@ -1195,7 +1195,7 @@ extension AccessibilityChannel {
         case .ambiguous:
             return nil
         case let .unique(window):
-            guard demotePluginWindowBeforeAcquisition(window, runtime: runtime.ax) else {
+            guard demotePluginWindowBeforeAcquisition(window, runtime: runtime) else {
                 return nil
             }
         case .none:
@@ -1230,16 +1230,20 @@ extension AccessibilityChannel {
 
     private static func demotePluginWindowBeforeAcquisition(
         _ window: AXUIElement,
-        runtime: AXHelpers.Runtime
+        runtime: AXLogicProElements.Runtime
     ) -> Bool {
-        guard AXHelpers.setAttribute(
-            window, kAXMainAttribute as String, false as CFTypeRef, runtime: runtime
-        ), AXHelpers.setAttribute(
-            window, kAXFocusedAttribute as String, false as CFTypeRef, runtime: runtime
-        ) else {
-            return false
+        let mainCleared = AXHelpers.setAttribute(
+            window, kAXMainAttribute as String, false as CFTypeRef, runtime: runtime.ax
+        )
+        let focusCleared = AXHelpers.setAttribute(
+            window, kAXFocusedAttribute as String, false as CFTypeRef, runtime: runtime.ax
+        )
+        if mainCleared, focusCleared, !pluginWindowIsFront(window, runtime: runtime.ax) {
+            return true
         }
-        return !pluginWindowIsFront(window, runtime: runtime)
+        guard let arrangeWindow = AXLogicProElements.mainWindow(runtime: runtime),
+              AXHelpers.performAction(arrangeWindow, kAXRaiseAction as String, runtime: runtime.ax) else { return false }
+        return !pluginWindowIsFront(window, runtime: runtime.ax)
     }
 
     private static func pluginWindowIsFront(

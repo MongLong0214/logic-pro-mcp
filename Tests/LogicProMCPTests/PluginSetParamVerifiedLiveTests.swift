@@ -48,7 +48,8 @@ private final class LiveFixture: @unchecked Sendable {
         forcedAfterValue: Double? = nil,
         otherTracks: Int = 0,
         duplicateTrackNameAt: Int? = nil,
-        emptyInsertChain: Bool = false
+        emptyInsertChain: Bool = false,
+        pluginWindowRejectsDirectDemotion: Bool = false
     ) {
         let b = builder
         let windowsAddedOnSlotPress = MutableBox<[AXUIElement]>([])
@@ -154,6 +155,12 @@ private final class LiveFixture: @unchecked Sendable {
         let runtime = b.makeLogicRuntime(
             appElement: app,
             setAttributeHandler: { [b] el, attribute, value in
+                if pluginWindowRejectsDirectDemotion,
+                   b.elementID(el) == b.elementID(pluginWindow),
+                   attribute == (kAXMainAttribute as String) || attribute == (kAXFocusedAttribute as String),
+                   (value as? NSNumber)?.boolValue == false {
+                    return true
+                }
                 guard b.elementID(el) == sliderKey, attribute == (kAXValueAttribute as String) else {
                     b.setAttribute(el, attribute, value)
                     return true
@@ -165,6 +172,13 @@ private final class LiveFixture: @unchecked Sendable {
                 return true
             },
             performActionHandler: { [b] el, action in
+                if pluginWindowRejectsDirectDemotion,
+                   b.elementID(el) == b.elementID(arrangeWindow),
+                   action == (kAXRaiseAction as String) {
+                    b.setAttribute(pluginWindow, kAXMainAttribute as String, false)
+                    b.setAttribute(pluginWindow, kAXFocusedAttribute as String, false)
+                    return true
+                }
                 guard action == (kAXPressAction as String) else {
                     return true
                 }
@@ -553,6 +567,15 @@ private func runChannelEQFixture(
         pluginWindowPresent: false,
         openWindowOnSlotPress: true
     )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(obj["observed_normalized"] as? Double == 60)
+    #expect(fixture.currentSliderValue == 60)
+}
+
+@Test func testManualPreopenFallsBackToRaisingArrangeWhenFocusedCannotBeClearedDirectly() async {
+    let fixture = LiveFixture(beforeValue: 51, pluginWindowRejectsDirectDemotion: true)
     let obj = await runLive(fixture: fixture, params: thresholdParams())
 
     #expect(obj["state"] as? String == "A")
