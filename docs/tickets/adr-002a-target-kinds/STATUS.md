@@ -56,12 +56,13 @@
 | #268 RED reproduction | E | closed-editor opener path failed pre-fix on the fake-AX tree | Deterministic PASS |
 | #268 GREEN (code) | A, E | closed-editor → auto-open → State A on fake-AX tree; `PluginSetParamVerifiedLiveTests` | Deterministic PASS |
 | #268 negative / fail-closed | C, D | wrong plugin / wrong param / ambiguous window → State C, `write_attempted:false`, zero write; window+slider identity re-verified immediately before the AX write | Deterministic PASS |
-| Final exact-head full suite | F | `swift test --no-parallel` — env-neutral CI is authoritative | CI pending on final head |
-| Final exact-head release build | G | `swift build -c release` | Pending exact-head confirm |
+| Adversarial hardening | — | 3 review rounds converged: plugin-insert delimiter injection, resource + `get_inventory` emission TOCTOU, resolve→write use-time epoch race, and `save_as` flag-off invariance all closed; final adversarial pass returned PROCEED with no new blockers | Deterministic PASS |
+| Final exact-head full suite | F | env-neutral CI green (2750 tests) — two Logic-coupled tests fail only under a live degraded Logic locally and pass with no Logic | CI green |
+| Final exact-head release build | G | `swift build -c release` | PASS |
 | #268 live A / B | A, B | closed-editor → A, manual-preopen → A on Logic 12.3 | **Pending healthy Logic (env)** |
 | #268 live negative | H | negative/ambiguous → zero-write; raw transcript | **Pending healthy Logic (env)** |
 | ADR-002 live continuity | — | project switch / restart → prior refs `stale_target_reference` on live | **Pending healthy Logic (env)** |
-| CTO exhaustive review | I | code-side verdict + evidence bundle | Code PASS (live-gated part pending H) |
+| CTO exhaustive review | I | full code review + 3 adversarial rounds converged | Code PASS (live-gated part pending H) |
 | CEO exact-head gate | I | production-readiness PASS (no merge before this) | Pending report |
 | Evidence recorded | J | public-safe notes on #268 / #285 / #308 / PR | In progress |
 
