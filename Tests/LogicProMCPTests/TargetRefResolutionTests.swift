@@ -917,6 +917,209 @@ struct TargetRefResolutionTests {
         }
     }
 
+    // MARK: - ADR-002 F5: live track-identity cross-check for track/mixer target_ref mutations
+
+    // F1 already makes the live AX track header authoritative over the state
+    // cache for the verified-plugin write path. F5 extends the same fail-closed
+    // guarantee to the track/mixer `target_ref` mutation-resolution boundary:
+    // the reference's bound track name is cross-checked against the LIVE AX
+    // header at the bound index immediately before the write target is returned.
+    // A mismatch — or an unreadable live name — fails closed with
+    // `stale_target_reference`, `write_attempted:false`, and zero write, even
+    // when a stale state cache would still (falsely) pass the fingerprint drift
+    // check after an out-of-band UI reorder. The explicit-index and flag-off
+    // paths never invoke the guard (byte-invariant).
+
+    private func body(_ result: CallTool.Result) -> [String: Any] {
+        sharedJSONObject(sharedToolText(result)) ?? [:]
+    }
+
+    /// Same-index collision: the cache still holds the bound name at the bound
+    /// index (drift check passes), but a live out-of-band reorder put a
+    /// different-named track there. The live cross-check must fail closed.
+    @Test
+    func testTrackTargetRefLiveNameMismatchFailsClosedStaleAndDoesNotWrite() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
+            let (router, channels) = await makeRouter()
+            let result = await TrackDispatcher.handle(
+                command: "select",
+                params: ["target_ref": .string(reference.rawValue)],
+                router: router,
+                cache: cache,
+                targetRegistry: registry,
+                liveTrackName: { $0 == 2 ? "Drums" : "Other" }
+            )
+            #expect(result.isError == true)
+            #expect(errorCode(result) == "stale_target_reference")
+            #expect(body(result)["write_attempted"] as? Bool == false)
+            #expect(body(result)["expected_track_name"] as? String == "Bass")
+            #expect(body(result)["observed_track_name"] as? String == "Drums")
+            #expect(await allOps(channels).isEmpty, "no wrong-target write")
+        }
+    }
+
+    /// Duplicate-name reorder: two tracks named "Bass". The cache is stale and
+    /// still shows "Bass" at the bound index 1 (drift passes). A live reorder
+    /// moved a *different* track into index 1 while a "Bass" survives at index 2
+    /// — a name-anywhere search would wrongly pass, so the guard must check the
+    /// BOUND index specifically and fail closed.
+    @Test
+    func testTrackTargetRefDuplicateNameReorderFailsClosedAndDoesNotWrite() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let registry = TargetRegistry()
+            let descriptor = TargetDescriptor(trackIndex: 1, trackName: "Bass")
+            let reference = await registry.bind(
+                kind: .track,
+                descriptor: descriptor,
+                fingerprint: descriptor.fingerprint
+            )
+            let cache = StateCache()
+            await cache.updateTracks([
+                TrackState(id: 0, name: "Drums", type: .audio),
+                TrackState(id: 1, name: "Bass", type: .audio),
+                TrackState(id: 2, name: "Bass", type: .audio),
+            ])
+            let (router, channels) = await makeRouter()
+            let result = await TrackDispatcher.handle(
+                command: "mute",
+                params: ["target_ref": .string(reference.rawValue)],
+                router: router,
+                cache: cache,
+                targetRegistry: registry,
+                liveTrackName: { idx in [0: "Bass", 1: "Drums", 2: "Bass"][idx] }
+            )
+            #expect(errorCode(result) == "stale_target_reference")
+            #expect(body(result)["write_attempted"] as? Bool == false)
+            #expect(body(result)["observed_track_name"] as? String == "Drums")
+            #expect(await allOps(channels).isEmpty, "no wrong-target write")
+        }
+    }
+
+    /// Mixer `set_volume` is the F5 sibling of the track path.
+    @Test
+    func testMixerTargetRefLiveNameMismatchFailsClosedStaleAndDoesNotWrite() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
+            let (router, channels) = await makeRouter()
+            let result = await MixerDispatcher.handle(
+                command: "set_volume",
+                params: ["target_ref": .string(reference.rawValue), "value": .double(0.5)],
+                router: router,
+                cache: cache,
+                targetRegistry: registry,
+                liveTrackName: { _ in "Lead Synth" }
+            )
+            #expect(errorCode(result) == "stale_target_reference")
+            #expect(body(result)["write_attempted"] as? Bool == false)
+            #expect(await allOps(channels).isEmpty, "no wrong-target write")
+        }
+    }
+
+    /// F1 parity: an unreadable (nil) live name fails closed, never silently
+    /// falling back to the possibly-stale cache.
+    @Test
+    func testTrackTargetRefUnreadableLiveNameFailsClosedAndDoesNotWrite() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
+            let (router, channels) = await makeRouter()
+            let result = await TrackDispatcher.handle(
+                command: "delete",
+                params: ["target_ref": .string(reference.rawValue)],
+                router: router,
+                cache: cache,
+                targetRegistry: registry,
+                liveTrackName: { _ in nil }
+            )
+            #expect(errorCode(result) == "stale_target_reference")
+            #expect(body(result)["write_attempted"] as? Bool == false)
+            #expect((body(result)["what_was_observed"] as? String)?.contains("unreadable") == true)
+            #expect(await allOps(channels).isEmpty, "no wrong-target write, no pre-delete select side effect")
+        }
+    }
+
+    /// GREEN passthrough: the live header still matches the bound name → resolve
+    /// and write proceed exactly as before.
+    @Test
+    func testTrackTargetRefLiveNameMatchStillResolvesAndWrites() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
+            let (router, channels) = await makeRouter()
+            let result = await TrackDispatcher.handle(
+                command: "select",
+                params: ["target_ref": .string(reference.rawValue)],
+                router: router,
+                cache: cache,
+                targetRegistry: registry,
+                liveTrackName: { _ in "Bass" }
+            )
+            #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == reference.rawValue)
+            #expect(await opParams(channels, "track.select") == ["index": "2"])
+        }
+    }
+
+    @Test
+    func testMixerTargetRefLiveNameMatchStillResolvesAndWrites() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
+            let (router, channels) = await makeRouter()
+            let result = await MixerDispatcher.handle(
+                command: "set_volume",
+                params: ["target_ref": .string(reference.rawValue), "value": .double(0.5)],
+                router: router,
+                cache: cache,
+                targetRegistry: registry,
+                liveTrackName: { _ in "Bass" }
+            )
+            #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == reference.rawValue)
+            #expect(await opParams(channels, "mixer.set_volume") == ["index": "2", "volume": "0.5"])
+        }
+    }
+
+    /// Byte-invariance of the explicit-index path: no `target_ref` → no binding
+    /// → the live guard is NEVER invoked, even with a mismatching probe.
+    @Test
+    func testExplicitIndexPathIsByteInvariantEvenWithMismatchingLiveProbe() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (registry, cache, _) = await boundTrack(index: 2, name: "Bass")
+            let (router, channels) = await makeRouter()
+            let result = await TrackDispatcher.handle(
+                command: "select",
+                params: ["index": .int(2)],
+                router: router,
+                cache: cache,
+                targetRegistry: registry,
+                liveTrackName: { _ in "Totally Different" }
+            )
+            #expect(result.isError == false)
+            #expect(echoedTargetRef(result) == nil)
+            #expect(await opParams(channels, "track.select") == ["index": "2"])
+        }
+    }
+
+    /// Byte-invariance of the flag-off path: a supplied `target_ref` fails closed
+    /// with `target_ref_unavailable` BEFORE the guard can run, regardless of the
+    /// live probe.
+    @Test
+    func testFlagOffTargetRefIsByteInvariantAndNeverReachesLiveGuard() async {
+        await FeatureFlags.withAdr002TargetRefForTests(false) {
+            let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
+            let (router, channels) = await makeRouter()
+            let result = await MixerDispatcher.handle(
+                command: "set_volume",
+                params: ["target_ref": .string(reference.rawValue), "value": .double(0.5)],
+                router: router,
+                cache: cache,
+                targetRegistry: registry,
+                liveTrackName: { _ in "Mismatch" }
+            )
+            #expect(errorCode(result) == "target_ref_unavailable")
+            #expect(await allOps(channels).isEmpty)
+        }
+    }
+
     // MARK: - #353: TargetRegistry.rebind unit
 
     @Test

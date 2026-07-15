@@ -72,6 +72,7 @@ enum TargetRefResolver {
         requiredKind: TargetKind = .track,
         invalidIndexResult: @autoclosure () -> CallTool.Result,
         acceptedKinds: [TargetKind]? = nil,
+        liveTrackName: (@Sendable (Int) -> String?)? = nil,
         beforeFinalValidation: (@Sendable () async -> Void)? = nil
     ) async -> Outcome {
         if let projectFailure = await validateProjectReference(
@@ -123,6 +124,21 @@ enum TargetRefResolver {
             }
             guard await targetRegistry.resolve(binding.reference) != nil else {
                 return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+            }
+            // ADR-002 F5 — F1-equivalent mutation-boundary live track-identity
+            // cross-check. The cache drift check above validates against the
+            // state cache, which lags an out-of-band UI reorder by the poll
+            // interval; this final check makes the LIVE AX header authoritative
+            // over that possibly-stale cache before the write target is returned.
+            // No-op when `liveTrackName` is nil (plugin / resolver-unit path) —
+            // the explicit-index and flag-off paths never reach here at all.
+            if let liveIdentityFailure = liveTrackIdentityGuard(
+                binding: binding,
+                rawReference: rawReference,
+                operation: operation,
+                liveTrackName: liveTrackName
+            ) {
+                return .failure(liveIdentityFailure)
             }
             return .success(Resolved(
                 index: binding.descriptor.trackIndex,
@@ -211,6 +227,69 @@ enum TargetRefResolver {
             structuredContent: structuredContentValue(fromToolText: echoed),
             isError: result.isError,
             _meta: result._meta
+        )
+    }
+
+    /// ADR-002 F5 — F1-equivalent live track-identity cross-check for
+    /// `target_ref`-resolved track / mixer mutations. `liveTrackName` reads the
+    /// LIVE AX track header at a positional index; it is threaded down only by
+    /// the track / mixer dispatchers (plugins carry the equivalent F1 guard
+    /// inside their own AX write, and pass nil here). When nil this is a no-op,
+    /// so the resolver stays AX-agnostic and the explicit-index path is
+    /// unaffected. Requires the live header at the reference's bound index to
+    /// still read back its bound track name (trimmed, exact). A mismatch — or an
+    /// unreadable live name — fails closed with `stale_target_reference`,
+    /// `write_attempted:false`, and no write, making the live read authoritative
+    /// over a state cache that may lag an out-of-band UI reorder.
+    private static func liveTrackIdentityGuard(
+        binding: TargetBinding,
+        rawReference: String?,
+        operation: String,
+        liveTrackName: (@Sendable (Int) -> String?)?
+    ) -> CallTool.Result? {
+        guard let liveTrackName else { return nil }
+        let index = binding.descriptor.trackIndex
+        let expected = binding.descriptor.trackName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let live = liveTrackName(index)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let live, live == expected else {
+            return staleLiveIdentityResult(
+                rawReference,
+                operation: operation,
+                index: index,
+                expected: binding.descriptor.trackName,
+                observed: live
+            )
+        }
+        return nil
+    }
+
+    /// Fail-closed State C for the F5 live-identity mismatch. Carries the same
+    /// evidence fields F1 emits (`expected_track_name` / `observed_track_name` /
+    /// `what_was_attempted` / `what_was_observed` / `safe_to_retry`) so the two
+    /// wrong-target guards report a uniform shape.
+    static func staleLiveIdentityResult(
+        _ rawReference: String?,
+        operation: String,
+        index: Int,
+        expected: String,
+        observed: String?
+    ) -> CallTool.Result {
+        toolStateCResult(
+            .staleTargetReference,
+            hint: "target_ref no longer names the live track at its bound index (out-of-band reorder)",
+            extras: [
+                "operation": operation,
+                "target_ref": rawReference ?? "",
+                "expected_track_name": expected,
+                "observed_track_name": observed as Any? ?? NSNull(),
+                "what_was_attempted": "confirm the live track at index \(index) still matches the referenced track before writing",
+                "what_was_observed": observed.map { "index \(index) live track name is '\($0)'" }
+                    ?? "index \(index) live track name was unreadable",
+                "safe_to_retry": false,
+                "write_attempted": false,
+            ]
         )
     }
 

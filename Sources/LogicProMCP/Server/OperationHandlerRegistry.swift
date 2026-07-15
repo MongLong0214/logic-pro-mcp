@@ -210,7 +210,11 @@ enum OperationHandlerRegistry {
                     params: params,
                     router: dependencies.router,
                     cache: dependencies.cache,
-                    targetRegistry: dependencies.targetRegistry
+                    targetRegistry: dependencies.targetRegistry,
+                    // ADR-002 F5 — production dispatch supplies the live AX
+                    // track-header reader so the target_ref mutation boundary
+                    // fails closed on an out-of-band reorder.
+                    liveTrackName: { AXLogicProElements.trackName(at: $0) }
                 )
             }
         case .logicNavigate:
@@ -238,7 +242,11 @@ enum OperationHandlerRegistry {
                     targetRegistry: dependencies.targetRegistry,
                     dialogPresent: dependencies.dialogPresent,
                     sagaJournal: dependencies.sagaJournal,
-                    mutationGate: dependencies.mutationGate
+                    mutationGate: dependencies.mutationGate,
+                    // ADR-002 F5 — production dispatch supplies the live AX
+                    // track-header reader so saga-replayed target_ref track/mixer
+                    // steps fail closed on an out-of-band reorder.
+                    liveTrackName: { AXLogicProElements.trackName(at: $0) }
                 )
             }
         case .logicPlugins:
@@ -294,7 +302,11 @@ enum OperationHandlerRegistry {
                     router: dependencies.router,
                     cache: dependencies.cache,
                     targetRegistry: dependencies.targetRegistry,
-                    dialogPresent: dependencies.dialogPresent
+                    dialogPresent: dependencies.dialogPresent,
+                    // ADR-002 F5 — production dispatch supplies the live AX
+                    // track-header reader so the target_ref mutation boundary
+                    // fails closed on an out-of-band reorder.
+                    liveTrackName: { AXLogicProElements.trackName(at: $0) }
                 )
             }
         }

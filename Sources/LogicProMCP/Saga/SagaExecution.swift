@@ -14,17 +14,24 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
     private let cache: StateCache
     private let targetRegistry: TargetRegistry
     private let dialogPresent: @Sendable () -> Bool
+    // ADR-002 F5 — live AX track-header reader, threaded to the dispatchers so
+    // saga-replayed / compensated track/mixer target_ref mutations fail closed
+    // on an out-of-band reorder. nil by default (saga tests stay deterministic);
+    // production construction supplies the real reader.
+    private let liveTrackName: (@Sendable (Int) -> String?)?
 
     init(
         router: ChannelRouter,
         cache: StateCache,
         targetRegistry: TargetRegistry,
-        dialogPresent: @escaping @Sendable () -> Bool
+        dialogPresent: @escaping @Sendable () -> Bool,
+        liveTrackName: (@Sendable (Int) -> String?)? = nil
     ) {
         self.router = router
         self.cache = cache
         self.targetRegistry = targetRegistry
         self.dialogPresent = dialogPresent
+        self.liveTrackName = liveTrackName
     }
 
     func run(_ step: SagaStep) async -> StepResult {
@@ -58,7 +65,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
                 router: router,
                 cache: cache,
                 targetRegistry: targetRegistry,
-                dialogPresent: dialogPresent
+                dialogPresent: dialogPresent,
+                liveTrackName: liveTrackName
             )
         case .mixerSetVolume:
             response = await MixerDispatcher.handle(
@@ -66,7 +74,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
                 params: params,
                 router: router,
                 cache: cache,
-                targetRegistry: targetRegistry
+                targetRegistry: targetRegistry,
+                liveTrackName: liveTrackName
             )
         case .mixerSetPan:
             response = await MixerDispatcher.handle(
@@ -74,7 +83,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
                 params: params,
                 router: router,
                 cache: cache,
-                targetRegistry: targetRegistry
+                targetRegistry: targetRegistry,
+                liveTrackName: liveTrackName
             )
         case .tracksMute:
             response = await TrackDispatcher.handle(
@@ -83,7 +93,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
                 router: router,
                 cache: cache,
                 targetRegistry: targetRegistry,
-                dialogPresent: dialogPresent
+                dialogPresent: dialogPresent,
+                liveTrackName: liveTrackName
             )
         case .tracksSolo:
             response = await TrackDispatcher.handle(
@@ -92,7 +103,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
                 router: router,
                 cache: cache,
                 targetRegistry: targetRegistry,
-                dialogPresent: dialogPresent
+                dialogPresent: dialogPresent,
+                liveTrackName: liveTrackName
             )
         case .tracksArm:
             response = await TrackDispatcher.handle(
@@ -101,7 +113,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
                 router: router,
                 cache: cache,
                 targetRegistry: targetRegistry,
-                dialogPresent: dialogPresent
+                dialogPresent: dialogPresent,
+                liveTrackName: liveTrackName
             )
         default:
             return StepResult(

@@ -153,3 +153,44 @@ The live gates (A/B/H, reorder→stale-ref, project switch/restart continuity, i
 restore/compensation, raw transcript) remain **env-blocked** on the degraded Logic 12.3 session and
 are held pending an approved/managed healthy fixture, per the release condition above. No merge
 before CEO exact-head PASS.
+
+### F5 closed — F1-equivalent track/mixer live-identity guard (2026-07-15)
+
+Per the CEO exact-head decision, **F5 is not accepted as a documented residual**. Option (a) of the
+F5 addendum is implemented: an F1-equivalent mutation-boundary live track-identity fail-closed guard
+now covers the `logic_mixer set_volume`/`set_pan` and `logic_tracks` verified `target_ref` mutations,
+so the prior `03d4b07` deterministic evidence bundle (focused 3/3, full 2753, release artifact
+`a7419d00…`) is **INVALIDATED / SUPERSEDED** and re-run on the F5-inclusive head.
+
+**What changed.** The shared `TargetRefResolver.resolveMutationIndex` gained a final, opt-in live
+track-identity cross-check on the `target_ref` (binding) path: immediately before the resolved write
+target is returned, the reference's bound track name is compared against the LIVE AX header at the
+bound index (`liveTrackName` probe). A mismatch — or an unreadable live name — fails closed with
+`stale_target_reference`, `write_attempted:false`, zero write, making the live read authoritative
+over a state cache that may lag an out-of-band UI reorder (the same window F1 closed for the plugin
+write path). The guard emits the same evidence fields F1 does (`expected_track_name` /
+`observed_track_name` / `what_was_attempted` / `what_was_observed` / `safe_to_retry`).
+
+**Wiring / byte-invariance.** The probe is nil by default at every dispatcher (so the deterministic
+test suite never reaches into live AX and stays fully deterministic); the real AX reader is supplied
+only at the single production dispatch chokepoint — the server operation registry for
+`logic_mixer` / `logic_tracks`, and forwarded through `logic_system saga_execute` into the saga
+executor so saga-replayed / compensated track/mixer target_ref steps are guarded too. The guard is
+gated on a resolved `target_ref` binding, so the explicit-index path and the flag-off default
+configuration never invoke it and are **byte-invariant** (asserted). Plugins are unchanged — they
+already carry the equivalent F1 guard inside their own AX write and pass no probe.
+
+**Deterministic RED→GREEN (locked RED first).** Eight focused tests in `TargetRefResolutionTests`:
+mismatch fails closed and does not write (same-index collision), duplicate-name reorder fails closed
+even though the bound name survives at another index (the guard checks the *bound* index, not a name
+search), mixer mismatch fails closed, unreadable-live-name fails closed (F1 parity), track/mixer
+match still resolves and writes (GREEN passthrough), explicit-index is byte-invariant even with a
+mismatching probe, and flag-off is byte-invariant (`target_ref_unavailable` before the guard). The
+four fail-closed cases were observed RED with the guard inert, then GREEN once the guard was wired.
+
+**Residual (inherent, unchanged).** The non-atomic window between resolution returning and the
+external AX write cannot be made atomic with a registry/AX check — identical to F1's documented
+bound. Live H must still exercise UI reorder → track/mixer stale-ref mutation → `stale_target_reference`.
+
+Head changes from the F5 guard trigger a full re-run (focused → full suite → release build →
+binary hash → live → security → CTO → CEO → CI) before the CEO exact-head gate. No merge before CEO PASS.

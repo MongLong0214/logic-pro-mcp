@@ -21,7 +21,14 @@ struct MixerDispatcher: OperationTraceDispatching {
         params: [String: Value],
         router: ChannelRouter,
         cache: StateCache,
-        targetRegistry: TargetRegistry? = nil
+        targetRegistry: TargetRegistry? = nil,
+        // ADR-002 F5 — live AX track-header reader for the mutation-boundary
+        // identity cross-check. Deliberately nil by default so the deterministic
+        // test suite never reaches into live AX; production wires the real reader
+        // at the single dispatch chokepoint (server + saga). When nil the guard
+        // is a no-op — but the target_ref path is only reachable behind the
+        // off-by-default flag, and every production entry point supplies it.
+        liveTrackName: (@Sendable (Int) -> String?)? = nil
     ) async -> CallTool.Result {
         if let projectFailure = await TargetRefResolver.validateProjectReference(
             params,
@@ -49,7 +56,8 @@ struct MixerDispatcher: OperationTraceDispatching {
                 invalidIndexResult: toolInvalidParamsResult(
                     "set_volume requires explicit 'track' or non-conflicting 'index' (Int >= 0)"
                 ),
-                acceptedKinds: [.track, .mixerStrip]
+                acceptedKinds: [.track, .mixerStrip],
+                liveTrackName: liveTrackName
             ) {
             case .success(let resolved):
                 index = resolved.index
@@ -94,7 +102,8 @@ struct MixerDispatcher: OperationTraceDispatching {
                 invalidIndexResult: toolInvalidParamsResult(
                     "set_pan requires explicit 'track' or non-conflicting 'index' (Int >= 0)"
                 ),
-                acceptedKinds: [.track, .mixerStrip]
+                acceptedKinds: [.track, .mixerStrip],
+                liveTrackName: liveTrackName
             ) {
             case .success(let resolved):
                 index = resolved.index

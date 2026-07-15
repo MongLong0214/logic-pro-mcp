@@ -32,7 +32,14 @@ struct TrackDispatcher: OperationTraceDispatching {
         router: ChannelRouter,
         cache: StateCache,
         targetRegistry: TargetRegistry? = nil,
-        dialogPresent: @escaping @Sendable () -> Bool = { false }
+        dialogPresent: @escaping @Sendable () -> Bool = { false },
+        // ADR-002 F5 — live AX track-header reader for the mutation-boundary
+        // identity cross-check. Deliberately nil by default so the deterministic
+        // test suite never reaches into live AX; production wires the real reader
+        // at the single dispatch chokepoint (server + saga). When nil the guard
+        // is a no-op — but the target_ref path is only reachable behind the
+        // off-by-default flag, and every production entry point supplies it.
+        liveTrackName: (@Sendable (Int) -> String?)? = nil
     ) async -> CallTool.Result {
         if let projectFailure = await TargetRefResolver.validateProjectReference(
             params,
@@ -65,7 +72,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                     invalidIndexResult: toolInvalidParamsResult(
                         "select requires 'index' or 'name' param",
                         extras: ["operation": "track.select"]
-                    )
+                    ),
+                    liveTrackName: liveTrackName
                 ) {
                 case .success(let resolved):
                     let traceID = await startTraceIfEnabled(command: command)
@@ -158,7 +166,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                 invalidIndexResult: toolInvalidParamsResult(
                     "delete requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.delete"]
-                )
+                ),
+                liveTrackName: liveTrackName
             ) {
             case .success(let resolved):
                 index = resolved.index
@@ -225,7 +234,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                 invalidIndexResult: toolInvalidParamsResult(
                     "duplicate requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.duplicate"]
-                )
+                ),
+                liveTrackName: liveTrackName
             ) {
             case .success(let resolved):
                 index = resolved.index
@@ -291,7 +301,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                 invalidIndexResult: toolInvalidParamsResult(
                     "rename requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.rename"]
-                )
+                ),
+                liveTrackName: liveTrackName
             ) {
             case .success(let resolved):
                 index = resolved.index
@@ -398,6 +409,7 @@ struct TrackDispatcher: OperationTraceDispatching {
                 router: router,
                 cache: cache,
                 targetRegistry: targetRegistry,
+                liveTrackName: liveTrackName,
                 traceID: traceID
             )
             return await finalizeTrace(result, traceID: traceID)
@@ -411,6 +423,7 @@ struct TrackDispatcher: OperationTraceDispatching {
                 router: router,
                 cache: cache,
                 targetRegistry: targetRegistry,
+                liveTrackName: liveTrackName,
                 traceID: traceID
             )
             return await finalizeTrace(result, traceID: traceID)
@@ -424,6 +437,7 @@ struct TrackDispatcher: OperationTraceDispatching {
                 router: router,
                 cache: cache,
                 targetRegistry: targetRegistry,
+                liveTrackName: liveTrackName,
                 traceID: traceID
             )
             return await finalizeTrace(result, traceID: traceID)
@@ -453,7 +467,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                 invalidIndexResult: toolInvalidParamsResult(
                     "arm_only requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.arm_only"]
-                )
+                ),
+                liveTrackName: liveTrackName
             ) {
             case .success(let resolved):
                 index = resolved.index
@@ -584,7 +599,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                 invalidIndexResult: toolInvalidParamsResult(
                     "set_automation requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.set_automation"]
-                )
+                ),
+                liveTrackName: liveTrackName
             ) {
             case .success(let resolved):
                 index = resolved.index
@@ -635,7 +651,8 @@ struct TrackDispatcher: OperationTraceDispatching {
                 invalidIndexResult: toolInvalidParamsResult(
                     "set_instrument requires explicit 'index' (Int ≥ 0)",
                     extras: ["operation": "track.set_instrument"]
-                )
+                ),
+                liveTrackName: liveTrackName
             ) {
             case .success(let resolved):
                 index = resolved.index
@@ -776,6 +793,7 @@ struct TrackDispatcher: OperationTraceDispatching {
         router: ChannelRouter,
         cache: StateCache,
         targetRegistry: TargetRegistry?,
+        liveTrackName: (@Sendable (Int) -> String?)? = nil,
         traceID: TraceID? = nil
     ) async -> CallTool.Result {
         let index: Int
@@ -789,7 +807,8 @@ struct TrackDispatcher: OperationTraceDispatching {
             invalidIndexResult: toolInvalidParamsResult(
                 "\(command) requires explicit 'index' (Int ≥ 0)",
                 extras: ["operation": operation]
-            )
+            ),
+            liveTrackName: liveTrackName
         ) {
         case .success(let resolved):
             index = resolved.index
