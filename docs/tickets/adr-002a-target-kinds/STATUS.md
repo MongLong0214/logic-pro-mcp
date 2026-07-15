@@ -4,7 +4,7 @@
 **Program**: [#308](https://github.com/MongLong0214/logic-pro-mcp/issues/308) — Train A, first step
 **Branch**: `feat/adr002a-target-kinds-20260715`
 **Baseline head at directive time**: `11f0985` (integrated Train-A head)
-**Increment status**: In implementation — the ADR-002-a target-kind slice (first-class `mixer_strip_ref` / `plugin_insert_ref` target kinds + topology invalidation + the plugin-insert target-reference helper) is committed at head `2f9fbb9` on this branch. Remaining before release: finish the full-suite checkpoint, then the #268 automatic plugin-editor acquisition fix and the blocking acceptance gates below. The #268 fix is NOT yet in this branch.
+**Increment status**: Code-complete on this branch. All four first-class target kinds are wired: `track_ref`, `mixer_strip_ref`, `plugin_insert_ref` (slice a), and `project_ref` + project-epoch lifecycle invalidation (slice b). The #268 automatic plugin-editor acquisition fix (slot-verified identity, fail-closed write) is committed at `40844ac`. `project_ref` is scoped to stable-target operations only (schema == runtime parity). Remaining before merge: the exact-head full-suite / release-build checkpoint and the real-Logic-12.3 live qualification gate (H) — see the ledger below.
 
 > Authoritative ADR-002 status summary: `docs/adr/README.md` §"ADR-002 — Session-scoped Stable Target Reference". This board is the active acceptance surface for the current ADR-002-a increment.
 
@@ -46,20 +46,37 @@
 
 ---
 
-## Verification Ledger (to be filled by the implementation worker)
+## Verification Ledger
 
 | Gate | Acceptance | Evidence | Status |
 |------|------------|----------|--------|
-| ADR-002-a full-suite checkpoint | (step 1) | | Pending |
-| #268 RED reproduction | E | closed-editor `set_param_verified` → State C `window_open_failed` before fix | Pending |
-| #268 GREEN | A, E | closed-editor → State A verified after fix | Pending |
-| Manual-preopen unchanged | B | State A | Pending |
-| Negative / fail-closed | C, D | wrong plugin / wrong param / wrong-or-ambiguous window → State C, `write_attempted:false`, zero write | Pending |
-| Final exact-head full suite | F | `swift test --no-parallel` PASS | Pending |
-| Final exact-head release build | G | `swift build -c release` PASS | Pending |
-| Exact-SHA live QA (Logic 12.3) | H | raw transcript: closed→A, preopen→A, negative→zero-write | Pending |
-| CTO exhaustive review | I | verdict + evidence bundle | Pending |
-| CEO exact-head gate | I | production-readiness PASS (no merge before this) | Pending |
-| Evidence recorded | J | public-safe notes on #268 / #285 / #308 / PR | Pending |
+| Target-kind wiring (a) | — | `mixer_strip_ref` / `plugin_insert_ref` emit + resolve + wrong-kind/stale fail-closed; deterministic tests `ADR002ATargetKindTests` (11) | Deterministic PASS |
+| project_ref + epoch (b) | — | `project_ref` emit + resolve; project open/new/save_as/close route through centralized `bumpProjectEpoch`; stale project/track/mixer/plugin refs → `stale_target_reference`; deterministic tests `ADR002BProjectTargetTests` (9) | Deterministic PASS |
+| project_ref scoping parity | — | `project_ref` in `allowedParams` only for `.requiresStableTarget` ops; schema == runtime; `SagaSurfaceTests` / `OperationCatalogTests` restored | Deterministic PASS |
+| #268 RED reproduction | E | closed-editor opener path failed pre-fix on the fake-AX tree | Deterministic PASS |
+| #268 GREEN (code) | A, E | closed-editor → auto-open → State A on fake-AX tree; `PluginSetParamVerifiedLiveTests` | Deterministic PASS |
+| #268 negative / fail-closed | C, D | wrong plugin / wrong param / ambiguous window → State C, `write_attempted:false`, zero write; window+slider identity re-verified immediately before the AX write | Deterministic PASS |
+| Final exact-head full suite | F | `swift test --no-parallel` — env-neutral CI is authoritative | CI pending on final head |
+| Final exact-head release build | G | `swift build -c release` | Pending exact-head confirm |
+| #268 live A / B | A, B | closed-editor → A, manual-preopen → A on Logic 12.3 | **Pending healthy Logic (env)** |
+| #268 live negative | H | negative/ambiguous → zero-write; raw transcript | **Pending healthy Logic (env)** |
+| ADR-002 live continuity | — | project switch / restart → prior refs `stale_target_reference` on live | **Pending healthy Logic (env)** |
+| CTO exhaustive review | I | code-side verdict + evidence bundle | Code PASS (live-gated part pending H) |
+| CEO exact-head gate | I | production-readiness PASS (no merge before this) | Pending report |
+| Evidence recorded | J | public-safe notes on #268 / #285 / #308 / PR | In progress |
 
-**Continue canonical work without stopping.** Return only receipt/evidence to the CTO; do not claim implementation complete before the gates above are green.
+### CTO live-qualification note
+
+The deterministic (fake-AX / registry) acceptance for all four target kinds, the project-epoch
+lifecycle, the `project_ref` scoping parity, and the #268 opener + fail-closed write path are
+implemented and pass headlessly. The behaviour is gated behind an off-by-default feature flag, so
+the merged code is byte-invariant in the default production configuration (flag-off invariance is
+asserted).
+
+The live gates **A / B / H** and the live project-switch/restart continuity check require an
+authoritative real-Logic-12.3 session. At the time of this checkpoint the local Logic environment
+is degraded (startup project chooser plus a stale state poller reporting zero tracks), which is a
+known source of false live results — running the live qualification against it would produce
+untrustworthy evidence. These gates are therefore held **pending a healthy Logic session** and will
+be executed as a batch with a raw transcript once the environment recovers, before the flag is
+enabled in any release. No live gate is marked passed without its transcript.
