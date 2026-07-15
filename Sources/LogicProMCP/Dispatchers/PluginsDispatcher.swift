@@ -54,6 +54,14 @@ struct PluginsDispatcher: OperationTraceDispatching {
         cache: StateCache,
         targetRegistry: TargetRegistry? = nil
     ) async -> CallTool.Result {
+        if let projectFailure = await TargetRefResolver.validateProjectReference(
+            params,
+            targetRegistry: targetRegistry,
+            operation: "plugin.\(command)"
+        ) {
+            return projectFailure
+        }
+
         switch command {
         case "get_inventory":
             // Non-mutating read — not gated by the verified-op serializer. The

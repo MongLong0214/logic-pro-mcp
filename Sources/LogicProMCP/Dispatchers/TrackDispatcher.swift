@@ -34,6 +34,14 @@ struct TrackDispatcher: OperationTraceDispatching {
         targetRegistry: TargetRegistry? = nil,
         dialogPresent: @escaping @Sendable () -> Bool = { false }
     ) async -> CallTool.Result {
+        if let projectFailure = await TargetRefResolver.validateProjectReference(
+            params,
+            targetRegistry: targetRegistry,
+            operation: "track.\(command)"
+        ) {
+            return projectFailure
+        }
+
         if let operation = modalGuardedTrackOperation(for: command), dialogPresent() {
             let traceID = await startTraceIfEnabled(command: command)
             return await finalizeTrace(

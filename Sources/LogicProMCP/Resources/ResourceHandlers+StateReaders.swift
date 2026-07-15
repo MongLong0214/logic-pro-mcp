@@ -470,7 +470,29 @@ extension ResourceHandlers {
         var extras: [String: Any] = ["source": source]
         if let age = lastSavedAgeSec { extras["last_saved_age_sec"] = age }
 
-        let body = encodeJSON(info)
+        var body = encodeJSON(info)
+        if FeatureFlags.adr002TargetRef,
+           let targetRegistry,
+           let projectFilePath = info.filePath?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !projectFilePath.isEmpty {
+            let projectName = info.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !projectName.isEmpty {
+                let epoch = await targetRegistry.currentProjectEpoch
+                let descriptor = TargetDescriptor.project(
+                    name: projectName,
+                    filePath: projectFilePath,
+                    epoch: epoch
+                )
+                let reference = await targetRegistry.bind(
+                    kind: .project,
+                    descriptor: descriptor,
+                    fingerprint: descriptor.fingerprint
+                )
+                var object = (jsonObject(info) as? [String: Any]) ?? [:]
+                object["project_ref"] = reference.rawValue
+                body = encodeJSONObject(object)
+            }
+        }
         if FeatureFlags.adr006VersionedCache {
             extras.merge(versionedCacheExtras(
                 projectEpoch: await targetRegistry?.currentProjectEpoch ?? 0,

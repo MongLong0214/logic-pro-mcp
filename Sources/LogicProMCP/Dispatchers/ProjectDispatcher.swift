@@ -45,6 +45,14 @@ struct ProjectDispatcher: OperationTraceDispatching {
         // inject fakes so the guarded state machine is unit-testable headless.
         exportOptions: ProjectExportExecutor.Options = .live()
     ) async -> CallTool.Result {
+        if let projectFailure = await TargetRefResolver.validateProjectReference(
+            params,
+            targetRegistry: targetRegistry,
+            operation: "project.\(command)"
+        ) {
+            return projectFailure
+        }
+
         func destructiveConfirmation(for command: String) -> (confirmed: Bool, error: CallTool.Result?) {
             switch strictBoolParam(params, "confirmed") {
             case .missing:
@@ -165,7 +173,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             // cache may now reflect the LAST opened project. Clear it on any run
             // that actually opened something, matching open/close semantics.
             if run.projects.contains(where: { $0.opened }) {
-                await cache.clearProjectState()
+                await invalidateProjectState(cache: cache, targetRegistry: targetRegistry)
             }
             do {
                 // HC truthfulness: a run that produced ZERO verified artifacts and
@@ -306,6 +314,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 operation: "project.save_as",
                 params: ["path": path]
             )
+            await invalidateOnSuccess(result, cache: cache, targetRegistry: targetRegistry)
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "close":
@@ -868,7 +877,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
     }
 
     /// v3.1.2 (P0-3) — invalidate cache on successful project lifecycle
-    /// transition (`new` / `open` / `close`). Defensive: only fires when the
+    /// transition (`new` / `open` / `save_as` / `close`). Defensive: only fires when the
     /// underlying channel reports success, so a failed AppleScript leaves
     /// the cache untouched (preserves whatever truth the poller had).
     private static func invalidateOnSuccess(
@@ -877,6 +886,13 @@ struct ProjectDispatcher: OperationTraceDispatching {
         targetRegistry: TargetRegistry?
     ) async {
         guard result.isSuccess else { return }
+        await invalidateProjectState(cache: cache, targetRegistry: targetRegistry)
+    }
+
+    private static func invalidateProjectState(
+        cache: StateCache,
+        targetRegistry: TargetRegistry?
+    ) async {
         await cache.clearProjectState()
         if FeatureFlags.adr002TargetRef {
             await targetRegistry?.bumpProjectEpoch()

@@ -185,7 +185,7 @@ struct OperationCatalogTests {
     ]
 
     private static func expectedAllowedParams(for spec: OperationSpec) -> Set<String> {
-        var expected = spec.allowedParams.intersection(["index", "track"])
+        var expected = spec.allowedParams.intersection(["index", "project_ref", "track"])
         if spec.target == .requiresStableTarget {
             expected.insert("target_ref")
         }
@@ -356,9 +356,9 @@ struct OperationCatalogTests {
             await OperationTraceStore.shared.clear()
             do {
                 let expectedSpecs: [(String, String, Set<String>, ConfirmationPolicy)] = [
-                    ("list_recent_traces", "system.list_recent_traces", ["limit"], .none),
-                    ("get_trace", "system.get_trace", ["trace_id"], .none),
-                    ("clear_traces", "system.clear_traces", ["confirmed"], .l2),
+                    ("list_recent_traces", "system.list_recent_traces", ["limit", "project_ref"], .none),
+                    ("get_trace", "system.get_trace", ["project_ref", "trace_id"], .none),
+                    ("clear_traces", "system.clear_traces", ["confirmed", "project_ref"], .l2),
                 ]
                 #expect(OperationRegistry.specs.count == 107)
                 for (command, operationID, allowedParams, confirmation) in expectedSpecs {
@@ -384,9 +384,9 @@ struct OperationCatalogTests {
                 await OperationTraceStore.shared.complete(traceID)
 
                 let strictCases: [(String, [String: Value], [String])] = [
-                    ("list_recent_traces", ["limit": .int(1)], ["limit"]),
-                    ("get_trace", ["trace_id": .string(traceID.rawValue)], ["trace_id"]),
-                    ("clear_traces", ["confirmed": .bool(true)], ["confirmed"]),
+                    ("list_recent_traces", ["limit": .int(1)], ["limit", "project_ref"]),
+                    ("get_trace", ["trace_id": .string(traceID.rawValue)], ["project_ref", "trace_id"]),
+                    ("clear_traces", ["confirmed": .bool(true)], ["confirmed", "project_ref"]),
                 ]
                 for (command, validParams, allowedParams) in strictCases {
                     var params = validParams

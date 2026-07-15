@@ -446,6 +446,14 @@ actor LogicProServer {
                     )
                 }
 
+                if let projectFailure = await TargetRefResolver.validateProjectReference(
+                    cmdParams,
+                    targetRegistry: targetRegistry,
+                    operation: "\(name).\(command)"
+                ) {
+                    return projectFailure
+                }
+
                 await cache.recordToolAccess()
 
                 // #112: every tool dispatch runs under a server-side deadline.

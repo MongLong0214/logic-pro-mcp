@@ -340,6 +340,7 @@ enum OperationRegistry {
     ) -> Set<String> {
         var allowed = commandSpecific
             .union(legacyIgnoredParamsByOperation[operationID] ?? [])
+        allowed.insert("project_ref")
         if target == .requiresStableTarget {
             allowed.insert("target_ref")
         }

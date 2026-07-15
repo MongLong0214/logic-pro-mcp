@@ -23,6 +23,14 @@ struct MixerDispatcher: OperationTraceDispatching {
         cache: StateCache,
         targetRegistry: TargetRegistry? = nil
     ) async -> CallTool.Result {
+        if let projectFailure = await TargetRefResolver.validateProjectReference(
+            params,
+            targetRegistry: targetRegistry,
+            operation: "mixer.\(command)"
+        ) {
+            return projectFailure
+        }
+
         switch command {
         case "set_volume":
             // RB-1.a (2026-05-08 enterprise review): pre-fix this defaulted

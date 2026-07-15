@@ -23,9 +23,43 @@ enum TargetKind: String, Codable, Sendable {
 struct TargetDescriptor: Hashable, Sendable {
     let trackIndex: Int
     let trackName: String
+    let projectName: String?
+    let projectFilePath: String?
+    let projectEpoch: UInt64?
+
+    init(
+        trackIndex: Int,
+        trackName: String,
+        projectName: String? = nil,
+        projectFilePath: String? = nil,
+        projectEpoch: UInt64? = nil
+    ) {
+        self.trackIndex = trackIndex
+        self.trackName = trackName
+        self.projectName = projectName
+        self.projectFilePath = projectFilePath
+        self.projectEpoch = projectEpoch
+    }
+
+    static func project(name: String, filePath: String, epoch: UInt64) -> TargetDescriptor {
+        TargetDescriptor(
+            trackIndex: -1,
+            trackName: "",
+            projectName: name,
+            projectFilePath: filePath,
+            projectEpoch: epoch
+        )
+    }
 
     var fingerprint: String {
-        "\(trackIndex):\(trackName.utf8.count):\(trackName)"
+        if let projectName, let projectFilePath, let projectEpoch {
+            return "project:name=\(projectName.utf8.count):\(projectName)|path=\(projectFilePath.utf8.count):\(projectFilePath)|epoch=\(projectEpoch)"
+        }
+        return "\(trackIndex):\(trackName.utf8.count):\(trackName)"
+    }
+
+    var isProjectIdentity: Bool {
+        projectName != nil && projectFilePath != nil && projectEpoch != nil
     }
 }
 
@@ -45,6 +79,7 @@ actor TargetRegistry {
     private var projectEpoch: UInt64 = 0
     private var topologyGeneration: UInt64 = 0
     private var bindings: [TargetReference: TargetBinding] = [:]
+    private var currentProjectDescriptor: TargetDescriptor?
 
     init(serverSessionID: UUID = UUID()) {
         self.serverSessionID = serverSessionID
@@ -52,12 +87,17 @@ actor TargetRegistry {
 
     var currentProjectEpoch: UInt64 { projectEpoch }
     var currentTopologyGeneration: UInt64 { topologyGeneration }
+    var currentProjectIdentity: TargetDescriptor? { currentProjectDescriptor }
 
     func bind(
         kind: TargetKind,
         descriptor: TargetDescriptor,
         fingerprint: String
     ) -> TargetReference {
+        if kind == .project, currentProjectDescriptor != descriptor {
+            currentProjectDescriptor = descriptor
+            bindings = bindings.filter { $0.value.kind != .project }
+        }
         if let binding = bindings.values.first(where: {
             $0.kind == kind
                 && $0.serverSessionID == serverSessionID
@@ -83,6 +123,17 @@ actor TargetRegistry {
             createdAt: ContinuousClock().now
         )
         return reference
+    }
+
+    func resolveCurrentProject(_ reference: TargetReference) -> TargetBinding? {
+        guard let binding = resolve(reference),
+              binding.kind == .project,
+              let currentProjectDescriptor,
+              binding.descriptor == currentProjectDescriptor,
+              binding.observedFingerprint == currentProjectDescriptor.fingerprint else {
+            return nil
+        }
+        return binding
     }
 
     func resolve(_ reference: TargetReference) -> TargetBinding? {
@@ -137,11 +188,13 @@ actor TargetRegistry {
     func bumpProjectEpoch() {
         projectEpoch += 1
         bindings.removeAll(keepingCapacity: true)
+        currentProjectDescriptor = nil
     }
 
     func bumpTopologyGeneration() {
         topologyGeneration += 1
         bindings.removeAll(keepingCapacity: true)
+        currentProjectDescriptor = nil
     }
 
     private func hasValidFormat(_ reference: TargetReference) -> Bool {

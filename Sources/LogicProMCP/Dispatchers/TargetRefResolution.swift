@@ -27,6 +27,25 @@ enum TargetRefResolver {
         case failure(CallTool.Result)
     }
 
+    static func validateProjectReference(
+        _ params: [String: Value],
+        targetRegistry: TargetRegistry?,
+        operation: String
+    ) async -> CallTool.Result? {
+        guard let value = params["project_ref"] else { return nil }
+        let rawReference = value.stringValue?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard FeatureFlags.adr002TargetRef, let targetRegistry else {
+            return projectReferenceUnavailableResult(rawReference, operation: operation)
+        }
+        guard let rawReference,
+              !rawReference.isEmpty,
+              await targetRegistry.resolveCurrentProject(TargetReference(rawValue: rawReference)) != nil else {
+            return staleProjectReferenceResult(rawReference, operation: operation)
+        }
+        return nil
+    }
+
     /// Resolve the target track index for a mutation.
     ///
     /// `target_ref` present:
@@ -54,6 +73,13 @@ enum TargetRefResolver {
         invalidIndexResult: @autoclosure () -> CallTool.Result,
         acceptedKinds: [TargetKind]? = nil
     ) async -> Outcome {
+        if let projectFailure = await validateProjectReference(
+            params,
+            targetRegistry: targetRegistry,
+            operation: operation
+        ) {
+            return .failure(projectFailure)
+        }
         if params["target_ref"] != nil {
             let rawReference = params["target_ref"]?.stringValue?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -178,14 +204,32 @@ enum TargetRefResolver {
     /// binding, or that no longer identifies the requested current track. Mirrors
     /// the exact shape `logic_tracks rename` has always emitted, with `operation`
     /// parameterised so each surface reports its own op.
-    static func staleTargetReferenceResult(_ rawReference: String?, operation: String) -> CallTool.Result {
+    static func staleTargetReferenceResult(
+        _ rawReference: String?,
+        operation: String,
+        referenceKey: String = "target_ref",
+        hint: String = "target_ref is stale or does not identify the requested current track"
+    ) -> CallTool.Result {
         toolStateCResult(
             .staleTargetReference,
-            hint: "target_ref is stale or does not identify the requested current track",
+            hint: hint,
             extras: [
                 "operation": operation,
-                "target_ref": rawReference ?? "",
+                referenceKey: rawReference ?? "",
+                "write_attempted": false,
             ]
+        )
+    }
+
+    private static func staleProjectReferenceResult(
+        _ rawReference: String?,
+        operation: String
+    ) -> CallTool.Result {
+        staleTargetReferenceResult(
+            rawReference,
+            operation: operation,
+            referenceKey: "project_ref",
+            hint: "project_ref is stale or does not identify the current project"
         )
     }
 
@@ -199,6 +243,21 @@ enum TargetRefResolver {
             extras: [
                 "operation": operation,
                 "target_ref": rawReference ?? "",
+                "write_attempted": false,
+            ]
+        )
+    }
+
+    private static func projectReferenceUnavailableResult(
+        _ rawReference: String?,
+        operation: String
+    ) -> CallTool.Result {
+        toolStateCResult(
+            .targetRefUnavailable,
+            hint: "project_ref requires LOGIC_MCP_ADR002_TARGET_REF=1 and an active project identity",
+            extras: [
+                "operation": operation,
+                "project_ref": rawReference ?? "",
                 "write_attempted": false,
             ]
         )
