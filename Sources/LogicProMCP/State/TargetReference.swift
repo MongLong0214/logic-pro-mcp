@@ -69,6 +69,12 @@ struct TargetDescriptor: Hashable, Sendable {
             return nil
         }
         let nameStart = secondSeparator + 1
+        guard nameStart <= bytes.count,
+              nameLength >= 0,
+              nameLength <= bytes.count - nameStart
+        else {
+            return nil
+        }
         let suffixStart = nameStart + nameLength
         let marker = Array("|insert=".utf8)
         guard suffixStart <= bytes.count,

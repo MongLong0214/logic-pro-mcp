@@ -69,6 +69,8 @@
 
 Direct track reorder/delete and plugin-slot replacement in Logic's UI are bounded by the state-cache polling interval: fingerprint drift fails closed after the next poll, while a stale cache can match during that latency window. Server-mediated mutations bump the relevant generation immediately; verified track rename also updates the cache before rebind, while other topology writes rely on the next poll after invalidation. Live H must explicitly cover UI reorder followed by stale-ref mutation and require `stale_target_reference`; it is not a deterministic or live pass until that case is observed.
 
+The resolver also performs a final registry recheck immediately before returning a resolved mutation target, including `project_ref` validation. A residual non-atomic window remains between that return and the live AX write because registry validation and the external AX write cannot be one atomic operation; live H must switch projects in that window and require fail-closed `stale_target_reference` rather than treating the registry check as a write lock.
+
 ### CTO live-qualification note
 
 The deterministic (fake-AX / registry) acceptance for all four target kinds, the project-epoch

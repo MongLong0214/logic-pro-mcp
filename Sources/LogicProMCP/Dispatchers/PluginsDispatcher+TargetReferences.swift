@@ -5,7 +5,8 @@ extension PluginsDispatcher {
     static func addInventoryTargetReferences(
         to result: CallTool.Result,
         cache: StateCache,
-        targetRegistry: TargetRegistry?
+        targetRegistry: TargetRegistry?,
+        targetSnapshot: TargetRegistrySnapshot? = nil
     ) async -> CallTool.Result {
         guard FeatureFlags.adr002TargetRef,
               let targetRegistry,
@@ -18,6 +19,12 @@ extension PluginsDispatcher {
             return result
         }
 
+        let snapshot: TargetRegistrySnapshot
+        if let targetSnapshot {
+            snapshot = targetSnapshot
+        } else {
+            snapshot = await targetRegistry.currentSnapshot
+        }
         let tracks = await cache.getTracks()
         let trackName = tracks.first(where: { $0.id == track })?.name
             ?? "Track \(track + 1)"
@@ -34,12 +41,14 @@ extension PluginsDispatcher {
                 insert: insert,
                 pluginIdentity: pluginIdentity
             )
-            let reference = await targetRegistry.bind(
+            guard let reference = await targetRegistry.bind(
                 kind: .pluginInsert,
                 descriptor: descriptor,
                 fingerprint: fingerprint,
-                pluginInsertIndex: insert
-            )
+                snapshot: snapshot
+            ) else {
+                continue
+            }
             plugins[index]["plugin_insert_ref"] = reference.rawValue
             changed = true
         }

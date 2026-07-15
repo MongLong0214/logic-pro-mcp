@@ -73,11 +73,18 @@ struct PluginsDispatcher: OperationTraceDispatching {
             if let track = intParamOrNil(params, "track", "track_index", "index") {
                 inventoryParams["track"] = String(track)
             }
+            let targetSnapshot: TargetRegistrySnapshot?
+            if FeatureFlags.adr002TargetRef, let targetRegistry {
+                targetSnapshot = await targetRegistry.currentSnapshot
+            } else {
+                targetSnapshot = nil
+            }
             let result = await routedTextResult(router, operation: "plugin.get_inventory", params: inventoryParams)
             return await addInventoryTargetReferences(
                 to: result,
                 cache: cache,
-                targetRegistry: targetRegistry
+                targetRegistry: targetRegistry,
+                targetSnapshot: targetSnapshot
             )
 
         case "set_param_verified":

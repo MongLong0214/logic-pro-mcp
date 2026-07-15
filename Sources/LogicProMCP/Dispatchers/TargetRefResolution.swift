@@ -71,7 +71,8 @@ enum TargetRefResolver {
         indexKeys: [String] = ["index", "track"],
         requiredKind: TargetKind = .track,
         invalidIndexResult: @autoclosure () -> CallTool.Result,
-        acceptedKinds: [TargetKind]? = nil
+        acceptedKinds: [TargetKind]? = nil,
+        beforeFinalValidation: (@Sendable () async -> Void)? = nil
     ) async -> Outcome {
         if let projectFailure = await validateProjectReference(
             params,
@@ -112,6 +113,17 @@ enum TargetRefResolver {
             else {
                 return .failure(staleTargetReferenceResult(rawReference, operation: operation))
             }
+            await beforeFinalValidation?()
+            if let projectFailure = await validateProjectReference(
+                params,
+                targetRegistry: targetRegistry,
+                operation: operation
+            ) {
+                return .failure(projectFailure)
+            }
+            guard await targetRegistry.resolve(binding.reference) != nil else {
+                return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+            }
             return .success(Resolved(
                 index: binding.descriptor.trackIndex,
                 reference: binding.reference,
@@ -121,6 +133,13 @@ enum TargetRefResolver {
 
         guard let requestedIndex = intParamOrNil(params, keys: indexKeys), requestedIndex >= 0 else {
             return .failure(invalidIndexResult())
+        }
+        if let projectFailure = await validateProjectReference(
+            params,
+            targetRegistry: targetRegistry,
+            operation: operation
+        ) {
+            return .failure(projectFailure)
         }
         return .success(Resolved(index: requestedIndex, reference: nil, binding: nil))
     }

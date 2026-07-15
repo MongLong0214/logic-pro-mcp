@@ -203,6 +203,37 @@ struct ADR002ATargetKindTests {
     }
 
     @Test
+    func testPluginInventorySkipsRefsWhenSnapshotTurnsStaleBeforeBind() async throws {
+        let inventory = HonestContract.encodeV2StateA(extras: [
+            "operation": "logic_plugins.get_inventory",
+            "track": 2,
+            "complete": true,
+            "plugins": [[
+                "insert": 0,
+                "read_status": "ok",
+                "occupied": true,
+                "name": "Gain",
+                "plugin_id": "logic.stock.effect.gain",
+            ]],
+        ])
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let cache = await cacheWithTracks()
+            let registry = TargetRegistry()
+            let snapshot = await registry.currentSnapshot
+            await registry.bumpTopologyGeneration()
+
+            let result = await PluginsDispatcher.addInventoryTargetReferences(
+                to: toolTextResult(inventory),
+                cache: cache,
+                targetRegistry: registry,
+                targetSnapshot: snapshot
+            )
+            let plugins = try #require(object(result)["plugins"] as? [[String: Any]])
+            #expect(plugins[0]["plugin_insert_ref"] == nil)
+        }
+    }
+
+    @Test
     func testMixerStripAndPluginInsertRefsResolveAndEchoFingerprintEvidence() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let cache = await cacheWithTracks()
@@ -337,6 +368,16 @@ struct ADR002ATargetKindTests {
 
             #expect(result.isError == false)
             #expect((await channels[0].operations()).first?.1["insert"] == "0")
+        }
+    }
+
+    @Test
+    func testMalformedPluginInsertFingerprintReturnsNilWithoutTrap() {
+        for fingerprint in [
+            "0:-1:x|insert=0|plugin=G",
+            "0:9223372036854775807:x|insert=0|plugin=G",
+        ] {
+            #expect(TargetDescriptor.pluginInsertIndex(from: fingerprint) == nil)
         }
     }
 

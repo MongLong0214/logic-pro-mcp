@@ -352,6 +352,52 @@ struct TargetRefResolutionTests {
     }
 
     @Test
+    func testMutationAfterEpochBumpFailsClosedBeforeWrite() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
+            let (router, channels) = await makeRouter()
+
+            await registry.bumpProjectEpoch()
+            let result = await TrackDispatcher.handle(
+                command: "rename",
+                params: [
+                    "target_ref": .string(reference.rawValue),
+                    "name": .string("Wrong Project"),
+                ],
+                router: router,
+                cache: cache,
+                targetRegistry: registry
+            )
+
+            #expect(errorCode(result) == "stale_target_reference")
+            #expect(await allOps(channels).isEmpty)
+        }
+    }
+
+    @Test
+    func testResolverRejectsEpochBumpAfterCacheReadBeforeSuccess() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
+            let outcome = await TargetRefResolver.resolveMutationIndex(
+                ["target_ref": .string(reference.rawValue)],
+                targetRegistry: registry,
+                cache: cache,
+                operation: "track.rename",
+                invalidIndexResult: dummyInvalid(),
+                beforeFinalValidation: {
+                    await registry.bumpProjectEpoch()
+                }
+            )
+
+            guard case .failure(let result) = outcome else {
+                Issue.record("expected stale target reference")
+                return
+            }
+            #expect(errorCode(result) == "stale_target_reference")
+        }
+    }
+
+    @Test
     func testResolverFlagOffNegativeIndexFailsInvalidParams() async {
         await FeatureFlags.withAdr002TargetRefForTests(false) {
             let outcome = await TargetRefResolver.resolveMutationIndex(
