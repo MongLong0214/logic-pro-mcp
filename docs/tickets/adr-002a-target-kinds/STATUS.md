@@ -65,6 +65,10 @@
 | CEO exact-head gate | I | production-readiness PASS (no merge before this) | Pending report |
 | Evidence recorded | J | public-safe notes on #268 / #285 / #308 / PR | In progress |
 
+### External Logic UI edit boundary
+
+Direct track reorder/delete and plugin-slot replacement in Logic's UI are bounded by the state-cache polling interval: fingerprint drift fails closed after the next poll, while a stale cache can match during that latency window. Server-mediated mutations bump the relevant generation immediately; verified track rename also updates the cache before rebind, while other topology writes rely on the next poll after invalidation. Live H must explicitly cover UI reorder followed by stale-ref mutation and require `stale_target_reference`; it is not a deterministic or live pass until that case is observed.
+
 ### CTO live-qualification note
 
 The deterministic (fake-AX / registry) acceptance for all four target kinds, the project-epoch

@@ -298,6 +298,49 @@ struct ADR002ATargetKindTests {
     }
 
     @Test
+    func testPluginInsertRefTrackNameDelimiterCannotChangeInsertIndex() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let cache = StateCache()
+            await cache.updateTracks([
+                TrackState(id: 2, name: "X|insert=7", type: .audio),
+            ])
+            let registry = TargetRegistry()
+            let descriptor = TargetDescriptor(trackIndex: 2, trackName: "X|insert=7")
+            let fingerprint = customPluginFingerprint(
+                index: 2,
+                name: "X|insert=7",
+                insert: 0,
+                plugin: "logic.stock.effect.gain"
+            )
+            let reference = await registry.bind(
+                kind: .pluginInsert,
+                descriptor: descriptor,
+                fingerprint: fingerprint
+            )
+            let (router, channels) = await router()
+
+            let result = await PluginsDispatcher.handle(
+                command: "set_param_verified",
+                params: [
+                    "target_ref": .string(reference.rawValue),
+                    "plugin": .string("logic.stock.effect.gain"),
+                    "param": .string("gain_db"),
+                    "value": .double(0.5),
+                    "unit": .string("db"),
+                    "mode": .string("duplicate_applyback"),
+                    "project_expected_path": .string("/tmp/project.logicx"),
+                ],
+                router: router,
+                cache: cache,
+                targetRegistry: registry
+            )
+
+            #expect(result.isError == false)
+            #expect((await channels[0].operations()).first?.1["insert"] == "0")
+        }
+    }
+
+    @Test
     func testWrongKindReferencesFailClosedBeforeMixerPluginOrTrackWrite() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let cache = await cacheWithTracks()

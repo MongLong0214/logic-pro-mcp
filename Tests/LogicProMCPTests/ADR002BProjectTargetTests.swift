@@ -123,6 +123,27 @@ struct ADR002BProjectTargetTests {
     }
 
     @Test
+    func projectSaveAsFlagOffPreservesCacheState() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
+            let cache = StateCache()
+            await cache.updateTracks([
+                TrackState(id: 0, name: "Existing", type: .audio),
+            ])
+            let (router, _) = await router(id: .appleScript)
+
+            let result = await ProjectDispatcher.handle(
+                command: "save_as",
+                params: ["path": .string("/tmp/adr002b-flag-off.logicx")],
+                router: router,
+                cache: cache
+            )
+
+            #expect(result.isError == false)
+            #expect(await cache.getTracks().map(\.name) == ["Existing"])
+        }
+    }
+
+    @Test
     func projectCloseBumpsProjectEpochExactlyOnce() async throws {
         try await assertLifecycleBump(
             command: "close",

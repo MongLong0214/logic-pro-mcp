@@ -58,6 +58,30 @@ struct TargetDescriptor: Hashable, Sendable {
         return "\(trackIndex):\(trackName.utf8.count):\(trackName)"
     }
 
+    static func pluginInsertIndex(from fingerprint: String) -> Int? {
+        let bytes = Array(fingerprint.utf8)
+        guard let firstSeparator = bytes.firstIndex(of: 58),
+              let secondSeparator = bytes[(firstSeparator + 1)...].firstIndex(of: 58),
+              firstSeparator > 0,
+              secondSeparator > firstSeparator + 1,
+              let nameLength = Int(String(decoding: bytes[(firstSeparator + 1)..<secondSeparator], as: UTF8.self))
+        else {
+            return nil
+        }
+        let nameStart = secondSeparator + 1
+        let suffixStart = nameStart + nameLength
+        let marker = Array("|insert=".utf8)
+        guard suffixStart <= bytes.count,
+              bytes[suffixStart...].starts(with: marker)
+        else {
+            return nil
+        }
+        let tokenStart = suffixStart + marker.count
+        let tokenEnd = bytes[tokenStart...].firstIndex(of: 124) ?? bytes.count
+        guard tokenStart < tokenEnd else { return nil }
+        return Int(String(decoding: bytes[tokenStart..<tokenEnd], as: UTF8.self))
+    }
+
     var isProjectIdentity: Bool {
         projectName != nil && projectFilePath != nil && projectEpoch != nil
     }
@@ -71,7 +95,13 @@ struct TargetBinding: Sendable {
     let topologyGeneration: UInt64
     let descriptor: TargetDescriptor
     let observedFingerprint: String
+    let pluginInsertIndex: Int?
     let createdAt: ContinuousClock.Instant
+}
+
+struct TargetRegistrySnapshot: Equatable, Sendable {
+    let projectEpoch: UInt64
+    let topologyGeneration: UInt64
 }
 
 actor TargetRegistry {
@@ -88,11 +118,18 @@ actor TargetRegistry {
     var currentProjectEpoch: UInt64 { projectEpoch }
     var currentTopologyGeneration: UInt64 { topologyGeneration }
     var currentProjectIdentity: TargetDescriptor? { currentProjectDescriptor }
+    var currentSnapshot: TargetRegistrySnapshot {
+        TargetRegistrySnapshot(
+            projectEpoch: projectEpoch,
+            topologyGeneration: topologyGeneration
+        )
+    }
 
     func bind(
         kind: TargetKind,
         descriptor: TargetDescriptor,
-        fingerprint: String
+        fingerprint: String,
+        pluginInsertIndex: Int? = nil
     ) -> TargetReference {
         if kind == .project, currentProjectDescriptor != descriptor {
             currentProjectDescriptor = descriptor
@@ -120,9 +157,25 @@ actor TargetRegistry {
             topologyGeneration: topologyGeneration,
             descriptor: descriptor,
             observedFingerprint: fingerprint,
+            pluginInsertIndex: kind == .pluginInsert
+                ? pluginInsertIndex ?? TargetDescriptor.pluginInsertIndex(from: fingerprint)
+                : nil,
             createdAt: ContinuousClock().now
         )
         return reference
+    }
+
+    func bind(
+        kind: TargetKind,
+        descriptor: TargetDescriptor,
+        fingerprint: String,
+        snapshot: TargetRegistrySnapshot
+    ) -> TargetReference? {
+        guard snapshot.projectEpoch == projectEpoch,
+              snapshot.topologyGeneration == topologyGeneration else {
+            return nil
+        }
+        return bind(kind: kind, descriptor: descriptor, fingerprint: fingerprint)
     }
 
     func resolveCurrentProject(_ reference: TargetReference) -> TargetBinding? {
@@ -181,6 +234,7 @@ actor TargetRegistry {
             topologyGeneration: existing.topologyGeneration,
             descriptor: descriptor,
             observedFingerprint: descriptor.fingerprint,
+            pluginInsertIndex: existing.pluginInsertIndex,
             createdAt: existing.createdAt
         )
     }

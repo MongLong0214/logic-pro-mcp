@@ -314,7 +314,9 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 operation: "project.save_as",
                 params: ["path": path]
             )
-            await invalidateOnSuccess(result, cache: cache, targetRegistry: targetRegistry)
+            if FeatureFlags.adr002TargetRef {
+                await invalidateOnSuccess(result, cache: cache, targetRegistry: targetRegistry)
+            }
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "close":

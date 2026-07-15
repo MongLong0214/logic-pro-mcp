@@ -134,11 +134,7 @@ enum TargetRefResolver {
     }
 
     static func pluginInsertIndex(from fingerprint: String) -> Int? {
-        guard let range = fingerprint.range(of: "|insert=") else { return nil }
-        let remainder = String(fingerprint[range.upperBound...])
-        let token = remainder.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false).first
-        guard let token else { return nil }
-        return Int(String(token))
+        TargetDescriptor.pluginInsertIndex(from: fingerprint)
     }
 
     private static func bindingFingerprintMatches(_ binding: TargetBinding) -> Bool {
@@ -149,10 +145,10 @@ enum TargetRefResolver {
         case .track, .mixerStrip:
             return binding.observedFingerprint == descriptorFingerprint
         case .pluginInsert:
-            guard binding.observedFingerprint.hasPrefix("\(descriptorFingerprint)|insert="),
-                  let insert = pluginInsertIndex(from: binding.observedFingerprint),
+            guard let insert = binding.pluginInsertIndex,
                   insert >= 0,
-                  binding.observedFingerprint.contains("|plugin=") else {
+                  pluginInsertIndex(from: binding.observedFingerprint) == insert,
+                  binding.observedFingerprint.hasPrefix("\(descriptorFingerprint)|insert=\(insert)|plugin=") else {
                 return false
             }
             return true

@@ -147,6 +147,12 @@ extension ResourceHandlers {
         targetRegistry: TargetRegistry? = nil,
         fileReader: LogicProjectFileReader.Runtime
     ) async throws -> ReadResource.Result {
+        let targetSnapshot: TargetRegistrySnapshot?
+        if FeatureFlags.adr002TargetRef, let targetRegistry {
+            targetSnapshot = await targetRegistry.currentSnapshot
+        } else {
+            targetSnapshot = nil
+        }
         var liveTracks = await cache.getTracks()
         let cacheFetchedAt = await cache.getTracksFetchedAt()
         let axOccluded = await cache.getAXOccluded()
@@ -183,16 +189,19 @@ extension ResourceHandlers {
         }
 
         let body: String
-        if FeatureFlags.adr002TargetRef, let targetRegistry {
+        if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot {
             var payload: [[String: Any]] = []
             payload.reserveCapacity(tracksOut.count)
             for track in tracksOut {
                 let descriptor = TargetDescriptor(trackIndex: track.id, trackName: track.name)
-                let reference = await targetRegistry.bind(
+                guard let reference = await targetRegistry.bind(
                     kind: .track,
                     descriptor: descriptor,
-                    fingerprint: descriptor.fingerprint
-                )
+                    fingerprint: descriptor.fingerprint,
+                    snapshot: targetSnapshot
+                ) else {
+                    throw MCPError.internalError("track target snapshot became stale during resource emission")
+                }
                 var object = jsonObject(track) as? [String: Any] ?? [:]
                 object["track_ref"] = reference.rawValue
                 payload.append(object)
@@ -288,12 +297,18 @@ extension ResourceHandlers {
         uri: String,
         targetRegistry: TargetRegistry? = nil
     ) async throws -> ReadResource.Result {
+        let targetSnapshot: TargetRegistrySnapshot?
+        if FeatureFlags.adr002TargetRef, let targetRegistry {
+            targetSnapshot = await targetRegistry.currentSnapshot
+        } else {
+            targetSnapshot = nil
+        }
         let strips = await cache.getChannelStrips()
         let conn = await cache.getMCUConnection()
         let fetchedAt = await cache.getMixerFetchedAt()
         let axOccluded = await cache.getAXOccluded()
         let stripsJSON: String
-        if FeatureFlags.adr002TargetRef, let targetRegistry {
+        if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot {
             let tracks = await cache.getTracks()
             var payload: [[String: Any]] = []
             payload.reserveCapacity(strips.count)
@@ -305,11 +320,14 @@ extension ResourceHandlers {
                     trackIndex: strip.trackIndex,
                     trackName: trackName
                 )
-                let reference = await targetRegistry.bind(
+                guard let reference = await targetRegistry.bind(
                     kind: .mixerStrip,
                     descriptor: descriptor,
-                    fingerprint: descriptor.fingerprint
-                )
+                    fingerprint: descriptor.fingerprint,
+                    snapshot: targetSnapshot
+                ) else {
+                    throw MCPError.internalError("mixer target snapshot became stale during resource emission")
+                }
                 object["mixer_strip_ref"] = reference.rawValue
                 payload.append(object)
             }
@@ -367,6 +385,12 @@ extension ResourceHandlers {
         fileReader: LogicProjectFileReader.Runtime,
         targetRegistry: TargetRegistry? = nil
     ) async throws -> ReadResource.Result {
+        let targetSnapshot: TargetRegistrySnapshot?
+        if FeatureFlags.adr002TargetRef, let targetRegistry {
+            targetSnapshot = await targetRegistry.currentSnapshot
+        } else {
+            targetSnapshot = nil
+        }
         let snapshot = await cache.auditSnapshot()
         let cached = snapshot.project
         let projectFetchedAt = snapshot.projectFetchedAt
@@ -473,21 +497,24 @@ extension ResourceHandlers {
         var body = encodeJSON(info)
         if FeatureFlags.adr002TargetRef,
            let targetRegistry,
+           let targetSnapshot,
            let projectFilePath = info.filePath?.trimmingCharacters(in: .whitespacesAndNewlines),
            !projectFilePath.isEmpty {
             let projectName = info.name.trimmingCharacters(in: .whitespacesAndNewlines)
             if !projectName.isEmpty {
-                let epoch = await targetRegistry.currentProjectEpoch
                 let descriptor = TargetDescriptor.project(
                     name: projectName,
                     filePath: projectFilePath,
-                    epoch: epoch
+                    epoch: targetSnapshot.projectEpoch
                 )
-                let reference = await targetRegistry.bind(
+                guard let reference = await targetRegistry.bind(
                     kind: .project,
                     descriptor: descriptor,
-                    fingerprint: descriptor.fingerprint
-                )
+                    fingerprint: descriptor.fingerprint,
+                    snapshot: targetSnapshot
+                ) else {
+                    throw MCPError.internalError("project target snapshot became stale during resource emission")
+                }
                 var object = (jsonObject(info) as? [String: Any]) ?? [:]
                 object["project_ref"] = reference.rawValue
                 body = encodeJSONObject(object)
@@ -597,6 +624,12 @@ extension ResourceHandlers {
         uri: String,
         targetRegistry: TargetRegistry? = nil
     ) async throws -> ReadResource.Result {
+        let targetSnapshot: TargetRegistrySnapshot?
+        if FeatureFlags.adr002TargetRef, let targetRegistry {
+            targetSnapshot = await targetRegistry.currentSnapshot
+        } else {
+            targetSnapshot = nil
+        }
         guard let strip = await cache.getChannelStrip(at: index) else {
             // Mixer strips are keyed by `trackIndex` (not array position), so the
             // valid set is the actual trackIndex values — possibly non-contiguous.
@@ -616,7 +649,7 @@ extension ResourceHandlers {
         let isoPart = (iso as? String).map { "\"\($0)\"" } ?? "null"
         let dataSource = mixerDataSource(fetchedAt: fetchedAt)
         let stripJSON: String
-        if FeatureFlags.adr002TargetRef, let targetRegistry {
+        if FeatureFlags.adr002TargetRef, let targetRegistry, let targetSnapshot {
             var object = jsonObject(strip) as? [String: Any] ?? [:]
             let tracks = await cache.getTracks()
             let trackName = tracks.first(where: { $0.id == strip.trackIndex })?.name
@@ -625,11 +658,14 @@ extension ResourceHandlers {
                 trackIndex: strip.trackIndex,
                 trackName: trackName
             )
-            let reference = await targetRegistry.bind(
+            guard let reference = await targetRegistry.bind(
                 kind: .mixerStrip,
                 descriptor: descriptor,
-                fingerprint: descriptor.fingerprint
-            )
+                fingerprint: descriptor.fingerprint,
+                snapshot: targetSnapshot
+            ) else {
+                throw MCPError.internalError("mixer target snapshot became stale during resource emission")
+            }
             object["mixer_strip_ref"] = reference.rawValue
             stripJSON = encodeJSONObject(object)
         } else {

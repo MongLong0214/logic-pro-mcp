@@ -64,6 +64,7 @@ Kernel increments merged to `main`. State-changing pilot paths stay behind their
 - **Active acceptance addendum (CTO directive, binding):** issue #268 (automatic plugin-editor acquisition for `set_param_verified`) is pulled forward into the current ADR-002-a increment's acceptance — see `docs/tickets/adr-002a-target-kinds/STATUS.md`. The #268 fix must land before the ADR-002-a release build and is never deferred past #285 or to a later debt pass.
 - `TargetRegistry` actor (server session + project epoch + topology generation + live fingerprint), opaque `track_ref` on the tracks resource, `tracks.rename` piloted end-to-end behind `FeatureFlags.adr002TargetRef`.
 - Live negative-qualification against real Logic Pro: valid ref → State A verified; stale-after-topology-bump / bogus / target_ref-index mismatch → State C `stale_target_reference` with zero writes (neighbor track provably untouched).
+- **Bounded external-edit limit:** direct track reorder/delete or plugin-slot replacement in Logic's UI is detected by fingerprint drift only after the next state-cache poll; until that poll, a stale reference can match the stale cache. Server-mediated mutations bump the relevant generation immediately; verified track rename also updates the cache before rebind, while other topology writes rely on the next poll after invalidation. Live H must include UI reorder followed by stale-ref use and require fail-closed `stale_target_reference`.
 - Merged: #318.
 
 ### ADR-005 — Operation Trace and Support Bundle (`In Implementation`)

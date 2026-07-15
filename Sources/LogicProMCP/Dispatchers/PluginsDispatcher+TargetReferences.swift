@@ -37,7 +37,8 @@ extension PluginsDispatcher {
             let reference = await targetRegistry.bind(
                 kind: .pluginInsert,
                 descriptor: descriptor,
-                fingerprint: fingerprint
+                fingerprint: fingerprint,
+                pluginInsertIndex: insert
             )
             plugins[index]["plugin_insert_ref"] = reference.rawValue
             changed = true
@@ -66,7 +67,7 @@ extension PluginsDispatcher {
         guard let binding = resolved.binding, binding.kind == .pluginInsert else {
             return nil
         }
-        guard let insert = TargetRefResolver.pluginInsertIndex(from: binding.observedFingerprint) else {
+        guard let insert = binding.pluginInsertIndex else {
             return TargetRefResolver.staleTargetReferenceResult(
                 params["target_ref"]?.stringValue,
                 operation: operation
