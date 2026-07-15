@@ -72,6 +72,7 @@ struct OperationRegistryCoverageTests {
             .mixerSetVolume,
             .mixerSetPan,
             .pluginsSetParamVerified,
+            .pluginsInsertVerified,
             .tracksSelect,
             .tracksDelete,
             .tracksDuplicate,
@@ -87,7 +88,7 @@ struct OperationRegistryCoverageTests {
         #expect(mutating.count == 86)
         #expect(readOnly.count == 21)
         #expect(targetBearingIDs == expectedTargetBearingIDs)
-        #expect(targetless.count == 73)
+        #expect(targetless.count == 72)
         #expect(targetBearingIDs.count + targetless.count == mutating.count)
         #expect(readOnly.allSatisfy { $0.target == .none })
     }

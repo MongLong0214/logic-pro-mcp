@@ -745,7 +745,7 @@ struct OperationCatalogTests {
         #expect(actualIndex.count == 17)
         #expect(actualTrack.count == 16)
         #expect(actualTargetRef == targetBearing)
-        #expect(actualTargetRef.count == 13)
+        #expect(actualTargetRef.count == 14)
         for spec in OperationRegistry.specs {
             #expect(
                 spec.allowedParams.isDisjoint(

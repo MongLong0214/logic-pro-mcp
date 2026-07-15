@@ -15,6 +15,7 @@ enum TargetRefResolver {
     struct Resolved: Sendable {
         let index: Int
         let reference: TargetReference?
+        let binding: TargetBinding?
     }
 
     /// Resolution outcome. A dedicated enum (rather than `Swift.Result`) because
@@ -31,7 +32,8 @@ enum TargetRefResolver {
     /// `target_ref` present:
     ///   0. Require the feature flag and a live resolver; otherwise fail closed.
     ///   1. Trim the raw reference; require non-empty + a live `TargetRegistry`.
-    ///   2. `resolve` it and require `binding.kind == requiredKind`.
+    ///   2. `resolve` it and require `binding.kind` to be one of
+    ///      `acceptedKinds` (or exactly `requiredKind` when omitted).
     ///   3. Optional cross-check: if an explicit index alias (`indexKeys`) is
     ///      ALSO present it must be ≥ 0 and equal the bound track index.
     ///   4. Drift check: the live cache must still hold a track at the bound
@@ -49,18 +51,21 @@ enum TargetRefResolver {
         operation: String,
         indexKeys: [String] = ["index", "track"],
         requiredKind: TargetKind = .track,
-        invalidIndexResult: @autoclosure () -> CallTool.Result
+        invalidIndexResult: @autoclosure () -> CallTool.Result,
+        acceptedKinds: [TargetKind]? = nil
     ) async -> Outcome {
         if params["target_ref"] != nil {
             let rawReference = params["target_ref"]?.stringValue?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+            let allowedKinds = acceptedKinds ?? [requiredKind]
             guard FeatureFlags.adr002TargetRef, let targetRegistry else {
                 return .failure(targetReferenceUnavailableResult(rawReference, operation: operation))
             }
             guard let rawReference,
                   !rawReference.isEmpty,
                   let binding = await targetRegistry.resolve(TargetReference(rawValue: rawReference)),
-                  binding.kind == requiredKind
+                  allowedKinds.contains(binding.kind),
+                  bindingFingerprintMatches(binding)
             else {
                 return .failure(staleTargetReferenceResult(rawReference, operation: operation))
             }
@@ -77,17 +82,55 @@ enum TargetRefResolver {
             let tracks = await cache.getTracks()
             guard let track = tracks.first(where: { $0.id == binding.descriptor.trackIndex }),
                   TargetDescriptor(trackIndex: track.id, trackName: track.name).fingerprint
-                    == binding.observedFingerprint
+                    == binding.descriptor.fingerprint
             else {
                 return .failure(staleTargetReferenceResult(rawReference, operation: operation))
             }
-            return .success(Resolved(index: binding.descriptor.trackIndex, reference: binding.reference))
+            return .success(Resolved(
+                index: binding.descriptor.trackIndex,
+                reference: binding.reference,
+                binding: binding
+            ))
         }
 
         guard let requestedIndex = intParamOrNil(params, keys: indexKeys), requestedIndex >= 0 else {
             return .failure(invalidIndexResult())
         }
-        return .success(Resolved(index: requestedIndex, reference: nil))
+        return .success(Resolved(index: requestedIndex, reference: nil, binding: nil))
+    }
+
+    static func pluginInsertFingerprint(
+        descriptor: TargetDescriptor,
+        insert: Int,
+        pluginIdentity: String?
+    ) -> String {
+        "\(descriptor.fingerprint)|insert=\(insert)|plugin=\(pluginIdentity ?? "")"
+    }
+
+    static func pluginInsertIndex(from fingerprint: String) -> Int? {
+        guard let range = fingerprint.range(of: "|insert=") else { return nil }
+        let remainder = String(fingerprint[range.upperBound...])
+        let token = remainder.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false).first
+        guard let token else { return nil }
+        return Int(String(token))
+    }
+
+    private static func bindingFingerprintMatches(_ binding: TargetBinding) -> Bool {
+        let descriptorFingerprint = binding.descriptor.fingerprint
+        switch binding.kind {
+        case .project:
+            return false
+        case .track, .mixerStrip:
+            return binding.observedFingerprint == descriptorFingerprint
+        case .pluginInsert:
+            guard binding.observedFingerprint.hasPrefix("\(descriptorFingerprint)|insert="),
+                  let insert = pluginInsertIndex(from: binding.observedFingerprint),
+                  insert >= 0,
+                  binding.observedFingerprint.contains("|plugin=") else {
+                return false
+            }
+            return true
+        }
     }
 
     /// Echo the causal reference only on a verified State A response. A nil
@@ -97,6 +140,7 @@ enum TargetRefResolver {
     /// compatibility (G8); new consumers should read `target_ref`.
     static func addEvidence(
         _ reference: TargetReference?,
+        fingerprint: String? = nil,
         to result: CallTool.Result,
         legacyTrackRefAlias: Bool = false
     ) -> CallTool.Result {
@@ -107,6 +151,9 @@ enum TargetRefResolver {
         }
 
         var evidence: [String: Any] = ["target_ref": reference.rawValue]
+        if let fingerprint {
+            evidence["target_fingerprint"] = fingerprint
+        }
         if legacyTrackRefAlias {
             evidence["track_ref"] = reference.rawValue
         }

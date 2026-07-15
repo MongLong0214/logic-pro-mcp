@@ -273,12 +273,18 @@ enum OperationHandlerRegistry {
             }
         case .logicMidi:
             return { dependencies, params in
-                await MIDIDispatcher.handle(
+                let result = await MIDIDispatcher.handle(
                     command: command,
                     params: params,
                     router: dependencies.router,
                     cache: dependencies.cache
                 )
+                if command == "import_file",
+                   FeatureFlags.adr002TargetRef,
+                   toolResultIsVerified(result) {
+                    await dependencies.targetRegistry.bumpTopologyGeneration()
+                }
+                return result
             }
         case .logicTracks:
             return { dependencies, params in

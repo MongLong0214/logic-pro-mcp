@@ -292,7 +292,31 @@ extension ResourceHandlers {
         let conn = await cache.getMCUConnection()
         let fetchedAt = await cache.getMixerFetchedAt()
         let axOccluded = await cache.getAXOccluded()
-        let stripsJSON = encodeJSON(strips)
+        let stripsJSON: String
+        if FeatureFlags.adr002TargetRef, let targetRegistry {
+            let tracks = await cache.getTracks()
+            var payload: [[String: Any]] = []
+            payload.reserveCapacity(strips.count)
+            for strip in strips {
+                var object = jsonObject(strip) as? [String: Any] ?? [:]
+                let trackName = tracks.first(where: { $0.id == strip.trackIndex })?.name
+                    ?? "Track \(strip.trackIndex + 1)"
+                let descriptor = TargetDescriptor(
+                    trackIndex: strip.trackIndex,
+                    trackName: trackName
+                )
+                let reference = await targetRegistry.bind(
+                    kind: .mixerStrip,
+                    descriptor: descriptor,
+                    fingerprint: descriptor.fingerprint
+                )
+                object["mixer_strip_ref"] = reference.rawValue
+                payload.append(object)
+            }
+            stripsJSON = encodeJSONObject(payload)
+        } else {
+            stripsJSON = encodeJSON(strips)
+        }
         let (age, iso) = cacheEnvelope(fetchedAt: fetchedAt)
         let agePart = (age as? Double).map { "\($0)" } ?? "null"
         let isoPart = (iso as? String).map { "\"\($0)\"" } ?? "null"
@@ -545,7 +569,12 @@ extension ResourceHandlers {
         )
     }
 
-    static func readMixerStrip(at index: Int, cache: StateCache, uri: String) async throws -> ReadResource.Result {
+    static func readMixerStrip(
+        at index: Int,
+        cache: StateCache,
+        uri: String,
+        targetRegistry: TargetRegistry? = nil
+    ) async throws -> ReadResource.Result {
         guard let strip = await cache.getChannelStrip(at: index) else {
             // Mixer strips are keyed by `trackIndex` (not array position), so the
             // valid set is the actual trackIndex values — possibly non-contiguous.
@@ -564,7 +593,26 @@ extension ResourceHandlers {
         let agePart = (age as? Double).map { "\($0)" } ?? "null"
         let isoPart = (iso as? String).map { "\"\($0)\"" } ?? "null"
         let dataSource = mixerDataSource(fetchedAt: fetchedAt)
-        let stripJSON = encodeJSON(strip)
+        let stripJSON: String
+        if FeatureFlags.adr002TargetRef, let targetRegistry {
+            var object = jsonObject(strip) as? [String: Any] ?? [:]
+            let tracks = await cache.getTracks()
+            let trackName = tracks.first(where: { $0.id == strip.trackIndex })?.name
+                ?? "Track \(strip.trackIndex + 1)"
+            let descriptor = TargetDescriptor(
+                trackIndex: strip.trackIndex,
+                trackName: trackName
+            )
+            let reference = await targetRegistry.bind(
+                kind: .mixerStrip,
+                descriptor: descriptor,
+                fingerprint: descriptor.fingerprint
+            )
+            object["mixer_strip_ref"] = reference.rawValue
+            stripJSON = encodeJSONObject(object)
+        } else {
+            stripJSON = encodeJSON(strip)
+        }
         let json = """
             {"cache_age_sec":\(agePart),"data_source":"\(dataSource)","fetched_at":\(isoPart),"strip":\(stripJSON)}
             """

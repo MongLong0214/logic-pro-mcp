@@ -533,7 +533,7 @@ enum OperationRegistry {
             Mutability.`mutating`,
             DeadlineClass.medium,
             VerificationPolicy.readbackRequired,
-            TargetPolicy.none,
+            TargetPolicy.requiresStableTarget,
             [
                 "insert", "mode", "plugin", "plugin_id", "plugin_name", "project_expected_path",
                 "slot", "track",

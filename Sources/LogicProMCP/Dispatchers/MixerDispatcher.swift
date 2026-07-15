@@ -12,7 +12,7 @@ struct MixerDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_mixer",
-        description: "Mixer actions in Logic Pro. Commands: set_volume, set_pan, set_master_volume, set_plugin_param, insert_plugin. BREAKING since v3.3.0: every mutating command requires explicit `track` (Int ≥ 0) — pre-v3.3.0 missing `track` defaulted to 0 and silently mutated the first track; this now returns an error. Params: set_volume -> { track: Int (required, ≥ 0), value: Float (0.0..1.0) } verified against the visible mixer strip via AX readback; set_pan -> { track: Int (required, ≥ 0), value: Float (-1.0..1.0) } verified against the visible mixer strip via AX readback; set_master_volume -> { value: Float (0.0..1.0) } — the master fader has no AX track-header equivalent, so MCU echo is the ONLY readback: State A only when a fresh echo lands, otherwise honest State B echo_timeout with readback_source:mcu_echo + a surface_limitation note (non-deterministic, not a recoverable failure); set_plugin_param -> { track: Int (required, ≥ 0), insert: Int (required, currently only 0), param: Int (required, ≥ 0), value: Float (required) } on the selected track via Scripter; insert_plugin -> { track: Int, slot: Int, plugin_name: Gain|Compressor|Channel EQ, confirmed: true } via AX mixer slot with readback. ADR-002 (LOGIC_MCP_ADR002_TARGET_REF=1): set_volume and set_pan ALSO accept a session-stable { target_ref: String } (a trk_… value from the logic://tracks resource) that resolves to the addressed track's mixer strip in place of the explicit track/index; when both target_ref and track/index are supplied they must agree or the op fails closed (stale_target_reference); when the flag is off, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use the explicit track/index path.",
+        description: "Mixer actions in Logic Pro. Commands: set_volume, set_pan, set_master_volume, set_plugin_param, insert_plugin. BREAKING since v3.3.0: every mutating command requires explicit `track` (Int ≥ 0) — pre-v3.3.0 missing `track` defaulted to 0 and silently mutated the first track; this now returns an error. Params: set_volume -> { track: Int (required, ≥ 0), value: Float (0.0..1.0) } verified against the visible mixer strip via AX readback; set_pan -> { track: Int (required, ≥ 0), value: Float (-1.0..1.0) } verified against the visible mixer strip via AX readback; set_master_volume -> { value: Float (0.0..1.0) } — the master fader has no AX track-header equivalent, so MCU echo is the ONLY readback: State A only when a fresh echo lands, otherwise honest State B echo_timeout with readback_source:mcu_echo + a surface_limitation note (non-deterministic, not a recoverable failure); set_plugin_param -> { track: Int (required, ≥ 0), insert: Int (required, currently only 0), param: Int (required, ≥ 0), value: Float (required) } on the selected track via Scripter; insert_plugin -> { track: Int, slot: Int, plugin_name: Gain|Compressor|Channel EQ, confirmed: true } via AX mixer slot with readback. ADR-002 (LOGIC_MCP_ADR002_TARGET_REF=1): set_volume and set_pan ALSO accept a session-stable { target_ref: String } from logic://tracks (trk_…) or logic://mixer (mix_…) that resolves to the addressed mixer strip in place of explicit track/index; when both target_ref and track/index are supplied they must agree or the op fails closed (stale_target_reference); when the flag is off, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use the explicit track/index path.",
         commandDescription: "Mixer command to execute"
     )
 
@@ -31,6 +31,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             // the operator's seat — missing/invalid target now fails closed.
             let index: Int
             let resolvedReference: TargetReference?
+            let resolvedFingerprint: String?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -39,11 +40,13 @@ struct MixerDispatcher: OperationTraceDispatching {
                 indexKeys: ["track", "index"],
                 invalidIndexResult: toolInvalidParamsResult(
                     "set_volume requires explicit 'track' or non-conflicting 'index' (Int >= 0)"
-                )
+                ),
+                acceptedKinds: [.track, .mixerStrip]
             ) {
             case .success(let resolved):
                 index = resolved.index
                 resolvedReference = resolved.reference
+                resolvedFingerprint = resolved.binding?.observedFingerprint
             case .failure(let result):
                 return result
             }
@@ -61,6 +64,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             await recordWriteBoundary(traceID)
             let result = TargetRefResolver.addEvidence(
                 resolvedReference,
+                fingerprint: resolvedFingerprint,
                 to: await routedTextResult(router, operation: "mixer.set_volume", params: [
                     "index": String(index),
                     "volume": String(volume),
@@ -72,6 +76,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             // RB-1.a — same fail-closed treatment as set_volume.
             let index: Int
             let resolvedReference: TargetReference?
+            let resolvedFingerprint: String?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -80,11 +85,13 @@ struct MixerDispatcher: OperationTraceDispatching {
                 indexKeys: ["track", "index"],
                 invalidIndexResult: toolInvalidParamsResult(
                     "set_pan requires explicit 'track' or non-conflicting 'index' (Int >= 0)"
-                )
+                ),
+                acceptedKinds: [.track, .mixerStrip]
             ) {
             case .success(let resolved):
                 index = resolved.index
                 resolvedReference = resolved.reference
+                resolvedFingerprint = resolved.binding?.observedFingerprint
             case .failure(let result):
                 return result
             }
@@ -102,6 +109,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             await recordWriteBoundary(traceID)
             let result = TargetRefResolver.addEvidence(
                 resolvedReference,
+                fingerprint: resolvedFingerprint,
                 to: await routedTextResult(router, operation: "mixer.set_pan", params: [
                     "index": String(index),
                     "pan": String(pan),
@@ -176,11 +184,15 @@ struct MixerDispatcher: OperationTraceDispatching {
             }
             let traceID = await startTraceIfEnabled(command: command)
             await recordWriteBoundary(traceID)
-            let result = await routedTextResult(router, operation: "plugin.insert", params: [
+            let channelResult = await router.route(operation: "plugin.insert", params: [
                 "track": String(track),
                 "slot": String(slot),
                 "plugin_name": spec.canonicalName,
             ])
+            if FeatureFlags.adr002TargetRef, channelResultIsVerified(channelResult) {
+                await targetRegistry?.bumpTopologyGeneration()
+            }
+            let result = toolTextResult(channelResult)
             return await finalizeTrace(result, traceID: traceID)
 
         case "bypass_plugin":
