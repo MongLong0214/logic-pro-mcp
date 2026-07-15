@@ -53,6 +53,25 @@ struct TrackState: Sendable, Codable, Identifiable {
     }
 }
 
+extension TrackState {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        type = try container.decode(TrackType.self, forKey: .type)
+        isMuted = try container.decodeIfPresent(Bool.self, forKey: .isMuted) ?? false
+        isSoloed = try container.decodeIfPresent(Bool.self, forKey: .isSoloed) ?? false
+        isArmed = try container.decodeIfPresent(Bool.self, forKey: .isArmed) ?? false
+        isSelected = try container.decodeIfPresent(Bool.self, forKey: .isSelected) ?? false
+        volume = try container.decodeIfPresent(Double.self, forKey: .volume) ?? 0.0
+        pan = try container.decodeIfPresent(Double.self, forKey: .pan) ?? 0.0
+        automationMode = try container.decodeIfPresent(AutomationMode.self, forKey: .automationMode) ?? .off
+        color = try container.decodeIfPresent(String.self, forKey: .color)
+        placeholder = try container.decodeIfPresent(Bool.self, forKey: .placeholder)
+        liveIdentityBacked = false
+    }
+}
+
 /// Mixer channel strip state (extends track with routing info).
 struct ChannelStripState: Sendable, Codable {
     var trackIndex: Int

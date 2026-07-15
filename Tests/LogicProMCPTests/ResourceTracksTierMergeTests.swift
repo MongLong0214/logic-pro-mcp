@@ -133,6 +133,56 @@ func placeholderRowsDoNotEmitTargetRefs() async throws {
 }
 
 @Test
+func trackStateJSONDecodeFailsClosedAndTypedRowsKeepTargetRefs() async throws {
+    let encoder = JSONEncoder()
+    let decoder = JSONDecoder()
+    let fallback = TrackState(
+        id: 0,
+        name: "Untitled",
+        type: .unknown,
+        liveIdentityBacked: false
+    )
+    let encoded = try encoder.encode(fallback)
+    let encodedObject = try #require(
+        JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+    )
+    #expect(encodedObject["liveIdentityBacked"] == nil)
+
+    let decoded = try decoder.decode(TrackState.self, from: encoded)
+    #expect(decoded.liveIdentityBacked == false)
+
+    let legacyCache = StateCache()
+    await legacyCache.updateTracks([decoded])
+    let legacyResult = try await FeatureFlags.withAdr002TargetRefForTests(true) {
+        try await ResourceHandlers.read(
+            uri: "logic://tracks",
+            cache: legacyCache,
+            router: ChannelRouter(),
+            targetRegistry: TargetRegistry()
+        )
+    }
+    let legacyTrack = try #require(
+        (sharedJSONObject(sharedResourceText(legacyResult))?["data"] as? [[String: Any]])?.first
+    )
+    #expect(legacyTrack["track_ref"] == nil)
+
+    let typedCache = StateCache()
+    await typedCache.updateTracks([TrackState(id: 0, name: "Kick", type: .audio)])
+    let typedResult = try await FeatureFlags.withAdr002TargetRefForTests(true) {
+        try await ResourceHandlers.read(
+            uri: "logic://tracks",
+            cache: typedCache,
+            router: ChannelRouter(),
+            targetRegistry: TargetRegistry()
+        )
+    }
+    let typedTrack = try #require(
+        (sharedJSONObject(sharedResourceText(typedResult))?["data"] as? [[String: Any]])?.first
+    )
+    #expect(typedTrack["track_ref"] as? String != nil)
+}
+
+@Test
 func fallbackNamedRowsDoNotEmitTargetRefs_butExactLiveNameDoes() async throws {
     let cache = StateCache()
     await cache.updateTracks([
