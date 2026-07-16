@@ -23,6 +23,44 @@ struct QualificationDriveRequest: Sendable {
     }
 }
 
+struct QualificationWireFrame: Codable, Equatable, Sendable {
+    enum Direction: String, Codable, Hashable, Sendable {
+        case request
+        case response
+        case notification
+    }
+
+    let sequence: Int
+    let direction: Direction
+    let operationID: String
+    let payload: String
+
+    enum CodingKeys: String, CodingKey {
+        case sequence
+        case direction
+        case operationID = "operation_id"
+        case payload
+    }
+}
+
+struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
+    let operationID: String
+    let preState: String
+    let mutation: String
+    let readback: String
+    let restore: String
+    let restoreReadback: String
+
+    enum CodingKeys: String, CodingKey {
+        case operationID = "operation_id"
+        case preState = "pre_state"
+        case mutation
+        case readback
+        case restore
+        case restoreReadback = "restore_readback"
+    }
+}
+
 struct QualificationHandshake: Equatable, Sendable {
     let protocolVersion: String
     let serverName: String
@@ -295,6 +333,8 @@ struct QualificationDriveResult: Equatable, Sendable {
     let negative: QualificationNegativeResult?
     let observedLocale: String
     let operationResults: [String: QualificationOperationResult]
+    let wireFrames: [QualificationWireFrame]
+    let mutationRestoreRecords: [QualificationMutationRestoreRecord]
     let failureReason: String?
 
     init(
@@ -307,6 +347,8 @@ struct QualificationDriveResult: Equatable, Sendable {
         negative: QualificationNegativeResult?,
         observedLocale: String,
         operationResults: [String: QualificationOperationResult] = [:],
+        wireFrames: [QualificationWireFrame] = [],
+        mutationRestoreRecords: [QualificationMutationRestoreRecord] = [],
         failureReason: String?
     ) {
         self.handshake = handshake
@@ -318,6 +360,8 @@ struct QualificationDriveResult: Equatable, Sendable {
         self.negative = negative
         self.observedLocale = observedLocale
         self.operationResults = operationResults
+        self.wireFrames = wireFrames
+        self.mutationRestoreRecords = mutationRestoreRecords
         self.failureReason = failureReason
     }
 
@@ -542,6 +586,7 @@ struct QualificationTransport: Sendable {
                 negative: negative,
                 observedLocale: healthBefore.value.logicProUILocale,
                 operationResults: operationResults,
+                wireFrames: session.transcriptFrames,
                 failureReason: nil
             )
         } catch {
@@ -1108,6 +1153,7 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
     private let stateLock = NSLock()
     private var started = false
     private var shutdownOutcome: ShutdownOutcome?
+    private var framesTranscript: [QualificationWireFrame] = []
 
     init(
         request: QualificationDriveRequest,
@@ -1120,6 +1166,10 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
     }
 
     var stderrTail: String { stderr.text }
+
+    var transcriptFrames: [QualificationWireFrame] {
+        stateLock.withLock { framesTranscript }
+    }
 
     func start() throws {
         guard FileManager.default.isExecutableFile(atPath: request.executableURL.path) else {
@@ -1170,8 +1220,9 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
             "id": id,
             "method": method,
             "params": params,
-        ])
+        ], direction: .request, operationID: phase)
         let data = try frames.response(id: id, phase: phase, timeout: timeout ?? requestTimeout)
+        record(direction: .response, operationID: phase, data: data)
         let response: RPCResponse<Result>
         do {
             response = try JSONDecoder().decode(RPCResponse<Result>.self, from: data)
@@ -1193,7 +1244,11 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
     }
 
     func notify(method: String) throws {
-        try writeJSON(["jsonrpc": "2.0", "method": method])
+        try writeJSON(
+            ["jsonrpc": "2.0", "method": method],
+            direction: .notification,
+            operationID: method
+        )
     }
 
     func shutdown() throws -> ShutdownOutcome {
@@ -1232,7 +1287,11 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
         return outcome
     }
 
-    private func writeJSON(_ object: [String: Any]) throws {
+    private func writeJSON(
+        _ object: [String: Any],
+        direction: QualificationWireFrame.Direction,
+        operationID: String
+    ) throws {
         let data: Data
         do {
             var encoded = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
@@ -1243,8 +1302,24 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
         }
         do {
             try inputPipe.fileHandleForWriting.write(contentsOf: data)
+            record(direction: direction, operationID: operationID, data: data.dropLast())
         } catch {
             throw QualificationTransportError.closedPipe(phase: "write")
+        }
+    }
+
+    private func record(
+        direction: QualificationWireFrame.Direction,
+        operationID: String,
+        data: Data
+    ) {
+        stateLock.withLock {
+            framesTranscript.append(QualificationWireFrame(
+                sequence: framesTranscript.count,
+                direction: direction,
+                operationID: operationID,
+                payload: String(decoding: data, as: UTF8.self)
+            ))
         }
     }
 

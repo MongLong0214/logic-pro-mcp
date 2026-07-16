@@ -56,6 +56,7 @@ struct QualificationRunner: Sendable {
         let attestationURL: URL
         let releaseVersion: String
         let expectedBinarySHA256: String
+        let expectedCommitSHA: String
         let requiredArtifacts: Set<String>
     }
 
@@ -78,6 +79,8 @@ struct QualificationRunner: Sendable {
             case caseEvidence = "case_evidence"
             case operationResponse = "operation_response"
             case readbackResponse = "readback_response"
+            case rawTranscript = "raw_transcript"
+            case mutationRestoreCompensation = "mutation_restore_compensation"
         }
 
         struct Entry: Codable {
@@ -113,6 +116,16 @@ struct QualificationRunner: Sendable {
             case waiversSHA256 = "waivers_sha256"
             case files
         }
+    }
+
+    private struct RawTranscriptArtifact: Codable {
+        let schema: String
+        let frames: [QualificationWireFrame]
+    }
+
+    private struct MutationRestoreCompensationArtifact: Codable {
+        let schema: String
+        let records: [QualificationMutationRestoreRecord]
     }
 
     private enum RunnerError: Error, CustomStringConvertible {
@@ -539,6 +552,38 @@ struct QualificationRunner: Sendable {
                 ))
                 evidenceFiles.append(healthPath)
             }
+            if isObservedAxis {
+                let requiredArtifacts: [(String, Data, EvidenceManifest.Kind)] = [
+                    (
+                        Self.rawTranscriptFilename,
+                        try Self.encoded(RawTranscriptArtifact(
+                            schema: "qualification-raw-transcript/v1",
+                            frames: driveResult.wireFrames
+                        )),
+                        .rawTranscript
+                    ),
+                    (
+                        Self.mutationRestoreCompensationFilename,
+                        try Self.encoded(MutationRestoreCompensationArtifact(
+                            schema: "qualification-mutation-restore-compensation/v1",
+                            records: driveResult.mutationRestoreRecords
+                        )),
+                        .mutationRestoreCompensation
+                    ),
+                ]
+                for (path, data, kind) in requiredArtifacts {
+                    try data.write(to: outputDirectory.appendingPathComponent(path), options: .atomic)
+                    manifestEntries.append(.init(
+                        path: path,
+                        sha256: SupportBundleBuilder.sha256(data),
+                        caseID: evidence.caseID,
+                        binarySHA256: binarySHA256,
+                        axis: axis,
+                        kind: kind
+                    ))
+                    evidenceFiles.append(path)
+                }
+            }
             cases.append(QualificationCase(
                 id: caseID,
                 status: status,
@@ -795,12 +840,12 @@ struct QualificationRunner: Sendable {
         )
         let manifestArtifact = Self.manifestFilename
         let requiredArtifacts = options.requiredArtifacts.union([manifestArtifact])
-        let manifestPaths: Set<String> = (try? Self.readNoFollow(
+        let manifest = (try? Self.readNoFollow(
             relativePath: manifestArtifact,
             directory: directory,
             beforeRead: runtime.beforeEvidenceRead
         )).flatMap { try? JSONDecoder().decode(EvidenceManifest.self, from: $0) }
-            .map { Set($0.files.map(\.path)) } ?? []
+        let manifestPaths = Set(manifest?.files.map(\.path) ?? [])
         let executableName = try runtime.executableURL().lastPathComponent
         let presentArtifacts = Set(requiredArtifacts.filter { artifact in
             let url = artifact.hasPrefix("/")
@@ -830,6 +875,12 @@ struct QualificationRunner: Sendable {
         )
         let currentExecutableSHA256 = SupportBundleBuilder.sha256(currentExecutableData)
         var rejections = decision.rejections
+        rejections.append(contentsOf: Self.requiredArtifactSchemaRejections(
+            requiredArtifacts: options.requiredArtifacts,
+            manifest: manifest,
+            directory: directory,
+            beforeRead: runtime.beforeEvidenceRead
+        ))
         if let evidenceBindingIssue {
             rejections.append(.evidenceBindingMismatch(detail: evidenceBindingIssue))
         }
@@ -838,6 +889,15 @@ struct QualificationRunner: Sendable {
             environment: runtime.environment()
         ) {
             rejections.append(provenanceRejection)
+        }
+        let boundCommitSHA = attestation.commitSHA == options.expectedCommitSHA
+            ? attestation.provenance?.commitSHA ?? attestation.commitSHA
+            : attestation.commitSHA
+        if boundCommitSHA != options.expectedCommitSHA {
+            rejections.append(.releaseCommitMismatch(
+                expected: options.expectedCommitSHA,
+                actual: boundCommitSHA
+            ))
         }
         if currentExecutableSHA256 != options.expectedBinarySHA256 {
             let replacementRejection = PromotionRejectionReason.binarySHAMismatch(
@@ -864,7 +924,8 @@ struct QualificationRunner: Sendable {
 
     private func parseVerifyOptions(_ arguments: [String]) throws -> VerifyOptions {
         let values = try Self.optionValues(arguments, allowed: [
-            "--attestation", "--release-version", "--expected-binary-sha256", "--required-artifacts",
+            "--attestation", "--release-version", "--expected-binary-sha256", "--expected-commit",
+            "--required-artifacts",
         ])
         guard let attestation = values["--attestation"] else {
             throw RunnerError.missingOption("--attestation")
@@ -874,6 +935,12 @@ struct QualificationRunner: Sendable {
         }
         guard let expectedBinarySHA256 = values["--expected-binary-sha256"] else {
             throw RunnerError.missingOption("--expected-binary-sha256")
+        }
+        guard let expectedCommitSHA = values["--expected-commit"] else {
+            throw RunnerError.missingOption("--expected-commit")
+        }
+        guard Self.isCommitSHA(expectedCommitSHA) else {
+            throw RunnerError.invalidOption("--expected-commit", expectedCommitSHA)
         }
         let requiredArtifacts = Set(
             (values["--required-artifacts"] ?? "")
@@ -885,6 +952,7 @@ struct QualificationRunner: Sendable {
             attestationURL: URL(fileURLWithPath: attestation),
             releaseVersion: releaseVersion,
             expectedBinarySHA256: expectedBinarySHA256,
+            expectedCommitSHA: expectedCommitSHA,
             requiredArtifacts: requiredArtifacts
         )
     }
@@ -906,9 +974,19 @@ struct QualificationRunner: Sendable {
                 reason: "missingArtifact", caseID: nil, key: nil,
                 name: name, expected: nil, actual: nil
             )
+        case .requiredArtifactSchemaInvalid(let name):
+            VerificationOutput.Rejection(
+                reason: "requiredArtifactSchemaInvalid", caseID: nil, key: nil,
+                name: name, expected: nil, actual: nil
+            )
         case .binarySHAMismatch(let expected, let actual):
             VerificationOutput.Rejection(
                 reason: "binarySHAMismatch", caseID: nil, key: nil,
+                name: nil, expected: expected, actual: actual
+            )
+        case .releaseCommitMismatch(let expected, let actual):
+            VerificationOutput.Rejection(
+                reason: "releaseCommitMismatch", caseID: nil, key: nil,
                 name: nil, expected: expected, actual: actual
             )
         case .expiredWaiver(let caseID):
@@ -1028,6 +1106,9 @@ struct QualificationRunner: Sendable {
 
     private static let manifestFilename = "evidence-manifest.json"
     private static let caseManifestFilename = "case-manifest.json"
+    private static let rawTranscriptFilename = "raw-transcript.json"
+    private static let mutationRestoreCompensationFilename =
+        "mutation-restore-compensation.json"
     private static let signingKeyEnvironmentKey =
         "LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY"
     private static let trustedPublicKeyEnvironmentKey =
@@ -1256,6 +1337,72 @@ struct QualificationRunner: Sendable {
             }
         }
         return nil
+    }
+
+    private static func requiredArtifactSchemaRejections(
+        requiredArtifacts: Set<String>,
+        manifest: EvidenceManifest?,
+        directory: URL,
+        beforeRead: @Sendable (URL) -> Void
+    ) -> [PromotionRejectionReason] {
+        [rawTranscriptFilename, mutationRestoreCompensationFilename].compactMap { filename in
+            guard requiredArtifacts.contains(filename),
+                  let entries = manifest?.files.filter({ $0.path == filename }),
+                  entries.count == 1,
+                  let entry = entries.first,
+                  let data = try? validatedEvidenceData(
+                      relativePath: filename,
+                      outputDirectory: directory,
+                      beforeRead: beforeRead
+                  ),
+                  SupportBundleBuilder.sha256(data) == entry.sha256 else {
+                return nil
+            }
+            let valid = filename == rawTranscriptFilename
+                ? rawTranscriptIsValid(data)
+                : mutationRestoreCompensationIsValid(data)
+            return valid ? nil : .requiredArtifactSchemaInvalid(name: filename)
+        }
+    }
+
+    private static func rawTranscriptIsValid(_ data: Data) -> Bool {
+        guard let artifact = try? JSONDecoder().decode(RawTranscriptArtifact.self, from: data),
+              artifact.schema == "qualification-raw-transcript/v1",
+              !artifact.frames.isEmpty,
+              Set(artifact.frames.map(\.direction)).isSuperset(of: [.request, .response]) else {
+            return false
+        }
+        return artifact.frames.enumerated().allSatisfy { index, frame in
+            guard frame.sequence == index,
+                  !frame.operationID.isEmpty,
+                  let payload = frame.payload.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any]
+            else {
+                return false
+            }
+            return object["jsonrpc"] as? String == "2.0"
+        }
+    }
+
+    private static func mutationRestoreCompensationIsValid(_ data: Data) -> Bool {
+        guard let artifact = try? JSONDecoder().decode(
+                  MutationRestoreCompensationArtifact.self,
+                  from: data
+              ),
+              artifact.schema == "qualification-mutation-restore-compensation/v1",
+              !artifact.records.isEmpty,
+              Set(artifact.records.map(\.operationID)).count == artifact.records.count else {
+            return false
+        }
+        return artifact.records.allSatisfy { record in
+            !record.operationID.isEmpty
+                && !record.preState.isEmpty
+                && !record.mutation.isEmpty
+                && record.preState != record.mutation
+                && record.mutation == record.readback
+                && record.preState == record.restore
+                && record.preState == record.restoreReadback
+        }
     }
 
     private static func evidence(
@@ -1611,11 +1758,14 @@ struct QualificationRunner: Sendable {
 
     private static func commitSHA(from environment: [String: String]) throws -> String {
         guard let commitSHA = environment["GIT_COMMIT"],
-              commitSHA.count == 40 || commitSHA.count == 64,
-              commitSHA.allSatisfy(\.isHexDigit) else {
+              isCommitSHA(commitSHA) else {
             throw RunnerError.commitIdentityUnavailable
         }
         return commitSHA
+    }
+
+    private static func isCommitSHA(_ value: String) -> Bool {
+        (value.count == 40 || value.count == 64) && value.allSatisfy(\.isHexDigit)
     }
 
     private static func sign(

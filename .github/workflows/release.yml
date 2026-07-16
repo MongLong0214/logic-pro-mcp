@@ -191,6 +191,7 @@ jobs:
               --attestation qualification-evidence/release-qualification-attestation.json \
               --release-version "${GITHUB_REF_NAME#v}" \
               --expected-binary-sha256 "$binary_sha256" \
+              --expected-commit "$GITHUB_SHA" \
               --required-artifacts raw-transcript.json,mutation-restore-compensation.json
 
       - name: trusted-provenance-verify

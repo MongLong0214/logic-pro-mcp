@@ -892,6 +892,41 @@ struct QualificationRunnerTests {
         #expect(Self.rejectionReasons(json).isEmpty)
     }
 
+    @Test func qualifyEmitsRequiredReleaseArtifactsAndManifestDigests() async throws {
+        let fixture = try promotableFixture()
+        defer { fixture.remove() }
+        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let artifacts = [
+            "raw-transcript.json": ("qualification-raw-transcript/v1", "frames"),
+            "mutation-restore-compensation.json": (
+                "qualification-mutation-restore-compensation/v1", "records"
+            ),
+        ]
+        let manifestData = try Data(contentsOf: fixture.manifestURL)
+        let manifest = try #require(
+            JSONSerialization.jsonObject(with: manifestData) as? [String: Any]
+        )
+        let entries = try #require(manifest["files"] as? [[String: Any]])
+
+        for (filename, expected) in artifacts {
+            let data = try #require(try? Data(
+                contentsOf: fixture.directory.appendingPathComponent(filename)
+            ))
+            let object = try #require(
+                JSONSerialization.jsonObject(with: data) as? [String: Any]
+            )
+            #expect(object["schema"] as? String == expected.0)
+            let values = try #require(object[expected.1] as? [[String: Any]])
+            if filename == "raw-transcript.json" {
+                let firstFrame = try #require(values.first)
+                #expect((firstFrame["operation_id"] as? String)?.isEmpty == false)
+            }
+            let entry = try #require(entries.first { $0["path"] as? String == filename })
+            #expect(entry["sha256"] as? String == SupportBundleBuilder.sha256(data))
+            #expect(attestation.cases.contains { $0.evidenceFiles.contains(filename) })
+        }
+    }
+
     @Test func runnerRecordsExactExecutableSHAAndCodableSchema() async throws {
         let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
         let observedAxis = QualificationAxis(
@@ -1362,6 +1397,37 @@ struct QualificationRunnerTests {
         #expect(rejections.isEmpty)
     }
 
+    @Test func verifyPromotionRejectsReleaseCommitMismatch() async throws {
+        let fixture = try promotableFixture()
+        defer { fixture.remove() }
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let releasedCommit = String(repeating: "b", count: 40)
+        #expect(releasedCommit != fixture.commitSHA)
+
+        let result = await fixture.verify(
+            expectedSHA256: fixture.binarySHA256,
+            expectedCommit: releasedCommit
+        )
+        let json = try Self.resultObject(result)
+
+        #expect(result.exitCode != 0)
+        #expect(Self.rejectionReasons(json).contains("releaseCommitMismatch"))
+    }
+
+    @Test func verifyPromotionAcceptsMatchingExpectedCommit() async throws {
+        let fixture = try promotableFixture()
+        defer { fixture.remove() }
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+
+        let result = await fixture.verify(
+            expectedSHA256: fixture.binarySHA256,
+            expectedCommit: fixture.commitSHA
+        )
+
+        #expect(result.exitCode == 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(result)).isEmpty)
+    }
+
     @Test func differentPublishedSHARejects() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }
@@ -1402,6 +1468,53 @@ struct QualificationRunnerTests {
 
         #expect(result.exitCode != 0)
         #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("missingArtifact"))
+    }
+
+    @Test func verifyPromotionAcceptsValidRequiredArtifactSchemas() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let driveResult = Self.driveResult(
+            specs: [spec],
+            mutationRestoreRecords: [.init(
+                operationID: "tracks.rename",
+                preState: "Before",
+                mutation: "After",
+                readback: "After",
+                restore: "Before",
+                restoreReadback: "Before"
+            )]
+        )
+        let fixture = try Fixture(specs: [spec], drive: { _ in driveResult })
+        defer { fixture.remove() }
+        try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+
+        let result = await fixture.verify(
+            expectedSHA256: fixture.binarySHA256,
+            requiredArtifacts: "raw-transcript.json,mutation-restore-compensation.json"
+        )
+
+        #expect(result.exitCode == 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(result)).isEmpty)
+    }
+
+    @Test func verifyPromotionRejectsInvalidRequiredArtifactSchema() async throws {
+        let fixture = try promotableFixture()
+        defer { fixture.remove() }
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+
+        let result = await fixture.verify(
+            expectedSHA256: fixture.binarySHA256,
+            requiredArtifacts: "raw-transcript.json,mutation-restore-compensation.json"
+        )
+        let json = try Self.resultObject(result)
+
+        #expect(result.exitCode != 0)
+        #expect(Self.rejectionReasons(json).contains("requiredArtifactSchemaInvalid"))
+        let rejections = try #require(json["rejections"] as? [[String: Any]])
+        #expect(rejections.contains {
+            $0["reason"] as? String == "requiredArtifactSchemaInvalid"
+                && $0["name"] as? String == "mutation-restore-compensation.json"
+        })
     }
 
     @Test func expiredWaiverRejectsThroughCLI() async throws {
@@ -1720,6 +1833,7 @@ struct QualificationRunnerTests {
         #expect(stdout.contains("--waivers <waivers.json>"))
         #expect(stdout.contains("--verify-promotion --attestation <attestation.json>"))
         #expect(stdout.contains("--expected-binary-sha256 <hex>"))
+        #expect(stdout.contains("--expected-commit <sha>"))
     }
 
     @Test func releaseWorkflowRequiresTrustedIndependentQualificationBeforePublication() throws {
@@ -1739,6 +1853,7 @@ struct QualificationRunnerTests {
         #expect(!workflow.contains("./LogicProMCP --qualify"))
         #expect(workflow.contains("LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"))
         #expect(workflow.contains("./LogicProMCP --verify-promotion"))
+        #expect(workflow.contains("--expected-commit \"$GITHUB_SHA\""))
         #expect(workflow.contains("--required-artifacts raw-transcript.json,mutation-restore-compensation.json"))
         let waiverData = try Data(contentsOf: URL(
             fileURLWithPath: ".github/qualification/waivers.json"
@@ -1907,7 +2022,8 @@ struct QualificationRunnerTests {
         failedOperationID: OperationID? = nil,
         qualifiedReadOperationCount: Int? = nil,
         healthChangesAfterNegativeProbe: Bool = false,
-        nonObjectResponseOperationID: OperationID? = nil
+        nonObjectResponseOperationID: OperationID? = nil,
+        mutationRestoreRecords: [QualificationMutationRestoreRecord] = []
     ) -> QualificationDriveResult {
         let expectedCount = specs.count
         let actualCount = catalogCount ?? expectedCount
@@ -2042,6 +2158,21 @@ struct QualificationRunnerTests {
             ),
             observedLocale: observedLocale,
             operationResults: operationResults,
+            wireFrames: [
+                .init(
+                    sequence: 0,
+                    direction: .request,
+                    operationID: "initialize",
+                    payload: #"{"id":1,"jsonrpc":"2.0","method":"initialize","params":{}}"#
+                ),
+                .init(
+                    sequence: 1,
+                    direction: .response,
+                    operationID: "initialize",
+                    payload: #"{"id":1,"jsonrpc":"2.0","result":{}}"#
+                ),
+            ],
+            mutationRestoreRecords: mutationRestoreRecords,
             failureReason: nil
         )
     }
@@ -2197,6 +2328,7 @@ struct QualificationRunnerTests {
         func verify(
             releaseVersion: String = "1.2.3",
             expectedSHA256: String,
+            expectedCommit: String? = nil,
             requiredArtifacts: String = "LogicProMCP,evidence-manifest.json"
         ) async -> QualificationCommandResult {
             await runner.run(arguments: [
@@ -2204,6 +2336,7 @@ struct QualificationRunnerTests {
                 "--attestation", attestationURL.path,
                 "--release-version", releaseVersion,
                 "--expected-binary-sha256", expectedSHA256,
+                "--expected-commit", expectedCommit ?? commitSHA,
                 "--required-artifacts", requiredArtifacts,
             ])
         }
