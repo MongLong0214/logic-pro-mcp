@@ -193,8 +193,19 @@ struct MixerDispatcher: OperationTraceDispatching {
             }
             switch strictBoolParam(params, "confirmed") {
             case .missing, .value(false):
+                // ADR-003: the prompt level comes from the registry's
+                // ConfirmationPolicy, never a local literal. Falls back to the
+                // stricter "L2" only if the registry entry ever went missing
+                // (over-prompting is the safe drift direction; the census test
+                // pins the entry so this cannot silently relax).
+                let level = DestructivePolicy.promptLabel(
+                    of: OperationRegistry.spec(
+                        tool: ToolID.logicMixer.rawValue,
+                        command: "insert_plugin"
+                    )?.confirmation ?? .l2
+                ) ?? "L2"
                 let response = """
-                {"confirmation_required":true,"command":"insert_plugin","level":"L2","message":"insert_plugin changes the channel strip insert chain. Re-call with confirmed:true to insert an allowlisted stock plugin.","confirm_command":"logic_mixer(\\"insert_plugin\\", {\\"track\\": \(track), \\"slot\\": \(slot), \\"plugin_name\\": \\"\(spec.canonicalName)\\", \\"confirmed\\": true})"}
+                {"confirmation_required":true,"command":"insert_plugin","level":"\(level)","message":"insert_plugin changes the channel strip insert chain. Re-call with confirmed:true to insert an allowlisted stock plugin.","confirm_command":"logic_mixer(\\"insert_plugin\\", {\\"track\\": \(track), \\"slot\\": \(slot), \\"plugin_name\\": \\"\(spec.canonicalName)\\", \\"confirmed\\": true})"}
                 """
                 return toolTextResult(response)
             case .value(true):

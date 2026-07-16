@@ -380,8 +380,16 @@ struct QualificationCaseManifest: Codable, Equatable, Sendable {
 struct QualificationWaiver: Codable, Equatable, Sendable {
     static let hostAxisAvailabilityCapability = "ADR-001-a host-axis availability"
 
+    /// ADR-003: the waiver-binding capability comes from the registry's
+    /// `CapabilityID` when the operation is registered — the registry is the
+    /// authority, not a string convention. Unregistered IDs (foreign/legacy
+    /// waiver rows under validation) fall back to the literal convention so
+    /// validation can still name what the row claimed to govern.
     static func operationCapability(_ operationID: String) -> String {
-        "operation:\(operationID)"
+        let capability = OperationRegistry.specs
+            .first { $0.id.rawValue == operationID }?
+            .capability.rawValue ?? operationID
+        return "operation:\(capability)"
     }
 
     let caseID: String

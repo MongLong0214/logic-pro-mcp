@@ -573,14 +573,24 @@ struct OperationRegistryTests {
         ("project.cleanup_apply", "cleanup_apply", .mutating, .medium, .readbackRequired),
     ]
 
-    private static func confirmationPolicy(for command: String) -> ConfirmationPolicy {
-        switch DestructivePolicy.level(for: command) {
-        case .l0: .none
-        case .l1: .l1
-        case .l2: .l2
-        case .l3: .l3
-        }
-    }
+    /// ADR-003: every operation that declares a confirmation policy, and its
+    /// level — the exhaustive enforcement census. A new spec declaring l1+
+    /// without being added here (and wired to an enforcement surface) fails.
+    private static let confirmationCensus: [(tool: String, command: String, confirmation: ConfirmationPolicy)] = [
+        ("logic_project", "new", .l1),
+        ("logic_project", "save", .l1),
+        ("logic_project", "launch", .l1),
+        ("logic_project", "cleanup_apply", .l1),
+        ("logic_project", "open", .l2),
+        ("logic_project", "save_as", .l2),
+        ("logic_project", "bounce", .l2),
+        ("logic_project", "export_run", .l2),
+        ("logic_project", "export_resume", .l2),
+        ("logic_mixer", "insert_plugin", .l2),
+        ("logic_system", "clear_traces", .l2),
+        ("logic_project", "close", .l3),
+        ("logic_project", "quit", .l3),
+    ]
 
     @Test("project registry is exact and globally unique")
     func projectCompletenessAndUniqueness() throws {
@@ -647,14 +657,107 @@ struct OperationRegistryTests {
         }
     }
 
-    @Test("project confirmation metadata cannot drift from DestructivePolicy")
-    func projectConfirmationPolicyParity() throws {
+    @Test("registry is the single confirmation authority across the full surface")
+    func confirmationAuthorityCensus() throws {
+        // Exact-set equality: every spec declaring a confirmation policy is in
+        // the census with the declared level, and nothing else declares one.
+        var declared: [String: ConfirmationPolicy] = [:]
+        for spec in OperationRegistry.specs where spec.confirmation != .none {
+            declared["\(spec.tool.rawValue)/\(spec.command)"] = spec.confirmation
+        }
+        var expected: [String: ConfirmationPolicy] = [:]
+        for entry in Self.confirmationCensus {
+            expected["\(entry.tool)/\(entry.command)"] = entry.confirmation
+        }
+        #expect(declared == expected)
+
+        // The DestructivePolicy adapter (project-scoped bare-command lookup)
+        // resolves through the registry: parity for every project command,
+        // and .l0 for commands with no project spec.
         for entry in Self.projectCommands {
             let spec = try #require(OperationRegistry.spec(
                 tool: "logic_project",
                 command: entry.command
             ))
-            #expect(spec.confirmation == Self.confirmationPolicy(for: entry.command))
+            #expect(DestructivePolicy.level(for: entry.command)
+                == DestructivePolicy.level(of: spec.confirmation))
+        }
+        #expect(DestructivePolicy.level(for: "no_such_command") == .l0)
+        // insert_plugin is a mixer command — the project-scoped adapter must
+        // NOT pick it up (its gate lives in MixerDispatcher via the registry).
+        #expect(DestructivePolicy.level(for: "insert_plugin") == .l0)
+
+        // Prompt labels project from ConfirmationPolicy, never a literal.
+        #expect(DestructivePolicy.promptLabel(of: .none) == nil)
+        #expect(DestructivePolicy.promptLabel(of: .l1) == nil)
+        #expect(DestructivePolicy.promptLabel(of: .l2) == "L2")
+        #expect(DestructivePolicy.promptLabel(of: .l3) == "L3")
+    }
+
+    @Test("registry is the single dirty-cache authority")
+    func dirtyCacheSectionCensus() throws {
+        var declared: [String: Set<CacheSectionID>] = [:]
+        for spec in OperationRegistry.specs where !spec.dirtySections.isEmpty {
+            declared["\(spec.tool.rawValue)/\(spec.command)"] = spec.dirtySections
+        }
+        // Exactly the project lifecycle transitions dirty the whole world;
+        // the dispatcher's invalidate-on-success derives from these entries,
+        // so adding a lifecycle op without declaring impact here fails.
+        let all = Set(CacheSectionID.allCases)
+        #expect(declared == [
+            "logic_project/new": all,
+            "logic_project/open": all,
+            "logic_project/save_as": all,
+            "logic_project/close": all,
+        ])
+    }
+
+    @Test("catalog rows expose capability and dirty sections from the registry")
+    func catalogCarriesCapabilityAndDirtySections() throws {
+        let byID = Dictionary(
+            uniqueKeysWithValues: OperationCatalog.snapshot().operations.map { ($0.id, $0) }
+        )
+        #expect(byID.count == OperationRegistry.specs.count)
+        for spec in OperationRegistry.specs {
+            let row = try #require(byID[spec.id.rawValue])
+            #expect(row.capability == spec.capability.rawValue)
+            #expect(row.dirtySections == spec.dirtySections.map(\.rawValue).sorted())
+        }
+    }
+
+    @Test("tool description command lists match the registry exactly")
+    func toolDescriptionCommandListsMatchRegistry() throws {
+        let tools: [(ToolID, String?)] = [
+            (.logicTransport, TransportDispatcher.tool.description),
+            (.logicMixer, MixerDispatcher.tool.description),
+            (.logicNavigate, NavigateDispatcher.tool.description),
+            (.logicAudio, AudioDispatcher.tool.description),
+            (.logicSystem, SystemDispatcher.tool.description),
+            (.logicPlugins, PluginsDispatcher.tool.description),
+            (.logicEdit, EditDispatcher.tool.description),
+            (.logicProject, ProjectDispatcher.tool.description),
+            (.logicMidi, MIDIDispatcher.tool.description),
+            (.logicTracks, TrackDispatcher.tool.description),
+        ]
+        for (toolID, description) in tools {
+            let text = try #require(description, Comment(rawValue: toolID.rawValue))
+            let marker = try #require(
+                text.range(of: "Commands: "),
+                "\(toolID.rawValue) tool description lacks a 'Commands: ' segment"
+            )
+            let segment = text[marker.upperBound...].prefix { $0 != "." }
+            let listed = Set(
+                segment.split(separator: ",").map {
+                    String($0.drop(while: { $0 == " " }))
+                }
+            )
+            let registered = Set(
+                OperationRegistry.specs.filter { $0.tool == toolID }.map(\.command)
+            )
+            #expect(
+                listed == registered,
+                "\(toolID.rawValue) description drift — described-only: \(listed.subtracting(registered).sorted()); registry-only: \(registered.subtracting(listed).sorted())"
+            )
         }
     }
 
