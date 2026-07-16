@@ -76,9 +76,9 @@ enum ExportTemporaryFiles {
         let cutoff = Date().addingTimeInterval(-olderThan)
         guard let entries = try? fileManager.contentsOfDirectory(atPath: dir) else { return }
         for name in entries {
+            guard name.hasPrefix("LogicProMCPExport-\(getuid())-") else { continue }
             let fullPath = "\(dir)/\(name)"
             guard (try? fileManager.destinationOfSymbolicLink(atPath: fullPath)) == nil else { continue }
-            guard name.hasPrefix("LogicProMCPExport-\(getuid())-") else { continue }
             guard let attributes = try? fileManager.attributesOfItem(atPath: fullPath),
                   let modifiedAt = attributes[.modificationDate] as? Date,
                   modifiedAt < cutoff,

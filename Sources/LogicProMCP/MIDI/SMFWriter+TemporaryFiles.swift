@@ -81,6 +81,14 @@ extension SMFWriter {
         guard let entries = try? fileManager.contentsOfDirectory(atPath: dir) else { return }
 
         for name in entries {
+            let isCandidate: Bool
+            if isLegacyDirectory {
+                isCandidate = name.hasSuffix(".mid")
+            } else {
+                isCandidate = name.hasPrefix("LogicProMCP-\(getuid())-")
+            }
+            guard isCandidate else { continue }
+
             let fullPath = "\(dir)/\(name)"
             guard (try? fileManager.destinationOfSymbolicLink(atPath: fullPath)) == nil else { continue }
             guard let attributes = try? fileManager.attributesOfItem(atPath: fullPath),

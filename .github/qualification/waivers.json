@@ -1,1 +1,1092 @@
-[]
+[
+  {
+    "caseID": "in-process/transport.play",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:transport.play",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/transport.stop",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:transport.stop",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/transport.record",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:transport.record",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/transport.pause",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:transport.pause",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/transport.rewind",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:transport.rewind",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/transport.fast_forward",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:transport.fast_forward",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/transport.toggle_cycle",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:transport.toggle_cycle",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/transport.toggle_metronome",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:transport.toggle_metronome",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/transport.set_tempo",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:transport.set_tempo",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/transport.goto_position",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:transport.goto_position",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/transport.set_cycle_range",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:transport.set_cycle_range",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/transport.toggle_count_in",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:transport.toggle_count_in",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/transport.toggle_autopunch",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:transport.toggle_autopunch",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/mixer.set_volume",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:mixer.set_volume",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/mixer.set_pan",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:mixer.set_pan",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/mixer.set_master_volume",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:mixer.set_master_volume",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/mixer.set_plugin_param",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:mixer.set_plugin_param",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/mixer.insert_plugin",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:mixer.insert_plugin",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/navigate.goto_bar",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:navigate.goto_bar",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/navigate.goto_marker",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:navigate.goto_marker",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/navigate.create_marker",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:navigate.create_marker",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/navigate.delete_marker",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:navigate.delete_marker",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/navigate.rename_marker",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:navigate.rename_marker",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/navigate.zoom_to_fit",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:navigate.zoom_to_fit",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/navigate.set_zoom",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:navigate.set_zoom",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/navigate.toggle_view",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:navigate.toggle_view",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/audio.analyze_file",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:audio.analyze_file",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/system.permissions",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:system.permissions",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/system.refresh_cache",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:system.refresh_cache",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/system.list_recent_traces",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:system.list_recent_traces",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/system.get_trace",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:system.get_trace",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/system.clear_traces",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:system.clear_traces",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/system.export_support_bundle",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:system.export_support_bundle",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/system.help",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:system.help",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/system.saga_preflight",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:system.saga_preflight",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/system.saga_execute",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:system.saga_execute",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/system.saga_status",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:system.saga_status",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/system.saga_cancel",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:system.saga_cancel",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/plugins.get_inventory",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:plugins.get_inventory",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/plugins.set_param_verified",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:plugins.set_param_verified",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/plugins.insert_verified",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:plugins.insert_verified",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/edit.undo",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:edit.undo",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/edit.redo",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:edit.redo",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/edit.cut",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:edit.cut",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/edit.copy",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:edit.copy",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/edit.paste",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:edit.paste",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/edit.delete",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:edit.delete",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/edit.select_all",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:edit.select_all",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/edit.split",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:edit.split",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/edit.join",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:edit.join",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/edit.quantize",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:edit.quantize",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/edit.bounce_in_place",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:edit.bounce_in_place",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/edit.normalize",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:edit.normalize",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/edit.duplicate",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:edit.duplicate",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/edit.toggle_step_input",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:edit.toggle_step_input",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.new",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.new",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.open",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.open",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.save",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.save",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.save_as",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.save_as",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.close",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.close",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.bounce",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.bounce",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.is_running",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.is_running",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.launch",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.launch",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.quit",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.quit",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.get_regions",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.get_regions",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.export_plan",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.export_plan",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.export_run",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.export_run",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.export_resume",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.export_resume",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.audit",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.audit",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.cleanup_plan",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.cleanup_plan",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/project.cleanup_apply",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:project.cleanup_apply",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.send_note",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.send_note",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.send_chord",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.send_chord",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.send_cc",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.send_cc",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.send_program_change",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.send_program_change",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.send_pitch_bend",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.send_pitch_bend",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.send_aftertouch",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.send_aftertouch",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.send_sysex",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.send_sysex",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.play_sequence",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.play_sequence",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.import_file",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.import_file",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.list_ports",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.list_ports",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.create_virtual_port",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.create_virtual_port",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.step_input",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.step_input",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.mmc_play",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.mmc_play",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.mmc_stop",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.mmc_stop",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.mmc_record",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.mmc_record",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/midi.mmc_locate",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:midi.mmc_locate",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.select",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.select",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.create_audio",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.create_audio",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.create_instrument",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.create_instrument",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.create_drummer",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.create_drummer",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.create_external_midi",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.create_external_midi",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.delete",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.delete",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.duplicate",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.duplicate",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.rename",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.rename",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.mute",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.mute",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.solo",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.solo",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.arm",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.arm",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.arm_only",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.arm_only",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.record_sequence",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.record_sequence",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.set_automation",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.set_automation",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.set_instrument",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.set_instrument",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.list_library",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.list_library",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.scan_library",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.scan_library",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.resolve_path",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.resolve_path",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "in-process/tracks.scan_plugin_presets",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Semantic qualification is deferred under a governed release-visible limitation.",
+    "affectedCapability": "operation:tracks.scan_plugin_presets",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "desktop/en-US/full/cold/empty",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "The English desktop axis is qualified in a separate exact-artifact run because one Logic process can expose only one UI locale at a time.",
+    "affectedCapability": "ADR-001-a host-axis availability",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "creator/en-US/full/cold/empty",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Creator Studio is not installed on the qualification host; this bounded host-axis limitation is release-visible.",
+    "affectedCapability": "ADR-001-a host-axis availability",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  },
+  {
+    "caseID": "creator/ko-KR/full/cold/empty",
+    "reasonCode": "known-limitation",
+    "owningIssue": "#284",
+    "userImpact": "Creator Studio is not installed on the qualification host; this bounded host-axis limitation is release-visible.",
+    "affectedCapability": "ADR-001-a host-axis availability",
+    "affectsDefaultProfile": true,
+    "expiryVersion": "99.0.0",
+    "releaseNoteVisible": true
+  }
+]

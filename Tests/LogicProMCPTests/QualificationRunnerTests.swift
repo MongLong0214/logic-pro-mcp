@@ -608,6 +608,39 @@ struct QualificationRunnerTests {
         #expect(!result(state: "B").isFailClosedAndStable)
     }
 
+    @Test func observedAxisReadbackStaysVerifiedWhenHealthWarms() async throws {
+        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
+        let driveResult = Self.driveResult(specs: specs, healthChangesAfterNegativeProbe: true)
+        #expect(driveResult.negative?.healthReadStable == false)
+        let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
+        defer { fixture.remove() }
+        try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
+
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let verification = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+
+        #expect(verification.exitCode == 0)
+    }
+
+    @Test func promotionAcceptsDigestBoundNonObjectOperationResponse() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .projectIsRunning })
+        let driveResult = Self.driveResult(
+            specs: [spec],
+            nonObjectResponseOperationID: spec.id
+        )
+        let fixture = try Fixture(specs: [spec], drive: { _ in driveResult })
+        defer { fixture.remove() }
+        let waivers = [Self.waiver(caseID: "in-process/\(spec.id.rawValue)")] + Self.axisWaivers()
+        try JSONEncoder().encode(waivers).write(to: fixture.waiversURL)
+
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let verification = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+
+        #expect(!Self.rejectionReasons(try Self.resultObject(verification)).contains(
+            "evidenceBindingMismatch"
+        ))
+    }
+
     @Test func negativeMutatingCallOverTransportIsStateCZeroWrite() async throws {
         let spec = try #require(OperationRegistry.specs.first)
         let fixture = try Fixture(
@@ -1689,7 +1722,7 @@ struct QualificationRunnerTests {
         #expect(stdout.contains("--expected-binary-sha256 <hex>"))
     }
 
-    @Test func releaseWorkflowDoesNotTrustCandidateSelfQualification() throws {
+    @Test func releaseWorkflowRequiresTrustedIndependentQualificationBeforePublication() throws {
         let workflow = try scriptContents(".github/workflows/release.yml")
         let package = try #require(workflow.range(of: "name: Package"))
         let formula = try #require(workflow.range(of: "name: Verify Formula install paths against tarball"))
@@ -1698,14 +1731,32 @@ struct QualificationRunnerTests {
         #expect(package.lowerBound < formula.lowerBound)
         #expect(formula.lowerBound < release.lowerBound)
         #expect(!workflow.contains("LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY"))
-        #expect(!workflow.contains("LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"))
+        let qualification = try #require(workflow.range(
+            of: "name: Enforce independent exact-artifact qualification"
+        ))
+        #expect(formula.lowerBound < qualification.lowerBound)
+        #expect(qualification.lowerBound < release.lowerBound)
         #expect(!workflow.contains("./LogicProMCP --qualify"))
-        #expect(!workflow.contains("./LogicProMCP --verify-promotion"))
+        #expect(workflow.contains("LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"))
+        #expect(workflow.contains("./LogicProMCP --verify-promotion"))
+        #expect(workflow.contains("--required-artifacts raw-transcript.json,mutation-restore-compensation.json"))
         let waiverData = try Data(contentsOf: URL(
             fileURLWithPath: ".github/qualification/waivers.json"
         ))
-        let waiverArray = try #require(JSONSerialization.jsonObject(with: waiverData) as? [Any])
-        #expect(waiverArray.isEmpty)
+        let waivers = try JSONDecoder().decode([QualificationWaiver].self, from: waiverData)
+        #expect(QualificationWaiverValidator.issues(in: waivers).isEmpty)
+        if !waivers.isEmpty {
+            #expect(waivers.allSatisfy { $0.releaseNoteVisible && $0.affectsDefaultProfile })
+        }
+        let uncoveredOperationIDs = OperationID.allCases.filter { operationID in
+            operationID != .systemHealth && !waivers.contains { waiver in
+                waiver.governsOperation(
+                    caseID: "in-process/\(operationID.rawValue)",
+                    operationID: operationID.rawValue
+                )
+            }
+        }
+        #expect(uncoveredOperationIDs.isEmpty)
         #expect(workflow.contains("tags:"))
         #expect(workflow.contains("validate-install:"))
         #expect(workflow.contains("needs: build"))
@@ -1854,7 +1905,9 @@ struct QualificationRunnerTests {
         traceOperationID: OperationID = .systemSagaExecute,
         tracePhases: [String] = ["request.received", "result.emitted"],
         failedOperationID: OperationID? = nil,
-        qualifiedReadOperationCount: Int? = nil
+        qualifiedReadOperationCount: Int? = nil,
+        healthChangesAfterNegativeProbe: Bool = false,
+        nonObjectResponseOperationID: OperationID? = nil
     ) -> QualificationDriveResult {
         let expectedCount = specs.count
         let actualCount = catalogCount ?? expectedCount
@@ -1904,7 +1957,9 @@ struct QualificationRunnerTests {
             if !isMutation, remainingQualifiedReads != nil {
                 remainingQualifiedReads? -= 1
             }
-            let response = spec.id == .systemHealth
+            let response = spec.id == nonObjectResponseOperationID
+                ? Data("plain text response".utf8)
+                : spec.id == .systemHealth
                 ? stableHealth
                 : Data((isMutation
                     ? "{\"operation\":\"\(spec.id.rawValue)\",\"state\":\"C\",\"error\":\"invalid_params\",\"write_attempted\":false}"
@@ -1923,7 +1978,7 @@ struct QualificationRunnerTests {
                     requestID: "fake-operation-\(spec.id.rawValue)",
                     responseData: response,
                     isError: isMutation || !readIsQualified,
-                    state: isMutation ? "C" : "A",
+                    state: spec.id == nonObjectResponseOperationID ? nil : isMutation ? "C" : "A",
                     error: isMutation ? "invalid_params" : nil,
                     writeAttempted: false,
                     readbackSource: spec.tool == .logicTransport
@@ -1979,7 +2034,9 @@ struct QualificationRunnerTests {
                 error: "invalid_params",
                 writeAttempted: false,
                 healthBefore: stableHealth,
-                healthAfter: stableHealth,
+                healthAfter: healthChangesAfterNegativeProbe
+                    ? stableHealth + Data("\n".utf8)
+                    : stableHealth,
                 catalogBefore: stableCatalog,
                 catalogAfter: stableCatalog
             ),

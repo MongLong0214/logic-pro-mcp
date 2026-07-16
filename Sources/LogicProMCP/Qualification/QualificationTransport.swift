@@ -727,6 +727,10 @@ struct QualificationTransport: Sendable {
         spec: OperationSpec,
         traceID: String
     ) throws -> (text: String, isError: Bool) {
+        if spec.mutability == .mutating,
+           let injection = QualificationFaultInjection(environment: ProcessInfo.processInfo.environment) {
+            return (injection.responseJSONText, true)
+        }
         let result: ToolCallResult = try session.request(
             id: id,
             method: "tools/call",

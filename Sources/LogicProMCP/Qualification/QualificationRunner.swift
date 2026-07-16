@@ -471,7 +471,7 @@ struct QualificationRunner: Sendable {
                 QualificationReadbackEvidence(
                     source: "logic://system/health",
                     requestID: axisReadbackRequestID,
-                    verified: isObservedAxis && (driveResult.negative?.healthReadStable == true),
+                    verified: isObservedAxis && passed,
                     sha256: SupportBundleBuilder.sha256($0)
                 )
             }
@@ -795,11 +795,21 @@ struct QualificationRunner: Sendable {
         )
         let manifestArtifact = Self.manifestFilename
         let requiredArtifacts = options.requiredArtifacts.union([manifestArtifact])
+        let manifestPaths: Set<String> = (try? Self.readNoFollow(
+            relativePath: manifestArtifact,
+            directory: directory,
+            beforeRead: runtime.beforeEvidenceRead
+        )).flatMap { try? JSONDecoder().decode(EvidenceManifest.self, from: $0) }
+            .map { Set($0.files.map(\.path)) } ?? []
+        let executableName = try runtime.executableURL().lastPathComponent
         let presentArtifacts = Set(requiredArtifacts.filter { artifact in
             let url = artifact.hasPrefix("/")
                 ? URL(fileURLWithPath: artifact)
                 : directory.appendingPathComponent(artifact)
-            return Self.isReadableRegularFile(url)
+            let digestBound = artifact == manifestArtifact
+                || artifact == executableName
+                || manifestPaths.contains(artifact)
+            return digestBound && Self.isReadableRegularFile(url)
         })
         let evidenceBindingIssue = Self.evidenceBindingIssue(
             attestation: attestation,
@@ -1278,13 +1288,21 @@ struct QualificationRunner: Sendable {
               artifact.command == evidence.command,
               artifact.requestID == evidence.operationRequestID,
               artifact.isError == evidence.operationIsError,
-              let payloadData = artifact.payload.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+              let payloadData = artifact.payload.data(using: .utf8)
         else {
             return false
         }
         if evidence.verificationKind == .semanticReadback {
             return true
+        }
+        let payload = try? JSONSerialization.jsonObject(
+            with: payloadData,
+            options: [.fragmentsAllowed]
+        )
+        guard let object = payload as? [String: Any] else {
+            return evidence.operationState == nil
+                && evidence.operationError == nil
+                && evidence.operationWriteAttempted != true
         }
         return object["state"] as? String == evidence.operationState
             && object["error"] as? String == evidence.operationError

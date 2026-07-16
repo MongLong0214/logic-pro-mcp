@@ -165,6 +165,41 @@ jobs:
         # .testFormulaInstallPathsMatchRepoAndReleaseStaging.
         run: bash Scripts/release-verify-formula-install-paths.sh
 
+      # managed-fixture-matrix / required-matrix-axes:4
+      # The independently produced bundle must cover Desktop/Creator × en-US/ko-KR,
+      # every registered operation by semantic readback or a governed default-profile
+      # waiver, and mutation/readback/restore/compensation. Missing evidence fails closed.
+      - name: Enforce independent exact-artifact qualification
+        env:
+          QUALIFICATION_EVIDENCE_URL: ${{ secrets.QUALIFICATION_EVIDENCE_URL }}
+          QUALIFICATION_EVIDENCE_SHA256: ${{ secrets.QUALIFICATION_EVIDENCE_SHA256 }}
+          TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
+        run: |
+          echo "managed-fixture-matrix"
+          echo "required-matrix-axes:4"
+          test -n "$QUALIFICATION_EVIDENCE_URL"
+          test -n "$QUALIFICATION_EVIDENCE_SHA256"
+          test -n "$TRUSTED_QUALIFICATION_PUBLIC_KEY"
+          curl --fail --location --silent --show-error \
+            "$QUALIFICATION_EVIDENCE_URL" --output qualification-evidence.zip
+          echo "$QUALIFICATION_EVIDENCE_SHA256  qualification-evidence.zip" | shasum -a 256 --check
+          mkdir qualification-evidence
+          ditto -x -k qualification-evidence.zip qualification-evidence
+          binary_sha256="$(shasum -a 256 LogicProMCP | awk '{print $1}')"
+          LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY="$TRUSTED_QUALIFICATION_PUBLIC_KEY" \
+            ./LogicProMCP --verify-promotion \
+              --attestation qualification-evidence/release-qualification-attestation.json \
+              --release-version "${GITHUB_REF_NAME#v}" \
+              --expected-binary-sha256 "$binary_sha256" \
+              --required-artifacts raw-transcript.json,mutation-restore-compensation.json
+
+      - name: trusted-provenance-verify
+        env:
+          TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
+        run: |
+          test -f qualification-evidence/evidence-manifest.json
+          test -n "$TRUSTED_QUALIFICATION_PUBLIC_KEY"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191
         with:
@@ -176,6 +211,11 @@ jobs:
             LogicProMCP-macOS-arm64.tar.gz
             RELEASE-METADATA.json
             SHA256SUMS.txt
+            qualification-evidence/release-qualification-attestation.json
+            qualification-evidence/evidence-manifest.json
+            qualification-evidence/case-manifest.json
+            qualification-evidence/raw-transcript.json
+            qualification-evidence/mutation-restore-compensation.json
 
   validate-install:
     needs: build

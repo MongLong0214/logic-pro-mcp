@@ -929,8 +929,10 @@ actor LogicProServer {
         return spec
     }
 
-    private func registerTools() async {
-        let handlers = makeHandlers(dialogPresent: { AXLogicProElements.dialogPresent() })
+    private func registerTools(
+        dialogPresent: @escaping @Sendable () -> Bool = { AXLogicProElements.dialogPresent() }
+    ) async {
+        let handlers = makeHandlers(dialogPresent: dialogPresent)
         await server.withMethodHandler(ListTools.self) { params in
             if let error = Self.invalidCursorError(params.cursor, method: "tools/list") { throw error }
             return await handlers.listTools(params)
@@ -1031,10 +1033,13 @@ actor LogicProServer {
         await resourceNotifier.reset()
     }
 
-    func startProtocolProbe(transport: any Transport) async throws {
+    func startProtocolProbe(
+        transport: any Transport,
+        dialogPresent: @escaping @Sendable () -> Bool = { false }
+    ) async throws {
         await sagaJournal.clear()
         OperationHandlerRegistry.validate()
-        await registerTools()
+        await registerTools(dialogPresent: dialogPresent)
         await registerResources()
         await registerPrompts()
         try await server.start(transport: transport)
