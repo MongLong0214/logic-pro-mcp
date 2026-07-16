@@ -33,6 +33,7 @@ enum HonestContract {
         case importedAsGMDevice
         case sendOnlyNoReadback
         case sagaReconciliationRequired
+        case sagaCancellationPending
 
         var rawValue: String {
             switch self {
@@ -43,6 +44,7 @@ enum HonestContract {
             case .importedAsGMDevice: return "imported_as_gm_device"
             case .sendOnlyNoReadback: return "send_only_no_readback"
             case .sagaReconciliationRequired: return "saga_reconciliation_required"
+            case .sagaCancellationPending: return "saga_cancellation_pending"
             }
         }
     }

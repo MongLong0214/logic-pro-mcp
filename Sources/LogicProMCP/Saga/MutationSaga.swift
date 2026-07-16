@@ -14,6 +14,7 @@ enum SagaState: String, Codable, CaseIterable, Equatable, Sendable {
     case partiallyCompensated
     case compensationFailed
     case rollbackUncertain
+    case cancelled
 }
 
 struct SagaExpectedInverse: Codable, Equatable, Sendable {
@@ -234,7 +235,8 @@ actor MutationSaga {
 
     func execute<Executor: SagaStepExecutor>(
         _ plan: SagaPlan,
-        executor: Executor
+        executor: Executor,
+        cancellationRequested: @Sendable () async -> Bool = { false }
     ) async -> SagaOutcome {
         let result = await preflight(plan)
         switch result.status {
@@ -267,6 +269,13 @@ actor MutationSaga {
 
         var appliedIndices: [Int] = []
         for (index, step) in plan.steps.enumerated() {
+            if await cancellationRequested() {
+                return await cancel(
+                    appliedIndices: appliedIndices,
+                    executor: executor,
+                    outcome: outcome
+                )
+            }
             guard let beforeState = await executor.readState(step),
                   let desiredValue = step.params[step.expectedInverse.valueParameter] else {
                 outcome.journal.append(CompensationJournalRecord(
@@ -305,6 +314,13 @@ actor MutationSaga {
             ))
             sessions[plan.idempotencyKey] = outcome
 
+            if await cancellationRequested() {
+                return await cancel(
+                    appliedIndices: appliedIndices,
+                    executor: executor,
+                    outcome: outcome
+                )
+            }
             let executionResult = await executor.run(step)
             outcome.journal[index].writeBoundaryCrossed = executionResult.writeBoundaryCrossed
             outcome.journal[index].executionResult = executionResult
@@ -325,6 +341,13 @@ actor MutationSaga {
                 if disposition == .applied {
                     appliedIndices.append(index)
                     sessions[plan.idempotencyKey] = outcome
+                    if await cancellationRequested() {
+                        return await cancel(
+                            appliedIndices: appliedIndices,
+                            executor: executor,
+                            outcome: outcome
+                        )
+                    }
                     continue
                 }
                 markReconciliation(outcome: &outcome)
@@ -417,9 +440,49 @@ actor MutationSaga {
             }
         }
 
+        if await cancellationRequested() {
+            return await cancel(
+                appliedIndices: appliedIndices,
+                executor: executor,
+                outcome: outcome
+            )
+        }
+
         outcome.complete = true
         advance(.completed, outcome: &outcome)
         return outcome
+    }
+
+    func cancel<Executor: SagaStepExecutor>(
+        outcome: SagaOutcome,
+        executor: Executor
+    ) async -> SagaOutcome {
+        let appliedIndices = outcome.journal.indices.filter {
+            outcome.journal[$0].verificationEvidence?.disposition == .applied
+        }
+        return await cancel(
+            appliedIndices: appliedIndices,
+            executor: executor,
+            outcome: outcome
+        )
+    }
+
+    private func cancel<Executor: SagaStepExecutor>(
+        appliedIndices: [Int],
+        executor: Executor,
+        outcome: SagaOutcome
+    ) async -> SagaOutcome {
+        guard !appliedIndices.isEmpty else {
+            var cancelled = outcome
+            advance(.cancelled, outcome: &cancelled)
+            return cancelled
+        }
+        return await compensate(
+            appliedIndices: appliedIndices,
+            rollbackIsUncertain: false,
+            executor: executor,
+            outcome: outcome
+        )
     }
 
     private func compensate<Executor: SagaStepExecutor>(
@@ -541,7 +604,7 @@ actor MutationSaga {
              .completed:
             true
         case .partiallyApplied, .fullyCompensated, .partiallyCompensated,
-             .compensationFailed, .rollbackUncertain:
+             .compensationFailed, .rollbackUncertain, .cancelled:
             false
         }
     }

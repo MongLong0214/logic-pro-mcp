@@ -17,12 +17,16 @@ actor SagaJournal {
 
     enum Record: Equatable, Sendable {
         case inProgress
+        case cancellationRequested
+        case cancelled(StoredOutcome, verified: Bool)
         case completed(StoredOutcome)
     }
 
     enum BeginResult: Equatable, Sendable {
         case started(Claim)
         case inProgress
+        case cancellationRequested
+        case cancelled
         case completed(StoredOutcome)
         case conflict
         case capacityExceeded
@@ -31,9 +35,19 @@ actor SagaJournal {
     enum PlanDisposition: Equatable, Sendable {
         case available
         case inProgress
+        case cancellationRequested
+        case cancelled
         case completed
         case conflict
         case capacityExceeded
+    }
+
+    enum CancelResult: Equatable, Sendable {
+        case requested
+        case alreadyRequested
+        case cancelled(StoredOutcome, verified: Bool)
+        case completed
+        case notFound
     }
 
     private struct Entry: Sendable {
@@ -58,6 +72,8 @@ actor SagaJournal {
         guard entry.plan == plan else { return .conflict }
         switch entry.record {
         case .inProgress: return .inProgress
+        case .cancellationRequested: return .cancellationRequested
+        case .cancelled: return .cancelled
         case .completed: return .completed
         }
     }
@@ -68,6 +84,10 @@ actor SagaJournal {
             switch entry.record {
             case .inProgress:
                 return .inProgress
+            case .cancellationRequested:
+                return .cancellationRequested
+            case .cancelled:
+                return .cancelled
             case .completed(let outcome):
                 return .completed(outcome)
             }
@@ -83,13 +103,30 @@ actor SagaJournal {
         return .started(claim)
     }
 
-    func complete(_ claim: Claim, outcome: StoredOutcome) {
+    @discardableResult
+    func complete(_ claim: Claim, outcome: StoredOutcome) -> Bool {
         guard claim.generation == generation,
               var entry = entries[claim.idempotencyKey],
               entry.claim == claim,
-              entry.record == .inProgress else { return }
+              entry.record == .inProgress else { return false }
         entry.record = .completed(outcome)
         entries[claim.idempotencyKey] = entry
+        return true
+    }
+
+    @discardableResult
+    func completeCancellation(
+        _ claim: Claim,
+        outcome: StoredOutcome,
+        verified: Bool
+    ) -> Bool {
+        guard claim.generation == generation,
+              var entry = entries[claim.idempotencyKey],
+              entry.claim == claim,
+              entry.record == .cancellationRequested else { return false }
+        entry.record = .cancelled(outcome, verified: verified)
+        entries[claim.idempotencyKey] = entry
+        return true
     }
 
     func abandon(_ claim: Claim) {
@@ -100,8 +137,56 @@ actor SagaJournal {
         entries.removeValue(forKey: claim.idempotencyKey)
     }
 
+    func finishGateRefusal(_ claim: Claim, cancellationOutcome: StoredOutcome) {
+        guard claim.generation == generation,
+              var entry = entries[claim.idempotencyKey],
+              entry.claim == claim else { return }
+        switch entry.record {
+        case .inProgress:
+            entries.removeValue(forKey: claim.idempotencyKey)
+        case .cancellationRequested:
+            entry.record = .cancelled(cancellationOutcome, verified: true)
+            entries[claim.idempotencyKey] = entry
+        case .cancelled, .completed:
+            break
+        }
+    }
+
+    @discardableResult
+    func completeBeforeWrite(_ claim: Claim, outcome: StoredOutcome) -> Bool {
+        guard claim.generation == generation,
+              var entry = entries[claim.idempotencyKey],
+              entry.claim == claim else { return false }
+        switch entry.record {
+        case .inProgress:
+            entry.record = .completed(outcome)
+        case .cancellationRequested:
+            entry.record = .cancelled(outcome, verified: true)
+        case .cancelled, .completed:
+            return false
+        }
+        entries[claim.idempotencyKey] = entry
+        return true
+    }
+
     func record(for idempotencyKey: String) -> Record? {
         entries[idempotencyKey]?.record
+    }
+
+    func cancel(idempotencyKey: String) -> CancelResult {
+        guard var entry = entries[idempotencyKey] else { return .notFound }
+        switch entry.record {
+        case .inProgress:
+            entry.record = .cancellationRequested
+            entries[idempotencyKey] = entry
+            return .requested
+        case .cancellationRequested:
+            return .alreadyRequested
+        case .cancelled(let outcome, let verified):
+            return .cancelled(outcome, verified: verified)
+        case .completed:
+            return .completed
+        }
     }
 
     func clear() {
@@ -322,8 +407,20 @@ enum SagaWire {
                 extras: extras
             )
             isError = true
+        case .cancelled:
+            extras["verified"] = false
+            body = HonestContract.encodeStateC(
+                error: .sagaExecutionFailed,
+                hint: "The requested saga was cancelled before completion",
+                extras: extras
+            )
+            isError = true
         }
         return SagaJournal.StoredOutcome(body: body, isError: isError)
+    }
+
+    static func cancellationVerified(_ outcome: SagaOutcome) -> Bool {
+        outcome.state == .cancelled || outcome.state == .fullyCompensated
     }
 
     static func duplicateOutcome(

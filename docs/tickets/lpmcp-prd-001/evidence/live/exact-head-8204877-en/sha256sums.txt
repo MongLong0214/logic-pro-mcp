@@ -1,0 +1,6 @@
+574c09f0bb26a596ca0a55fc61c5204d255a9858ea5814fc4ef82b1f7968a36e  docs/tickets/lpmcp-prd-001/evidence/live/exact-head-8204877-en/attestation.json
+d027e23796cb6c7939fd4960495d08c7a8ef85bc3a9290cb7c75ac95db83b9d7  docs/tickets/lpmcp-prd-001/evidence/live/exact-head-8204877-en/case-manifest.json
+d0d226a333017d183738ebbd6c99d80c45e1ac7e636b7434329a1cd5f3cc6a1e  docs/tickets/lpmcp-prd-001/evidence/live/exact-head-8204877-en/evidence-manifest.json
+5e0702ec4eabc7fd0ef82c3ce5b6d68680901191c77606c7f666ed878f9c09dc  docs/tickets/lpmcp-prd-001/evidence/live/exact-head-8204877-en/qualify-retry.log
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  docs/tickets/lpmcp-prd-001/evidence/live/exact-head-8204877-en/qualify-terminal.log
+5e0702ec4eabc7fd0ef82c3ce5b6d68680901191c77606c7f666ed878f9c09dc  docs/tickets/lpmcp-prd-001/evidence/live/exact-head-8204877-en/qualify.log

@@ -320,31 +320,69 @@ enum AXValueExtractors {
         return contract
     }
 
-    /// Real track-header automation mode (WS3 AC2). Scans the header for the
-    /// automation control — gated by `automationModeContext` so unrelated
-    /// "read"/"write" AX text cannot be misread — and maps its mode token to
-    /// `AutomationMode`. Returns `.off` (the pre-fix fabricated default) when no
-    /// automation control is found or its mode is unreadable; NO `.unknown` case
-    /// is introduced.
-    private static func extractTrackAutomationMode(
+    static func extractTrackAutomationModeIfReadable(
+        from header: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> AutomationMode? {
+        let elements = AXHelpers.findAllDescendants(of: header, maxDepth: 4, runtime: runtime)
+        let candidates = elements.filter { element in
+            guard AXHelpers.getRole(element, runtime: runtime) == (kAXGroupRole as String),
+                  let description = AXHelpers.getDescription(element, runtime: runtime)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                  !description.isEmpty else { return false }
+            return AXLocalePolicy.automationModeContext.labels.contains { label in
+                description.caseInsensitiveCompare(label) == .orderedSame
+                    || description.range(
+                        of: "\(label):",
+                        options: [.anchored, .caseInsensitive]
+                    ) != nil
+                    || description.range(
+                        of: "\(label) ",
+                        options: [.anchored, .caseInsensitive]
+                    ) != nil
+            }
+        }
+        guard candidates.count == 1, let element = candidates.first else { return nil }
+
+        let value: String? = AXHelpers.getAttribute(
+            element,
+            kAXValueAttribute,
+            runtime: runtime
+        )
+        let fields = [
+            AXHelpers.getDescription(element, runtime: runtime),
+            AXHelpers.getTitle(element, runtime: runtime),
+            value,
+        ].compactMap { $0?.lowercased() }
+        var observed: [AutomationMode] = []
+        let modes: [(AutomationMode, AXLocalePolicy.LabelSet)] = [
+            (.write, AXLocalePolicy.automationModeWrite),
+            (.trim, AXLocalePolicy.automationModeTrim),
+            (.touch, AXLocalePolicy.automationModeTouch),
+            (.latch, AXLocalePolicy.automationModeLatch),
+            (.read, AXLocalePolicy.automationModeRead),
+            (.off, AXLocalePolicy.automationModeOff),
+        ]
+        for field in fields {
+            let tokens = field.components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty }
+            for (mode, labels) in modes where labels.labels.contains(where: { label in
+                tokens.contains { $0.caseInsensitiveCompare(label) == .orderedSame }
+            }) {
+                if !observed.contains(where: { $0 == mode }) {
+                    observed.append(mode)
+                }
+            }
+        }
+        guard observed.count == 1 else { return nil }
+        return observed[0]
+    }
+
+    static func extractTrackAutomationMode(
         from header: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> AutomationMode {
-        let elements = [header] + AXHelpers.findAllDescendants(of: header, maxDepth: 4, runtime: runtime)
-        for element in elements {
-            let combined = [
-                AXHelpers.getDescription(element, runtime: runtime),
-                AXHelpers.getTitle(element, runtime: runtime),
-                extractTextValue(element, runtime: runtime),
-            ].compactMap { $0?.lowercased() }.joined(separator: " ")
-            guard AXLocalePolicy.automationModeContext.containsAny(in: combined) else { continue }
-            if AXLocalePolicy.automationModeWrite.containsAny(in: combined) { return .write }
-            if AXLocalePolicy.automationModeTrim.containsAny(in: combined) { return .trim }
-            if AXLocalePolicy.automationModeTouch.containsAny(in: combined) { return .touch }
-            if AXLocalePolicy.automationModeLatch.containsAny(in: combined) { return .latch }
-            if AXLocalePolicy.automationModeRead.containsAny(in: combined) { return .read }
-        }
-        return .off
+        extractTrackAutomationModeIfReadable(from: header, runtime: runtime) ?? .off
     }
 
     /// Read transport bar elements and build a TransportState.

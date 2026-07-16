@@ -1,0 +1,11 @@
+# Independent release-qualification trust boundary (#367 LPMCP-PRD-001 / B4).
+# Changes to the standalone verifier, the release workflow, the pinned
+# verifier commit, and the promotion policy require code-owner review so a
+# candidate PR cannot weaken or bypass the independent gate.
+/Sources/TrustedVerifier/                                   @MongLong0214
+/Sources/LogicProMCP/Qualification/QualificationRunner.swift @MongLong0214
+/Sources/LogicProMCP/Qualification/PromotionGate.swift       @MongLong0214
+/Sources/LogicProMCP/Qualification/ProductionReadinessContracts.swift @MongLong0214
+/.github/workflows/release.yml                              @MongLong0214
+/.github/CODEOWNERS                                         @MongLong0214
+/Package.swift                                              @MongLong0214

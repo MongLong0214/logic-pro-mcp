@@ -427,7 +427,7 @@ enum OperationRegistry {
         (.navigateGotoMarker, "goto_marker", .readbackRequired, .defaultInstall, ["index", "name"]),
         (.navigateCreateMarker, "create_marker", .readbackRequired, .defaultInstall, ["name"]),
         (.navigateDeleteMarker, "delete_marker", .none, .requiresKeyBinding, ["index"]),
-        (.navigateRenameMarker, "rename_marker", .none, .unsupported, ["index", "name"]),
+        (.navigateRenameMarker, "rename_marker", .readbackRequired, .defaultInstall, ["index", "name"]),
         (.navigateZoomToFit, "zoom_to_fit", .readbackRequired, .defaultInstall, []),
         (.navigateSetZoom, "set_zoom", .readbackRequired, .defaultInstall, ["direction", "level"]),
         (.navigateToggleView, "toggle_view", .none, .defaultInstall, ["view"]),
@@ -490,7 +490,7 @@ enum OperationRegistry {
         (.systemSagaPreflight, "saga_preflight", Mutability.readOnly, DeadlineClass.medium, VerificationPolicy.none, ["idempotency_key", "steps"]),
         (.systemSagaExecute, "saga_execute", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, ["idempotency_key", "steps"]),
         (.systemSagaStatus, "saga_status", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["idempotency_key"]),
-        (.systemSagaCancel, "saga_cancel", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none, ["idempotency_key"]),
+        (.systemSagaCancel, "saga_cancel", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, ["idempotency_key"]),
     ] as [(OperationID, String, Mutability, DeadlineClass, VerificationPolicy, Set<String>)]).map { entry in
         OperationSpec(
             id: entry.0,
@@ -716,7 +716,7 @@ enum OperationRegistry {
         (.tracksArm, "arm", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["enabled", "index", "track"]),
         (.tracksArmOnly, "arm_only", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["index", "track"]),
         (.tracksRecordSequence, "record_sequence", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, TargetPolicy.none, ["bar", "notes", "tempo"]),
-        (.tracksSetAutomation, "set_automation", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none, TargetPolicy.requiresStableTarget, ["index", "mode", "track"]),
+        (.tracksSetAutomation, "set_automation", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["index", "mode", "track"]),
         (.tracksSetInstrument, "set_instrument", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["category", "index", "path", "preset"]),
         (.tracksListLibrary, "list_library", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none, TargetPolicy.none, []),
         (.tracksScanLibrary, "scan_library", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none, TargetPolicy.none, ["mode"]),

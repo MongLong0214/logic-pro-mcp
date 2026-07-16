@@ -18,13 +18,19 @@ actor MCUChannel: Channel {
     struct AXReadback: Sendable {
         let readVolume: @Sendable (Int) async -> Double?
         let readPan: @Sendable (Int) async -> Double?
+        let readAutomationMode: @Sendable (Int) async -> AutomationMode?
+        let readSelectedTrack: @Sendable () async -> Int?
 
         init(
             readVolume: @escaping @Sendable (Int) async -> Double?,
-            readPan: @escaping @Sendable (Int) async -> Double?
+            readPan: @escaping @Sendable (Int) async -> Double?,
+            readAutomationMode: @escaping @Sendable (Int) async -> AutomationMode? = { _ in nil },
+            readSelectedTrack: @escaping @Sendable () async -> Int? = { nil }
         ) {
             self.readVolume = readVolume
             self.readPan = readPan
+            self.readAutomationMode = readAutomationMode
+            self.readSelectedTrack = readSelectedTrack
         }
     }
 
@@ -571,26 +577,70 @@ actor MCUChannel: Channel {
 
     private func executeAutomation(_ params: [String: String]) async -> ChannelResult {
         let operation = "track.set_automation"
+        let track: Int
         let mode: String
         let function: MCUProtocol.ButtonFunction
         do {
             (mode, function) = try Self.requiredAutomationMode(params["mode"], operation: operation)
+            track = try Self.requiredTrackIndex(params["index"], operation: operation)
         } catch let failure as ValidationFailure {
             return Self.invalidParams(failure.hint, operation: operation)
         } catch {
             return Self.invalidParams("Invalid MCU parameters for \(operation)", operation: operation)
         }
-        let bytes = MCUProtocol.encodeButton(function, on: true)
-        await transport.send(bytes)
-        // v3.1.2 (P0-1) — Automation mode buttons (Read / Write / Touch / Latch
-        // / Trim) are MCU LED-only writes; Logic does not surface the active
-        // mode back through the MCU echo stream that StateCache subscribes to.
-        // Until an AX-side automation-mode read-back is added (PRD §4.2 G), the
-        // honest envelope is State B `readback_unavailable`.
-        return .success(HonestContract.encodeStateB(
-            reason: .readbackUnavailable,
-            extras: ["function": "set_automation", "mode": mode]
-        ))
+        let requestedMode = AutomationMode(rawValue: mode)
+        var extras: [String: Any] = [
+            "function": "set_automation",
+            "track": track,
+            "mode": mode,
+        ]
+        var observedMode = await axReadback?.readAutomationMode(track)
+        if observedMode == requestedMode {
+            extras["observed_mode"] = observedMode?.rawValue
+            extras["write_attempted"] = false
+            return .success(HonestContract.encodeStateA(extras: extras))
+        }
+
+        return await withBanking(targetTrack: track) { strip in
+            await self.transport.send(MCUProtocol.encodeButton(.select, strip: strip, on: true))
+            var observedSelectedTrack: Int?
+            if let axReadback = self.axReadback {
+                for attempt in 0..<10 {
+                    observedSelectedTrack = await axReadback.readSelectedTrack()
+                    if observedSelectedTrack == track { break }
+                    if attempt < 9 { try? await Task.sleep(nanoseconds: 50_000_000) }
+                }
+            }
+            extras["write_attempted"] = true
+            extras["automation_write_attempted"] = false
+            if let observedSelectedTrack {
+                extras["observed_selected_track"] = observedSelectedTrack
+            }
+            guard observedSelectedTrack == track else {
+                return .success(HonestContract.encodeStateB(
+                    reason: observedSelectedTrack == nil ? .readbackUnavailable : .readbackMismatch,
+                    extras: extras
+                ))
+            }
+
+            await self.transport.send(MCUProtocol.encodeButton(function, on: true))
+            extras["automation_write_attempted"] = true
+            if let axReadback = self.axReadback {
+                for attempt in 0..<10 {
+                    observedMode = await axReadback.readAutomationMode(track)
+                    if observedMode == requestedMode { break }
+                    if attempt < 9 { try? await Task.sleep(nanoseconds: 50_000_000) }
+                }
+            }
+            if let observedMode { extras["observed_mode"] = observedMode.rawValue }
+            guard observedMode == requestedMode else {
+                return .success(HonestContract.encodeStateB(
+                    reason: observedMode == nil ? .readbackUnavailable : .readbackMismatch,
+                    extras: extras
+                ))
+            }
+            return .success(HonestContract.encodeStateA(extras: extras))
+        }
     }
 
     // MARK: - Validation

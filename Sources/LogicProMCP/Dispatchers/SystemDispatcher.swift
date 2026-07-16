@@ -222,6 +222,7 @@ struct SystemDispatcher: OperationTraceDispatching {
         dialogPresent: @escaping @Sendable () -> Bool = { false },
         sagaJournal: SagaJournal = SagaJournal(),
         mutationGate: LogicMutationGate? = nil,
+        sagaAfterJournalBegin: (@Sendable () async -> Void)? = nil,
         sagaRefreshAfterWrite: (@Sendable () async -> Void)? = nil,
         logicHealthObservation: @Sendable () -> LogicHealthObservation = {
             productionLogicHealthObservation()
@@ -399,6 +400,10 @@ struct SystemDispatcher: OperationTraceDispatching {
                 journalIssues = [[
                     "code": HonestContract.FailureError.sagaJournalCapacityExceeded.rawValue,
                 ]]
+            case .cancellationRequested, .cancelled:
+                journalIssues = [[
+                    "code": HonestContract.FailureError.unsupportedState.rawValue,
+                ]]
             case .available, .inProgress, .completed:
                 journalIssues = []
             }
@@ -442,6 +447,24 @@ struct SystemDispatcher: OperationTraceDispatching {
                     ),
                     traceID: traceID
                 )
+            case .cancellationRequested:
+                return await finalizeTrace(
+                    SagaWire.scopedStateC(
+                        .sagaInProgress,
+                        hint: "Cancellation is pending for this saga",
+                        extras: ["idempotency_key": plan.idempotencyKey]
+                    ),
+                    traceID: traceID
+                )
+            case .cancelled:
+                return await finalizeTrace(
+                    SagaWire.scopedStateC(
+                        .unsupportedState,
+                        hint: "The saga was cancelled and cannot be executed",
+                        extras: ["idempotency_key": plan.idempotencyKey]
+                    ),
+                    traceID: traceID
+                )
             case .completed(let outcome):
                 let duplicate = SagaWire.duplicateOutcome(outcome)
                 return await finalizeTrace(
@@ -459,15 +482,14 @@ struct SystemDispatcher: OperationTraceDispatching {
                     traceID: traceID
                 )
             case .started(let journalClaim):
+                await sagaAfterJournalBegin?()
                 let mutationClaim: LogicMutationGate.Claim?
                 if let mutationGate {
                     guard let acquired = mutationGate.tryAcquire(
                         operation: OperationID.systemSagaExecute.rawValue,
                         reclaimPolicy: .releaseOnly
                     ) else {
-                        await sagaJournal.abandon(journalClaim)
-                        return await finalizeTrace(
-                            SagaWire.scopedStateC(
+                        let result = SagaWire.scopedStateC(
                                 .mutatingOperationInProgress,
                                 hint: "Saga execution is waiting for the active mutation to finish",
                                 extras: [
@@ -477,9 +499,12 @@ struct SystemDispatcher: OperationTraceDispatching {
                                     "safe_to_retry": true,
                                     "write_attempted": false,
                                 ]
-                            ),
-                            traceID: traceID
                         )
+                        await sagaJournal.finishGateRefusal(
+                            journalClaim,
+                            cancellationOutcome: SagaWire.storedOutcome(from: result)
+                        )
+                        return await finalizeTrace(result, traceID: traceID)
                     }
                     mutationClaim = acquired
                 } else {
@@ -518,7 +543,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                             ),
                         ]
                     )
-                    await sagaJournal.complete(
+                    await sagaJournal.completeBeforeWrite(
                         journalClaim,
                         outcome: SagaWire.storedOutcome(from: result)
                     )
@@ -549,10 +574,36 @@ struct SystemDispatcher: OperationTraceDispatching {
                 let outcome = await OperationTraceParentBoundary.$onWriteBoundary.withValue(
                     onWriteBoundary
                 ) {
-                    await saga.execute(plan, executor: surfaceExecutor)
+                    await saga.execute(
+                        plan,
+                        executor: surfaceExecutor,
+                        cancellationRequested: {
+                            await sagaJournal.record(for: plan.idempotencyKey) == .cancellationRequested
+                        }
+                    )
                 }
-                let stored = SagaWire.storedOutcome(plan: plan, outcome: outcome)
-                await sagaJournal.complete(journalClaim, outcome: stored)
+                let completed = SagaWire.storedOutcome(plan: plan, outcome: outcome)
+                if await sagaJournal.complete(journalClaim, outcome: completed) {
+                    return await finalizeTrace(
+                        toolTextResult(completed.body, isError: completed.isError),
+                        traceID: traceID
+                    )
+                }
+                guard await sagaJournal.record(for: plan.idempotencyKey) == .cancellationRequested else {
+                    return await finalizeTrace(
+                        toolTextResult(completed.body, isError: completed.isError),
+                        traceID: traceID
+                    )
+                }
+                let finalOutcome = outcome.state == .completed
+                    ? await saga.cancel(outcome: outcome, executor: surfaceExecutor)
+                    : outcome
+                let stored = SagaWire.storedOutcome(plan: plan, outcome: finalOutcome)
+                await sagaJournal.completeCancellation(
+                    journalClaim,
+                    outcome: stored,
+                    verified: SagaWire.cancellationVerified(finalOutcome)
+                )
                 return await finalizeTrace(
                     toolTextResult(stored.body, isError: stored.isError),
                     traceID: traceID
@@ -577,6 +628,14 @@ struct SystemDispatcher: OperationTraceDispatching {
             switch record {
             case .inProgress:
                 details = ["status": "in_progress"]
+            case .cancellationRequested:
+                details = ["status": "cancellation_requested"]
+            case .cancelled(let outcome, let verified):
+                details = [
+                    "status": "cancelled",
+                    "verified": verified,
+                    "outcome": SagaWire.jsonObject(outcome.body),
+                ]
             case .completed(let outcome):
                 details = ["status": "completed", "outcome": SagaWire.jsonObject(outcome.body)]
             }
@@ -596,17 +655,11 @@ struct SystemDispatcher: OperationTraceDispatching {
                 return await finalizeTrace(SagaWire.invalidParams(error), traceID: traceID)
             }
             let result: CallTool.Result
-            switch await sagaJournal.record(for: idempotencyKey) {
-            case nil:
+            switch await sagaJournal.cancel(idempotencyKey: idempotencyKey) {
+            case .notFound:
                 result = SagaWire.scopedStateC(
                     .elementNotFound,
                     hint: "No saga journal record exists for this idempotency_key",
-                    extras: ["idempotency_key": idempotencyKey]
-                )
-            case .inProgress:
-                result = SagaWire.scopedStateC(
-                    .notSupported,
-                    hint: "The current saga engine does not expose safe step-boundary cancellation",
                     extras: ["idempotency_key": idempotencyKey]
                 )
             case .completed:
@@ -615,6 +668,26 @@ struct SystemDispatcher: OperationTraceDispatching {
                     hint: "The saga is already completed",
                     extras: ["idempotency_key": idempotencyKey]
                 )
+            case .requested, .alreadyRequested:
+                result = toolTextResult(HonestContract.encodeStateB(
+                    reason: .sagaCancellationPending,
+                    extras: SagaWire.sessionFields.merging([
+                        "idempotency_key": idempotencyKey,
+                        "status": "cancellation_requested",
+                    ]) { _, new in new }
+                ))
+            case .cancelled(let outcome, let verified):
+                let extras = SagaWire.sessionFields.merging([
+                    "idempotency_key": idempotencyKey,
+                    "status": "cancelled",
+                    "outcome": SagaWire.jsonObject(outcome.body),
+                ]) { _, new in new }
+                result = verified
+                    ? toolTextResult(HonestContract.encodeStateA(extras: extras))
+                    : toolTextResult(HonestContract.encodeStateB(
+                        reason: .sagaReconciliationRequired,
+                        extras: extras
+                    ))
             }
             return await finalizeTrace(result, traceID: traceID)
 
@@ -913,7 +986,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                                        `"not-attempted"` (or `"ignored:<legacy instrument_path>"` for clients still sending the
                                        removed param). Callers that want a specific patch call set_instrument separately on a Software Instrument track — see
                                        CHANGELOG v3.0.8 for the selectTrackViaAX limitation on fresh SMF-created tracks.
-                  set_automation    -> { index: Int, mode: String } (read/write/touch/latch/trim/off)
+                  set_automation    -> { index: Int, mode: String } (read/write/touch/latch/trim; independent readback required for State A)
                   set_instrument    -> { index: Int, path: String } OR { index: Int, category: String, preset: String }
                   list_library      -> {} — Read currently visible Library columns
                   scan_library      -> { mode?: "ax"|"disk"|"both" } — disk (default) dedupes user/app-bundle Instrument .patch candidates; ax runs legacy live Panel scan; both returns diff
@@ -982,9 +1055,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                   goto_marker       -> { index: Int } or { name: String }
                   create_marker     -> { name: String }
                   delete_marker     -> { index: Int }
-                  rename_marker     -> { index: Int, name: String } (UNSUPPORTED:
-                                       not implemented; returns State C
-                                       not_implemented — delete + create to rename)
+                  rename_marker     -> { index: Int, name: String } — independent readback required for State A
                   zoom_to_fit       -> {}
                   set_zoom          -> { level: String } ("in", "out", "fit")
                   toggle_view       -> { view: String } (mixer, piano_roll, score,
@@ -1057,7 +1128,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                   saga_preflight    -> { steps: [step], idempotency_key: String } — Validate and inspect before-state availability; writes 0
                   saga_execute      -> { steps: [step], idempotency_key: String } — Execute ordered steps with evidence and compensation
                   saga_status       -> { idempotency_key: String } — Read the session journal
-                  saga_cancel       -> { idempotency_key: String } — Typed not_supported with the current engine
+                  saga_cancel       -> { idempotency_key: String } — Request cancellation; State B until unwind is journaled, then terminal status carries its outcome
                   help              -> { category: String } — Param docs per category
 
                 step = { operation_id: String, target_ref?: String, params: Object,

@@ -325,6 +325,21 @@ actor LogicProServer {
             readPan: { track in
                 guard let pan = AXLogicProElements.findPanKnob(trackIndex: track) else { return nil }
                 return AXValueExtractors.extractCenteredSliderValue(pan)
+            },
+            readAutomationMode: { track in
+                guard let header = AXLogicProElements.findTrackHeader(at: track) else { return nil }
+                return AXValueExtractors.extractTrackAutomationModeIfReadable(
+                    from: header,
+                    runtime: .production
+                )
+            },
+            readSelectedTrack: {
+                let selected = AXLogicProElements.allTrackHeaders().enumerated().compactMap { index, header in
+                    AXValueExtractors.extractSelectedState(header, runtime: .production) == true
+                        ? index
+                        : nil
+                }
+                return selected.count == 1 ? selected[0] : nil
             }
         )
         self.mcuChannel = MCUChannel(transport: mcuTransport, cache: cache, axReadback: mcuAXReadback)
@@ -419,6 +434,25 @@ actor LogicProServer {
                     return invalidParams
                 }
                 let cmdParams: [String: Value] = rawCmdParams?.objectValue ?? [:]
+                if cmdParams["__adr001b_no_write_probe"]?.boolValue == true,
+                   OperationRegistry.spec(tool: name, command: command)?.id == .transportPlay,
+                   let injection = QualificationFaultInjection(
+                       environment: ProcessInfo.processInfo.environment
+                   ) {
+                    switch injection.mode {
+                    case .timeout:
+                        return await Self.runWithDeadline(tool: name, command: command) {
+                            try? await Task.sleep(for: .seconds(60))
+                            return toolStateCResult(.operationTimeout)
+                        }
+                    case .partialState:
+                        return toolStateCResult(
+                            .readbackUnavailable,
+                            hint: "Mutation state could not be fully observed; the request was refused before dispatch.",
+                            extras: ["write_attempted": false]
+                        )
+                    }
+                }
                 if let invalidParams = Self.strictParamValidationResult(
                     tool: name,
                     command: command,
@@ -929,8 +963,10 @@ actor LogicProServer {
         return spec
     }
 
-    private func registerTools() async {
-        let handlers = makeHandlers(dialogPresent: { AXLogicProElements.dialogPresent() })
+    private func registerTools(
+        dialogPresent: @escaping @Sendable () -> Bool = { AXLogicProElements.dialogPresent() }
+    ) async {
+        let handlers = makeHandlers(dialogPresent: dialogPresent)
         await server.withMethodHandler(ListTools.self) { params in
             if let error = Self.invalidCursorError(params.cursor, method: "tools/list") { throw error }
             return await handlers.listTools(params)
@@ -1031,10 +1067,13 @@ actor LogicProServer {
         await resourceNotifier.reset()
     }
 
-    func startProtocolProbe(transport: any Transport) async throws {
+    func startProtocolProbe(
+        transport: any Transport,
+        dialogPresent: @escaping @Sendable () -> Bool = { false }
+    ) async throws {
         await sagaJournal.clear()
         OperationHandlerRegistry.validate()
-        await registerTools()
+        await registerTools(dialogPresent: dialogPresent)
         await registerResources()
         await registerPrompts()
         try await server.start(transport: transport)

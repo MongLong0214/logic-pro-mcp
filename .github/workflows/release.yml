@@ -15,11 +15,8 @@ on:
 jobs:
   build:
     runs-on: macos-15
-    # Only the build job creates the GitHub Release (needs contents:write).
-    # Scoped per-job instead of workflow-level so the read-only
-    # validate-install job below does NOT inherit write access.
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -165,6 +162,118 @@ jobs:
         # .testFormulaInstallPathsMatchRepoAndReleaseStaging.
         run: bash Scripts/release-verify-formula-install-paths.sh
 
+      # managed-fixture-matrix / required-matrix-axes:4
+      # The independently produced bundle must cover Desktop/Creator × en-US/ko-KR,
+      # every registered operation by semantic readback or a governed default-profile
+      # waiver, and mutation/readback/restore/compensation. Missing evidence fails closed.
+      - name: Checkout pinned trusted verifier
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 67fec5fccf817f9978022f0ca262b80a789e2dce
+          path: trusted-verifier-src
+
+      - name: Build pinned trusted verifier
+        working-directory: trusted-verifier-src
+        run: swift build -c release --product trusted-verifier
+
+      - name: Enforce independent exact-artifact qualification
+        env:
+          QUALIFICATION_EVIDENCE_URL: ${{ secrets.QUALIFICATION_EVIDENCE_URL }}
+          QUALIFICATION_EVIDENCE_SHA256: ${{ secrets.QUALIFICATION_EVIDENCE_SHA256 }}
+          TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
+        run: |
+          echo "managed-fixture-matrix"
+          echo "required-matrix-axes:4"
+          test -n "$QUALIFICATION_EVIDENCE_URL"
+          test -n "$QUALIFICATION_EVIDENCE_SHA256"
+          test -n "$TRUSTED_QUALIFICATION_PUBLIC_KEY"
+          curl --fail --location --silent --show-error \
+            "$QUALIFICATION_EVIDENCE_URL" --output qualification-evidence.zip
+          echo "$QUALIFICATION_EVIDENCE_SHA256  qualification-evidence.zip" | shasum -a 256 --check
+          mkdir qualification-evidence
+          ditto -x -k qualification-evidence.zip qualification-evidence
+          LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY="$TRUSTED_QUALIFICATION_PUBLIC_KEY" \
+            trusted-verifier-src/.build/release/trusted-verifier verify \
+              --candidate LogicProMCP \
+              --bundle qualification-evidence \
+              --release-version "${GITHUB_REF_NAME#v}" \
+              --expected-commit "$GITHUB_SHA"
+
+      - name: trusted-provenance-verify
+        env:
+          TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
+        run: |
+          test -f qualification-evidence/evidence-manifest.json
+          test -n "$TRUSTED_QUALIFICATION_PUBLIC_KEY"
+
+      - name: Create release artifact SHA256 manifest
+        run: |
+          shasum -a 256 \
+            LogicProMCP \
+            LogicProMCP-macOS-universal.tar.gz \
+            LogicProMCP-macOS-arm64.tar.gz \
+            RELEASE-METADATA.json \
+            SHA256SUMS.txt \
+            qualification-evidence/release-qualification-attestation.json \
+            qualification-evidence/evidence-manifest.json \
+            qualification-evidence/case-manifest.json \
+            qualification-evidence/public-transcript.json \
+            qualification-evidence/mutation-restore-compensation.json \
+            > release-artifacts.sha256
+
+      - name: Upload verified release artifacts
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+        with:
+          name: verified-release-artifacts
+          if-no-files-found: error
+          path: |
+            LogicProMCP
+            LogicProMCP-macOS-universal.tar.gz
+            LogicProMCP-macOS-arm64.tar.gz
+            RELEASE-METADATA.json
+            SHA256SUMS.txt
+            qualification-evidence/release-qualification-attestation.json
+            qualification-evidence/evidence-manifest.json
+            qualification-evidence/case-manifest.json
+            qualification-evidence/public-transcript.json
+            qualification-evidence/mutation-restore-compensation.json
+            release-artifacts.sha256
+
+  publish:
+    needs: build
+    runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified release artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: verified-release-artifacts
+
+      - name: Checkout pinned trusted verifier for publish
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 67fec5fccf817f9978022f0ca262b80a789e2dce
+          path: trusted-verifier-src
+
+      - name: Build pinned trusted verifier for publish
+        working-directory: trusted-verifier-src
+        run: swift build -c release --product trusted-verifier
+
+      - name: Reverify downloaded release artifact
+        env:
+          TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
+        run: |
+          test -f release-artifacts.sha256
+          shasum -a 256 --check release-artifacts.sha256
+          test -n "$TRUSTED_QUALIFICATION_PUBLIC_KEY"
+          LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY="$TRUSTED_QUALIFICATION_PUBLIC_KEY" \
+            trusted-verifier-src/.build/release/trusted-verifier verify \
+              --candidate LogicProMCP \
+              --bundle qualification-evidence \
+              --release-version "${GITHUB_REF_NAME#v}" \
+              --expected-commit "$GITHUB_SHA"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191
         with:
@@ -176,9 +285,14 @@ jobs:
             LogicProMCP-macOS-arm64.tar.gz
             RELEASE-METADATA.json
             SHA256SUMS.txt
+            qualification-evidence/release-qualification-attestation.json
+            qualification-evidence/evidence-manifest.json
+            qualification-evidence/case-manifest.json
+            qualification-evidence/public-transcript.json
+            qualification-evidence/mutation-restore-compensation.json
 
   validate-install:
-    needs: build
+    needs: publish
     # Read-only: checks out the repo and curls the just-published (public)
     # release assets to exercise install/uninstall. No write scope required.
     permissions:

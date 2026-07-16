@@ -5,7 +5,8 @@ let package = Package(
     name: "LogicProMCP",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "LogicProMCP", targets: ["LogicProMCP"]),
+        .executable(name: "LogicProMCP", targets: ["LogicProMCPCLI"]),
+        .executable(name: "trusted-verifier", targets: ["TrustedVerifier"]),
     ],
     dependencies: [
         // swift-sdk 0.11.0+ adopts the short-form
@@ -27,7 +28,7 @@ let package = Package(
         .package(url: "https://github.com/swiftlang/swift-testing.git", from: "0.12.0"),
     ],
     targets: [
-        .executableTarget(
+        .target(
             name: "LogicProMCP",
             dependencies: [
                 .product(name: "MCP", package: "swift-sdk"),
@@ -39,6 +40,16 @@ let package = Package(
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("AVFoundation"),
             ]
+        ),
+        .executableTarget(
+            name: "LogicProMCPCLI",
+            dependencies: ["LogicProMCP"],
+            path: "Sources/LogicProMCPCLI"
+        ),
+        .executableTarget(
+            name: "TrustedVerifier",
+            dependencies: ["LogicProMCP"],
+            path: "Sources/TrustedVerifier"
         ),
         .testTarget(
             name: "LogicProMCPTests",

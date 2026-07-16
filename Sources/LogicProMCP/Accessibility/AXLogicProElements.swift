@@ -8,10 +8,24 @@ enum AXLogicProElements {
     struct Runtime: @unchecked Sendable {
         let logicProPID: @Sendable () -> pid_t?
         let ax: AXHelpers.Runtime
+        let executeAppleScript: @Sendable (String) async -> ChannelResult
+
+        init(
+            logicProPID: @escaping @Sendable () -> pid_t?,
+            ax: AXHelpers.Runtime,
+            executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
+                await AppleScriptChannel.executeAppleScript($0)
+            }
+        ) {
+            self.logicProPID = logicProPID
+            self.ax = ax
+            self.executeAppleScript = executeAppleScript
+        }
 
         static let production = Runtime(
             logicProPID: { ProcessUtils.logicProPID() },
-            ax: .production
+            ax: .production,
+            executeAppleScript: { await AppleScriptChannel.executeAppleScript($0) }
         )
     }
 

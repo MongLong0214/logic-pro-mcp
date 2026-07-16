@@ -11,6 +11,16 @@ extension AccessibilityChannel {
                 "already_open": true,
             ]))
         }
+        if AXLogicProElements.hasUnverifiedMarkerListWindow(runtime: runtime) {
+            return .error(HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: "The requested marker view could not be verified.",
+                extras: [
+                    "operation": "nav.open_marker_list",
+                    "write_attempted": false,
+                ]
+            ))
+        }
         let menuResult = await pressMarkerMenuItem(.openList)
         guard menuResult.isSuccess else {
             return .error(HonestContract.encodeStateC(
@@ -78,13 +88,18 @@ extension AccessibilityChannel {
 
         let requestedName = params["name"]
         var nameApplied: Bool? = nil
+        var nameWriteAttempted: Bool? = nil
         if let requestedName, !requestedName.isEmpty,
            let currentWindow = AXLogicProElements.findMarkerListWindow(runtime: runtime) {
-            nameApplied = await renameSelectedMarker(
+            let write = await renameSelectedMarker(
                 requestedName,
                 in: currentWindow,
                 runtime: runtime
             )
+            nameWriteAttempted = write.writeAttempted
+            if !write.writeAttempted {
+                nameApplied = false
+            }
         }
 
         var extras: [String: Any] = [
@@ -97,12 +112,178 @@ extension AccessibilityChannel {
         ]
         if let requestedName, !requestedName.isEmpty {
             extras["requested_name"] = requestedName
-            extras["name_applied"] = nameApplied ?? false
+            if let nameApplied {
+                extras["name_applied"] = nameApplied
+            }
+            if let nameWriteAttempted {
+                extras["name_write_attempted"] = nameWriteAttempted
+            }
         }
         return .success(HonestContract.encodeStateB(
             reason: .readbackUnavailable,
             extras: extras
         ))
+    }
+
+    static func defaultRenameMarker(
+        params: [String: String],
+        runtime: AXLogicProElements.Runtime = .production
+    ) async -> ChannelResult {
+        guard let rawIndex = params["index"], let index = Int(rawIndex), index >= 0,
+              let name = params["name"], !name.isEmpty else {
+            return .error(HonestContract.encodeStateC(
+                error: .invalidParams,
+                hint: "nav.rename_marker requires an index >= 0 and a non-empty name"
+            ))
+        }
+        guard !AXLogicProElements.hasUnverifiedMarkerListWindow(runtime: runtime) else {
+            return .error(HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: "The requested marker target could not be verified.",
+                extras: [
+                    "operation": "nav.rename_marker",
+                    "requested_index": index,
+                    "requested_name": name,
+                    "write_attempted": false,
+                ]
+            ))
+        }
+        let openResult = await defaultOpenMarkerList(runtime: runtime)
+        guard openResult.isSuccess else {
+            return openResult
+        }
+        guard let binding = AXLogicProElements.markerListBinding(runtime: runtime) else {
+            return .error(HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: "The requested marker target could not be verified after opening.",
+                extras: [
+                    "operation": "nav.rename_marker",
+                    "requested_index": index,
+                    "requested_name": name,
+                    "write_attempted": false,
+                ]
+            ))
+        }
+        let window = binding.window
+        let before = AXLogicProElements.enumerateMarkersFromListWindow(
+            window,
+            runtime: runtime.ax
+        )
+        guard let target = before.first(where: { $0.id == index }) else {
+            return .error(HonestContract.encodeStateC(
+                error: .elementNotFound,
+                hint: "Marker index \(index) was not found in the Marker List",
+                extras: ["requested_index": index, "marker_count": before.count]
+            ))
+        }
+        let stablePosition = target.positionSource == .parser
+            && before.filter({ $0.position == target.position }).count == 1
+            ? target.position
+            : nil
+        if target.name == name {
+            let extras: [String: Any] = [
+                "operation": "nav.rename_marker",
+                "index": index,
+                "previous_name": target.name,
+                "requested_name": name,
+                "observed_name": target.name,
+                "write_attempted": false,
+            ]
+            guard stablePosition != nil else {
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: extras
+                ))
+            }
+            return .success(HonestContract.encodeStateA(extras: extras))
+        }
+        guard selectMarkerRow(index, in: window, runtime: runtime.ax) else {
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "Marker index \(index) could not be selected",
+                extras: ["write_attempted": false]
+            ))
+        }
+        let write = await renameSelectedMarker(name, in: window, runtime: runtime)
+        var extras: [String: Any] = [
+            "operation": "nav.rename_marker",
+            "index": index,
+            "previous_name": target.name,
+            "requested_name": name,
+            "write_attempted": write.writeAttempted,
+        ]
+        guard write.writeAttempted else {
+            return .error(HonestContract.encodeStateC(
+                error: write.failureError ?? .axWriteFailed,
+                hint: "The selected marker name write could not be attempted",
+                extras: extras
+            ))
+        }
+
+        guard let stablePosition,
+              let currentBinding = AXLogicProElements.markerListBinding(runtime: runtime),
+              currentBinding.projectDocument == binding.projectDocument,
+              CFEqual(currentBinding.window, binding.window) else {
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: extras
+            ))
+        }
+        let matches = AXLogicProElements.enumerateMarkersFromListWindow(
+            currentBinding.window,
+            runtime: runtime.ax
+        ).filter { $0.positionSource == .parser && $0.position == stablePosition }
+        guard matches.count == 1 else {
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: extras
+            ))
+        }
+        let observed = matches[0]
+        extras["observed_name"] = observed.name
+        guard observed.name == name else {
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackMismatch,
+                extras: extras
+            ))
+        }
+        return .success(HonestContract.encodeStateA(extras: extras))
+    }
+
+    private static func selectMarkerRow(
+        _ index: Int,
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        guard let table = AXHelpers.findAllDescendants(
+            of: window,
+            role: kAXTableRole,
+            maxDepth: 8,
+            runtime: runtime
+        ).first else { return false }
+        let rows: [AXUIElement] = AXHelpers.getAttribute(
+            table,
+            "AXRows",
+            runtime: runtime
+        ) ?? AXHelpers.getChildren(table, runtime: runtime).filter {
+            AXHelpers.getRole($0, runtime: runtime) == (kAXRowRole as String)
+        }
+        guard rows.indices.contains(index) else { return false }
+        let row = rows[index]
+        if AXHelpers.setAttribute(
+            table,
+            kAXSelectedRowsAttribute,
+            [row] as CFArray,
+            runtime: runtime
+        ) {
+            return true
+        }
+        return AXHelpers.setAttribute(
+            row,
+            kAXSelectedAttribute,
+            kCFBooleanTrue,
+            runtime: runtime
+        )
     }
 
     private enum MarkerMenuAction {

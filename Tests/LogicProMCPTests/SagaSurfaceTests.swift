@@ -78,6 +78,59 @@ private actor SagaSurfaceCountingExecutor: SagaStepExecutor {
     func runCount() -> Int { calls }
 }
 
+private actor BlockingSagaRefreshProbe {
+    private var entered = false
+    private var didBlock = false
+    private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func waitUntilEntered() async {
+        if entered { return }
+        await withCheckedContinuation { enteredWaiters.append($0) }
+    }
+
+    func blockFirstRefresh() async {
+        guard !didBlock else { return }
+        didBlock = true
+        entered = true
+        let waiters = enteredWaiters
+        enteredWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+        await withCheckedContinuation { releaseWaiters.append($0) }
+    }
+
+    func unblock() {
+        let waiters = releaseWaiters
+        releaseWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+    }
+}
+
+private actor SagaPhaseBarrier {
+    private var entered = false
+    private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func waitUntilEntered() async {
+        if entered { return }
+        await withCheckedContinuation { enteredWaiters.append($0) }
+    }
+
+    func enterAndWait() async {
+        entered = true
+        let waiters = enteredWaiters
+        enteredWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+        await withCheckedContinuation { releaseWaiters.append($0) }
+    }
+
+    func release() {
+        let waiters = releaseWaiters
+        releaseWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+    }
+}
+
 @Suite("Saga public MCP surface", .serialized)
 struct SagaSurfaceTests {
     private struct Fixture: Sendable {
@@ -222,6 +275,8 @@ struct SagaSurfaceTests {
         params: [String: Value],
         fixture: Fixture,
         dialogPresent: @escaping @Sendable () -> Bool = { false },
+        mutationGate: LogicMutationGate? = nil,
+        sagaAfterJournalBegin: (@Sendable () async -> Void)? = nil,
         sagaRefreshAfterWrite: (@Sendable () async -> Void)? = nil
     ) async -> CallTool.Result {
         await SystemDispatcher.handle(
@@ -232,6 +287,8 @@ struct SagaSurfaceTests {
             targetRegistry: fixture.targetRegistry,
             dialogPresent: dialogPresent,
             sagaJournal: fixture.journal,
+            mutationGate: mutationGate,
+            sagaAfterJournalBegin: sagaAfterJournalBegin,
             sagaRefreshAfterWrite: sagaRefreshAfterWrite
         )
     }
@@ -333,7 +390,7 @@ struct SagaSurfaceTests {
                     channel: channel
                 )
                 let object = try resultObject(result)
-                #expect(result.isError ?? false)
+                #expect(result.isError!)
                 #expect(object["state"] as? String == "C")
                 #expect(object["error"] as? String == "invalid_params")
                 #expect(object["journal_scope"] as? String == "session")
@@ -352,7 +409,7 @@ struct SagaSurfaceTests {
                 channel: channel
             )
             let object = try resultObject(result)
-            #expect(result.isError ?? false)
+            #expect(result.isError!)
             #expect(object["state"] as? String == "C")
             #expect(object["error"] as? String == "invalid_params")
             #expect(await channel.writeCount() == 0)
@@ -398,7 +455,7 @@ struct SagaSurfaceTests {
             channel: allowedChannel
         )
         let allowedBody = try resultObject(allowed)
-        #expect(allowed.isError == true)
+        #expect(allowed.isError!)
         #expect(allowedBody["error"] as? String == "element_not_found")
         #expect(allowedBody["journal_scope"] as? String == "session")
         #expect(await allowedChannel.writeCount() == 0)
@@ -419,7 +476,7 @@ struct SagaSurfaceTests {
                 channel: channel
             )
             let body = try resultObject(rejected)
-            #expect(rejected.isError == true)
+            #expect(rejected.isError!)
             #expect(body["state"] as? String == "C")
             #expect(body["error"] as? String == "invalid_params")
             #expect(body["journal_scope"] as? String == "session")
@@ -442,7 +499,7 @@ struct SagaSurfaceTests {
                 channel: channel
             )
             let object = try resultObject(result)
-            #expect(result.isError ?? false)
+            #expect(result.isError!)
             #expect(object["state"] as? String == "C")
             #expect(object["error"] as? String == "element_not_found")
             #expect(object["journal_scope"] as? String == "session")
@@ -479,7 +536,7 @@ struct SagaSurfaceTests {
 
             #expect(try #require(readyObject["ok"] as? Bool))
             #expect(readyAvailability.count == 2)
-            #expect(readyAvailability.allSatisfy { ($0["available"] as? Bool) ?? false })
+            #expect(readyAvailability.allSatisfy { ($0["available"] as? Bool)! })
             #expect(await ready.channel.writeCount() == 0)
 
             let unavailable = await makeFixture(populateCache: false)
@@ -521,7 +578,7 @@ struct SagaSurfaceTests {
             )
             let object = try resultObject(result)
             let steps = try #require(object["steps"] as? [[String: Any]])
-            let isError = result.isError ?? false
+            let isError = result.isError!
 
             #expect(!isError)
             #expect(object["state"] as? String == "A")
@@ -591,7 +648,7 @@ struct SagaSurfaceTests {
             let readback = try #require(compensation["readback_evidence"] as? [[String: Any]])
             let summary = try #require(compensation["journal_summary"] as? [String: Any])
 
-            #expect(result.isError ?? false)
+            #expect(result.isError!)
             #expect(object["state"] as? String == "C")
             #expect(object["error"] as? String == "saga_execution_failed")
             #expect(compensation["status"] as? String == "fully_compensated")
@@ -721,7 +778,7 @@ struct SagaSurfaceTests {
             let object = try resultObject(result)
             let compensation = try #require(object["compensation"] as? [String: Any])
             let evidence = try #require(compensation["readback_evidence"] as? [[String: Any]])
-            let isError = result.isError ?? false
+            let isError = result.isError!
 
             #expect(!isError)
             #expect(object["state"] as? String == "B")
@@ -918,14 +975,14 @@ struct SagaSurfaceTests {
         }
     }
 
-    @Test("in-progress execute is typed and cancel is honestly unsupported")
-    func inProgressAndCancelAreTyped() async throws {
+    @Test("saga cancel transitions an in-progress journal entry and status reads it back")
+    func sagaCancelTransitionsInFlightJournalEntryToCancelled() async throws {
         try await withSagaFeatures {
             let fixture = await makeFixture()
             let params = twoStepPlan(fixture, key: "running-key")
             let runningPlan = try SagaWire.plan(from: params)
             let begin = await fixture.journal.begin(runningPlan)
-            guard case .started = begin else {
+            guard case .started(let claim) = begin else {
                 Issue.record("expected a new in-progress journal claim")
                 return
             }
@@ -935,12 +992,17 @@ struct SagaSurfaceTests {
                 params: params,
                 fixture: fixture
             ))
+            let cancel = try resultObject(await dispatch(
+                command: "saga_cancel",
+                params: ["idempotency_key": .string("running-key")],
+                fixture: fixture
+            ))
             let status = try resultObject(await dispatch(
                 command: "saga_status",
                 params: ["idempotency_key": .string("running-key")],
                 fixture: fixture
             ))
-            let cancel = try resultObject(await dispatch(
+            let duplicateCancel = try resultObject(await dispatch(
                 command: "saga_cancel",
                 params: ["idempotency_key": .string("running-key")],
                 fixture: fixture
@@ -949,10 +1011,252 @@ struct SagaSurfaceTests {
 
             #expect(execute["state"] as? String == "C")
             #expect(execute["error"] as? String == "saga_in_progress")
-            #expect(record["status"] as? String == "in_progress")
-            #expect(cancel["state"] as? String == "C")
-            #expect(cancel["error"] as? String == "not_supported")
+            #expect(cancel["state"] as? String == "B")
+            #expect(!((cancel["verified"] as? Bool)!))
+            #expect(cancel["status"] as? String == "cancellation_requested")
+            #expect(record["status"] as? String == "cancellation_requested")
+            #expect(duplicateCancel["state"] as? String == "B")
+            #expect(duplicateCancel["status"] as? String == "cancellation_requested")
+            #expect(!(await fixture.journal.complete(
+                claim,
+                outcome: SagaJournal.StoredOutcome(body: "late", isError: false)
+            )))
             #expect(await fixture.channel.writeCount() == 0)
+        }
+    }
+
+    @Test("cancellation racing mutation-gate refusal reaches a verified terminal record")
+    func sagaCancellationAtMutationGateRefusalDoesNotRemainPending() async throws {
+        try await withSagaFeatures {
+            let fixture = await makeFixture()
+            let barrier = SagaPhaseBarrier()
+            let gate = LogicMutationGate()
+            let heldClaim = try #require(gate.tryAcquire(operation: "test.blocking_mutation"))
+            let params = plan(idempotencyKey: "cancel-gate-refusal", steps: [
+                step(
+                    operationID: .tracksRename,
+                    target: fixture.targets[0],
+                    valueParameter: "name",
+                    value: .string("Never Written")
+                ),
+            ])
+            let execution = Task {
+                await dispatch(
+                    command: "saga_execute",
+                    params: params,
+                    fixture: fixture,
+                    mutationGate: gate,
+                    sagaAfterJournalBegin: { await barrier.enterAndWait() }
+                )
+            }
+
+            await barrier.waitUntilEntered()
+            let pending = try resultObject(await dispatch(
+                command: "saga_cancel",
+                params: ["idempotency_key": .string("cancel-gate-refusal")],
+                fixture: fixture
+            ))
+            await barrier.release()
+            let execute = try resultObject(await execution.value)
+            gate.release(heldClaim)
+            let status = try resultObject(await dispatch(
+                command: "saga_status",
+                params: ["idempotency_key": .string("cancel-gate-refusal")],
+                fixture: fixture
+            ))
+            let terminalCancel = try resultObject(await dispatch(
+                command: "saga_cancel",
+                params: ["idempotency_key": .string("cancel-gate-refusal")],
+                fixture: fixture
+            ))
+            let record = try #require(status["record"] as? [String: Any])
+
+            #expect(pending["state"] as? String == "B")
+            #expect(execute["state"] as? String == "C")
+            #expect(record["status"] as? String == "cancelled")
+            #expect((record["verified"] as? Bool)!)
+            #expect(terminalCancel["state"] as? String == "A")
+            #expect((terminalCancel["verified"] as? Bool)!)
+            #expect(await fixture.channel.writeCount() == 0)
+        }
+    }
+
+    @Test("cancellation racing rejected preflight reaches a verified terminal record")
+    func sagaCancellationAtRejectedPreflightDoesNotRemainPending() async throws {
+        try await withSagaFeatures {
+            let fixture = await makeFixture(populateCache: false)
+            let barrier = SagaPhaseBarrier()
+            let params = plan(idempotencyKey: "cancel-preflight-refusal", steps: [
+                step(
+                    operationID: .tracksRename,
+                    target: fixture.targets[0],
+                    valueParameter: "name",
+                    value: .string("Never Written")
+                ),
+            ])
+            let execution = Task {
+                await dispatch(
+                    command: "saga_execute",
+                    params: params,
+                    fixture: fixture,
+                    sagaAfterJournalBegin: { await barrier.enterAndWait() }
+                )
+            }
+
+            await barrier.waitUntilEntered()
+            let pending = try resultObject(await dispatch(
+                command: "saga_cancel",
+                params: ["idempotency_key": .string("cancel-preflight-refusal")],
+                fixture: fixture
+            ))
+            await barrier.release()
+            let execute = try resultObject(await execution.value)
+            let status = try resultObject(await dispatch(
+                command: "saga_status",
+                params: ["idempotency_key": .string("cancel-preflight-refusal")],
+                fixture: fixture
+            ))
+            let terminalCancel = try resultObject(await dispatch(
+                command: "saga_cancel",
+                params: ["idempotency_key": .string("cancel-preflight-refusal")],
+                fixture: fixture
+            ))
+            let record = try #require(status["record"] as? [String: Any])
+
+            #expect(pending["state"] as? String == "B")
+            #expect(execute["state"] as? String == "C")
+            #expect(record["status"] as? String == "cancelled")
+            #expect((record["verified"] as? Bool)!)
+            #expect(terminalCancel["state"] as? String == "A")
+            #expect((terminalCancel["verified"] as? Bool)!)
+            #expect(await fixture.channel.writeCount() == 0)
+        }
+    }
+
+    @Test("cancellation stays pending until failed compensation is persisted")
+    func sagaCancellationPersistsFailedCompensationBeforeTerminalStatus() async throws {
+        try await withSagaFeatures {
+            let fixture = await makeFixture(failureCalls: [2])
+            let probe = BlockingSagaRefreshProbe()
+            let params = plan(idempotencyKey: "cancel-compensation-failure", steps: [
+                step(
+                    operationID: .tracksRename,
+                    target: fixture.targets[0],
+                    valueParameter: "name",
+                    value: .string("Changed")
+                ),
+            ])
+            let execution = Task {
+                await dispatch(
+                    command: "saga_execute",
+                    params: params,
+                    fixture: fixture,
+                    sagaRefreshAfterWrite: { await probe.blockFirstRefresh() }
+                )
+            }
+
+            await probe.waitUntilEntered()
+            let cancelResponse = await dispatch(
+                command: "saga_cancel",
+                params: ["idempotency_key": .string("cancel-compensation-failure")],
+                fixture: fixture
+            )
+            let pendingStatusResponse = await dispatch(
+                command: "saga_status",
+                params: ["idempotency_key": .string("cancel-compensation-failure")],
+                fixture: fixture
+            )
+            await probe.unblock()
+            let executeResponse = await execution.value
+            let terminalStatusResponse = await dispatch(
+                command: "saga_status",
+                params: ["idempotency_key": .string("cancel-compensation-failure")],
+                fixture: fixture
+            )
+            let duplicateCancelResponse = await dispatch(
+                command: "saga_cancel",
+                params: ["idempotency_key": .string("cancel-compensation-failure")],
+                fixture: fixture
+            )
+
+            let cancel = try resultObject(cancelResponse)
+            let pendingStatus = try resultObject(pendingStatusResponse)
+            let execute = try resultObject(executeResponse)
+            let terminalStatus = try resultObject(terminalStatusResponse)
+            let duplicateCancel = try resultObject(duplicateCancelResponse)
+            let pendingRecord = try #require(pendingStatus["record"] as? [String: Any])
+            let terminalRecord = try #require(terminalStatus["record"] as? [String: Any])
+            let storedOutcome = try #require(terminalRecord["outcome"] as? [String: Any])
+
+            #expect(cancel["state"] as? String == "B")
+            #expect(!((cancel["verified"] as? Bool)!))
+            #expect(cancel["status"] as? String == "cancellation_requested")
+            #expect(pendingRecord["status"] as? String == "cancellation_requested")
+            #expect(execute["state"] as? String == "B")
+            #expect(execute["saga_state"] as? String == "compensationFailed")
+            #expect(terminalRecord["status"] as? String == "cancelled")
+            #expect(!((terminalRecord["verified"] as? Bool)!))
+            #expect(storedOutcome["saga_state"] as? String == "compensationFailed")
+            #expect(duplicateCancel["state"] as? String == "B")
+            #expect(duplicateCancel["status"] as? String == "cancelled")
+            #expect(await fixture.channel.recordedOperations() == ["track.rename", "track.rename"])
+            #expect((await fixture.cache.getTracks()).first?.name == "Changed")
+        }
+    }
+
+    @Test("terminal cancellation is State A only after verified compensation")
+    func sagaCancellationBecomesVerifiedAfterSuccessfulCompensation() async throws {
+        try await withSagaFeatures {
+            let fixture = await makeFixture()
+            let probe = BlockingSagaRefreshProbe()
+            let params = plan(idempotencyKey: "cancel-compensation-success", steps: [
+                step(
+                    operationID: .tracksRename,
+                    target: fixture.targets[0],
+                    valueParameter: "name",
+                    value: .string("Changed")
+                ),
+            ])
+            let execution = Task {
+                await dispatch(
+                    command: "saga_execute",
+                    params: params,
+                    fixture: fixture,
+                    sagaRefreshAfterWrite: { await probe.blockFirstRefresh() }
+                )
+            }
+
+            await probe.waitUntilEntered()
+            let pendingCancel = await dispatch(
+                command: "saga_cancel",
+                params: ["idempotency_key": .string("cancel-compensation-success")],
+                fixture: fixture
+            )
+            await probe.unblock()
+            _ = await execution.value
+            let status = try resultObject(await dispatch(
+                command: "saga_status",
+                params: ["idempotency_key": .string("cancel-compensation-success")],
+                fixture: fixture
+            ))
+            let terminalCancel = try resultObject(await dispatch(
+                command: "saga_cancel",
+                params: ["idempotency_key": .string("cancel-compensation-success")],
+                fixture: fixture
+            ))
+            let pending = try resultObject(pendingCancel)
+            let record = try #require(status["record"] as? [String: Any])
+            let outcome = try #require(record["outcome"] as? [String: Any])
+
+            #expect(pending["state"] as? String == "B")
+            #expect(!((pending["verified"] as? Bool)!))
+            #expect(record["status"] as? String == "cancelled")
+            #expect((record["verified"] as? Bool)!)
+            #expect(outcome["saga_state"] as? String == "fullyCompensated")
+            #expect(terminalCancel["state"] as? String == "A")
+            #expect((terminalCancel["verified"] as? Bool)!)
+            #expect(await fixture.channel.recordedOperations() == ["track.rename", "track.rename"])
+            #expect((await fixture.cache.getTracks()).first?.name == "Bass")
         }
     }
 
@@ -1012,7 +1316,7 @@ struct SagaSurfaceTests {
                         .first { $0.operationID == OperationID.systemSagaExecute.rawValue }
                 )
 
-                #expect(result.isError ?? false)
+                #expect(result.isError!)
                 #expect(!trace.events.contains { $0.phase == .writeBoundaryCrossed })
                 #expect(await fixture.channel.writeCount() == 0)
                 await OperationTraceStore.shared.clear()
@@ -1020,8 +1324,8 @@ struct SagaSurfaceTests {
         }
     }
 
-    @Test("MCP protocol routes saga commands through logic_system")
-    func protocolSurfaceReturnsTypedSagaFailures() async throws {
+    @Test("MCP protocol routes typed saga failures and pending cancellation")
+    func protocolSurfaceReturnsTypedSagaOutcomes() async throws {
         let journal = SagaJournal()
         let mutationGate = LogicMutationGate()
         let server = LogicProServer(sagaJournal: journal, mutationGate: mutationGate)
@@ -1056,7 +1360,6 @@ struct SagaSurfaceTests {
                 #"{"steps":[],"idempotency_key":"protocol-running"}"#,
                 "saga_in_progress"
             ),
-            (5, "saga_cancel", #"{"idempotency_key":"protocol-running"}"#, "not_supported"),
         ]
 
         for item in cases {
@@ -1075,11 +1378,47 @@ struct SagaSurfaceTests {
                 JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
             )
 
-            #expect(try #require(result["isError"] as? Bool))
+            #expect((result["isError"] as? Bool)!)
             #expect(body["state"] as? String == "C")
             #expect(body["error"] as? String == item.error)
             #expect(body["journal_scope"] as? String == "session")
         }
+
+        await transport.queueJSON(probeToolCallFrame(
+            id: 5,
+            name: SystemDispatcher.tool.name,
+            command: "saga_cancel",
+            params: #"{"idempotency_key":"protocol-running"}"#
+        ))
+        let cancelResponse = try await waitForProbeResponse(transport, id: 5)
+        let cancelResult = try #require(cancelResponse["result"] as? [String: Any])
+        let cancelContent = try #require(cancelResult["content"] as? [[String: Any]])
+        let cancelText = try #require(cancelContent.first?["text"] as? String)
+        let cancelBody = try #require(
+            JSONSerialization.jsonObject(with: Data(cancelText.utf8)) as? [String: Any]
+        )
+        #expect(!((cancelResult["isError"] as? Bool)!))
+        #expect(cancelBody["state"] as? String == "B")
+        #expect(!((cancelBody["verified"] as? Bool)!))
+        #expect(cancelBody["status"] as? String == "cancellation_requested")
+
+        await transport.queueJSON(probeToolCallFrame(
+            id: 6,
+            name: SystemDispatcher.tool.name,
+            command: "saga_status",
+            params: #"{"idempotency_key":"protocol-running"}"#
+        ))
+        let statusResponse = try await waitForProbeResponse(transport, id: 6)
+        let statusResult = try #require(statusResponse["result"] as? [String: Any])
+        let statusContent = try #require(statusResult["content"] as? [[String: Any]])
+        let statusText = try #require(statusContent.first?["text"] as? String)
+        let statusBody = try #require(
+            JSONSerialization.jsonObject(with: Data(statusText.utf8)) as? [String: Any]
+        )
+        let statusRecord = try #require(statusBody["record"] as? [String: Any])
+        #expect(!((statusResult["isError"] as? Bool)!))
+        #expect(statusRecord["status"] as? String == "cancellation_requested")
+        #expect(statusBody["journal_scope"] as? String == "session")
         await server.stopProtocolProbe()
         #expect(await journal.record(for: "protocol-running") == nil)
     }

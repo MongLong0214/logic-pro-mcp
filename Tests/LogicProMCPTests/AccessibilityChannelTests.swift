@@ -636,11 +636,6 @@ private func makeSetInstrumentFixture() -> (
         ("mixer.set_output", "I/O routing not yet implemented via AX"),
         ("mixer.toggle_eq", "EQ toggle not yet implemented via AX"),
         ("mixer.reset_strip", "Strip reset not yet implemented via AX"),
-        // Issue #143: rename_marker now returns a State C envelope with
-        // `error:"not_implemented"` (+ a create+delete workaround hint)
-        // instead of a plain free-form string, so the router surfaces it
-        // verbatim instead of re-wrapping it as `channels_exhausted`.
-        ("nav.rename_marker", "\"error\":\"not_implemented\""),
         ("region.select", "Region operations not yet implemented via AX"),
         ("plugin.list", "Plugin list reading not yet implemented via AX"),
         ("automation.get_mode", "Automation mode reading not yet implemented via AX"),
@@ -655,34 +650,381 @@ private func makeSetInstrumentFixture() -> (
     }
 }
 
-// Issue #143 — `nav.rename_marker` short-circuits inside the operation
-// switch (it never touches the AX tree), so the default runtime suffices.
-// It must emit an explicit State C `not_implemented` envelope with a
-// create+delete workaround hint — NOT a free-form string that the router
-// would re-wrap as `channels_exhausted` (which conflates "feature not built"
-// with "all channels failed").
-@Test func testRenameMarkerReturnsNotImplementedEnvelope() async {
+@Test func testRenameMarkerRejectsInvalidDirectChannelParams() async {
     let channel = AccessibilityChannel(runtime: makeAccessibilityRuntime())
 
     let result = await channel.execute(
         operation: "nav.rename_marker",
-        params: ["index": "2", "name": "Big Chorus"]
+        params: [:]
     )
 
     #expect(!result.isSuccess)
     let obj = decodeAccessibilityJSON(result.message)
     #expect(!((obj["success"] as? Bool)!))
-    #expect(obj["error"] as? String == "not_implemented")
-    let hint = obj["hint"] as? String ?? ""
-    #expect(hint.contains("delete_marker"), "expected create+delete workaround hint, got: \(hint)")
-    #expect(hint.contains("create_marker"), "expected create+delete workaround hint, got: \(hint)")
+    #expect(obj["error"] as? String == "invalid_params")
+}
 
-    // `not_implemented` is in `terminalErrorCodes`, so the router classifies
-    // this as terminal and surfaces it verbatim (no `channels_exhausted`).
-    #expect(
-        HonestContract.isTerminalStateC(result.message),
-        "rename_marker State C must be terminal so the router skips fallback"
+private final class MarkerRenameSurface: @unchecked Sendable {
+    let builder = FakeAXRuntimeBuilder()
+    let app: AXUIElement
+    let arrange: AXUIElement
+    let window: AXUIElement
+    private let table: AXUIElement
+    private let rows: [AXUIElement]
+    private let nameTexts: [AXUIElement]
+    private let editButton: AXUIElement
+    let editor: AXUIElement
+    private let commitTarget: Int
+    private let postCommitOrder: [Int]
+    private let dropReadbackAfterCommit: Bool
+    private let rejectEditorValueWrite: Bool
+    private let postCommitArrangeDocument: String?
+    private let executeAppleScript: @Sendable (String) async -> ChannelResult
+    private var stagedName: String?
+    private(set) var editPressCount = 0
+    private(set) var targetNameWhenStaged: String?
+
+    init(
+        commitTarget: Int,
+        postCommitOrder: [Int] = [0, 1],
+        dropReadbackAfterCommit: Bool = false,
+        initialNames: [String] = ["Old Target", "Other Marker"],
+        positions: [String] = ["1 1 1 1", "5 1 1 1"],
+        projectTitle: String = "Fixture",
+        arrangeDocument: String = "/projects/Fixture.logicx",
+        markerDocument: String = "/projects/Fixture.logicx",
+        postCommitArrangeDocument: String? = nil,
+        rejectEditorValueWrite: Bool = false,
+        executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
+            await AppleScriptChannel.executeAppleScript($0)
+        }
+    ) {
+        self.commitTarget = commitTarget
+        self.postCommitOrder = postCommitOrder
+        self.dropReadbackAfterCommit = dropReadbackAfterCommit
+        self.rejectEditorValueWrite = rejectEditorValueWrite
+        self.postCommitArrangeDocument = postCommitArrangeDocument
+        self.executeAppleScript = executeAppleScript
+        app = builder.element(7_100)
+        arrange = builder.element(7_101)
+        window = builder.element(7_102)
+        table = builder.element(7_103)
+        editButton = builder.element(7_104)
+        editor = builder.element(7_105)
+        let toggle = builder.element(7_106)
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, window])
+        builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
+        builder.setAttribute(arrange, kAXTitleAttribute as String, "\(projectTitle) - Tracks")
+        builder.setAttribute(arrange, kAXDocumentAttribute as String, arrangeDocument)
+        builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+        builder.setAttribute(window, kAXTitleAttribute as String, "\(projectTitle) - Marker List")
+        builder.setAttribute(window, kAXDocumentAttribute as String, markerDocument)
+        builder.setAttribute(table, kAXRoleAttribute as String, kAXTableRole as String)
+        builder.setAttribute(toggle, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        builder.setAttribute(toggle, kAXDescriptionAttribute as String, "Edit Marker")
+        builder.setAttribute(toggle, kAXValueAttribute as String, true)
+        builder.setAttribute(editButton, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(editButton, kAXDescriptionAttribute as String, "Edit")
+        builder.setAttribute(editor, kAXRoleAttribute as String, kAXTextAreaRole as String)
+
+        var builtRows: [AXUIElement] = []
+        var builtNameTexts: [AXUIElement] = []
+        let values = [(positions[0], initialNames[0]), (positions[1], initialNames[1])]
+        for (index, value) in values.enumerated() {
+            let base = 7_120 + index * 10
+            let row = builder.element(base)
+            let lockCell = builder.element(base + 1)
+            let positionCell = builder.element(base + 2)
+            let positionText = builder.element(base + 3)
+            let nameCell = builder.element(base + 4)
+            let nameText = builder.element(base + 5)
+            builder.setAttribute(row, kAXRoleAttribute as String, kAXRowRole as String)
+            for cell in [lockCell, positionCell, nameCell] {
+                builder.setAttribute(cell, kAXRoleAttribute as String, kAXCellRole as String)
+            }
+            builder.setAttribute(positionText, kAXDescriptionAttribute as String, value.0)
+            builder.setAttribute(nameText, kAXDescriptionAttribute as String, value.1)
+            builder.setChildren(positionCell, [positionText])
+            builder.setChildren(nameCell, [nameText])
+            builder.setChildren(row, [lockCell, positionCell, nameCell])
+            builtRows.append(row)
+            builtNameTexts.append(nameText)
+        }
+        rows = builtRows
+        nameTexts = builtNameTexts
+        builder.setAttribute(table, "AXRows", builtRows)
+        builder.setChildren(table, builtRows)
+        builder.setChildren(window, [table, toggle, editButton, editor])
+    }
+
+    func makeRuntime(
+        attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil
+    ) -> AXLogicProElements.Runtime {
+        builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueHandler: attributeValueHandler,
+            setAttributeHandler: { [self] element, attribute, value in
+                if rejectEditorValueWrite,
+                   builder.elementID(element) == builder.elementID(editor),
+                   attribute == (kAXValueAttribute as String) {
+                    return false
+                }
+                builder.setAttribute(element, attribute, value)
+                if builder.elementID(element) == builder.elementID(editor),
+                   attribute == (kAXValueAttribute as String),
+                   let name = value as? String {
+                    targetNameWhenStaged = builder.attributeValue(
+                        nameTexts[0],
+                        kAXDescriptionAttribute as String
+                    ) as? String
+                    stagedName = name
+                }
+                return true
+            },
+            performActionHandler: { [self] element, action in
+                guard builder.elementID(element) == builder.elementID(editButton),
+                      action == (kAXPressAction as String) else { return true }
+                editPressCount += 1
+                guard editPressCount == 2, let stagedName else { return true }
+                builder.setAttribute(
+                    nameTexts[commitTarget],
+                    kAXDescriptionAttribute as String,
+                    stagedName
+                )
+                if dropReadbackAfterCommit {
+                    builder.setAttribute(table, "AXRows", [AXUIElement]())
+                    builder.setChildren(table, [])
+                } else {
+                    let reordered = postCommitOrder.map { rows[$0] }
+                    builder.setAttribute(table, "AXRows", reordered)
+                    builder.setChildren(table, reordered)
+                }
+                if let postCommitArrangeDocument {
+                    builder.setAttribute(
+                        arrange,
+                        kAXDocumentAttribute as String,
+                        postCommitArrangeDocument
+                    )
+                }
+                return true
+            },
+            executeAppleScript: executeAppleScript
+        )
+    }
+
+    func channel(runtime: AXLogicProElements.Runtime) -> AccessibilityChannel {
+        makeAXBackedAccessibilityChannel(builder: builder, app: app, logicRuntime: runtime)
+    }
+
+    func markers(runtime: AXLogicProElements.Runtime) -> [MarkerState] {
+        AXLogicProElements.enumerateMarkersFromListWindow(window, runtime: runtime.ax)
+    }
+}
+
+private final class MarkerWindowReadSequence: @unchecked Sendable {
+    private let app: AXUIElement
+    private let snapshots: [[AXUIElement]]
+    private var reads = 0
+
+    init(app: AXUIElement, snapshots: [[AXUIElement]]) {
+        self.app = app
+        self.snapshots = snapshots
+    }
+
+    func read(element: AXUIElement, attribute: String) -> AnyObject?? {
+        guard CFEqual(element, app), attribute == (kAXWindowsAttribute as String) else {
+            return nil
+        }
+        reads += 1
+        let windows = snapshots[min(reads - 1, snapshots.count - 1)]
+        return .some(windows as NSArray)
+    }
+}
+
+@Test func renameMarkerTracksStablePositionAcrossRowReorder() async {
+    let surface = MarkerRenameSurface(commitTarget: 0, postCommitOrder: [1, 0])
+    let runtime = surface.makeRuntime()
+    let result = await surface.channel(runtime: runtime).execute(
+        operation: "nav.rename_marker",
+        params: ["index": "0", "name": "Zulu Target"]
     )
+    let body = decodeAccessibilityJSON(result.message)
+    let markers = surface.markers(runtime: runtime)
+
+    #expect(body["state"] as? String == "A")
+    #expect(body["observed_name"] as? String == "Zulu Target")
+    #expect(body["target_position"] == nil)
+    #expect(body["observed_position"] == nil)
+    #expect(body["identity_match_count"] == nil)
+    #expect(body["observed_index"] == nil)
+    #expect(body["write_source"] == nil)
+    #expect(body["verification_source"] == nil)
+    #expect(markers.first { $0.position == "1.1.1.1" }?.name == "Zulu Target")
+    #expect(markers.first { $0.position == "5.1.1.1" }?.name == "Other Marker")
+    #expect(surface.targetNameWhenStaged == "Old Target")
+    #expect(surface.editPressCount == 2)
+}
+
+@Test func renameMarkerNeverVerifiesAReplacementOrdinal() async {
+    let surface = MarkerRenameSurface(commitTarget: 1, postCommitOrder: [1, 0])
+    let runtime = surface.makeRuntime()
+    let result = await surface.channel(runtime: runtime).execute(
+        operation: "nav.rename_marker",
+        params: ["index": "0", "name": "Wrongly Applied"]
+    )
+    let body = decodeAccessibilityJSON(result.message)
+    let markers = surface.markers(runtime: runtime)
+
+    #expect(body["state"] as? String == "B")
+    guard body["state"] as? String == "B" else { return }
+    #expect(!((body["verified"] as? Bool)!))
+    #expect(markers.first { $0.position == "1.1.1.1" }?.name == "Old Target")
+    #expect(markers.first { $0.position == "5.1.1.1" }?.name == "Wrongly Applied")
+}
+
+@Test func renameMarkerAttemptedWriteWithoutReadbackIsStateB() async {
+    let surface = MarkerRenameSurface(commitTarget: 0, dropReadbackAfterCommit: true)
+    let runtime = surface.makeRuntime()
+    let result = await surface.channel(runtime: runtime).execute(
+        operation: "nav.rename_marker",
+        params: ["index": "0", "name": "Committed But Hidden"]
+    )
+    let body = decodeAccessibilityJSON(result.message)
+
+    #expect(body["state"] as? String == "B")
+    guard body["state"] as? String == "B" else { return }
+    #expect(!((body["verified"] as? Bool)!))
+    #expect((body["write_attempted"] as? Bool)!)
+    #expect(surface.editPressCount == 2)
+}
+
+@Test func renameMarkerDuplicateCanonicalPositionCannotReachStateA() async {
+    let surface = MarkerRenameSurface(
+        commitTarget: 0,
+        positions: ["1 1 1 1", "1 1 1 1"]
+    )
+    let runtime = surface.makeRuntime()
+    let result = await surface.channel(runtime: runtime).execute(
+        operation: "nav.rename_marker",
+        params: ["index": "0", "name": "Ambiguous Target"]
+    )
+    let body = decodeAccessibilityJSON(result.message)
+
+    #expect(body["state"] as? String == "B")
+    guard body["state"] as? String == "B" else { return }
+    #expect(!((body["verified"] as? Bool)!))
+}
+
+@Test func renameMarkerAlreadyMatchingAmbiguousIdentityCannotReachStateA() async {
+    let surface = MarkerRenameSurface(
+        commitTarget: 0,
+        initialNames: ["Already Named", "Other Marker"],
+        positions: ["1 1 1 1", "1 1 1 1"]
+    )
+    let runtime = surface.makeRuntime()
+    let result = await surface.channel(runtime: runtime).execute(
+        operation: "nav.rename_marker",
+        params: ["index": "0", "name": "Already Named"]
+    )
+    let body = decodeAccessibilityJSON(result.message)
+
+    #expect(body["state"] as? String == "B")
+    #expect(!((body["verified"] as? Bool)!))
+    #expect(!((body["write_attempted"] as? Bool)!))
+    #expect(surface.editPressCount == 0)
+}
+
+@Test func renameMarkerRejectsSameBasenameForeignProjectWindow() async {
+    let surface = MarkerRenameSurface(
+        commitTarget: 0,
+        projectTitle: "Song",
+        arrangeDocument: "/A/Song.logicx",
+        markerDocument: "/B/Song.logicx"
+    )
+    let runtime = surface.makeRuntime()
+    let result = await surface.channel(runtime: runtime).execute(
+        operation: "nav.rename_marker",
+        params: ["index": "0", "name": "Must Stay In A"]
+    )
+    let body = decodeAccessibilityJSON(result.message)
+
+    #expect(body["state"] as? String == "C")
+    #expect(body["operation"] as? String == "nav.rename_marker")
+    #expect(body["hint"] as? String == "The requested marker target could not be verified.")
+    #expect(!((body["write_attempted"] as? Bool)!))
+    #expect(surface.editPressCount == 0)
+}
+
+@Test func renameMarkerSystemEventsDenialBeforeFallbackWriteIsStateC() async {
+    let surface = MarkerRenameSurface(
+        commitTarget: 0,
+        rejectEditorValueWrite: true,
+        executeAppleScript: { _ in
+            .error(HonestContract.encodeStateC(
+                error: .systemEventsAutomationDenied,
+                extras: ["write_attempted": false]
+            ))
+        }
+    )
+    let runtime = surface.makeRuntime(attributeValueHandler: { element, attribute in
+        if surface.builder.elementID(element) == surface.builder.elementID(surface.editor),
+           attribute == (kAXValueAttribute as String) {
+            return .some(nil)
+        }
+        return nil
+    })
+    let result = await surface.channel(runtime: runtime).execute(
+        operation: "nav.rename_marker",
+        params: ["index": "0", "name": "Denied Before Write"]
+    )
+    let body = decodeAccessibilityJSON(result.message)
+
+    #expect(body["state"] as? String == "C")
+    #expect(body["error"] as? String == "system_events_automation_denied")
+    #expect(!((body["write_attempted"] as? Bool)!))
+}
+
+@Test func renameMarkerProjectSwitchAfterWriteCannotReachStateA() async {
+    let surface = MarkerRenameSurface(
+        commitTarget: 0,
+        postCommitArrangeDocument: "/projects/Other.logicx"
+    )
+    let runtime = surface.makeRuntime()
+    let result = await surface.channel(runtime: runtime).execute(
+        operation: "nav.rename_marker",
+        params: ["index": "0", "name": "Written Before Switch"]
+    )
+    let body = decodeAccessibilityJSON(result.message)
+
+    #expect(body["state"] as? String == "B")
+    #expect(!((body["verified"] as? Bool)!))
+    #expect((body["write_attempted"] as? Bool)!)
+}
+
+@Test func renameMarkerDoesNotReuseOpenResultWhenWindowDisappears() async {
+    let surface = MarkerRenameSurface(commitTarget: 0)
+    let sequence = MarkerWindowReadSequence(
+        app: surface.app,
+        snapshots: [
+            [surface.arrange],
+            [surface.arrange, surface.window],
+            [surface.arrange],
+        ]
+    )
+    let runtime = surface.makeRuntime(attributeValueHandler: sequence.read)
+    let result = await surface.channel(runtime: runtime).execute(
+        operation: "nav.rename_marker",
+        params: ["index": "0", "name": "Never Attempted"]
+    )
+    let body = decodeAccessibilityJSON(result.message)
+
+    #expect(body["state"] as? String == "C")
+    #expect(body["operation"] as? String == "nav.rename_marker")
+    #expect(body["error"] as? String == "readback_unavailable")
+    #expect(body["hint"] as? String == "The requested marker target could not be verified after opening.")
+    #expect(surface.editPressCount == 0)
 }
 
 @Test func testAccessibilityChannelAXBackedRegionReadReturnsParsedRegions() async throws {
@@ -788,7 +1130,7 @@ private func makeSetInstrumentFixture() -> (
     let payload = try #require(
         JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
     )
-    #expect(payload["complete"] as? Bool == false)
+    #expect(!((payload["complete"] as? Bool)!))
     #expect(payload["scope"] as? String == "visible_arrange_area")
     #expect(payload["reason"] as? String == "logic_ax_viewport_only")
     #expect(payload["returned_count"] as? Int == 2)
@@ -1944,7 +2286,7 @@ private func makeTempoSliderFixture(
 
     try #require(result.isSuccess, "English-only Track menu must resolve Delete Track, got: \(result.message)")
     let object = decodeAccessibilityJSON(result.message)
-    #expect(object["verified"] as? Bool == true)
+    #expect((object["verified"] as? Bool)!)
     #expect(object["menu_clicked"] as? String == "Delete Track")
     #expect(fixture.session.pressedTitles == ["Delete Track"])
 }
@@ -1959,7 +2301,7 @@ private func makeTempoSliderFixture(
 
     try #require(result.isSuccess, "Korean-only 트랙 menu must resolve 트랙 삭제, got: \(result.message)")
     let object = decodeAccessibilityJSON(result.message)
-    #expect(object["verified"] as? Bool == true)
+    #expect((object["verified"] as? Bool)!)
     #expect(object["menu_clicked"] as? String == "트랙 삭제")
     #expect(fixture.session.pressedTitles == ["트랙 삭제"])
 }

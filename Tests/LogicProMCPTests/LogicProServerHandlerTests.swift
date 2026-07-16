@@ -135,7 +135,7 @@ func testLogicProServerHandlersReadResourcesWithoutRegisteredTransport() async t
     let trackData = try #require(trackEnvelope["data"] as? [[String: Any]])
 
     #expect(serverResourceText(transport).contains("\"tempo\""))
-    #expect(trackData.isEmpty)
+    #expect(trackData.allSatisfy { $0["placeholder"] as? Bool == true })
     #expect(serverResourceText(health).contains("\"logic_pro_running\""))
 }
 

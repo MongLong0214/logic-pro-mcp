@@ -1,3 +1,4 @@
+@preconcurrency import ApplicationServices
 import Foundation
 import Testing
 @testable import LogicProMCP
@@ -207,8 +208,17 @@ import Testing
 }
 
 @Test func testMCUChannelPluginParamAndAutomationModes() async {
-    let transport = MockMCUTransport()
-    let channel = MCUChannel(transport: transport, cache: StateCache())
+    let transport = AutomationTargetSurface(selectedTrack: 0, modes: [.off])
+    let channel = MCUChannel(
+        transport: transport,
+        cache: StateCache(),
+        axReadback: MCUChannel.AXReadback(
+            readVolume: { _ in nil },
+            readPan: { _ in nil },
+            readAutomationMode: { track in await transport.mode(at: track) },
+            readSelectedTrack: { await transport.selectedTrackIndex() }
+        )
+    )
 
     let pluginResult = await channel.execute(
         operation: "mixer.set_plugin_param",
@@ -227,7 +237,7 @@ import Testing
     for (mode, function) in automationModes {
         let result = await channel.execute(
             operation: "track.set_automation",
-            params: ["mode": mode]
+            params: ["index": "0", "mode": mode]
         )
         #expect(result.isSuccess)
         let sent = await transport.sentBytes
@@ -382,7 +392,7 @@ private func decodeMCUJSON(_ s: String) -> [String: Any] {
 
     let result = await channel.execute(
         operation: "track.set_automation",
-        params: ["mode": "write"]
+        params: ["index": "0", "mode": "write"]
     )
     #expect(result.isSuccess)
     let obj = decodeMCUJSON(result.message)
@@ -391,6 +401,135 @@ private func decodeMCUJSON(_ s: String) -> [String: Any] {
     #expect(obj["reason"] as? String == "readback_unavailable")
     #expect(obj["mode"] as? String == "write")
     #expect(obj["function"] as? String == "set_automation")
+}
+
+@Test func setAutomationSelectsAndMutatesOnlyRequestedTrack() async {
+    let transport = AutomationTargetSurface(
+        selectedTrack: 0,
+        modes: [.read, .read, .read]
+    )
+    let readback = MCUChannel.AXReadback(
+        readVolume: { _ in nil },
+        readPan: { _ in nil },
+        readAutomationMode: { track in await transport.mode(at: track) },
+        readSelectedTrack: { await transport.selectedTrackIndex() }
+    )
+    let channel = MCUChannel(
+        transport: transport,
+        cache: StateCache(),
+        axReadback: readback
+    )
+
+    let result = await channel.execute(
+        operation: "track.set_automation",
+        params: ["index": "2", "mode": "write"]
+    )
+    let body = decodeMCUJSON(result.message)
+
+    #expect(body["state"] as? String == "A")
+    #expect((body["verified"] as? Bool)!)
+    #expect(body["write_source"] == nil)
+    #expect(body["verification_source"] == nil)
+    #expect(await transport.mode(at: 0) == .read)
+    #expect(await transport.mode(at: 2) == .write)
+    #expect(await transport.events == ["select:2", "automation:write:2"])
+}
+
+@Test func setAutomationAlreadyMatchingRequestedTrackDoesNotMutateSelectedTrack() async {
+    let transport = AutomationTargetSurface(
+        selectedTrack: 0,
+        modes: [.read, .read, .write]
+    )
+    let channel = MCUChannel(
+        transport: transport,
+        cache: StateCache(),
+        axReadback: MCUChannel.AXReadback(
+            readVolume: { _ in nil },
+            readPan: { _ in nil },
+            readAutomationMode: { track in await transport.mode(at: track) },
+            readSelectedTrack: { await transport.selectedTrackIndex() }
+        )
+    )
+
+    let result = await channel.execute(
+        operation: "track.set_automation",
+        params: ["index": "2", "mode": "write"]
+    )
+    let body = decodeMCUJSON(result.message)
+
+    #expect(body["state"] as? String == "A")
+    #expect((body["verified"] as? Bool)!)
+    #expect(await transport.mode(at: 0) == .read)
+    #expect(await transport.mode(at: 2) == .write)
+    #expect(await transport.sentBytes.isEmpty)
+}
+
+@Test func setAutomationSelectionMismatchNeverSendsGlobalAutomation() async {
+    let transport = AutomationTargetSurface(
+        selectedTrack: 0,
+        modes: [.read, .read, .read],
+        selectionApplies: false
+    )
+    let channel = MCUChannel(
+        transport: transport,
+        cache: StateCache(),
+        axReadback: MCUChannel.AXReadback(
+            readVolume: { _ in nil },
+            readPan: { _ in nil },
+            readAutomationMode: { track in await transport.mode(at: track) },
+            readSelectedTrack: { await transport.selectedTrackIndex() }
+        )
+    )
+
+    let result = await channel.execute(
+        operation: "track.set_automation",
+        params: ["index": "2", "mode": "write"]
+    )
+    let body = decodeMCUJSON(result.message)
+
+    #expect(body["state"] as? String == "B")
+    #expect(!((body["verified"] as? Bool)!))
+    #expect(body["reason"] as? String == "readback_mismatch")
+    #expect((body["write_attempted"] as? Bool)!)
+    #expect(!((body["automation_write_attempted"] as? Bool)!))
+    #expect(body["observed_selected_track"] as? Int == 0)
+    #expect(await transport.mode(at: 0) == .read)
+    #expect(await transport.mode(at: 2) == .read)
+    #expect(await transport.events == ["select:2"])
+}
+
+@Test func setAutomationUnreadableAXModeIsUnavailableNotSyntheticOff() async {
+    let builder = FakeAXRuntimeBuilder()
+    let unreadableHeader = builder.element(9_100)
+    builder.setAttribute(unreadableHeader, kAXTitleAttribute as String, "Bare Track")
+    let axRuntime = builder.makeAXRuntime()
+    let transport = AutomationTargetSurface(selectedTrack: 0, modes: [.read])
+    let channel = MCUChannel(
+        transport: transport,
+        cache: StateCache(),
+        axReadback: MCUChannel.AXReadback(
+            readVolume: { _ in nil },
+            readPan: { _ in nil },
+            readAutomationMode: { _ in
+                AXValueExtractors.extractTrackAutomationModeIfReadable(
+                    from: unreadableHeader,
+                    runtime: axRuntime
+                )
+            },
+            readSelectedTrack: { await transport.selectedTrackIndex() }
+        )
+    )
+
+    let result = await channel.execute(
+        operation: "track.set_automation",
+        params: ["index": "0", "mode": "write"]
+    )
+    let body = decodeMCUJSON(result.message)
+
+    #expect(body["state"] as? String == "B")
+    #expect(!((body["verified"] as? Bool)!))
+    #expect(body["reason"] as? String == "readback_unavailable")
+    #expect(body["observed_mode"] == nil)
 }
 
 // MARK: - Mock Transport
@@ -417,5 +556,68 @@ actor MockMCUTransport: MCUTransportProtocol {
 
     func emit(_ event: MIDIFeedback.Event) {
         onReceive?(event)
+    }
+}
+
+private actor AutomationTargetSurface: MCUTransportProtocol {
+    private var currentBank = 0
+    private var selectedTrack: Int
+    private var modes: [AutomationMode]
+    private let selectionApplies: Bool
+    private(set) var sentBytes: [[UInt8]] = []
+    private(set) var events: [String] = []
+
+    init(
+        selectedTrack: Int,
+        modes: [AutomationMode],
+        selectionApplies: Bool = true
+    ) {
+        self.selectedTrack = selectedTrack
+        self.modes = modes
+        self.selectionApplies = selectionApplies
+    }
+
+    func send(_ bytes: [UInt8]) {
+        sentBytes.append(bytes)
+        guard let button = MCUProtocol.decodeButton(bytes), button.on else { return }
+        switch button.function {
+        case .bankLeft:
+            currentBank = max(0, currentBank - 1)
+        case .bankRight:
+            currentBank += 1
+        case .select:
+            let requestedTrack = currentBank * 8 + button.strip
+            events.append("select:\(requestedTrack)")
+            if selectionApplies {
+                selectedTrack = requestedTrack
+            }
+        case .automationRead:
+            setSelectedMode(.read)
+        case .automationWrite:
+            setSelectedMode(.write)
+        case .automationTrim:
+            setSelectedMode(.trim)
+        case .automationTouch:
+            setSelectedMode(.touch)
+        case .automationLatch:
+            setSelectedMode(.latch)
+        default:
+            break
+        }
+    }
+
+    func mode(at track: Int) -> AutomationMode? {
+        modes.indices.contains(track) ? modes[track] : nil
+    }
+
+    func selectedTrackIndex() -> Int { selectedTrack }
+
+    func start(onReceive: @escaping @Sendable (MIDIFeedback.Event) -> Void) async throws {}
+    func stop() {}
+
+    private func setSelectedMode(_ mode: AutomationMode) {
+        guard modes.indices.contains(selectedTrack) else { return }
+        modes[selectedTrack] = mode
+        events.append("automation:\(mode.rawValue):\(selectedTrack)")
     }
 }

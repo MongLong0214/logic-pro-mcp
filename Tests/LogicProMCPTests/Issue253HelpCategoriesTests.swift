@@ -46,3 +46,28 @@ import Testing
         "Categories: transport, tracks, mixer, midi, edit, navigate, project, audio, plugins, system"
     ))
 }
+
+@Test func navigateHelpDoesNotExposeMarkerImplementationMetadata() async {
+    let result = await SystemDispatcher.handle(
+        command: "help",
+        params: ["category": .string("navigate")],
+        router: ChannelRouter(),
+        cache: StateCache()
+    )
+    let text = sharedToolText(result)
+
+    #expect(!text.contains("AX"))
+    #expect(!text.localizedCaseInsensitiveContains("accessibility"))
+}
+
+@Test func tracksHelpDoesNotExposeAutomationImplementationMetadata() async {
+    let result = await SystemDispatcher.handle(
+        command: "help",
+        params: ["category": .string("tracks")],
+        router: ChannelRouter(),
+        cache: StateCache()
+    )
+    let text = sharedToolText(result)
+
+    #expect(!text.contains("MCU write + AX track-header readback"))
+}

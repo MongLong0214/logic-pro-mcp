@@ -14,13 +14,19 @@ private enum MockSagaBehavior: Sendable {
 private actor MockSagaExecutor: SagaStepExecutor {
     private var states: [TargetReference: Value]
     private var behaviors: [MockSagaBehavior]
+    private let beforeFirstRead: @Sendable () async -> Void
     private var unknownNextRead: Set<TargetReference> = []
     private var runs: [SagaStep] = []
     private var reads = 0
 
-    init(states: [TargetReference: Value], behaviors: [MockSagaBehavior]) {
+    init(
+        states: [TargetReference: Value],
+        behaviors: [MockSagaBehavior],
+        beforeFirstRead: @escaping @Sendable () async -> Void = {}
+    ) {
         self.states = states
         self.behaviors = behaviors
+        self.beforeFirstRead = beforeFirstRead
     }
 
     func run(_ step: SagaStep) async -> StepResult {
@@ -47,7 +53,9 @@ private actor MockSagaExecutor: SagaStepExecutor {
     }
 
     func readState(_ step: SagaStep) async -> ObservedState? {
+        let isFirstRead = reads == 0
         reads += 1
+        if isFirstRead { await beforeFirstRead() }
         guard let target = step.targetRef else { return nil }
         if unknownNextRead.remove(target) != nil { return nil }
         guard let value = states[target] else { return nil }
@@ -58,6 +66,40 @@ private actor MockSagaExecutor: SagaStepExecutor {
     func readCount() -> Int { reads }
     func runOperations() -> [OperationID] { runs.map(\.operationID) }
     func state(for target: TargetReference) -> Value? { states[target] }
+}
+
+private actor BlockingSagaReadProbe {
+    private var entered = false
+    private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func waitUntilEntered() async {
+        if entered { return }
+        await withCheckedContinuation { enteredWaiters.append($0) }
+    }
+
+    func block() async {
+        entered = true
+        let waiters = enteredWaiters
+        enteredWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+        await withCheckedContinuation { releaseWaiters.append($0) }
+    }
+
+    func unblock() {
+        let waiters = releaseWaiters
+        releaseWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+    }
+}
+
+private actor StepBoundaryCancellationProbe {
+    private var checks = 0
+
+    func shouldCancel() -> Bool {
+        checks += 1
+        return checks >= 3
+    }
 }
 
 @Suite("Mutation saga", .serialized)
@@ -229,6 +271,89 @@ struct MutationSagaTests {
     }
 
     @Test
+    func testStepBoundaryCancellationCompensatesVerifiedWrite() async {
+        let registry = TargetRegistry()
+        let target = await bind(registry, index: 0, name: "Cancelable")
+        let executor = MockSagaExecutor(
+            states: [target: .string("Before")],
+            behaviors: [.applyStateA, .applyStateA]
+        )
+        let cancellation = StepBoundaryCancellationProbe()
+        let outcome = await MutationSaga(targetRegistry: registry, enabled: true).execute(
+            SagaPlan(
+                steps: [step(.tracksRename, target: target, value: .string("After"))],
+                idempotencyKey: "cancel-after-verified-write"
+            ),
+            executor: executor,
+            cancellationRequested: { await cancellation.shouldCancel() }
+        )
+
+        #expect(outcome.state == .fullyCompensated)
+        #expect(!outcome.complete)
+        #expect(outcome.journal.first?.verificationEvidence?.disposition == .applied)
+        #expect(outcome.journal.first?.compensationEvidence?.disposition == .verified)
+        #expect(await executor.runCount() == 2)
+        #expect(await executor.state(for: target) == .string("Before"))
+    }
+
+    @Test
+    func cancellationRequestedThroughDispatcherWhileReadBlockedPreventsWrite() async throws {
+        let registry = TargetRegistry()
+        let target = await bind(registry, index: 0, name: "Before")
+        let plan = SagaPlan(
+            steps: [step(.tracksRename, target: target, value: .string("After"))],
+            idempotencyKey: "cancel-during-read"
+        )
+        let journal = SagaJournal()
+        guard case .started = await journal.begin(plan) else {
+            Issue.record("expected journal claim")
+            return
+        }
+        let probe = BlockingSagaReadProbe()
+        let executor = MockSagaExecutor(
+            states: [target: .string("Before")],
+            behaviors: [.applyStateA, .applyStateA],
+            beforeFirstRead: { await probe.block() }
+        )
+        let saga = MutationSaga(targetRegistry: registry, enabled: true)
+        let execution = Task {
+            await saga.execute(
+                plan,
+                executor: executor,
+                cancellationRequested: {
+                    await journal.record(for: plan.idempotencyKey) == .cancellationRequested
+                }
+            )
+        }
+
+        await probe.waitUntilEntered()
+        let cancelResult = await SystemDispatcher.handle(
+            command: "saga_cancel",
+            params: ["idempotency_key": .string(plan.idempotencyKey)],
+            router: ChannelRouter(),
+            cache: StateCache(),
+            sagaJournal: journal
+        )
+        await probe.unblock()
+        let outcome = await execution.value
+        guard case .text(let text, _, _) = cancelResult.content.first else {
+            Issue.record("expected cancellation body")
+            return
+        }
+        let body = try #require(
+            JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
+        )
+
+        #expect(body["state"] as? String == "B")
+        #expect(!((body["verified"] as? Bool)!))
+        #expect(body["status"] as? String == "cancellation_requested")
+        #expect(await executor.runCount() == 0)
+        #expect(await executor.state(for: target) == .string("Before"))
+        let journalEntry = try #require(outcome.journal.first)
+        #expect(!journalEntry.writeBoundaryCrossed)
+    }
+
+    @Test
     func testAmbiguousWriteReconcilesWithoutBlindInverse() async {
         let registry = TargetRegistry()
         let appliedTarget = await bind(registry, index: 0, name: "Applied")
@@ -386,6 +511,7 @@ struct MutationSagaTests {
             .partiallyCompensated,
             .compensationFailed,
             .rollbackUncertain,
+            .cancelled,
         ])
         #expect(MutationSaga.reversibleOperationIDs == Set([
             .tracksRename,

@@ -393,6 +393,11 @@ enum AXLocalePolicy {
         variants: ["읽기"],
         rationale: "Classifies the track-header automation mode as Read; read-only classifier."
     )
+    static let automationModeOff = LabelSet(
+        canonical: "off",
+        variants: ["끔"],
+        rationale: "Classifies an explicit track-header automation Off token; read-only classifier."
+    )
 
     // --- Plugin Setting popup locator (read-only, `.contains`) ---
 
