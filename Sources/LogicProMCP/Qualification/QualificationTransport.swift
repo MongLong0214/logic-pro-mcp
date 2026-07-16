@@ -451,6 +451,7 @@ struct QualificationTransport: Sendable {
     }
 
     func drive(_ request: QualificationDriveRequest) throws -> QualificationDriveResult {
+        let faultInjection = QualificationFaultInjection(environment: request.environment)
         let session = QualificationSubprocessSession(
             request: request,
             requestTimeout: requestTimeout,
@@ -509,7 +510,8 @@ struct QualificationTransport: Sendable {
                             session,
                             id: responseID,
                             spec: spec,
-                            traceID: traceSummary.traceID
+                            traceID: traceSummary.traceID,
+                            faultInjection: faultInjection
                         )
                     }
                 } catch {
@@ -770,12 +772,9 @@ struct QualificationTransport: Sendable {
         _ session: QualificationSubprocessSession,
         id: Int,
         spec: OperationSpec,
-        traceID: String
+        traceID: String,
+        faultInjection: QualificationFaultInjection?
     ) throws -> (text: String, isError: Bool) {
-        if spec.mutability == .mutating,
-           let injection = QualificationFaultInjection(environment: ProcessInfo.processInfo.environment) {
-            return (injection.responseJSONText, true)
-        }
         let result: ToolCallResult = try session.request(
             id: id,
             method: "tools/call",
@@ -786,7 +785,10 @@ struct QualificationTransport: Sendable {
                     "params": Self.probeParams(for: spec, traceID: traceID),
                 ],
             ],
-            phase: "operation_probe.\(spec.id.rawValue)"
+            phase: "operation_probe.\(spec.id.rawValue)",
+            timeout: faultInjection != nil && spec.id == .transportPlay
+                ? spec.deadline.seconds + 5
+                : nil
         )
         return (
             try result.text(phase: "operation_probe.\(spec.id.rawValue)"),

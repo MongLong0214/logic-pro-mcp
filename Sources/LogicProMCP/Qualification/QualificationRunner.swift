@@ -80,6 +80,7 @@ struct QualificationRunner: Sendable {
             case operationResponse = "operation_response"
             case readbackResponse = "readback_response"
             case rawTranscript = "raw_transcript"
+            case publicTranscript = "public_transcript"
             case mutationRestoreCompensation = "mutation_restore_compensation"
         }
 
@@ -121,6 +122,25 @@ struct QualificationRunner: Sendable {
     private struct RawTranscriptArtifact: Codable {
         let schema: String
         let frames: [QualificationWireFrame]
+    }
+
+    private struct PublicTranscriptArtifact: Codable {
+        struct Frame: Codable {
+            let sequence: Int
+            let direction: QualificationWireFrame.Direction
+            let operationID: String
+            let payloadSHA256: String
+
+            enum CodingKeys: String, CodingKey {
+                case sequence
+                case direction
+                case operationID = "operation_id"
+                case payloadSHA256 = "payload_sha256"
+            }
+        }
+
+        let schema: String
+        let frames: [Frame]
     }
 
     private struct MutationRestoreCompensationArtifact: Codable {
@@ -561,6 +581,23 @@ struct QualificationRunner: Sendable {
                             frames: driveResult.wireFrames
                         )),
                         .rawTranscript
+                    ),
+                    (
+                        Self.publicTranscriptFilename,
+                        try Self.encoded(PublicTranscriptArtifact(
+                            schema: "qualification-public-transcript/v1",
+                            frames: driveResult.wireFrames.map { frame in
+                                .init(
+                                    sequence: frame.sequence,
+                                    direction: frame.direction,
+                                    operationID: frame.operationID,
+                                    payloadSHA256: SupportBundleBuilder.sha256(
+                                        Data(frame.payload.utf8)
+                                    )
+                                )
+                            }
+                        )),
+                        .publicTranscript
                     ),
                     (
                         Self.mutationRestoreCompensationFilename,
@@ -1107,6 +1144,7 @@ struct QualificationRunner: Sendable {
     private static let manifestFilename = "evidence-manifest.json"
     private static let caseManifestFilename = "case-manifest.json"
     private static let rawTranscriptFilename = "raw-transcript.json"
+    private static let publicTranscriptFilename = "public-transcript.json"
     private static let mutationRestoreCompensationFilename =
         "mutation-restore-compensation.json"
     private static let signingKeyEnvironmentKey =
@@ -1345,7 +1383,16 @@ struct QualificationRunner: Sendable {
         directory: URL,
         beforeRead: @Sendable (URL) -> Void
     ) -> [PromotionRejectionReason] {
-        [rawTranscriptFilename, mutationRestoreCompensationFilename].compactMap { filename in
+        let expectedKinds: [String: EvidenceManifest.Kind] = [
+            rawTranscriptFilename: .rawTranscript,
+            publicTranscriptFilename: .publicTranscript,
+            mutationRestoreCompensationFilename: .mutationRestoreCompensation,
+        ]
+        return [
+            rawTranscriptFilename,
+            publicTranscriptFilename,
+            mutationRestoreCompensationFilename,
+        ].compactMap { filename in
             guard requiredArtifacts.contains(filename),
                   let entries = manifest?.files.filter({ $0.path == filename }),
                   entries.count == 1,
@@ -1354,13 +1401,27 @@ struct QualificationRunner: Sendable {
                       relativePath: filename,
                       outputDirectory: directory,
                       beforeRead: beforeRead
-                  ),
-                  SupportBundleBuilder.sha256(data) == entry.sha256 else {
+                  ) else {
                 return nil
             }
-            let valid = filename == rawTranscriptFilename
-                ? rawTranscriptIsValid(data)
-                : mutationRestoreCompensationIsValid(data)
+            guard SupportBundleBuilder.sha256(data) == entry.sha256,
+                  entry.kind == expectedKinds[filename] else {
+                return .requiredArtifactSchemaInvalid(name: filename)
+            }
+            let valid: Bool
+            switch filename {
+            case rawTranscriptFilename:
+                valid = rawTranscriptIsValid(data)
+            case publicTranscriptFilename:
+                let rawData = try? validatedEvidenceData(
+                    relativePath: rawTranscriptFilename,
+                    outputDirectory: directory,
+                    beforeRead: beforeRead
+                )
+                valid = publicTranscriptIsValid(data, rawData: rawData)
+            default:
+                valid = mutationRestoreCompensationIsValid(data)
+            }
             return valid ? nil : .requiredArtifactSchemaInvalid(name: filename)
         }
     }
@@ -1381,6 +1442,37 @@ struct QualificationRunner: Sendable {
                 return false
             }
             return object["jsonrpc"] as? String == "2.0"
+        }
+    }
+
+    private static func publicTranscriptIsValid(_ data: Data, rawData: Data?) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              Set(object.keys) == ["schema", "frames"],
+              let frameObjects = object["frames"] as? [[String: Any]],
+              frameObjects.allSatisfy({
+                  Set($0.keys) == ["sequence", "direction", "operation_id", "payload_sha256"]
+              }),
+              let rawData,
+              let rawArtifact = try? JSONDecoder().decode(RawTranscriptArtifact.self, from: rawData),
+              rawTranscriptIsValid(rawData),
+              rawArtifact.frames.count == frameObjects.count,
+              let artifact = try? JSONDecoder().decode(PublicTranscriptArtifact.self, from: data),
+              artifact.schema == "qualification-public-transcript/v1",
+              !artifact.frames.isEmpty,
+              Set(artifact.frames.map(\.direction)).isSuperset(of: [.request, .response]) else {
+            return false
+        }
+        return zip(artifact.frames, rawArtifact.frames).enumerated().allSatisfy {
+            index, pair in
+            let (frame, rawFrame) = pair
+            return frame.sequence == index
+                && !frame.operationID.isEmpty
+                && frame.payloadSHA256.count == 64
+                && frame.payloadSHA256.allSatisfy(\.isHexDigit)
+                && frame.sequence == rawFrame.sequence
+                && frame.direction == rawFrame.direction
+                && frame.operationID == rawFrame.operationID
+                && frame.payloadSHA256 == SupportBundleBuilder.sha256(Data(rawFrame.payload.utf8))
         }
     }
 

@@ -40,6 +40,100 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         #expect(report.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
     }
 
+    @Test func r_rel_rejectsIndependentQualificationStepThatCannotBlockRelease() {
+        let fixture = """
+        jobs:
+          build:
+            steps:
+              - name: Enforce independent exact-artifact qualification
+                <DIRECTIVE>
+                run: ./LogicProMCP --verify-promotion
+              - name: Create GitHub Release
+                run: gh release create
+        """
+        for directive in ["continue-on-error: true", "if: false"] {
+            let report = ProductionReadinessContractEvaluator.evaluate(
+                releaseWorkflowYAML: fixture.replacingOccurrences(
+                    of: "<DIRECTIVE>",
+                    with: directive
+                ),
+                registeredOperationIDs: ["system.health"],
+                semanticValidatorOperationIDs: ["system.health"],
+                requiredMatrixAxisCount: 4,
+                debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
+                expectedAuthorityBaseSHA: expectedBaseSHA,
+                publishedReleaseEvidencePresent: true,
+                mutationRestoreCompensationEvidencePresent: true,
+                independentProvenanceEnforced: true
+            )
+
+            #expect(
+                report.openDebts.contains(.releaseWorkflowMissingIndependentQualification),
+                "\(directive) must make the release gate non-blocking"
+            )
+        }
+    }
+
+    @Test func r_rel_ignoresGateNameSpoofedInsideRunBlock() {
+        let fixture = """
+        jobs:
+          build:
+            steps:
+              - name: Decoy
+                run: |
+                  echo "- name: Enforce independent exact-artifact qualification"
+              - name: Enforce independent exact-artifact qualification
+                continue-on-error: true
+                run: ./LogicProMCP --verify-promotion
+              - name: Create GitHub Release
+                run: gh release create
+        """
+        let report = ProductionReadinessContractEvaluator.evaluate(
+            releaseWorkflowYAML: fixture,
+            registeredOperationIDs: ["system.health"],
+            semanticValidatorOperationIDs: ["system.health"],
+            requiredMatrixAxisCount: 4,
+            debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
+            expectedAuthorityBaseSHA: expectedBaseSHA,
+            publishedReleaseEvidencePresent: true,
+            mutationRestoreCompensationEvidencePresent: true,
+            independentProvenanceEnforced: true
+        )
+
+        #expect(report.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+    }
+
+    @Test func r_rel_ignoresGateAndReleaseAnchorsInsideRunBlock() {
+        let fixture = """
+        jobs:
+          build:
+            steps:
+              - name: Decoy
+                run: |
+                  - name: Enforce independent exact-artifact qualification
+                    run: ./LogicProMCP --verify-promotion
+                  - name: Create GitHub Release
+              - name: Enforce independent exact-artifact qualification
+                if: false
+                run: ./LogicProMCP --verify-promotion
+              - name: Create GitHub Release
+                run: gh release create
+        """
+        let report = ProductionReadinessContractEvaluator.evaluate(
+            releaseWorkflowYAML: fixture,
+            registeredOperationIDs: ["system.health"],
+            semanticValidatorOperationIDs: ["system.health"],
+            requiredMatrixAxisCount: 4,
+            debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
+            expectedAuthorityBaseSHA: expectedBaseSHA,
+            publishedReleaseEvidencePresent: true,
+            mutationRestoreCompensationEvidencePresent: true,
+            independentProvenanceEnforced: true
+        )
+
+        #expect(report.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+    }
+
     @Test func r_sem_rejectsWhenSemanticValidatorsCoverOnlyHealth() {
         let ops = (0..<10).map { "op.\($0)" } + ["system.health"]
         let report = ProductionReadinessContractEvaluator.evaluate(

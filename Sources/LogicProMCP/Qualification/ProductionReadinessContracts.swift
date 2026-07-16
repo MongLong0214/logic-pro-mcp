@@ -52,13 +52,75 @@ enum ProductionReadinessContractEvaluator {
 
     private static func independentQualificationStep(in workflow: String) -> String? {
         let step = "- name: \(independentQualificationStepMarker)"
-        guard let start = workflow.range(of: step),
-              let release = workflow.range(of: "- name: Create GitHub Release"),
-              start.lowerBound < release.lowerBound else { return nil }
-        let tail = workflow[start.lowerBound...]
-        let end = tail.dropFirst(step.count).range(of: "\n      - name:")?.lowerBound
-            ?? release.lowerBound
-        return String(workflow[start.lowerBound..<end])
+        let releaseStep = "- name: Create GitHub Release"
+        let lines = workflow.split(separator: "\n", omittingEmptySubsequences: false)
+        var structuralIndices: [Int] = []
+        var blockScalarIndentation: Int?
+        for index in lines.indices {
+            let line = lines[index]
+            let indentation = line.prefix { $0 == " " }.count
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            if let scalarIndentation = blockScalarIndentation {
+                if indentation > scalarIndentation { continue }
+                blockScalarIndentation = nil
+            }
+            structuralIndices.append(index)
+            let uncommented = trimmed.split(
+                separator: "#",
+                maxSplits: 1,
+                omittingEmptySubsequences: false
+            )[0].trimmingCharacters(in: .whitespaces)
+            if let colon = uncommented.firstIndex(of: ":") {
+                let value = uncommented[uncommented.index(after: colon)...]
+                    .trimmingCharacters(in: .whitespaces)
+                if value.first == "|" || value.first == ">" {
+                    blockScalarIndentation = indentation
+                }
+            }
+        }
+        guard let releaseIndex = structuralIndices.first(where: {
+            lines[$0].trimmingCharacters(in: .whitespaces) == releaseStep
+        }) else { return nil }
+        let stepIndentation = lines[releaseIndex].prefix { $0 == " " }.count
+        guard let startIndex = structuralIndices.first(where: {
+            $0 < releaseIndex
+                && lines[$0].prefix { $0 == " " }.count == stepIndentation
+                && lines[$0].trimmingCharacters(in: .whitespaces) == step
+        }) else { return nil }
+        let endIndex = structuralIndices.first(where: {
+            $0 > startIndex && $0 < releaseIndex
+                && lines[$0].prefix { $0 == " " }.count == stepIndentation
+                && lines[$0].trimmingCharacters(in: .whitespaces).hasPrefix("- name:")
+        }) ?? releaseIndex
+        let body = lines[startIndex..<endIndex].joined(separator: "\n")
+        guard stepScalar("continue-on-error", in: body).map(isTruthyConstant) != true,
+              stepScalar("if", in: body).map(isFalseConstant) != true else {
+            return nil
+        }
+        return body
+    }
+
+    private static func stepScalar(_ key: String, in step: String) -> String? {
+        let lines = step.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let first = lines.first else { return nil }
+        let indentation = first.prefix { $0 == " " }.count + 2
+        let prefix = String(repeating: " ", count: indentation) + "\(key):"
+        return lines.dropFirst().first { $0.hasPrefix(prefix) }.map {
+            $0.dropFirst(prefix.count)
+                .split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)[0]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+                .replacingOccurrences(of: " ", with: "")
+        }
+    }
+
+    private static func isTruthyConstant(_ value: String) -> Bool {
+        ["true", "yes", "on", "1", "${{true}}"].contains(value)
+    }
+
+    private static func isFalseConstant(_ value: String) -> Bool {
+        ["false", "0", "${{false}}", "${{0}}"].contains(value)
     }
 
     /// Operations for which a semantic readback validator is implemented.
@@ -139,7 +201,7 @@ enum ProductionReadinessContractEvaluator {
 
         // R-MUT: mutation/readback/restore/compensation evidence must be required by release path.
         if !mutationRestoreCompensationEvidencePresent
-            && qualificationStep?.contains("--required-artifacts raw-transcript.json,mutation-restore-compensation.json") != true {
+            && qualificationStep?.contains("--required-artifacts raw-transcript.json,public-transcript.json,mutation-restore-compensation.json") != true {
             findings.append(.init(
                 id: .mutationRestoreCompensationMissing,
                 detail: "no mutation/readback/restore/compensation evidence requirement in release path"
@@ -161,7 +223,8 @@ enum ProductionReadinessContractEvaluator {
         if !publishedReleaseEvidencePresent
             && (!releaseStep.contains("qualification-evidence/release-qualification-attestation.json")
                 || !releaseStep.contains("qualification-evidence/evidence-manifest.json")
-                || !releaseStep.contains("qualification-evidence/raw-transcript.json")
+                || !releaseStep.contains("qualification-evidence/public-transcript.json")
+                || releaseStep.contains("qualification-evidence/raw-transcript.json")
                 || !releaseStep.contains("qualification-evidence/mutation-restore-compensation.json")) {
             findings.append(.init(
                 id: .publishedImmutableEvidenceMissing,

@@ -419,6 +419,25 @@ actor LogicProServer {
                     return invalidParams
                 }
                 let cmdParams: [String: Value] = rawCmdParams?.objectValue ?? [:]
+                if cmdParams["__adr001b_no_write_probe"]?.boolValue == true,
+                   OperationRegistry.spec(tool: name, command: command)?.id == .transportPlay,
+                   let injection = QualificationFaultInjection(
+                       environment: ProcessInfo.processInfo.environment
+                   ) {
+                    switch injection.mode {
+                    case .timeout:
+                        return await Self.runWithDeadline(tool: name, command: command) {
+                            try? await Task.sleep(for: .seconds(60))
+                            return toolStateCResult(.operationTimeout)
+                        }
+                    case .partialState:
+                        return toolStateCResult(
+                            .readbackUnavailable,
+                            hint: "Mutation state could not be fully observed; the request was refused before dispatch.",
+                            extras: ["write_attempted": false]
+                        )
+                    }
+                }
                 if let invalidParams = Self.strictParamValidationResult(
                     tool: name,
                     command: command,

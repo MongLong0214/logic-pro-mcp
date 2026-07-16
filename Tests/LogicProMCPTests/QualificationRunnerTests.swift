@@ -809,6 +809,76 @@ struct QualificationRunnerTests {
         )
     }
 
+    @Test(.enabled(
+        if: FileManager.default.isExecutableFile(atPath: Self.releaseExecutableURL.path),
+        "Requires `swift build -c release` before running the Runner fault probe."
+    ))
+    func runnerRejectsPartialStateObservedFromRealServer() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
+        let executableData = try Data(contentsOf: Self.releaseExecutableURL)
+        let fixture = try Fixture(
+            specs: [spec],
+            executableData: executableData,
+            environmentAdditions: [
+                QualificationFaultInjection.environmentKey:
+                    QualificationFaultInjection.Mode.partialState.rawValue,
+            ],
+            drive: { request in
+                let observed = try QualificationTransport(
+                    requestTimeout: 30,
+                    shutdownGrace: 1
+                ).drive(request)
+                let baseline = Self.driveResult(specs: [spec])
+                return QualificationDriveResult(
+                    handshake: baseline.handshake,
+                    health: baseline.health,
+                    catalog: baseline.catalog,
+                    expectedOperationCount: baseline.expectedOperationCount,
+                    traceList: baseline.traceList,
+                    traceDetail: baseline.traceDetail,
+                    negative: baseline.negative,
+                    observedLocale: baseline.observedLocale,
+                    operationResults: observed.operationResults,
+                    wireFrames: observed.wireFrames,
+                    mutationRestoreRecords: observed.mutationRestoreRecords,
+                    failureReason: observed.failureReason
+                )
+            }
+        )
+        defer { fixture.remove() }
+
+        let qualification = await fixture.runQualification()
+        let attestationData = try #require(
+            try? Data(contentsOf: fixture.attestationURL),
+            "qualification failed: \(qualification.stderr)"
+        )
+        let attestation = try JSONDecoder().decode(
+            ReleaseQualificationAttestation.self,
+            from: attestationData
+        )
+        let operationCase = try #require(
+            attestation.cases.first { $0.id == "in-process/transport.play" }
+        )
+        let transcript = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: fixture.directory
+                .appendingPathComponent("raw-transcript.json"))) as? [String: Any]
+        )
+        let frames = try #require(transcript["frames"] as? [[String: Any]])
+        let response = try #require(frames.first {
+            $0["operation_id"] as? String == "operation_probe.transport.play"
+                && $0["direction"] as? String == "response"
+        })
+        let responsePayload = try #require(response["payload"] as? String)
+        let promotion = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        let promotionJSON = try Self.resultObject(promotion)
+
+        #expect(qualification.exitCode == 0)
+        #expect(responsePayload.contains(#"\"error\":\"readback_unavailable\""#))
+        #expect(operationCase.status == .failed)
+        #expect(promotion.exitCode == 1)
+        #expect(promotionJSON["promotable"] as? Bool == false)
+    }
+
     @Test func handshakeStillFailsClosedBeyondStartupBudget() throws {
         let fixture = try SlowHandshakeFixture()
         defer { fixture.remove() }
@@ -924,6 +994,81 @@ struct QualificationRunnerTests {
             let entry = try #require(entries.first { $0["path"] as? String == filename })
             #expect(entry["sha256"] as? String == SupportBundleBuilder.sha256(data))
             #expect(attestation.cases.contains { $0.evidenceFiles.contains(filename) })
+        }
+    }
+
+    @Test func qualifyEmitsManifestBoundPublicTranscriptWithoutPrivatePayloadValues() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let privatePayload = #"{"id":9,"jsonrpc":"2.0","result":{"project_title":"Project Mothership","host_path":"/Users/private/Secret.logicx","permissions":{"accessibility":"granted"}}}"#
+        let frames: [QualificationWireFrame] = [
+            .init(
+                sequence: 0,
+                direction: .request,
+                operationID: "operation_probe.system.health",
+                payload: #"{"id":9,"jsonrpc":"2.0","method":"tools/call"}"#
+            ),
+            .init(
+                sequence: 1,
+                direction: .response,
+                operationID: "operation_probe.system.health",
+                payload: privatePayload
+            ),
+        ]
+        let fixture = try Fixture(specs: [spec], drive: { _ in
+            Self.driveResult(specs: [spec], wireFrames: frames)
+        })
+        defer { fixture.remove() }
+        try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
+        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+
+        let publicURL = fixture.directory.appendingPathComponent("public-transcript.json")
+        let publicData = try Data(contentsOf: publicURL)
+        let publicText = try #require(String(data: publicData, encoding: .utf8))
+        let object = try #require(
+            JSONSerialization.jsonObject(with: publicData) as? [String: Any]
+        )
+        let publicFrames = try #require(object["frames"] as? [[String: Any]])
+        let response = try #require(publicFrames.last)
+
+        #expect(object["schema"] as? String == "qualification-public-transcript/v1")
+        #expect(!publicText.contains("Project Mothership"))
+        #expect(!publicText.contains("/Users/private/Secret.logicx"))
+        #expect(!publicText.contains("permissions"))
+        #expect(response["payload"] == nil)
+        #expect(
+            response["payload_sha256"] as? String
+                == SupportBundleBuilder.sha256(Data(privatePayload.utf8))
+        )
+
+        let manifestData = try Data(contentsOf: fixture.manifestURL)
+        let manifest = try #require(
+            JSONSerialization.jsonObject(with: manifestData) as? [String: Any]
+        )
+        let entries = try #require(manifest["files"] as? [[String: Any]])
+        let entry = try #require(entries.first { $0["path"] as? String == "public-transcript.json" })
+        #expect(entry["kind"] as? String == "public_transcript")
+        #expect(entry["sha256"] as? String == SupportBundleBuilder.sha256(publicData))
+    }
+
+    @Test func verifyPromotionRejectsIncoherentOrLeakyPublicTranscript() async throws {
+        for mutation in PublicTranscriptMutation.allCases {
+            let fixture = try promotableFixture()
+            defer { fixture.remove() }
+            _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
+            try Self.mutatePublicTranscript(mutation, in: fixture)
+
+            let result = await fixture.verify(
+                expectedSHA256: fixture.binarySHA256,
+                requiredArtifacts: "raw-transcript.json,public-transcript.json"
+            )
+            let json = try Self.resultObject(result)
+            let rejections = try #require(json["rejections"] as? [[String: Any]])
+
+            #expect(result.exitCode == 1)
+            #expect(rejections.contains {
+                $0["reason"] as? String == "requiredArtifactSchemaInvalid"
+                    && $0["name"] as? String == "public-transcript.json"
+            }, "\(mutation) must invalidate the public transcript schema")
         }
     }
 
@@ -1854,7 +1999,13 @@ struct QualificationRunnerTests {
         #expect(workflow.contains("LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"))
         #expect(workflow.contains("./LogicProMCP --verify-promotion"))
         #expect(workflow.contains("--expected-commit \"$GITHUB_SHA\""))
-        #expect(workflow.contains("--required-artifacts raw-transcript.json,mutation-restore-compensation.json"))
+        #expect(workflow.contains("--required-artifacts raw-transcript.json,public-transcript.json,mutation-restore-compensation.json"))
+        let releaseStep = workflow.split(
+            separator: "- name: Create GitHub Release",
+            maxSplits: 1
+        ).last.map(String.init) ?? ""
+        #expect(releaseStep.contains("qualification-evidence/public-transcript.json"))
+        #expect(!releaseStep.contains("qualification-evidence/raw-transcript.json"))
         let waiverData = try Data(contentsOf: URL(
             fileURLWithPath: ".github/qualification/waivers.json"
         ))
@@ -2011,6 +2162,55 @@ struct QualificationRunnerTests {
         isDirectory: true
     ).appendingPathComponent(".build/release/LogicProMCP")
 
+    private enum PublicTranscriptMutation: String, CaseIterable, CustomStringConvertible {
+        case digestMismatch
+        case wrongManifestKind
+        case leakedPayload
+
+        var description: String { rawValue }
+    }
+
+    private static func mutatePublicTranscript(
+        _ mutation: PublicTranscriptMutation,
+        in fixture: Fixture
+    ) throws {
+        let publicURL = fixture.directory.appendingPathComponent("public-transcript.json")
+        var publicObject = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: publicURL)) as? [String: Any]
+        )
+        var frames = try #require(publicObject["frames"] as? [[String: Any]])
+        switch mutation {
+        case .digestMismatch:
+            frames[0]["payload_sha256"] = String(repeating: "0", count: 64)
+        case .wrongManifestKind:
+            break
+        case .leakedPayload:
+            frames[0]["payload"] = "private payload must never be public"
+        }
+        publicObject["frames"] = frames
+        let publicData = try JSONSerialization.data(
+            withJSONObject: publicObject,
+            options: [.sortedKeys]
+        )
+        try publicData.write(to: publicURL, options: .atomic)
+
+        var manifestObject = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: fixture.manifestURL))
+                as? [String: Any]
+        )
+        var entries = try #require(manifestObject["files"] as? [[String: Any]])
+        let entryIndex = try #require(entries.firstIndex {
+            $0["path"] as? String == "public-transcript.json"
+        })
+        entries[entryIndex]["sha256"] = SupportBundleBuilder.sha256(publicData)
+        if mutation == .wrongManifestKind {
+            entries[entryIndex]["kind"] = "raw_transcript"
+        }
+        manifestObject["files"] = entries
+        try JSONSerialization.data(withJSONObject: manifestObject, options: [.sortedKeys])
+            .write(to: fixture.manifestURL, options: .atomic)
+    }
+
     private static func driveResult(
         specs: [OperationSpec],
         catalogCount: Int? = nil,
@@ -2023,7 +2223,8 @@ struct QualificationRunnerTests {
         qualifiedReadOperationCount: Int? = nil,
         healthChangesAfterNegativeProbe: Bool = false,
         nonObjectResponseOperationID: OperationID? = nil,
-        mutationRestoreRecords: [QualificationMutationRestoreRecord] = []
+        mutationRestoreRecords: [QualificationMutationRestoreRecord] = [],
+        wireFrames: [QualificationWireFrame]? = nil
     ) -> QualificationDriveResult {
         let expectedCount = specs.count
         let actualCount = catalogCount ?? expectedCount
@@ -2158,7 +2359,7 @@ struct QualificationRunnerTests {
             ),
             observedLocale: observedLocale,
             operationResults: operationResults,
-            wireFrames: [
+            wireFrames: wireFrames ?? [
                 .init(
                     sequence: 0,
                     direction: .request,
@@ -2231,7 +2432,7 @@ struct QualificationRunnerTests {
     private final class Fixture: @unchecked Sendable {
         let directory: URL
         let executableURL: URL
-        let executableData = Data("qualification-binary-fixture".utf8)
+        let executableData: Data
         let attestationURL: URL
         let manifestURL: URL
         let caseManifestURL: URL
@@ -2244,6 +2445,7 @@ struct QualificationRunnerTests {
 
         init(
             specs: [OperationSpec],
+            executableData: Data = Data("qualification-binary-fixture".utf8),
             binaryVersion: String = "1.2.3",
             registryValidationErrors: [String] = [],
             handlerValidationErrors: [String] = [],
@@ -2253,9 +2455,11 @@ struct QualificationRunnerTests {
             commitSHA: String = String(repeating: "c", count: 40),
             trustedPublicKeyData: Data? = nil,
             beforeEvidenceRead: @escaping @Sendable (URL) -> Void = { _ in },
+            environmentAdditions: [String: String] = [:],
             drive: (@Sendable (QualificationDriveRequest) async throws -> QualificationDriveResult)? = nil
         ) throws {
             self.commitSHA = commitSHA
+            self.executableData = executableData
             directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("qualification-runner-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -2266,6 +2470,10 @@ struct QualificationRunnerTests {
             externalCasesURL = directory.appendingPathComponent("cases.json")
             waiversURL = directory.appendingPathComponent("waivers.json")
             try executableData.write(to: executableURL)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755],
+                ofItemAtPath: executableURL.path
+            )
             let signingKeyData = Data(repeating: 7, count: 32)
             let signingKey = try Curve25519.Signing.PrivateKey(
                 rawRepresentation: signingKeyData
@@ -2278,11 +2486,13 @@ struct QualificationRunnerTests {
             let drive = drive ?? { _ in defaultDriveResult }
             runner = QualificationRunner(runtime: .init(
                 executableURL: { [executableURL] in executableURL },
-                environment: { [commitSHA] in [
-                    "GIT_COMMIT": commitSHA,
-                    "LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY": signingKeyBase64,
-                    "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": trustedKeyBase64,
-                ] },
+                environment: { [commitSHA, environmentAdditions] in
+                    var environment = environmentAdditions
+                    environment["GIT_COMMIT"] = commitSHA
+                    environment["LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY"] = signingKeyBase64
+                    environment["LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"] = trustedKeyBase64
+                    return environment
+                },
                 now: { Date(timeIntervalSince1970: 1_000) },
                 serverVersion: { binaryVersion },
                 specs: { specs },
