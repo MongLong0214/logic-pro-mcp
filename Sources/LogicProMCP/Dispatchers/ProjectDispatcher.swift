@@ -907,7 +907,15 @@ struct ProjectDispatcher: OperationTraceDispatching {
         targetRegistry: TargetRegistry?
     ) async {
         await cache.clearProjectState()
-        if FeatureFlags.adr002TargetRef {
+        // ADR-006 coupling fix: the versioned-cache envelope publishes
+        // `project_epoch` as ITS cross-project discriminator, so the epoch
+        // must advance on lifecycle transitions whenever EITHER consumer is
+        // active. Gating on adr002 alone froze the envelope's epoch at 0
+        // when only adr006 was enabled (a constant discriminator across
+        // project switches). With both flags off the bump has no observable
+        // surface, so the either-flag condition is behavior-preserving for
+        // the default configuration.
+        if FeatureFlags.adr002TargetRef || FeatureFlags.adr006VersionedCache {
             await targetRegistry?.bumpProjectEpoch()
         }
     }
