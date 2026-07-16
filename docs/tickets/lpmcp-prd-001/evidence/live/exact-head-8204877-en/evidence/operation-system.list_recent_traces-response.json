@@ -1,1 +1,0 @@
-{"command":"list_recent_traces","is_error":false,"operation_id":"system.list_recent_traces","payload":"{\"traces\":[{\"operation_id\":\"system.saga_execute\",\"phase_count\":3,\"readback_state\":\"C\",\"trace_id\":\"lpmcp_C2AC8A66-C28E-4A2F-A302-3A68E6CCC74B\"}]}","request_id":"145","tool":"logic_system"}

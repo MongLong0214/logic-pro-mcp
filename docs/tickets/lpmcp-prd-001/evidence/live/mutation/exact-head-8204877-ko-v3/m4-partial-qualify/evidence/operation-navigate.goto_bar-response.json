@@ -1,1 +1,0 @@
-{"command":"goto_bar","is_error":true,"operation_id":"navigate.goto_bar","payload":"{\"state\":\"C\",\"error\":\"qualification_partial_state\",\"fault_injection\":\"partial_state\",\"success\":false,\"write_attempted\":false}","request_id":"85","tool":"logic_navigate"}

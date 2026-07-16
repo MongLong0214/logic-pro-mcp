@@ -1,1 +1,0 @@
-{"command":"insert_verified","is_error":true,"operation_id":"plugins.insert_verified","payload":"{\"state\":\"C\",\"error\":\"qualification_partial_state\",\"fault_injection\":\"partial_state\",\"success\":false,\"write_attempted\":false}","request_id":"99","tool":"logic_plugins"}

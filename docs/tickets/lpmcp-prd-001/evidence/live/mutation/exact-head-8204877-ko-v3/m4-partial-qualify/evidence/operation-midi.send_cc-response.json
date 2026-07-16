@@ -1,1 +1,0 @@
-{"command":"send_cc","is_error":true,"operation_id":"midi.send_cc","payload":"{\"state\":\"C\",\"error\":\"qualification_partial_state\",\"fault_injection\":\"partial_state\",\"success\":false,\"write_attempted\":false}","request_id":"57","tool":"logic_midi"}

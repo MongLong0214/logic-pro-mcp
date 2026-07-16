@@ -1,1 +1,0 @@
-{"command":"duplicate","is_error":true,"operation_id":"edit.duplicate","payload":"{\"success\":false,\"state\":\"C\",\"error\":\"qualification_partial_state\",\"fault_injection\":\"partial_state\",\"write_attempted\":false}","request_id":"19","tool":"logic_edit"}

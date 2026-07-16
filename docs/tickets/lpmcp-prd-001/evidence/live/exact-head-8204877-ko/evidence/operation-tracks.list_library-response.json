@@ -1,1 +1,0 @@
-{"command":"list_library","is_error":true,"operation_id":"tracks.list_library","payload":"{\"error\":\"channels_exhausted\",\"hint\":\"Library panel not found. Open Library (Y) in Logic Pro.\",\"last_error\":\"Library panel not found. Open Library (Y) in Logic Pro.\",\"operation\":\"library.list\",\"state\":\"C\",\"success\":false}","request_id":"174","tool":"logic_tracks"}

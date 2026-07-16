@@ -1,1 +1,0 @@
-{"command":"normalize","is_error":true,"operation_id":"edit.normalize","payload":"{\"success\":false,\"state\":\"C\",\"error\":\"qualification_partial_state\",\"fault_injection\":\"partial_state\",\"write_attempted\":false}","request_id":"23","tool":"logic_edit"}

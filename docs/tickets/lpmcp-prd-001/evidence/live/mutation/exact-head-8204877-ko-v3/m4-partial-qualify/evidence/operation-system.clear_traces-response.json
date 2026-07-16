@@ -1,1 +1,0 @@
-{"command":"clear_traces","is_error":true,"operation_id":"system.clear_traces","payload":"{\"error\":\"invalid_params\",\"hint\":\"clear_traces requires 'confirmed:true' because it destroys in-process diagnostic evidence\",\"state\":\"C\",\"success\":false}","request_id":"135","tool":"logic_system"}
