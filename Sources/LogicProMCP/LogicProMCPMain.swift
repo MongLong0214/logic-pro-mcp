@@ -1,6 +1,6 @@
 import Foundation
 
-enum LogicProMCPMain {
+package enum LogicProMCPMain {
     static func defaultRunner(
         arguments: [String],
         permissionCheck: () -> PermissionChecker.PermissionStatus = PermissionChecker.check,
@@ -27,7 +27,7 @@ enum LogicProMCPMain {
         )
     }
 
-    static func exitCode(
+    package static func exitCode(
         arguments: [String],
         runner: ([String]) async -> Int = { arguments in
             await LogicProMCPMain.defaultRunner(arguments: arguments)
@@ -36,5 +36,3 @@ enum LogicProMCPMain {
         Int32(await runner(arguments))
     }
 }
-
-exit(await LogicProMCPMain.exitCode(arguments: CommandLine.arguments))

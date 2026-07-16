@@ -274,7 +274,7 @@ enum MainEntrypoint {
           LogicProMCP --qualify --out <attestation.json> [--cases <cases.json>] [--waivers <waivers.json>] [--release-version <version>] [--variant <desktop|creator>] [--locale <en|ko>] [--profile <core|full>] [--cache <cold|warm>]
                                                Drive the packaged binary over stdio and write a live qualification attestation
           LogicProMCP --verify-promotion --attestation <attestation.json> --release-version <version> --expected-binary-sha256 <hex> --expected-commit <sha> [--required-artifacts <path,...>]
-                                               Evaluate local promotion prerequisites and emit a JSON decision
+                                               non-authoritative local diagnostic; emits a JSON decision with no promotion authority
           LogicProMCP --list-approvals         List manual channel approvals and exit
           LogicProMCP --approve-channel <MIDIKeyCommands|Scripter> [--approval-note <note>]
                                                Record a manual channel approval and exit

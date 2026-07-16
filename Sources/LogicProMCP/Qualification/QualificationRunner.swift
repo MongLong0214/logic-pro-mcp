@@ -2,13 +2,13 @@ import Foundation
 import CryptoKit
 import Darwin
 
-struct QualificationCommandResult: Sendable {
-    let exitCode: Int
-    let stdout: String
-    let stderr: String
+package struct QualificationCommandResult: Sendable {
+    package let exitCode: Int
+    package let stdout: String
+    package let stderr: String
 }
 
-struct QualificationRunner: Sendable {
+package struct QualificationRunner: Sendable {
     struct Runtime: Sendable {
         let executableURL: @Sendable () throws -> URL
         let environment: @Sendable () -> [String: String]
@@ -72,6 +72,11 @@ struct QualificationRunner: Sendable {
 
         let promotable: Bool
         let rejections: [Rejection]
+    }
+
+    private enum SignatureRequirement {
+        case skipped
+        case required(trustedPublicKeyData: Data?)
     }
 
     private struct EvidenceManifest: Codable {
@@ -159,8 +164,6 @@ struct QualificationRunner: Sendable {
         case logicUILocaleMismatch(expected: String, actual: String)
         case evidenceBindingMismatch(String)
         case commitIdentityUnavailable
-        case signingKeyUnavailable
-        case invalidSigningKey
         case executableUnavailable
 
         var description: String {
@@ -181,10 +184,6 @@ struct QualificationRunner: Sendable {
                 "External evidence binding mismatch: \(detail)"
             case .commitIdentityUnavailable:
                 "Qualification provenance commit identity is unavailable"
-            case .signingKeyUnavailable:
-                "Qualification provenance signing key is unavailable"
-            case .invalidSigningKey:
-                "Qualification provenance signing key is invalid"
             case .executableUnavailable: "Unable to resolve the running executable"
             }
         }
@@ -249,7 +248,6 @@ struct QualificationRunner: Sendable {
         let sourceExecutableURL = try runtime.executableURL()
         let environment = runtime.environment()
         let commitSHA = try Self.commitSHA(from: environment)
-        let signingKey = try Self.signingKey(from: environment)
         var driveEnvironment = environment
         driveEnvironment.removeValue(forKey: Self.signingKeyEnvironmentKey)
         driveEnvironment.removeValue(forKey: Self.trustedPublicKeyEnvironmentKey)
@@ -812,7 +810,6 @@ struct QualificationRunner: Sendable {
             completedAt: completedAt,
             evidenceManifestSHA256: manifestSHA256
         )
-        let provenanceSignature = try Self.sign(provenance, with: signingKey)
         let attestation = ReleaseQualificationAttestation(
             schema: "release-qualification-attestation/v2",
             serverVersion: options.releaseVersion,
@@ -834,7 +831,7 @@ struct QualificationRunner: Sendable {
             waivers: waivers,
             evidenceManifestSHA256: manifestSHA256,
             provenance: provenance,
-            provenanceSignature: provenanceSignature
+            provenanceSignature: nil
         )
         try Self.encoded(attestation).write(
             to: options.outputURL,
@@ -875,15 +872,44 @@ struct QualificationRunner: Sendable {
             ReleaseQualificationAttestation.self,
             from: attestationData
         )
+        let encodedTrustedKey = runtime.environment()[Self.trustedPublicKeyEnvironmentKey]
+        let trustedKeyData = encodedTrustedKey.flatMap { Data(base64Encoded: $0) }
+        let rejections = try Self.evaluateBundle(
+            attestation: attestation,
+            directory: directory,
+            candidateURL: try runtime.executableURL(),
+            publishedBinarySHA256: options.expectedBinarySHA256,
+            releaseVersion: options.releaseVersion,
+            expectedCommitSHA: options.expectedCommitSHA,
+            requiredArtifacts: options.requiredArtifacts,
+            requiredOperationIDs: Set(runtime.specs().map { $0.id.rawValue }),
+            beforeEvidenceRead: runtime.beforeEvidenceRead,
+            signatureRequirement: .required(trustedPublicKeyData: trustedKeyData)
+        )
+        return try Self.verificationResult(rejections)
+    }
+
+    private static func evaluateBundle(
+        attestation: ReleaseQualificationAttestation,
+        directory: URL,
+        candidateURL: URL,
+        publishedBinarySHA256: String? = nil,
+        releaseVersion: String,
+        expectedCommitSHA: String,
+        requiredArtifacts requestedArtifacts: Set<String>,
+        requiredOperationIDs: Set<String>,
+        beforeEvidenceRead: @Sendable (URL) -> Void,
+        signatureRequirement: SignatureRequirement
+    ) throws -> [PromotionRejectionReason] {
         let manifestArtifact = Self.manifestFilename
-        let requiredArtifacts = options.requiredArtifacts.union([manifestArtifact])
+        let requiredArtifacts = requestedArtifacts.union([manifestArtifact])
         let manifest = (try? Self.readNoFollow(
             relativePath: manifestArtifact,
             directory: directory,
-            beforeRead: runtime.beforeEvidenceRead
+            beforeRead: beforeEvidenceRead
         )).flatMap { try? JSONDecoder().decode(EvidenceManifest.self, from: $0) }
         let manifestPaths = Set(manifest?.files.map(\.path) ?? [])
-        let executableName = try runtime.executableURL().lastPathComponent
+        let executableName = candidateURL.lastPathComponent
         let presentArtifacts = Set(requiredArtifacts.filter { artifact in
             let url = artifact.hasPrefix("/")
                 ? URL(fileURLWithPath: artifact)
@@ -896,55 +922,67 @@ struct QualificationRunner: Sendable {
         let evidenceBindingIssue = Self.evidenceBindingIssue(
             attestation: attestation,
             directory: directory,
-            beforeRead: runtime.beforeEvidenceRead
+            beforeRead: beforeEvidenceRead
         )
+        let candidateData = try Self.readNoFollow(
+            relativePath: candidateURL.lastPathComponent,
+            directory: candidateURL.deletingLastPathComponent(),
+            beforeRead: { _ in },
+            maxBytes: 256 * 1024 * 1024
+        )
+        let candidateSHA256 = SupportBundleBuilder.sha256(candidateData)
         let decision = PromotionGate().evaluate(
             attestation: attestation,
-            releaseVersion: options.releaseVersion,
-            expectedBinarySHA256: options.expectedBinarySHA256,
+            releaseVersion: releaseVersion,
+            expectedBinarySHA256: candidateSHA256,
             presentArtifacts: presentArtifacts,
             requiredArtifacts: requiredArtifacts,
-            requiredOperationIDs: Set(runtime.specs().map { $0.id.rawValue })
+            requiredOperationIDs: requiredOperationIDs
         )
-        let currentExecutableData = try Data(
-            contentsOf: runtime.executableURL(),
-            options: .mappedIfSafe
-        )
-        let currentExecutableSHA256 = SupportBundleBuilder.sha256(currentExecutableData)
         var rejections = decision.rejections
+        if let publishedBinarySHA256, publishedBinarySHA256 != candidateSHA256 {
+            rejections.append(.binarySHAMismatch(
+                expected: publishedBinarySHA256,
+                actual: candidateSHA256
+            ))
+        }
         rejections.append(contentsOf: Self.requiredArtifactSchemaRejections(
-            requiredArtifacts: options.requiredArtifacts,
+            requiredArtifacts: requestedArtifacts,
             manifest: manifest,
             directory: directory,
-            beforeRead: runtime.beforeEvidenceRead
+            beforeRead: beforeEvidenceRead
         ))
         if let evidenceBindingIssue {
             rejections.append(.evidenceBindingMismatch(detail: evidenceBindingIssue))
         }
-        if let provenanceRejection = Self.provenanceRejection(
-            attestation: attestation,
-            environment: runtime.environment()
-        ) {
+        let provenanceRejection: PromotionRejectionReason?
+        switch signatureRequirement {
+        case .skipped:
+            provenanceRejection = Self.provenanceBindingRejection(attestation: attestation)
+        case .required(let trustedPublicKeyData):
+            provenanceRejection = Self.provenanceRejection(
+                attestation: attestation,
+                trustedPublicKeyData: trustedPublicKeyData
+            )
+        }
+        if let provenanceRejection {
             rejections.append(provenanceRejection)
         }
-        let boundCommitSHA = attestation.commitSHA == options.expectedCommitSHA
+        let boundCommitSHA = attestation.commitSHA == expectedCommitSHA
             ? attestation.provenance?.commitSHA ?? attestation.commitSHA
             : attestation.commitSHA
-        if boundCommitSHA != options.expectedCommitSHA {
+        if boundCommitSHA != expectedCommitSHA {
             rejections.append(.releaseCommitMismatch(
-                expected: options.expectedCommitSHA,
+                expected: expectedCommitSHA,
                 actual: boundCommitSHA
             ))
         }
-        if currentExecutableSHA256 != options.expectedBinarySHA256 {
-            let replacementRejection = PromotionRejectionReason.binarySHAMismatch(
-                expected: options.expectedBinarySHA256,
-                actual: currentExecutableSHA256
-            )
-            if !rejections.contains(replacementRejection) {
-                rejections.append(replacementRejection)
-            }
-        }
+        return rejections
+    }
+
+    private static func verificationResult(
+        _ rejections: [PromotionRejectionReason]
+    ) throws -> QualificationCommandResult {
         let output = VerificationOutput(
             promotable: rejections.isEmpty,
             rejections: rejections.map(Self.output)
@@ -992,6 +1030,220 @@ struct QualificationRunner: Sendable {
             expectedCommitSHA: expectedCommitSHA,
             requiredArtifacts: requiredArtifacts
         )
+    }
+
+    package static func runTrusted(
+        arguments: [String],
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> QualificationCommandResult {
+        do {
+            guard let command = arguments.dropFirst().first,
+                  command == "sign" || command == "verify" else {
+                return try typedFailure("invalidArguments", actual: "Expected sign or verify")
+            }
+            let values = try optionValues(Array(arguments.dropFirst(2)), allowed: [
+                "--candidate", "--bundle", "--release-version", "--expected-commit",
+            ])
+            guard let candidate = values["--candidate"] else {
+                throw RunnerError.missingOption("--candidate")
+            }
+            guard let bundle = values["--bundle"] else {
+                throw RunnerError.missingOption("--bundle")
+            }
+            guard let releaseVersion = values["--release-version"] else {
+                throw RunnerError.missingOption("--release-version")
+            }
+            guard let expectedCommitSHA = values["--expected-commit"] else {
+                throw RunnerError.missingOption("--expected-commit")
+            }
+            guard isCommitSHA(expectedCommitSHA) else {
+                throw RunnerError.invalidOption("--expected-commit", expectedCommitSHA)
+            }
+            let candidateURL = URL(fileURLWithPath: candidate).standardizedFileURL
+            let bundleURL = URL(fileURLWithPath: bundle).standardizedFileURL
+            if command == "sign" {
+                guard let encodedKey = environment[signingKeyEnvironmentKey] else {
+                    return try typedFailure("signingKeyUnavailable")
+                }
+                guard let keyData = Data(base64Encoded: encodedKey) else {
+                    return try typedFailure("invalidSigningKey")
+                }
+                return signTrusted(
+                    candidateURL: candidateURL,
+                    bundleURL: bundleURL,
+                    releaseVersion: releaseVersion,
+                    expectedCommitSHA: expectedCommitSHA,
+                    signingPrivateKeyData: keyData
+                )
+            }
+            let trustedKeyData = environment[trustedPublicKeyEnvironmentKey]
+                .flatMap { Data(base64Encoded: $0) }
+            return verifyTrusted(
+                candidateURL: candidateURL,
+                bundleURL: bundleURL,
+                releaseVersion: releaseVersion,
+                expectedCommitSHA: expectedCommitSHA,
+                trustedPublicKeyData: trustedKeyData
+            )
+        } catch {
+            return (try? typedFailure("invalidArguments", actual: String(describing: error)))
+                ?? QualificationCommandResult(exitCode: 1, stdout: "", stderr: "trusted-verifier failed\n")
+        }
+    }
+
+    package static func signTrusted(
+        candidateURL: URL,
+        bundleURL: URL,
+        releaseVersion: String,
+        expectedCommitSHA: String,
+        signingPrivateKeyData: Data,
+        requiredArtifacts: Set<String> = trustedRequiredArtifacts,
+        requiredOperationIDs: Set<String> = Set(OperationRegistry.specs.map { $0.id.rawValue })
+    ) -> QualificationCommandResult {
+        do {
+            guard let signingKey = try? Curve25519.Signing.PrivateKey(
+                rawRepresentation: signingPrivateKeyData
+            ) else {
+                return try typedFailure("invalidSigningKey")
+            }
+            let (attestationURL, attestation) = try loadTrustedAttestation(bundleURL: bundleURL)
+            guard attestation.provenanceSignature == nil else {
+                return try typedFailure("provenanceAlreadySigned")
+            }
+            let unsignedRejections = try evaluateBundle(
+                attestation: attestation,
+                directory: bundleURL,
+                candidateURL: candidateURL,
+                releaseVersion: releaseVersion,
+                expectedCommitSHA: expectedCommitSHA,
+                requiredArtifacts: requiredArtifacts,
+                requiredOperationIDs: requiredOperationIDs,
+                beforeEvidenceRead: { _ in },
+                signatureRequirement: .skipped
+            )
+            guard unsignedRejections.isEmpty else {
+                return try verificationResult(unsignedRejections)
+            }
+            guard let provenance = attestation.provenance else {
+                return try typedFailure("provenanceSignatureMissing")
+            }
+            let signature = QualificationProvenanceSignature(
+                algorithm: "ed25519",
+                keyID: SupportBundleBuilder.sha256(signingKey.publicKey.rawRepresentation),
+                value: try signingKey.signature(for: encoded(provenance)).base64EncodedString()
+            )
+            let signedAttestation = replacingSignature(attestation, with: signature)
+            let signedRejections = try evaluateBundle(
+                attestation: signedAttestation,
+                directory: bundleURL,
+                candidateURL: candidateURL,
+                releaseVersion: releaseVersion,
+                expectedCommitSHA: expectedCommitSHA,
+                requiredArtifacts: requiredArtifacts,
+                requiredOperationIDs: requiredOperationIDs,
+                beforeEvidenceRead: { _ in },
+                signatureRequirement: .required(
+                    trustedPublicKeyData: signingKey.publicKey.rawRepresentation
+                )
+            )
+            guard signedRejections.isEmpty else {
+                return try verificationResult(signedRejections)
+            }
+            try encoded(signedAttestation).write(to: attestationURL, options: .atomic)
+            return try verificationResult([])
+        } catch {
+            return (try? typedFailure("signerFailure", actual: String(describing: error)))
+                ?? QualificationCommandResult(exitCode: 1, stdout: "", stderr: "trusted signer failed\n")
+        }
+    }
+
+    package static func verifyTrusted(
+        candidateURL: URL,
+        bundleURL: URL,
+        releaseVersion: String,
+        expectedCommitSHA: String,
+        trustedPublicKeyData: Data?
+    ) -> QualificationCommandResult {
+        do {
+            let (_, attestation) = try loadTrustedAttestation(bundleURL: bundleURL)
+            let rejections = try evaluateBundle(
+                attestation: attestation,
+                directory: bundleURL,
+                candidateURL: candidateURL,
+                releaseVersion: releaseVersion,
+                expectedCommitSHA: expectedCommitSHA,
+                requiredArtifacts: trustedRequiredArtifacts,
+                requiredOperationIDs: Set(OperationRegistry.specs.map { $0.id.rawValue }),
+                beforeEvidenceRead: { _ in },
+                signatureRequirement: .required(trustedPublicKeyData: trustedPublicKeyData)
+            )
+            return try verificationResult(rejections)
+        } catch {
+            return (try? typedFailure("verifierFailure", actual: String(describing: error)))
+                ?? QualificationCommandResult(exitCode: 1, stdout: "", stderr: "trusted verifier failed\n")
+        }
+    }
+
+    private static func loadTrustedAttestation(
+        bundleURL: URL
+    ) throws -> (URL, ReleaseQualificationAttestation) {
+        let attestationURL = bundleURL.appendingPathComponent(attestationFilename)
+        let data = try readNoFollow(
+            relativePath: attestationFilename,
+            directory: bundleURL,
+            beforeRead: { _ in }
+        )
+        return (attestationURL, try JSONDecoder().decode(ReleaseQualificationAttestation.self, from: data))
+    }
+
+    private static func replacingSignature(
+        _ attestation: ReleaseQualificationAttestation,
+        with signature: QualificationProvenanceSignature
+    ) -> ReleaseQualificationAttestation {
+        ReleaseQualificationAttestation(
+            schema: attestation.schema,
+            serverVersion: attestation.serverVersion,
+            commitSHA: attestation.commitSHA,
+            binarySHA256: attestation.binarySHA256,
+            logicVariant: attestation.logicVariant,
+            logicVersion: attestation.logicVersion,
+            locale: attestation.locale,
+            profile: attestation.profile,
+            cache: attestation.cache,
+            fixture: attestation.fixture,
+            startedAt: attestation.startedAt,
+            completedAt: attestation.completedAt,
+            total: attestation.total,
+            passed: attestation.passed,
+            failed: attestation.failed,
+            waived: attestation.waived,
+            cases: attestation.cases,
+            waivers: attestation.waivers,
+            evidenceManifestSHA256: attestation.evidenceManifestSHA256,
+            provenance: attestation.provenance,
+            provenanceSignature: signature
+        )
+    }
+
+    private static func typedFailure(
+        _ reason: String,
+        actual: String? = nil
+    ) throws -> QualificationCommandResult {
+        let output = VerificationOutput(
+            promotable: false,
+            rejections: [.init(
+                reason: reason,
+                caseID: nil,
+                key: nil,
+                name: nil,
+                expected: nil,
+                actual: actual
+            )]
+        )
+        guard let json = String(data: try encoded(output), encoding: .utf8) else {
+            throw RunnerError.invalidArguments("Unable to encode rejection")
+        }
+        return QualificationCommandResult(exitCode: 1, stdout: json + "\n", stderr: "")
     }
 
     private static func output(_ reason: PromotionRejectionReason) -> VerificationOutput.Rejection {
@@ -1142,6 +1394,7 @@ struct QualificationRunner: Sendable {
     }
 
     private static let manifestFilename = "evidence-manifest.json"
+    private static let attestationFilename = "release-qualification-attestation.json"
     private static let caseManifestFilename = "case-manifest.json"
     private static let rawTranscriptFilename = "raw-transcript.json"
     private static let publicTranscriptFilename = "public-transcript.json"
@@ -1151,6 +1404,11 @@ struct QualificationRunner: Sendable {
         "LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY"
     private static let trustedPublicKeyEnvironmentKey =
         "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"
+    private static let trustedRequiredArtifacts: Set<String> = [
+        rawTranscriptFilename,
+        publicTranscriptFilename,
+        mutationRestoreCompensationFilename,
+    ]
 
     private static func loadWaivers(
         from url: URL?,
@@ -1835,19 +2093,6 @@ struct QualificationRunner: Sendable {
         }
     }
 
-    private static func signingKey(
-        from environment: [String: String]
-    ) throws -> Curve25519.Signing.PrivateKey {
-        guard let encodedKey = environment[signingKeyEnvironmentKey] else {
-            throw RunnerError.signingKeyUnavailable
-        }
-        guard let rawKey = Data(base64Encoded: encodedKey),
-              let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: rawKey) else {
-            throw RunnerError.invalidSigningKey
-        }
-        return key
-    }
-
     private static func commitSHA(from environment: [String: String]) throws -> String {
         guard let commitSHA = environment["GIT_COMMIT"],
               isCommitSHA(commitSHA) else {
@@ -1860,29 +2105,36 @@ struct QualificationRunner: Sendable {
         (value.count == 40 || value.count == 64) && value.allSatisfy(\.isHexDigit)
     }
 
-    private static func sign(
-        _ provenance: QualificationProvenanceRecord,
-        with key: Curve25519.Signing.PrivateKey
-    ) throws -> QualificationProvenanceSignature {
-        QualificationProvenanceSignature(
-            algorithm: "ed25519",
-            keyID: SupportBundleBuilder.sha256(key.publicKey.rawRepresentation),
-            value: try key.signature(for: encoded(provenance)).base64EncodedString()
-        )
-    }
-
     private static func provenanceRejection(
         attestation: ReleaseQualificationAttestation,
-        environment: [String: String]
+        trustedPublicKeyData rawKey: Data?
     ) -> PromotionRejectionReason? {
+        if let rejection = provenanceBindingRejection(attestation: attestation) {
+            return rejection
+        }
         guard let provenance = attestation.provenance,
               let signature = attestation.provenanceSignature else {
             return .provenanceSignatureMissing
         }
-        guard let encodedKey = environment[trustedPublicKeyEnvironmentKey],
-              let rawKey = Data(base64Encoded: encodedKey),
+        guard let rawKey,
               let trustedKey = try? Curve25519.Signing.PublicKey(rawRepresentation: rawKey) else {
             return .trustedProvenanceKeyUnavailable
+        }
+        guard signature.algorithm == "ed25519",
+              signature.keyID == SupportBundleBuilder.sha256(rawKey),
+              let signatureData = Data(base64Encoded: signature.value),
+              let provenanceData = try? encoded(provenance),
+              trustedKey.isValidSignature(signatureData, for: provenanceData) else {
+            return .provenanceSignatureInvalid
+        }
+        return nil
+    }
+
+    private static func provenanceBindingRejection(
+        attestation: ReleaseQualificationAttestation
+    ) -> PromotionRejectionReason? {
+        guard let provenance = attestation.provenance else {
+            return .provenanceSignatureMissing
         }
         let axis = QualificationAxis(
             variant: attestation.logicVariant,
@@ -1900,12 +2152,7 @@ struct QualificationRunner: Sendable {
               provenance.startedAt == attestation.startedAt,
               provenance.completedAt == attestation.completedAt,
               provenance.completedAt >= provenance.startedAt,
-              provenance.evidenceManifestSHA256 == attestation.evidenceManifestSHA256,
-              signature.algorithm == "ed25519",
-              signature.keyID == SupportBundleBuilder.sha256(rawKey),
-              let signatureData = Data(base64Encoded: signature.value),
-              let provenanceData = try? encoded(provenance),
-              trustedKey.isValidSignature(signatureData, for: provenanceData) else {
+              provenance.evidenceManifestSHA256 == attestation.evidenceManifestSHA256 else {
             return .provenanceSignatureInvalid
         }
         return nil
