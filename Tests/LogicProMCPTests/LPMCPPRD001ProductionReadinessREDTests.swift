@@ -135,6 +135,102 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         #expect(report.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
     }
 
+    @Test func r_rel_rejectsPrivilegeSeparationMutations() throws {
+        let valid = fullGreenWorkflowYAML()
+        let publicationBlock = """
+              - name: Create GitHub Release
+                uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191
+        """
+        let publishVerifierRange = try #require(valid.range(
+            of: "trusted-verifier-src/.build/release/trusted-verifier verify",
+            options: .backwards
+        ))
+        let downloadNameRange = try #require(valid.range(
+            of: "name: verified-release-artifacts",
+            options: .backwards
+        ))
+        let finalReleaseAssetRange = try #require(valid.range(
+            of: "qualification-evidence/mutation-restore-compensation.json",
+            options: .backwards
+        ))
+        let publicationBeforeVerification = valid
+            .replacingOccurrences(
+                of: publicationBlock,
+                with: "      - name: Publication marker\n        run: true"
+            )
+            .replacingOccurrences(
+                of: "      - name: Reverify downloaded release artifact",
+                with: "\(publicationBlock)\n      - name: Reverify downloaded release artifact"
+            )
+        let mutations = [
+            (
+                "build has write permission",
+                valid.replacingOccurrences(
+                    of: "  build:\n    runs-on: macos-15\n    permissions:\n      contents: read",
+                    with: "  build:\n    runs-on: macos-15\n    permissions:\n      contents: write"
+                )
+            ),
+            (
+                "publish verifier removed",
+                valid.replacingCharacters(in: publishVerifierRange, with: "true")
+            ),
+            ("publication precedes publish verification", publicationBeforeVerification),
+            (
+                "downloaded artifact name can be replaced",
+                valid.replacingCharacters(in: downloadNameRange, with: "name: attacker-artifacts")
+            ),
+            (
+                "publish executes the candidate",
+                valid.replacingOccurrences(
+                    of: "test -f release-artifacts.sha256",
+                    with: "./LogicProMCP\n          test -f release-artifacts.sha256"
+                )
+            ),
+            (
+                "publish executes and publishes candidate before named download",
+                valid.replacingOccurrences(
+                    of: "      - name: Download verified release artifacts",
+                    with: """
+                          - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+                            with:
+                              name: verified-release-artifacts
+                          - env:
+                              GH_TOKEN: ${{ github.token }}
+                            run: |
+                              chmod +x LogicProMCP
+                              ./LogicProMCP
+                              gh release create "$GITHUB_REF_NAME" LogicProMCP
+                          - name: Download verified release artifacts
+                    """
+                )
+            ),
+            (
+                "release includes an unmanifested asset",
+                valid.replacingCharacters(
+                    in: finalReleaseAssetRange,
+                    with: "qualification-evidence/mutation-restore-compensation.json\n                    unverified.bin"
+                )
+            ),
+        ]
+
+        let validReport = evaluateWorkflow(valid)
+        #expect(!validReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(!validReport.openDebts.contains(.independentProvenanceNotEnforced))
+        #expect(mutations.allSatisfy { $0.1 != valid })
+
+        for (name, yaml) in mutations {
+            let report = evaluateWorkflow(yaml)
+            #expect(
+                report.openDebts.contains(.releaseWorkflowMissingIndependentQualification),
+                "\(name) must fail R-REL closed"
+            )
+            #expect(
+                report.openDebts.contains(.independentProvenanceNotEnforced),
+                "\(name) must fail R-PROV closed"
+            )
+        }
+    }
+
     @Test func r_rel_r_prov_rejectPinnedVerifierApprovalPathMutations() {
         let valid = fullGreenWorkflowYAML()
         let mutableRefWithDecoy = valid.replacingOccurrences(
@@ -317,8 +413,8 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             (
                 "job default shell skips run steps",
                 valid.replacingOccurrences(
-                    of: "  build:\n    steps:",
-                    with: "  build:\n    defaults:\n      run:\n        shell: \"/usr/bin/true {0}\"\n    steps:"
+                    of: "  build:\n    runs-on: macos-15\n    permissions:\n      contents: read\n    steps:",
+                    with: "  build:\n    runs-on: macos-15\n    permissions:\n      contents: read\n    defaults:\n      run:\n        shell: \"/usr/bin/true {0}\"\n    steps:"
                 )
             ),
             (
@@ -331,8 +427,8 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             (
                 "job PATH replaces verifier tools",
                 valid.replacingOccurrences(
-                    of: "  build:\n    steps:",
-                    with: "  build:\n    env:\n      PATH: /tmp/forged-bin\n    steps:"
+                    of: "  build:\n    runs-on: macos-15\n    permissions:\n      contents: read\n    steps:",
+                    with: "  build:\n    runs-on: macos-15\n    permissions:\n      contents: read\n    env:\n      PATH: /tmp/forged-bin\n    steps:"
                 )
             ),
             (
@@ -384,8 +480,8 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             (
                 "job environment key uses a YAML escape",
                 valid.replacingOccurrences(
-                    of: "  build:\n    steps:",
-                    with: "  build:\n    \"\\u0065nv\":\n      PATH: /tmp/forged-bin\n    steps:"
+                    of: "  build:\n    runs-on: macos-15\n    permissions:\n      contents: read\n    steps:",
+                    with: "  build:\n    runs-on: macos-15\n    permissions:\n      contents: read\n    \"\\u0065nv\":\n      PATH: /tmp/forged-bin\n    steps:"
                 )
             ),
             (
@@ -419,8 +515,8 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             (
                 "skipped decoy release job precedes an unguarded publisher job",
                 valid.replacingOccurrences(
-                    of: "  build:\n    steps:",
-                    with: "  build:\n    if: ${{ false }}\n    steps:"
+                    of: "  build:\n    runs-on: macos-15\n    permissions:\n      contents: read\n    steps:",
+                    with: "  build:\n    runs-on: macos-15\n    permissions:\n      contents: read\n    if: ${{ false }}\n    steps:"
                 ) + """
 
                   bypass-publish:
@@ -698,6 +794,9 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         """
         jobs:
           build:
+            runs-on: macos-15
+            permissions:
+              contents: read
             steps:
               - name: Checkout pinned trusted verifier
                 uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -735,8 +834,96 @@ struct LPMCPPRD001ProductionReadinessREDTests {
                 run: |
                   test -f qualification-evidence/evidence-manifest.json
                   test -n "$TRUSTED_QUALIFICATION_PUBLIC_KEY"
+              - name: Create release artifact SHA256 manifest
+                run: |
+                  shasum -a 256 \\
+                    LogicProMCP \\
+                    LogicProMCP-macOS-universal.tar.gz \\
+                    LogicProMCP-macOS-arm64.tar.gz \\
+                    RELEASE-METADATA.json \\
+                    SHA256SUMS.txt \\
+                    qualification-evidence/release-qualification-attestation.json \\
+                    qualification-evidence/evidence-manifest.json \\
+                    qualification-evidence/case-manifest.json \\
+                    qualification-evidence/public-transcript.json \\
+                    qualification-evidence/mutation-restore-compensation.json \\
+                    > release-artifacts.sha256
+              - name: Upload verified release artifacts
+                uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+                with:
+                  name: verified-release-artifacts
+                  if-no-files-found: error
+                  path: |
+                    LogicProMCP
+                    LogicProMCP-macOS-universal.tar.gz
+                    LogicProMCP-macOS-arm64.tar.gz
+                    RELEASE-METADATA.json
+                    SHA256SUMS.txt
+                    qualification-evidence/release-qualification-attestation.json
+                    qualification-evidence/evidence-manifest.json
+                    qualification-evidence/case-manifest.json
+                    qualification-evidence/public-transcript.json
+                    qualification-evidence/mutation-restore-compensation.json
+                    release-artifacts.sha256
+          publish:
+            needs: build
+            runs-on: macos-15
+            permissions:
+              contents: write
+            steps:
+              - name: Download verified release artifacts
+                uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+                with:
+                  name: verified-release-artifacts
+              - name: Checkout pinned trusted verifier for publish
+                uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+                with:
+                  ref: \(trustedVerifierCommitSHA)
+                  path: trusted-verifier-src
+              - name: Build pinned trusted verifier for publish
+                working-directory: trusted-verifier-src
+                run: swift build -c release --product trusted-verifier
+              - name: Reverify downloaded release artifact
+                env:
+                  TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
+                run: |
+                  test -f release-artifacts.sha256
+                  shasum -a 256 --check release-artifacts.sha256
+                  test -n "$TRUSTED_QUALIFICATION_PUBLIC_KEY"
+                  LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY="$TRUSTED_QUALIFICATION_PUBLIC_KEY" \\
+                    trusted-verifier-src/.build/release/trusted-verifier verify \\
+                      --candidate LogicProMCP \\
+                      --bundle qualification-evidence \\
+                      --release-version "${GITHUB_REF_NAME#v}" \\
+                      --expected-commit "$GITHUB_SHA"
               - name: Create GitHub Release
                 uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191
+                with:
+                  files: |
+                    LogicProMCP
+                    LogicProMCP-macOS-universal.tar.gz
+                    LogicProMCP-macOS-arm64.tar.gz
+                    RELEASE-METADATA.json
+                    SHA256SUMS.txt
+                    qualification-evidence/release-qualification-attestation.json
+                    qualification-evidence/evidence-manifest.json
+                    qualification-evidence/case-manifest.json
+                    qualification-evidence/public-transcript.json
+                    qualification-evidence/mutation-restore-compensation.json
         """
+    }
+
+    private func evaluateWorkflow(_ yaml: String) -> ProductionReadinessContractReport {
+        ProductionReadinessContractEvaluator.evaluate(
+            releaseWorkflowYAML: yaml,
+            registeredOperationIDs: ["system.health"],
+            semanticValidatorOperationIDs: ["system.health"],
+            requiredMatrixAxisCount: QualificationAxis.requiredCombinations.count,
+            debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
+            expectedAuthorityBaseSHA: expectedBaseSHA,
+            publishedReleaseEvidencePresent: true,
+            mutationRestoreCompensationEvidencePresent: true,
+            independentProvenanceEnforced: true
+        )
     }
 }

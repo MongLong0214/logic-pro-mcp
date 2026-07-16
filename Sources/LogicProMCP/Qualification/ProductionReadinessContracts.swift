@@ -50,14 +50,10 @@ enum ProductionReadinessContractEvaluator {
     static let provenanceMarker = "trusted-provenance-verify"
     static let promotionVerificationMarker = "--verify-promotion"
     static let trustedVerifierCommitSHA = "67fec5fccf817f9978022f0ca262b80a789e2dce"
+    static let uploadArtifactCommitSHA = "65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08"
+    static let downloadArtifactCommitSHA = "d3f86a106a0bac45b974a628896c90dbdf5c8093"
 
-    private static func blockingStep(
-        named name: String,
-        in workflow: String
-    ) -> (body: String, index: Int, endIndex: Int, jobEndIndex: Int)? {
-        let step = "- name: \(name)"
-        let releaseStep = "- name: Create GitHub Release"
-        let lines = workflow.split(separator: "\n", omittingEmptySubsequences: false)
+    private static func structuralIndices(in lines: [Substring]) -> [Int]? {
         var structuralIndices: [Int] = []
         var blockScalarIndentation: Int?
         for index in lines.indices {
@@ -83,81 +79,67 @@ enum ProductionReadinessContractEvaluator {
                 }
             }
         }
-        guard !structuralIndices.contains(where: {
+        return structuralIndices.contains(where: {
             hasAmbiguousYAMLKey(in: lines[$0])
-        }) else { return nil }
-        let releaseIndices = structuralIndices.filter {
-            lines[$0].trimmingCharacters(in: .whitespaces) == releaseStep
-        }
-        let usesValues = structuralIndices.compactMap { index -> String? in
-            guard let entry = yamlKeyValue(in: lines[index]), entry.key == "uses" else {
-                return nil
-            }
-            return entry.value
-        }
-        let ambiguousUsesValue = usesValues.contains { value in
-            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.contains("\\")
-                || trimmed.hasPrefix("|")
-                || trimmed.hasPrefix(">")
-                || trimmed.hasPrefix("!")
-                || trimmed.hasPrefix("&")
-                || trimmed.hasPrefix("*")
-        }
-        let publisherCount = usesValues.filter {
-            $0.lowercased()
-                .replacingOccurrences(of: " ", with: "")
-                .contains("softprops/action-gh-release@")
-        }.count
-        guard releaseIndices.count == 1,
-              publisherCount == 1,
-              !ambiguousUsesValue,
-              let releaseIndex = releaseIndices.first else {
-            return nil
-        }
-        let stepIndentation = lines[releaseIndex].prefix { $0 == " " }.count
-        let stepsStartIndex = structuralIndices.last(where: {
-            $0 < releaseIndex && lines[$0].prefix { $0 == " " }.count < stepIndentation
-        }) ?? lines.startIndex
-        let stepsIndentation = lines[stepsStartIndex].prefix { $0 == " " }.count
-        let jobStartIndex = structuralIndices.last(where: {
-            $0 < stepsStartIndex && lines[$0].prefix { $0 == " " }.count < stepsIndentation
-        }) ?? lines.startIndex
-        let jobIndentation = lines[jobStartIndex].prefix { $0 == " " }.count
-        let jobEndIndex = structuralIndices.first(where: {
-            $0 > jobStartIndex && lines[$0].prefix { $0 == " " }.count <= jobIndentation
+        }) ? nil : structuralIndices
+    }
+
+    private static func workflowJob(named name: String, in workflow: String) -> String? {
+        let lines = workflow.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let structuralIndices = structuralIndices(in: lines),
+              let jobsIndex = structuralIndices.first(where: {
+                  lines[$0].prefix { $0 == " " }.isEmpty
+                      && lines[$0].trimmingCharacters(in: .whitespaces) == "jobs:"
+              }) else { return nil }
+        let jobsEndIndex = structuralIndices.first(where: {
+            $0 > jobsIndex && lines[$0].prefix { $0 == " " }.isEmpty
         }) ?? lines.endIndex
-        let inheritedOverride = structuralIndices.contains { index in
-            let indentation = lines[index].prefix { $0 == " " }.count
-            let isInheritedScope = indentation == 0
-                || (index > jobStartIndex
-                    && index < jobEndIndex
-                    && indentation == jobIndentation + 2)
-            guard isInheritedScope else { return false }
-            if hasAmbiguousYAMLKey(in: lines[index]) { return true }
-            guard let key = yamlKeyValue(in: lines[index])?.key else { return false }
-            return key == "defaults"
-                || key == "env"
-                || (indentation == jobIndentation + 2 && key == "if")
+        let jobIndices = structuralIndices.filter {
+            $0 > jobsIndex && $0 < jobsEndIndex
+                && lines[$0].prefix { $0 == " " }.count == 2
+                && lines[$0].trimmingCharacters(in: .whitespaces) == "\(name):"
         }
-        guard !inheritedOverride else { return nil }
-        let startIndex: Int
-        if step == releaseStep {
-            startIndex = releaseIndex
-        } else {
-            guard let gateIndex = structuralIndices.first(where: {
-                $0 > stepsStartIndex && $0 < releaseIndex
-                    && lines[$0].prefix { $0 == " " }.count == stepIndentation
-                    && lines[$0].trimmingCharacters(in: .whitespaces) == step
-            }) else { return nil }
-            startIndex = gateIndex
-        }
-        let endIndex = structuralIndices.first(where: { index in
+        guard jobIndices.count == 1, let startIndex = jobIndices.first else { return nil }
+        let endIndex = structuralIndices.first(where: {
+            $0 > startIndex && $0 < jobsEndIndex
+                && lines[$0].prefix { $0 == " " }.count <= 2
+        }) ?? jobsEndIndex
+        return lines[startIndex..<endIndex].joined(separator: "\n")
+    }
+
+    private static func blockingStep(
+        named name: String,
+        in job: String
+    ) -> (body: String, index: Int, endIndex: Int, jobEndIndex: Int, firstStepIndex: Int)? {
+        let lines = job.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let structuralIndices = structuralIndices(in: lines),
+              let first = lines.first else { return nil }
+        let jobIndentation = first.prefix { $0 == " " }.count
+        guard let stepsStartIndex = structuralIndices.first(where: {
+            lines[$0].prefix { $0 == " " }.count == jobIndentation + 2
+                && yamlKeyValue(in: lines[$0])?.key == "steps"
+                && yamlKeyValue(in: lines[$0])?.value.isEmpty == true
+        }) else { return nil }
+        let stepIndentation = jobIndentation + 4
+        guard let firstStepIndex = structuralIndices.first(where: { index in
             let line = lines[index].trimmingCharacters(in: .whitespaces)
-            return index > startIndex && index < jobEndIndex
+            return index > stepsStartIndex
                 && lines[index].prefix { $0 == " " }.count == stepIndentation
                 && (line == "-" || line.hasPrefix("- "))
-        }) ?? jobEndIndex
+        }) else { return nil }
+        let step = "- name: \(name)"
+        let matches = structuralIndices.filter {
+            $0 > stepsStartIndex
+                && lines[$0].prefix { $0 == " " }.count == stepIndentation
+                && lines[$0].trimmingCharacters(in: .whitespaces) == step
+        }
+        guard matches.count == 1, let startIndex = matches.first else { return nil }
+        let endIndex = structuralIndices.first(where: { index in
+            let line = lines[index].trimmingCharacters(in: .whitespaces)
+            return index > startIndex
+                && lines[index].prefix { $0 == " " }.count == stepIndentation
+                && (line == "-" || line.hasPrefix("- "))
+        }) ?? lines.endIndex
         let body = lines[startIndex..<endIndex].joined(separator: "\n")
         guard stepScalar("continue-on-error", in: body) == nil,
               stepScalar("if", in: body) == nil,
@@ -165,26 +147,81 @@ enum ProductionReadinessContractEvaluator {
               !hasAmbiguousStepKey(in: body) else {
             return nil
         }
-        return (body, startIndex, endIndex, jobEndIndex)
+        return (body, startIndex, endIndex, lines.endIndex, firstStepIndex)
     }
 
     private static func pinnedTrustedVerifierStep(in workflow: String) -> String? {
-        guard let checkout = blockingStep(named: "Checkout pinned trusted verifier", in: workflow),
-              let build = blockingStep(named: "Build pinned trusted verifier", in: workflow),
-              let qualification = blockingStep(named: independentQualificationStepMarker, in: workflow),
-              let provenance = blockingStep(named: provenanceMarker, in: workflow),
-              let publication = blockingStep(named: "Create GitHub Release", in: workflow),
-              checkout.endIndex == build.index,
-              build.endIndex == qualification.index,
+        let lines = workflow.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let structuralIndices = structuralIndices(in: lines),
+              let buildJob = workflowJob(named: "build", in: workflow),
+              let publishJob = workflowJob(named: "publish", in: workflow),
+              stepMapping("permissions", in: buildJob) == ["contents": "read"],
+              stepMapping("permissions", in: publishJob) == ["contents": "write"],
+              stepScalar("needs", in: publishJob) == "build",
+              stepScalar("if", in: buildJob) == nil,
+              stepScalar("if", in: publishJob) == nil,
+              stepScalar("defaults", in: buildJob) == nil,
+              stepScalar("defaults", in: publishJob) == nil,
+              stepScalar("env", in: buildJob) == nil,
+              stepScalar("env", in: publishJob) == nil else { return nil }
+        let usesValues = structuralIndices.compactMap { index -> String? in
+            guard let entry = yamlKeyValue(in: lines[index]), entry.key == "uses" else {
+                return nil
+            }
+            return entry.value
+        }
+        guard usesValues.filter({
+            normalizedScalar($0).contains("softprops/action-gh-release@")
+        }).count == 1,
+        !usesValues.contains(where: {
+            let value = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.contains("\\") || ["|", ">", "!", "&", "*"].contains { value.hasPrefix($0) }
+        }),
+        structuralIndices.filter({ index in
+            guard let entry = yamlKeyValue(in: lines[index]) else { return false }
+            return entry.key == "contents" && normalizedScalar(entry.value) == "write"
+        }).count == 1,
+        !structuralIndices.contains(where: { index in
+            guard lines[index].prefix(while: { $0 == " " }).isEmpty,
+                  let key = yamlKeyValue(in: lines[index])?.key else { return false }
+            return ["defaults", "env", "permissions"].contains(key)
+        }),
+        !structuralIndices.contains(where: { index in
+            guard let entry = yamlKeyValue(in: lines[index]) else { return false }
+            return entry.key == "permissions" && !entry.value.isEmpty
+        }) else { return nil }
+
+        guard let checkout = blockingStep(named: "Checkout pinned trusted verifier", in: buildJob),
+              let verifierBuild = blockingStep(named: "Build pinned trusted verifier", in: buildJob),
+              let qualification = blockingStep(named: independentQualificationStepMarker, in: buildJob),
+              let provenance = blockingStep(named: provenanceMarker, in: buildJob),
+              let manifest = blockingStep(named: "Create release artifact SHA256 manifest", in: buildJob),
+              let upload = blockingStep(named: "Upload verified release artifacts", in: buildJob),
+              checkout.endIndex == verifierBuild.index,
+              verifierBuild.endIndex == qualification.index,
               qualification.endIndex == provenance.index,
-              provenance.endIndex == publication.index,
+              provenance.endIndex == manifest.index,
+              manifest.endIndex == upload.index,
+              upload.endIndex == upload.jobEndIndex else {
+            return nil
+        }
+        guard let download = blockingStep(named: "Download verified release artifacts", in: publishJob),
+              let publishCheckout = blockingStep(named: "Checkout pinned trusted verifier for publish", in: publishJob),
+              let publishBuild = blockingStep(named: "Build pinned trusted verifier for publish", in: publishJob),
+              let reverify = blockingStep(named: "Reverify downloaded release artifact", in: publishJob),
+              let publication = blockingStep(named: "Create GitHub Release", in: publishJob),
+              download.index == download.firstStepIndex,
+              download.endIndex == publishCheckout.index,
+              publishCheckout.endIndex == publishBuild.index,
+              publishBuild.endIndex == reverify.index,
+              reverify.endIndex == publication.index,
               publication.endIndex == publication.jobEndIndex else {
             return nil
         }
         guard let qualificationScript = stepBlockScalar("run", in: qualification.body),
-              let provenanceScript = stepBlockScalar("run", in: provenance.body) else {
-            return nil
-        }
+              let provenanceScript = stepBlockScalar("run", in: provenance.body),
+              let manifestScript = stepBlockScalar("run", in: manifest.body),
+              let reverifyScript = stepBlockScalar("run", in: reverify.body) else { return nil }
         let qualificationLines = qualificationScript.split(separator: "\n").map {
             $0.trimmingCharacters(in: .whitespaces)
         }
@@ -206,6 +243,32 @@ enum ProductionReadinessContractEvaluator {
             "--release-version \"${GITHUB_REF_NAME#v}\" \\",
             "--expected-commit \"$GITHUB_SHA\"",
         ]
+        let artifactFiles = [
+            "LogicProMCP",
+            "LogicProMCP-macOS-universal.tar.gz",
+            "LogicProMCP-macOS-arm64.tar.gz",
+            "RELEASE-METADATA.json",
+            "SHA256SUMS.txt",
+            "qualification-evidence/release-qualification-attestation.json",
+            "qualification-evidence/evidence-manifest.json",
+            "qualification-evidence/case-manifest.json",
+            "qualification-evidence/public-transcript.json",
+            "qualification-evidence/mutation-restore-compensation.json",
+        ]
+        let expectedManifestLines = ["shasum -a 256 \\"]
+            + artifactFiles.map { "\($0) \\" }
+            + ["> release-artifacts.sha256"]
+        let expectedReverifyLines = [
+            "test -f release-artifacts.sha256",
+            "shasum -a 256 --check release-artifacts.sha256",
+            "test -n \"$TRUSTED_QUALIFICATION_PUBLIC_KEY\"",
+            "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY=\"$TRUSTED_QUALIFICATION_PUBLIC_KEY\" \\",
+            "trusted-verifier-src/.build/release/trusted-verifier verify \\",
+            "--candidate LogicProMCP \\",
+            "--bundle qualification-evidence \\",
+            "--release-version \"${GITHUB_REF_NAME#v}\" \\",
+            "--expected-commit \"$GITHUB_SHA\"",
+        ]
         let expectedQualificationEnvironment = [
             "QUALIFICATION_EVIDENCE_URL": "${{secrets.qualification_evidence_url}}",
             "QUALIFICATION_EVIDENCE_SHA256": "${{secrets.qualification_evidence_sha256}}",
@@ -214,13 +277,19 @@ enum ProductionReadinessContractEvaluator {
         let provenanceLines = provenanceScript.split(separator: "\n").map {
             $0.trimmingCharacters(in: .whitespaces)
         }
+        let manifestLines = manifestScript.split(separator: "\n").map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }
+        let reverifyLines = reverifyScript.split(separator: "\n").map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }
         guard stepScalar("uses", in: checkout.body) == "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
               nestedStepScalar("ref", under: "with", in: checkout.body) == trustedVerifierCommitSHA,
               nestedStepScalar("path", under: "with", in: checkout.body) == "trusted-verifier-src",
               stepMapping("env", in: checkout.body) == nil,
-              stepScalar("working-directory", in: build.body) == "trusted-verifier-src",
-              stepScalar("run", in: build.body) == "swiftbuild-crelease--producttrusted-verifier",
-              stepMapping("env", in: build.body) == nil,
+              stepScalar("working-directory", in: verifierBuild.body) == "trusted-verifier-src",
+              stepScalar("run", in: verifierBuild.body) == "swiftbuild-crelease--producttrusted-verifier",
+              stepMapping("env", in: verifierBuild.body) == nil,
               stepScalar("working-directory", in: qualification.body) == nil,
               stepMapping("env", in: qualification.body) == expectedQualificationEnvironment,
               qualificationLines == expectedQualificationLines,
@@ -232,7 +301,29 @@ enum ProductionReadinessContractEvaluator {
                   "test -f qualification-evidence/evidence-manifest.json",
                   "test -n \"$TRUSTED_QUALIFICATION_PUBLIC_KEY\"",
               ],
+              manifestLines == expectedManifestLines,
+              stepScalar("uses", in: upload.body) == "actions/upload-artifact@\(uploadArtifactCommitSHA)",
+              stepMapping("with", in: upload.body) == [
+                  "name": "verified-release-artifacts",
+                  "if-no-files-found": "error",
+                  "path": "|",
+              ],
+              nestedStepBlockScalarLines("path", under: "with", in: upload.body) == artifactFiles + ["release-artifacts.sha256"],
+              stepScalar("uses", in: download.body) == "actions/download-artifact@\(downloadArtifactCommitSHA)",
+              stepMapping("with", in: download.body) == ["name": "verified-release-artifacts"],
+              stepScalar("uses", in: publishCheckout.body) == "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+              nestedStepScalar("ref", under: "with", in: publishCheckout.body) == trustedVerifierCommitSHA,
+              nestedStepScalar("path", under: "with", in: publishCheckout.body) == "trusted-verifier-src",
+              stepMapping("env", in: publishCheckout.body) == nil,
+              stepScalar("working-directory", in: publishBuild.body) == "trusted-verifier-src",
+              stepScalar("run", in: publishBuild.body) == "swiftbuild-crelease--producttrusted-verifier",
+              stepMapping("env", in: publishBuild.body) == nil,
+              stepMapping("env", in: reverify.body) == [
+                  "TRUSTED_QUALIFICATION_PUBLIC_KEY": "${{secrets.trusted_qualification_public_key}}",
+              ],
+              reverifyLines == expectedReverifyLines,
               stepScalar("uses", in: publication.body) == "softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191",
+              nestedStepBlockScalarLines("files", under: "with", in: publication.body) == artifactFiles,
               stepScalar("working-directory", in: publication.body) == nil,
               stepMapping("env", in: publication.body) == nil else {
             return nil
@@ -246,6 +337,34 @@ enum ProductionReadinessContractEvaluator {
         in step: String
     ) -> String? {
         stepMapping(parent, in: step)?[key]
+    }
+
+    private static func nestedStepBlockScalarLines(
+        _ key: String,
+        under parent: String,
+        in step: String
+    ) -> [String]? {
+        let lines = step.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let first = lines.first else { return nil }
+        let parentIndentation = first.prefix { $0 == " " }.count + 2
+        guard let parentIndex = lines.dropFirst().firstIndex(where: {
+            $0.prefix { $0 == " " }.count == parentIndentation
+                && yamlKeyValue(in: $0)?.key == parent
+                && yamlKeyValue(in: $0)?.value.isEmpty == true
+        }) else { return nil }
+        let keyIndentation = parentIndentation + 2
+        guard let keyIndex = lines[lines.index(after: parentIndex)...].firstIndex(where: {
+            $0.prefix { $0 == " " }.count == keyIndentation
+                && yamlKeyValue(in: $0)?.key == key
+                && yamlKeyValue(in: $0)?.value == "|"
+        }) else { return nil }
+        return lines[lines.index(after: keyIndex)...]
+            .prefix { line in
+                line.trimmingCharacters(in: .whitespaces).isEmpty
+                    || line.prefix { $0 == " " }.count > keyIndentation
+            }
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
     }
 
     private static func stepMapping(_ parent: String, in step: String) -> [String: String]? {
