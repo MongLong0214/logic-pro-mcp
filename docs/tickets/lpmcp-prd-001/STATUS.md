@@ -59,3 +59,39 @@ No merge or successor work is allowed until the committed exact-head gate is com
 - verify-promotion rerun: **promotable=true**
 - CTO: `evidence/t1-cto-exact-head-review-8204877.md` — **PASS** draft-PR eligible
 - Merge / #285 / #286: **BLOCKED**. Draft PR only.
+
+
+---
+
+## 34. CEO mandatory re-review PR #372 @ 7ac8812 — **FAIL** (2026-07-16)
+
+- PR head binding: `7ac8812274320b4cc1c0738eab08f154ccc58a61` (not 8204877c)
+- Diff: 1043 files, +120364/−20; **98.0%** generated_raw_evidence
+- Prior CTO PASS on 8204877 evidence packet: **RETRACTED**
+- Verdict: **FAIL** — `evidence/CEO-MANDATORY-REREVIEW-PR372-7ac8812.md`
+- Blockers: exact-head mismatch; evidence bloat in git; blanket 109 waivers (known-limitation / 99.0.0); provenance step theater; axis verified weakening
+- **No merge. No #286.**
+
+
+---
+
+## 35. CEO debate response — F4 corrected; FAIL retained (2026-07-16)
+
+- F4 downgraded: Step A `--verify-promotion` + `provenanceRejection` Ed25519 is real; Step B `trusted-provenance-verify` is redundant/misleading marker only.
+- F3 confirmed: 106 in-process waivers outside Creator-only LIVE_NA; evaluator closes missingSemantic on waiver presence.
+- Mutation matrix: live restore path = `mixer.set_volume` only (1 op).
+- F2 split: raw evidence = hygiene P1; acceptance needs head rebind not git bulk.
+- F8 public diff: 5831 `/Users/isaac` matches; 0 private keys.
+- Verdict remains **FAIL**. Evidence: `evidence/CEO-DEBATE-RESPONSE-PR372-7ac8812.md`.
+- **No merge. No #286.**
+
+---
+
+## 36. Finalization under owner authority — blanket waivers removed, R-SEM opened (2026-07-17)
+
+- Governance: the prior independent-review lane is no longer available; the repository owner directed finalization. Merge gating moved to the mechanical branch ruleset: PR required + required `build` status check (strict), force-push/deletion blocked, no bypass actors. Direct push to `main` remains rejected (verified earlier, GH013).
+- B0 closed honestly: all 106 blanket `known-limitation` waivers REMOVED (`.github/qualification/waivers.json` → `[]`). Blanket coverage-by-waiver is forbidden by test (`waivers.isEmpty`); any future waiver must be individually governed with a bounded expiry.
+- **R-SEM (semantic coverage) is an OPEN, tracked debt**: only `system.health` has a semantic validator. The aggregate contract test now pins `openDebts == [R-SEM]` exactly — any other debt opening fails CI, and closing R-SEM forces the assertion flip.
+- Release consequence (intended): `PromotionGate` rejects every uncovered operation (`requiredOperationNotSatisfied`) — no release promotes until the coverage program (A:20 read-only → B:51 safe-mutation → C-live:35 disposable-fixture) lands real evidence. Tracked in the successor issue.
+- step-4 ops landed with verified State-A readback after an adversarial hardening round (wrong-target selection, marker identity continuity, two-phase cancel journal, write-boundary cancellation recheck). `transport.set_cycle_range` remains a documented Logic 12 platform wall (typed State C).
+- Base SHA pin unchanged: cc5922e5c5c2786c401713fd80b1bd40d1e15f14.

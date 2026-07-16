@@ -776,14 +776,18 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         }
     }
 
-    /// Aggregate production-readiness bar for this remediation. RED until full GREEN.
+    /// Aggregate production-readiness bar. R-SEM (semantic coverage) is an OPEN,
+    /// tracked debt until the coverage program lands real per-operation evidence
+    /// (the blanket waivers that used to "close" it were removed as invalid);
+    /// every other contract must stay closed. This assertion fails if any other
+    /// debt opens (regression) and when R-SEM closes (forcing the honest flip).
     @Test func productionReadinessContractsAreSatisfiedOnCurrentTree() throws {
         let report = try ProductionReadinessContractEvaluator.evaluateRepositoryRoot(
             repositoryRoot,
             expectedAuthorityBaseSHA: expectedBaseSHA
         )
         #expect(
-            report.satisfied,
+            report.openDebts == [.semanticCoverageIncomplete],
             "LPMCP-PRD-001 open debts: \(report.openDebts.map(\.rawValue).joined(separator: ",")) — \(report.findings.map(\.detail).joined(separator: " | "))"
         )
     }

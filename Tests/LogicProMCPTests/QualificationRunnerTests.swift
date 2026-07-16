@@ -2330,18 +2330,11 @@ struct QualificationRunnerTests {
         ))
         let waivers = try JSONDecoder().decode([QualificationWaiver].self, from: waiverData)
         #expect(QualificationWaiverValidator.issues(in: waivers).isEmpty)
-        if !waivers.isEmpty {
-            #expect(waivers.allSatisfy { $0.releaseNoteVisible && $0.affectsDefaultProfile })
-        }
-        let uncoveredOperationIDs = OperationID.allCases.filter { operationID in
-            operationID != .systemHealth && !waivers.contains { waiver in
-                waiver.governsOperation(
-                    caseID: "in-process/\(operationID.rawValue)",
-                    operationID: operationID.rawValue
-                )
-            }
-        }
-        #expect(uncoveredOperationIDs.isEmpty)
+        // B0: blanket coverage-by-waiver is forbidden. Semantic coverage is
+        // enforced at release time by PromotionGate (requiredOperationNotSatisfied
+        // per uncovered operation); a future waiver must be individually governed
+        // with a bounded expiry, not a repo-wide census filler.
+        #expect(waivers.isEmpty)
         #expect(workflow.contains("tags:"))
         #expect(workflow.contains("validate-install:"))
         #expect(workflow.contains("needs: build"))
