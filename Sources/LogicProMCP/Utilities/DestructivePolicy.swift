@@ -13,27 +13,36 @@ enum DestructivePolicy {
     }
 
     /// Classify a command's destructive level.
+    ///
+    /// ADR-003: the operation registry's `ConfirmationPolicy` is the single
+    /// authority — this is a projection, not an independent classification.
+    /// Export-run/resume keep their per-run `confirmed` gate inside
+    /// ProjectExportExecutor (a confirmed:false run returns a State-C
+    /// `confirmation_required` envelope rather than the L2 prompt), and
+    /// cleanup_apply carries its own confirmed:true gate (#28) — L1 there
+    /// only turns on the SIEM audit trail.
     static func level(for command: String) -> Level {
-        switch command {
-        case "quit", "close":
-            return .l3
-        case "save_as", "bounce", "open", "export_run", "export_resume":
-            // #27 Phase 2 — guarded export execution opens projects and fires
-            // bounces, so it carries the same L2 destructive weight as the
-            // individual open/bounce ops it composes. (The per-run `confirmed`
-            // gate is enforced inside ProjectExportExecutor, not via the
-            // dispatcher confirmation prompt, so a confirmed:false run returns a
-            // State-C `confirmation_required` envelope rather than the L2 prompt.)
-            return .l2
-        case "save", "new", "launch", "cleanup_apply":
-            // cleanup_apply mutates the project (executes a confirmed cleanup
-            // step through track.rename). It carries its own confirmed:true
-            // gate (#28), so it does NOT use the L2/L3 confirmation-prompt
-            // flow — L1 here just turns on the SIEM audit trail.
-            return .l1
-        default:
-            return .l0
+        level(of: OperationRegistry.spec(
+            tool: ToolID.logicProject.rawValue,
+            command: command
+        )?.confirmation ?? .none)
+    }
+
+    /// Projection used by every enforcement surface so no local map can drift.
+    static func level(of confirmation: ConfirmationPolicy) -> Level {
+        switch confirmation {
+        case .none: return .l0
+        case .l1: return .l1
+        case .l2: return .l2
+        case .l3: return .l3
         }
+    }
+
+    /// Wire label ("L2"/"L3") for a registry confirmation policy; nil below L2.
+    static func promptLabel(of confirmation: ConfirmationPolicy) -> String? {
+        let level = level(of: confirmation)
+        guard level >= .l2 else { return nil }
+        return level == .l3 ? "L3" : "L2"
     }
 
     /// Generate confirmation response JSON for high-risk commands.

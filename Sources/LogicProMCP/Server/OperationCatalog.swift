@@ -26,6 +26,8 @@ struct OperationCatalogEntry: Codable, Sendable, Equatable {
     let deadline: String
     let availability: String
     let allowedParams: [String]
+    let capability: String
+    let dirtySections: [String]
 }
 
 enum OperationCatalog {
@@ -44,7 +46,9 @@ enum OperationCatalog {
                     retry: wire(spec.retry),
                     deadline: wire(spec.deadline),
                     availability: wire(spec.availability),
-                    allowedParams: spec.allowedParams.sorted()
+                    allowedParams: spec.allowedParams.sorted(),
+                    capability: spec.capability.rawValue,
+                    dirtySections: spec.dirtySections.map(\.rawValue).sorted()
                 )
             }
         return OperationCatalogSnapshot(
