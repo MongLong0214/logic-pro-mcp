@@ -2292,6 +2292,8 @@ struct QualificationRunnerTests {
         let workflow = try scriptContents(".github/workflows/release.yml")
         let package = try #require(workflow.range(of: "name: Package"))
         let formula = try #require(workflow.range(of: "name: Verify Formula install paths against tarball"))
+        let checkout = try #require(workflow.range(of: "name: Checkout pinned trusted verifier"))
+        let buildVerifier = try #require(workflow.range(of: "name: Build pinned trusted verifier"))
         let release = try #require(workflow.range(of: "name: Create GitHub Release"))
 
         #expect(package.lowerBound < formula.lowerBound)
@@ -2300,13 +2302,23 @@ struct QualificationRunnerTests {
         let qualification = try #require(workflow.range(
             of: "name: Enforce independent exact-artifact qualification"
         ))
-        #expect(formula.lowerBound < qualification.lowerBound)
+        #expect(formula.lowerBound < checkout.lowerBound)
+        #expect(checkout.lowerBound < buildVerifier.lowerBound)
+        #expect(buildVerifier.lowerBound < qualification.lowerBound)
         #expect(qualification.lowerBound < release.lowerBound)
         #expect(!workflow.contains("./LogicProMCP --qualify"))
-        #expect(workflow.contains("LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"))
-        #expect(workflow.contains("./LogicProMCP --verify-promotion"))
+        #expect(!workflow.contains("./LogicProMCP --verify-promotion"))
+        #expect(workflow.contains("uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"))
+        #expect(workflow.contains("ref: 67fec5fccf817f9978022f0ca262b80a789e2dce"))
+        #expect(workflow.contains("path: trusted-verifier-src"))
+        #expect(workflow.contains("working-directory: trusted-verifier-src"))
+        #expect(workflow.contains("swift build -c release --product trusted-verifier"))
+        #expect(workflow.contains("LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY=\"$TRUSTED_QUALIFICATION_PUBLIC_KEY\""))
+        #expect(workflow.contains("trusted-verifier-src/.build/release/trusted-verifier verify"))
+        #expect(workflow.contains("--candidate LogicProMCP"))
+        #expect(workflow.contains("--bundle qualification-evidence"))
+        #expect(workflow.contains("--release-version \"${GITHUB_REF_NAME#v}\""))
         #expect(workflow.contains("--expected-commit \"$GITHUB_SHA\""))
-        #expect(workflow.contains("--required-artifacts raw-transcript.json,public-transcript.json,mutation-restore-compensation.json"))
         let releaseStep = workflow.split(
             separator: "- name: Create GitHub Release",
             maxSplits: 1

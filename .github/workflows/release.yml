@@ -169,6 +169,16 @@ jobs:
       # The independently produced bundle must cover Desktop/Creator × en-US/ko-KR,
       # every registered operation by semantic readback or a governed default-profile
       # waiver, and mutation/readback/restore/compensation. Missing evidence fails closed.
+      - name: Checkout pinned trusted verifier
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 67fec5fccf817f9978022f0ca262b80a789e2dce
+          path: trusted-verifier-src
+
+      - name: Build pinned trusted verifier
+        working-directory: trusted-verifier-src
+        run: swift build -c release --product trusted-verifier
+
       - name: Enforce independent exact-artifact qualification
         env:
           QUALIFICATION_EVIDENCE_URL: ${{ secrets.QUALIFICATION_EVIDENCE_URL }}
@@ -185,14 +195,12 @@ jobs:
           echo "$QUALIFICATION_EVIDENCE_SHA256  qualification-evidence.zip" | shasum -a 256 --check
           mkdir qualification-evidence
           ditto -x -k qualification-evidence.zip qualification-evidence
-          binary_sha256="$(shasum -a 256 LogicProMCP | awk '{print $1}')"
           LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY="$TRUSTED_QUALIFICATION_PUBLIC_KEY" \
-            ./LogicProMCP --verify-promotion \
-              --attestation qualification-evidence/release-qualification-attestation.json \
+            trusted-verifier-src/.build/release/trusted-verifier verify \
+              --candidate LogicProMCP \
+              --bundle qualification-evidence \
               --release-version "${GITHUB_REF_NAME#v}" \
-              --expected-binary-sha256 "$binary_sha256" \
-              --expected-commit "$GITHUB_SHA" \
-              --required-artifacts raw-transcript.json,public-transcript.json,mutation-restore-compensation.json
+              --expected-commit "$GITHUB_SHA"
 
       - name: trusted-provenance-verify
         env:
