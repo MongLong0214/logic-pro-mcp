@@ -776,20 +776,129 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         }
     }
 
-    /// Aggregate production-readiness bar. R-SEM (semantic coverage) is an OPEN,
-    /// tracked debt until the coverage program lands real per-operation evidence
-    /// (the blanket waivers that used to "close" it were removed as invalid);
-    /// every other contract must stay closed. This assertion fails if any other
-    /// debt opens (regression) and when R-SEM closes (forcing the honest flip).
+    /// Aggregate production-readiness bar. Three debts are OPEN and honestly
+    /// tracked until reality changes — R-MATRIX (managed reproducible fixtures
+    /// do not exist; a workflow text marker used to self-attest this closed),
+    /// R-PUB (release assets are owner-replaceable; no immutable/transparency
+    /// publication exists — the asset list used to self-attest this closed),
+    /// and R-SEM (semantic coverage is 1/107 until the coverage program lands).
+    /// Every other contract must stay closed. This assertion fails if any
+    /// other debt opens (regression) and when any of the three closes
+    /// (forcing the honest flip).
     @Test func productionReadinessContractsAreSatisfiedOnCurrentTree() throws {
         let report = try ProductionReadinessContractEvaluator.evaluateRepositoryRoot(
             repositoryRoot,
             expectedAuthorityBaseSHA: expectedBaseSHA
         )
         #expect(
-            report.openDebts == [.semanticCoverageIncomplete],
+            report.openDebts == [
+                .managedFixtureMatrixUnbound,
+                .publishedImmutableEvidenceMissing,
+                .semanticCoverageIncomplete,
+            ],
             "LPMCP-PRD-001 open debts: \(report.openDebts.map(\.rawValue).joined(separator: ",")) — \(report.findings.map(\.detail).joined(separator: " | "))"
         )
+    }
+
+    @Test func workflowTextMarkersAloneCannotCloseFixtureMatrixDebt() throws {
+        // Green workflow (markers present) + no managed fixtures → R-MATRIX
+        // must stay open with the fixture-specific detail. An `echo` in the
+        // workflow can never close the fixture half again.
+        let report = ProductionReadinessContractEvaluator.evaluate(
+            releaseWorkflowYAML: fullGreenWorkflowYAML(),
+            registeredOperationIDs: ["system.health"],
+            semanticValidatorOperationIDs: ["system.health"],
+            requiredMatrixAxisCount: QualificationAxis.requiredCombinations.count,
+            debtBoardMarkdown: nil,
+            expectedAuthorityBaseSHA: nil,
+            publishedReleaseEvidencePresent: true,
+            mutationRestoreCompensationEvidencePresent: true,
+            independentProvenanceEnforced: true,
+            managedFixturesPresent: false
+        )
+        #expect(report.openDebts.contains(.managedFixtureMatrixUnbound))
+        let detail = try #require(
+            report.findings.first { $0.id == .managedFixtureMatrixUnbound }?.detail
+        )
+        #expect(detail.contains("do not exist or are not SHA-bound"))
+
+        let closed = ProductionReadinessContractEvaluator.evaluate(
+            releaseWorkflowYAML: fullGreenWorkflowYAML(),
+            registeredOperationIDs: ["system.health"],
+            semanticValidatorOperationIDs: ["system.health"],
+            requiredMatrixAxisCount: QualificationAxis.requiredCombinations.count,
+            debtBoardMarkdown: nil,
+            expectedAuthorityBaseSHA: nil,
+            publishedReleaseEvidencePresent: true,
+            mutationRestoreCompensationEvidencePresent: true,
+            independentProvenanceEnforced: true,
+            managedFixturesPresent: true
+        )
+        #expect(!closed.openDebts.contains(.managedFixtureMatrixUnbound))
+    }
+
+    @Test func releaseAssetListingAloneCannotClosePublishedEvidenceDebt() throws {
+        // Assets listed in the release step but no immutability mechanism →
+        // R-PUB must stay open with the owner-replaceable detail.
+        let report = ProductionReadinessContractEvaluator.evaluate(
+            releaseWorkflowYAML: fullGreenWorkflowYAML(),
+            registeredOperationIDs: ["system.health"],
+            semanticValidatorOperationIDs: ["system.health"],
+            requiredMatrixAxisCount: QualificationAxis.requiredCombinations.count,
+            debtBoardMarkdown: nil,
+            expectedAuthorityBaseSHA: nil,
+            publishedReleaseEvidencePresent: false,
+            mutationRestoreCompensationEvidencePresent: true,
+            independentProvenanceEnforced: true,
+            managedFixturesPresent: true
+        )
+        #expect(report.openDebts.contains(.publishedImmutableEvidenceMissing))
+        let detail = try #require(
+            report.findings.first { $0.id == .publishedImmutableEvidenceMissing }?.detail
+        )
+        #expect(detail.contains("owner-replaceable"))
+    }
+
+    @Test func managedFixturePresenceIsAContentCheck() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(
+            "lpmcp-fixture-check-\(UInt64.random(in: 0..<UInt64.max))"
+        )
+        let fixturesDir = root.appendingPathComponent("Fixtures/qualification")
+        try fm.createDirectory(at: fixturesDir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+        let manifestURL = root.appendingPathComponent(
+            ProductionReadinessContractEvaluator.fixtureManifestRelativePath
+        )
+
+        // Absent manifest → false.
+        #expect(!ProductionReadinessContractEvaluator.managedFixturesPresent(atRepositoryRoot: root))
+        // Empty list → false.
+        try Data("[]".utf8).write(to: manifestURL)
+        #expect(!ProductionReadinessContractEvaluator.managedFixturesPresent(atRepositoryRoot: root))
+        // Valid-shape entry whose fixture file is missing → false.
+        let sha = String(repeating: "ab", count: 32)
+        try Data("""
+        [{"path": "Fixtures/qualification/empty.logicx.tar", "sha256": "\(sha)"}]
+        """.utf8).write(to: manifestURL)
+        #expect(!ProductionReadinessContractEvaluator.managedFixturesPresent(atRepositoryRoot: root))
+        // Fixture file exists but the sha is not 64-hex → false.
+        let fixtureURL = fixturesDir.appendingPathComponent("empty.logicx.tar")
+        try Data("fixture-bytes".utf8).write(to: fixtureURL)
+        try Data("""
+        [{"path": "Fixtures/qualification/empty.logicx.tar", "sha256": "not-a-sha"}]
+        """.utf8).write(to: manifestURL)
+        #expect(!ProductionReadinessContractEvaluator.managedFixturesPresent(atRepositoryRoot: root))
+        // Absolute path → false.
+        try Data("""
+        [{"path": "/etc/hosts", "sha256": "\(sha)"}]
+        """.utf8).write(to: manifestURL)
+        #expect(!ProductionReadinessContractEvaluator.managedFixturesPresent(atRepositoryRoot: root))
+        // Well-formed entry + existing file → true.
+        try Data("""
+        [{"path": "Fixtures/qualification/empty.logicx.tar", "sha256": "\(sha)"}]
+        """.utf8).write(to: manifestURL)
+        #expect(ProductionReadinessContractEvaluator.managedFixturesPresent(atRepositoryRoot: root))
     }
 
     // MARK: - Helpers

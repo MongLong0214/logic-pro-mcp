@@ -501,7 +501,8 @@ enum ProductionReadinessContractEvaluator {
         publishedReleaseEvidencePresent: Bool,
         mutationRestoreCompensationEvidencePresent: Bool,
         independentProvenanceEnforced: Bool,
-        governedWaivers: [QualificationWaiver] = []
+        governedWaivers: [QualificationWaiver] = [],
+        managedFixturesPresent: Bool = false
     ) -> ProductionReadinessContractReport {
         var findings: [ProductionReadinessDebtFinding] = []
 
@@ -542,7 +543,11 @@ enum ProductionReadinessContractEvaluator {
             ))
         }
 
-        // R-MATRIX: required Desktop/Creator × en/ko axis count must be enforced in workflow + evidence path.
+        // R-MATRIX: required Desktop/Creator × en/ko axis count must be enforced in workflow + evidence path,
+        // AND managed reproducible fixtures must actually exist (SHA-bound), not just be named.
+        // The axis half is mechanically enforced by PromotionGate.requiredCombinations at release
+        // time; a workflow text marker alone must never close the fixture half — that was a
+        // self-attestation (an `echo` satisfied the contract while no fixture existed).
         let axisMarker = "required-matrix-axes:\(requiredMatrixAxisCount)"
         if requiredMatrixAxisCount < QualificationAxis.requiredCombinations.count
             || qualificationStep?.contains(axisMarker) != true
@@ -550,6 +555,11 @@ enum ProductionReadinessContractEvaluator {
             findings.append(.init(
                 id: .managedFixtureMatrixUnbound,
                 detail: "release path does not bind managed-fixture matrix (\(QualificationAxis.requiredCombinations.count) axes)"
+            ))
+        } else if !managedFixturesPresent {
+            findings.append(.init(
+                id: .managedFixtureMatrixUnbound,
+                detail: "managed reproducible qualification fixtures do not exist or are not SHA-bound (fixture identity is a label only)"
             ))
         }
 
@@ -571,17 +581,24 @@ enum ProductionReadinessContractEvaluator {
             ))
         }
 
-        // R-PUB: immutable published qualification evidence must be a release asset.
+        // R-PUB: immutable published qualification evidence. Listing assets in the
+        // release step is necessary but NOT sufficient — GitHub release assets are
+        // owner-replaceable, so asset upload alone never closes this debt (that was
+        // a self-attestation: the workflow text suppressed the finding while no
+        // non-replaceable/transparency-bound publication existed). Only a real
+        // immutability mechanism (`publishedReleaseEvidencePresent`) closes it.
         let releaseStep = releaseWorkflowYAML.split(separator: "- name: Create GitHub Release", maxSplits: 1).last.map(String.init) ?? ""
-        if !publishedReleaseEvidencePresent
-            && (!releaseStep.contains("qualification-evidence/release-qualification-attestation.json")
-                || !releaseStep.contains("qualification-evidence/evidence-manifest.json")
-                || !releaseStep.contains("qualification-evidence/public-transcript.json")
-                || releaseStep.contains("qualification-evidence/raw-transcript.json")
-                || !releaseStep.contains("qualification-evidence/mutation-restore-compensation.json")) {
+        if !publishedReleaseEvidencePresent {
+            let assetsListed = releaseStep.contains("qualification-evidence/release-qualification-attestation.json")
+                && releaseStep.contains("qualification-evidence/evidence-manifest.json")
+                && releaseStep.contains("qualification-evidence/public-transcript.json")
+                && !releaseStep.contains("qualification-evidence/raw-transcript.json")
+                && releaseStep.contains("qualification-evidence/mutation-restore-compensation.json")
             findings.append(.init(
                 id: .publishedImmutableEvidenceMissing,
-                detail: "release path does not publish \(publishedEvidenceMarker) evidence assets"
+                detail: assetsListed
+                    ? "release assets are owner-replaceable; no immutable/transparency-bound evidence publication exists"
+                    : "release path does not publish \(publishedEvidenceMarker) evidence assets"
             ))
         }
 
@@ -632,10 +649,40 @@ enum ProductionReadinessContractEvaluator {
             requiredMatrixAxisCount: QualificationAxis.requiredCombinations.count,
             debtBoardMarkdown: board,
             expectedAuthorityBaseSHA: expectedAuthorityBaseSHA,
+            // No immutable/transparency-bound evidence publication mechanism
+            // exists yet; GitHub release assets are owner-replaceable. Flip
+            // this derivation only when a real mechanism ships.
             publishedReleaseEvidencePresent: false,
             mutationRestoreCompensationEvidencePresent: false,
             independentProvenanceEnforced: false,
-            governedWaivers: waivers
+            governedWaivers: waivers,
+            managedFixturesPresent: managedFixturesPresent(atRepositoryRoot: root)
         )
+    }
+
+    static let fixtureManifestRelativePath = "Fixtures/qualification/fixture-manifest.json"
+
+    /// Content check, not a label check: managed fixtures exist only when the
+    /// manifest decodes to a non-empty list whose entries each carry a relative
+    /// path and a 64-hex SHA-256, and every referenced fixture file exists.
+    static func managedFixturesPresent(atRepositoryRoot root: URL) -> Bool {
+        struct FixtureManifestEntry: Decodable {
+            let path: String
+            let sha256: String
+        }
+        let manifestURL = root.appendingPathComponent(fixtureManifestRelativePath)
+        guard let data = try? Data(contentsOf: manifestURL),
+              let entries = try? JSONDecoder().decode([FixtureManifestEntry].self, from: data),
+              !entries.isEmpty else { return false }
+        let hexDigits = CharacterSet(charactersIn: "0123456789abcdef")
+        return entries.allSatisfy { entry in
+            entry.sha256.count == 64
+                && entry.sha256.unicodeScalars.allSatisfy { hexDigits.contains($0) }
+                && !entry.path.isEmpty
+                && !entry.path.hasPrefix("/")
+                && FileManager.default.fileExists(
+                    atPath: root.appendingPathComponent(entry.path).path
+                )
+        }
     }
 }

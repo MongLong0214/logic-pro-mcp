@@ -95,3 +95,12 @@ No merge or successor work is allowed until the committed exact-head gate is com
 - Release consequence (intended): `PromotionGate` rejects every uncovered operation (`requiredOperationNotSatisfied`) — no release promotes until the coverage program (A:20 read-only → B:51 safe-mutation → C-live:35 disposable-fixture) lands real evidence. Tracked in the successor issue.
 - step-4 ops landed with verified State-A readback after an adversarial hardening round (wrong-target selection, marker identity continuity, two-phase cancel journal, write-boundary cancellation recheck). `transport.set_cycle_range` remains a documented Logic 12 platform wall (typed State C).
 - Base SHA pin unchanged: cc5922e5c5c2786c401713fd80b1bd40d1e15f14.
+
+---
+
+## 37. Contract self-attestation removed — R-MATRIX and R-PUB re-opened honestly (2026-07-17)
+
+- An independent receipt audit found the R-MATRIX and R-PUB repository contracts closing on **workflow text**, not reality: an `echo "required-matrix-axes:4"` marker satisfied R-MATRIX while no managed fixture exists, and listing release assets satisfied R-PUB while GitHub release assets remain owner-replaceable (no immutable/transparency-bound publication). Same self-attestation class this remediation purged elsewhere.
+- Fixed: R-MATRIX now additionally requires managed fixtures to exist as **content** (a fixture manifest whose entries carry relative paths + 64-hex SHA-256 and whose files exist — `Fixtures/qualification/fixture-manifest.json`); R-PUB now opens whenever no immutability mechanism exists, regardless of the asset list (the list only refines the finding detail).
+- The aggregate contract bar now pins **three** open debts exactly: `R-MATRIX`, `R-PUB`, `R-SEM`. Any other debt opening fails CI; closing any of the three forces the honest assertion flip.
+- Closure paths: R-MATRIX — author + SHA-bind the managed empty/medium/large fixtures (also feeds the attestation fixture-SHA field); R-PUB — establish a non-replaceable/transparency-bound evidence publication; R-SEM — #373 coverage program.
