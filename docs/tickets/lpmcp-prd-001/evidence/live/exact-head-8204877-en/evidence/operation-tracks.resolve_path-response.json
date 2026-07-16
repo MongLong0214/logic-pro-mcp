@@ -1,0 +1,1 @@
+{"command":"resolve_path","is_error":true,"operation_id":"tracks.resolve_path","payload":"{\"error\":\"invalid_params\",\"hint\":\"Missing 'path' parameter; resolve_path requires 'path' parameter\",\"operation\":\"library.resolve_path\",\"state\":\"C\",\"success\":false}","request_id":"181","tool":"logic_tracks"}

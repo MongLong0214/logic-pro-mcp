@@ -1,0 +1,49 @@
+{
+  "axis" : {
+    "cache" : "cold",
+    "fixture" : "empty",
+    "locale" : "en-US",
+    "profile" : "full",
+    "variant" : "desktop"
+  },
+  "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+  "case_id" : "in-process/midi.mmc_locate",
+  "catalog_count_match" : true,
+  "catalog_read_stable" : true,
+  "command" : "mmc_locate",
+  "deferral" : {
+    "code" : "live_mutation_not_run",
+    "detail" : "deferred to ADR-001-c: live mutation requires an operation-specific fixture and independent readback"
+  },
+  "handler_bound" : true,
+  "handshake_ok" : true,
+  "health_ok" : true,
+  "health_read_stable" : true,
+  "negative_failclosed" : true,
+  "negative_state" : "C",
+  "negative_write_attempted" : false,
+  "observed_locale" : "en-US",
+  "observed_variant" : "desktop",
+  "operation_error" : "invalid_params",
+  "operation_id" : "midi.mmc_locate",
+  "operation_is_error" : true,
+  "operation_request_id" : "45",
+  "operation_response_sha256" : "96a20d1644d4f34b8a2e9c5f9a9ee26daf9324a89e21dc03560448371e1a9d1b",
+  "operation_state" : "C",
+  "operation_write_attempted" : false,
+  "readback" : {
+    "request_id" : "operation-readback-46",
+    "sha256" : "04bf9d79ef7eb4fe833d530792088021a0f59021fbb05b5bc7f27df1e3f289a5",
+    "source" : "logic://midi/ports",
+    "verified" : true
+  },
+  "registry_spec_found" : true,
+  "schema" : "qualification-case-evidence/v3",
+  "status" : "waived",
+  "tool" : "logic_midi",
+  "trace_completed" : false,
+  "trace_ok" : true,
+  "trace_started" : false,
+  "verification_kind" : "typed_deferral",
+  "verified" : false
+}

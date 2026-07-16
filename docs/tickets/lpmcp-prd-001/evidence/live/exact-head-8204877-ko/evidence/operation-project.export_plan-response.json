@@ -1,0 +1,1 @@
+{"command":"export_plan","is_error":true,"operation_id":"project.export_plan","payload":"{\"error\":\"invalid_params\",\"hint\":\"export_plan invalid_params: export_plan requires projects or project\\/path\",\"operation\":\"project.export_plan\",\"state\":\"C\",\"success\":false}","request_id":"113","tool":"logic_project"}

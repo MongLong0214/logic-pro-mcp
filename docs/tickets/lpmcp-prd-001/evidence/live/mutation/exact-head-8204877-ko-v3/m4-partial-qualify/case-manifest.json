@@ -1,0 +1,3617 @@
+{
+  "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+  "cases" : [
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "analyze_file",
+      "deferral" : {
+        "code" : "operation_unavailable",
+        "detail" : "read-only operation did not return a successful typed response on this host"
+      },
+      "evidence_files" : [
+        "evidence/operation-audio.analyze_file.json",
+        "evidence/operation-audio.analyze_file-response.json",
+        "evidence/operation-audio.analyze_file-readback.json"
+      ],
+      "id" : "in-process/audio.analyze_file",
+      "operation_id" : "audio.analyze_file",
+      "operation_request_id" : "9",
+      "readback" : {
+        "request_id" : "operation-readback-10",
+        "sha256" : "5a53553bfab86d8459a1a8e9c9160d857c82dd282399aa3a3906fcf54a1d8fee",
+        "source" : "logic://system/health",
+        "verified" : false
+      },
+      "reason" : "read-only operation did not return a successful typed response on this host",
+      "status" : "waived",
+      "tool" : "logic_audio",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "bounce_in_place",
+      "evidence_files" : [
+        "evidence/operation-edit.bounce_in_place.json",
+        "evidence/operation-edit.bounce_in_place-response.json",
+        "evidence/operation-edit.bounce_in_place-readback.json"
+      ],
+      "id" : "in-process/edit.bounce_in_place",
+      "operation_id" : "edit.bounce_in_place",
+      "operation_request_id" : "11",
+      "readback" : {
+        "request_id" : "operation-readback-12",
+        "sha256" : "f0f2156f68a2fb610cff5693b45ff05667cf4f8d121c1d3c1e7464b1ba89ba96",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_edit",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "copy",
+      "evidence_files" : [
+        "evidence/operation-edit.copy.json",
+        "evidence/operation-edit.copy-response.json",
+        "evidence/operation-edit.copy-readback.json"
+      ],
+      "id" : "in-process/edit.copy",
+      "operation_id" : "edit.copy",
+      "operation_request_id" : "13",
+      "readback" : {
+        "request_id" : "operation-readback-14",
+        "sha256" : "9af8cf82e8280a5ed1efd5d337d20ab45ff58344fa3e607d4aca0956979ab347",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_edit",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "cut",
+      "evidence_files" : [
+        "evidence/operation-edit.cut.json",
+        "evidence/operation-edit.cut-response.json",
+        "evidence/operation-edit.cut-readback.json"
+      ],
+      "id" : "in-process/edit.cut",
+      "operation_id" : "edit.cut",
+      "operation_request_id" : "15",
+      "readback" : {
+        "request_id" : "operation-readback-16",
+        "sha256" : "bb375320d5049a4dda077b341b009c71e180ba77821ffdf325d4e21d9d04a31c",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_edit",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "delete",
+      "evidence_files" : [
+        "evidence/operation-edit.delete.json",
+        "evidence/operation-edit.delete-response.json",
+        "evidence/operation-edit.delete-readback.json"
+      ],
+      "id" : "in-process/edit.delete",
+      "operation_id" : "edit.delete",
+      "operation_request_id" : "17",
+      "readback" : {
+        "request_id" : "operation-readback-18",
+        "sha256" : "9797652df325a735a5723147542dda771a83eaa647ea72364c20b5f077c3b55e",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_edit",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "duplicate",
+      "evidence_files" : [
+        "evidence/operation-edit.duplicate.json",
+        "evidence/operation-edit.duplicate-response.json",
+        "evidence/operation-edit.duplicate-readback.json"
+      ],
+      "id" : "in-process/edit.duplicate",
+      "operation_id" : "edit.duplicate",
+      "operation_request_id" : "19",
+      "readback" : {
+        "request_id" : "operation-readback-20",
+        "sha256" : "33571912ece1b6b48897e261090a6e0b44dff635bfeaef71a26dbe873db29730",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_edit",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "join",
+      "evidence_files" : [
+        "evidence/operation-edit.join.json",
+        "evidence/operation-edit.join-response.json",
+        "evidence/operation-edit.join-readback.json"
+      ],
+      "id" : "in-process/edit.join",
+      "operation_id" : "edit.join",
+      "operation_request_id" : "21",
+      "readback" : {
+        "request_id" : "operation-readback-22",
+        "sha256" : "fc6c95014f5227a075cbb22e159d5ad60db3689fbf1181b1ac6eecb24217fc77",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_edit",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "normalize",
+      "evidence_files" : [
+        "evidence/operation-edit.normalize.json",
+        "evidence/operation-edit.normalize-response.json",
+        "evidence/operation-edit.normalize-readback.json"
+      ],
+      "id" : "in-process/edit.normalize",
+      "operation_id" : "edit.normalize",
+      "operation_request_id" : "23",
+      "readback" : {
+        "request_id" : "operation-readback-24",
+        "sha256" : "d4c97416c03493c6961b0054d15c6a45e62f109d286004492282d72cdc30dc8c",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_edit",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "paste",
+      "evidence_files" : [
+        "evidence/operation-edit.paste.json",
+        "evidence/operation-edit.paste-response.json",
+        "evidence/operation-edit.paste-readback.json"
+      ],
+      "id" : "in-process/edit.paste",
+      "operation_id" : "edit.paste",
+      "operation_request_id" : "25",
+      "readback" : {
+        "request_id" : "operation-readback-26",
+        "sha256" : "cbad2d3ff1012edeb23d2201825ef15401223895e6a58f00a394f61f433e96bd",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_edit",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "quantize",
+      "evidence_files" : [
+        "evidence/operation-edit.quantize.json",
+        "evidence/operation-edit.quantize-response.json",
+        "evidence/operation-edit.quantize-readback.json"
+      ],
+      "id" : "in-process/edit.quantize",
+      "operation_id" : "edit.quantize",
+      "operation_request_id" : "27",
+      "readback" : {
+        "request_id" : "operation-readback-28",
+        "sha256" : "da88da9cce02d0b01b9a1a98fad5b7ef084d07b619759c10f44d6de00001f35d",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_edit",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "redo",
+      "evidence_files" : [
+        "evidence/operation-edit.redo.json",
+        "evidence/operation-edit.redo-response.json",
+        "evidence/operation-edit.redo-readback.json"
+      ],
+      "id" : "in-process/edit.redo",
+      "operation_id" : "edit.redo",
+      "operation_request_id" : "29",
+      "readback" : {
+        "request_id" : "operation-readback-30",
+        "sha256" : "8c51bce137c1d6b2628d82e3e22eee0e4e7c1361792ee397a8c423d3122549cb",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_edit",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "select_all",
+      "evidence_files" : [
+        "evidence/operation-edit.select_all.json",
+        "evidence/operation-edit.select_all-response.json",
+        "evidence/operation-edit.select_all-readback.json"
+      ],
+      "id" : "in-process/edit.select_all",
+      "operation_id" : "edit.select_all",
+      "operation_request_id" : "31",
+      "readback" : {
+        "request_id" : "operation-readback-32",
+        "sha256" : "e2a123fbd7352678927183ab4034595e5c05d7ce40498f21803ba28bb380cbb2",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_edit",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "split",
+      "evidence_files" : [
+        "evidence/operation-edit.split.json",
+        "evidence/operation-edit.split-response.json",
+        "evidence/operation-edit.split-readback.json"
+      ],
+      "id" : "in-process/edit.split",
+      "operation_id" : "edit.split",
+      "operation_request_id" : "33",
+      "readback" : {
+        "request_id" : "operation-readback-34",
+        "sha256" : "6b1234708312d3a4d7641fef3101b22f47a19bc91ae78b4782e8838654f6f9b5",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_edit",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "toggle_step_input",
+      "evidence_files" : [
+        "evidence/operation-edit.toggle_step_input.json",
+        "evidence/operation-edit.toggle_step_input-response.json",
+        "evidence/operation-edit.toggle_step_input-readback.json"
+      ],
+      "id" : "in-process/edit.toggle_step_input",
+      "operation_id" : "edit.toggle_step_input",
+      "operation_request_id" : "35",
+      "readback" : {
+        "request_id" : "operation-readback-36",
+        "sha256" : "0f68d63d5bc78dc9341b775b9cf688285065dc92a665b18585ef68ebf5a37a2a",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_edit",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "undo",
+      "evidence_files" : [
+        "evidence/operation-edit.undo.json",
+        "evidence/operation-edit.undo-response.json",
+        "evidence/operation-edit.undo-readback.json"
+      ],
+      "id" : "in-process/edit.undo",
+      "operation_id" : "edit.undo",
+      "operation_request_id" : "37",
+      "readback" : {
+        "request_id" : "operation-readback-38",
+        "sha256" : "4c092c1a26895c566239a3ea6d3bbc17ae0b631f2cdafa6c6f983c769eda9627",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_edit",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "create_virtual_port",
+      "evidence_files" : [
+        "evidence/operation-midi.create_virtual_port.json",
+        "evidence/operation-midi.create_virtual_port-response.json",
+        "evidence/operation-midi.create_virtual_port-readback.json"
+      ],
+      "id" : "in-process/midi.create_virtual_port",
+      "operation_id" : "midi.create_virtual_port",
+      "operation_request_id" : "39",
+      "readback" : {
+        "request_id" : "operation-readback-40",
+        "sha256" : "2adf807b365612bf43f2d5038023af37fbdf84c299acf63179d4265abd71ca37",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "import_file",
+      "evidence_files" : [
+        "evidence/operation-midi.import_file.json",
+        "evidence/operation-midi.import_file-response.json",
+        "evidence/operation-midi.import_file-readback.json"
+      ],
+      "id" : "in-process/midi.import_file",
+      "operation_id" : "midi.import_file",
+      "operation_request_id" : "41",
+      "readback" : {
+        "request_id" : "operation-readback-42",
+        "sha256" : "0f5a47ca8633775adc95472d9e9e7d680a9b00e758153d749627a981599563c8",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "list_ports",
+      "deferral" : {
+        "code" : "semantic_validator_unavailable",
+        "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+      },
+      "evidence_files" : [
+        "evidence/operation-midi.list_ports.json",
+        "evidence/operation-midi.list_ports-response.json",
+        "evidence/operation-midi.list_ports-readback.json"
+      ],
+      "id" : "in-process/midi.list_ports",
+      "operation_id" : "midi.list_ports",
+      "operation_request_id" : "43",
+      "readback" : {
+        "request_id" : "operation-readback-44",
+        "sha256" : "706ca2578becbf422af9734e8e7615ea81ca10f67af0aeb75e700414a5021c8f",
+        "source" : "logic://midi/ports",
+        "verified" : false
+      },
+      "reason" : "protocol transport succeeded without an operation-specific semantic validator",
+      "status" : "waived",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "mmc_locate",
+      "evidence_files" : [
+        "evidence/operation-midi.mmc_locate.json",
+        "evidence/operation-midi.mmc_locate-response.json",
+        "evidence/operation-midi.mmc_locate-readback.json"
+      ],
+      "id" : "in-process/midi.mmc_locate",
+      "operation_id" : "midi.mmc_locate",
+      "operation_request_id" : "45",
+      "readback" : {
+        "request_id" : "operation-readback-46",
+        "sha256" : "02d308b755a0526f6b4a7a8eea5668f9654d27cfc68eac278d5a706f6a198cc1",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "mmc_play",
+      "evidence_files" : [
+        "evidence/operation-midi.mmc_play.json",
+        "evidence/operation-midi.mmc_play-response.json",
+        "evidence/operation-midi.mmc_play-readback.json"
+      ],
+      "id" : "in-process/midi.mmc_play",
+      "operation_id" : "midi.mmc_play",
+      "operation_request_id" : "47",
+      "readback" : {
+        "request_id" : "operation-readback-48",
+        "sha256" : "7f7a1e25c94bac86346d058caf16bae61b61d5bd757adbee60cfc2bab8c445e9",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "mmc_record",
+      "evidence_files" : [
+        "evidence/operation-midi.mmc_record.json",
+        "evidence/operation-midi.mmc_record-response.json",
+        "evidence/operation-midi.mmc_record-readback.json"
+      ],
+      "id" : "in-process/midi.mmc_record",
+      "operation_id" : "midi.mmc_record",
+      "operation_request_id" : "49",
+      "readback" : {
+        "request_id" : "operation-readback-50",
+        "sha256" : "2fdbc138cd0496bdedfc448471e4d1ef9a5bf9013531159f5ab117dc319a0cb7",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "mmc_stop",
+      "evidence_files" : [
+        "evidence/operation-midi.mmc_stop.json",
+        "evidence/operation-midi.mmc_stop-response.json",
+        "evidence/operation-midi.mmc_stop-readback.json"
+      ],
+      "id" : "in-process/midi.mmc_stop",
+      "operation_id" : "midi.mmc_stop",
+      "operation_request_id" : "51",
+      "readback" : {
+        "request_id" : "operation-readback-52",
+        "sha256" : "75592e6f66e689acde8fe4f1785847b6dc0a49226406db9ab7dc7fbc492762ef",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "play_sequence",
+      "evidence_files" : [
+        "evidence/operation-midi.play_sequence.json",
+        "evidence/operation-midi.play_sequence-response.json",
+        "evidence/operation-midi.play_sequence-readback.json"
+      ],
+      "id" : "in-process/midi.play_sequence",
+      "operation_id" : "midi.play_sequence",
+      "operation_request_id" : "53",
+      "readback" : {
+        "request_id" : "operation-readback-54",
+        "sha256" : "9513261d7b0ff217d9f03b6d1a58634aafea2be7ce245b1033cbbb89d922e5a4",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "send_aftertouch",
+      "evidence_files" : [
+        "evidence/operation-midi.send_aftertouch.json",
+        "evidence/operation-midi.send_aftertouch-response.json",
+        "evidence/operation-midi.send_aftertouch-readback.json"
+      ],
+      "id" : "in-process/midi.send_aftertouch",
+      "operation_id" : "midi.send_aftertouch",
+      "operation_request_id" : "55",
+      "readback" : {
+        "request_id" : "operation-readback-56",
+        "sha256" : "c2410054fc922fecd890e11d6a444e6a2259b3b6097dfe35b4a899e88b952497",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "send_cc",
+      "evidence_files" : [
+        "evidence/operation-midi.send_cc.json",
+        "evidence/operation-midi.send_cc-response.json",
+        "evidence/operation-midi.send_cc-readback.json"
+      ],
+      "id" : "in-process/midi.send_cc",
+      "operation_id" : "midi.send_cc",
+      "operation_request_id" : "57",
+      "readback" : {
+        "request_id" : "operation-readback-58",
+        "sha256" : "d07c9642394afb261f4ee17c756134d48f720ecc1e54fd1aa0cd8ef7371f45aa",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "send_chord",
+      "evidence_files" : [
+        "evidence/operation-midi.send_chord.json",
+        "evidence/operation-midi.send_chord-response.json",
+        "evidence/operation-midi.send_chord-readback.json"
+      ],
+      "id" : "in-process/midi.send_chord",
+      "operation_id" : "midi.send_chord",
+      "operation_request_id" : "59",
+      "readback" : {
+        "request_id" : "operation-readback-60",
+        "sha256" : "eeb900f8ec02e9da154191b12dd7b6999bd455b53f77d82381e83624baf66b79",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "send_note",
+      "evidence_files" : [
+        "evidence/operation-midi.send_note.json",
+        "evidence/operation-midi.send_note-response.json",
+        "evidence/operation-midi.send_note-readback.json"
+      ],
+      "id" : "in-process/midi.send_note",
+      "operation_id" : "midi.send_note",
+      "operation_request_id" : "61",
+      "readback" : {
+        "request_id" : "operation-readback-62",
+        "sha256" : "9705e7ff395d8afd9b796d52e37f7b9b0db1e3f065829f45a4fb7ae1ddd29e03",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "send_pitch_bend",
+      "evidence_files" : [
+        "evidence/operation-midi.send_pitch_bend.json",
+        "evidence/operation-midi.send_pitch_bend-response.json",
+        "evidence/operation-midi.send_pitch_bend-readback.json"
+      ],
+      "id" : "in-process/midi.send_pitch_bend",
+      "operation_id" : "midi.send_pitch_bend",
+      "operation_request_id" : "63",
+      "readback" : {
+        "request_id" : "operation-readback-64",
+        "sha256" : "5ffc1f18252f292ffb8b91218c5fc90f3019c1840a7f3d48ff55254be475c00e",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "send_program_change",
+      "evidence_files" : [
+        "evidence/operation-midi.send_program_change.json",
+        "evidence/operation-midi.send_program_change-response.json",
+        "evidence/operation-midi.send_program_change-readback.json"
+      ],
+      "id" : "in-process/midi.send_program_change",
+      "operation_id" : "midi.send_program_change",
+      "operation_request_id" : "65",
+      "readback" : {
+        "request_id" : "operation-readback-66",
+        "sha256" : "6c56053c9aef59e9362a43126ff0ef685fea42c1dbe4c05689033d73eec761fd",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "send_sysex",
+      "evidence_files" : [
+        "evidence/operation-midi.send_sysex.json",
+        "evidence/operation-midi.send_sysex-response.json",
+        "evidence/operation-midi.send_sysex-readback.json"
+      ],
+      "id" : "in-process/midi.send_sysex",
+      "operation_id" : "midi.send_sysex",
+      "operation_request_id" : "67",
+      "readback" : {
+        "request_id" : "operation-readback-68",
+        "sha256" : "e872bbc1d743254aeba9551c529f62702ae26ffcf2fcbbebe9d471bcbcd52bed",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "step_input",
+      "evidence_files" : [
+        "evidence/operation-midi.step_input.json",
+        "evidence/operation-midi.step_input-response.json",
+        "evidence/operation-midi.step_input-readback.json"
+      ],
+      "id" : "in-process/midi.step_input",
+      "operation_id" : "midi.step_input",
+      "operation_request_id" : "69",
+      "readback" : {
+        "request_id" : "operation-readback-70",
+        "sha256" : "6b52ffbc65360ba800ace42bf6fadbf808f91c68df412d9cded0987650254358",
+        "source" : "logic://midi/ports",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_midi",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "insert_plugin",
+      "evidence_files" : [
+        "evidence/operation-mixer.insert_plugin.json",
+        "evidence/operation-mixer.insert_plugin-response.json",
+        "evidence/operation-mixer.insert_plugin-readback.json"
+      ],
+      "id" : "in-process/mixer.insert_plugin",
+      "operation_id" : "mixer.insert_plugin",
+      "operation_request_id" : "71",
+      "readback" : {
+        "request_id" : "operation-readback-72",
+        "sha256" : "dac08735a7a8044b729120cc255310324f3adbea4f7dd2354ffe090fff46f60f",
+        "source" : "logic://mixer",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_mixer",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "set_master_volume",
+      "evidence_files" : [
+        "evidence/operation-mixer.set_master_volume.json",
+        "evidence/operation-mixer.set_master_volume-response.json",
+        "evidence/operation-mixer.set_master_volume-readback.json"
+      ],
+      "id" : "in-process/mixer.set_master_volume",
+      "operation_id" : "mixer.set_master_volume",
+      "operation_request_id" : "73",
+      "readback" : {
+        "request_id" : "operation-readback-74",
+        "sha256" : "c384bbbabbebabf5a661624c0225a5a0d5d6f7c697a62ed71f42d553e051e613",
+        "source" : "logic://mixer",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_mixer",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "set_pan",
+      "evidence_files" : [
+        "evidence/operation-mixer.set_pan.json",
+        "evidence/operation-mixer.set_pan-response.json",
+        "evidence/operation-mixer.set_pan-readback.json"
+      ],
+      "id" : "in-process/mixer.set_pan",
+      "operation_id" : "mixer.set_pan",
+      "operation_request_id" : "75",
+      "readback" : {
+        "request_id" : "operation-readback-76",
+        "sha256" : "88a8275a413ab35299026014620524b9f5d4d3657fbf6b8cede4742fb2265ac5",
+        "source" : "logic://mixer",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_mixer",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "set_plugin_param",
+      "evidence_files" : [
+        "evidence/operation-mixer.set_plugin_param.json",
+        "evidence/operation-mixer.set_plugin_param-response.json",
+        "evidence/operation-mixer.set_plugin_param-readback.json"
+      ],
+      "id" : "in-process/mixer.set_plugin_param",
+      "operation_id" : "mixer.set_plugin_param",
+      "operation_request_id" : "77",
+      "readback" : {
+        "request_id" : "operation-readback-78",
+        "sha256" : "225022991792118d03aee96561fdef071d3d0fe7abb872c56275d09034ff9572",
+        "source" : "logic://mixer",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_mixer",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "set_volume",
+      "evidence_files" : [
+        "evidence/operation-mixer.set_volume.json",
+        "evidence/operation-mixer.set_volume-response.json",
+        "evidence/operation-mixer.set_volume-readback.json"
+      ],
+      "id" : "in-process/mixer.set_volume",
+      "operation_id" : "mixer.set_volume",
+      "operation_request_id" : "79",
+      "readback" : {
+        "request_id" : "operation-readback-80",
+        "sha256" : "df6dfdb1ac9773f67238f48d95eadb2f0b03cadb2062792b2de24d7e0d1dc7fc",
+        "source" : "logic://mixer",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_mixer",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "create_marker",
+      "evidence_files" : [
+        "evidence/operation-navigate.create_marker.json",
+        "evidence/operation-navigate.create_marker-response.json",
+        "evidence/operation-navigate.create_marker-readback.json"
+      ],
+      "id" : "in-process/navigate.create_marker",
+      "operation_id" : "navigate.create_marker",
+      "operation_request_id" : "81",
+      "readback" : {
+        "request_id" : "operation-readback-82",
+        "sha256" : "6e7066f13276823a0febc53fadd57872575e0d990c7e495bb84dce39cfb0d849",
+        "source" : "logic://markers",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_navigate",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "delete_marker",
+      "evidence_files" : [
+        "evidence/operation-navigate.delete_marker.json",
+        "evidence/operation-navigate.delete_marker-response.json",
+        "evidence/operation-navigate.delete_marker-readback.json"
+      ],
+      "id" : "in-process/navigate.delete_marker",
+      "operation_id" : "navigate.delete_marker",
+      "operation_request_id" : "83",
+      "readback" : {
+        "request_id" : "operation-readback-84",
+        "sha256" : "c7157c7c8e9e5fdefaa3dc583223f9d23ed738cb8f61950d6c3c5a570f64cb33",
+        "source" : "logic://markers",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_navigate",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "goto_bar",
+      "evidence_files" : [
+        "evidence/operation-navigate.goto_bar.json",
+        "evidence/operation-navigate.goto_bar-response.json",
+        "evidence/operation-navigate.goto_bar-readback.json"
+      ],
+      "id" : "in-process/navigate.goto_bar",
+      "operation_id" : "navigate.goto_bar",
+      "operation_request_id" : "85",
+      "readback" : {
+        "request_id" : "operation-readback-86",
+        "sha256" : "65169db0ace4a2134c9d7ac7dc4f5e55b4ff00ec85cf99be50dea610b79334ed",
+        "source" : "logic://markers",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_navigate",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "goto_marker",
+      "evidence_files" : [
+        "evidence/operation-navigate.goto_marker.json",
+        "evidence/operation-navigate.goto_marker-response.json",
+        "evidence/operation-navigate.goto_marker-readback.json"
+      ],
+      "id" : "in-process/navigate.goto_marker",
+      "operation_id" : "navigate.goto_marker",
+      "operation_request_id" : "87",
+      "readback" : {
+        "request_id" : "operation-readback-88",
+        "sha256" : "3e29ec800701befe5b7ef73a6c02666c185b68752adbc2da9eeb21c448335aa2",
+        "source" : "logic://markers",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_navigate",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "rename_marker",
+      "evidence_files" : [
+        "evidence/operation-navigate.rename_marker.json",
+        "evidence/operation-navigate.rename_marker-response.json",
+        "evidence/operation-navigate.rename_marker-readback.json"
+      ],
+      "id" : "in-process/navigate.rename_marker",
+      "operation_id" : "navigate.rename_marker",
+      "operation_request_id" : "89",
+      "readback" : {
+        "request_id" : "operation-readback-90",
+        "sha256" : "6218cc9f74015ff191196916392516ffab479d1680e45061a5df3b07bbda4615",
+        "source" : "logic://markers",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_navigate",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "set_zoom",
+      "evidence_files" : [
+        "evidence/operation-navigate.set_zoom.json",
+        "evidence/operation-navigate.set_zoom-response.json",
+        "evidence/operation-navigate.set_zoom-readback.json"
+      ],
+      "id" : "in-process/navigate.set_zoom",
+      "operation_id" : "navigate.set_zoom",
+      "operation_request_id" : "91",
+      "readback" : {
+        "request_id" : "operation-readback-92",
+        "sha256" : "70666075bf767021d3be10bf568e7c7152d7edfd16d8e5802eb56550a05f5e66",
+        "source" : "logic://markers",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_navigate",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "toggle_view",
+      "evidence_files" : [
+        "evidence/operation-navigate.toggle_view.json",
+        "evidence/operation-navigate.toggle_view-response.json",
+        "evidence/operation-navigate.toggle_view-readback.json"
+      ],
+      "id" : "in-process/navigate.toggle_view",
+      "operation_id" : "navigate.toggle_view",
+      "operation_request_id" : "93",
+      "readback" : {
+        "request_id" : "operation-readback-94",
+        "sha256" : "986e8487cac8f0c30c4d257c8cc45b5217a7b29164c6c2a86dd76e7385cfdf23",
+        "source" : "logic://markers",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_navigate",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "zoom_to_fit",
+      "evidence_files" : [
+        "evidence/operation-navigate.zoom_to_fit.json",
+        "evidence/operation-navigate.zoom_to_fit-response.json",
+        "evidence/operation-navigate.zoom_to_fit-readback.json"
+      ],
+      "id" : "in-process/navigate.zoom_to_fit",
+      "operation_id" : "navigate.zoom_to_fit",
+      "operation_request_id" : "95",
+      "readback" : {
+        "request_id" : "operation-readback-96",
+        "sha256" : "f4f11bd1a7b8a9c0f1beafd3971fae16aabe662b760cccc36c1b8b2763172dc5",
+        "source" : "logic://markers",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_navigate",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "get_inventory",
+      "deferral" : {
+        "code" : "operation_unavailable",
+        "detail" : "read-only operation did not return a successful typed response on this host"
+      },
+      "evidence_files" : [
+        "evidence/operation-plugins.get_inventory.json",
+        "evidence/operation-plugins.get_inventory-response.json",
+        "evidence/operation-plugins.get_inventory-readback.json"
+      ],
+      "id" : "in-process/plugins.get_inventory",
+      "operation_id" : "plugins.get_inventory",
+      "operation_request_id" : "97",
+      "readback" : {
+        "request_id" : "operation-readback-98",
+        "sha256" : "de67aea488569300756cba646dd7c112bb37607af29794201ef1d3763651f040",
+        "source" : "logic://mixer",
+        "verified" : false
+      },
+      "reason" : "read-only operation did not return a successful typed response on this host",
+      "status" : "waived",
+      "tool" : "logic_plugins",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "insert_verified",
+      "evidence_files" : [
+        "evidence/operation-plugins.insert_verified.json",
+        "evidence/operation-plugins.insert_verified-response.json",
+        "evidence/operation-plugins.insert_verified-readback.json"
+      ],
+      "id" : "in-process/plugins.insert_verified",
+      "operation_id" : "plugins.insert_verified",
+      "operation_request_id" : "99",
+      "readback" : {
+        "request_id" : "operation-readback-100",
+        "sha256" : "3a1e1a1f576d6ab91cb913f32643cadd1a31fa51e460e18f86b1810fd7aabd66",
+        "source" : "logic://mixer",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_plugins",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "set_param_verified",
+      "evidence_files" : [
+        "evidence/operation-plugins.set_param_verified.json",
+        "evidence/operation-plugins.set_param_verified-response.json",
+        "evidence/operation-plugins.set_param_verified-readback.json"
+      ],
+      "id" : "in-process/plugins.set_param_verified",
+      "operation_id" : "plugins.set_param_verified",
+      "operation_request_id" : "101",
+      "readback" : {
+        "request_id" : "operation-readback-102",
+        "sha256" : "7597b4410dc09c3c669ee036363d7ef3cd821cb74d49b92951bac0150f96723e",
+        "source" : "logic://mixer",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_plugins",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "audit",
+      "deferral" : {
+        "code" : "semantic_validator_unavailable",
+        "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+      },
+      "evidence_files" : [
+        "evidence/operation-project.audit.json",
+        "evidence/operation-project.audit-response.json",
+        "evidence/operation-project.audit-readback.json"
+      ],
+      "id" : "in-process/project.audit",
+      "operation_id" : "project.audit",
+      "operation_request_id" : "103",
+      "readback" : {
+        "request_id" : "operation-readback-104",
+        "sha256" : "e68f75dc8a60434a8f4bec9ac4db48eb7f05b09585771e119791a95afc87294a",
+        "source" : "logic://project/audit",
+        "verified" : false
+      },
+      "reason" : "protocol transport succeeded without an operation-specific semantic validator",
+      "status" : "waived",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "bounce",
+      "evidence_files" : [
+        "evidence/operation-project.bounce.json",
+        "evidence/operation-project.bounce-response.json",
+        "evidence/operation-project.bounce-readback.json"
+      ],
+      "id" : "in-process/project.bounce",
+      "operation_id" : "project.bounce",
+      "operation_request_id" : "105",
+      "readback" : {
+        "request_id" : "operation-readback-106",
+        "sha256" : "aa25770f6810594075db95a084a095c60d2f34d91fded398cb67fe498a22b204",
+        "source" : "logic://project/info",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "cleanup_apply",
+      "evidence_files" : [
+        "evidence/operation-project.cleanup_apply.json",
+        "evidence/operation-project.cleanup_apply-response.json",
+        "evidence/operation-project.cleanup_apply-readback.json"
+      ],
+      "id" : "in-process/project.cleanup_apply",
+      "operation_id" : "project.cleanup_apply",
+      "operation_request_id" : "107",
+      "readback" : {
+        "request_id" : "operation-readback-108",
+        "sha256" : "6f589d3e7f2b32684cfd9725802f60b1ceea8c642a7556885921e68192b7e18a",
+        "source" : "logic://project/cleanup-plan",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "cleanup_plan",
+      "deferral" : {
+        "code" : "semantic_validator_unavailable",
+        "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+      },
+      "evidence_files" : [
+        "evidence/operation-project.cleanup_plan.json",
+        "evidence/operation-project.cleanup_plan-response.json",
+        "evidence/operation-project.cleanup_plan-readback.json"
+      ],
+      "id" : "in-process/project.cleanup_plan",
+      "operation_id" : "project.cleanup_plan",
+      "operation_request_id" : "109",
+      "readback" : {
+        "request_id" : "operation-readback-110",
+        "sha256" : "9202ec2f964ca2b5e323b61fa7c4fe300084f68ae6551803ed9d25404c831c7b",
+        "source" : "logic://project/cleanup-plan",
+        "verified" : false
+      },
+      "reason" : "protocol transport succeeded without an operation-specific semantic validator",
+      "status" : "waived",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "close",
+      "evidence_files" : [
+        "evidence/operation-project.close.json",
+        "evidence/operation-project.close-response.json",
+        "evidence/operation-project.close-readback.json"
+      ],
+      "id" : "in-process/project.close",
+      "operation_id" : "project.close",
+      "operation_request_id" : "111",
+      "readback" : {
+        "request_id" : "operation-readback-112",
+        "sha256" : "b19d44e189dbea3be17402155af6763601c0010df7b3da0ca56624686ebdf883",
+        "source" : "logic://project/info",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "export_plan",
+      "deferral" : {
+        "code" : "operation_unavailable",
+        "detail" : "read-only operation did not return a successful typed response on this host"
+      },
+      "evidence_files" : [
+        "evidence/operation-project.export_plan.json",
+        "evidence/operation-project.export_plan-response.json",
+        "evidence/operation-project.export_plan-readback.json"
+      ],
+      "id" : "in-process/project.export_plan",
+      "operation_id" : "project.export_plan",
+      "operation_request_id" : "113",
+      "readback" : {
+        "request_id" : "operation-readback-114",
+        "sha256" : "80fbc15f46bbdb913dc3b8a019581d87f41109ea66a7b00c9fa0be3a9d4718a8",
+        "source" : "logic://project/info",
+        "verified" : false
+      },
+      "reason" : "read-only operation did not return a successful typed response on this host",
+      "status" : "waived",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "export_resume",
+      "evidence_files" : [
+        "evidence/operation-project.export_resume.json",
+        "evidence/operation-project.export_resume-response.json",
+        "evidence/operation-project.export_resume-readback.json"
+      ],
+      "id" : "in-process/project.export_resume",
+      "operation_id" : "project.export_resume",
+      "operation_request_id" : "115",
+      "readback" : {
+        "request_id" : "operation-readback-116",
+        "sha256" : "ec6502962a366bdd06dc797174e99e80c5cb3ff13e5881e1f01eaf6f83a08fdf",
+        "source" : "logic://project/info",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "export_run",
+      "evidence_files" : [
+        "evidence/operation-project.export_run.json",
+        "evidence/operation-project.export_run-response.json",
+        "evidence/operation-project.export_run-readback.json"
+      ],
+      "id" : "in-process/project.export_run",
+      "operation_id" : "project.export_run",
+      "operation_request_id" : "117",
+      "readback" : {
+        "request_id" : "operation-readback-118",
+        "sha256" : "209fbcbcff6d8e523a903edfb1227047098639a16ad22d93028ed4cfd608e05e",
+        "source" : "logic://project/info",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "get_regions",
+      "deferral" : {
+        "code" : "semantic_validator_unavailable",
+        "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+      },
+      "evidence_files" : [
+        "evidence/operation-project.get_regions.json",
+        "evidence/operation-project.get_regions-response.json",
+        "evidence/operation-project.get_regions-readback.json"
+      ],
+      "id" : "in-process/project.get_regions",
+      "operation_id" : "project.get_regions",
+      "operation_request_id" : "119",
+      "readback" : {
+        "request_id" : "operation-readback-120",
+        "sha256" : "01ed1828680c1093a6d65790319ed11d56a678a98ac5fd0b9cfc4bb6e2f416a1",
+        "source" : "logic://tracks",
+        "verified" : false
+      },
+      "reason" : "protocol transport succeeded without an operation-specific semantic validator",
+      "status" : "waived",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "is_running",
+      "deferral" : {
+        "code" : "semantic_validator_unavailable",
+        "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+      },
+      "evidence_files" : [
+        "evidence/operation-project.is_running.json",
+        "evidence/operation-project.is_running-response.json",
+        "evidence/operation-project.is_running-readback.json"
+      ],
+      "id" : "in-process/project.is_running",
+      "operation_id" : "project.is_running",
+      "operation_request_id" : "121",
+      "readback" : {
+        "request_id" : "operation-readback-122",
+        "sha256" : "16626f63542df9bcd02b614137caa6d0bfb7f8da1610bac9d1584edcd5cec62b",
+        "source" : "logic://project/info",
+        "verified" : false
+      },
+      "reason" : "protocol transport succeeded without an operation-specific semantic validator",
+      "status" : "waived",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "launch",
+      "evidence_files" : [
+        "evidence/operation-project.launch.json",
+        "evidence/operation-project.launch-response.json",
+        "evidence/operation-project.launch-readback.json"
+      ],
+      "id" : "in-process/project.launch",
+      "operation_id" : "project.launch",
+      "operation_request_id" : "123",
+      "readback" : {
+        "request_id" : "operation-readback-124",
+        "sha256" : "1d2a18c6bbe0a3fd3a65f3b792d9f226fd5177e1177c771f6cd57f30a3492f86",
+        "source" : "logic://project/info",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "new",
+      "evidence_files" : [
+        "evidence/operation-project.new.json",
+        "evidence/operation-project.new-response.json",
+        "evidence/operation-project.new-readback.json"
+      ],
+      "id" : "in-process/project.new",
+      "operation_id" : "project.new",
+      "operation_request_id" : "125",
+      "readback" : {
+        "request_id" : "operation-readback-126",
+        "sha256" : "de8a4ec5f37a641adf4e1c29fbd24c2f6a796fc943abae2b3bd537ada3cf4c9a",
+        "source" : "logic://project/info",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "open",
+      "evidence_files" : [
+        "evidence/operation-project.open.json",
+        "evidence/operation-project.open-response.json",
+        "evidence/operation-project.open-readback.json"
+      ],
+      "id" : "in-process/project.open",
+      "operation_id" : "project.open",
+      "operation_request_id" : "127",
+      "readback" : {
+        "request_id" : "operation-readback-128",
+        "sha256" : "b86989bd19f6deb426b363cd74c90c42a107e25745bc62cf89c4170ee12b1ad2",
+        "source" : "logic://project/info",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "quit",
+      "evidence_files" : [
+        "evidence/operation-project.quit.json",
+        "evidence/operation-project.quit-response.json",
+        "evidence/operation-project.quit-readback.json"
+      ],
+      "id" : "in-process/project.quit",
+      "operation_id" : "project.quit",
+      "operation_request_id" : "129",
+      "readback" : {
+        "request_id" : "operation-readback-130",
+        "sha256" : "e0e25d73c1807628004661b299cc08f3922295e4f464ec1e682369513d5ea8d8",
+        "source" : "logic://project/info",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "save",
+      "evidence_files" : [
+        "evidence/operation-project.save.json",
+        "evidence/operation-project.save-response.json",
+        "evidence/operation-project.save-readback.json"
+      ],
+      "id" : "in-process/project.save",
+      "operation_id" : "project.save",
+      "operation_request_id" : "131",
+      "readback" : {
+        "request_id" : "operation-readback-132",
+        "sha256" : "69bd69ac44380b163d0857e903b1f666a9ed74dacbf202d59a7a81a4790e71c4",
+        "source" : "logic://project/info",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "save_as",
+      "evidence_files" : [
+        "evidence/operation-project.save_as.json",
+        "evidence/operation-project.save_as-response.json",
+        "evidence/operation-project.save_as-readback.json"
+      ],
+      "id" : "in-process/project.save_as",
+      "operation_id" : "project.save_as",
+      "operation_request_id" : "133",
+      "readback" : {
+        "request_id" : "operation-readback-134",
+        "sha256" : "27841b405bed80b2b14ea658b4c2411638ac26fee30b1890f3a38ab99114c62a",
+        "source" : "logic://project/info",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_project",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "clear_traces",
+      "deferral" : {
+        "code" : "operation_unavailable",
+        "detail" : "read-only operation did not return a successful typed response on this host"
+      },
+      "evidence_files" : [
+        "evidence/operation-system.clear_traces.json",
+        "evidence/operation-system.clear_traces-response.json",
+        "evidence/operation-system.clear_traces-readback.json"
+      ],
+      "id" : "in-process/system.clear_traces",
+      "operation_id" : "system.clear_traces",
+      "operation_request_id" : "135",
+      "readback" : {
+        "request_id" : "operation-readback-136",
+        "sha256" : "b85ed5c5091f62b007f091ebc97686262cf08fdea1f572d7d8a685eddaa7303a",
+        "source" : "logic://system/operations",
+        "verified" : false
+      },
+      "reason" : "read-only operation did not return a successful typed response on this host",
+      "status" : "waived",
+      "tool" : "logic_system",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "export_support_bundle",
+      "evidence_files" : [
+        "evidence/operation-system.export_support_bundle.json",
+        "evidence/operation-system.export_support_bundle-response.json",
+        "evidence/operation-system.export_support_bundle-readback.json"
+      ],
+      "id" : "in-process/system.export_support_bundle",
+      "operation_id" : "system.export_support_bundle",
+      "operation_request_id" : "137",
+      "readback" : {
+        "request_id" : "operation-readback-138",
+        "sha256" : "7902bb6b5978c29154d08346e12622f337f53b7a5639dd5635dc1c8338459eb0",
+        "source" : "logic://system/health",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_system",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "get_trace",
+      "deferral" : {
+        "code" : "semantic_validator_unavailable",
+        "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+      },
+      "evidence_files" : [
+        "evidence/operation-system.get_trace.json",
+        "evidence/operation-system.get_trace-response.json",
+        "evidence/operation-system.get_trace-readback.json"
+      ],
+      "id" : "in-process/system.get_trace",
+      "operation_id" : "system.get_trace",
+      "operation_request_id" : "139",
+      "readback" : {
+        "request_id" : "operation-readback-140",
+        "sha256" : "c7d77757ca056844f49d46a5497a42deb95b999f298dbfefe6f695b35b32b63c",
+        "source" : "logic://system/operations",
+        "verified" : false
+      },
+      "reason" : "protocol transport succeeded without an operation-specific semantic validator",
+      "status" : "waived",
+      "tool" : "logic_system",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "health",
+      "evidence_files" : [
+        "evidence/operation-system.health.json",
+        "evidence/operation-system.health-response.json",
+        "evidence/operation-system.health-readback.json"
+      ],
+      "id" : "in-process/system.health",
+      "operation_id" : "system.health",
+      "operation_request_id" : "141",
+      "readback" : {
+        "request_id" : "operation-readback-142",
+        "sha256" : "6d3878249496971c851448b9c73d74f603da31634c48f71a0451c99347deeeee",
+        "source" : "logic://system/health",
+        "verified" : true
+      },
+      "status" : "passed",
+      "tool" : "logic_system",
+      "trace_id" : "",
+      "verification_kind" : "semantic_readback",
+      "verified" : true
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "help",
+      "deferral" : {
+        "code" : "semantic_validator_unavailable",
+        "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+      },
+      "evidence_files" : [
+        "evidence/operation-system.help.json",
+        "evidence/operation-system.help-response.json",
+        "evidence/operation-system.help-readback.json"
+      ],
+      "id" : "in-process/system.help",
+      "operation_id" : "system.help",
+      "operation_request_id" : "143",
+      "readback" : {
+        "request_id" : "operation-readback-144",
+        "sha256" : "b3d1e489529bf695ec9bd867a0fafb3702d39af526647d98e6c3faa55e651e94",
+        "source" : "logic://system/operations",
+        "verified" : false
+      },
+      "reason" : "protocol transport succeeded without an operation-specific semantic validator",
+      "status" : "waived",
+      "tool" : "logic_system",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "list_recent_traces",
+      "deferral" : {
+        "code" : "semantic_validator_unavailable",
+        "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+      },
+      "evidence_files" : [
+        "evidence/operation-system.list_recent_traces.json",
+        "evidence/operation-system.list_recent_traces-response.json",
+        "evidence/operation-system.list_recent_traces-readback.json"
+      ],
+      "id" : "in-process/system.list_recent_traces",
+      "operation_id" : "system.list_recent_traces",
+      "operation_request_id" : "145",
+      "readback" : {
+        "request_id" : "operation-readback-146",
+        "sha256" : "cb999f3412fd94d74d8d813729a525b4ba3774263dd273e71efdb10874140724",
+        "source" : "logic://system/operations",
+        "verified" : false
+      },
+      "reason" : "protocol transport succeeded without an operation-specific semantic validator",
+      "status" : "waived",
+      "tool" : "logic_system",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "permissions",
+      "deferral" : {
+        "code" : "semantic_validator_unavailable",
+        "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+      },
+      "evidence_files" : [
+        "evidence/operation-system.permissions.json",
+        "evidence/operation-system.permissions-response.json",
+        "evidence/operation-system.permissions-readback.json"
+      ],
+      "id" : "in-process/system.permissions",
+      "operation_id" : "system.permissions",
+      "operation_request_id" : "147",
+      "readback" : {
+        "request_id" : "operation-readback-148",
+        "sha256" : "aa8f997974ffe27a982db889cf4a5b8b8d7ced66116c4e09c57fabc89b6d714a",
+        "source" : "logic://system/health",
+        "verified" : false
+      },
+      "reason" : "protocol transport succeeded without an operation-specific semantic validator",
+      "status" : "waived",
+      "tool" : "logic_system",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "refresh_cache",
+      "deferral" : {
+        "code" : "semantic_validator_unavailable",
+        "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+      },
+      "evidence_files" : [
+        "evidence/operation-system.refresh_cache.json",
+        "evidence/operation-system.refresh_cache-response.json",
+        "evidence/operation-system.refresh_cache-readback.json"
+      ],
+      "id" : "in-process/system.refresh_cache",
+      "operation_id" : "system.refresh_cache",
+      "operation_request_id" : "149",
+      "readback" : {
+        "request_id" : "operation-readback-150",
+        "sha256" : "21cc28c123e5665fd875ac79879a5b36b0b80198cdf7cac6b0f53a10f32ecdcb",
+        "source" : "logic://system/health",
+        "verified" : false
+      },
+      "reason" : "protocol transport succeeded without an operation-specific semantic validator",
+      "status" : "waived",
+      "tool" : "logic_system",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "saga_cancel",
+      "evidence_files" : [
+        "evidence/operation-system.saga_cancel.json",
+        "evidence/operation-system.saga_cancel-response.json",
+        "evidence/operation-system.saga_cancel-readback.json"
+      ],
+      "id" : "in-process/system.saga_cancel",
+      "operation_id" : "system.saga_cancel",
+      "operation_request_id" : "151",
+      "readback" : {
+        "request_id" : "operation-readback-152",
+        "sha256" : "8dba8cf5eeea2e8c992697d5b70be91c86914082662b83704fc71d1fa2e14931",
+        "source" : "logic://system/health",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_system",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "saga_execute",
+      "deferral" : {
+        "code" : "live_mutation_not_run",
+        "detail" : "deferred to ADR-001-c: live mutation requires an operation-specific fixture and independent readback"
+      },
+      "evidence_files" : [
+        "evidence/operation-system.saga_execute.json",
+        "evidence/operation-system.saga_execute-response.json",
+        "evidence/operation-system.saga_execute-readback.json"
+      ],
+      "id" : "in-process/system.saga_execute",
+      "operation_id" : "system.saga_execute",
+      "operation_request_id" : "5",
+      "readback" : {
+        "request_id" : "operation-readback-153",
+        "sha256" : "7b9e842757007f449753ce230498580fa6230cf893e45813faac118b48e70c27",
+        "source" : "logic://system/health",
+        "verified" : true
+      },
+      "reason" : "deferred to ADR-001-c: live mutation requires an operation-specific fixture and independent readback",
+      "status" : "waived",
+      "tool" : "logic_system",
+      "trace_id" : "lpmcp_9E5A1EB3-6BD5-46D0-A5FD-0D6D8729A6C4",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "saga_preflight",
+      "deferral" : {
+        "code" : "semantic_validator_unavailable",
+        "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+      },
+      "evidence_files" : [
+        "evidence/operation-system.saga_preflight.json",
+        "evidence/operation-system.saga_preflight-response.json",
+        "evidence/operation-system.saga_preflight-readback.json"
+      ],
+      "id" : "in-process/system.saga_preflight",
+      "operation_id" : "system.saga_preflight",
+      "operation_request_id" : "154",
+      "readback" : {
+        "request_id" : "operation-readback-155",
+        "sha256" : "4481723f9ffcd80f71fbe5fecb28fb6a19c75aab230a36bc61b176d16c22c14d",
+        "source" : "logic://system/health",
+        "verified" : false
+      },
+      "reason" : "protocol transport succeeded without an operation-specific semantic validator",
+      "status" : "waived",
+      "tool" : "logic_system",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "saga_status",
+      "deferral" : {
+        "code" : "operation_unavailable",
+        "detail" : "read-only operation did not return a successful typed response on this host"
+      },
+      "evidence_files" : [
+        "evidence/operation-system.saga_status.json",
+        "evidence/operation-system.saga_status-response.json",
+        "evidence/operation-system.saga_status-readback.json"
+      ],
+      "id" : "in-process/system.saga_status",
+      "operation_id" : "system.saga_status",
+      "operation_request_id" : "156",
+      "readback" : {
+        "request_id" : "operation-readback-157",
+        "sha256" : "e1a9812183fa2cb1e71d2613f283b5ca89d26363955869eb9542beaccd54ec16",
+        "source" : "logic://system/health",
+        "verified" : false
+      },
+      "reason" : "read-only operation did not return a successful typed response on this host",
+      "status" : "waived",
+      "tool" : "logic_system",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "arm",
+      "evidence_files" : [
+        "evidence/operation-tracks.arm.json",
+        "evidence/operation-tracks.arm-response.json",
+        "evidence/operation-tracks.arm-readback.json"
+      ],
+      "id" : "in-process/tracks.arm",
+      "operation_id" : "tracks.arm",
+      "operation_request_id" : "158",
+      "readback" : {
+        "request_id" : "operation-readback-159",
+        "sha256" : "a32c70350f2f169a67f32d1254d116ffefc4ef0825e530d7229eb5acd24eb124",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "arm_only",
+      "evidence_files" : [
+        "evidence/operation-tracks.arm_only.json",
+        "evidence/operation-tracks.arm_only-response.json",
+        "evidence/operation-tracks.arm_only-readback.json"
+      ],
+      "id" : "in-process/tracks.arm_only",
+      "operation_id" : "tracks.arm_only",
+      "operation_request_id" : "160",
+      "readback" : {
+        "request_id" : "operation-readback-161",
+        "sha256" : "43e2020b25b484ab1b6ab3914a246ee3a54c290e1aed4a1823e15b89648ada0e",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "create_audio",
+      "evidence_files" : [
+        "evidence/operation-tracks.create_audio.json",
+        "evidence/operation-tracks.create_audio-response.json",
+        "evidence/operation-tracks.create_audio-readback.json"
+      ],
+      "id" : "in-process/tracks.create_audio",
+      "operation_id" : "tracks.create_audio",
+      "operation_request_id" : "162",
+      "readback" : {
+        "request_id" : "operation-readback-163",
+        "sha256" : "8d52f0397fd4b7347a2bab588159e35e2bff25e00c80dfed49518f4f08a4e4db",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "create_drummer",
+      "evidence_files" : [
+        "evidence/operation-tracks.create_drummer.json",
+        "evidence/operation-tracks.create_drummer-response.json",
+        "evidence/operation-tracks.create_drummer-readback.json"
+      ],
+      "id" : "in-process/tracks.create_drummer",
+      "operation_id" : "tracks.create_drummer",
+      "operation_request_id" : "164",
+      "readback" : {
+        "request_id" : "operation-readback-165",
+        "sha256" : "228bfaeeea9aec2ed26cf982d2a1946a6d6385aea9b754e8f87305eb1ce17a71",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "create_external_midi",
+      "evidence_files" : [
+        "evidence/operation-tracks.create_external_midi.json",
+        "evidence/operation-tracks.create_external_midi-response.json",
+        "evidence/operation-tracks.create_external_midi-readback.json"
+      ],
+      "id" : "in-process/tracks.create_external_midi",
+      "operation_id" : "tracks.create_external_midi",
+      "operation_request_id" : "166",
+      "readback" : {
+        "request_id" : "operation-readback-167",
+        "sha256" : "e1ed0094d0a6cf20d7e1c090d086ff4353d731e6b15e88bc7f19027b8e8aa9d0",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "create_instrument",
+      "evidence_files" : [
+        "evidence/operation-tracks.create_instrument.json",
+        "evidence/operation-tracks.create_instrument-response.json",
+        "evidence/operation-tracks.create_instrument-readback.json"
+      ],
+      "id" : "in-process/tracks.create_instrument",
+      "operation_id" : "tracks.create_instrument",
+      "operation_request_id" : "168",
+      "readback" : {
+        "request_id" : "operation-readback-169",
+        "sha256" : "085e525713530cf0085f9cbcb5154af828551e5957c58f2cbdacb92a0a162167",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "delete",
+      "evidence_files" : [
+        "evidence/operation-tracks.delete.json",
+        "evidence/operation-tracks.delete-response.json",
+        "evidence/operation-tracks.delete-readback.json"
+      ],
+      "id" : "in-process/tracks.delete",
+      "operation_id" : "tracks.delete",
+      "operation_request_id" : "170",
+      "readback" : {
+        "request_id" : "operation-readback-171",
+        "sha256" : "331fa15dc81602a1dbf69ac4a77585e54b0ae936cb0534c7a12afaa8d3148ed3",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "duplicate",
+      "evidence_files" : [
+        "evidence/operation-tracks.duplicate.json",
+        "evidence/operation-tracks.duplicate-response.json",
+        "evidence/operation-tracks.duplicate-readback.json"
+      ],
+      "id" : "in-process/tracks.duplicate",
+      "operation_id" : "tracks.duplicate",
+      "operation_request_id" : "172",
+      "readback" : {
+        "request_id" : "operation-readback-173",
+        "sha256" : "4f32ed764d4a9c37ac4ff46947204174b7cc1e9215f2f1dde130bb498a90b95d",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "list_library",
+      "deferral" : {
+        "code" : "operation_unavailable",
+        "detail" : "read-only operation did not return a successful typed response on this host"
+      },
+      "evidence_files" : [
+        "evidence/operation-tracks.list_library.json",
+        "evidence/operation-tracks.list_library-response.json",
+        "evidence/operation-tracks.list_library-readback.json"
+      ],
+      "id" : "in-process/tracks.list_library",
+      "operation_id" : "tracks.list_library",
+      "operation_request_id" : "174",
+      "readback" : {
+        "request_id" : "operation-readback-175",
+        "sha256" : "035e7a97c9ce2823f24154d402b28357db027e947eafde5f166fd373db912fd6",
+        "source" : "logic://library/inventory",
+        "verified" : false
+      },
+      "reason" : "read-only operation did not return a successful typed response on this host",
+      "status" : "waived",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "mute",
+      "evidence_files" : [
+        "evidence/operation-tracks.mute.json",
+        "evidence/operation-tracks.mute-response.json",
+        "evidence/operation-tracks.mute-readback.json"
+      ],
+      "id" : "in-process/tracks.mute",
+      "operation_id" : "tracks.mute",
+      "operation_request_id" : "176",
+      "readback" : {
+        "request_id" : "operation-readback-177",
+        "sha256" : "23d9c0bb431a594f6979094098ba25e2c220ddbdc47db81e6894850f299f83f5",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "record_sequence",
+      "evidence_files" : [
+        "evidence/operation-tracks.record_sequence.json",
+        "evidence/operation-tracks.record_sequence-response.json",
+        "evidence/operation-tracks.record_sequence-readback.json"
+      ],
+      "id" : "in-process/tracks.record_sequence",
+      "operation_id" : "tracks.record_sequence",
+      "operation_request_id" : "178",
+      "readback" : {
+        "request_id" : "operation-readback-179",
+        "sha256" : "557dc43095dcdadd2a48bb86c7255b26e8f289ff971b114aaf0320744017e00c",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "rename",
+      "deferral" : {
+        "code" : "live_mutation_not_run",
+        "detail" : "deferred to ADR-001-c: live mutation requires an operation-specific fixture and independent readback"
+      },
+      "evidence_files" : [
+        "evidence/operation-tracks.rename.json",
+        "evidence/operation-tracks.rename-response.json",
+        "evidence/operation-tracks.rename-readback.json"
+      ],
+      "id" : "in-process/tracks.rename",
+      "operation_id" : "tracks.rename",
+      "operation_request_id" : "8",
+      "readback" : {
+        "request_id" : "operation-readback-180",
+        "sha256" : "99a10bbfea62177cd84d2dafc84610598208b30b6fbfd4d1b4ff3c5ec897ecff",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "deferred to ADR-001-c: live mutation requires an operation-specific fixture and independent readback",
+      "status" : "waived",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "resolve_path",
+      "deferral" : {
+        "code" : "operation_unavailable",
+        "detail" : "read-only operation did not return a successful typed response on this host"
+      },
+      "evidence_files" : [
+        "evidence/operation-tracks.resolve_path.json",
+        "evidence/operation-tracks.resolve_path-response.json",
+        "evidence/operation-tracks.resolve_path-readback.json"
+      ],
+      "id" : "in-process/tracks.resolve_path",
+      "operation_id" : "tracks.resolve_path",
+      "operation_request_id" : "181",
+      "readback" : {
+        "request_id" : "operation-readback-182",
+        "sha256" : "73ecc77989fcd978f87e63794ccf00d8bf58fb68b1b1f8bca6ff4af69336cdf2",
+        "source" : "logic://library/inventory",
+        "verified" : false
+      },
+      "reason" : "read-only operation did not return a successful typed response on this host",
+      "status" : "waived",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "scan_library",
+      "deferral" : {
+        "code" : "semantic_validator_unavailable",
+        "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+      },
+      "evidence_files" : [
+        "evidence/operation-tracks.scan_library.json",
+        "evidence/operation-tracks.scan_library-response.json",
+        "evidence/operation-tracks.scan_library-readback.json"
+      ],
+      "id" : "in-process/tracks.scan_library",
+      "operation_id" : "tracks.scan_library",
+      "operation_request_id" : "183",
+      "readback" : {
+        "request_id" : "operation-readback-184",
+        "sha256" : "0c956d0d187875584f5bf891511136010c4ae2b3c4c41c7dffec892624c2a155",
+        "source" : "logic://library/inventory",
+        "verified" : false
+      },
+      "reason" : "protocol transport succeeded without an operation-specific semantic validator",
+      "status" : "waived",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "scan_plugin_presets",
+      "deferral" : {
+        "code" : "operation_unavailable",
+        "detail" : "read-only operation did not return a successful typed response on this host"
+      },
+      "evidence_files" : [
+        "evidence/operation-tracks.scan_plugin_presets.json",
+        "evidence/operation-tracks.scan_plugin_presets-response.json",
+        "evidence/operation-tracks.scan_plugin_presets-readback.json"
+      ],
+      "id" : "in-process/tracks.scan_plugin_presets",
+      "operation_id" : "tracks.scan_plugin_presets",
+      "operation_request_id" : "185",
+      "readback" : {
+        "request_id" : "operation-readback-186",
+        "sha256" : "728a9114d926c24654730a572c2073edeae44a35117064533d28caa360b07d2d",
+        "source" : "logic://library/inventory",
+        "verified" : false
+      },
+      "reason" : "read-only operation did not return a successful typed response on this host",
+      "status" : "waived",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "select",
+      "evidence_files" : [
+        "evidence/operation-tracks.select.json",
+        "evidence/operation-tracks.select-response.json",
+        "evidence/operation-tracks.select-readback.json"
+      ],
+      "id" : "in-process/tracks.select",
+      "operation_id" : "tracks.select",
+      "operation_request_id" : "187",
+      "readback" : {
+        "request_id" : "operation-readback-188",
+        "sha256" : "c1f8cdb4ad759b39dcc892009aa6726beef43564f436fa13f924bb8c6e68a224",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "set_automation",
+      "evidence_files" : [
+        "evidence/operation-tracks.set_automation.json",
+        "evidence/operation-tracks.set_automation-response.json",
+        "evidence/operation-tracks.set_automation-readback.json"
+      ],
+      "id" : "in-process/tracks.set_automation",
+      "operation_id" : "tracks.set_automation",
+      "operation_request_id" : "189",
+      "readback" : {
+        "request_id" : "operation-readback-190",
+        "sha256" : "fdea19919eed8cad5c3b03d659e462572eee7b152ab232d82731b0266ec2a10b",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "set_instrument",
+      "evidence_files" : [
+        "evidence/operation-tracks.set_instrument.json",
+        "evidence/operation-tracks.set_instrument-response.json",
+        "evidence/operation-tracks.set_instrument-readback.json"
+      ],
+      "id" : "in-process/tracks.set_instrument",
+      "operation_id" : "tracks.set_instrument",
+      "operation_request_id" : "191",
+      "readback" : {
+        "request_id" : "operation-readback-192",
+        "sha256" : "980ab872e6da0402cac3ab8d31c62840be7b9fe10581abd2c320bc3628d774a3",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "solo",
+      "evidence_files" : [
+        "evidence/operation-tracks.solo.json",
+        "evidence/operation-tracks.solo-response.json",
+        "evidence/operation-tracks.solo-readback.json"
+      ],
+      "id" : "in-process/tracks.solo",
+      "operation_id" : "tracks.solo",
+      "operation_request_id" : "193",
+      "readback" : {
+        "request_id" : "operation-readback-194",
+        "sha256" : "549468edc760d92facc64fbd29de2a828c92d523b170378bfcb60b9803a587fd",
+        "source" : "logic://tracks",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_tracks",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "fast_forward",
+      "evidence_files" : [
+        "evidence/operation-transport.fast_forward.json",
+        "evidence/operation-transport.fast_forward-response.json",
+        "evidence/operation-transport.fast_forward-readback.json"
+      ],
+      "id" : "in-process/transport.fast_forward",
+      "operation_id" : "transport.fast_forward",
+      "operation_request_id" : "195",
+      "readback" : {
+        "request_id" : "operation-readback-196",
+        "sha256" : "dea60af54c22148eab0e9defe21876468c57f02284e66bdd5b3f6098494cdab0",
+        "source" : "logic://transport/state",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_transport",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "goto_position",
+      "evidence_files" : [
+        "evidence/operation-transport.goto_position.json",
+        "evidence/operation-transport.goto_position-response.json",
+        "evidence/operation-transport.goto_position-readback.json"
+      ],
+      "id" : "in-process/transport.goto_position",
+      "operation_id" : "transport.goto_position",
+      "operation_request_id" : "197",
+      "readback" : {
+        "request_id" : "operation-readback-198",
+        "sha256" : "06b3be364ea3d7ccfb02c8cefa31b931c1286bca9398290f2665c19d764698c6",
+        "source" : "logic://transport/state",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_transport",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "pause",
+      "evidence_files" : [
+        "evidence/operation-transport.pause.json",
+        "evidence/operation-transport.pause-response.json",
+        "evidence/operation-transport.pause-readback.json"
+      ],
+      "id" : "in-process/transport.pause",
+      "operation_id" : "transport.pause",
+      "operation_request_id" : "199",
+      "readback" : {
+        "request_id" : "operation-readback-200",
+        "sha256" : "f6d6647564e7d454071e697c9f37925673444c66379d075f5216b52924aa1c20",
+        "source" : "logic://transport/state",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_transport",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "play",
+      "evidence_files" : [
+        "evidence/operation-transport.play.json",
+        "evidence/operation-transport.play-response.json",
+        "evidence/operation-transport.play-readback.json"
+      ],
+      "id" : "in-process/transport.play",
+      "operation_id" : "transport.play",
+      "operation_request_id" : "201",
+      "readback" : {
+        "request_id" : "operation-readback-202",
+        "sha256" : "3406492a8d6f442e992db03ec1f1806ca4c913f3fcf7f6fae2a82d8c9005a166",
+        "source" : "logic://transport/state",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_transport",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "record",
+      "evidence_files" : [
+        "evidence/operation-transport.record.json",
+        "evidence/operation-transport.record-response.json",
+        "evidence/operation-transport.record-readback.json"
+      ],
+      "id" : "in-process/transport.record",
+      "operation_id" : "transport.record",
+      "operation_request_id" : "203",
+      "readback" : {
+        "request_id" : "operation-readback-204",
+        "sha256" : "1ee6eb5f0e9b88e4680e86cabd43cd482c82bad77c7eac00bacadd463a7c5c68",
+        "source" : "logic://transport/state",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_transport",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "rewind",
+      "evidence_files" : [
+        "evidence/operation-transport.rewind.json",
+        "evidence/operation-transport.rewind-response.json",
+        "evidence/operation-transport.rewind-readback.json"
+      ],
+      "id" : "in-process/transport.rewind",
+      "operation_id" : "transport.rewind",
+      "operation_request_id" : "205",
+      "readback" : {
+        "request_id" : "operation-readback-206",
+        "sha256" : "a83da9c3d8f919b824d3403ba0566df73d54cf0d8dedfa39a2607f0e879e5b0a",
+        "source" : "logic://transport/state",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_transport",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "set_cycle_range",
+      "evidence_files" : [
+        "evidence/operation-transport.set_cycle_range.json",
+        "evidence/operation-transport.set_cycle_range-response.json",
+        "evidence/operation-transport.set_cycle_range-readback.json"
+      ],
+      "id" : "in-process/transport.set_cycle_range",
+      "operation_id" : "transport.set_cycle_range",
+      "operation_request_id" : "207",
+      "readback" : {
+        "request_id" : "operation-readback-208",
+        "sha256" : "0fcaa0d4e66aa8ed08830ea9a551d2fbbebf5379f9b8d73e2bc2c5f8a796ef12",
+        "source" : "logic://transport/state",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_transport",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "set_tempo",
+      "evidence_files" : [
+        "evidence/operation-transport.set_tempo.json",
+        "evidence/operation-transport.set_tempo-response.json",
+        "evidence/operation-transport.set_tempo-readback.json"
+      ],
+      "id" : "in-process/transport.set_tempo",
+      "operation_id" : "transport.set_tempo",
+      "operation_request_id" : "209",
+      "readback" : {
+        "request_id" : "operation-readback-210",
+        "sha256" : "0c7b2dc842f8980fc7ea97f9d6a0c42c8744002be729aec015ce1ce9c6a9625a",
+        "source" : "logic://transport/state",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_transport",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "stop",
+      "evidence_files" : [
+        "evidence/operation-transport.stop.json",
+        "evidence/operation-transport.stop-response.json",
+        "evidence/operation-transport.stop-readback.json"
+      ],
+      "id" : "in-process/transport.stop",
+      "operation_id" : "transport.stop",
+      "operation_request_id" : "211",
+      "readback" : {
+        "request_id" : "operation-readback-212",
+        "sha256" : "7ee9b52a25550e829bfb72a972131fc63277e875d6380105e392943ad763d055",
+        "source" : "logic://transport/state",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_transport",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "toggle_autopunch",
+      "evidence_files" : [
+        "evidence/operation-transport.toggle_autopunch.json",
+        "evidence/operation-transport.toggle_autopunch-response.json",
+        "evidence/operation-transport.toggle_autopunch-readback.json"
+      ],
+      "id" : "in-process/transport.toggle_autopunch",
+      "operation_id" : "transport.toggle_autopunch",
+      "operation_request_id" : "213",
+      "readback" : {
+        "request_id" : "operation-readback-214",
+        "sha256" : "8372534bdbcb93954a1e5943eadab34be67b4486d1f6fa3e97e926d8c05cdb08",
+        "source" : "logic://transport/state",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_transport",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "toggle_count_in",
+      "evidence_files" : [
+        "evidence/operation-transport.toggle_count_in.json",
+        "evidence/operation-transport.toggle_count_in-response.json",
+        "evidence/operation-transport.toggle_count_in-readback.json"
+      ],
+      "id" : "in-process/transport.toggle_count_in",
+      "operation_id" : "transport.toggle_count_in",
+      "operation_request_id" : "215",
+      "readback" : {
+        "request_id" : "operation-readback-216",
+        "sha256" : "6dcf0ddd226f50024cff1bfc74f4bd2de139eefef7f2406337d7efc9bb675926",
+        "source" : "logic://transport/state",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_transport",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "toggle_cycle",
+      "evidence_files" : [
+        "evidence/operation-transport.toggle_cycle.json",
+        "evidence/operation-transport.toggle_cycle-response.json",
+        "evidence/operation-transport.toggle_cycle-readback.json"
+      ],
+      "id" : "in-process/transport.toggle_cycle",
+      "operation_id" : "transport.toggle_cycle",
+      "operation_request_id" : "217",
+      "readback" : {
+        "request_id" : "operation-readback-218",
+        "sha256" : "667df2c179b9452a3707c65e431ceb8b43819d9c6945a62f181549cc9332feb7",
+        "source" : "logic://transport/state",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_transport",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "toggle_metronome",
+      "evidence_files" : [
+        "evidence/operation-transport.toggle_metronome.json",
+        "evidence/operation-transport.toggle_metronome-response.json",
+        "evidence/operation-transport.toggle_metronome-readback.json"
+      ],
+      "id" : "in-process/transport.toggle_metronome",
+      "operation_id" : "transport.toggle_metronome",
+      "operation_request_id" : "219",
+      "readback" : {
+        "request_id" : "operation-readback-220",
+        "sha256" : "9d7569de5a11fee58f06ae55a5228e5463b99bbef3d11218dd9799f8a6c9f58a",
+        "source" : "logic://transport/state",
+        "verified" : true
+      },
+      "reason" : "operation-specific protocol evidence failed",
+      "status" : "failed",
+      "tool" : "logic_transport",
+      "trace_id" : "",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "availability_observation" : {
+        "active_bundle_id" : "com.apple.logic10",
+        "active_variant" : "desktop",
+        "logic_ui_locale" : "ko-KR",
+        "variants" : [
+          {
+            "bundle_id" : "com.apple.logic10",
+            "installed" : true,
+            "running" : true,
+            "variant" : "desktop"
+          },
+          {
+            "bundle_id" : "com.apple.mobilelogic",
+            "installed" : false,
+            "running" : false,
+            "variant" : "creator"
+          }
+        ]
+      },
+      "availability_reason" : "different_logic_ui_locale",
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "en-US",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "stdio_jsonrpc_drive",
+      "deferral" : {
+        "code" : "operation_unavailable",
+        "detail" : "required axis covered by a governed per-axis waiver"
+      },
+      "evidence_files" : [
+        "evidence/axis-desktop-en-US-full-cold-empty.json",
+        "evidence/axis-desktop-en-US-full-cold-empty-health.json"
+      ],
+      "id" : "desktop/en-US/full/cold/empty",
+      "operation_id" : "qualification.desktop/en-US/full/cold/empty",
+      "readback" : {
+        "request_id" : "axis-health-desktop/en-US/full/cold/empty",
+        "sha256" : "f877e650da357dcdaa787e109c4fb7497005a07ade650d56ca7771cd4d6fa152",
+        "source" : "logic://system/health",
+        "verified" : false
+      },
+      "reason" : "required axis covered by a governed per-axis waiver",
+      "status" : "waived",
+      "tool" : "qualification",
+      "trace_id" : "lpmcp_9E5A1EB3-6BD5-46D0-A5FD-0D6D8729A6C4",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "availability_observation" : {
+        "active_bundle_id" : "com.apple.logic10",
+        "active_variant" : "desktop",
+        "logic_ui_locale" : "ko-KR",
+        "variants" : [
+          {
+            "bundle_id" : "com.apple.logic10",
+            "installed" : true,
+            "running" : true,
+            "variant" : "desktop"
+          },
+          {
+            "bundle_id" : "com.apple.mobilelogic",
+            "installed" : false,
+            "running" : false,
+            "variant" : "creator"
+          }
+        ]
+      },
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "desktop"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "stdio_jsonrpc_drive",
+      "evidence_files" : [
+        "evidence/axis-desktop-ko-KR-full-cold-empty.json",
+        "evidence/axis-desktop-ko-KR-full-cold-empty-health.json"
+      ],
+      "id" : "desktop/ko-KR/full/cold/empty",
+      "operation_id" : "qualification.desktop/ko-KR/full/cold/empty",
+      "readback" : {
+        "request_id" : "axis-health-desktop/ko-KR/full/cold/empty",
+        "sha256" : "c4035a2177b23d2389600cd672ce3274a2b21cc252ffd47eff76bbee3ca5b121",
+        "source" : "logic://system/health",
+        "verified" : false
+      },
+      "reason" : "one or more operation-specific protocol checks failed",
+      "status" : "failed",
+      "tool" : "qualification",
+      "trace_id" : "lpmcp_9E5A1EB3-6BD5-46D0-A5FD-0D6D8729A6C4",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "availability_observation" : {
+        "active_bundle_id" : "com.apple.logic10",
+        "active_variant" : "desktop",
+        "logic_ui_locale" : "ko-KR",
+        "variants" : [
+          {
+            "bundle_id" : "com.apple.logic10",
+            "installed" : true,
+            "running" : true,
+            "variant" : "desktop"
+          },
+          {
+            "bundle_id" : "com.apple.mobilelogic",
+            "installed" : false,
+            "running" : false,
+            "variant" : "creator"
+          }
+        ]
+      },
+      "availability_reason" : "different_logic_variant_and_ui_locale",
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "en-US",
+        "profile" : "full",
+        "variant" : "creator"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "stdio_jsonrpc_drive",
+      "deferral" : {
+        "code" : "operation_unavailable",
+        "detail" : "required axis covered by a governed per-axis waiver"
+      },
+      "evidence_files" : [
+        "evidence/axis-creator-en-US-full-cold-empty.json",
+        "evidence/axis-creator-en-US-full-cold-empty-health.json"
+      ],
+      "id" : "creator/en-US/full/cold/empty",
+      "operation_id" : "qualification.creator/en-US/full/cold/empty",
+      "readback" : {
+        "request_id" : "axis-health-creator/en-US/full/cold/empty",
+        "sha256" : "adcb2cee0039085043d63aff0ede0180d7acaecc16f361256b4d0f994ae71acc",
+        "source" : "logic://system/health",
+        "verified" : false
+      },
+      "reason" : "required axis covered by a governed per-axis waiver",
+      "status" : "waived",
+      "tool" : "qualification",
+      "trace_id" : "lpmcp_9E5A1EB3-6BD5-46D0-A5FD-0D6D8729A6C4",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    },
+    {
+      "availability_observation" : {
+        "active_bundle_id" : "com.apple.logic10",
+        "active_variant" : "desktop",
+        "logic_ui_locale" : "ko-KR",
+        "variants" : [
+          {
+            "bundle_id" : "com.apple.logic10",
+            "installed" : true,
+            "running" : true,
+            "variant" : "desktop"
+          },
+          {
+            "bundle_id" : "com.apple.mobilelogic",
+            "installed" : false,
+            "running" : false,
+            "variant" : "creator"
+          }
+        ]
+      },
+      "availability_reason" : "different_logic_variant",
+      "axis" : {
+        "cache" : "cold",
+        "fixture" : "empty",
+        "locale" : "ko-KR",
+        "profile" : "full",
+        "variant" : "creator"
+      },
+      "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+      "command" : "stdio_jsonrpc_drive",
+      "deferral" : {
+        "code" : "operation_unavailable",
+        "detail" : "required axis covered by a governed per-axis waiver"
+      },
+      "evidence_files" : [
+        "evidence/axis-creator-ko-KR-full-cold-empty.json",
+        "evidence/axis-creator-ko-KR-full-cold-empty-health.json"
+      ],
+      "id" : "creator/ko-KR/full/cold/empty",
+      "operation_id" : "qualification.creator/ko-KR/full/cold/empty",
+      "readback" : {
+        "request_id" : "axis-health-creator/ko-KR/full/cold/empty",
+        "sha256" : "6d043fe13c7e9a8f523cfc57ba05365fe695a21734e1e896fc1c38d54796c788",
+        "source" : "logic://system/health",
+        "verified" : false
+      },
+      "reason" : "required axis covered by a governed per-axis waiver",
+      "status" : "waived",
+      "tool" : "qualification",
+      "trace_id" : "lpmcp_9E5A1EB3-6BD5-46D0-A5FD-0D6D8729A6C4",
+      "verification_kind" : "typed_deferral",
+      "verified" : false
+    }
+  ],
+  "schema" : "qualification-case-manifest/v1"
+}

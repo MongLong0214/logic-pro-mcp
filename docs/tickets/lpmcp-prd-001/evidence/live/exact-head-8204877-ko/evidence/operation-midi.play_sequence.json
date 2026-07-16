@@ -1,0 +1,49 @@
+{
+  "axis" : {
+    "cache" : "cold",
+    "fixture" : "empty",
+    "locale" : "ko-KR",
+    "profile" : "full",
+    "variant" : "desktop"
+  },
+  "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+  "case_id" : "in-process/midi.play_sequence",
+  "catalog_count_match" : true,
+  "catalog_read_stable" : true,
+  "command" : "play_sequence",
+  "deferral" : {
+    "code" : "live_mutation_not_run",
+    "detail" : "deferred to ADR-001-c: live mutation requires an operation-specific fixture and independent readback"
+  },
+  "handler_bound" : true,
+  "handshake_ok" : true,
+  "health_ok" : true,
+  "health_read_stable" : false,
+  "negative_failclosed" : true,
+  "negative_state" : "C",
+  "negative_write_attempted" : false,
+  "observed_locale" : "ko-KR",
+  "observed_variant" : "desktop",
+  "operation_error" : "invalid_params",
+  "operation_id" : "midi.play_sequence",
+  "operation_is_error" : true,
+  "operation_request_id" : "53",
+  "operation_response_sha256" : "8bb824bb100f2ce32902d663465a0cdc185059c84697751e773223da6064304c",
+  "operation_state" : "C",
+  "operation_write_attempted" : false,
+  "readback" : {
+    "request_id" : "operation-readback-54",
+    "sha256" : "b3945a0012d5fc421578b8908ffe30bdb291ce075ba283569a8d40d974b9d7b4",
+    "source" : "logic://midi/ports",
+    "verified" : true
+  },
+  "registry_spec_found" : true,
+  "schema" : "qualification-case-evidence/v3",
+  "status" : "waived",
+  "tool" : "logic_midi",
+  "trace_completed" : false,
+  "trace_ok" : true,
+  "trace_started" : false,
+  "verification_kind" : "typed_deferral",
+  "verified" : false
+}

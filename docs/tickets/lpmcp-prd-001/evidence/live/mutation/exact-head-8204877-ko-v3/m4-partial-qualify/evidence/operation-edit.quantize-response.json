@@ -1,0 +1,1 @@
+{"command":"quantize","is_error":true,"operation_id":"edit.quantize","payload":"{\"state\":\"C\",\"error\":\"qualification_partial_state\",\"fault_injection\":\"partial_state\",\"success\":false,\"write_attempted\":false}","request_id":"27","tool":"logic_edit"}

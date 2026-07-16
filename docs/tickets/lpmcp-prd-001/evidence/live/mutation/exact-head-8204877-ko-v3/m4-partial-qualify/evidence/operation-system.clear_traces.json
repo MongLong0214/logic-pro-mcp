@@ -1,0 +1,48 @@
+{
+  "axis" : {
+    "cache" : "cold",
+    "fixture" : "empty",
+    "locale" : "ko-KR",
+    "profile" : "full",
+    "variant" : "desktop"
+  },
+  "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+  "case_id" : "in-process/system.clear_traces",
+  "catalog_count_match" : true,
+  "catalog_read_stable" : true,
+  "command" : "clear_traces",
+  "deferral" : {
+    "code" : "operation_unavailable",
+    "detail" : "read-only operation did not return a successful typed response on this host"
+  },
+  "handler_bound" : true,
+  "handshake_ok" : true,
+  "health_ok" : true,
+  "health_read_stable" : false,
+  "negative_failclosed" : true,
+  "negative_state" : "C",
+  "negative_write_attempted" : false,
+  "observed_locale" : "ko-KR",
+  "observed_variant" : "desktop",
+  "operation_error" : "invalid_params",
+  "operation_id" : "system.clear_traces",
+  "operation_is_error" : true,
+  "operation_request_id" : "135",
+  "operation_response_sha256" : "289e3330530800ac5fa751c9e7e2ce1c924f836e7f17d4b7d44540891bca7efe",
+  "operation_state" : "C",
+  "readback" : {
+    "request_id" : "operation-readback-136",
+    "sha256" : "b85ed5c5091f62b007f091ebc97686262cf08fdea1f572d7d8a685eddaa7303a",
+    "source" : "logic://system/operations",
+    "verified" : false
+  },
+  "registry_spec_found" : true,
+  "schema" : "qualification-case-evidence/v3",
+  "status" : "waived",
+  "tool" : "logic_system",
+  "trace_completed" : false,
+  "trace_ok" : true,
+  "trace_started" : false,
+  "verification_kind" : "typed_deferral",
+  "verified" : false
+}

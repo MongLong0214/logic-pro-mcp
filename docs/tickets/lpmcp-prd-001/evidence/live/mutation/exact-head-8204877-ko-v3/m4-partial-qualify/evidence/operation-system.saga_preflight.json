@@ -1,0 +1,46 @@
+{
+  "axis" : {
+    "cache" : "cold",
+    "fixture" : "empty",
+    "locale" : "ko-KR",
+    "profile" : "full",
+    "variant" : "desktop"
+  },
+  "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+  "case_id" : "in-process/system.saga_preflight",
+  "catalog_count_match" : true,
+  "catalog_read_stable" : true,
+  "command" : "saga_preflight",
+  "deferral" : {
+    "code" : "semantic_validator_unavailable",
+    "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+  },
+  "handler_bound" : true,
+  "handshake_ok" : true,
+  "health_ok" : true,
+  "health_read_stable" : false,
+  "negative_failclosed" : true,
+  "negative_state" : "C",
+  "negative_write_attempted" : false,
+  "observed_locale" : "ko-KR",
+  "observed_variant" : "desktop",
+  "operation_id" : "system.saga_preflight",
+  "operation_is_error" : false,
+  "operation_request_id" : "154",
+  "operation_response_sha256" : "2c28b2488ccb20a78e880d942ce98ddf7f69395541362e9029ca341e135e56f0",
+  "readback" : {
+    "request_id" : "operation-readback-155",
+    "sha256" : "4481723f9ffcd80f71fbe5fecb28fb6a19c75aab230a36bc61b176d16c22c14d",
+    "source" : "logic://system/health",
+    "verified" : false
+  },
+  "registry_spec_found" : true,
+  "schema" : "qualification-case-evidence/v3",
+  "status" : "waived",
+  "tool" : "logic_system",
+  "trace_completed" : false,
+  "trace_ok" : true,
+  "trace_started" : false,
+  "verification_kind" : "typed_deferral",
+  "verified" : false
+}

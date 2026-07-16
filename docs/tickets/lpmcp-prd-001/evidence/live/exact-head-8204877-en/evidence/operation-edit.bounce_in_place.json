@@ -1,0 +1,49 @@
+{
+  "axis" : {
+    "cache" : "cold",
+    "fixture" : "empty",
+    "locale" : "en-US",
+    "profile" : "full",
+    "variant" : "desktop"
+  },
+  "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+  "case_id" : "in-process/edit.bounce_in_place",
+  "catalog_count_match" : true,
+  "catalog_read_stable" : true,
+  "command" : "bounce_in_place",
+  "deferral" : {
+    "code" : "live_mutation_not_run",
+    "detail" : "deferred to ADR-001-c: live mutation requires an operation-specific fixture and independent readback"
+  },
+  "handler_bound" : true,
+  "handshake_ok" : true,
+  "health_ok" : true,
+  "health_read_stable" : true,
+  "negative_failclosed" : true,
+  "negative_state" : "C",
+  "negative_write_attempted" : false,
+  "observed_locale" : "en-US",
+  "observed_variant" : "desktop",
+  "operation_error" : "invalid_params",
+  "operation_id" : "edit.bounce_in_place",
+  "operation_is_error" : true,
+  "operation_request_id" : "11",
+  "operation_response_sha256" : "bd38316ba586849d07d53d22c73ea1a8b765b8a0b4050edd5393f5bd3a666f64",
+  "operation_state" : "C",
+  "operation_write_attempted" : false,
+  "readback" : {
+    "request_id" : "operation-readback-12",
+    "sha256" : "c4dc7defab4039747e5e402eb88b26981f411d494c88909308f89cfc140302b2",
+    "source" : "logic://tracks",
+    "verified" : true
+  },
+  "registry_spec_found" : true,
+  "schema" : "qualification-case-evidence/v3",
+  "status" : "waived",
+  "tool" : "logic_edit",
+  "trace_completed" : false,
+  "trace_ok" : true,
+  "trace_started" : false,
+  "verification_kind" : "typed_deferral",
+  "verified" : false
+}

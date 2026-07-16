@@ -1,0 +1,21 @@
+{
+  "promotable" : false,
+  "rejections" : [
+    {
+      "name" : "managed-fixture-matrix",
+      "reason" : "missingArtifact"
+    },
+    {
+      "name" : "mutation-restore-compensation",
+      "reason" : "missingArtifact"
+    },
+    {
+      "name" : "release-qualification-attestation",
+      "reason" : "missingArtifact"
+    },
+    {
+      "name" : "trusted-provenance-verify",
+      "reason" : "missingArtifact"
+    }
+  ]
+}

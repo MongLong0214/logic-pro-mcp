@@ -1,0 +1,46 @@
+{
+  "axis" : {
+    "cache" : "cold",
+    "fixture" : "empty",
+    "locale" : "ko-KR",
+    "profile" : "full",
+    "variant" : "desktop"
+  },
+  "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+  "case_id" : "in-process/project.get_regions",
+  "catalog_count_match" : true,
+  "catalog_read_stable" : true,
+  "command" : "get_regions",
+  "deferral" : {
+    "code" : "semantic_validator_unavailable",
+    "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+  },
+  "handler_bound" : true,
+  "handshake_ok" : true,
+  "health_ok" : true,
+  "health_read_stable" : false,
+  "negative_failclosed" : true,
+  "negative_state" : "C",
+  "negative_write_attempted" : false,
+  "observed_locale" : "ko-KR",
+  "observed_variant" : "desktop",
+  "operation_id" : "project.get_regions",
+  "operation_is_error" : false,
+  "operation_request_id" : "119",
+  "operation_response_sha256" : "9f9fd37d568cff0429a8518060c9860519127522df77e66e278e3fedf405a4b1",
+  "readback" : {
+    "request_id" : "operation-readback-120",
+    "sha256" : "01ed1828680c1093a6d65790319ed11d56a678a98ac5fd0b9cfc4bb6e2f416a1",
+    "source" : "logic://tracks",
+    "verified" : false
+  },
+  "registry_spec_found" : true,
+  "schema" : "qualification-case-evidence/v3",
+  "status" : "waived",
+  "tool" : "logic_project",
+  "trace_completed" : false,
+  "trace_ok" : true,
+  "trace_started" : false,
+  "verification_kind" : "typed_deferral",
+  "verified" : false
+}

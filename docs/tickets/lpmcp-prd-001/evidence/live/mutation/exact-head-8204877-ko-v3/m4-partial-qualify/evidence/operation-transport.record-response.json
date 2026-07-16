@@ -1,0 +1,1 @@
+{"command":"record","is_error":true,"operation_id":"transport.record","payload":"{\"state\":\"C\",\"error\":\"qualification_partial_state\",\"fault_injection\":\"partial_state\",\"success\":false,\"write_attempted\":false}","request_id":"203","tool":"logic_transport"}

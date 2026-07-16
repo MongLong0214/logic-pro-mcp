@@ -1,0 +1,13 @@
+{
+  "promotable" : false,
+  "rejections" : [
+    {
+      "caseID" : "desktop/en-US/full/cold/empty",
+      "reason" : "waiverForPassingCase"
+    },
+    {
+      "key" : "desktop/ko-KR/full/cold/empty",
+      "reason" : "requiredCombinationNotQualified"
+    }
+  ]
+}

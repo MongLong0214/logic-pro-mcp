@@ -1,0 +1,49 @@
+{
+  "axis" : {
+    "cache" : "cold",
+    "fixture" : "empty",
+    "locale" : "ko-KR",
+    "profile" : "full",
+    "variant" : "desktop"
+  },
+  "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+  "case_id" : "in-process/edit.split",
+  "catalog_count_match" : true,
+  "catalog_read_stable" : true,
+  "command" : "split",
+  "deferral" : {
+    "code" : "live_mutation_not_run",
+    "detail" : "deferred to ADR-001-c: live mutation requires an operation-specific fixture and independent readback"
+  },
+  "handler_bound" : true,
+  "handshake_ok" : true,
+  "health_ok" : true,
+  "health_read_stable" : false,
+  "negative_failclosed" : true,
+  "negative_state" : "C",
+  "negative_write_attempted" : false,
+  "observed_locale" : "ko-KR",
+  "observed_variant" : "desktop",
+  "operation_error" : "invalid_params",
+  "operation_id" : "edit.split",
+  "operation_is_error" : true,
+  "operation_request_id" : "33",
+  "operation_response_sha256" : "07c57e20d186d799b36e443d1827b59bb19695bdce1704f52b9dfd12fa836d02",
+  "operation_state" : "C",
+  "operation_write_attempted" : false,
+  "readback" : {
+    "request_id" : "operation-readback-34",
+    "sha256" : "e2173490e339b38138a57cbd922d2e7c8e614e3b100e00dcbab08cb060622682",
+    "source" : "logic://tracks",
+    "verified" : true
+  },
+  "registry_spec_found" : true,
+  "schema" : "qualification-case-evidence/v3",
+  "status" : "waived",
+  "tool" : "logic_edit",
+  "trace_completed" : false,
+  "trace_ok" : true,
+  "trace_started" : false,
+  "verification_kind" : "typed_deferral",
+  "verified" : false
+}

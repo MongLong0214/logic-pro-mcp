@@ -1,0 +1,1 @@
+{"command":"bounce","is_error":true,"operation_id":"project.bounce","payload":"{\"state\":\"C\",\"error\":\"qualification_partial_state\",\"fault_injection\":\"partial_state\",\"success\":false,\"write_attempted\":false}","request_id":"105","tool":"logic_project"}

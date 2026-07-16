@@ -1,0 +1,46 @@
+{
+  "axis" : {
+    "cache" : "cold",
+    "fixture" : "empty",
+    "locale" : "en-US",
+    "profile" : "full",
+    "variant" : "desktop"
+  },
+  "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+  "case_id" : "in-process/system.list_recent_traces",
+  "catalog_count_match" : true,
+  "catalog_read_stable" : true,
+  "command" : "list_recent_traces",
+  "deferral" : {
+    "code" : "semantic_validator_unavailable",
+    "detail" : "protocol transport succeeded without an operation-specific semantic validator"
+  },
+  "handler_bound" : true,
+  "handshake_ok" : true,
+  "health_ok" : true,
+  "health_read_stable" : true,
+  "negative_failclosed" : true,
+  "negative_state" : "C",
+  "negative_write_attempted" : false,
+  "observed_locale" : "en-US",
+  "observed_variant" : "desktop",
+  "operation_id" : "system.list_recent_traces",
+  "operation_is_error" : false,
+  "operation_request_id" : "145",
+  "operation_response_sha256" : "7f26c2012d048c759f976bc679fdba4a0498e2e1ff644f5fefef0e4c68bd26f6",
+  "readback" : {
+    "request_id" : "operation-readback-146",
+    "sha256" : "6a32a3a257bab66a596cf8c63484dc709a6001c5010f4dac259898d5710cb28d",
+    "source" : "logic://system/operations",
+    "verified" : false
+  },
+  "registry_spec_found" : true,
+  "schema" : "qualification-case-evidence/v3",
+  "status" : "waived",
+  "tool" : "logic_system",
+  "trace_completed" : false,
+  "trace_ok" : true,
+  "trace_started" : false,
+  "verification_kind" : "typed_deferral",
+  "verified" : false
+}

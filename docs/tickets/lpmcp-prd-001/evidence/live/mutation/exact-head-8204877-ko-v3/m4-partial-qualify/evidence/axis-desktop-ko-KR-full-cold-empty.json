@@ -1,0 +1,58 @@
+{
+  "availability_observation" : {
+    "active_bundle_id" : "com.apple.logic10",
+    "active_variant" : "desktop",
+    "logic_ui_locale" : "ko-KR",
+    "variants" : [
+      {
+        "bundle_id" : "com.apple.logic10",
+        "installed" : true,
+        "running" : true,
+        "variant" : "desktop"
+      },
+      {
+        "bundle_id" : "com.apple.mobilelogic",
+        "installed" : false,
+        "running" : false,
+        "variant" : "creator"
+      }
+    ]
+  },
+  "axis" : {
+    "cache" : "cold",
+    "fixture" : "empty",
+    "locale" : "ko-KR",
+    "profile" : "full",
+    "variant" : "desktop"
+  },
+  "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+  "case_id" : "desktop/ko-KR/full/cold/empty",
+  "catalog_count_match" : true,
+  "catalog_read_stable" : true,
+  "command" : "stdio_jsonrpc_drive",
+  "handler_bound" : true,
+  "handshake_ok" : true,
+  "health_ok" : true,
+  "health_read_stable" : false,
+  "negative_failclosed" : true,
+  "negative_state" : "C",
+  "negative_write_attempted" : false,
+  "observed_locale" : "ko-KR",
+  "observed_variant" : "desktop",
+  "operation_id" : "qualification.desktop/ko-KR/full/cold/empty",
+  "readback" : {
+    "request_id" : "axis-health-desktop/ko-KR/full/cold/empty",
+    "sha256" : "c4035a2177b23d2389600cd672ce3274a2b21cc252ffd47eff76bbee3ca5b121",
+    "source" : "logic://system/health",
+    "verified" : false
+  },
+  "registry_spec_found" : true,
+  "schema" : "qualification-case-evidence/v3",
+  "status" : "failed",
+  "tool" : "qualification",
+  "trace_completed" : true,
+  "trace_ok" : true,
+  "trace_started" : true,
+  "verification_kind" : "typed_deferral",
+  "verified" : false
+}

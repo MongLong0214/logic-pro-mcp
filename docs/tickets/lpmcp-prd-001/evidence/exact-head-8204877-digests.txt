@@ -1,0 +1,3 @@
+44f236bf54abd250233eda54f55bea4bec82900c2e5db9e25b7e796a7a469129  docs/tickets/lpmcp-prd-001/evidence/exact-head-full-suite-8204877-sealed.log
+42552ad9bc8e992042ff83349433c28f156c7affb3839a9f5aacaf9233fca112  docs/tickets/lpmcp-prd-001/evidence/exact-head-release-8204877-sealed.log
+8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6  LogicProMCP

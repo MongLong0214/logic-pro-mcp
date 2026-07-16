@@ -1,0 +1,1 @@
+{"command":"get_regions","is_error":false,"operation_id":"project.get_regions","payload":"{\"returned_count\":0,\"regions\":[],\"complete\":false,\"scope\":\"visible_arrange_area\",\"reason\":\"logic_ax_viewport_only\",\"_debug\":{\"layoutItems\":0,\"nonRegion\":0}}","request_id":"119","tool":"logic_project"}

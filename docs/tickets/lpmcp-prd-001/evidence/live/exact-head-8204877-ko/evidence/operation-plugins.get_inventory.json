@@ -1,0 +1,48 @@
+{
+  "axis" : {
+    "cache" : "cold",
+    "fixture" : "empty",
+    "locale" : "ko-KR",
+    "profile" : "full",
+    "variant" : "desktop"
+  },
+  "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+  "case_id" : "in-process/plugins.get_inventory",
+  "catalog_count_match" : true,
+  "catalog_read_stable" : true,
+  "command" : "get_inventory",
+  "deferral" : {
+    "code" : "operation_unavailable",
+    "detail" : "read-only operation did not return a successful typed response on this host"
+  },
+  "handler_bound" : true,
+  "handshake_ok" : true,
+  "health_ok" : true,
+  "health_read_stable" : false,
+  "negative_failclosed" : true,
+  "negative_state" : "C",
+  "negative_write_attempted" : false,
+  "observed_locale" : "ko-KR",
+  "observed_variant" : "desktop",
+  "operation_error" : "invalid_params",
+  "operation_id" : "plugins.get_inventory",
+  "operation_is_error" : true,
+  "operation_request_id" : "97",
+  "operation_response_sha256" : "7ddff776d2d696727adc078f13b4cb411b8a15d31a29c10600591ba84c5ba931",
+  "operation_state" : "C",
+  "readback" : {
+    "request_id" : "operation-readback-98",
+    "sha256" : "7569463dfa5ed4531244c47f76c4de9d542341f4d6d76ca09d1cc7e3e2e07f8a",
+    "source" : "logic://mixer",
+    "verified" : false
+  },
+  "registry_spec_found" : true,
+  "schema" : "qualification-case-evidence/v3",
+  "status" : "waived",
+  "tool" : "logic_plugins",
+  "trace_completed" : false,
+  "trace_ok" : true,
+  "trace_started" : false,
+  "verification_kind" : "typed_deferral",
+  "verified" : false
+}

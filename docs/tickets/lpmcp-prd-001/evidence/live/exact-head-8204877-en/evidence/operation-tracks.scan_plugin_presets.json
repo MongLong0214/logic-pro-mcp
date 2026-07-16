@@ -1,0 +1,49 @@
+{
+  "axis" : {
+    "cache" : "cold",
+    "fixture" : "empty",
+    "locale" : "en-US",
+    "profile" : "full",
+    "variant" : "desktop"
+  },
+  "binary_sha256" : "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+  "case_id" : "in-process/tracks.scan_plugin_presets",
+  "catalog_count_match" : true,
+  "catalog_read_stable" : true,
+  "command" : "scan_plugin_presets",
+  "deferral" : {
+    "code" : "operation_unavailable",
+    "detail" : "read-only operation did not return a successful typed response on this host"
+  },
+  "handler_bound" : true,
+  "handshake_ok" : true,
+  "health_ok" : true,
+  "health_read_stable" : true,
+  "negative_failclosed" : true,
+  "negative_state" : "C",
+  "negative_write_attempted" : false,
+  "observed_locale" : "en-US",
+  "observed_variant" : "desktop",
+  "operation_error" : "unsupported_state",
+  "operation_id" : "tracks.scan_plugin_presets",
+  "operation_is_error" : true,
+  "operation_request_id" : "185",
+  "operation_response_sha256" : "23c4fde2f41eb324e7fb948557c36032112cbf998852a1b7ea3e03966940176b",
+  "operation_state" : "C",
+  "operation_write_attempted" : false,
+  "readback" : {
+    "request_id" : "operation-readback-186",
+    "sha256" : "728a9114d926c24654730a572c2073edeae44a35117064533d28caa360b07d2d",
+    "source" : "logic://library/inventory",
+    "verified" : false
+  },
+  "registry_spec_found" : true,
+  "schema" : "qualification-case-evidence/v3",
+  "status" : "waived",
+  "tool" : "logic_tracks",
+  "trace_completed" : false,
+  "trace_ok" : true,
+  "trace_started" : false,
+  "verification_kind" : "typed_deferral",
+  "verified" : false
+}

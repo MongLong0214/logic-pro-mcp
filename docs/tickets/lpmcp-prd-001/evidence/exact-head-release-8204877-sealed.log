@@ -1,0 +1,13 @@
+=== EXACT_HEAD_RELEASE_IDENTITY_START ===
+HEAD=8204877c2d66d11598ac5e7292d231fa42c8a8b3
+TIME_UTC=2026-07-16T11:40:10Z
+BINARY_PATH=/Users/isaac/projects/logic-pro-mcp-adr001-remediation/LogicProMCP
+BINARY_SHA256=8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6
+LogicProMCP: Mach-O universal binary with 2 architectures: [x86_64:Mach-O 64-bit executable x86_64] [arm64]
+LogicProMCP (for architecture x86_64):	Mach-O 64-bit executable x86_64
+LogicProMCP (for architecture arm64):	Mach-O 64-bit executable arm64
+Architectures in the fat file: LogicProMCP are: x86_64 arm64 
+PRIOR_RELEASE_LOG=exact-head-release-8204877.log
+PRIOR_RELEASE_LOG_SHA256=219c3f42d4917b1d1d5a857b5c1dff0e1b2cfd90b6500e6c8e995fccabc2fd2b
+NOTE=Binary sealed at path ./LogicProMCP; universal Mach-O re-measured; prior release log is build transcript (lacks HEAD stamp).
+=== EXACT_HEAD_RELEASE_IDENTITY_END ===

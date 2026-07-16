@@ -1,0 +1,28 @@
+{
+  "fault_injection": "partial_state",
+  "response": {
+    "control": "volume",
+    "detent_raw_step": 10,
+    "nudge_steps": 8,
+    "observed": 0.48214285714285715,
+    "observed_after": 0.48214285714285715,
+    "observed_before": 0.7578947368421053,
+    "observed_raw": 93,
+    "operation": "mixer.set_volume",
+    "quantization_note": "Logic exposes this fader to AX in ~10-raw-unit detents; observed is the nearest representable level to requested.",
+    "requested": 0.5,
+    "state": "A",
+    "success": true,
+    "target_identity": {
+      "control": "volume",
+      "track_index": 0
+    },
+    "target_raw": 98,
+    "track": 0,
+    "verified": true,
+    "verify_source": "ax_slider",
+    "write_method": "ax_increment_decrement"
+  },
+  "binary_sha256": "8c3a525a89a6bbaaff09e362ea35aae8391243d9eff1221c1161aa58257262d6",
+  "head": "8204877c2d66d11598ac5e7292d231fa42c8a8b3"
+}

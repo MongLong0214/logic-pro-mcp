@@ -1,0 +1,7 @@
+live/keys/
+**/ephemeral-qualify-keys.env
+t1-m4-red-green.log
+t1-red.log
+debug-*.log
+t1-full-suite-ORPHAN-partial-build.log
+t1-full-suite-STALL-*.log
