@@ -325,6 +325,21 @@ actor LogicProServer {
             readPan: { track in
                 guard let pan = AXLogicProElements.findPanKnob(trackIndex: track) else { return nil }
                 return AXValueExtractors.extractCenteredSliderValue(pan)
+            },
+            readAutomationMode: { track in
+                guard let header = AXLogicProElements.findTrackHeader(at: track) else { return nil }
+                return AXValueExtractors.extractTrackAutomationModeIfReadable(
+                    from: header,
+                    runtime: .production
+                )
+            },
+            readSelectedTrack: {
+                let selected = AXLogicProElements.allTrackHeaders().enumerated().compactMap { index, header in
+                    AXValueExtractors.extractSelectedState(header, runtime: .production) == true
+                        ? index
+                        : nil
+                }
+                return selected.count == 1 ? selected[0] : nil
             }
         )
         self.mcuChannel = MCUChannel(transport: mcuTransport, cache: cache, axReadback: mcuAXReadback)

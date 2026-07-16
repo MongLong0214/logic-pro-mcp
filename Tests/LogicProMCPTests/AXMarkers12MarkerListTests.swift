@@ -24,9 +24,11 @@ private func makeMarkerListTree(
 
     builder.setAttribute(arrangeWindow, kAXRoleAttribute as String, kAXWindowRole as String)
     builder.setAttribute(arrangeWindow, kAXTitleAttribute as String, "TestProject - 트랙")
+    builder.setAttribute(arrangeWindow, kAXDocumentAttribute as String, "/TestProject.logicx")
 
     builder.setAttribute(markerListWindow, kAXRoleAttribute as String, kAXWindowRole as String)
     builder.setAttribute(markerListWindow, kAXTitleAttribute as String, "TestProject - 마커 목록")
+    builder.setAttribute(markerListWindow, kAXDocumentAttribute as String, "/TestProject.logicx")
 
     // Table inside marker list window
     let table = builder.element(8000)
@@ -199,14 +201,42 @@ func findMarkerListWindow_englishLocale_matches() async {
     let app = builder.element(7300)
     let arrange = builder.element(7301)
     let listWin = builder.element(7302)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
     builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, listWin])
     builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
     builder.setAttribute(arrange, kAXTitleAttribute as String, "TestProject - Tracks")
+    builder.setAttribute(arrange, kAXDocumentAttribute as String, "/TestProject.logicx")
     builder.setAttribute(listWin, kAXRoleAttribute as String, kAXWindowRole as String)
     builder.setAttribute(listWin, kAXTitleAttribute as String, "TestProject - Marker List")
+    builder.setAttribute(listWin, kAXDocumentAttribute as String, "/TestProject.logicx")
     let runtime = builder.makeLogicRuntime(appElement: app)
     let win = AXLogicProElements.findMarkerListWindow(runtime: runtime)
     #expect(win == listWin)
+}
+
+@Test
+func findMarkerListWindow_scopesToActiveProject() async {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(7_320)
+    let activeArrange = builder.element(7_321)
+    let foreignList = builder.element(7_322)
+    let activeList = builder.element(7_323)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, activeArrange)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [foreignList, activeArrange, activeList])
+    builder.setAttribute(activeArrange, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(activeArrange, kAXTitleAttribute as String, "ActiveProject - Tracks")
+    builder.setAttribute(activeArrange, kAXDocumentAttribute as String, "/ActiveProject.logicx")
+    builder.setAttribute(foreignList, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(foreignList, kAXTitleAttribute as String, "OtherProject - Marker List")
+    builder.setAttribute(foreignList, kAXDocumentAttribute as String, "/OtherProject.logicx")
+    builder.setAttribute(activeList, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(activeList, kAXTitleAttribute as String, "ActiveProject - Marker List")
+    builder.setAttribute(activeList, kAXDocumentAttribute as String, "/ActiveProject.logicx")
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    let window = AXLogicProElements.findMarkerListWindow(runtime: runtime)
+
+    #expect(window == activeList)
 }
 
 @Test
@@ -265,10 +295,14 @@ func enumerateMarkers_malformedRow_skipsRowKeepsValid() async {
     let app = builder.element(7600)
     let arrange = builder.element(7601)
     let listWin = builder.element(7602)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
     builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, listWin])
     builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(arrange, kAXTitleAttribute as String, "TestProject - Tracks")
+    builder.setAttribute(arrange, kAXDocumentAttribute as String, "/TestProject.logicx")
     builder.setAttribute(listWin, kAXRoleAttribute as String, kAXWindowRole as String)
     builder.setAttribute(listWin, kAXTitleAttribute as String, "TestProject - 마커 목록")
+    builder.setAttribute(listWin, kAXDocumentAttribute as String, "/TestProject.logicx")
 
     let table = builder.element(7610)
     builder.setAttribute(table, kAXRoleAttribute as String, kAXTableRole as String)

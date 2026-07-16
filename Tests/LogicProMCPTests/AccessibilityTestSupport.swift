@@ -41,15 +41,22 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
 
     func makeAXRuntime(
         appElement: AXUIElement? = nil,
+        attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
-        performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?
+        performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
+        executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
+            await AppleScriptChannel.executeAppleScript($0)
+        }
     ) -> AXHelpers.Runtime {
         AXHelpers.Runtime(
             axApp: { [self] _ in
                 appElement ?? element(0)
             },
             attributeValue: { [self] element, attribute in
-                bridge(attributes[key(for: element)]?[attribute])
+                if let handled = attributeValueHandler?(element, attribute) {
+                    return handled
+                }
+                return bridge(attributes[key(for: element)]?[attribute])
             },
             setAttributeValue: { [self] element, attribute, value in
                 if let setAttributeHandler {
@@ -87,16 +94,22 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
     func makeLogicRuntime(
         pid: pid_t? = 4242,
         appElement: AXUIElement? = nil,
+        attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
-        performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?
+        performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
+        executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
+            await AppleScriptChannel.executeAppleScript($0)
+        }
     ) -> AXLogicProElements.Runtime {
         AXLogicProElements.Runtime(
             logicProPID: { pid },
             ax: makeAXRuntime(
                 appElement: appElement,
+                attributeValueHandler: attributeValueHandler,
                 setAttributeHandler: setAttributeHandler,
                 performActionHandler: performActionHandler
-            )
+            ),
+            executeAppleScript: executeAppleScript
         )
     }
 

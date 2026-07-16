@@ -3,6 +3,66 @@ import Foundation
 
 
 extension AXLogicProElements {
+    struct MarkerListBinding {
+        let window: AXUIElement
+        let projectDocument: String
+    }
+
+    static func markerListBinding(runtime: Runtime = .production) -> MarkerListBinding? {
+        guard let app = appRoot(runtime: runtime),
+              let mainWindow: AXUIElement = AXHelpers.getAttribute(
+                  app,
+                  kAXMainWindowAttribute,
+                  runtime: runtime.ax
+              ),
+        let projectDocument: String = AXHelpers.getAttribute(
+            mainWindow,
+            kAXDocumentAttribute,
+            runtime: runtime.ax
+        ),
+        !projectDocument.isEmpty else { return nil }
+
+        let matches = titleScopedMarkerListWindows(runtime: runtime).filter { window in
+            guard let document: String = AXHelpers.getAttribute(
+                      window,
+                      kAXDocumentAttribute,
+                      runtime: runtime.ax
+                  ) else { return false }
+            return document == projectDocument
+        }
+        guard matches.count == 1 else { return nil }
+        return MarkerListBinding(window: matches[0], projectDocument: projectDocument)
+    }
+
+    static func hasUnverifiedMarkerListWindow(runtime: Runtime = .production) -> Bool {
+        !titleScopedMarkerListWindows(runtime: runtime).isEmpty
+            && markerListBinding(runtime: runtime) == nil
+    }
+
+    private static func titleScopedMarkerListWindows(
+        runtime: Runtime
+    ) -> [AXUIElement] {
+        guard let app = appRoot(runtime: runtime) else { return [] }
+        let windows: [AXUIElement] = AXHelpers.getAttribute(
+            app, kAXWindowsAttribute, runtime: runtime.ax
+        ) ?? []
+        guard let mainWindow: AXUIElement = AXHelpers.getAttribute(
+            app,
+            kAXMainWindowAttribute,
+            runtime: runtime.ax
+        ),
+        let mainTitle = AXHelpers.getTitle(mainWindow, runtime: runtime.ax),
+        let activeProject = markerProjectName(from: mainTitle) else { return [] }
+        return windows.filter { window in
+            guard let title = AXHelpers.getTitle(window, runtime: runtime.ax),
+                  let suffix = AXLocalePolicy.markerListWindowSuffixes.first(where: {
+                      title.hasSuffix($0)
+                  }) else { return false }
+            return title.dropLast(suffix.count)
+                .trimmingCharacters(in: .whitespacesAndNewlines) == activeProject
+        }
+    }
+
     // MARK: - Markers
 
     /// Defensive upper bound on AX marker enumeration. Logic projects in the
@@ -108,16 +168,23 @@ extension AXLogicProElements {
     /// `"<project name> - <localized 'Marker List'>"`; the localized suffix
     /// table lives in `AXLocalePolicy.markerListWindowSuffixes` (round-1 #7).
     static func findMarkerListWindow(runtime: Runtime = .production) -> AXUIElement? {
-        guard let app = appRoot(runtime: runtime) else { return nil }
-        let windows: [AXUIElement] = AXHelpers.getAttribute(
-            app, kAXWindowsAttribute, runtime: runtime.ax
-        ) ?? []
-        return windows.first { window in
-            guard let title = AXHelpers.getTitle(window, runtime: runtime.ax) else {
-                return false
-            }
-            return AXLocalePolicy.markerListWindowSuffixes.contains { title.hasSuffix($0) }
+        markerListBinding(runtime: runtime)?.window
+    }
+
+    private static func markerProjectName(from windowTitle: String) -> String? {
+        if let suffix = AXLocalePolicy.markerListWindowSuffixes.first(where: {
+            windowTitle.hasSuffix($0)
+        }) {
+            let project = windowTitle.dropLast(suffix.count)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return project.isEmpty ? nil : project
         }
+        guard let separator = windowTitle.range(of: " - ", options: .backwards) else {
+            return nil
+        }
+        let project = windowTitle[..<separator.lowerBound]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return project.isEmpty ? nil : project
     }
 
     /// Read `MarkerState[]` from the Marker List window's `AXTable`.

@@ -10,7 +10,7 @@ struct NavigateDispatcher: OperationTraceDispatching {
 
     static let tool = Tool(
         name: "logic_navigate",
-        description: "Navigation and markers in Logic Pro. Commands: goto_bar, goto_marker, create_marker, delete_marker, rename_marker, zoom_to_fit, set_zoom, toggle_view. UNSUPPORTED: rename_marker is NOT implemented — there is no verified AX write path on Logic 12.x, so it always fails closed with State C error=not_implemented; to rename, delete_marker the target then create_marker with the new name. BREAKING since v3.3.0: delete_marker / rename_marker require explicit `index` (Int ≥ 0) — pre-v3.3.0 missing `index` defaulted to 0 and silently mutated marker 0; rename_marker now also rejects empty `name`. Params: goto_bar -> { bar: Int }; goto_marker -> { index: Int } or { name: String }; create_marker -> { name: String }; rename_marker -> { index: Int (required, ≥ 0), name: String (required, non-empty) } (not implemented: returns not_implemented); delete_marker -> { index: Int (required, ≥ 0) }; set_zoom -> { level: String } (in|out|fit); toggle_view -> { view: String } (mixer|piano_roll|score|step_editor|library|inspector|automation).",
+        description: "Navigation and markers in Logic Pro. Commands: goto_bar, goto_marker, create_marker, delete_marker, rename_marker, zoom_to_fit, set_zoom, toggle_view. BREAKING since v3.3.0: delete_marker / rename_marker require explicit `index` (Int ≥ 0) — pre-v3.3.0 missing `index` defaulted to 0 and silently mutated marker 0; rename_marker also rejects empty `name`. Params: goto_bar -> { bar: Int }; goto_marker -> { index: Int } or { name: String }; create_marker -> { name: String }; rename_marker -> { index: Int (required, ≥ 0), name: String (required, non-empty) } (independent readback required for State A); delete_marker -> { index: Int (required, ≥ 0) }; set_zoom -> { level: String } (in|out|fit); toggle_view -> { view: String } (mixer|piano_roll|score|step_editor|library|inspector|automation).",
         inputSchema: commandParamsToolSchema(commandDescription: "Navigation command to execute")
     )
 
@@ -194,13 +194,23 @@ struct NavigateDispatcher: OperationTraceDispatching {
                     extras: ["operation": "nav.rename_marker"]
                 )
             }
+            guard name.count <= 250,
+                  name.rangeOfCharacter(from: .controlCharacters) == nil else {
+                return toolInvalidParamsResult(
+                    "rename_marker 'name' must be at most 250 characters and contain no control characters",
+                    extras: ["operation": "nav.rename_marker"]
+                )
+            }
             let traceID = await startTraceIfEnabled(command: command)
             await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "nav.rename_marker",
                 params: ["index": String(index), "name": name]
             )
-            return await finalizeTrace(toolTextResult(result), traceID: traceID)
+            return await finalizeTrace(
+                toolTextResultTreatingUnverifiedAsError(result),
+                traceID: traceID
+            )
 
         case "zoom_to_fit":
             let traceID = await startTraceIfEnabled(command: command)

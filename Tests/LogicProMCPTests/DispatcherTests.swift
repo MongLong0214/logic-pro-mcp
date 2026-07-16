@@ -3471,43 +3471,29 @@ private actor SelectiveFailChannel: Channel {
     #expect(ops.isEmpty, "Empty rename must not reach the router")
 }
 
-// Issue #143 — end-to-end through the REAL AccessibilityChannel: a valid
-// rename_marker request (index + non-empty name) must fail closed with a
-// typed State C `not_implemented` envelope and a create+delete workaround
-// hint, NOT the previous `channels_exhausted` aggregate. `nav.rename_marker`
-// short-circuits inside the channel switch (never touches the AX tree), so a
-// minimal trusted/Logic-running runtime reaches the not-implemented branch.
-@Test func testNavigateDispatcherRenameMarkerReturnsNotImplementedEndToEnd() async {
+@Test func testNavigateDispatcherRenameMarkerRejectsUnsafeName() async {
     let router = ChannelRouter()
-    // CI runs with no Logic Pro process, so the real appRoot resolver returns
-    // nil and `healthCheck` reports the channel unavailable → the router skips
-    // it and the end-to-end result is `channels_exhausted`, not the typed
-    // `not_implemented` this test asserts. Inject a fake PID so healthCheck's
-    // appRoot smoke test passes deterministically; `nav.rename_marker`
-    // short-circuits to State C before any live AX call, so no real Logic is
-    // needed for the routing assertion.
-    await router.register(AccessibilityChannel(runtime: .axBacked(
-        isTrusted: { true },
-        isLogicProRunning: { true },
-        logicRuntime: AXLogicProElements.Runtime(logicProPID: { 4242 }, ax: .production)
-    )))
+    let ax = MockChannel(id: .accessibility)
+    await router.register(ax)
 
-    let result = await NavigateDispatcher.handle(
+    let tooLong = await NavigateDispatcher.handle(
         command: "rename_marker",
-        params: ["index": .int(2), "name": .string("Big Chorus")],
+        params: ["index": .int(2), "name": .string(String(repeating: "x", count: 251))],
+        router: router,
+        cache: StateCache()
+    )
+    let controlCharacter = await NavigateDispatcher.handle(
+        command: "rename_marker",
+        params: ["index": .int(2), "name": .string("Line 1\nLine 2")],
         router: router,
         cache: StateCache()
     )
 
-    #expect(result.isError!)
-    let text = dispatcherText(result)
-    let obj = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
-    #expect(!((obj["success"] as? Bool)!))
-    #expect(obj["error"] as? String == "not_implemented")
-    #expect((obj["error"] as? String) != "channels_exhausted")
-    let hint = obj["hint"] as? String ?? ""
-    #expect(hint.contains("delete_marker") && hint.contains("create_marker"),
-            "expected create+delete workaround hint, got: \(hint)")
+    #expect(tooLong.isError!)
+    #expect(controlCharacter.isError!)
+    #expect(dispatcherText(tooLong).contains("invalid_params"))
+    #expect(dispatcherText(controlCharacter).contains("invalid_params"))
+    #expect(await ax.executedOps.isEmpty)
 }
 
 @Test func testNavigateDispatcherToggleViewAndErrors() async {
@@ -3591,6 +3577,7 @@ private actor SelectiveFailChannel: Channel {
     #expect(description.contains("scan_library"))
     #expect(description.contains("resolve_path"))
     #expect(description.contains("scan_plugin_presets"))
+    #expect(!description.contains("MCU write, verified by AX track-header readback"))
     _ = tool.inputSchema
 }
 
@@ -3643,6 +3630,8 @@ private actor SelectiveFailChannel: Channel {
     #expect(tool.name == "logic_navigate")
     #expect(description.contains("toggle_view"))
     #expect(description.contains("set_zoom"))
+    #expect(!description.contains("AX"))
+    #expect(!description.localizedCaseInsensitiveContains("accessibility"))
     _ = tool.inputSchema
 
     let router = ChannelRouter()

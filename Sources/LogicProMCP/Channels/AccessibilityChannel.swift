@@ -104,6 +104,7 @@ actor AccessibilityChannel: Channel {
         let markers: @Sendable () -> ChannelResult
         let openMarkerList: @Sendable () async -> ChannelResult
         let createMarker: @Sendable ([String: String]) async -> ChannelResult
+        let renameMarker: @Sendable ([String: String]) async -> ChannelResult
         let importMIDIFile: @Sendable (String) async -> ChannelResult
         let confirmNewTrackDialog: @Sendable () -> Void
         let canPostEvents: @Sendable () -> Bool
@@ -137,6 +138,7 @@ actor AccessibilityChannel: Channel {
             markers: @escaping @Sendable () -> ChannelResult = { .success("[]") },
             openMarkerList: @escaping @Sendable () async -> ChannelResult = { .error("openMarkerList not wired") },
             createMarker: @escaping @Sendable ([String: String]) async -> ChannelResult = { _ in .error("createMarker not wired") },
+            renameMarker: @escaping @Sendable ([String: String]) async -> ChannelResult = { _ in .error("renameMarker not wired") },
             importMIDIFile: @escaping @Sendable (String) async -> ChannelResult = { _ in .error("importMIDIFile not wired") },
             confirmNewTrackDialog: @escaping @Sendable () -> Void = {
                 AccessibilityChannel.sendReturnKey()
@@ -168,6 +170,7 @@ actor AccessibilityChannel: Channel {
             self.markers = markers
             self.openMarkerList = openMarkerList
             self.createMarker = createMarker
+            self.renameMarker = renameMarker
             self.importMIDIFile = importMIDIFile
             self.confirmNewTrackDialog = confirmNewTrackDialog
             self.canPostEvents = canPostEvents
@@ -238,6 +241,12 @@ actor AccessibilityChannel: Channel {
                 openMarkerList: { await AccessibilityChannel.defaultOpenMarkerList(runtime: logicRuntime) },
                 createMarker: {
                     await AccessibilityChannel.defaultCreateMarker(
+                        params: $0,
+                        runtime: logicRuntime
+                    )
+                },
+                renameMarker: {
+                    await AccessibilityChannel.defaultRenameMarker(
                         params: $0,
                         runtime: logicRuntime
                     )
@@ -590,19 +599,19 @@ actor AccessibilityChannel: Channel {
         case "nav.create_marker":
             return await runtime.createMarker(params)
         case "nav.rename_marker":
-            // Issue #143 — marker renaming has no verified AX write path on
-            // Logic 12.x (the Marker List table cells are not settable via
-            // AX), so this surface is genuinely unbuilt. Return an explicit
-            // State C `not_implemented` envelope instead of a free-form string:
-            // a free-form `.error` falls through the router's single-channel
-            // chain and is re-wrapped as `channels_exhausted`, which conflates
-            // "feature not built" with "all channels failed". `not_implemented`
-            // is in `terminalErrorCodes`, so the router surfaces it verbatim,
-            // and the hint points callers at the create+delete workaround.
-            return .error(HonestContract.encodeStateC(
-                error: .notImplemented,
-                hint: "Marker renaming is not implemented via AX in Logic Pro 12.x. Workaround: nav.delete_marker the target then nav.create_marker with the new name."
-            ))
+            guard let rawIndex = params["index"], let index = Int(rawIndex), index >= 0 else {
+                return .error(HonestContract.encodeStateC(
+                    error: .invalidParams,
+                    hint: "nav.rename_marker requires 'index' as an integer >= 0"
+                ))
+            }
+            guard let name = params["name"], !name.isEmpty else {
+                return .error(HonestContract.encodeStateC(
+                    error: .invalidParams,
+                    hint: "nav.rename_marker requires a non-empty 'name'"
+                ))
+            }
+            return await runtime.renameMarker(["index": String(index), "name": name])
 
         // MARK: - Project
         case "project.get_info":

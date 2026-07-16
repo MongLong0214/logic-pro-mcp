@@ -2,11 +2,23 @@ import ApplicationServices
 import Foundation
 
 extension AccessibilityChannel {
+    enum MarkerRenameWriteResult: Sendable, Equatable {
+        case notAttempted(HonestContract.FailureError)
+        case attempted
+
+        var writeAttempted: Bool { self == .attempted }
+
+        var failureError: HonestContract.FailureError? {
+            guard case .notAttempted(let error) = self else { return nil }
+            return error
+        }
+    }
+
     static func renameSelectedMarker(
         _ name: String,
         in window: AXUIElement,
         runtime: AXLogicProElements.Runtime
-    ) async -> Bool {
+    ) async -> MarkerRenameWriteResult {
         let madeMain = AXHelpers.setAttribute(
             window,
             kAXMainAttribute,
@@ -14,11 +26,11 @@ extension AccessibilityChannel {
             runtime: runtime.ax
         )
         let raised = AXHelpers.performAction(window, kAXRaiseAction, runtime: runtime.ax)
-        guard madeMain || raised else { return false }
+        guard madeMain || raised else { return .notAttempted(.axWriteFailed) }
         usleep(100_000)
 
         guard let showControl = markerTextAreaToggle(in: window, runtime: runtime.ax) else {
-            return false
+            return .notAttempted(.axWriteFailed)
         }
         let showValue: NSNumber? = AXHelpers.getAttribute(
             showControl,
@@ -27,14 +39,14 @@ extension AccessibilityChannel {
         )
         if showValue?.boolValue != true {
             guard AXHelpers.performAction(showControl, kAXPressAction, runtime: runtime.ax) else {
-                return false
+                return .notAttempted(.axWriteFailed)
             }
             usleep(100_000)
         }
 
         guard let editControl = markerEditControl(in: window, runtime: runtime.ax),
               AXHelpers.performAction(editControl, kAXPressAction, runtime: runtime.ax) else {
-            return false
+            return .notAttempted(.axWriteFailed)
         }
         usleep(100_000)
 
@@ -51,7 +63,7 @@ extension AccessibilityChannel {
                 kCFBooleanTrue,
                 runtime: runtime.ax
               ) else {
-            return false
+            return .notAttempted(.axWriteFailed)
         }
         usleep(50_000)
         let focused: NSNumber? = AXHelpers.getAttribute(
@@ -59,19 +71,36 @@ extension AccessibilityChannel {
             kAXFocusedAttribute,
             runtime: runtime.ax
         )
-        guard focused?.boolValue == true else { return false }
+        guard focused?.boolValue == true else { return .notAttempted(.axWriteFailed) }
 
+        if AXHelpers.setAttribute(
+            editor,
+            kAXValueAttribute,
+            name as CFString,
+            runtime: runtime.ax
+        ) {
+            _ = AXHelpers.performAction(editControl, kAXPressAction, runtime: runtime.ax)
+            usleep(200_000)
+            return .attempted
+        }
+
+        guard let windowTitle = AXHelpers.getTitle(window, runtime: runtime.ax) else {
+            return .notAttempted(.axWriteFailed)
+        }
+        guard markerWindows(named: windowTitle, runtime: runtime).count == 1 else {
+            return .notAttempted(.axWriteFailed)
+        }
         let escapedName = AppleScriptSafety.escapeForScript(name)
+        let escapedWindowTitle = AppleScriptSafety.escapeForScript(windowTitle)
         let target = LogicProTarget.appleScriptTarget()
         let script = """
         tell application "System Events"
             tell \(target.systemEventsProcessTarget)
+                set markerWindow to first window whose name is "\(escapedWindowTitle)"
                 try
-                    set markerWindow to first window whose name contains "Marker List"
                     set markerGroup to first group of markerWindow whose description is "Marker"
                     set editButton to first button of markerGroup whose description is "Edit"
                 on error
-                    set markerWindow to first window whose name contains "마커 목록"
                     set markerGroup to first group of markerWindow whose description is "마커"
                     set editButton to first button of markerGroup whose description is "편집"
                 end try
@@ -85,15 +114,27 @@ extension AccessibilityChannel {
         end tell
         return "renamed"
         """
-        let renameResult = await AppleScriptChannel.executeAppleScript(script)
-        guard renameResult.isSuccess else { return false }
+        let result = await runtime.executeAppleScript(script)
+        if !result.isSuccess,
+           HonestContract.stateCErrorCode(result.message)
+            == HonestContract.FailureError.systemEventsAutomationDenied.rawValue {
+            return .notAttempted(.systemEventsAutomationDenied)
+        }
         usleep(200_000)
+        return .attempted
+    }
 
-        let markers = AXLogicProElements.enumerateMarkersFromListWindow(
-            window,
+    private static func markerWindows(
+        named title: String,
+        runtime: AXLogicProElements.Runtime
+    ) -> [AXUIElement] {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return [] }
+        let windows: [AXUIElement] = AXHelpers.getAttribute(
+            app,
+            kAXWindowsAttribute,
             runtime: runtime.ax
-        )
-        return markers.contains { $0.name == name }
+        ) ?? []
+        return windows.filter { AXHelpers.getTitle($0, runtime: runtime.ax) == title }
     }
 
     private static func markerTextAreaToggle(

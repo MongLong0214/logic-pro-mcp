@@ -43,12 +43,11 @@ struct OperationRegistryTests {
     ]
 
     private static let unverifiedNavigateCommands: Set<String> = [
-        "delete_marker", "rename_marker", "toggle_view",
+        "delete_marker", "toggle_view",
     ]
 
     private static let navigateAvailabilityOverrides: [String: AvailabilityPolicy] = [
         "delete_marker": .requiresKeyBinding,
-        "rename_marker": .unsupported,
     ]
 
     private static let smallToolCount = 16
@@ -313,13 +312,12 @@ struct OperationRegistryTests {
         }
     }
 
-    @Test("navigate rename marker is honestly marked unsupported")
-    func navigateRenameMarkerUnsupported() throws {
+    @Test("navigate rename marker requires verified AX readback")
+    func navigateRenameMarkerVerified() throws {
         let spec = try #require(OperationRegistry.spec(tool: "logic_navigate", command: "rename_marker"))
-        #expect(spec.availability == .unsupported)
-        #expect(spec.verification == .none)
+        #expect(spec.availability == .defaultInstall)
+        #expect(spec.verification == .readbackRequired)
         #expect(spec.confirmation == .none)
-        #expect(HonestContract.terminalErrorCodes.contains("not_implemented"))
     }
 
     @Test("navigate decisions are registry-backed")
@@ -363,7 +361,7 @@ struct OperationRegistryTests {
         ("logic_system", "system.saga_preflight", "saga_preflight", .readOnly, .medium, .none),
         ("logic_system", "system.saga_execute", "saga_execute", .mutating, .long, .readbackRequired),
         ("logic_system", "system.saga_status", "saga_status", .readOnly, .short, .none),
-        ("logic_system", "system.saga_cancel", "saga_cancel", .mutating, .short, .none),
+        ("logic_system", "system.saga_cancel", "saga_cancel", .mutating, .short, .readbackRequired),
         ("logic_plugins", "plugins.get_inventory", "get_inventory", .readOnly, .short, .none),
         ("logic_plugins", "plugins.set_param_verified", "set_param_verified", .mutating, .medium, .readbackRequired),
         ("logic_plugins", "plugins.insert_verified", "insert_verified", .mutating, .medium, .readbackRequired),
@@ -829,7 +827,7 @@ struct OperationRegistryTests {
         ("tracks.arm", "arm", .mutating, .short, .readbackRequired),
         ("tracks.arm_only", "arm_only", .mutating, .short, .readbackRequired),
         ("tracks.record_sequence", "record_sequence", .mutating, .long, .readbackRequired),
-        ("tracks.set_automation", "set_automation", .mutating, .short, .none),
+        ("tracks.set_automation", "set_automation", .mutating, .short, .readbackRequired),
         ("tracks.set_instrument", "set_instrument", .mutating, .medium, .readbackRequired),
         ("tracks.list_library", "list_library", .readOnly, .long, .none),
         ("tracks.scan_library", "scan_library", .readOnly, .long, .none),

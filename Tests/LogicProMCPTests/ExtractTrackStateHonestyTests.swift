@@ -96,6 +96,10 @@ import Testing
     #expect(track.volume == 0.0)
     #expect(track.pan == 0.0)
     #expect(track.automationMode == .off)
+    #expect(AXValueExtractors.extractTrackAutomationModeIfReadable(
+        from: header,
+        runtime: runtime
+    ) == nil)
 }
 
 /// The automation mode is read from the track-header automation control's
@@ -122,6 +126,84 @@ import Testing
     #expect(mode(forDescription: "Automation: Off") == .off)
     // Korean automation control ("오토메이션" context + "읽기" = Read).
     #expect(mode(forDescription: "오토메이션 읽기") == .read)
+
+    let explicitOffBuilder = FakeAXRuntimeBuilder()
+    let explicitOffHeader = explicitOffBuilder.element(10)
+    let explicitOff = explicitOffBuilder.element(11)
+    explicitOffBuilder.setChildren(explicitOffHeader, [explicitOff])
+    explicitOffBuilder.setAttribute(
+        explicitOff,
+        kAXRoleAttribute as String,
+        kAXGroupRole as String
+    )
+    explicitOffBuilder.setAttribute(
+        explicitOff,
+        kAXDescriptionAttribute as String,
+        "Automation: Off"
+    )
+    #expect(AXValueExtractors.extractTrackAutomationModeIfReadable(
+        from: explicitOffHeader,
+        runtime: explicitOffBuilder.makeAXRuntime()
+    ) == .off)
+}
+
+@Test func testAutomationVerificationIgnoresTrackNameSpoofing() {
+    let builder = FakeAXRuntimeBuilder()
+    let header = builder.element(1)
+    let name = builder.element(2)
+    let automationGroup = builder.element(3)
+    builder.setChildren(header, [name, automationGroup])
+    builder.setAttribute(header, kAXTitleAttribute as String, "Automation Read")
+    builder.setAttribute(name, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    builder.setAttribute(name, kAXValueAttribute as String, "Automation Read")
+    builder.setAttribute(automationGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(
+        automationGroup,
+        kAXDescriptionAttribute as String,
+        "Automation: Write"
+    )
+
+    #expect(AXValueExtractors.extractTrackAutomationModeIfReadable(
+        from: header,
+        runtime: builder.makeAXRuntime()
+    ) == .write)
+}
+
+@Test func testAutomationVerificationRejectsUnrelatedControlSpoofing() {
+    let builder = FakeAXRuntimeBuilder()
+    let header = builder.element(1)
+    let unrelatedButton = builder.element(2)
+    builder.setChildren(header, [unrelatedButton])
+    builder.setAttribute(unrelatedButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(
+        unrelatedButton,
+        kAXTitleAttribute as String,
+        "Automation Read"
+    )
+
+    #expect(AXValueExtractors.extractTrackAutomationModeIfReadable(
+        from: header,
+        runtime: builder.makeAXRuntime()
+    ) == nil)
+}
+
+@Test func testAutomationVerificationRejectsConflictingControlMetadata() {
+    let builder = FakeAXRuntimeBuilder()
+    let header = builder.element(1)
+    let automationGroup = builder.element(2)
+    builder.setChildren(header, [automationGroup])
+    builder.setAttribute(automationGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(
+        automationGroup,
+        kAXDescriptionAttribute as String,
+        "Automation: Write"
+    )
+    builder.setAttribute(automationGroup, kAXValueAttribute as String, "Read")
+
+    #expect(AXValueExtractors.extractTrackAutomationModeIfReadable(
+        from: header,
+        runtime: builder.makeAXRuntime()
+    ) == nil)
 }
 
 /// The automation read is GATED by the "automation"/"오토메이션" context token:
