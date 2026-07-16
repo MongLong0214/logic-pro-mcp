@@ -823,8 +823,14 @@ struct SystemDispatcher: OperationTraceDispatching {
     }
 
     private static func unknownCommandResult(_ command: String) -> CallTool.Result {
-        toolTextResult(
-            "Unknown system command: \(command). Available: health, permissions, refresh_cache, export_support_bundle, list_recent_traces, get_trace, clear_traces, saga_preflight, saga_execute, saga_status, saga_cancel, help",
+        // ADR-003: the available-command list is registry-derived (registry
+        // order), so a new logic_system operation can never be missing here.
+        let available = OperationRegistry.specs
+            .filter { $0.tool == .logicSystem }
+            .map(\.command)
+            .joined(separator: ", ")
+        return toolTextResult(
+            "Unknown system command: \(command). Available: \(available)",
             isError: true
         )
     }
@@ -904,15 +910,26 @@ struct SystemDispatcher: OperationTraceDispatching {
             ]))
 
         case "clear_traces":
-            switch strictBoolParam(params, "confirmed") {
-            case .value(true):
-                break
-            case .invalid(let hint):
-                return toolInvalidParamsResult("clear_traces \(hint)")
-            case .missing, .value(false):
-                return toolInvalidParamsResult(
-                    "clear_traces requires 'confirmed:true' because it destroys in-process diagnostic evidence"
-                )
+            // ADR-003: the confirmed-gate requirement is the registry's
+            // ConfirmationPolicy (l2), not a dispatcher-local rule. If the
+            // registry entry ever went missing the gate stays required —
+            // over-gating is the safe drift direction; the census test pins
+            // the entry so the requirement cannot silently relax.
+            let clearTracesConfirmation = OperationRegistry.spec(
+                tool: ToolID.logicSystem.rawValue,
+                command: "clear_traces"
+            )?.confirmation ?? .l2
+            if DestructivePolicy.level(of: clearTracesConfirmation) >= .l2 {
+                switch strictBoolParam(params, "confirmed") {
+                case .value(true):
+                    break
+                case .invalid(let hint):
+                    return toolInvalidParamsResult("clear_traces \(hint)")
+                case .missing, .value(false):
+                    return toolInvalidParamsResult(
+                        "clear_traces requires 'confirmed:true' because it destroys in-process diagnostic evidence"
+                    )
+                }
             }
             guard FeatureFlags.adr005OperationTrace else {
                 return toolTextResult(HonestContract.jsonString([

@@ -516,7 +516,8 @@ struct OperationCatalogTests {
             if let spec {
                 #expect(spec.allowedParams.intersection(["index", "track"]) == keys)
             }
-            #expect(Self.selectorLiveQualificationReasonByOperation[id]?.contains("AX") == true)
+            let reason = try #require(Self.selectorLiveQualificationReasonByOperation[id])
+            #expect(reason.contains("AX"))
         }
 
         for (spec, key) in probes {
@@ -869,9 +870,15 @@ struct OperationCatalogTests {
                 (row["allowedParams"] as? [String])?.contains("target_ref")
                     == (spec.target == .requiresStableTarget)
             )
+            #expect(row["capability"] as? String == spec.capability.rawValue)
+            #expect(
+                row["dirtySections"] as? [String]
+                    == spec.dirtySections.map(\.rawValue).sorted()
+            )
             #expect(row.keys.sorted() == [
-                "allowedParams", "availability", "command", "confirmation", "deadline",
-                "id", "mutability", "retry", "target", "tool", "verification",
+                "allowedParams", "availability", "capability", "command", "confirmation",
+                "deadline", "dirtySections", "id", "mutability", "retry", "target",
+                "tool", "verification",
             ])
         }
 

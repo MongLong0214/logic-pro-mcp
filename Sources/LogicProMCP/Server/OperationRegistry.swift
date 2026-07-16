@@ -193,6 +193,41 @@ struct OperationSpec: Sendable {
     let availability: AvailabilityPolicy
     let allowedParams: Set<String>
     let capability: CapabilityID
+    /// ADR-003: cache sections a successful run of this operation dirties.
+    /// Project lifecycle transitions invalidate every section (the poller's
+    /// whole world changed); everything else currently relies on the poller
+    /// and targeted post-write updates, declared as an empty set.
+    let dirtySections: Set<CacheSectionID>
+
+    init(
+        id: OperationID,
+        tool: ToolID,
+        command: String,
+        mutability: Mutability,
+        confirmation: ConfirmationPolicy,
+        target: TargetPolicy,
+        verification: VerificationPolicy,
+        retry: RetryPolicy,
+        deadline: DeadlineClass,
+        availability: AvailabilityPolicy,
+        allowedParams: Set<String>,
+        capability: CapabilityID,
+        dirtySections: Set<CacheSectionID> = []
+    ) {
+        self.id = id
+        self.tool = tool
+        self.command = command
+        self.mutability = mutability
+        self.confirmation = confirmation
+        self.target = target
+        self.verification = verification
+        self.retry = retry
+        self.deadline = deadline
+        self.availability = availability
+        self.allowedParams = allowedParams
+        self.capability = capability
+        self.dirtySections = dirtySections
+    }
 }
 
 enum OperationRegistry {
@@ -660,7 +695,8 @@ enum OperationRegistry {
             deadline: entry.5,
             availability: .defaultInstall,
             allowedParams: allowedParams(for: entry.0, commandSpecific: entry.6),
-            capability: CapabilityID(rawValue: entry.0.rawValue)
+            capability: CapabilityID(rawValue: entry.0.rawValue),
+            dirtySections: projectDirtySections(for: entry.1)
         )
     } + ([
         (.midiSendNote, "send_note", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none, ["channel", "duration_ms", "note", "port", "velocity"]),
@@ -741,6 +777,19 @@ enum OperationRegistry {
             ),
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
+    }
+
+    /// Lifecycle transitions swap the whole open-project world; the project
+    /// dispatcher's invalidate-on-success derives from this declaration.
+    /// Typed helper (not inline) to keep the large `specs` literal within the
+    /// type-checker's budget.
+    private static func projectDirtySections(for command: String) -> Set<CacheSectionID> {
+        switch command {
+        case "new", "open", "save_as", "close":
+            return Set(CacheSectionID.allCases)
+        default:
+            return []
+        }
     }
 
     static func spec(tool: String, command: String) -> OperationSpec? {

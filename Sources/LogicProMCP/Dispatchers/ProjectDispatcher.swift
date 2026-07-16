@@ -18,7 +18,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_project",
-        description: "Project lifecycle + read-only project state in Logic Pro. Commands: new, open, save, save_as, close, bounce, launch, quit, get_regions, export_plan, export_run, export_resume, audit, cleanup_plan, cleanup_apply. Params: open -> { path: String }; save_as -> { path: String }; close -> { saving?: \"yes\"|\"no\"|\"ask\" }; bounce/launch/quit -> {}; bounce requires confirmation and runs a pre-bounce project audit, returning `export_readiness_blocked` before opening the Bounce dialog if blockers such as `external_midi_regions_bounce_risk` are present; get_regions -> {} (returns { regions: [{ name, trackIndex, startBar, endBar, kind, rawHelp }], complete, scope, reason, returned_count }; Logic AX currently reports scope=visible_arrange_area and complete=false); export_plan -> { projects: [absolute .logicx], output_root: String, artifacts?: [bounce|stem|preview|variant], collision_policy?: fail_if_exists|skip_existing } dry-run only; export_run -> { ...same as export_plan, confirmed: Bool } GUARDED execution (re-plans, opens, verifies project identity by readback, bounces, verifies each artifact on disk via logic_audio, records logic_pro_mcp_export_run.v1 with HC State A/B/C; never overwrites under fail_if_exists); export_resume -> { ...same as export_run } idempotent resume (skips already-present+verified artifacts, produces the rest); audit -> read-only project/session audit JSON; cleanup_plan -> read-only serializable cleanup plan JSON; cleanup_apply -> { step_id: String, confirmed: Bool, names?: \"newA,newB\" (CSV aligned to the step's target track indices) | new_name?: String (single target) } executes ONE supported mutating cleanup-plan step (currently rename_* only) through the existing track.rename path so it inherits AX readback + Honest Contract State A/B/C. Fails closed (State C) when confirmed!=true, the step is unknown/unsupported/non-mutating, the audit shows stale/occluded inventory or a track readback gap, or rename names are missing/mismatched. Deletion steps are unsupported by construction and are always refused; others -> {}.",
+        description: "Project lifecycle + read-only project state in Logic Pro. Commands: new, open, save, save_as, close, bounce, is_running, launch, quit, get_regions, export_plan, export_run, export_resume, audit, cleanup_plan, cleanup_apply. Params: open -> { path: String }; save_as -> { path: String }; close -> { saving?: \"yes\"|\"no\"|\"ask\" }; bounce/launch/quit -> {}; bounce requires confirmation and runs a pre-bounce project audit, returning `export_readiness_blocked` before opening the Bounce dialog if blockers such as `external_midi_regions_bounce_risk` are present; get_regions -> {} (returns { regions: [{ name, trackIndex, startBar, endBar, kind, rawHelp }], complete, scope, reason, returned_count }; Logic AX currently reports scope=visible_arrange_area and complete=false); export_plan -> { projects: [absolute .logicx], output_root: String, artifacts?: [bounce|stem|preview|variant], collision_policy?: fail_if_exists|skip_existing } dry-run only; export_run -> { ...same as export_plan, confirmed: Bool } GUARDED execution (re-plans, opens, verifies project identity by readback, bounces, verifies each artifact on disk via logic_audio, records logic_pro_mcp_export_run.v1 with HC State A/B/C; never overwrites under fail_if_exists); export_resume -> { ...same as export_run } idempotent resume (skips already-present+verified artifacts, produces the rest); audit -> read-only project/session audit JSON; cleanup_plan -> read-only serializable cleanup plan JSON; cleanup_apply -> { step_id: String, confirmed: Bool, names?: \"newA,newB\" (CSV aligned to the step's target track indices) | new_name?: String (single target) } executes ONE supported mutating cleanup-plan step (currently rename_* only) through the existing track.rename path so it inherits AX readback + Honest Contract State A/B/C. Fails closed (State C) when confirmed!=true, the step is unknown/unsupported/non-mutating, the audit shows stale/occluded inventory or a track readback gap, or rename names are missing/mismatched. Deletion steps are unsupported by construction and are always refused; others -> {}.",
         commandDescription: "Project command to execute"
     )
 
@@ -213,7 +213,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             // the data was current. clearProjectState() is idempotent and
             // mutation-free on actor state — safe to call on every success
             // even if the poller would have caught up eventually.
-            await invalidateOnSuccess(result, cache: cache, targetRegistry: targetRegistry)
+            await invalidateOnSuccess(command: command, result: result, cache: cache, targetRegistry: targetRegistry)
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "open":
@@ -255,7 +255,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 params: ["path": path]
             )
             // v3.1.2 (P0-3) — same cache stale-after-lifecycle bug as `new`.
-            await invalidateOnSuccess(result, cache: cache, targetRegistry: targetRegistry)
+            await invalidateOnSuccess(command: command, result: result, cache: cache, targetRegistry: targetRegistry)
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "save":
@@ -315,7 +315,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 params: ["path": path]
             )
             if FeatureFlags.adr002TargetRef {
-                await invalidateOnSuccess(result, cache: cache, targetRegistry: targetRegistry)
+                await invalidateOnSuccess(command: command, result: result, cache: cache, targetRegistry: targetRegistry)
             }
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
@@ -354,7 +354,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             // v3.1.2 (P0-3) — closing the project leaves the cache stuffed
             // with the just-closed tracks/regions/markers. Clear so resource
             // reads honestly reflect "no project" until the next open.
-            await invalidateOnSuccess(result, cache: cache, targetRegistry: targetRegistry)
+            await invalidateOnSuccess(command: command, result: result, cache: cache, targetRegistry: targetRegistry)
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "bounce":
@@ -879,15 +879,26 @@ struct ProjectDispatcher: OperationTraceDispatching {
     }
 
     /// v3.1.2 (P0-3) — invalidate cache on successful project lifecycle
-    /// transition (`new` / `open` / `save_as` / `close`). Defensive: only fires when the
-    /// underlying channel reports success, so a failed AppleScript leaves
-    /// the cache untouched (preserves whatever truth the poller had).
+    /// transition. Defensive: only fires when the underlying channel reports
+    /// success, so a failed AppleScript leaves the cache untouched (preserves
+    /// whatever truth the poller had).
+    ///
+    /// ADR-003: WHICH commands dirty the cache comes from the registry's
+    /// `dirtySections` (currently `new` / `open` / `save_as` / `close` declare
+    /// the full section set) — a call site cannot invalidate unless the
+    /// registry entry declares impact, so no dispatcher-local list can drift.
     private static func invalidateOnSuccess(
-        _ result: ChannelResult,
+        command: String,
+        result: ChannelResult,
         cache: StateCache,
         targetRegistry: TargetRegistry?
     ) async {
-        guard result.isSuccess else { return }
+        guard result.isSuccess,
+              let spec = OperationRegistry.spec(
+                  tool: ToolID.logicProject.rawValue,
+                  command: command
+              ),
+              !spec.dirtySections.isEmpty else { return }
         await invalidateProjectState(cache: cache, targetRegistry: targetRegistry)
     }
 
