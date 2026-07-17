@@ -98,7 +98,13 @@ enum TracePrivacyClass: String, Codable, Sendable {
 
 struct TraceEvent: Sendable {
     let phase: TracePhase
+    /// Monotonic capture, kept internal for deterministic ordering.
     let timestamp: ContinuousClock.Instant
+    /// Wall-clock capture at record time. #388: the public `timestamp` field is
+    /// serialized from THIS as ISO-8601 UTC (matching the trace-clear
+    /// `cleared_at` and saga `sampled_at` receipts) — never the monotonic
+    /// `Instant`, whose debug string ("Instant(_value: …)") leaked to callers.
+    let wallClock: Date
     let attributes: [String: String]
     let privacyClasses: [String: TracePrivacyClass]
 }
@@ -177,6 +183,7 @@ actor OperationTraceStore {
         trace.events.append(TraceEvent(
             phase: phase,
             timestamp: .now,
+            wallClock: Date(),
             attributes: filtered.values,
             privacyClasses: filtered.privacyClasses
         ))

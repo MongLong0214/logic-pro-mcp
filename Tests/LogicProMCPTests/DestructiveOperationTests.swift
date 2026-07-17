@@ -47,6 +47,24 @@ private final class AppleScriptOpenHarness: @unchecked Sendable {
     #expect(response == nil) // L1 executes immediately
 }
 
+/// #390 (P2): the public (English) confirmation envelope must not leak
+/// non-English text. Every field value is ASCII-only and `message` is the
+/// ratified English sentence. RED-first (pre-fix `message` is Korean).
+@Test func testConfirmationResponseIsEnglishASCII() throws {
+    let response = try #require(DestructivePolicy.confirmationResponse(command: "quit"))
+    let object = try #require(sharedJSONObject(response))
+    #expect(
+        object["message"] as? String
+            == "This operation may change project state or cause data loss."
+    )
+    for (_, value) in object {
+        if let string = value as? String {
+            let asciiOnly = string.allSatisfy(\.isASCII)
+            #expect(asciiOnly, "non-ASCII leaked into a field value: \(string)")
+        }
+    }
+}
+
 @Test func testTransportWhitelist() {
     #expect(AppleScriptSafety.isAllowedTransportAction("play"))
     #expect(AppleScriptSafety.isAllowedTransportAction("stop"))
