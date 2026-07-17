@@ -285,8 +285,16 @@ enum QualificationSemanticReadbackValidator {
     ) -> Bool? {
         switch OperationID(rawValue: operationID) {
         case .systemHealth:
+            // Bespoke: full typed-payload equality against the independent read.
             return healthMatches(responseData, readbackData)
-        default:
+        case .some(let id):
+            // #373 Phase A: the read-only surface is covered by the data-driven
+            // oracle table. Only an operation with no oracle at all falls
+            // through to nil, which the runner honestly records as
+            // protocolSmoke rather than passing it.
+            guard let oracle = SemanticOracleTable.byOperationID[id] else { return nil }
+            return oracle.evaluate(responseData: responseData, readbackData: readbackData)
+        case .none:
             return nil
         }
     }

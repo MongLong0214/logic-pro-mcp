@@ -51,15 +51,22 @@ struct QualificationRunnerTests {
         let attestation = try await fixture.qualify()
         let operationCases = attestation.cases.filter { $0.id.hasPrefix("in-process/") }
 
+        // #373 Phase A shifted these counts. Before: only system.health had a
+        // semantic validator, so the other 20 read-only ops were honestly
+        // recorded protocolSmoke ("transport worked, nobody checked meaning").
+        // Now every read-only spec has an oracle, so a read that returns its
+        // real payload qualifies: passed == 21 (20 oracles + health's bespoke
+        // validator), protocolSmoke == 0. The 86 mutating ops are unchanged —
+        // they still defer to ADR-001-c for live mutation.
         #expect(operationCases.count == 107)
-        #expect(operationCases.filter { $0.status == .passed }.count == 1)
-        #expect(operationCases.filter { $0.status == .protocolSmoke }.count == 20)
+        #expect(operationCases.filter { $0.status == .passed }.count == 21)
+        #expect(operationCases.filter { $0.status == .protocolSmoke }.isEmpty)
         #expect(operationCases.filter { $0.status == .notQualified }.count == 86)
         #expect(operationCases.filter { $0.status == .failed }.isEmpty)
-        #expect(operationCases.filter { $0.status == .protocolSmoke }.allSatisfy {
-            $0.verificationKind == .protocolSmoke
-                && $0.deferral?.code == .semanticValidatorUnavailable
-                && $0.readback?.verified == false
+        #expect(operationCases.filter { $0.status == .passed }.allSatisfy {
+            $0.verificationKind == .semanticReadback
+                && $0.deferral == nil
+                && $0.readback?.verified == true
         })
         #expect(operationCases.filter { $0.status == .notQualified }.allSatisfy {
             $0.verificationKind == .typedDeferral
@@ -95,7 +102,12 @@ struct QualificationRunnerTests {
         #expect(result.readback?.verified == false)
     }
 
-    @Test func readOperationWithoutValidatorIsProtocolSmoke() throws {
+    /// #373 Phase A retired the protocolSmoke bucket for read-only operations.
+    /// Before, system.permissions had no validator, so ANY well-formed body was
+    /// recorded protocolSmoke — "the transport worked, nobody checked". Now it
+    /// has an oracle, and this body (invented JSON, not the prose the handler
+    /// actually emits) is a semantic mismatch, not an unchecked smoke pass.
+    @Test func readOperationWithAnOracleIsNoLongerProtocolSmoke() throws {
         let spec = try #require(OperationRegistry.specs.first { $0.id == .systemPermissions })
         let result = QualificationOperationResult(
             operationID: spec.id.rawValue,
@@ -114,9 +126,24 @@ struct QualificationRunnerTests {
             failureReason: nil
         )
 
-        #expect(result.status.rawValue == "protocol_smoke")
+        #expect(result.status == .notQualified)
+        #expect(result.status.rawValue != "protocol_smoke")
         #expect(!result.verified)
+        #expect(result.deferral?.code == .semanticMismatch)
         #expect(result.readback?.verified == false)
+    }
+
+    /// The structural consequence, pinned: with every read-only spec oracled,
+    /// no read-only operation can reach protocolSmoke. If a future read-only op
+    /// lands without an oracle the census test fails first — this one records
+    /// why that matters.
+    @Test func noReadOnlyOperationCanFallThroughToProtocolSmoke() {
+        let unoracled = OperationRegistry.specs
+            .filter { $0.mutability == .readOnly && $0.availability != .unsupported }
+            .filter { spec in
+                spec.id != .systemHealth && SemanticOracleTable.byOperationID[spec.id] == nil
+            }
+        #expect(unoracled.isEmpty)
     }
 
     @Test func readErrorIsNotLabeledSemanticMismatch() throws {
@@ -254,7 +281,13 @@ struct QualificationRunnerTests {
         #expect(try Self.resultObject(decision)["promotable"] as? Bool == true)
     }
 
-    @Test func individualGovernedProtocolSmokeWaiverSatisfiesRequiredOperation() async throws {
+    /// #373 Phase A inverted this test's premise, and the inversion is the
+    /// point. This used to waive system.permissions because it could only reach
+    /// protocolSmoke — a validator-shaped hole a waiver had to paper over. The
+    /// op now qualifies on its own semantics, so waiving it is no longer
+    /// governance, it is noise: the gate must reject a waiver for a passing
+    /// case rather than let a stale waiver linger over a healthy operation.
+    @Test func waiverForNowQualifyingReadOperationIsRejected() async throws {
         let spec = try #require(OperationRegistry.specs.first { $0.id == .systemPermissions })
         let fixture = try Fixture(specs: [spec])
         defer { fixture.remove() }
@@ -267,13 +300,16 @@ struct QualificationRunnerTests {
 
         let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
         let operationCase = try #require(attestation.cases.first { $0.id == waiver.caseID })
-        #expect(operationCase.status == .waived)
-        #expect(operationCase.verificationKind == .typedDeferral)
-        #expect(operationCase.deferral?.code == .semanticValidatorUnavailable)
+        #expect(operationCase.status == .passed)
+        #expect(operationCase.verified)
+        #expect(operationCase.verificationKind == .semanticReadback)
+        #expect(operationCase.deferral == nil)
 
         let decision = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(decision.exitCode == 0)
-        #expect(try Self.resultObject(decision)["promotable"] as? Bool == true)
+        #expect(decision.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(decision)).contains(
+            "waiverForPassingCase"
+        ))
     }
 
     @Test func forgedCoherentBundleWithoutTrustedSignatureRejectsPromotion() async throws {
@@ -1496,10 +1532,13 @@ struct QualificationRunnerTests {
         // ship axis (desktop/ko-KR) is not qualified (no waiver supplied).
         #expect(aggregateCases.filter { $0.status == .failed }.count == 1)
         #expect(aggregateCases.filter { $0.status == .notQualified }.count == 1)
-        #expect(operationCases.filter { $0.status == .passed }.count == 1)
-        #expect(operationCases.filter { $0.status == .protocolSmoke }.count == 20)
+        // #373 Phase A: the read-only surface now qualifies semantically.
+        #expect(operationCases.filter { $0.status == .passed }.count == 21)
+        #expect(operationCases.filter { $0.status == .protocolSmoke }.isEmpty)
         #expect(operationCases.filter { $0.status == .notQualified }.count == 86)
-        #expect(attestation.passed == 1)
+        // #373 Phase A: 20 oracled read-only ops + system.health's bespoke
+        // validator. The aggregate axes contribute no passes here.
+        #expect(attestation.passed == 21)
         #expect(attestation.failed == 1)
 
         for qualificationCase in operationCases {
@@ -1509,15 +1548,12 @@ struct QualificationRunnerTests {
             ))
             #expect(qualificationCase.id == "in-process/\(spec.id.rawValue)")
             #expect(OperationHandlerRegistry.handler(tool: qualificationCase.tool, command: qualificationCase.command) != nil)
-            if spec.id == .systemHealth {
+            if spec.mutability == .readOnly {
+                // #373 Phase A: health via its bespoke validator, every other
+                // read-only spec via its oracle — both are semantic readbacks.
                 #expect(qualificationCase.status == .passed)
                 #expect(qualificationCase.verified)
                 #expect(qualificationCase.verificationKind == .semanticReadback)
-            } else if spec.mutability == .readOnly {
-                #expect(qualificationCase.status == .protocolSmoke)
-                #expect(!qualificationCase.verified)
-                #expect(qualificationCase.verificationKind == .protocolSmoke)
-                #expect(qualificationCase.deferral?.code == .semanticValidatorUnavailable)
             } else {
                 #expect(qualificationCase.status == .notQualified)
                 #expect(!qualificationCase.verified)
@@ -2703,17 +2739,29 @@ struct QualificationRunnerTests {
             if !isMutation, remainingQualifiedReads != nil {
                 remainingQualifiedReads? -= 1
             }
+            // #373 Phase A: read-only ops now have real semantic oracles, so a
+            // generic {"operation":…,"state":"A"} stub no longer models a
+            // qualifying read — the oracle would (correctly) reject it. Read-only
+            // specs are driven with the realistic per-operation payloads the
+            // oracle fixtures pin, which are themselves derived from the real
+            // dispatcher shapes. systemHealth keeps its bespoke full-payload
+            // equality, so it is fed the same health body on both sides.
+            let oracleFixture = spec.mutability == .readOnly
+                ? SemanticOracleFixtures.byOperationID[spec.id]
+                : nil
             let response = spec.id == nonObjectResponseOperationID
                 ? Data("plain text response".utf8)
                 : spec.id == .systemHealth
                 ? stableHealth
-                : Data((isMutation
+                : oracleFixture.map(\.responseData)
+                ?? Data((isMutation
                     ? "{\"operation\":\"\(spec.id.rawValue)\",\"state\":\"C\",\"error\":\"invalid_params\",\"write_attempted\":false}"
                     : "{\"operation\":\"\(spec.id.rawValue)\",\"state\":\"A\",\"write_attempted\":false}"
                 ).utf8)
             let readback = spec.id == .systemHealth
                 ? stableHealth
-                : Data("{\"operation_readback\":\"\(spec.id.rawValue)\"}".utf8)
+                : oracleFixture.map(\.readbackData)
+                ?? Data("{\"operation_readback\":\"\(spec.id.rawValue)\"}".utf8)
             return (
                 spec.id.rawValue,
                 QualificationOperationResult(
