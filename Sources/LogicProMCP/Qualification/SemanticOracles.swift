@@ -16,8 +16,15 @@ import Foundation
 // mutation-tested so an oracle that cannot fail a corrupted payload fails CI.
 //
 // Presence-only oracles are FORBIDDEN: an oracle must carry at least one VALUE
-// constraint (valueEquals / numericRange / enumMember) or be an explicitly
-// reasoned `.custom` escape hatch.
+// constraint (valueEquals / numericRange / enumMember / fieldsEqual /
+// crossCheck) or be an explicitly reasoned `.custom` escape hatch.
+//
+// #373 Phase B0 — extends the model with two RELATIONAL constraints so the
+// safe-mutation surface can be expressed declaratively: `.fieldsEqual` pins the
+// `requested == observed` invariant of a verified write, and `.crossCheck` pins
+// response↔independent-readback agreement (previously only a `.custom` closure
+// could). The 50 concrete safe-mutation oracles land in Phase B1–B3; this file
+// only carries the reusable framework they build on (see `SafeMutationOracle`).
 
 /// A JSON leaf value an oracle can pin exactly.
 enum JSONPrimitive: Sendable, Equatable {
@@ -54,45 +61,82 @@ enum OracleConstraint: Sendable {
     case nonEmptyArray(key: String)
     /// Field must be present with the given JSON type.
     case typedField(key: String, type: JSONType)
+    /// Two key paths WITHIN THE SAME payload resolve to equal leaf values. The
+    /// load-bearing safe-mutation invariant: a verified write echoes what was
+    /// requested as what was observed, so `requested == observed` proves the
+    /// value that LANDED is the value that was ASKED FOR — not merely that some
+    /// value is present. Bool-vs-number safe: a requested `true` is not
+    /// satisfied by an observed `1`.
+    case fieldsEqual(keyA: String, keyB: String)
+    /// A key path in the RESPONSE equals a key path in the INDEPENDENT readback.
+    /// Makes response↔readback agreement declarative instead of a bespoke
+    /// closure. Fails closed when the readback is absent or unparseable — an
+    /// unverifiable cross-check is not a pass. Bool-vs-number safe on both sides.
+    case crossCheck(responseKey: String, readbackKey: String)
 
+    /// The primary RESPONSE-side key path — the one the generic mutator drops
+    /// and error messages cite. For the relational cases it is the response side
+    /// (`keyA` / `responseKey`); the second key is reached case-locally.
     var key: String {
         switch self {
         case .valueEquals(let key, _),
              .numericRange(let key, _, _),
              .enumMember(let key, _),
              .nonEmptyArray(let key),
-             .typedField(let key, _):
+             .typedField(let key, _),
+             .fieldsEqual(let key, _),
+             .crossCheck(let key, _):
             return key
         }
     }
 
     /// VALUE constraints pin meaning; the others only pin shape. The strength
-    /// meta-test uses this to forbid presence-only oracles.
+    /// meta-test uses this to forbid presence-only oracles. The relational cases
+    /// are value-bearing: `fieldsEqual`/`crossCheck` assert a concrete agreement
+    /// between two OBSERVED values, which is stronger than presence — so an
+    /// oracle carrying one is never a checkbox oracle.
     var isValueConstraint: Bool {
         switch self {
-        case .valueEquals, .numericRange, .enumMember:
+        case .valueEquals, .numericRange, .enumMember, .fieldsEqual, .crossCheck:
             return true
         case .nonEmptyArray, .typedField:
             return false
         }
     }
 
-    func isSatisfied(by root: Any) -> Bool {
-        guard let value = JSONPath.resolve(root, keyPath: key) else { return false }
+    /// `readback` is the parsed INDEPENDENT readback payload, read only by
+    /// `.crossCheck`; every other case ignores it. Defaulting it to nil keeps the
+    /// single-payload call sites (and the engine unit tests) unchanged.
+    func isSatisfied(by root: Any, readback: Any? = nil) -> Bool {
         switch self {
-        case .valueEquals(_, let expected):
+        case .valueEquals(let key, let expected):
+            guard let value = JSONPath.resolve(root, keyPath: key) else { return false }
             return JSONInspector.primitive(of: value) == expected
-        case .numericRange(_, let min, let max):
-            guard let number = JSONInspector.number(of: value) else { return false }
+        case .numericRange(let key, let min, let max):
+            guard let value = JSONPath.resolve(root, keyPath: key),
+                  let number = JSONInspector.number(of: value) else { return false }
             return number >= min && number <= max
-        case .enumMember(_, let allowed):
-            guard let token = JSONInspector.enumToken(of: value) else { return false }
+        case .enumMember(let key, let allowed):
+            guard let value = JSONPath.resolve(root, keyPath: key),
+                  let token = JSONInspector.enumToken(of: value) else { return false }
             return allowed.contains(token)
-        case .nonEmptyArray:
-            guard let array = value as? [Any] else { return false }
+        case .nonEmptyArray(let key):
+            guard let array = JSONPath.resolve(root, keyPath: key) as? [Any] else { return false }
             return !array.isEmpty
-        case .typedField(_, let type):
+        case .typedField(let key, let type):
+            guard let value = JSONPath.resolve(root, keyPath: key) else { return false }
             return JSONInspector.type(of: value) == type
+        case .fieldsEqual(let keyA, let keyB):
+            guard let a = JSONPath.resolve(root, keyPath: keyA),
+                  let b = JSONPath.resolve(root, keyPath: keyB) else { return false }
+            return JSONInspector.leavesEqual(a, b)
+        case .crossCheck(let responseKey, let readbackKey):
+            // Fail closed: no readback means nothing to cross-check against,
+            // which is an unverified read — never a pass.
+            guard let readback,
+                  let a = JSONPath.resolve(root, keyPath: responseKey),
+                  let b = JSONPath.resolve(readback, keyPath: readbackKey) else { return false }
+            return JSONInspector.leavesEqual(a, b)
         }
     }
 }
@@ -103,8 +147,10 @@ enum OracleStrength: String, Sendable {
     /// Mixes exact values with domain/shape constraints for the
     /// environment-dependent fields.
     case shapeAndDomain
-    /// Escape hatch: the response is not key-addressable JSON, or the check is
-    /// a response↔readback cross-check the constraint data model cannot express.
+    /// Escape hatch: the response is not key-addressable JSON (prose bodies,
+    /// bare scalars), or the check is a conditional the constraint model cannot
+    /// express. Response↔readback cross-checks are NO LONGER a reason to reach
+    /// for this — `.crossCheck` (Phase B0) expresses them declaratively.
     case custom
 }
 
@@ -156,7 +202,55 @@ struct OperationOracle: Sendable {
             return custom(responseData, readbackData)
         }
         guard let root = JSONInspector.parse(responseData) else { return false }
-        return constraints.allSatisfy { $0.isSatisfied(by: root) }
+        // A missing/unparseable readback is nil; only `.crossCheck` reads it (and
+        // it fails closed on nil). Every non-relational constraint ignores the
+        // readback, so their verdicts are byte-for-byte unchanged.
+        let readback = JSONInspector.parse(readbackData)
+        return constraints.allSatisfy { $0.isSatisfied(by: root, readback: readback) }
+    }
+}
+
+// MARK: - Safe-mutation composition
+
+/// The base every Phase-B *safe-mutation* oracle composes with.
+///
+/// A read-only oracle pins what a query returned; a mutation oracle must first
+/// prove the write was GENUINELY verified before it inspects what changed. The
+/// HonestContract tri-state makes that precise: only State A ("write + read-back
+/// matched") is a verified success. State B ("write landed, could not confirm")
+/// and State C ("write failed") are honest non-verifications and must never be
+/// laundered into a semantic pass.
+///
+/// The envelope is expressed as ordinary declarative constraints — not a bespoke
+/// closure — so each clause is mutation-tested like any other, and a mutation
+/// oracle is just `verifiedEnvelope + <its own invariant>` (typically a
+/// `.fieldsEqual(requested, observed)`). The 50 concrete oracles land in #373
+/// Phase B1–B3; this is only the reusable base they build on.
+enum SafeMutationOracle {
+    /// State A + verified + success, triple-guarded so no single dropped or
+    /// forged field can pass a State B / State C envelope off as a verified
+    /// write. `state == "A"` alone already excludes B and C; `verified == true`
+    /// and `success == true` are kept as independent guards so a handler that
+    /// mislabels its `state` cannot launder an unverified write on one typo.
+    static let verifiedEnvelope: [OracleConstraint] = [
+        .valueEquals(key: "state", expected: .string("A")),
+        .valueEquals(key: "verified", expected: .bool(true)),
+        .valueEquals(key: "success", expected: .bool(true)),
+    ]
+
+    /// Compose the verified envelope with an operation's own semantic clauses.
+    /// The envelope is always FIRST, so a mutation oracle can never assert what
+    /// changed without first proving the change was verified.
+    static func oracle(
+        _ operationID: OperationID,
+        strength: OracleStrength = .shapeAndDomain,
+        semantics: [OracleConstraint]
+    ) -> OperationOracle {
+        OperationOracle(
+            operationID,
+            strength: strength,
+            constraints: verifiedEnvelope + semantics
+        )
     }
 }
 
@@ -208,6 +302,39 @@ enum JSONInspector {
         case .string: return value as? String
         case .bool: return ((value as? NSNumber)?.boolValue ?? false) ? "true" : "false"
         default: return nil
+        }
+    }
+
+    /// Leaf/structural equality with the SAME bool-vs-number discipline as
+    /// `primitive(of:)`: a `true` never equals a `1`, because the two are
+    /// distinguished by CFBooleanGetTypeID before any numeric bridge can conflate
+    /// them. Arrays and objects compare recursively so the discipline holds at
+    /// every depth. Used by the relational constraints (`fieldsEqual` /
+    /// `crossCheck`) — the load-bearing safe-mutation checks.
+    static func leavesEqual(_ lhs: Any, _ rhs: Any) -> Bool {
+        let lhsType = type(of: lhs)
+        guard lhsType == type(of: rhs) else { return false }
+        switch lhsType {
+        case .bool:
+            return (lhs as? NSNumber)?.boolValue == (rhs as? NSNumber)?.boolValue
+        case .number:
+            return number(of: lhs) == number(of: rhs)
+        case .string:
+            return (lhs as? String) == (rhs as? String)
+        case .null:
+            return true
+        case .array:
+            guard let la = lhs as? [Any], let ra = rhs as? [Any], la.count == ra.count else {
+                return false
+            }
+            return zip(la, ra).allSatisfy { leavesEqual($0, $1) }
+        case .object:
+            guard let lo = lhs as? [String: Any], let ro = rhs as? [String: Any],
+                  lo.count == ro.count else { return false }
+            return lo.allSatisfy { key, value in
+                guard let other = ro[key] else { return false }
+                return leavesEqual(value, other)
+            }
         }
     }
 }
