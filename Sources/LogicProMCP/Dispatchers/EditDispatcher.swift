@@ -3,10 +3,7 @@ import MCP
 
 struct EditDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
-    static let handledCommands: Set<String> = [
-        "undo", "redo", "cut", "copy", "paste", "delete", "select_all", "split", "join",
-        "quantize", "bounce_in_place", "normalize", "duplicate", "toggle_step_input",
-    ]
+    static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicEdit)
 
     private enum EditRoute {
         case regular(String)
@@ -100,10 +97,7 @@ struct EditDispatcher: OperationTraceDispatching {
             )
 
         default:
-            return toolTextResult(
-                "Unknown edit command: \(command). Available: undo, redo, cut, copy, paste, delete, select_all, split, join, quantize, bounce_in_place, normalize, duplicate, toggle_step_input",
-                isError: true
-            )
+            return Self.unhandledCommandResult(command, label: "edit")
         }
     }
 

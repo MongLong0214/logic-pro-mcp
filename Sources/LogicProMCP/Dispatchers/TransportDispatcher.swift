@@ -3,11 +3,7 @@ import MCP
 
 struct TransportDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
-    static let handledCommands: Set<String> = [
-        "play", "stop", "record", "pause", "rewind", "fast_forward", "toggle_cycle",
-        "toggle_metronome", "set_tempo", "goto_position", "set_cycle_range",
-        "toggle_count_in", "toggle_autopunch",
-    ]
+    static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicTransport)
 
     static let tool = Tool(
         name: "logic_transport",
@@ -243,10 +239,7 @@ struct TransportDispatcher: OperationTraceDispatching {
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         default:
-            return toolTextResult(
-                "Unknown transport command: \(command). Available: play, stop, record, pause, rewind, fast_forward, toggle_cycle, toggle_metronome, set_tempo, goto_position, set_cycle_range, toggle_count_in, toggle_autopunch",
-                isError: true
-            )
+            return Self.unhandledCommandResult(command, label: "transport")
         }
     }
 

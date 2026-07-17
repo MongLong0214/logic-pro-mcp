@@ -3,10 +3,7 @@ import MCP
 
 struct NavigateDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
-    static let handledCommands: Set<String> = [
-        "goto_bar", "goto_marker", "create_marker", "delete_marker", "rename_marker",
-        "zoom_to_fit", "set_zoom", "toggle_view",
-    ]
+    static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicNavigate)
 
     static let tool = Tool(
         name: "logic_navigate",
@@ -310,10 +307,7 @@ struct NavigateDispatcher: OperationTraceDispatching {
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         default:
-            return toolInvalidParamsResult(
-                "Unknown navigate command: \(command). Available: goto_bar, goto_marker, create_marker, delete_marker, rename_marker, zoom_to_fit, set_zoom, toggle_view",
-                extras: ["operation": "nav.\(command)"]
-            )
+            return Self.unhandledCommandResult(command, label: "navigate")
         }
     }
 

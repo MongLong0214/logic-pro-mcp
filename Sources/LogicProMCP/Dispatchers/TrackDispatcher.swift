@@ -3,12 +3,7 @@ import MCP
 
 struct TrackDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
-    static let handledCommands: Set<String> = [
-        "select", "create_audio", "create_instrument", "create_drummer",
-        "create_external_midi", "delete", "duplicate", "rename", "mute", "solo", "arm",
-        "arm_only", "record_sequence", "set_automation", "set_instrument", "list_library",
-        "scan_library", "resolve_path", "scan_plugin_presets",
-    ]
+    static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicTracks)
     static let notExposedCommands: Set<String> = ["set_color"]
     // The legacy direct alias stays explicit but is never exposed through MCP fallback.
     static let directOnlyCommands: Set<String> = ["library"]
@@ -785,10 +780,7 @@ struct TrackDispatcher: OperationTraceDispatching {
             return toolTextResult(result)
 
         default:
-            return toolInvalidParamsResult(
-                "Unknown track command: \(command). Available: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets",
-                extras: ["operation": "track.\(command)"]
-            )
+            return Self.unhandledCommandResult(command, label: "track")
         }
     }
 

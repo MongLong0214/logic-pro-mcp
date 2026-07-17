@@ -5,11 +5,7 @@ import MCP
 
 struct SystemDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
-    static let handledCommands: Set<String> = [
-        "health", "permissions", "refresh_cache", "export_support_bundle", "help",
-        "list_recent_traces", "get_trace", "clear_traces",
-        "saga_preflight", "saga_execute", "saga_status", "saga_cancel",
-    ]
+    static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicSystem)
 
     typealias SupportBundleExporter = @Sendable (
         URL,
@@ -841,16 +837,7 @@ struct SystemDispatcher: OperationTraceDispatching {
     }
 
     private static func unknownCommandResult(_ command: String) -> CallTool.Result {
-        // ADR-003: the available-command list is registry-derived (registry
-        // order), so a new logic_system operation can never be missing here.
-        let available = OperationRegistry.specs
-            .filter { $0.tool == .logicSystem }
-            .map(\.command)
-            .joined(separator: ", ")
-        return toolTextResult(
-            "Unknown system command: \(command). Available: \(available)",
-            isError: true
-        )
+        unhandledCommandResult(command, label: "system")
     }
 
     private static func handleTraceCommand(

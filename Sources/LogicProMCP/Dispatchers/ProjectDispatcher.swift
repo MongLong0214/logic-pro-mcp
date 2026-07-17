@@ -3,11 +3,7 @@ import MCP
 
 struct ProjectDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
-    static let handledCommands: Set<String> = [
-        "new", "open", "save", "save_as", "close", "bounce", "is_running", "launch", "quit",
-        "get_regions", "export_plan", "export_run", "export_resume", "audit", "cleanup_plan",
-        "cleanup_apply",
-    ]
+    static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicProject)
 
     struct LifecycleExecution: Sendable {
         let executionError: String?
@@ -497,10 +493,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             return await finalizeTrace(result, traceID: traceID)
 
         default:
-            return toolInvalidParamsResult(
-                "Unknown project command: \(command). Available: new, open, save, save_as, close, bounce, is_running, launch, quit, get_regions, export_plan, export_run, export_resume, audit, cleanup_plan, cleanup_apply",
-                extras: ["operation": "project.\(command)"]
-            )
+            return Self.unhandledCommandResult(command, label: "project")
         }
     }
 

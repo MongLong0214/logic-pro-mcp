@@ -37,9 +37,7 @@ final class VerifiedOpGate: @unchecked Sendable {
 /// AX result.
 struct PluginsDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
-    static let handledCommands: Set<String> = [
-        "get_inventory", "set_param_verified", "insert_verified",
-    ]
+    static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicPlugins)
 
     static let tool = commandTool(
         name: "logic_plugins",
@@ -200,10 +198,7 @@ struct PluginsDispatcher: OperationTraceDispatching {
             )
 
         default:
-            return toolTextResult(
-                "Unknown plugins command: \(command). Available: get_inventory, set_param_verified, insert_verified",
-                isError: true
-            )
+            return Self.unhandledCommandResult(command, label: "plugins")
         }
     }
 
