@@ -184,6 +184,9 @@ enum HonestContract {
         /// executable dispatch census asserts it never fires for any
         /// registered operation.
         case unhandledRegisteredCommand = "unhandled_registered_command"
+        /// PRD-014: trace management requested while operation tracing is
+        /// disabled — a no-op must never surface as success.
+        case traceDisabled = "trace_disabled"
         case supportBundleExportFailed = "support_bundle_export_failed"
         case sagaInProgress = "saga_in_progress"
         case idempotencyKeyConflict = "idempotency_key_conflict"

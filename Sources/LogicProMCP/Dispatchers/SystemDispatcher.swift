@@ -937,11 +937,18 @@ struct SystemDispatcher: OperationTraceDispatching {
                 }
             }
             guard FeatureFlags.adr005OperationTrace else {
-                return toolTextResult(HonestContract.jsonString([
-                    "note": "trace_disabled",
-                    "success": true,
-                    "trace_disabled": true,
-                ]))
+                // PRD-014: a no-op clear must never claim success — tracing
+                // is disabled, nothing was cleared, and the catalog advertises
+                // these operations as experimental in this configuration.
+                return toolTextResult(
+                    HonestContract.encodeStateC(
+                        error: .traceDisabled,
+                        hint: "Operation tracing is disabled; nothing was cleared. "
+                            + "Enable LOGIC_MCP_ADR005_OPERATION_TRACE=1 to record and manage traces.",
+                        extras: ["trace_disabled": true, "write_attempted": false]
+                    ),
+                    isError: true
+                )
             }
             await OperationTraceStore.shared.clear()
             return toolTextResult(HonestContract.jsonString(["success": true]))

@@ -470,6 +470,8 @@ struct OperationTraceTests {
             #expect(sharedJSONObject(sharedToolText(unconfirmed))?["error"] as? String == "invalid_params")
             #expect(await OperationTraceStore.shared.trace(traceID) != nil)
 
+            // PRD-014: a flag-off clear is a NO-OP and must never claim
+            // success — typed State C, write_attempted:false, store intact.
             let cleared = await SystemDispatcher.handle(
                 command: "clear_traces",
                 params: ["confirmed": .bool(true)],
@@ -477,9 +479,12 @@ struct OperationTraceTests {
                 cache: cache
             )
             let clearedBody = sharedJSONObject(sharedToolText(cleared)) ?? [:]
-            #expect(cleared.isError != true)
-            #expect(clearedBody["success"] as? Bool == true)
-            #expect(clearedBody["note"] as? String == "trace_disabled")
+            #expect(cleared.isError == true)
+            #expect(clearedBody["state"] as? String == "C")
+            #expect(clearedBody["error"] as? String == "trace_disabled")
+            #expect(clearedBody["trace_disabled"] as? Bool == true)
+            #expect(clearedBody["write_attempted"] as? Bool == false)
+            #expect(clearedBody["success"] as? Bool != true)
             #expect(await OperationTraceStore.shared.trace(traceID) != nil)
         }
         await OperationTraceStore.shared.clear()

@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
+## [Unreleased]
+
+### Changed — BREAKING (honesty contract)
+
+- **Release promotion is fail-closed until real per-operation qualification evidence exists.** The 106 blanket operation waivers were removed as invalid; `PromotionGate` rejects every uncovered operation, and the release workflow verifies the exact artifact through a pinned independent verifier bound to the released commit. No release can promote until the coverage program (#373) lands evidence.
+- **Flag-off `clear_traces` no longer claims success.** With operation tracing disabled, a confirmed `clear_traces` returns a typed State C (`error: trace_disabled`, `write_attempted: false`) instead of `success: true` — a no-op never surfaces as success. Cleanup flows that called `clear_traces` unconditionally under the default configuration must treat this outcome as the expected disabled response.
+- **Trace operation availability is generated from the feature policy.** `list_recent_traces`, `get_trace`, and `clear_traces` advertise `default_install` only when tracing is enabled for the process; otherwise they advertise `experimental` in the operation catalog. Promotion requirements are unaffected (all registered operations remain required).
+- **Saga preflight rejects three more plan classes before step 1**: unavailable routes, confirmation-requiring steps (the saga wire carries no confirmation flow), and plans whose modeled duration cannot fit the saga-execute deadline budget.
+- **`saga_cancel` is a real two-phase cancellation**: State B `saga_cancellation_pending` until the unwind is journaled; terminal State A only after compensation readback verifies restoration; compensation failure surfaces as State B `saga_reconciliation_required` with the stored outcome.
+
+### Added
+
+- All 13 declared operation-trace phases now record at live seams (input validation, mutation-gate pair, route evaluation, channel bracket, target resolution, verification polls, compensation start), with saga child traces correlated to their parent via `parent_trace_id`.
+- A registered command that reaches a dispatcher without a matching switch case now produces a typed `unhandled_registered_command` State C envelope (previously prose); genuinely unknown commands are still rejected at the server layer before dispatch.
+
+---
+
 ## [3.11.0] — 2026-07-10
 
 Minor release for Doctor readiness, native UI routing fixes, and the full-surface QA bug batch after v3.10.0. The public MCP surface remains **10 tools / 18 resources / 11 templates**.

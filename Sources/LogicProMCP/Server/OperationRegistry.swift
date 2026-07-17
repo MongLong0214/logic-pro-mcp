@@ -537,7 +537,9 @@ enum OperationRegistry {
             verification: entry.4,
             retry: .neverAutomatic,
             deadline: entry.3,
-            availability: .defaultInstall,
+            availability: Self.traceOperationIDs.contains(entry.0)
+                ? traceAvailability(traceEnabled: traceEnabledAtRegistryBuild)
+                : .defaultInstall,
             allowedParams: allowedParams(for: entry.0, commandSpecific: entry.5),
             capability: CapabilityID(rawValue: entry.0.rawValue)
         )
@@ -786,6 +788,25 @@ enum OperationRegistry {
     /// is proven separately by the dispatch census test.
     static func commands(for tool: ToolID) -> Set<String> {
         Set(specs.filter { $0.tool == tool }.map(\.command))
+    }
+
+    /// PRD-014: the three trace operations are flag-gated at runtime, so
+    /// their advertised availability is GENERATED from the feature policy —
+    /// `defaultInstall` only when tracing is actually on for this process
+    /// (the flag is environment-derived and process-constant), otherwise
+    /// `experimental`. A hardcoded `defaultInstall` contradicted the catalog.
+    static let traceOperationIDs: Set<OperationID> = [
+        .systemListRecentTraces, .systemGetTrace, .systemClearTraces,
+    ]
+
+    /// The flag value the registry actually consulted when the static specs
+    /// were built (environment-derived, process-constant in production; in
+    /// tests the first registry access decides it). Exposed so the derivation
+    /// can be asserted self-consistently regardless of test ordering.
+    static let traceEnabledAtRegistryBuild = FeatureFlags.adr005OperationTrace
+
+    static func traceAvailability(traceEnabled: Bool) -> AvailabilityPolicy {
+        traceEnabled ? .defaultInstall : .experimental
     }
 
     /// Lifecycle transitions swap the whole open-project world; the project
