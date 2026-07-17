@@ -214,6 +214,17 @@ With `LOGIC_MCP_ADR005_OPERATION_TRACE=1`, `list_recent_traces` returns bounded 
 
 The bounded journal belongs only to the current server session and is cleared on session end or process restart. A completed duplicate key returns its stored outcome with `duplicate:true`; `saga_status` reads that record. `saga_cancel` returns a typed refusal for active work because the current engine has no safe cancellation seam. Ordered work with compensation does not promise all-or-nothing completion or durable recovery.
 
+The journal keeps two independently bounded tiers, so pressure costs stored evidence rather than safety:
+
+- **Replay protection (whole session).** Every `idempotency_key` begun in a session stays recorded for that whole session. A key that reached a terminal state never starts again — replay protection does not lapse, expire, or time out. There is no wall-clock TTL.
+- **Outcome bodies (most recent N).** Full stored outcomes are retained for the most recent `journal_record_capacity` sagas (default 1024). Under insertion pressure the oldest terminal body is dropped; in-flight sagas are never dropped.
+
+Retrying an older completed saga whose body was dropped returns `saga_outcome_unavailable` (State C, terminal) instead of the original body — never a re-execution. It carries `terminal_kind` (`completed` or `cancelled`), `outcome_retained:false`, `safe_to_retry:false`, and `write_attempted:false`. `terminal_kind` names only which path the saga terminated on; it is **not** a claim that the intent succeeded (a `completed` saga may have applied only partially). Reconcile by observing current state via `saga_status` or the relevant read operations — do not re-fire the same intent blindly. `saga_status` for such a key still reports its terminal `status` with `outcome_retained:false` and no `outcome`.
+
+`saga_journal_capacity_exceeded` remains distinct and unchanged in meaning: the journal cannot admit a **new** key. It is returned under either of two conditions — the session's replay-protection tier (`journal_compact_capacity`, default 65536) is full, or the outcome tier is fully occupied by in-flight sagas and therefore holds no terminal body that can be reclaimed. Both stay fail-closed: admitting a key the session cannot replay-protect, or evicting a saga still running, would be a correctness hole rather than an availability one.
+
+`saga_status` and `saga_preflight` publish `journal_full_body_count`, `journal_compact_count`, `journal_body_evictions`, `journal_compact_capacity`, and `journal_record_capacity` for operators. These are diagnostics only — none of them promises that a later retry will fit, and `journal_survives_process_restart` stays `false`.
+
 ### Not-exposed commands
 
 A few command tokens are recognised by the dispatchers but are deliberately **not part of the production MCP contract** (no deterministic / verified path exists yet). They are excluded from the workflow command census and return a single machine-classifiable State C shape — `error: "command_not_exposed"`, `not_exposed: true`, `supported: false`, plus the `operation` — so a complete-surface demo/test harness can classify them as *expected*, not a malfunction:
