@@ -157,4 +157,57 @@ struct VersionedCacheEnvelopeTests {
         }
         return try await operation()
     }
+
+    /// Flag-coupling regression (ADR-006 audit): with the versioned cache ON
+    /// and target refs OFF, a real project lifecycle transition through the
+    /// dispatcher must still advance `project_epoch` — it used to stay frozen
+    /// at 0 because the epoch bump was gated on the adr002 flag alone, making
+    /// the envelope's cross-project discriminator a constant. The pre-fix
+    /// suite could not catch this because it bumped the registry directly.
+    @Test func lifecycleInvalidationAdvancesEpochWithoutTargetRefFlag() async throws {
+        try await withVersionedCacheFlag(true) {
+            let adr002Key = "LOGIC_MCP_ADR002_TARGET_REF"
+            let previous = ProcessInfo.processInfo.environment[adr002Key]
+            unsetenv(adr002Key)
+            defer {
+                if let previous {
+                    setenv(adr002Key, previous, 1)
+                } else {
+                    unsetenv(adr002Key)
+                }
+            }
+            #expect(!FeatureFlags.adr002TargetRef)
+            #expect(FeatureFlags.adr006VersionedCache)
+
+            let router = ChannelRouter()
+            await router.register(MockChannel(id: .appleScript))
+            let cache = StateCache()
+            let registry = TargetRegistry()
+            let epochBefore = await registry.currentProjectEpoch
+
+            _ = await ProjectDispatcher.handle(
+                command: "new",
+                params: [:],
+                router: router,
+                cache: cache,
+                targetRegistry: registry
+            )
+
+            let epochAfter = await registry.currentProjectEpoch
+            #expect(epochAfter == epochBefore + 1)
+
+            // And the envelope actually publishes the advanced epoch.
+            let result = try await ResourceHandlers.read(
+                uri: "logic://project/info",
+                cache: cache,
+                router: router,
+                targetRegistry: registry,
+                fileReader: headlessFileReader
+            )
+            let envelope = try #require(JSONSerialization.jsonObject(
+                with: Data(sharedResourceText(result).utf8)
+            ) as? [String: Any])
+            #expect((envelope["project_epoch"] as? NSNumber)?.uint64Value == epochAfter)
+        }
+    }
 }
