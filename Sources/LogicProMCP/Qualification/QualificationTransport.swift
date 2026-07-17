@@ -450,6 +450,43 @@ struct QualificationTransport: Sendable {
         self.shutdownGrace = shutdownGrace
     }
 
+    /// Environment the same-artifact qualification drives the server with.
+    ///
+    /// #394: ADR-002 target_ref ships DEFAULT ON — the server reads an ABSENT
+    /// `LOGIC_MCP_ADR002_TARGET_REF` as ON (`!= "0"`). Qualification therefore
+    /// attests the SHIPPED DEFAULT by leaving the variable ABSENT (even if the
+    /// base inherited a pin), exactly what a default deployment runs — rather
+    /// than pinning the `=0` kill-switch, which diverged from the shipped
+    /// default. The session-random target/trace IDs this surfaces are
+    /// ID-normalized by `QualificationTranscriptNormalizer` before the transcript
+    /// is emitted (cross-run ID stability). The `=0` kill-switch is the operator
+    /// rollback config — it is NOT run as a secondary same-artifact qualification
+    /// drive; it is exercised only by a FeatureFlags env-contract UNIT test (via
+    /// `adr002KillSwitchEnvironment`, alongside the absent / `=0` / `=1` cases in
+    /// `FeatureFlagEnvironmentTests`).
+    ///
+    /// ADR-003 strict params and ADR-005 tracing are pinned to their shipped
+    /// default ("1" reads identically to the default-ON `!= "0"`), so
+    /// qualification and production agree on those too.
+    static func qualificationEnvironment(base: [String: String]) -> [String: String] {
+        var environment = base
+        environment.removeValue(forKey: "LOGIC_MCP_ADR002_TARGET_REF")
+        environment["LOGIC_MCP_ADR003_STRICT_PARAMS"] = "1"
+        environment["LOGIC_MCP_ADR005_OPERATION_TRACE"] = "1"
+        return environment
+    }
+
+    /// The `=0` kill-switch environment — the operator's documented ADR-002
+    /// rollback. Consumed by a FeatureFlags env-contract UNIT test, NOT by a
+    /// secondary same-artifact qualification drive, so the rollback config stays
+    /// exercised now that the PRIMARY qualification attests the shipped default
+    /// (absent = ON) instead of this config.
+    static func adr002KillSwitchEnvironment(base: [String: String]) -> [String: String] {
+        var environment = qualificationEnvironment(base: base)
+        environment["LOGIC_MCP_ADR002_TARGET_REF"] = "0"
+        return environment
+    }
+
     static func qualificationLocaleIdentifier(_ identifier: String) -> String {
         switch Locale(identifier: identifier).language.languageCode?.identifier.lowercased() {
         case "en": QualificationLocale.enUS.rawValue
@@ -1186,26 +1223,14 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
             throw QualificationTransportError.launchFailed("not executable: \(request.executableURL.path)")
         }
         try verifyExecutableIdentity()
-        var environment = request.environment
-        // PRD-007 Part 2 DIVERGENCE, deliberate and open: `adr002TargetRef` is
-        // now DEFAULT ON in production, so this `=0` no longer pins the shipped
-        // default — it pins the kill-switch path. It is left off because target
-        // refs are minted as `trk_<random UUID>` (see `TargetReference`), which
-        // would make qualification transcripts non-reproducible run-to-run.
-        // The cost is real and NOT waived: qualification currently attests to a
-        // configuration no default deployment runs. Closing it needs a
-        // ref-redaction/normalization pass over the transcript before this can
-        // honestly flip to "1". Tracked as PRD-007 follow-up, not fixed here.
-        environment["LOGIC_MCP_ADR002_TARGET_REF"] = "0"
-        environment["LOGIC_MCP_ADR003_STRICT_PARAMS"] = "1"
-        // ADR-005 #288 R2: operation tracing is now DEFAULT ON, so this "1" no
-        // longer pins a special-case configuration — it pins the SAME behavior a
-        // default deployment runs. Unlike the ADR-002 pin above, promotion
-        // REMOVES the divergence rather than introducing one: qualification and
-        // production now agree here. Left as an explicit "1" (no pin change) so
-        // the intent stays legible and a future kill-switch default flip can't
-        // silently drift qualification off the shipped behavior.
-        environment["LOGIC_MCP_ADR005_OPERATION_TRACE"] = "1"
+        // #394: qualification now attests the SHIPPED DEFAULT for ADR-002
+        // target_ref (default ON), not the `=0` kill-switch it used to pin. The
+        // session-random target/trace IDs this surfaces are ID-normalized (made
+        // cross-run stable in the ID dimension) by `QualificationTranscriptNormalizer`
+        // at transcript-emit time. See `QualificationTransport.qualificationEnvironment`.
+        let environment = QualificationTransport.qualificationEnvironment(
+            base: request.environment
+        )
         process.executableURL = request.executableURL.standardizedFileURL
         process.currentDirectoryURL = request.executableURL.deletingLastPathComponent()
         process.environment = environment
