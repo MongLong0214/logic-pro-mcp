@@ -85,6 +85,75 @@ struct SemanticOracleEngineTests {
         #expect(!OracleConstraint.typedField(key: "missing", type: .string).isSatisfied(by: object))
     }
 
+    // MARK: - relational constraints (Phase B0)
+
+    @Test func fieldsEqualHoldsWhenTwoKeyPathsAgreeAndFailsWhenTheyDiverge() {
+        let object = root(#"{"requested":-6.0,"observed":-6.0,"other":-3.0}"#)
+        #expect(OracleConstraint.fieldsEqual(keyA: "requested", keyB: "observed").isSatisfied(by: object))
+        #expect(!OracleConstraint.fieldsEqual(keyA: "requested", keyB: "other").isSatisfied(by: object))
+        // A missing side can never agree — corrupt inputs fail closed, not open.
+        #expect(!OracleConstraint.fieldsEqual(keyA: "requested", keyB: "absent").isSatisfied(by: object))
+        #expect(!OracleConstraint.fieldsEqual(keyA: "absent", keyB: "observed").isSatisfied(by: object))
+    }
+
+    /// The same bool-vs-number discipline valueEquals enforces: a requested
+    /// boolean `true` must not be satisfied by an observed numeric `1`, or a
+    /// mute/arm write's `requested == observed` invariant becomes forgeable.
+    @Test func fieldsEqualDoesNotConflateBooleanAndNumericOne() {
+        let object = root(#"{"reqBool":true,"obsOne":1,"reqTrue":true,"obsTrue":true}"#)
+        #expect(!OracleConstraint.fieldsEqual(keyA: "reqBool", keyB: "obsOne").isSatisfied(by: object))
+        #expect(OracleConstraint.fieldsEqual(keyA: "reqTrue", keyB: "obsTrue").isSatisfied(by: object))
+    }
+
+    @Test func fieldsEqualComparesStringsAndNestedStructuresPreservingTheDiscipline() {
+        let strings = root(#"{"a":"Kick 1","b":"Kick 1","c":"Kick 2"}"#)
+        #expect(OracleConstraint.fieldsEqual(keyA: "a", keyB: "b").isSatisfied(by: strings))
+        #expect(!OracleConstraint.fieldsEqual(keyA: "a", keyB: "c").isSatisfied(by: strings))
+        // Nested containers compare structurally; the bool≠1 rule holds at depth.
+        let nested = root(#"{"x":{"v":1,"on":true},"y":{"v":1,"on":true},"z":{"v":1,"on":1}}"#)
+        #expect(OracleConstraint.fieldsEqual(keyA: "x", keyB: "y").isSatisfied(by: nested))
+        #expect(!OracleConstraint.fieldsEqual(keyA: "x", keyB: "z").isSatisfied(by: nested))
+    }
+
+    @Test func crossCheckAgreesAcrossPayloadsAndFailsOnDivergenceOrMissingReadback() {
+        let response = root(#"{"value":-6.0,"name":"Bass"}"#)
+        let constraint = OracleConstraint.crossCheck(responseKey: "value", readbackKey: "observed_value")
+        #expect(constraint.isSatisfied(by: response, readback: root(#"{"observed_value":-6.0}"#)))
+        #expect(!constraint.isSatisfied(by: response, readback: root(#"{"observed_value":-3.0}"#)))
+        // Fail closed: an absent readback is not a pass.
+        #expect(!constraint.isSatisfied(by: response, readback: nil))
+        // A readback missing the cross-checked key is a divergence, not a pass.
+        #expect(!constraint.isSatisfied(by: response, readback: root(#"{"other":-6.0}"#)))
+    }
+
+    @Test func crossCheckDoesNotConflateBooleanAndNumericOneAcrossPayloads() {
+        let response = root(#"{"flag":true}"#)
+        let constraint = OracleConstraint.crossCheck(responseKey: "flag", readbackKey: "mirror")
+        #expect(!constraint.isSatisfied(by: response, readback: root(#"{"mirror":1}"#)))
+        #expect(constraint.isSatisfied(by: response, readback: root(#"{"mirror":true}"#)))
+    }
+
+    /// Through the full Data path: `evaluate` parses the readback, so an
+    /// unparseable readback resolves to nil and `.crossCheck` fails closed rather
+    /// than laundering an unverifiable read into a pass.
+    @Test func crossCheckOracleFailsClosedWhenReadbackIsUnparseable() throws {
+        let oracle = OperationOracle(
+            .transportPlay,
+            strength: .shapeAndDomain,
+            constraints: [.crossCheck(responseKey: "value", readbackKey: "value")]
+        )
+        let agreed = try #require(oracle.evaluate(
+            responseData: Data(#"{"value":1}"#.utf8),
+            readbackData: Data(#"{"value":1}"#.utf8)
+        ))
+        #expect(agreed)
+        let failedClosed: Bool = oracle.evaluate(
+            responseData: Data(#"{"value":1}"#.utf8),
+            readbackData: Data("not json".utf8)
+        ) == true
+        #expect(!failedClosed)
+    }
+
     // MARK: - key paths
 
     @Test func keyPathsResolveNestingIndexingAndTheRoot() {
@@ -217,6 +286,33 @@ struct SemanticOracleStrengthTests {
             let allExact = oracle.constraints.allSatisfy(Self.isExactValue)
             #expect(allExact, "\(oracle.operationID.rawValue) claims .value strength inexactly")
         }
+    }
+
+    /// Phase B0: the relational constraints are VALUE-bearing, so an oracle
+    /// carrying only a `fieldsEqual` or `crossCheck` (and no `valueEquals`) still
+    /// passes the anti-checkbox gate — the gate must not force a redundant
+    /// constant onto a mutation oracle whose real check is the agreement.
+    @Test func relationalConstraintsAreValueBearingAndSurviveTheStrengthGate() {
+        #expect(OracleConstraint.fieldsEqual(keyA: "a", keyB: "b").isValueConstraint)
+        #expect(OracleConstraint.crossCheck(responseKey: "a", readbackKey: "b").isValueConstraint)
+
+        let fieldsEqualOnly = OperationOracle(
+            .transportPlay,
+            strength: .shapeAndDomain,
+            constraints: [.fieldsEqual(keyA: "requested", keyB: "observed")]
+        )
+        #expect(fieldsEqualOnly.isSemanticallyLoadBearing)
+
+        let crossCheckOnly = OperationOracle(
+            .transportPlay,
+            strength: .shapeAndDomain,
+            constraints: [.crossCheck(responseKey: "value", readbackKey: "value")]
+        )
+        #expect(crossCheckOnly.isSemanticallyLoadBearing)
+
+        // Shape-only constraints remain non-value-bearing — the gate still bites.
+        #expect(!OracleConstraint.typedField(key: "a", type: .string).isValueConstraint)
+        #expect(!OracleConstraint.nonEmptyArray(key: "a").isValueConstraint)
     }
 
     private static func isExactValue(_ constraint: OracleConstraint) -> Bool {
@@ -401,6 +497,150 @@ struct SemanticOracleMutationTests {
     }
 }
 
+// MARK: - safe-mutation base (Phase B0)
+
+@Suite("#373 Phase B0 safe-mutation oracle base")
+struct SafeMutationOracleTests {
+    private func passes(_ oracle: OperationOracle, _ response: String, readback: String = "{}") -> Bool {
+        oracle.evaluate(responseData: Data(response.utf8), readbackData: Data(readback.utf8)) == true
+    }
+
+    /// A genuine State A verified write passes the base envelope; the honest
+    /// non-verifications (B, C) do not, so "I couldn't verify" can never be
+    /// laundered into a semantic pass.
+    @Test func verifiedEnvelopePassesStateAAndRejectsStateBAndC() {
+        let oracle = SafeMutationOracle.oracle(.transportPlay, semantics: [])
+        #expect(passes(oracle, #"{"success":true,"verified":true,"state":"A"}"#))
+        #expect(!passes(oracle, #"{"success":true,"verified":false,"state":"B","reason":"ax_readback_unavailable"}"#))
+        #expect(!passes(oracle, #"{"success":false,"verified":false,"state":"C","error":"invalid_params"}"#))
+    }
+
+    /// Each envelope clause is independently load-bearing: forging or dropping
+    /// any ONE must sink the verdict, so a single mislabeled field cannot pass a
+    /// State B envelope off as a verified write.
+    @Test func eachEnvelopeClauseIsIndependentlyLoadBearing() {
+        let oracle = SafeMutationOracle.oracle(.transportPlay, semantics: [])
+        // `state` forged to A while `verified` is still false (B wearing A's tag).
+        #expect(!passes(oracle, #"{"success":true,"verified":false,"state":"A"}"#))
+        // `verified` forged true while `state` is still B.
+        #expect(!passes(oracle, #"{"success":true,"verified":true,"state":"B"}"#))
+        // `success` false under an otherwise A-looking envelope.
+        #expect(!passes(oracle, #"{"success":false,"verified":true,"state":"A"}"#))
+        // A dropped field is absent → its valueEquals fails closed.
+        #expect(!passes(oracle, #"{"verified":true,"state":"A"}"#))
+    }
+
+    /// The base composes: envelope FIRST, then the op's own invariant. A verified
+    /// envelope whose requested≠observed is still not a semantic pass, and an
+    /// unverified envelope fails before the invariant is even consulted.
+    @Test func envelopeComposesWithASafeMutationInvariant() {
+        let oracle = SafeMutationOracle.oracle(.transportPlay, semantics: [
+            .fieldsEqual(keyA: "requested", keyB: "observed"),
+        ])
+        #expect(passes(oracle, #"{"success":true,"verified":true,"state":"A","requested":-6.0,"observed":-6.0}"#))
+        // Verified write, but what landed is not what was asked for.
+        #expect(!passes(oracle, #"{"success":true,"verified":true,"state":"A","requested":-6.0,"observed":-3.0}"#))
+        // Unverified (State B) — fails on the envelope regardless of the invariant.
+        #expect(!passes(oracle, #"{"success":true,"verified":false,"state":"B","requested":-6.0,"observed":-6.0}"#))
+    }
+
+    @Test func verifiedEnvelopeIsThreeValueConstraintsAndComposesLoadBearing() {
+        #expect(SafeMutationOracle.verifiedEnvelope.count == 3)
+        #expect(SafeMutationOracle.verifiedEnvelope.allSatisfy { $0.isValueConstraint })
+        let composed = SafeMutationOracle.oracle(.transportPlay, semantics: [
+            .fieldsEqual(keyA: "requested", keyB: "observed"),
+        ])
+        #expect(composed.isSemanticallyLoadBearing)
+        #expect(composed.strength == .shapeAndDomain)
+        #expect(composed.constraints.count == 4)
+    }
+}
+
+// MARK: - relational mutation harness (Phase B0)
+
+@Suite("#373 Phase B0 relational mutation")
+struct SemanticOracleRelationalMutationTests {
+    /// The relational constraints are load-bearing under the SAME generic
+    /// mutation harness the B1–B3 mutating oracles will run through: every mutant
+    /// the mutator derives for a `fieldsEqual` must sink the oracle. Proven on a
+    /// synthetic oracle because the table carries no mutating oracle yet — the
+    /// read-only census stays at 20 (see SemanticOracleB0CensusTests).
+    @Test func fieldsEqualMutantsAreAllRejected() throws {
+        let response = #"{"requested":-6.0,"observed":-6.0}"#
+        let root = try #require(JSONInspector.parse(Data(response.utf8)))
+        let constraint = OracleConstraint.fieldsEqual(keyA: "requested", keyB: "observed")
+        let oracle = OperationOracle(.transportPlay, strength: .shapeAndDomain, constraints: [constraint])
+
+        // Guard: the pristine fixture passes, so a rejection below is the
+        // mutation's doing, not a broken baseline.
+        let baseline = try #require(oracle.evaluate(
+            responseData: Data(response.utf8), readbackData: Data("{}".utf8)))
+        #expect(baseline)
+
+        let mutants = JSONMutator.mutants(for: constraint, in: root)
+        #expect(mutants.count >= 3, "expected drop + two divergence mutants, got \(mutants.count)")
+        for mutant in mutants {
+            let data = try #require(JSONMutator.encode(mutant.json))
+            let survived: Bool = oracle.evaluate(
+                responseData: data, readbackData: Data("{}".utf8)) == true
+            #expect(!survived, "fieldsEqual survived mutant [\(mutant.label)]")
+        }
+    }
+
+    @Test func crossCheckResponseMutantsAndReadbackDivergenceAreRejected() throws {
+        let response = #"{"value":-6.0}"#
+        let readback = #"{"observed":-6.0}"#
+        let root = try #require(JSONInspector.parse(Data(response.utf8)))
+        let constraint = OracleConstraint.crossCheck(responseKey: "value", readbackKey: "observed")
+        let oracle = OperationOracle(.transportPlay, strength: .shapeAndDomain, constraints: [constraint])
+
+        let baseline = try #require(oracle.evaluate(
+            responseData: Data(response.utf8), readbackData: Data(readback.utf8)))
+        #expect(baseline)
+
+        // Response-side mutants — exactly what the table-driven harness runs
+        // (readback held fixed, response corrupted).
+        let mutants = JSONMutator.mutants(for: constraint, in: root)
+        #expect(mutants.count >= 2, "expected drop + divergence mutants, got \(mutants.count)")
+        for mutant in mutants {
+            let data = try #require(JSONMutator.encode(mutant.json))
+            let survived: Bool = oracle.evaluate(
+                responseData: data, readbackData: Data(readback.utf8)) == true
+            #expect(!survived, "crossCheck survived response mutant [\(mutant.label)]")
+        }
+
+        // Readback-side divergence: pristine response, corrupted readback.
+        let diverged: Bool = oracle.evaluate(
+            responseData: Data(response.utf8),
+            readbackData: Data(#"{"observed":-3.0}"#.utf8)) == true
+        #expect(!diverged)
+    }
+}
+
+// MARK: - census non-regression (Phase B0)
+
+@Suite("#373 Phase B0 census non-regression")
+struct SemanticOracleB0CensusTests {
+    /// B0 adds FRAMEWORK ONLY — no oracle was added to the table, so the
+    /// read-only census is unchanged and the mutating surface stays UNCOVERED
+    /// (its 50 oracles land in B1–B3). Pinning this catches a premature mutating
+    /// oracle and proves the mutating-census scaffold stays satisfiable at zero.
+    @Test func b0AddsNoTableOracleAndLeavesTheReadOnlyCensusAtTwenty() {
+        #expect(SemanticOracleTable.all.count == 20)
+        #expect(SemanticOracleTable.coveredSpecIDs.count == 20)
+
+        let mutatingSpecIDs = Set(
+            OperationRegistry.specs.filter { $0.mutability == .mutating }.map(\.id)
+        )
+        let mutatingOraclesPresent = Set(SemanticOracleTable.byOperationID.keys)
+            .intersection(mutatingSpecIDs)
+        #expect(
+            mutatingOraclesPresent.isEmpty,
+            "B0 must not author mutating oracles: \(mutatingOraclesPresent.map(\.rawValue).sorted())"
+        )
+    }
+}
+
 // MARK: - mutator
 
 enum JSONMutator {
@@ -437,6 +677,22 @@ enum JSONMutator {
             mutants.append(contentsOf: replacements(root, key, [("emptied", [Any]())]))
         case .typedField(_, let type):
             mutants.append(contentsOf: replacements(root, key, [("wrong type", wrongTyped(type))]))
+        case .fieldsEqual(let keyA, let keyB):
+            // Break the equality by diverging EITHER side; each must sink the
+            // oracle. (`drop keyA` is already added generically via `key`.)
+            if let currentA = JSONPath.resolve(root, keyPath: keyA) {
+                mutants.append(contentsOf: replacements(root, keyA, [("diverge", divergent(from: currentA))]))
+            }
+            if let currentB = JSONPath.resolve(root, keyPath: keyB) {
+                mutants.append(contentsOf: replacements(root, keyB, [("diverge", divergent(from: currentB))]))
+            }
+        case .crossCheck(let responseKey, _):
+            // The harness holds the readback fixed and mutates the response, so
+            // diverging the response side breaks response==readback. (Readback-
+            // side divergence is exercised directly in the engine unit tests.)
+            if let current = JSONPath.resolve(root, keyPath: responseKey) {
+                mutants.append(contentsOf: replacements(root, responseKey, [("diverge", divergent(from: current))]))
+            }
         }
         return mutants
     }
@@ -457,6 +713,19 @@ enum JSONMutator {
         case .number(let value): return value + 1
         case .bool(let value): return !value
         case .null: return "no longer null"
+        }
+    }
+
+    /// A value guaranteed to differ from `value` under `JSONInspector.leavesEqual`
+    /// — used to break a relational constraint (fieldsEqual / crossCheck) by
+    /// corrupting one side. Mirrors the type discipline: a bool flips, a number
+    /// increments, a string is suffixed, a container/null becomes a sentinel.
+    private static func divergent(from value: Any) -> Any {
+        switch JSONInspector.type(of: value) {
+        case .string: return (value as? String ?? "") + "__oracle_mutant__"
+        case .number: return (JSONInspector.number(of: value) ?? 0) + 1
+        case .bool: return !((value as? NSNumber)?.boolValue ?? false)
+        case .array, .object, .null: return "__oracle_divergent__"
         }
     }
 
