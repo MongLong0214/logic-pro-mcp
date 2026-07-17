@@ -199,6 +199,11 @@ enum HonestContract {
         case sagaInProgress = "saga_in_progress"
         case idempotencyKeyConflict = "idempotency_key_conflict"
         case sagaJournalCapacityExceeded = "saga_journal_capacity_exceeded"
+        // LPMCP-PRD-005: the saga already reached a terminal state in this
+        // session but its stored outcome body has been evicted under bounded
+        // retention. Distinct from `sagaJournalCapacityExceeded`, which means
+        // "cannot admit a NEW key".
+        case sagaOutcomeUnavailable = "saga_outcome_unavailable"
         case notSupported = "not_supported"
         case sagaExecutionFailed = "saga_execution_failed"
     }
@@ -386,6 +391,10 @@ enum HonestContract {
         FailureError.traceClearReceiptFailed.rawValue,
         FailureError.idempotencyKeyConflict.rawValue,
         FailureError.sagaJournalCapacityExceeded.rawValue,
+        // LPMCP-PRD-005: an evicted outcome body is terminal — no other channel
+        // and no retry can reconstruct a body this session no longer holds. The
+        // caller must reconcile with a live read.
+        FailureError.sagaOutcomeUnavailable.rawValue,
     ]
 
     /// Returns true if the given message is a State-C envelope whose `error`

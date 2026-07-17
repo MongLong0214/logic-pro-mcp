@@ -912,10 +912,17 @@ struct SagaSurfaceTests {
         }
     }
 
-    @Test("bounded journal rejects new keys without evicting completed outcomes")
+    /// LPMCP-PRD-005: capacity now means "cannot admit a NEW key" — the COMPACT
+    /// replay-protection tier is full. This test used to pin `maxRecords: 1`
+    /// (the body tier) rejecting a second key; bodies are now reclaimable, so
+    /// exhausting the body tier admits the new key by evicting an older BODY
+    /// (see SagaJournalReclaimTests). Saturating the compact tier is what still
+    /// fails closed, and it must, because admitting a key we cannot
+    /// replay-protect is a correctness hole rather than an availability one.
+    @Test("bounded journal fails closed once the compact replay tier is full")
     func journalCapacityFailsClosed() async throws {
         try await withSagaFeatures {
-            let journal = SagaJournal(maxRecords: 1)
+            let journal = SagaJournal(maxRecords: 1, compactCapacity: 1)
             let fixture = await makeFixture(journal: journal)
             let first = try resultObject(await dispatch(
                 command: "saga_execute",

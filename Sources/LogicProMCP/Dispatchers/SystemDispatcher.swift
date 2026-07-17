@@ -436,6 +436,14 @@ struct SystemDispatcher: OperationTraceDispatching {
                 journalIssues = [[
                     "code": HonestContract.FailureError.unsupportedState.rawValue,
                 ]]
+            case .outcomeEvicted(let terminal):
+                // LPMCP-PRD-005: unlike `.completed` (where execute hands back
+                // the stored body and preflight stays ok), an evicted body means
+                // execute WILL refuse — so preflight must say so up front.
+                journalIssues = [[
+                    "code": HonestContract.FailureError.sagaOutcomeUnavailable.rawValue,
+                    "terminal_kind": terminal.rawValue,
+                ]]
             case .available, .inProgress, .completed:
                 journalIssues = []
             }
@@ -457,12 +465,17 @@ struct SystemDispatcher: OperationTraceDispatching {
             let issues = preflight.issues.map(SagaWire.preflightIssue)
                 + availabilityIssues
                 + journalIssues
-            let body = SagaWire.sessionFields.merging([
-                "ok": issues.isEmpty,
-                "issues": issues,
-                "before_state_availability": SagaWire.availabilityObjects(availability, plan: plan),
-                "writes_performed": 0,
-            ]) { _, new in new }
+            let body = SagaWire.sessionFields
+                .merging(SagaWire.journalMetricsFields(await sagaJournal.metrics())) { _, new in new }
+                .merging([
+                    "ok": issues.isEmpty,
+                    "issues": issues,
+                    "before_state_availability": SagaWire.availabilityObjects(
+                        availability,
+                        plan: plan
+                    ),
+                    "writes_performed": 0,
+                ]) { _, new in new }
             return toolTextResult(HonestContract.jsonString(body))
 
         case "saga_execute":
@@ -515,6 +528,15 @@ struct SystemDispatcher: OperationTraceDispatching {
             case .capacityExceeded:
                 return await finalizeTrace(
                     SagaWire.journalCapacityExceeded(plan.idempotencyKey),
+                    traceID: traceID
+                )
+            case .outcomeEvicted(let terminal):
+                // LPMCP-PRD-005: this key already ran to a terminal state in
+                // this session. Returning here — before any executor exists —
+                // is what makes "an evicted body never re-fires a write"
+                // structural rather than a promise.
+                return await finalizeTrace(
+                    SagaWire.outcomeUnavailable(plan.idempotencyKey, terminal: terminal),
                     traceID: traceID
                 )
             case .started(let journalClaim):
@@ -674,16 +696,33 @@ struct SystemDispatcher: OperationTraceDispatching {
                 details = [
                     "status": "cancelled",
                     "verified": verified,
+                    "outcome_retained": true,
                     "outcome": SagaWire.jsonObject(outcome.body),
                 ]
             case .completed(let outcome):
-                details = ["status": "completed", "outcome": SagaWire.jsonObject(outcome.body)]
+                details = [
+                    "status": "completed",
+                    "outcome_retained": true,
+                    "outcome": SagaWire.jsonObject(outcome.body),
+                ]
+            case .outcomeEvicted(let terminal):
+                // LPMCP-PRD-005: `status` still names the terminal path the key
+                // took — the replay-protection record is intact. `outcome` is
+                // ABSENT (not null, not a stand-in) and `outcome_retained:false`
+                // says why. `verified` is likewise absent for an evicted
+                // cancellation: it lived in the body, and inventing one would be
+                // the exact dishonesty this record exists to prevent.
+                details = ["status": terminal.rawValue, "outcome_retained": false]
             }
             return toolTextResult(HonestContract.jsonString(
-                SagaWire.sessionFields.merging([
-                    "idempotency_key": idempotencyKey,
-                    "record": details,
-                ]) { _, new in new }
+                SagaWire.sessionFields
+                    .merging(SagaWire.journalMetricsFields(await sagaJournal.metrics())) {
+                        _, new in new
+                    }
+                    .merging([
+                        "idempotency_key": idempotencyKey,
+                        "record": details,
+                    ]) { _, new in new }
             ))
 
         case "saga_cancel":
@@ -708,6 +747,10 @@ struct SystemDispatcher: OperationTraceDispatching {
                     hint: "The saga is already completed",
                     extras: ["idempotency_key": idempotencyKey]
                 )
+            case .outcomeEvicted(let terminal):
+                // LPMCP-PRD-005: the key IS known and terminal — answering
+                // `element_not_found` here would deny a record we still hold.
+                result = SagaWire.outcomeUnavailable(idempotencyKey, terminal: terminal)
             case .requested, .alreadyRequested:
                 result = toolTextResult(HonestContract.encodeStateB(
                     reason: .sagaCancellationPending,

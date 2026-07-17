@@ -1,12 +1,47 @@
+import CryptoKit
 import Foundation
 import MCP
 
+/// LPMCP-PRD-005 — the session saga journal is split into two independently
+/// bounded tiers so that saturation costs OUTCOME BODIES, never same-key replay
+/// protection.
+///
+/// - The COMPACT tier (`idempotencySet`) holds one small row per key ever begun
+///   in this generation: plan hash, terminal kind, sequence. It is append-only
+///   within a generation — a key that reached a terminal state is NEVER dropped
+///   while the session lives, so a replayed key can never fall back to
+///   `.started` and re-fire a write.
+/// - The BODY tier holds the full state a caller can still be handed back:
+///   in-flight entries (`entries`, plan + claim, never evictable) and stored
+///   terminal outcomes (`outcomeBodies`, evictable oldest-first). It is bounded
+///   by `maxRecords`.
+///
+/// When a body is evicted the compact row survives, so the key answers
+/// `.outcomeEvicted` — "this already ran, and I can no longer show you what
+/// happened". That is deliberately NOT `.completed` (which would replay a body
+/// we no longer have) and NOT `.started` (which would re-execute a write).
+///
+/// There is no wall-clock TTL anywhere: eviction is count-based and ordered by
+/// begin sequence, so behaviour is deterministic and testable.
 actor SagaJournal {
+    /// Bounds the BODY tier: in-flight entries + retained terminal outcomes.
     static let defaultMaxRecords = 1_024
+    /// Bounds the COMPACT tier: every key begun in this generation.
+    static let defaultCompactCapacity = 65_536
 
     struct StoredOutcome: Equatable, Sendable {
         let body: String
         let isError: Bool
+    }
+
+    /// WHICH terminal path a key finished on — NOT a claim that the caller's
+    /// intent succeeded. A saga that only partially applied still terminates via
+    /// `.completed` (with an isError body). Once the body is evicted, this is
+    /// all that survives, so callers must reconcile with a live read rather than
+    /// read `completed` as "it worked".
+    enum TerminalKind: String, Equatable, Sendable {
+        case completed
+        case cancelled
     }
 
     struct Claim: Equatable, Sendable {
@@ -20,6 +55,7 @@ actor SagaJournal {
         case cancellationRequested
         case cancelled(StoredOutcome, verified: Bool)
         case completed(StoredOutcome)
+        case outcomeEvicted(terminal: TerminalKind)
     }
 
     enum BeginResult: Equatable, Sendable {
@@ -28,6 +64,7 @@ actor SagaJournal {
         case cancellationRequested
         case cancelled
         case completed(StoredOutcome)
+        case outcomeEvicted(terminal: TerminalKind)
         case conflict
         case capacityExceeded
     }
@@ -38,6 +75,7 @@ actor SagaJournal {
         case cancellationRequested
         case cancelled
         case completed
+        case outcomeEvicted(terminal: TerminalKind)
         case conflict
         case capacityExceeded
     }
@@ -47,57 +85,159 @@ actor SagaJournal {
         case alreadyRequested
         case cancelled(StoredOutcome, verified: Bool)
         case completed
+        case outcomeEvicted(terminal: TerminalKind)
         case notFound
+    }
+
+    /// Ops/test counters for the two tiers. Deliberately NOT a caller-recovery
+    /// API: nothing here tells a client "retry later and it will fit".
+    struct Metrics: Equatable, Sendable {
+        /// Body-tier occupancy: in-flight entries + retained terminal outcomes.
+        /// Compare against `recordCapacity`.
+        let fullBodyCount: Int
+        let compactCount: Int
+        /// Monotonic for the life of the process — `clear()` does not reset it.
+        let bodyEvictions: UInt64
+        let compactCapacity: Int
+        let recordCapacity: Int
+    }
+
+    /// Only ever an in-flight state — terminal keys leave `entries` entirely,
+    /// which makes "a live entry is terminal" unrepresentable.
+    private enum LiveRecord: Equatable, Sendable {
+        case inProgress
+        case cancellationRequested
+    }
+
+    private enum TerminalRecord: Equatable, Sendable {
+        case completed(StoredOutcome)
+        case cancelled(StoredOutcome, verified: Bool)
+
+        var kind: TerminalKind {
+            switch self {
+            case .completed: .completed
+            case .cancelled: .cancelled
+            }
+        }
+
+        var record: Record {
+            switch self {
+            case .completed(let outcome): .completed(outcome)
+            case .cancelled(let outcome, let verified): .cancelled(outcome, verified: verified)
+            }
+        }
     }
 
     private struct Entry: Sendable {
         let plan: SagaPlan
         let claim: Claim
-        var record: Record
+        var record: LiveRecord
+    }
+
+    /// The append-only identity row. `planHash` replaces holding the whole plan
+    /// once the body is gone; `sequence` is the begin order that drives
+    /// oldest-first body eviction.
+    private struct CompactRow: Sendable {
+        let planHash: String
+        let sequence: UInt64
+        var terminal: TerminalKind?
+    }
+
+    private struct TerminalBody: Sendable {
+        let record: TerminalRecord
+        let sequence: UInt64
     }
 
     private let maxRecords: Int
+    private let compactCapacity: Int
     private var entries: [String: Entry] = [:]
+    private var idempotencySet: [String: CompactRow] = [:]
+    private var outcomeBodies: [String: TerminalBody] = [:]
+    private var bodyEvictions: UInt64 = 0
     private var generation: UInt64 = 0
     private var sequence: UInt64 = 0
 
-    init(maxRecords: Int = SagaJournal.defaultMaxRecords) {
+    init(
+        maxRecords: Int = SagaJournal.defaultMaxRecords,
+        compactCapacity: Int = SagaJournal.defaultCompactCapacity
+    ) {
         self.maxRecords = max(1, maxRecords)
+        self.compactCapacity = max(max(1, maxRecords), compactCapacity)
+    }
+
+    func metrics() -> Metrics {
+        Metrics(
+            fullBodyCount: entries.count + outcomeBodies.count,
+            compactCount: idempotencySet.count,
+            bodyEvictions: bodyEvictions,
+            compactCapacity: compactCapacity,
+            recordCapacity: maxRecords
+        )
     }
 
     func disposition(for plan: SagaPlan) -> PlanDisposition {
-        guard let entry = entries[plan.idempotencyKey] else {
-            return entries.count >= maxRecords ? .capacityExceeded : .available
+        if let entry = entries[plan.idempotencyKey] {
+            guard entry.plan == plan else { return .conflict }
+            switch entry.record {
+            case .inProgress: return .inProgress
+            case .cancellationRequested: return .cancellationRequested
+            }
         }
-        guard entry.plan == plan else { return .conflict }
-        switch entry.record {
-        case .inProgress: return .inProgress
-        case .cancellationRequested: return .cancellationRequested
-        case .cancelled: return .cancelled
-        case .completed: return .completed
+        if let row = idempotencySet[plan.idempotencyKey] {
+            guard Self.planHash(plan) == row.planHash, let terminal = row.terminal else {
+                return .conflict
+            }
+            guard let body = outcomeBodies[plan.idempotencyKey] else {
+                return .outcomeEvicted(terminal: terminal)
+            }
+            switch body.record {
+            case .completed: return .completed
+            case .cancelled: return .cancelled
+            }
         }
+        return canAdmitNewKey() ? .available : .capacityExceeded
     }
 
     func begin(_ plan: SagaPlan) -> BeginResult {
         if let entry = entries[plan.idempotencyKey] {
             guard entry.plan == plan else { return .conflict }
             switch entry.record {
-            case .inProgress:
-                return .inProgress
-            case .cancellationRequested:
-                return .cancellationRequested
-            case .cancelled:
-                return .cancelled
-            case .completed(let outcome):
-                return .completed(outcome)
+            case .inProgress: return .inProgress
+            case .cancellationRequested: return .cancellationRequested
             }
         }
-        guard entries.count < maxRecords else { return .capacityExceeded }
+        if let row = idempotencySet[plan.idempotencyKey] {
+            // The plan itself is gone once a key goes terminal, so identity is
+            // re-established by hashing the incoming plan. A mismatch is the
+            // same `.conflict` full-plan equality reports for a live key.
+            guard Self.planHash(plan) == row.planHash, let terminal = row.terminal else {
+                return .conflict
+            }
+            guard let body = outcomeBodies[plan.idempotencyKey] else {
+                return .outcomeEvicted(terminal: terminal)
+            }
+            switch body.record {
+            case .completed(let outcome): return .completed(outcome)
+            case .cancelled: return .cancelled
+            }
+        }
+        guard idempotencySet.count < compactCapacity else { return .capacityExceeded }
+        while entries.count + outcomeBodies.count >= maxRecords {
+            // Fail closed when nothing is evictable (a body tier full of
+            // in-flight sagas): admitting anyway would mean dropping a plan we
+            // still need for equality.
+            guard evictOldestBody() else { return .capacityExceeded }
+        }
         sequence &+= 1
         let claim = Claim(
             idempotencyKey: plan.idempotencyKey,
             generation: generation,
             sequence: sequence
+        )
+        idempotencySet[plan.idempotencyKey] = CompactRow(
+            planHash: Self.planHash(plan),
+            sequence: sequence,
+            terminal: nil
         )
         entries[plan.idempotencyKey] = Entry(plan: plan, claim: claim, record: .inProgress)
         return .started(claim)
@@ -106,11 +246,10 @@ actor SagaJournal {
     @discardableResult
     func complete(_ claim: Claim, outcome: StoredOutcome) -> Bool {
         guard claim.generation == generation,
-              var entry = entries[claim.idempotencyKey],
+              let entry = entries[claim.idempotencyKey],
               entry.claim == claim,
               entry.record == .inProgress else { return false }
-        entry.record = .completed(outcome)
-        entries[claim.idempotencyKey] = entry
+        finalize(claim.idempotencyKey, record: .completed(outcome), sequence: claim.sequence)
         return true
     }
 
@@ -121,77 +260,152 @@ actor SagaJournal {
         verified: Bool
     ) -> Bool {
         guard claim.generation == generation,
-              var entry = entries[claim.idempotencyKey],
+              let entry = entries[claim.idempotencyKey],
               entry.claim == claim,
               entry.record == .cancellationRequested else { return false }
-        entry.record = .cancelled(outcome, verified: verified)
-        entries[claim.idempotencyKey] = entry
+        finalize(
+            claim.idempotencyKey,
+            record: .cancelled(outcome, verified: verified),
+            sequence: claim.sequence
+        )
         return true
     }
 
-    func abandon(_ claim: Claim) {
-        guard claim.generation == generation,
-              let entry = entries[claim.idempotencyKey],
-              entry.claim == claim,
-              entry.record == .inProgress else { return }
-        entries.removeValue(forKey: claim.idempotencyKey)
-    }
-
+    /// The ONLY legitimate pre-write retract of a compact row.
+    ///
+    /// LPMCP-PRD-005: dropping a compact row is dropping replay protection, so
+    /// it is only sound where "no write happened" is PROVABLE rather than
+    /// assumed. It is provable here and nowhere else: the mutation gate refused,
+    /// so the claim never reached an executor. `inProgress` alone cannot carry
+    /// that proof — it IS the write window — which is why no general
+    /// `abandon(claim)` escape door exists on this API.
     func finishGateRefusal(_ claim: Claim, cancellationOutcome: StoredOutcome) {
         guard claim.generation == generation,
-              var entry = entries[claim.idempotencyKey],
+              let entry = entries[claim.idempotencyKey],
               entry.claim == claim else { return }
         switch entry.record {
         case .inProgress:
-            entries.removeValue(forKey: claim.idempotencyKey)
+            forget(claim.idempotencyKey)
         case .cancellationRequested:
-            entry.record = .cancelled(cancellationOutcome, verified: true)
-            entries[claim.idempotencyKey] = entry
-        case .cancelled, .completed:
-            break
+            finalize(
+                claim.idempotencyKey,
+                record: .cancelled(cancellationOutcome, verified: true),
+                sequence: claim.sequence
+            )
         }
     }
 
     @discardableResult
     func completeBeforeWrite(_ claim: Claim, outcome: StoredOutcome) -> Bool {
         guard claim.generation == generation,
-              var entry = entries[claim.idempotencyKey],
+              let entry = entries[claim.idempotencyKey],
               entry.claim == claim else { return false }
         switch entry.record {
         case .inProgress:
-            entry.record = .completed(outcome)
+            finalize(claim.idempotencyKey, record: .completed(outcome), sequence: claim.sequence)
         case .cancellationRequested:
-            entry.record = .cancelled(outcome, verified: true)
-        case .cancelled, .completed:
-            return false
+            finalize(
+                claim.idempotencyKey,
+                record: .cancelled(outcome, verified: true),
+                sequence: claim.sequence
+            )
         }
-        entries[claim.idempotencyKey] = entry
         return true
     }
 
     func record(for idempotencyKey: String) -> Record? {
-        entries[idempotencyKey]?.record
+        if let entry = entries[idempotencyKey] {
+            switch entry.record {
+            case .inProgress: return .inProgress
+            case .cancellationRequested: return .cancellationRequested
+            }
+        }
+        guard let row = idempotencySet[idempotencyKey], let terminal = row.terminal else {
+            return nil
+        }
+        guard let body = outcomeBodies[idempotencyKey] else {
+            return .outcomeEvicted(terminal: terminal)
+        }
+        return body.record.record
     }
 
     func cancel(idempotencyKey: String) -> CancelResult {
-        guard var entry = entries[idempotencyKey] else { return .notFound }
-        switch entry.record {
-        case .inProgress:
-            entry.record = .cancellationRequested
-            entries[idempotencyKey] = entry
-            return .requested
-        case .cancellationRequested:
-            return .alreadyRequested
-        case .cancelled(let outcome, let verified):
-            return .cancelled(outcome, verified: verified)
-        case .completed:
-            return .completed
+        if var entry = entries[idempotencyKey] {
+            switch entry.record {
+            case .inProgress:
+                entry.record = .cancellationRequested
+                entries[idempotencyKey] = entry
+                return .requested
+            case .cancellationRequested:
+                return .alreadyRequested
+            }
+        }
+        guard let row = idempotencySet[idempotencyKey], let terminal = row.terminal else {
+            return .notFound
+        }
+        guard let body = outcomeBodies[idempotencyKey] else {
+            return .outcomeEvicted(terminal: terminal)
+        }
+        switch body.record {
+        case .completed: return .completed
+        case .cancelled(let outcome, let verified): return .cancelled(outcome, verified: verified)
         }
     }
 
     func clear() {
         generation &+= 1
         entries.removeAll(keepingCapacity: true)
+        idempotencySet.removeAll(keepingCapacity: true)
+        outcomeBodies.removeAll(keepingCapacity: true)
+    }
+
+    // MARK: - private
+
+    /// Moves a key from the in-flight tier to the terminal tier. Body-tier
+    /// occupancy is unchanged (one entry out, one body in), so terminating a
+    /// saga never triggers eviction — only admitting a NEW key does.
+    private func finalize(_ key: String, record: TerminalRecord, sequence: UInt64) {
+        entries.removeValue(forKey: key)
+        idempotencySet[key]?.terminal = record.kind
+        outcomeBodies[key] = TerminalBody(record: record, sequence: sequence)
+    }
+
+    private func forget(_ key: String) {
+        entries.removeValue(forKey: key)
+        idempotencySet.removeValue(forKey: key)
+        outcomeBodies.removeValue(forKey: key)
+    }
+
+    private func evictOldestBody() -> Bool {
+        guard let oldest = outcomeBodies.min(by: { $0.value.sequence < $1.value.sequence })
+        else { return false }
+        outcomeBodies.removeValue(forKey: oldest.key)
+        bodyEvictions &+= 1
+        return true
+    }
+
+    private func canAdmitNewKey() -> Bool {
+        guard idempotencySet.count < compactCapacity else { return false }
+        guard entries.count + outcomeBodies.count >= maxRecords else { return true }
+        return !outcomeBodies.isEmpty
+    }
+
+    /// SHA256 over a `.sortedKeys` canonical JSON encoding of the plan. Hashing
+    /// the encoded plan — rather than concatenating fields with a delimiter —
+    /// is what keeps a crafted step value from forging another plan's identity.
+    ///
+    /// A plan that cannot be encoded (e.g. a directly-constructed plan carrying
+    /// a non-finite number, which the wire layer already rejects) hashes to a
+    /// per-call unique sentinel. That fails CLOSED: such a plan can never match
+    /// a stored row, so it answers `.conflict` rather than aliasing another
+    /// saga's record.
+    private static func planHash(_ plan: SagaPlan) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(plan) else {
+            return "unencodable:\(UUID().uuidString)"
+        }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }
 
@@ -274,6 +488,47 @@ enum SagaWire {
             hint: "The session saga journal has reached its bounded record capacity",
             extras: ["idempotency_key": idempotencyKey]
         )
+    }
+
+    /// LPMCP-PRD-005 — the key is replay-protected but its outcome body is gone.
+    ///
+    /// The hint deliberately refuses to imply success: `terminal_kind` only says
+    /// WHICH path terminated, and a `completed` saga may still have applied
+    /// partially. The only honest recovery is to observe current state, so the
+    /// hint routes the caller to a live read and explicitly forbids re-firing
+    /// the same intent (`safe_to_retry: false`).
+    static func outcomeUnavailable(
+        _ idempotencyKey: String,
+        terminal: SagaJournal.TerminalKind
+    ) -> CallTool.Result {
+        scopedStateC(
+            .sagaOutcomeUnavailable,
+            hint: "This idempotency_key already reached a terminal saga state in this session, "
+                + "but its stored outcome body is no longer retained (bounded outcome retention). "
+                + "'\(terminal.rawValue)' names the terminal path only — it does NOT assert the "
+                + "intent succeeded. Reconcile the current state with a live read "
+                + "(system.saga_status, or the relevant read operations) and decide from what you "
+                + "observe; do NOT re-fire the same intent blindly.",
+            extras: [
+                "idempotency_key": idempotencyKey,
+                "terminal_kind": terminal.rawValue,
+                "outcome_retained": false,
+                "safe_to_retry": false,
+                "write_attempted": false,
+            ]
+        )
+    }
+
+    /// Ops/test counters for the journal's two bounded tiers. NOT a
+    /// caller-recovery API — nothing here promises a retry will fit.
+    static func journalMetricsFields(_ metrics: SagaJournal.Metrics) -> [String: Any] {
+        [
+            "journal_full_body_count": metrics.fullBodyCount,
+            "journal_compact_count": metrics.compactCount,
+            "journal_body_evictions": metrics.bodyEvictions,
+            "journal_compact_capacity": metrics.compactCapacity,
+            "journal_record_capacity": metrics.recordCapacity,
+        ]
     }
 
     static func preflightIssue(_ preflightIssue: PreflightIssue) -> [String: Any] {
