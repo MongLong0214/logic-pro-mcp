@@ -255,7 +255,10 @@ enum OperationHandlerRegistry {
                     // track-header reader so saga-replayed target_ref track/mixer
                     // steps fail closed on an out-of-band reorder.
                     liveTrackName: { AXLogicProElements.trackName(at: $0) },
-                    liveTrackNames: { AXLogicProElements.trackNames() }
+                    liveTrackNames: { AXLogicProElements.trackNames() },
+                    // LPMCP-PRD-004 — saga before-state/verification/compensation
+                    // read the live AX surface, never the cache mirror.
+                    sagaLiveReadback: .production
                 )
             }
         case .logicPlugins:

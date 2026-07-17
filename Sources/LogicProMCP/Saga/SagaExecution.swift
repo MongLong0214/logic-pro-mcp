@@ -1,4 +1,83 @@
+import ApplicationServices
+import Foundation
 import MCP
+
+/// The track-header toggle a saga step addresses.
+enum SagaToggleField: String, Sendable {
+    case mute
+    case solo
+    case arm
+}
+
+/// LPMCP-PRD-004 — independent LIVE read seams for saga decisions.
+///
+/// The saga used to source its before-state, verification readback, and
+/// compensation proof from `StateCache`. The cache is a poller-refreshed
+/// MIRROR: it can be stale by a poll interval, and it is refreshed by the very
+/// write the saga is trying to judge. A stale mirror means the saga can capture
+/// the WRONG before-state and then "restore" a value the operator never had —
+/// a rollback that is itself a mutation.
+///
+/// Every reader here calls the SAME AX primitive the corresponding dispatcher
+/// uses for its State-A verification, and every one returns `nil` rather than a
+/// fabricated default when the surface is unreadable — an unreadable fader must
+/// become `unknown`, never `0.0`.
+struct SagaLiveReadback: Sendable {
+    let readTrackName: @Sendable (Int) async -> String?
+    let readTrackVolume: @Sendable (Int) async -> Double?
+    let readTrackPan: @Sendable (Int) async -> Double?
+    let readTrackToggle: @Sendable (Int, SagaToggleField) async -> Bool?
+
+    /// Fail-closed seam: every read is unavailable, so every saga decision
+    /// resolves to `unknown` and every plan rejects at before-state capture.
+    /// A construction site that forgets the real reader loses the saga — it
+    /// does NOT silently fall back to a cache value.
+    static let unavailable = SagaLiveReadback(
+        readTrackName: { _ in nil },
+        readTrackVolume: { _ in nil },
+        readTrackPan: { _ in nil },
+        readTrackToggle: { _, _ in nil }
+    )
+}
+
+extension SagaLiveReadback {
+    /// Production seam. Each reader mirrors a dispatcher's State-A verification
+    /// primitive exactly:
+    /// - name: `AXLogicProElements.trackName(at:)` — the same live-identity-gated
+    ///   read the ADR-002 F5 mutation-boundary check uses.
+    /// - volume/pan: the header fader/pan slider + the same contract mapping
+    ///   `AccessibilityChannel.defaultSetMixerValue` reads back through.
+    /// - toggles: the M/S/R checkbox AXValue that
+    ///   `AccessibilityChannel.defaultSetTrackToggle` verifies against.
+    static let production = SagaLiveReadback(
+        readTrackName: { index in
+            AXLogicProElements.trackName(at: index)
+        },
+        readTrackVolume: { index in
+            guard let fader = AXLogicProElements.findTrackHeaderVolumeFader(at: index) else {
+                return nil
+            }
+            return AXValueExtractors.extractLogicMixerFaderValue(fader)
+        },
+        readTrackPan: { index in
+            guard let slider = AXLogicProElements.findTrackHeaderPanControl(at: index),
+                  let range = AXValueExtractors.extractSliderRange(slider),
+                  range.max > range.min else {
+                return nil
+            }
+            return AXValueExtractors.headerPanContract(slider, range: range)
+        },
+        readTrackToggle: { index, field in
+            let button: AXUIElement? = switch field {
+            case .mute: AXLogicProElements.findTrackMuteButton(trackIndex: index)
+            case .solo: AXLogicProElements.findTrackSoloButton(trackIndex: index)
+            case .arm: AXLogicProElements.findTrackArmButton(trackIndex: index)
+            }
+            guard let button else { return nil }
+            return AXValueExtractors.extractButtonState(button)
+        }
+    )
+}
 
 struct ProductionSagaStepExecutor: SagaStepExecutor {
     private static let allowlist: Set<OperationID> = [
@@ -11,30 +90,46 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
     ]
 
     private let router: ChannelRouter
+    // LPMCP-PRD-004: the cache is threaded to the DISPATCHERS (the write path's
+    // own resolution and the resource mirror they refresh) — it is never read
+    // for a saga decision. `readState` uses `liveReadback` only.
     private let cache: StateCache
     private let targetRegistry: TargetRegistry
     private let dialogPresent: @Sendable () -> Bool
+    /// LPMCP-PRD-004 — live AX reads for saga before-state / verification /
+    /// compensation proof. Explicit and non-optional: a saga that cannot read
+    /// the live surface must fail closed loudly, so callers name their seam
+    /// (`.production`, `.unavailable`, or a fake) at the construction site.
+    private let liveReadback: SagaLiveReadback
     // ADR-002 F5 — live AX track-header reader, threaded to the dispatchers so
     // saga-replayed / compensated track/mixer target_ref mutations fail closed
     // on an out-of-band reorder. nil by default (saga tests stay deterministic);
     // production construction supplies the real reader.
     private let liveTrackName: (@Sendable (Int) -> String?)?
     private let liveTrackNames: (@Sendable () -> [Int: String]?)?
+    /// Evidence timestamp source. Injectable so evidence assertions stay
+    /// deterministic; `sampled_at` is provenance metadata and never an input to
+    /// a saga decision.
+    private let now: @Sendable () -> Date
 
     init(
         router: ChannelRouter,
         cache: StateCache,
         targetRegistry: TargetRegistry,
         dialogPresent: @escaping @Sendable () -> Bool,
+        liveReadback: SagaLiveReadback,
         liveTrackName: (@Sendable (Int) -> String?)? = nil,
-        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil,
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.router = router
         self.cache = cache
         self.targetRegistry = targetRegistry
         self.dialogPresent = dialogPresent
+        self.liveReadback = liveReadback
         self.liveTrackName = liveTrackName
         self.liveTrackNames = liveTrackNames
+        self.now = now
     }
 
     func run(_ step: SagaStep) async -> StepResult {
@@ -149,6 +244,10 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         return Self.mapResponse(response, operationID: step.operationID)
     }
 
+    /// LPMCP-PRD-004: every value returned here is an INDEPENDENT live AX read.
+    /// There is deliberately no cache fallback — a surface we cannot read
+    /// returns nil, which the engine treats as `unknown` (fail-closed), rather
+    /// than a mirror value that could be stale by a poll interval.
     func readState(_ step: SagaStep) async -> ObservedState? {
         guard Self.allowlist.contains(step.operationID),
               let targetRef = step.targetRef,
@@ -158,9 +257,15 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
             return nil
         }
 
-        let tracks = await cache.getTracks()
-        guard let track = tracks.first(where: { $0.id == binding.descriptor.trackIndex }),
-              TargetDescriptor(trackIndex: track.id, trackName: track.name).fingerprint
+        let index = binding.descriptor.trackIndex
+        // Per-step identity fingerprint gate, unchanged in shape but now
+        // LIVE-sourced: the cache name it used to compare could agree with the
+        // binding while the live track at `index` was a different track after
+        // an out-of-band reorder — the gate would pass and the saga would read
+        // (and later restore) the wrong track. `trackName(at:)` is itself
+        // live-identity-gated and returns nil for an unreadable header.
+        guard let liveName = await liveReadback.readTrackName(index),
+              TargetDescriptor(trackIndex: index, trackName: liveName).fingerprint
                 == binding.observedFingerprint
         else {
             return nil
@@ -168,32 +273,49 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
 
         let value: Value
         let field: String
+        let readSource: SagaReadSource
         switch step.operationID {
         case .tracksRename:
-            value = .string(track.name)
+            value = .string(liveName)
             field = "name"
+            readSource = .axTrackName
         case .mixerSetVolume:
-            value = .double(track.volume)
+            guard let volume = await liveReadback.readTrackVolume(index) else { return nil }
+            value = .double(volume)
             field = "volume"
+            readSource = .axTrackHeaderFader
         case .mixerSetPan:
-            value = .double(track.pan)
+            guard let pan = await liveReadback.readTrackPan(index) else { return nil }
+            value = .double(pan)
             field = "pan"
+            readSource = .axTrackHeaderPan
         case .tracksMute:
-            value = .bool(track.isMuted)
+            guard let muted = await liveReadback.readTrackToggle(index, .mute) else { return nil }
+            value = .bool(muted)
             field = "isMuted"
+            readSource = .axTrackToggle
         case .tracksSolo:
-            value = .bool(track.isSoloed)
+            guard let soloed = await liveReadback.readTrackToggle(index, .solo) else { return nil }
+            value = .bool(soloed)
             field = "isSoloed"
+            readSource = .axTrackToggle
         case .tracksArm:
-            value = .bool(track.isArmed)
+            guard let armed = await liveReadback.readTrackToggle(index, .arm) else { return nil }
+            value = .bool(armed)
             field = "isArmed"
+            readSource = .axTrackToggle
         default:
             return nil
         }
-        return ObservedState(
-            value: value,
-            evidence: "state_cache tracks[\(track.id)].\(field)"
-        )
+
+        return ObservedState(read: SagaReadEvidence(
+            readSource: readSource,
+            provenance: .liveIndependent,
+            trackIndex: index,
+            field: field,
+            observed: value,
+            sampledAt: ISO8601DateFormatter.cacheFormatter.string(from: now())
+        ))
     }
 
     private static func mapResponse(

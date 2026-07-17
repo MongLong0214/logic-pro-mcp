@@ -555,10 +555,14 @@ enum SagaWire {
                 } else {
                     readback = NSNull()
                 }
-                evidence["verification"] = [
+                var verificationObject: [String: Any] = [
                     "disposition": verification.disposition.rawValue,
                     "readback": readback,
                 ]
+                if let comparison = verification.comparison {
+                    verificationObject["comparison"] = comparisonObject(comparison)
+                }
+                evidence["verification"] = verificationObject
             }
             object["evidence"] = evidence
             if let compensation = record.compensationEvidence {
@@ -568,10 +572,14 @@ enum SagaWire {
                 } else {
                     readback = NSNull()
                 }
-                object["compensation"] = [
+                var compensationRecord: [String: Any] = [
                     "disposition": compensation.disposition.rawValue,
                     "readback": readback,
                 ]
+                if let comparison = compensation.comparison {
+                    compensationRecord["comparison"] = comparisonObject(comparison)
+                }
+                object["compensation"] = compensationRecord
             }
             return object
         }
@@ -581,11 +589,15 @@ enum SagaWire {
         let evidence: [[String: Any]] = outcome.journal.compactMap { record in
             guard let compensation = record.compensationEvidence,
                   let readback = compensation.readback else { return nil }
-            return [
+            var object: [String: Any] = [
                 "step_index": record.stepIndex,
                 "disposition": compensation.disposition.rawValue,
                 "readback": observedState(readback),
             ]
+            if let comparison = compensation.comparison {
+                object["comparison"] = comparisonObject(comparison)
+            }
+            return object
         }
         let verifiedCount = outcome.journal.filter {
             $0.compensationEvidence?.disposition == .verified
@@ -627,8 +639,40 @@ enum SagaWire {
         }
     }
 
+    /// LPMCP-PRD-004: saga observations carry structured provenance so an
+    /// operator can audit WHERE a rollback value came from — not just a prose
+    /// string. `evidence` stays the human summary (`ax_live tracks[3].volume
+    /// (header_fader)`).
     private static func observedState(_ state: ObservedState) -> [String: Any] {
-        ["value": foundationValue(state.value), "evidence": state.evidence]
+        var object: [String: Any] = [
+            "value": foundationValue(state.value),
+            "evidence": state.evidence,
+        ]
+        guard let read = state.read else { return object }
+        object["read_source"] = read.readSource.rawValue
+        object["provenance"] = read.provenance.rawValue
+        object["track_index"] = read.trackIndex
+        object["field"] = read.field
+        object["observed"] = foundationValue(read.observed)
+        object["sampled_at"] = read.sampledAt
+        return object
+    }
+
+    /// How a disposition was decided: comparator, epsilon, desired, observed,
+    /// delta. Absent keys mean "not applicable" (no epsilon for an exact
+    /// comparator; no delta for a string/bool field).
+    private static func comparisonObject(
+        _ comparison: SagaComparisonEvidence
+    ) -> [String: Any] {
+        var object: [String: Any] = [
+            "comparator": comparison.comparator.rawValue,
+            "equal": comparison.equal,
+        ]
+        if let epsilon = comparison.epsilon { object["epsilon"] = epsilon }
+        if let desired = comparison.desired { object["desired"] = foundationValue(desired) }
+        if let observed = comparison.observed { object["observed"] = foundationValue(observed) }
+        if let delta = comparison.delta { object["delta"] = delta }
+        return object
     }
 
     private static func foundationValue(_ value: Value) -> Any {

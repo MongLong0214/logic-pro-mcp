@@ -228,7 +228,13 @@ struct SystemDispatcher: OperationTraceDispatching {
         // reorder. nil by default (saga surface tests stay deterministic);
         // production dispatch supplies the real reader.
         liveTrackName: (@Sendable (Int) -> String?)? = nil,
-        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil,
+        // LPMCP-PRD-004 — independent live AX reads for saga before-state,
+        // verification, and compensation proof. nil by default so unit call
+        // sites stay deterministic; that default is `.unavailable`, i.e. the
+        // saga fails closed at before-state capture rather than reading the
+        // stale-able cache mirror. Production dispatch supplies `.production`.
+        sagaLiveReadback: SagaLiveReadback? = nil
     ) async -> CallTool.Result {
         switch command {
         case "list_recent_traces", "get_trace", "clear_traces":
@@ -438,6 +444,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                 cache: cache,
                 targetRegistry: targetRegistry,
                 dialogPresent: dialogPresent,
+                liveReadback: sagaLiveReadback ?? .unavailable,
                 liveTrackName: liveTrackName,
                 liveTrackNames: liveTrackNames
             )
@@ -547,6 +554,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                     cache: cache,
                     targetRegistry: targetRegistry,
                     dialogPresent: dialogPresent,
+                    liveReadback: sagaLiveReadback ?? .unavailable,
                     liveTrackName: liveTrackName,
                     liveTrackNames: liveTrackNames
                 )
