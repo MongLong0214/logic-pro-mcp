@@ -161,6 +161,10 @@ actor ChannelRouter {
             await OperationTraceContext.record(.channelStarted, attributes: [
                 "channel": channelID.rawValue,
             ])
+            // #389: an armed write boundary commits HERE — the first channel
+            // that actually executes — and never on a route that resolved no
+            // channel. Reads route without an arm, so this is a no-op for them.
+            await OperationTraceWriteBoundaryArm.commitIfArmed()
             let result = await channel.execute(operation: operation, params: params)
             await OperationTraceContext.record(.channelCompleted, attributes: [
                 "channel": channelID.rawValue,

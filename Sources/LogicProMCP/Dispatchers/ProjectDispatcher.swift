@@ -198,8 +198,9 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 )
             }
             audit(command, phase: .executed)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(operation: "project.new")
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: "project.new")
+            }
             // v3.1.2 (P0-3) — clear cache on lifecycle success so the next
             // resource read / name-based routing decision sees the fresh
             // project's tracks instead of the previous project's stale list.
@@ -245,11 +246,12 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 )
             }
             audit(command, phase: .executed)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(
-                operation: "project.open",
-                params: ["path": path]
-            )
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "project.open",
+                    params: ["path": path]
+                )
+            }
             // v3.1.2 (P0-3) — same cache stale-after-lifecycle bug as `new`.
             await invalidateOnSuccess(command: command, result: result, cache: cache, targetRegistry: targetRegistry)
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
@@ -268,8 +270,9 @@ struct ProjectDispatcher: OperationTraceDispatching {
             // verification lives in the AppleScript channel (the reliable
             // writer, now tried first) so it stays DI-testable like save_as;
             // the dispatcher just routes + surfaces the channel's HC verdict.
-            await recordWriteBoundary(traceID)
-            let result = await router.route(operation: "project.save")
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: "project.save")
+            }
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "save_as":
@@ -305,11 +308,12 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 )
             }
             audit(command, phase: .executed)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(
-                operation: "project.save_as",
-                params: ["path": path]
-            )
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "project.save_as",
+                    params: ["path": path]
+                )
+            }
             if FeatureFlags.adr002TargetRef {
                 await invalidateOnSuccess(command: command, result: result, cache: cache, targetRegistry: targetRegistry)
             }
@@ -342,11 +346,12 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 )
             }
             audit(command, phase: .executed)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(
-                operation: "project.close",
-                params: ["saving": saving]
-            )
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "project.close",
+                    params: ["saving": saving]
+                )
+            }
             // v3.1.2 (P0-3) — closing the project leaves the cache stuffed
             // with the just-closed tracks/regions/markers. Clear so resource
             // reads honestly reflect "no project" until the next open.
@@ -376,8 +381,9 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 return await finalizeTrace(block, traceID: traceID)
             }
             audit(command, phase: .executed)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(operation: "project.bounce")
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: "project.bounce")
+            }
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "is_running":
@@ -692,6 +698,12 @@ struct ProjectDispatcher: OperationTraceDispatching {
         }
 
         var renamed: [[String: Any]] = []
+        // #389: cleanup_apply reaches the router only through nested
+        // TrackDispatcher.handle calls, each of which arms and commits its OWN
+        // child boundary — the parent trace would otherwise show none. Keep the
+        // explicit parent emit here; propagating a child's committed boundary up
+        // to its parent trace (so this becomes observation, not intent, like the
+        // routed ops) is future work.
         await recordWriteBoundary(traceID)
         for (target, newName) in zip(targets, names) {
             let result = await TrackDispatcher.handle(
@@ -973,6 +985,9 @@ struct ProjectDispatcher: OperationTraceDispatching {
         sleep: (UInt64) async -> Void,
         traceID: TraceID?
     ) async -> CallTool.Result {
+        // #389: no router involved — the AppleScript launch/quit IS the external
+        // effect, and it is about to run unconditionally, so the immediate emit
+        // is an honest observation of the genuine first write.
         await recordWriteBoundary(traceID)
         let execution = await execute(script)
         if let executionError = execution.executionError {

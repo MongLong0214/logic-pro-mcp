@@ -84,11 +84,12 @@ struct TrackDispatcher: OperationTraceDispatching {
                 ) {
                 case .success(let resolved):
                     let traceID = await startTraceIfEnabled(command: command)
-                    await recordWriteBoundary(traceID)
-                    let result = await router.route(
-                        operation: "track.select",
-                        params: ["index": String(resolved.index)]
-                    )
+                    let result = await withWriteBoundaryArmed(traceID) {
+                        await router.route(
+                            operation: "track.select",
+                            params: ["index": String(resolved.index)]
+                        )
+                    }
                     return await finalizeTrace(
                         TargetRefResolver.addEvidence(
                             resolved.reference,
@@ -115,11 +116,12 @@ struct TrackDispatcher: OperationTraceDispatching {
                     )
                 }
                 let traceID = await startTraceIfEnabled(command: command)
-                await recordWriteBoundary(traceID)
-                let result = await router.route(
-                    operation: "track.select",
-                    params: ["index": String(index)]
-                )
+                let result = await withWriteBoundaryArmed(traceID) {
+                    await router.route(
+                        operation: "track.select",
+                        params: ["index": String(index)]
+                    )
+                }
                 return await finalizeTrace(toolTextResult(result), traceID: traceID)
             }
             let name = stringParam(params, "name")
@@ -127,11 +129,12 @@ struct TrackDispatcher: OperationTraceDispatching {
                 let tracks = await cache.getTracks()
                 if let track = tracks.first(where: { $0.name.localizedCaseInsensitiveContains(name) }) {
                     let traceID = await startTraceIfEnabled(command: command)
-                    await recordWriteBoundary(traceID)
-                    let result = await router.route(
-                        operation: "track.select",
-                        params: ["index": String(track.id)]
-                    )
+                    let result = await withWriteBoundaryArmed(traceID) {
+                        await router.route(
+                            operation: "track.select",
+                            params: ["index": String(track.id)]
+                        )
+                    }
                     return await finalizeTrace(toolTextResult(result), traceID: traceID)
                 }
                 return toolStateCResult(
@@ -148,8 +151,9 @@ struct TrackDispatcher: OperationTraceDispatching {
         case "create_audio", "create_instrument", "create_drummer", "create_external_midi":
             // 4 byte-identical bodies; the channel op is always "track.<command>".
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(operation: "track.\(command)")
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: "track.\(command)")
+            }
             if result.isSuccess, !channelSuccessIsVerified(result) {
                 return await finalizeTrace(
                     toolTextResult(result.message, isError: true),
@@ -194,11 +198,12 @@ struct TrackDispatcher: OperationTraceDispatching {
                 return bindingFailure
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let selectResult = await router.route(
-                operation: "track.select",
-                params: ["index": String(index)]
-            )
+            let selectResult = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "track.select",
+                    params: ["index": String(index)]
+                )
+            }
             guard selectResult.isSuccess else {
                 return await finalizeTrace(
                     toolTextResult(selectResult.message, isError: true),
@@ -272,11 +277,12 @@ struct TrackDispatcher: OperationTraceDispatching {
                 return bindingFailure
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let selectResult = await router.route(
-                operation: "track.select",
-                params: ["index": String(index)]
-            )
+            let selectResult = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "track.select",
+                    params: ["index": String(index)]
+                )
+            }
             guard selectResult.isSuccess else {
                 return await finalizeTrace(
                     toolTextResult(selectResult.message, isError: true),
@@ -357,11 +363,12 @@ struct TrackDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(
-                operation: "track.rename",
-                params: ["index": String(index), "name": name]
-            )
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "track.rename",
+                    params: ["index": String(index), "name": name]
+                )
+            }
             guard result.isSuccess else {
                 return await finalizeTrace(
                     toolTextResult(result.message, isError: true),
@@ -511,27 +518,38 @@ struct TrackDispatcher: OperationTraceDispatching {
             }
             let tracks = await cache.getTracks()
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            var disarmed: [Int] = []
-            var unverifiedDisarm: [Int] = []
-            var failedDisarm: [Int] = []
-            for t in tracks where t.id != index && t.isArmed {
-                let r = await router.route(
-                    operation: "track.set_arm",
-                    params: ["index": String(t.id), "enabled": "false"]
-                )
-                if !r.isSuccess {
-                    failedDisarm.append(t.id)
-                } else if trackToggleResultIsVerified(r) {
-                    disarmed.append(t.id)
-                } else {
-                    unverifiedDisarm.append(t.id)
+            // #389: arm_only's write is the whole disarm-sweep + target-arm
+            // sequence, so ONE arm scope spans it — the once-commit bit puts the
+            // boundary on whichever of those routes dispatches a channel first
+            // (a disarm hop when other tracks are armed, else the target arm).
+            let armSequence = await withWriteBoundaryArmed(traceID) {
+                () async -> (disarmed: [Int], unverified: [Int], failed: [Int], armResult: ChannelResult) in
+                var disarmed: [Int] = []
+                var unverifiedDisarm: [Int] = []
+                var failedDisarm: [Int] = []
+                for t in tracks where t.id != index && t.isArmed {
+                    let r = await router.route(
+                        operation: "track.set_arm",
+                        params: ["index": String(t.id), "enabled": "false"]
+                    )
+                    if !r.isSuccess {
+                        failedDisarm.append(t.id)
+                    } else if trackToggleResultIsVerified(r) {
+                        disarmed.append(t.id)
+                    } else {
+                        unverifiedDisarm.append(t.id)
+                    }
                 }
+                let armResult = await router.route(
+                    operation: "track.set_arm",
+                    params: ["index": String(index), "enabled": "true"]
+                )
+                return (disarmed, unverifiedDisarm, failedDisarm, armResult)
             }
-            let armResult = await router.route(
-                operation: "track.set_arm",
-                params: ["index": String(index), "enabled": "true"]
-            )
+            let disarmed = armSequence.disarmed
+            let unverifiedDisarm = armSequence.unverified
+            let failedDisarm = armSequence.failed
+            let armResult = armSequence.armResult
             // If the primary arm action failed, return an explicit error instead
             // of a structured success payload. Partial-disarm visibility still
             // available in the error detail.
@@ -657,11 +675,12 @@ struct TrackDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(
-                operation: "track.set_automation",
-                params: ["index": String(index), "mode": mode]
-            )
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "track.set_automation",
+                    params: ["index": String(index), "mode": mode]
+                )
+            }
             return await finalizeTrace(
                 TargetRefResolver.addEvidence(
                     resolvedReference,
@@ -730,11 +749,12 @@ struct TrackDispatcher: OperationTraceDispatching {
             ) {
                 return await finalizeTrace(bindingFailure, traceID: traceID)
             }
-            await recordWriteBoundary(traceID)
-            let result = await router.route(
-                operation: "track.set_instrument",
-                params: routeParams
-            )
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "track.set_instrument",
+                    params: routeParams
+                )
+            }
             if FeatureFlags.adr002TargetRef, channelResultIsVerified(result) {
                 await targetRegistry?.bumpTopologyGeneration()
             }
@@ -883,11 +903,12 @@ struct TrackDispatcher: OperationTraceDispatching {
         } else {
             enabled = true
         }
-        await recordWriteBoundary(traceID)
-        let result = await router.route(
-            operation: operation,
-            params: ["index": String(index), "enabled": String(enabled)]
-        )
+        let result = await withWriteBoundaryArmed(traceID) {
+            await router.route(
+                operation: operation,
+                params: ["index": String(index), "enabled": String(enabled)]
+            )
+        }
         // #106: never surface an unverified channel success — a State B
         // "success without read-back" is reported as an error so callers
         // can't mistake a fired-but-unconfirmed toggle for a verified one.

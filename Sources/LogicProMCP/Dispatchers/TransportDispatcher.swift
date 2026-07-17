@@ -70,27 +70,31 @@ struct TransportDispatcher: OperationTraceDispatching {
 
         case "rewind":
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(operation: "transport.rewind")
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: "transport.rewind")
+            }
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "fast_forward":
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(operation: "transport.fast_forward")
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: "transport.fast_forward")
+            }
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "toggle_cycle":
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(operation: "transport.toggle_cycle")
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: "transport.toggle_cycle")
+            }
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "toggle_metronome":
             let traceID = await startTraceIfEnabled(command: command)
             let beforeTransport = await liveTransportState(router: router, cache: cache)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(operation: "transport.toggle_metronome")
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: "transport.toggle_metronome")
+            }
             let finalized = await finalizeToggleMetronomeResult(
                 result,
                 beforeTransport: beforeTransport,
@@ -101,14 +105,16 @@ struct TransportDispatcher: OperationTraceDispatching {
 
         case "toggle_count_in":
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(operation: "transport.toggle_count_in")
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: "transport.toggle_count_in")
+            }
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "toggle_autopunch":
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(operation: "transport.toggle_autopunch")
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: "transport.toggle_autopunch")
+            }
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "set_tempo":
@@ -131,11 +137,12 @@ struct TransportDispatcher: OperationTraceDispatching {
                     )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(
-                operation: "transport.set_tempo",
-                params: ["bpm": String(tempo)]
-            )
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "transport.set_tempo",
+                    params: ["bpm": String(tempo)]
+                )
+            }
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "goto_position":
@@ -170,11 +177,12 @@ struct TransportDispatcher: OperationTraceDispatching {
                     )
                 }
                 let traceID = await startTraceIfEnabled(command: command)
-                await recordWriteBoundary(traceID)
-                let result = await router.route(
-                    operation: "transport.goto_position",
-                    params: ["position": "\(bar).1.1.1"]
-                )
+                let result = await withWriteBoundaryArmed(traceID) {
+                    await router.route(
+                        operation: "transport.goto_position",
+                        params: ["position": "\(bar).1.1.1"]
+                    )
+                }
                 let finalized = await finalizeGotoPositionResult(
                     result,
                     requestedPosition: "\(bar).1.1.1",
@@ -193,11 +201,12 @@ struct TransportDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(
-                operation: "transport.goto_position",
-                params: ["position": time]
-            )
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "transport.goto_position",
+                    params: ["position": time]
+                )
+            }
             let finalized = await finalizeGotoPositionResult(
                 result,
                 requestedPosition: time,
@@ -231,11 +240,12 @@ struct TransportDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(
-                operation: "transport.set_cycle_range",
-                params: ["start": "\(start).1.1.1", "end": "\(end).1.1.1"]
-            )
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "transport.set_cycle_range",
+                    params: ["start": "\(start).1.1.1", "end": "\(end).1.1.1"]
+                )
+            }
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         default:
@@ -288,8 +298,9 @@ struct TransportDispatcher: OperationTraceDispatching {
             )))
         }
 
-        await recordWriteBoundary(traceID)
-        let writeResult = await router.route(operation: "transport.stop")
+        let writeResult = await withWriteBoundaryArmed(traceID) {
+            await router.route(operation: "transport.stop")
+        }
         guard writeResult.isSuccess else {
             return toolTextResult(writeResult)
         }
@@ -377,8 +388,9 @@ struct TransportDispatcher: OperationTraceDispatching {
             )))
         }
 
-        await recordWriteBoundary(traceID)
-        let writeResult = await router.route(operation: "transport.pause")
+        let writeResult = await withWriteBoundaryArmed(traceID) {
+            await router.route(operation: "transport.pause")
+        }
         let writePayload = jsonValue(from: writeResult.message)
 
         var attempts = 0
@@ -645,8 +657,9 @@ struct TransportDispatcher: OperationTraceDispatching {
             )))
         }
 
-        await recordWriteBoundary(traceID)
-        let writeResult = await router.route(operation: action.operation)
+        let writeResult = await withWriteBoundaryArmed(traceID) {
+            await router.route(operation: action.operation)
+        }
         let writePayload = jsonValue(from: writeResult.message)
         var attempts = 0
         var afterState: TransportState?

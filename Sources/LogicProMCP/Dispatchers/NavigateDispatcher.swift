@@ -35,11 +35,12 @@ struct NavigateDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(
-                operation: "transport.goto_position",
-                params: ["position": "\(bar).1.1.1"]
-            )
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "transport.goto_position",
+                    params: ["position": "\(bar).1.1.1"]
+                )
+            }
             let finalized = await TransportDispatcher.finalizeGotoPositionResult(
                 result,
                 requestedPosition: "\(bar).1.1.1",
@@ -60,11 +61,12 @@ struct NavigateDispatcher: OperationTraceDispatching {
             let markers = await cache.getMarkers()
             func routeMarkerTarget(_ target: MarkerState) async -> CallTool.Result {
                 let traceID = await startTraceIfEnabled(command: command)
-                await recordWriteBoundary(traceID)
-                var result = await router.route(
-                    operation: "transport.goto_position",
-                    params: ["position": target.position]
-                )
+                var result = await withWriteBoundaryArmed(traceID) {
+                    await router.route(
+                        operation: "transport.goto_position",
+                        params: ["position": target.position]
+                    )
+                }
                 // canonical 마커는 응답 그대로. fallback/unknown 만 uncertainty
                 // 머신 가독으로 surface (HC State A/B 한정; State C 보존).
                 if !target.positionSource.isCanonical {
@@ -168,11 +170,12 @@ struct NavigateDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(
-                operation: "nav.delete_marker",
-                params: ["index": String(index)]
-            )
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "nav.delete_marker",
+                    params: ["index": String(index)]
+                )
+            }
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         case "rename_marker":
@@ -199,11 +202,12 @@ struct NavigateDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(
-                operation: "nav.rename_marker",
-                params: ["index": String(index), "name": name]
-            )
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "nav.rename_marker",
+                    params: ["index": String(index), "name": name]
+                )
+            }
             return await finalizeTrace(
                 toolTextResultTreatingUnverifiedAsError(result),
                 traceID: traceID
@@ -211,8 +215,9 @@ struct NavigateDispatcher: OperationTraceDispatching {
 
         case "zoom_to_fit":
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(operation: "nav.zoom_to_fit")
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: "nav.zoom_to_fit")
+            }
             return await finalizeTrace(
                 toolTextResultTreatingUnverifiedAsError(result),
                 traceID: traceID
@@ -232,30 +237,33 @@ struct NavigateDispatcher: OperationTraceDispatching {
             switch level {
             case "in":
                 let traceID = await startTraceIfEnabled(command: command)
-                await recordWriteBoundary(traceID)
-                let result = await router.route(
-                    operation: "nav.set_zoom_level",
-                    params: ["level": "8"]
-                )
+                let result = await withWriteBoundaryArmed(traceID) {
+                    await router.route(
+                        operation: "nav.set_zoom_level",
+                        params: ["level": "8"]
+                    )
+                }
                 return await finalizeTrace(
                     toolTextResultTreatingUnverifiedAsError(result),
                     traceID: traceID
                 )
             case "out":
                 let traceID = await startTraceIfEnabled(command: command)
-                await recordWriteBoundary(traceID)
-                let result = await router.route(
-                    operation: "nav.set_zoom_level",
-                    params: ["level": "2"]
-                )
+                let result = await withWriteBoundaryArmed(traceID) {
+                    await router.route(
+                        operation: "nav.set_zoom_level",
+                        params: ["level": "2"]
+                    )
+                }
                 return await finalizeTrace(
                     toolTextResultTreatingUnverifiedAsError(result),
                     traceID: traceID
                 )
             case "fit":
                 let traceID = await startTraceIfEnabled(command: command)
-                await recordWriteBoundary(traceID)
-                let result = await router.route(operation: "nav.zoom_to_fit")
+                let result = await withWriteBoundaryArmed(traceID) {
+                    await router.route(operation: "nav.zoom_to_fit")
+                }
                 return await finalizeTrace(
                     toolTextResultTreatingUnverifiedAsError(result),
                     traceID: traceID
@@ -268,11 +276,12 @@ struct NavigateDispatcher: OperationTraceDispatching {
                     )
                 }
                 let traceID = await startTraceIfEnabled(command: command)
-                await recordWriteBoundary(traceID)
-                let result = await router.route(
-                    operation: "nav.set_zoom_level",
-                    params: ["level": String(numericLevel)]
-                )
+                let result = await withWriteBoundaryArmed(traceID) {
+                    await router.route(
+                        operation: "nav.set_zoom_level",
+                        params: ["level": String(numericLevel)]
+                    )
+                }
                 return await finalizeTrace(
                     toolTextResultTreatingUnverifiedAsError(result),
                     traceID: traceID
@@ -302,8 +311,9 @@ struct NavigateDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(operation: operation)
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: operation)
+            }
             return await finalizeTrace(toolTextResult(result), traceID: traceID)
 
         default:
@@ -323,8 +333,9 @@ struct NavigateDispatcher: OperationTraceDispatching {
         // counts were equal on success → every verified-by-readback create fell
         // to the State-B readback-mismatch path. Still fail-closed: a nil/short
         // readback below returns State B.
-        await recordWriteBoundary(traceID)
-        let openResult = await router.route(operation: "nav.open_marker_list")
+        let openResult = await withWriteBoundaryArmed(traceID) {
+            await router.route(operation: "nav.open_marker_list")
+        }
         guard openResult.isSuccess else {
             return toolTextResult(openResult)
         }

@@ -82,6 +82,55 @@ private struct OperationTraceCoverageFixtures {
     let midiPath: String
 }
 
+/// Shared fixture for the #389 store-wide censuses: the same temp project /
+/// output roots, all-channel router and seeded cache the mutating census builds,
+/// so both censuses drive the real bound dispatchers over every mutating spec.
+private struct OperationTraceCensusContext {
+    let fixtures: OperationTraceCoverageFixtures
+    let router: ChannelRouter
+    let cache: StateCache
+    let mutatingSpecs: [OperationSpec]
+    let cleanup: @Sendable () -> Void
+}
+
+private func makeOperationTraceCensusContext() async throws -> OperationTraceCensusContext {
+    let projectRoot = try makeExecTempDir()
+    let outputRoot = try makeExecTempDir()
+    let project = try makeLogicxProject(in: projectRoot, named: "Trace Census")
+    let resources = project.appendingPathComponent("Resources", isDirectory: true)
+    let alternative = project.appendingPathComponent("Alternatives/000", isDirectory: true)
+    try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: alternative, withIntermediateDirectories: true)
+    try Data().write(to: resources.appendingPathComponent("ProjectInformation.plist"))
+    try Data().write(to: alternative.appendingPathComponent("ProjectData"))
+    let midiFile = try SMFWriter.temporaryMIDIFile()
+    try Data([0x4D, 0x54, 0x68, 0x64]).write(to: midiFile.fileURL)
+
+    let router = ChannelRouter()
+    for channelID in ChannelID.allCases {
+        await router.register(OperationTraceCoverageChannel(id: channelID))
+    }
+    let cache = StateCache()
+    await cache.updateMarkers([
+        MarkerState(id: 0, name: "Coverage Marker", position: "1.1.1.1", positionSource: .parser),
+    ])
+    return OperationTraceCensusContext(
+        fixtures: OperationTraceCoverageFixtures(
+            projectPath: project.path,
+            outputRoot: outputRoot.path,
+            midiPath: midiFile.fileURL.path
+        ),
+        router: router,
+        cache: cache,
+        mutatingSpecs: OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` },
+        cleanup: {
+            try? FileManager.default.removeItem(at: projectRoot)
+            try? FileManager.default.removeItem(at: outputRoot)
+            SMFWriter.cleanupTemporaryMIDIFile(midiFile)
+        }
+    )
+}
+
 private let operationTraceCoverageFileReader = LogicProjectFileReader.Runtime(
     currentDocumentPath: { nil },
     now: Date.init,
@@ -278,6 +327,140 @@ extension OperationTraceTests {
                 Comment(rawValue: "Read-only command recorded writeBoundaryCrossed: \(spec.id.rawValue)")
             )
         }
+
+        await OperationTraceStore.shared.clear()
+    }
+
+    /// #389 store-wide ORDERING census. For every mutating registry spec, no
+    /// trace may place `writeBoundaryCrossed` before its first `channelStarted`:
+    /// the boundary is committed BY the router at the channel it dispatches, so
+    /// a boundary that precedes every channel is a boundary the op never crossed.
+    /// Traces that have one phase but not the other are exempt — non-router
+    /// writers (export/AppleScript) legitimately have a boundary and no channel,
+    /// and a route that dispatched nothing legitimately has neither.
+    @Test func OperationTraceWriteBoundaryNeverPrecedesChannelStartedCensus() async throws {
+        let previous = replaceOperationTraceCoverageFlag(with: "1")
+        defer { _ = replaceOperationTraceCoverageFlag(with: previous) }
+        let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
+        let previousRoot = getenv(rootKey).map { String(cString: $0) }
+        setenv(rootKey, FileManager.default.temporaryDirectory.path, 1)
+        defer {
+            if let previousRoot { setenv(rootKey, previousRoot, 1) } else { unsetenv(rootKey) }
+        }
+
+        let context = try await makeOperationTraceCensusContext()
+        defer { context.cleanup() }
+
+        var tracesWithBoth = 0
+        for spec in context.mutatingSpecs {
+            await OperationTraceStore.shared.clear()
+            let traceContext = OperationTraceContext(mutationGateAcquired: true)
+            _ = await OperationTraceContext.$current.withValue(traceContext) {
+                await dispatchOperationTraceCoverageSpec(
+                    spec,
+                    params: operationTraceCoverageParams(for: spec.id, fixtures: context.fixtures),
+                    router: context.router,
+                    cache: context.cache
+                )
+            }
+            for trace in await OperationTraceStore.shared.recent(limit: 128) {
+                let phases = trace.events.map(\.phase)
+                guard let boundary = phases.firstIndex(of: .writeBoundaryCrossed),
+                      let firstChannel = phases.firstIndex(of: .channelStarted) else { continue }
+                tracesWithBoth += 1
+                #expect(
+                    boundary >= firstChannel,
+                    Comment(rawValue: "\(spec.id.rawValue): writeBoundaryCrossed at \(boundary) precedes first channelStarted at \(firstChannel)")
+                )
+            }
+        }
+        // Guard the guard: if no traced op ever produced both phases the loop
+        // above would pass vacuously and prove nothing.
+        #expect(tracesWithBoth > 0, "ordering census exercised no trace with both phases")
+
+        await OperationTraceStore.shared.clear()
+    }
+
+    /// #389 store-wide PRESENCE census — the failure mode ordering is blind to.
+    /// An op whose arm was forgotten (or whose scope closed before the route)
+    /// records channels but NO boundary, and every ordering assertion still
+    /// passes because the phase simply is not there. For each mutating spec that
+    /// dispatched a channel under an armed write path, assert the boundary EXISTS
+    /// at/after that channel.
+    @Test func OperationTraceWriteBoundaryPresentForDispatchedMutationsCensus() async throws {
+        let previous = replaceOperationTraceCoverageFlag(with: "1")
+        defer { _ = replaceOperationTraceCoverageFlag(with: previous) }
+        let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
+        let previousRoot = getenv(rootKey).map { String(cString: $0) }
+        setenv(rootKey, FileManager.default.temporaryDirectory.path, 1)
+        defer {
+            if let previousRoot { setenv(rootKey, previousRoot, 1) } else { unsetenv(rootKey) }
+        }
+
+        let context = try await makeOperationTraceCensusContext()
+        defer { context.cleanup() }
+
+        // `eligible` = ops observed dispatching a channel in THIS run; `covered`
+        // = those that also carried the boundary. The invariant is equality:
+        // every op that reached a channel crossed a write boundary and must say
+        // so. Deriving `eligible` from the run (rather than a hardcoded floor)
+        // means a regression that silently drops armed coverage is caught at any
+        // scale, not just below an arbitrary threshold.
+        var eligible: [String] = []
+        var covered: [String] = []
+        for spec in context.mutatingSpecs {
+            await OperationTraceStore.shared.clear()
+            let traceContext = OperationTraceContext(mutationGateAcquired: true)
+            // The probe counts commits independently of the store, so an op that
+            // dispatches a channel with a nil/unregistered trace is still seen.
+            let boundaryProbe = WriteBoundaryProbe()
+            _ = await OperationTraceParentBoundary.$onWriteBoundary.withValue({
+                await boundaryProbe.record()
+            }) {
+                await OperationTraceContext.$current.withValue(traceContext) {
+                    await dispatchOperationTraceCoverageSpec(
+                        spec,
+                        params: operationTraceCoverageParams(for: spec.id, fixtures: context.fixtures),
+                        router: context.router,
+                        cache: context.cache
+                    )
+                }
+            }
+
+            guard let trace = await OperationTraceStore.shared.recent(limit: 128)
+                .first(where: { $0.operationID == spec.id.rawValue }) else { continue }
+            let phases = trace.events.map(\.phase)
+            guard let firstChannel = phases.firstIndex(of: .channelStarted) else { continue }
+            eligible.append(spec.id.rawValue)
+            // A channel executed for a mutating op ⇒ the write boundary was
+            // crossed and must be recorded at/after that channel.
+            guard let boundary = phases.firstIndex(of: .writeBoundaryCrossed) else {
+                Issue.record(Comment(rawValue: "\(spec.id.rawValue): dispatched a channel but recorded NO writeBoundaryCrossed"))
+                continue
+            }
+            #expect(
+                boundary >= firstChannel,
+                Comment(rawValue: "\(spec.id.rawValue): boundary at \(boundary) precedes channelStarted at \(firstChannel)")
+            )
+            #expect(
+                await boundaryProbe.count > 0,
+                Comment(rawValue: "\(spec.id.rawValue): recorded a boundary but never fired the parent hook")
+            )
+            covered.append(spec.id.rawValue)
+        }
+        // The honest invariant: channel-dispatching ⇒ boundary-carrying, for
+        // every op, with no coverage floor to hide behind.
+        let missing = Set(eligible).subtracting(covered).sorted()
+        #expect(
+            covered.count == eligible.count,
+            Comment(rawValue: "\(missing.count)/\(eligible.count) channel-dispatching ops carried no write boundary: \(missing)")
+        )
+        // Guard the guard: a refactor that stopped dispatching channels entirely
+        // would make the equality above hold vacuously (0 == 0).
+        #expect(
+            eligible.count >= 40,
+            Comment(rawValue: "presence census only saw \(eligible.count) channel-dispatching ops: \(eligible.sorted())")
+        )
 
         await OperationTraceStore.shared.clear()
     }

@@ -232,6 +232,10 @@ enum ProjectExportExecutor {
         }
 
         // (3a) Open the project (existing open path through the router).
+        // #389 known residual (accepted, not fixed): this notify fires BEFORE the
+        // open route, so an export boundary is still intent — not observation —
+        // if that route dispatches no channel. The arm/commit seam covers routed
+        // dispatcher writes, not this injected callback.
         await firstWriteNotifier.notify()
         let openResult = await router.route(
             operation: "project.open",

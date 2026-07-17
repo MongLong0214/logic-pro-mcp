@@ -277,6 +277,27 @@ extension OperationTraceDispatching {
         return id
     }
 
+    /// #389: arm `write_boundary.crossed` for EXACTLY the routed write in
+    /// `route`, then let `ChannelRouter` commit it at the first channel it
+    /// actually dispatches. The arm clears on exit whether or not it committed,
+    /// so a dead route (no channel) records no boundary and a later read route
+    /// can never inherit this write's arm.
+    ///
+    /// Wrap the WRITE route only — never widen the scope back over pre-reads
+    /// (`liveTransportState` and friends), which is exactly the false boundary
+    /// this replaces.
+    static func withWriteBoundaryArmed<T>(
+        _ traceID: TraceID?,
+        _ route: () async -> T
+    ) async -> T {
+        await OperationTraceWriteBoundaryArm.armed(traceID, route)
+    }
+
+    /// Immediate, unconditional boundary for genuine first writes that do NOT
+    /// go through `ChannelRouter` (support-bundle/export materialization, the
+    /// project lifecycle AppleScript, the cleanup_apply parent). Router-backed
+    /// writes must use `withWriteBoundaryArmed` instead — this call cannot know
+    /// whether a channel was ever dispatched.
     static func recordWriteBoundary(_ traceID: TraceID?) async {
         if let onWriteBoundary = OperationTraceParentBoundary.onWriteBoundary {
             await onWriteBoundary()
