@@ -38,6 +38,44 @@ private actor OperationTraceCoverageChannel: Channel {
     }
 }
 
+/// Answers State A so every read-only op runs its SUCCESS path. The refusing
+/// mock above short-circuits each op at its first channel hop — which is
+/// precisely why it can never prove where `writeBoundaryCrossed` is (or is
+/// not) recorded. The read-only inverse gate uses this permissive probe
+/// instead, so an op that wrongly recorded a write boundary on its happy path
+/// is actually reached.
+private actor OperationTraceReadOnlyProbeChannel: Channel {
+    nonisolated let id: ChannelID
+
+    init(id: ChannelID) {
+        self.id = id
+    }
+
+    func start() async throws {}
+    func stop() async {}
+
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        .success(HonestContract.encodeStateA(extras: ["operation": operation]))
+    }
+
+    func healthCheck() async -> ChannelHealth {
+        .healthy(detail: "operation trace read-only probe")
+    }
+}
+
+/// Counts `recordWriteBoundary` calls independently of the trace store. This
+/// is the load-bearing part of the zero-write census: `recordWriteBoundary`
+/// fires the `onWriteBoundary` hook BEFORE its `guard let traceID` early
+/// return, so a read-only op that crosses a write boundary is caught here even
+/// though it starts no trace and therefore leaves the store empty.
+private actor WriteBoundaryProbe {
+    private(set) var count = 0
+
+    func record() {
+        count += 1
+    }
+}
+
 private struct OperationTraceCoverageFixtures {
     let projectPath: String
     let outputRoot: String
@@ -130,41 +168,114 @@ extension OperationTraceTests {
         await OperationTraceStore.shared.clear()
     }
 
-    @Test func OperationTraceCoverageReadOnlyCommandsRemainTraceFree() async throws {
+    /// ADR-005 zero-write census (inverse gate). Read-only ops start no trace
+    /// by design, so the contract is an ABSENCE: for EVERY read-only registry
+    /// spec — not a hand-picked sample — invoking the real bound handler must
+    /// record no trace and cross no write boundary. Two independent assertions,
+    /// because neither alone is sufficient: the store-empty check proves no
+    /// trace was started, and the `onWriteBoundary` probe proves no write
+    /// boundary was crossed even in the (correct) absence of a trace, which a
+    /// store-only check is structurally blind to.
+    ///
+    /// Side-effect safety mirrors the executable dispatch census: every channel
+    /// is a probe, the project lifecycle executor is stubbed through the
+    /// dependencies seam, and the support-bundle exporter throws. Ops whose
+    /// read path needs live AX return errors through the probe channels — the
+    /// contract under test is trace/write-boundary absence, not success.
+    @Test func OperationTraceCoverageEveryReadOnlyRegistrySpecIsTraceAndWriteFree() async throws {
         let previous = replaceOperationTraceCoverageFlag(with: "1")
         defer { _ = replaceOperationTraceCoverageFlag(with: previous) }
 
+        let projectRoot = try makeExecTempDir()
+        let outputRoot = try makeExecTempDir()
+        defer {
+            try? FileManager.default.removeItem(at: projectRoot)
+            try? FileManager.default.removeItem(at: outputRoot)
+        }
+        let project = try makeLogicxProject(in: projectRoot, named: "Trace ReadOnly")
+        let resources = project.appendingPathComponent("Resources", isDirectory: true)
+        let alternative = project.appendingPathComponent("Alternatives/000", isDirectory: true)
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: alternative, withIntermediateDirectories: true)
+        try Data().write(to: resources.appendingPathComponent("ProjectInformation.plist"))
+        try Data().write(to: alternative.appendingPathComponent("ProjectData"))
+        let midiFile = try SMFWriter.temporaryMIDIFile()
+        try Data([0x4D, 0x54, 0x68, 0x64]).write(to: midiFile.fileURL)
+        defer { SMFWriter.cleanupTemporaryMIDIFile(midiFile) }
+
         let fixtures = OperationTraceCoverageFixtures(
-            projectPath: "/tmp/trace-coverage.logicx",
-            outputRoot: "/tmp",
-            midiPath: "/tmp/trace-coverage.mid"
+            projectPath: project.path,
+            outputRoot: outputRoot.path,
+            midiPath: midiFile.fileURL.path
         )
         let router = ChannelRouter()
         for channelID in ChannelID.allCases {
-            await router.register(OperationTraceCoverageChannel(id: channelID))
+            await router.register(OperationTraceReadOnlyProbeChannel(id: channelID))
         }
         let cache = StateCache()
-        let readOnlyIDs: [OperationID] = [
-            .audioAnalyzeFile,
-            .pluginsGetInventory,
-            .projectIsRunning,
-            .midiListPorts,
-            .tracksResolvePath,
-        ]
+        let dependencies = HandlerDependencies(
+            router: router,
+            cache: cache,
+            targetRegistry: TargetRegistry(),
+            poller: StatePoller(
+                axChannel: AccessibilityChannel(),
+                cache: cache,
+                runtime: .fastTest
+            ),
+            dialogPresent: { false },
+            supportBundleExporter: { _, _ in
+                throw NSError(domain: "operation-trace-read-only-census", code: 1)
+            },
+            projectLifecycleExecute: { _ in
+                ProjectDispatcher.LifecycleExecution(
+                    executionError: nil,
+                    timedOut: false,
+                    terminationStatus: 0,
+                    stderrOutput: ""
+                )
+            }
+        )
 
-        for operationID in readOnlyIDs {
-            let spec = try #require(OperationRegistry.specs.first { $0.id == operationID })
-            #expect(spec.mutability == .readOnly)
+        let readOnlySpecs = OperationRegistry.specs.filter { $0.mutability == .readOnly }
+        let mutatingSpecs = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
+        #expect(OperationRegistry.specs.count == 107)
+        #expect(readOnlySpecs.count == 21)
+        // Mutability is total: the mutating census (86) and this inverse gate
+        // (21) together account for every registered spec, so a new operation
+        // cannot land outside both gates.
+        #expect(readOnlySpecs.count + mutatingSpecs.count == OperationRegistry.specs.count)
+
+        for spec in readOnlySpecs {
+            let handler = try #require(
+                OperationHandlerRegistry.handler(for: spec.id),
+                Comment(rawValue: "\(spec.id.rawValue) has no bound handler")
+            )
             await OperationTraceStore.shared.clear()
-            _ = await dispatchOperationTraceCoverageSpec(
-                spec,
-                params: operationTraceCoverageParams(for: operationID, fixtures: fixtures),
-                router: router,
-                cache: cache
+            let boundaryProbe = WriteBoundaryProbe()
+            _ = await OperationTraceParentBoundary.$onWriteBoundary.withValue({
+                await boundaryProbe.record()
+            }) {
+                await handler(
+                    dependencies,
+                    operationTraceCoverageParams(for: spec.id, fixtures: fixtures)
+                )
+            }
+
+            let boundaryCount = await boundaryProbe.count
+            #expect(
+                boundaryCount == 0,
+                Comment(rawValue: "Read-only command crossed a write boundary: \(spec.id.rawValue)")
+            )
+            let traces = await OperationTraceStore.shared.recent(limit: 128)
+            #expect(
+                traces.isEmpty,
+                Comment(rawValue: "Read-only command traced: \(spec.tool.rawValue).\(spec.command)")
             )
             #expect(
-                await OperationTraceStore.shared.recent(limit: 128).isEmpty,
-                "Read-only command traced: \(spec.tool.rawValue).\(spec.command)"
+                !traces.contains { trace in
+                    trace.events.contains { $0.phase == .writeBoundaryCrossed }
+                },
+                Comment(rawValue: "Read-only command recorded writeBoundaryCrossed: \(spec.id.rawValue)")
             )
         }
 

@@ -290,7 +290,7 @@ extension OperationTraceDispatching {
         traceID: TraceID?
     ) async -> CallTool.Result {
         guard let traceID else { return result }
-        guard case .text(let raw, _, _) = result.content.first else {
+        guard case .text(let raw, let annotations, let meta) = result.content.first else {
             await OperationTraceStore.shared.record(
                 traceID,
                 phase: .verificationCompleted,
@@ -319,6 +319,18 @@ extension OperationTraceDispatching {
 
         let merged = HonestContract.addExtras(["trace_id": traceID.rawValue], into: raw)
         guard merged != raw else { return result }
-        return toolTextResult(merged, isError: result.isError == true)
+        // Injecting trace_id must not silently rewrite the rest of the result the
+        // dispatcher already built: rebuilding via `toolTextResult` dropped block 0's
+        // annotations/_meta, every later content block, the result-level _meta, and
+        // coerced a nil `isError` into `false`. Reconstruct in place instead —
+        // only block 0's text changes. Mirrors `TargetRefResolution.addEvidence`.
+        var content = result.content
+        content[0] = .text(text: merged, annotations: annotations, _meta: meta)
+        return CallTool.Result(
+            content: content,
+            structuredContent: structuredContentValue(fromToolText: merged),
+            isError: result.isError,
+            _meta: result._meta
+        )
     }
 }
