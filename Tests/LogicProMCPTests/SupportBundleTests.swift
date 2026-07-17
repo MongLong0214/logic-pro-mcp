@@ -23,6 +23,7 @@ struct SupportBundleTests {
                 TraceEvent(
                     phase: .requestReceived,
                     timestamp: .now,
+                    wallClock: Date(timeIntervalSince1970: 1_700_000_000),
                     attributes: [
                         "operation_id": OperationID.transportPlay.rawValue,
                         "command": "play",

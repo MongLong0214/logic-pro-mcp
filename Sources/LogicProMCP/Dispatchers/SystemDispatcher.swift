@@ -1214,7 +1214,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             let events: [[String: Any]] = trace.events.map { event in
                 [
                     "phase": event.phase.rawValue,
-                    "timestamp": String(describing: event.timestamp),
+                    "timestamp": ISO8601DateFormatter.cacheFormatter.string(from: event.wallClock),
                     "attributes": event.attributes,
                 ]
             }
