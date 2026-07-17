@@ -124,6 +124,10 @@ package struct QualificationRunner: Sendable {
         }
     }
 
+    // #394: despite the "raw" name (kept to avoid rippling the schema/contract
+    // checks), this transcript is ID-NORMALIZED wire — session-random target /
+    // trace IDs are replaced with stable `<prefix>_<NORM:N>` placeholders for
+    // cross-run comparison. It is NOT forensic, byte-unmodified stdio.
     private struct RawTranscriptArtifact: Codable {
         let schema: String
         let frames: [QualificationWireFrame]
@@ -571,12 +575,22 @@ package struct QualificationRunner: Sendable {
                 evidenceFiles.append(healthPath)
             }
             if isObservedAxis {
+                // #394: rewrite session-random target refs (trk_/mix_/ins_/prj_)
+                // and trace ids (lpmcp_) to appearance-order placeholders so the
+                // transcript is CROSS-RUN ID-STABLE (the ID dimension only —
+                // timestamp / live-DAW-state noise is not touched by this pass).
+                // Emit-only: the semantic oracle still validates the raw,
+                // un-normalized operation response/readback bytes (see
+                // QualificationOperationResult), so target-faithfulness is intact.
+                let normalizedFrames = QualificationTranscriptNormalizer.normalize(
+                    driveResult.wireFrames
+                )
                 let requiredArtifacts: [(String, Data, EvidenceManifest.Kind)] = [
                     (
                         Self.rawTranscriptFilename,
                         try Self.encoded(RawTranscriptArtifact(
                             schema: "qualification-raw-transcript/v1",
-                            frames: driveResult.wireFrames
+                            frames: normalizedFrames
                         )),
                         .rawTranscript
                     ),
@@ -584,7 +598,7 @@ package struct QualificationRunner: Sendable {
                         Self.publicTranscriptFilename,
                         try Self.encoded(PublicTranscriptArtifact(
                             schema: "qualification-public-transcript/v1",
-                            frames: driveResult.wireFrames.map { frame in
+                            frames: normalizedFrames.map { frame in
                                 .init(
                                     sequence: frame.sequence,
                                     direction: frame.direction,
