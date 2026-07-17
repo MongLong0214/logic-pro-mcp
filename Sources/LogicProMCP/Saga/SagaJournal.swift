@@ -300,6 +300,16 @@ enum SagaWire {
             return ["code": "invalid_expected_inverse", "step_index": index]
         case .automaticReplayBlocked:
             return ["code": "automatic_replay_blocked"]
+        case .confirmationRequired(let index, let operationID):
+            return indexedIssue("confirmation_required", index: index, operationID: operationID)
+        case .routeUnavailable(let index, let operationID):
+            return indexedIssue("route_unavailable", index: index, operationID: operationID)
+        case .deadlineBudgetExceeded(let totalSeconds, let budgetSeconds):
+            return [
+                "code": "deadline_budget_exceeded",
+                "worst_case_seconds": totalSeconds,
+                "budget_seconds": budgetSeconds,
+            ]
         }
     }
 

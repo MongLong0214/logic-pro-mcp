@@ -144,6 +144,83 @@ struct MutationSagaTests {
         )
     }
 
+    /// ADR-004: an unavailable route rejects the whole plan before step 1 —
+    /// the executor is never called.
+    @Test
+    func preflightRejectsUnavailableRouteBeforeStepOne() async {
+        let registry = TargetRegistry()
+        let valid = await bind(registry, index: 0, name: "Valid")
+        let executor = MockSagaExecutor(states: [valid: .string("Before")], behaviors: [])
+        let saga = MutationSaga(
+            targetRegistry: registry,
+            enabled: true,
+            routeAvailable: { _ in false }
+        )
+        let outcome = await saga.execute(
+            SagaPlan(
+                steps: [step(.tracksRename, target: valid, value: .string("After"))],
+                idempotencyKey: "route-unavailable-plan"
+            ),
+            executor: executor
+        )
+        #expect(!outcome.complete)
+        #expect(outcome.preflightIssues.contains(
+            .routeUnavailable(stepIndex: 0, operationID: .tracksRename)
+        ))
+        #expect(await executor.runCount() == 0)
+    }
+
+    /// ADR-004: a plan whose worst-case registry-deadline sum exceeds the
+    /// saga-execute budget rejects before step 1. The 6 allowlisted ops are
+    /// DeadlineClass.short (25s) and the budget is DeadlineClass.long (300s),
+    /// so 13 steps (325s) overflow while 12 (300s) fit exactly.
+    @Test
+    func preflightRejectsPlansExceedingDeadlineBudget() async {
+        let registry = TargetRegistry()
+        let valid = await bind(registry, index: 0, name: "Valid")
+        let executor = MockSagaExecutor(states: [valid: .string("Before")], behaviors: [])
+        let saga = MutationSaga(targetRegistry: registry, enabled: true)
+        let steps = (0..<13).map { index in
+            step(.tracksRename, target: valid, value: .string("After-\(index)"))
+        }
+        let outcome = await saga.execute(
+            SagaPlan(steps: steps, idempotencyKey: "budget-overflow-plan"),
+            executor: executor
+        )
+        #expect(!outcome.complete)
+        #expect(outcome.preflightIssues.contains(
+            .deadlineBudgetExceeded(totalSeconds: 325, budgetSeconds: 300)
+        ))
+        #expect(await executor.runCount() == 0)
+    }
+
+    /// ADR-004: a step whose registry spec declares a confirmation policy is
+    /// rejected — the saga wire carries no confirmation flow. project.open is
+    /// l2, so the plan surfaces confirmationRequired alongside the
+    /// not-reversible rejection.
+    @Test
+    func preflightRejectsConfirmationRequiringSteps() async {
+        let registry = TargetRegistry()
+        let valid = await bind(registry, index: 0, name: "Valid")
+        let executor = MockSagaExecutor(states: [valid: .string("Before")], behaviors: [])
+        let saga = MutationSaga(targetRegistry: registry, enabled: true)
+        let outcome = await saga.execute(
+            SagaPlan(
+                steps: [step(.projectOpen, target: valid, value: .string("/tmp/x.logicx"))],
+                idempotencyKey: "confirmation-plan"
+            ),
+            executor: executor
+        )
+        #expect(!outcome.complete)
+        #expect(outcome.preflightIssues.contains(
+            .confirmationRequired(stepIndex: 0, operationID: .projectOpen)
+        ))
+        #expect(outcome.preflightIssues.contains(
+            .operationNotReversible(stepIndex: 0, operationID: .projectOpen)
+        ))
+        #expect(await executor.runCount() == 0)
+    }
+
     @Test
     func testPreflightRejectsInvalidPlansBeforeRun() async {
         let registry = TargetRegistry()
