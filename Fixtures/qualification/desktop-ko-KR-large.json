@@ -1,0 +1,276 @@
+{
+  "axis": {
+    "cache": "cold",
+    "fixture": "large",
+    "locale": "ko-KR",
+    "profile": "core",
+    "variant": "desktop"
+  },
+  "description": "Canonical large project qualification input for Logic Pro Desktop under the ko-KR UI locale. Reproducible descriptor of the project state a same-artifact qualification run establishes for this axis; project content depends on the fixture size only, while the locale identifies the UI the run drives.",
+  "key": "desktop/ko-KR/core/cold/large",
+  "project": {
+    "sample_rate_hz": 48000,
+    "tempo_bpm": 120,
+    "time_signature": "4/4",
+    "track_count": 32,
+    "tracks": [
+      {
+        "index": 0,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 01",
+        "region_count": 1,
+        "soloed": false
+      },
+      {
+        "index": 1,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 02",
+        "region_count": 2,
+        "soloed": false
+      },
+      {
+        "index": 2,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 03",
+        "region_count": 3,
+        "soloed": false
+      },
+      {
+        "index": 3,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 04",
+        "region_count": 1,
+        "soloed": false
+      },
+      {
+        "index": 4,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 05",
+        "region_count": 2,
+        "soloed": false
+      },
+      {
+        "index": 5,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 06",
+        "region_count": 3,
+        "soloed": false
+      },
+      {
+        "index": 6,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 07",
+        "region_count": 1,
+        "soloed": false
+      },
+      {
+        "index": 7,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 08",
+        "region_count": 2,
+        "soloed": false
+      },
+      {
+        "index": 8,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 09",
+        "region_count": 3,
+        "soloed": false
+      },
+      {
+        "index": 9,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 10",
+        "region_count": 1,
+        "soloed": false
+      },
+      {
+        "index": 10,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 11",
+        "region_count": 2,
+        "soloed": false
+      },
+      {
+        "index": 11,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 12",
+        "region_count": 3,
+        "soloed": false
+      },
+      {
+        "index": 12,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 13",
+        "region_count": 1,
+        "soloed": false
+      },
+      {
+        "index": 13,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 14",
+        "region_count": 2,
+        "soloed": false
+      },
+      {
+        "index": 14,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 15",
+        "region_count": 3,
+        "soloed": false
+      },
+      {
+        "index": 15,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 16",
+        "region_count": 1,
+        "soloed": false
+      },
+      {
+        "index": 16,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 17",
+        "region_count": 2,
+        "soloed": false
+      },
+      {
+        "index": 17,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 18",
+        "region_count": 3,
+        "soloed": false
+      },
+      {
+        "index": 18,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 19",
+        "region_count": 1,
+        "soloed": false
+      },
+      {
+        "index": 19,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 20",
+        "region_count": 2,
+        "soloed": false
+      },
+      {
+        "index": 20,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 21",
+        "region_count": 3,
+        "soloed": false
+      },
+      {
+        "index": 21,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 22",
+        "region_count": 1,
+        "soloed": false
+      },
+      {
+        "index": 22,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 23",
+        "region_count": 2,
+        "soloed": false
+      },
+      {
+        "index": 23,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 24",
+        "region_count": 3,
+        "soloed": false
+      },
+      {
+        "index": 24,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 25",
+        "region_count": 1,
+        "soloed": false
+      },
+      {
+        "index": 25,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 26",
+        "region_count": 2,
+        "soloed": false
+      },
+      {
+        "index": 26,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 27",
+        "region_count": 3,
+        "soloed": false
+      },
+      {
+        "index": 27,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 28",
+        "region_count": 1,
+        "soloed": false
+      },
+      {
+        "index": 28,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 29",
+        "region_count": 2,
+        "soloed": false
+      },
+      {
+        "index": 29,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 30",
+        "region_count": 3,
+        "soloed": false
+      },
+      {
+        "index": 30,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 31",
+        "region_count": 1,
+        "soloed": false
+      },
+      {
+        "index": 31,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 32",
+        "region_count": 2,
+        "soloed": false
+      }
+    ]
+  },
+  "schema": "qualification-managed-fixture/v1"
+}

@@ -1,0 +1,84 @@
+{
+  "axis": {
+    "cache": "cold",
+    "fixture": "medium",
+    "locale": "en-US",
+    "profile": "core",
+    "variant": "desktop"
+  },
+  "description": "Canonical medium project qualification input for Logic Pro Desktop under the en-US UI locale. Reproducible descriptor of the project state a same-artifact qualification run establishes for this axis; project content depends on the fixture size only, while the locale identifies the UI the run drives.",
+  "key": "desktop/en-US/core/cold/medium",
+  "project": {
+    "sample_rate_hz": 48000,
+    "tempo_bpm": 120,
+    "time_signature": "4/4",
+    "track_count": 8,
+    "tracks": [
+      {
+        "index": 0,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 01",
+        "region_count": 1,
+        "soloed": false
+      },
+      {
+        "index": 1,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 02",
+        "region_count": 2,
+        "soloed": false
+      },
+      {
+        "index": 2,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 03",
+        "region_count": 3,
+        "soloed": false
+      },
+      {
+        "index": 3,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 04",
+        "region_count": 1,
+        "soloed": false
+      },
+      {
+        "index": 4,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 05",
+        "region_count": 2,
+        "soloed": false
+      },
+      {
+        "index": 5,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 06",
+        "region_count": 3,
+        "soloed": false
+      },
+      {
+        "index": 6,
+        "kind": "software_instrument",
+        "muted": false,
+        "name": "Track 07",
+        "region_count": 1,
+        "soloed": false
+      },
+      {
+        "index": 7,
+        "kind": "audio",
+        "muted": false,
+        "name": "Track 08",
+        "region_count": 2,
+        "soloed": false
+      }
+    ]
+  },
+  "schema": "qualification-managed-fixture/v1"
+}
