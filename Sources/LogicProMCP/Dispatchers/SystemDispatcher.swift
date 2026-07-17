@@ -335,12 +335,21 @@ struct SystemDispatcher: OperationTraceDispatching {
             let createdAt = Date()
             let directory: URL
             if let raw = params["dir"] {
+                // PRD-011: no arbitrary absolute targets. The requested
+                // directory must resolve INSIDE the dedicated support-bundle
+                // root (a relative subpath, or an absolute path already under
+                // the root) — symlinks in existing ancestors are resolved
+                // before the containment check so a link cannot escape it.
                 guard let path = raw.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
                       !path.isEmpty,
-                      path.hasPrefix("/") else {
-                    return toolInvalidParamsResult("export_support_bundle 'dir' must be an absolute path")
+                      let contained = Self.resolvedSupportBundleDirectory(requested: path) else {
+                    return toolInvalidParamsResult(
+                        "export_support_bundle 'dir' must resolve inside the support-bundle root "
+                            + "(~/Library/Logs/LogicProMCP/support-bundles) — pass a relative subpath "
+                            + "or omit 'dir' for an auto-named bundle"
+                    )
                 }
-                directory = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+                directory = contained
             } else {
                 directory = defaultSupportBundleDirectory(createdAt: createdAt)
             }
@@ -764,13 +773,75 @@ struct SystemDispatcher: OperationTraceDispatching {
         )
     }
 
+    /// PRD-011: the ONLY directory support bundles may be written under.
+    /// Overridable for tests via environment (never in production launchd
+    /// plists) so containment behavior is provable against a temp root.
+    static var supportBundleRoot: URL {
+        if let override = ProcessInfo.processInfo
+            .environment["LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"],
+            !override.isEmpty {
+            return URL(fileURLWithPath: override, isDirectory: true).standardizedFileURL
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/LogicProMCP/support-bundles", isDirectory: true)
+            .standardizedFileURL
+    }
+
+    /// Resolves a caller-requested bundle directory strictly inside the
+    /// support-bundle root, or nil. Relative subpaths resolve against the
+    /// root; absolute paths must already be under it. `..` is collapsed by
+    /// standardization and every EXISTING ancestor is resolved through
+    /// `realpath` (Foundation's `resolvingSymlinksInPath()` leaves symlinked
+    /// ancestors unresolved when the path tail does not exist yet), so
+    /// neither dot-dot traversal nor a symlink planted under the root can
+    /// escape containment. The result must be STRICTLY inside (the root
+    /// itself is not a valid bundle directory).
+    static func resolvedSupportBundleDirectory(requested: String) -> URL? {
+        let rootPath = realpathResolvedPath(supportBundleRoot)
+        let candidate: URL = requested.hasPrefix("/")
+            ? URL(fileURLWithPath: requested, isDirectory: true)
+            : supportBundleRoot.appendingPathComponent(requested, isDirectory: true)
+        let resolvedPath = realpathResolvedPath(candidate)
+        // String-level containment on realpath output — URL standardization
+        // is deliberately avoided post-realpath because Foundation strips the
+        // /private prefix only for EXISTING paths, which makes root/candidate
+        // canonical forms diverge when the candidate tail does not exist yet.
+        guard resolvedPath.hasPrefix(rootPath + "/"),
+              !resolvedPath.split(separator: "/").contains("..") else {
+            return nil
+        }
+        return URL(fileURLWithPath: resolvedPath, isDirectory: true)
+    }
+
+    /// realpath-resolves the deepest EXISTING prefix of `url` (following every
+    /// symlink in it) and re-appends the not-yet-existing tail literally.
+    /// Returns a plain path string so both sides of the containment check use
+    /// the same canonical form.
+    private static func realpathResolvedPath(_ url: URL) -> String {
+        var existing = url.standardizedFileURL
+        var tail: [String] = []
+        while !FileManager.default.fileExists(atPath: existing.path),
+              existing.pathComponents.count > 1 {
+            tail.append(existing.lastPathComponent)
+            existing = existing.deletingLastPathComponent()
+        }
+        var base = existing.path
+        if let raw = realpath(existing.path, nil) {
+            base = String(cString: raw)
+            free(raw)
+        }
+        for component in tail.reversed() {
+            base += "/" + component
+        }
+        return base
+    }
+
     private static func defaultSupportBundleDirectory(createdAt: Date) -> URL {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        return FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/LogicProMCP/support-bundles", isDirectory: true)
+        return supportBundleRoot
             .appendingPathComponent(
                 "\(formatter.string(from: createdAt))-\(UUID().uuidString.lowercased())",
                 isDirectory: true

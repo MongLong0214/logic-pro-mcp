@@ -195,6 +195,46 @@ struct SupportBundleTests {
             == Set(SupportBundleBuilder.fileNames))
     }
 
+    @Test("PRD-011: bundle directory containment defeats absolute, dot-dot, and symlink escapes")
+    func bundleDirectoryContainment() throws {
+        let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
+        let previousRoot = getenv(rootKey).map { String(cString: $0) }
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bundle-root-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        setenv(rootKey, root.path, 1)
+        defer {
+            if let previousRoot { setenv(rootKey, previousRoot, 1) } else { unsetenv(rootKey) }
+            try? FileManager.default.removeItem(at: root)
+        }
+        // Relative subpath resolves strictly inside (suffix-checked; the
+        // canonical prefix form is the resolver's own realpath output).
+        let relative = SystemDispatcher.resolvedSupportBundleDirectory(requested: "session-a/bundle-1")
+        #expect(relative != nil)
+        #expect(relative?.path.hasSuffix("/session-a/bundle-1") == true)
+        // Absolute path already under the root is accepted.
+        #expect(SystemDispatcher.resolvedSupportBundleDirectory(
+            requested: root.appendingPathComponent("abs-child").path
+        ) != nil)
+        // Absolute path outside the root is rejected.
+        #expect(SystemDispatcher.resolvedSupportBundleDirectory(
+            requested: "/tmp/pr011-outside-\(UUID().uuidString)"
+        ) == nil)
+        // Dot-dot traversal is rejected.
+        #expect(SystemDispatcher.resolvedSupportBundleDirectory(requested: "a/../../escape") == nil)
+        // The root itself is not a valid bundle directory (strictly inside).
+        #expect(SystemDispatcher.resolvedSupportBundleDirectory(requested: root.path) == nil)
+        // A symlink planted under the root that points outside is resolved
+        // before the containment check and rejected.
+        let outside = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pr011-outside-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let link = root.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+        #expect(SystemDispatcher.resolvedSupportBundleDirectory(requested: "link/bundle") == nil)
+    }
+
     @Test("system command returns typed State A/C and records the write boundary")
     func systemCommandContractAndTrace() async throws {
         let flag = "LOGIC_MCP_ADR005_OPERATION_TRACE"
@@ -202,6 +242,13 @@ struct SupportBundleTests {
         setenv(flag, "1", 1)
         defer {
             if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
+        }
+        // PRD-011: contain test bundles under a temp root override.
+        let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
+        let previousRoot = getenv(rootKey).map { String(cString: $0) }
+        setenv(rootKey, FileManager.default.temporaryDirectory.path, 1)
+        defer {
+            if let previousRoot { setenv(rootKey, previousRoot, 1) } else { unsetenv(rootKey) }
         }
         await OperationTraceStore.shared.clear()
 
@@ -222,7 +269,10 @@ struct SupportBundleTests {
         )
         let successObject = try #require(sharedJSONObject(sharedToolText(success)))
         #expect(successObject["state"] as? String == "A")
-        #expect(successObject["bundle_path"] as? String == output.path)
+        #expect(
+            (successObject["bundle_path"] as? String)?
+                .hasSuffix("/" + output.lastPathComponent) == true
+        )
         let files = try #require(successObject["files"] as? [[String: String]])
         #expect(files == [["name": "manifest.json", "sha256": String(repeating: "a", count: 64)]])
         let traceID = try #require(successObject["trace_id"] as? String)
@@ -262,6 +312,13 @@ struct SupportBundleTests {
 
     @Test("public MCP handler exports locally without starting Logic")
     func publicHandlerExport() async throws {
+        // PRD-011: contain the test bundle under a temp root override.
+        let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
+        let previousRoot = getenv(rootKey).map { String(cString: $0) }
+        setenv(rootKey, FileManager.default.temporaryDirectory.path, 1)
+        defer {
+            if let previousRoot { setenv(rootKey, previousRoot, 1) } else { unsetenv(rootKey) }
+        }
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("logic-pro-mcp-public-support-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: output) }
@@ -295,7 +352,7 @@ struct SupportBundleTests {
             name: "logic_system",
             arguments: [
                 "command": .string("export_support_bundle"),
-                "params": .object(["dir": .string("relative/path")]),
+                "params": .object(["dir": .string("/pr011-outside-root-\(UUID().uuidString)")]),
             ]
         ))
         #expect(invalid.isError == true)

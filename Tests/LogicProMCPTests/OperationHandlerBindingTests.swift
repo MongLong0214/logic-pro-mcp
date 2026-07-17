@@ -212,10 +212,13 @@ struct OperationHandlerBindingTests {
             ),
             (
                 .systemExportSupportBundle,
-                ["dir": .string("relative")],
+                // PRD-011: an absolute path outside the support-bundle root is
+                // rejected by containment before any write — both paths must
+                // produce the identical typed rejection.
+                ["dir": .string("/definitely-outside-bundle-root")],
                 await SystemDispatcher.handle(
                     command: "export_support_bundle",
-                    params: ["dir": .string("relative")],
+                    params: ["dir": .string("/definitely-outside-bundle-root")],
                     router: dependencies.router,
                     cache: dependencies.cache,
                     poller: dependencies.poller,
