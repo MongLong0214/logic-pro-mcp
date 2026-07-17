@@ -203,11 +203,29 @@ actor OperationTraceStore {
         return order.reversed().prefix(count).compactMap { traces[$0] }
     }
 
-    func clear() {
+    /// Number of traces currently retained. `recent()` materializes the whole
+    /// trace list just to count it; callers that only need the size take this.
+    var traceCount: Int {
+        traces.count
+    }
+
+    /// PRD-015: atomically drain every retained trace and report how many were
+    /// ACTUALLY removed. A count sampled in one actor call and a `clear()` in
+    /// another straddle a suspension point, so a trace started in between makes
+    /// the separately-sampled number a lie. Draining and counting in a SINGLE
+    /// actor call closes that window: the returned number is exactly what this
+    /// call destroyed, and nothing else can interleave.
+    func clearReturningCount() -> Int {
+        let removed = traces.count
         traces.removeAll(keepingCapacity: true)
         order.removeAll(keepingCapacity: true)
         byteCounts.removeAll(keepingCapacity: true)
         totalBytes = 0
+        return removed
+    }
+
+    func clear() {
+        _ = clearReturningCount()
     }
 
     private func replace(_ trace: OperationTrace) {

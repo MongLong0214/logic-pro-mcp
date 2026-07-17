@@ -845,30 +845,67 @@ struct SystemDispatcher: OperationTraceDispatching {
         case encodingFailed
         case openFailed(errno: Int32)
         case writeFailed
+        /// The audit directory resolved OUTSIDE its intended parent (symlink
+        /// planted for the final component) — the receipt must never be
+        /// diverted out of the containment root, so the clear is refused.
+        case auditDirectoryEscaped
     }
 
-    /// PRD-015: append ONE JSON line recording a successful trace clear to the
-    /// durable audit log. The receipt survives the store clear (it lives outside
-    /// it) and carries counts/timestamps ONLY — never trace contents, paths, or
-    /// params — so the log itself leaks nothing about the cleared evidence.
-    /// Opened `O_APPEND` (never truncated); intermediate directories are created
-    /// fail-closed (a create/append error propagates so the caller refuses the
-    /// clear). Returns the receipt file path for the response body.
-    private static func appendTraceClearReceipt(clearedTraceCount: Int) throws -> String {
-        let root = auditLogRoot
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let receiptURL = traceClearReceiptURL
-        // Counts + timestamps ONLY. `authorization` records the boundary that
-        // sanctioned the clear so a future operator-approval integration can
-        // slot in without a schema bump. No path/param/trace content ever.
-        let receipt: [String: Any] = [
+    /// PRD-015 receipt fields — counts + timestamps ONLY, never trace contents,
+    /// paths, or params, so the log itself leaks nothing about the evidence it
+    /// records the destruction of. `authorization` records the boundary that
+    /// sanctioned the clear so a future operator-approval integration can slot
+    /// in without a schema bump.
+    ///
+    /// `trace_count_at_receipt` is deliberately named for what it can honestly
+    /// promise: the count SNAPSHOT taken when this line was written, one actor
+    /// hop before the store was drained. When `actualClearedCount` is supplied
+    /// the line is an amendment (see `appendTraceClearAmendment`) and carries
+    /// the drain's true number alongside the snapshot it corrects. Schema stays
+    /// `.v1`: both fields are additive and the tag brands the record shape, so
+    /// a consumer branching on it keeps parsing every line.
+    private static func traceClearReceiptFields(
+        traceCountAtReceipt: Int,
+        actualClearedCount: Int? = nil
+    ) -> [String: Any] {
+        var receipt: [String: Any] = [
             "schema": traceClearReceiptSchema,
             "cleared_at": ISO8601DateFormatter.cacheFormatter.string(from: Date()),
-            "cleared_trace_count": clearedTraceCount,
+            "trace_count_at_receipt": traceCountAtReceipt,
             "authorization": "mcp_confirmed_param",
             "server_version": ServerConfig.serverVersion,
             "pid": Int(ProcessInfo.processInfo.processIdentifier),
         ]
+        if let actualClearedCount {
+            receipt["amends"] = true
+            receipt["actual_cleared_count"] = actualClearedCount
+        }
+        return receipt
+    }
+
+    /// PRD-015: append ONE JSON line to the durable audit log. The line survives
+    /// the store clear (it lives outside it). Opened `O_APPEND` (never
+    /// truncated); the directory is created and containment-checked fail-closed
+    /// (any error propagates so the caller refuses the clear). Returns the
+    /// receipt file path for the response body.
+    ///
+    /// Unbounded append is ACCEPTED, not an oversight. Each line is a fixed,
+    /// receipt-sized record and `clear_traces` is an l2-confirmed operator
+    /// action, so the log grows with human-scale invocation frequency, not with
+    /// traffic. Rotation/pruning is deliberately out of scope: a rotator that
+    /// can delete receipt lines is itself an evidence-destruction surface —
+    /// precisely the failure mode this receipt exists to close.
+    private static func appendTraceClearAuditLine(_ receipt: [String: Any]) throws -> String {
+        let root = auditLogRoot
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        // The directory now EXISTS, so re-resolve it through realpath BEFORE
+        // any write: a symlink planted for the audit dir would otherwise divert
+        // the receipt — and with it the whole evidence trail — outside the
+        // intended root, which is indistinguishable from having no receipt.
+        guard auditDirectoryIsContained(root) else {
+            throw TraceClearReceiptError.auditDirectoryEscaped
+        }
+        let receiptURL = traceClearReceiptURL
         let data = try JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys])
         guard let line = String(data: data, encoding: .utf8) else {
             throw TraceClearReceiptError.encodingFailed
@@ -880,6 +917,49 @@ struct SystemDispatcher: OperationTraceDispatching {
         let written = bytes.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
         guard written == bytes.count else { throw TraceClearReceiptError.writeFailed }
         return receiptURL.path
+    }
+
+    /// PRD-015: record a trace clear, written BEFORE the store is drained so a
+    /// clear can never destroy evidence without a surviving durable record.
+    private static func appendTraceClearReceipt(traceCountAtReceipt: Int) throws -> String {
+        try appendTraceClearAuditLine(
+            traceClearReceiptFields(traceCountAtReceipt: traceCountAtReceipt)
+        )
+    }
+
+    /// PRD-015: amend an already-durable receipt whose snapshot count the atomic
+    /// drain then contradicted. The first line is NEVER rewritten — the log
+    /// tells the truth by growing, never by editing history, which is the only
+    /// form of honesty an append-only audit trail can offer. The amendment is
+    /// self-describing (`amends:true` + `actual_cleared_count`) so a consumer
+    /// reading lines in order lands on the true count without ambiguity.
+    @discardableResult
+    static func appendTraceClearAmendment(
+        traceCountAtReceipt: Int,
+        actualClearedCount: Int
+    ) throws -> String {
+        try appendTraceClearAuditLine(
+            traceClearReceiptFields(
+                traceCountAtReceipt: traceCountAtReceipt,
+                actualClearedCount: actualClearedCount
+            )
+        )
+    }
+
+    /// PRD-015 symlink hardening: the audit directory must resolve INSIDE its
+    /// intended parent — production `~/Library/Logs/LogicProMCP`, or the
+    /// DEBUG override root's parent when the test hook is set. Mirrors the
+    /// support-bundle containment check (`createdBundleDirectoryIsContained`):
+    /// realpath BOTH sides, then require the directory to resolve strictly
+    /// under the parent. Because `realpath` follows the final component while
+    /// the parent is resolved independently, a symlink planted for the audit
+    /// dir resolves outside the parent and is caught. Fail-closed when either
+    /// side cannot be canonicalized — an unresolved path is never contained.
+    static func auditDirectoryIsContained(_ directory: URL) -> Bool {
+        guard let parentPath = realpathResolvedPath(directory.deletingLastPathComponent()),
+              let resolved = realpathResolvedPath(directory) else { return false }
+        return resolved.hasPrefix(parentPath + "/")
+            && !resolved.split(separator: "/").contains("..")
     }
 
     /// Resolves a caller-requested bundle directory strictly inside the
@@ -1137,27 +1217,56 @@ struct SystemDispatcher: OperationTraceDispatching {
             // below. `authorization` is recorded in the receipt so a future
             // operator-approval integration slots in without a schema change.
             //
-            // Fail closed: capture the count, then write the receipt BEFORE
+            // Fail closed: snapshot the count, then write the receipt BEFORE
             // clearing. If the receipt cannot be written the store is left
             // intact and a typed State C is returned — never destroy evidence
             // without a surviving durable record of the clear.
-            let clearedTraceCount = await OperationTraceStore.shared.recent(limit: .max).count
+            //
+            // The snapshot and the drain are two actor hops with file IO
+            // between them, so a trace started in that window would make the
+            // receipt's count wrong. The ordering is NOT relaxed to fix that
+            // (receipt-before-destruction is the whole guarantee); instead the
+            // drain is atomic and reports what it ACTUALLY removed, and any
+            // divergence is amended with a second append-only line below.
+            let countAtReceipt = await OperationTraceStore.shared.traceCount
             let receiptPath: String
             do {
-                receiptPath = try appendTraceClearReceipt(clearedTraceCount: clearedTraceCount)
+                receiptPath = try appendTraceClearReceipt(traceCountAtReceipt: countAtReceipt)
             } catch {
                 return toolStateCResult(
                     .traceClearReceiptFailed,
                     hint: "clear_traces refused: the durable audit receipt could not be written; "
                         + "the trace store was left intact. Fix the audit-log location and retry.",
-                    extras: ["write_attempted": false]
+                    // The receipt write WAS attempted (and failed); what the
+                    // caller needs to know is that the STORE is untouched.
+                    extras: ["store_cleared": false]
                 )
             }
-            await OperationTraceStore.shared.clear()
+            let actualCleared = await OperationTraceStore.shared.clearReturningCount()
+            if actualCleared != countAtReceipt {
+                // The receipt is already durable and is never rewritten. If the
+                // amendment itself cannot be written the clear has ALREADY
+                // happened, so State C would be a lie — report the true count
+                // and leave a warning rather than claim nothing was cleared.
+                do {
+                    try appendTraceClearAmendment(
+                        traceCountAtReceipt: countAtReceipt,
+                        actualClearedCount: actualCleared
+                    )
+                } catch {
+                    Log.warn(
+                        "clear_traces receipt amendment could not be appended: the durable "
+                            + "receipt records \(countAtReceipt) trace(s) at snapshot but "
+                            + "\(actualCleared) were actually cleared",
+                        subsystem: .server
+                    )
+                }
+            }
             return toolTextResult(HonestContract.jsonString([
                 "success": true,
                 "receipt_path": receiptPath,
-                "cleared_trace_count": clearedTraceCount,
+                // The drain's true number, not the earlier snapshot.
+                "cleared_trace_count": actualCleared,
             ]))
 
         default:
