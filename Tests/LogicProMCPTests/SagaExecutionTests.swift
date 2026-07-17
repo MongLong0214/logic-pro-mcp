@@ -699,4 +699,279 @@ struct SagaExecutionTests {
             }
         }
     }
+
+    // MARK: - ADR-004 / issue #287 qualification-only partial-state fault seam
+
+    private struct SeamFixture: Sendable {
+        let executor: ProductionSagaStepExecutor
+        let channel: SagaRecordingChannel
+        let surface: SagaLiveTrackSurface
+        let registry: TargetRegistry
+        let targets: [TargetReference]
+    }
+
+    /// Builds a one-step-per-track saga environment, optionally arming the
+    /// qualification fault seam. `faultSeam` is nil in the control (env unset)
+    /// case, so the executor is byte-for-byte the production one.
+    private func makeSeamFixture(
+        tracks: [TrackState],
+        faultSeam: SagaPartialStateFaultSeam? = nil
+    ) async -> SeamFixture {
+        let cache = StateCache()
+        await cache.updateTracks(tracks)
+        let surface = SagaLiveTrackSurface(tracks)
+        let registry = TargetRegistry()
+        var targets: [TargetReference] = []
+        for track in tracks {
+            let descriptor = TargetDescriptor(trackIndex: track.id, trackName: track.name)
+            targets.append(await registry.bind(
+                kind: .track,
+                descriptor: descriptor,
+                fingerprint: descriptor.fingerprint
+            ))
+        }
+        let channel = SagaRecordingChannel(cache: cache, surface: surface)
+        let router = ChannelRouter()
+        await router.register(channel)
+        return SeamFixture(
+            executor: ProductionSagaStepExecutor(
+                router: router,
+                cache: cache,
+                targetRegistry: registry,
+                dialogPresent: { false },
+                liveReadback: surface.readback,
+                faultSeam: faultSeam
+            ),
+            channel: channel,
+            surface: surface,
+            registry: registry,
+            targets: targets
+        )
+    }
+
+    private func twoStepTracks() -> [TrackState] {
+        [
+            TrackState(id: 0, name: "Bass", type: .audio, volume: 0.25),
+            TrackState(id: 1, name: "Keys", type: .softwareInstrument),
+        ]
+    }
+
+    /// TEST (c): the seam is a completely dead branch unless the fault env is
+    /// explicitly `partial_state`. Resolution — the ONLY place a seam is
+    /// constructed — returns nil for an unset env, for the transport-only
+    /// `timeout` mode, and for an empty plan; it constructs a seam only for
+    /// `partial_state` with a non-empty plan.
+    @Test("fault seam resolves nil unless partial_state env is explicitly set")
+    func faultSeamResolvesNilUnlessPartialStateEnvSet() async {
+        #expect(SagaPartialStateFaultSeam.resolve(environment: [:], stepCount: 2) == nil)
+        #expect(SagaPartialStateFaultSeam.resolve(
+            environment: ["UNRELATED": "partial_state"],
+            stepCount: 2
+        ) == nil)
+        // `timeout` is the transport probe's mode; it must leave the saga inert.
+        #expect(SagaPartialStateFaultSeam.resolve(
+            environment: ["LOGIC_PRO_MCP_FAULT_INJECT": "timeout"],
+            stepCount: 2
+        ) == nil)
+        #expect(SagaPartialStateFaultSeam.resolve(
+            environment: ["LOGIC_PRO_MCP_FAULT_INJECT": "partial_state"],
+            stepCount: 0
+        ) == nil)
+        #expect(SagaPartialStateFaultSeam.resolve(
+            environment: ["LOGIC_PRO_MCP_FAULT_INJECT": "partial_state"],
+            stepCount: 2
+        ) != nil)
+    }
+
+    /// TEST (c): even when armed the seam yields a State-C result for EXACTLY
+    /// one run — the targeted forward step — and nil for every run before and
+    /// after it, so the compensation inverses (which run after) dispatch for
+    /// real. This is what keeps the seam inert on every non-target run.
+    @Test("armed seam injects exactly once at the target forward run")
+    func faultSeamInjectsExactlyOnceAtTargetForwardRun() async throws {
+        let probeStep = SagaStep(
+            operationID: .mixerSetVolume,
+            targetRef: nil,
+            params: [:],
+            expectedInverse: SagaExpectedInverse(
+                operationID: .mixerSetVolume,
+                valueParameter: "value"
+            )
+        )
+
+        // Default target is the LAST step (index 1 of a 2-step plan).
+        let lastSeam = try #require(SagaPartialStateFaultSeam.resolve(
+            environment: ["LOGIC_PRO_MCP_FAULT_INJECT": "partial_state"],
+            stepCount: 2
+        ))
+        #expect(lastSeam.injectionResult(for: probeStep) == nil) // cursor 0 ≠ 1
+        let injected = try #require(lastSeam.injectionResult(for: probeStep)) // cursor 1
+        #expect(injected.state == .stateC)
+        #expect(!injected.writeBoundaryCrossed)
+        #expect(injected.detail.contains("qualification_fault_injected_partial_state"))
+        #expect(lastSeam.injectionResult(for: probeStep) == nil) // cursor 2 (a compensation run)
+        #expect(lastSeam.injectionResult(for: probeStep) == nil) // cursor 3
+
+        // Explicit override pins the FIRST step (index 0).
+        let firstSeam = try #require(SagaPartialStateFaultSeam.resolve(
+            environment: [
+                "LOGIC_PRO_MCP_FAULT_INJECT": "partial_state",
+                "LOGIC_PRO_MCP_FAULT_INJECT_STEP": "0",
+            ],
+            stepCount: 3
+        ))
+        #expect(try #require(firstSeam.injectionResult(for: probeStep)).state == .stateC) // cursor 0
+        #expect(firstSeam.injectionResult(for: probeStep) == nil) // cursor 1
+
+        // An out-of-range override falls back to the LAST step.
+        let clampedSeam = try #require(SagaPartialStateFaultSeam.resolve(
+            environment: [
+                "LOGIC_PRO_MCP_FAULT_INJECT": "partial_state",
+                "LOGIC_PRO_MCP_FAULT_INJECT_STEP": "99",
+            ],
+            stepCount: 2
+        ))
+        #expect(clampedSeam.injectionResult(for: probeStep) == nil) // cursor 0 ≠ 1
+        #expect(try #require(clampedSeam.injectionResult(for: probeStep)).state == .stateC) // cursor 1
+    }
+
+    /// TEST (a): with the seam absent (env unset) the exact same 2-step plan
+    /// completes normally — both steps apply, nothing compensates. This is the
+    /// control the injected run in the next test is measured against.
+    @Test("seam-absent plan completes normally and applies both steps")
+    func faultSeamAbsentCompletesTwoStepPlanNormally() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = await makeSeamFixture(tracks: twoStepTracks())
+            let plan = SagaPlan(
+                steps: [
+                    step(.mixerSetVolume, target: fixture.targets[0], value: .double(0.75)),
+                    step(.tracksRename, target: fixture.targets[1], value: .string("Lead")),
+                ],
+                idempotencyKey: "seam-absent-control"
+            )
+
+            let outcome = await MutationSaga(
+                targetRegistry: fixture.registry,
+                enabled: true,
+                routeAvailable: { _ in true }
+            ).execute(plan, executor: fixture.executor)
+
+            #expect(outcome.state == .completed)
+            #expect(outcome.complete)
+            let appliedVolume = try #require(outcome.journal[0].executionResult)
+            #expect(appliedVolume.state == .stateA)
+            let appliedRename = try #require(outcome.journal[1].executionResult)
+            #expect(appliedRename.state == .stateA)
+            #expect(await fixture.channel.recordedCalls().map(\.operation)
+                == ["mixer.set_volume", "track.rename"])
+            #expect(fixture.surface.snapshot(0)?.volume == 0.75)
+            #expect(fixture.surface.snapshot(1)?.name == "Lead")
+        }
+    }
+
+    /// TEST (b): with `partial_state` armed on the SAME 2-step plan, the first
+    /// step really applies, the last (injected) step returns State C BEFORE its
+    /// write (no dispatch, no mutation), and the saga's own compensate() runs a
+    /// real inverse over the applied first step — restoring the live surface and
+    /// recording CompensationEvidence for it.
+    @Test("partial_state fault drives real compensation of the applied prefix")
+    func partialStateFaultDrivesRealCompensationOnTwoStepPlan() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let seam = SagaPartialStateFaultSeam.resolve(
+                environment: ["LOGIC_PRO_MCP_FAULT_INJECT": "partial_state"],
+                stepCount: 2
+            )
+            let fixture = await makeSeamFixture(tracks: twoStepTracks(), faultSeam: seam)
+            let plan = SagaPlan(
+                steps: [
+                    step(.mixerSetVolume, target: fixture.targets[0], value: .double(0.75)),
+                    step(.tracksRename, target: fixture.targets[1], value: .string("Lead")),
+                ],
+                idempotencyKey: "partial-state-two-step"
+            )
+
+            let outcome = await MutationSaga(
+                targetRegistry: fixture.registry,
+                enabled: true,
+                routeAvailable: { _ in true }
+            ).execute(plan, executor: fixture.executor)
+
+            // The applied first step, then its inverse — the injected rename
+            // NEVER reached the channel (no "track.rename" forward call).
+            #expect(await fixture.channel.recordedCalls().map(\.operation)
+                == ["mixer.set_volume", "mixer.set_volume"])
+
+            #expect(outcome.state == .fullyCompensated)
+            let applied = try #require(outcome.journal[0].executionResult)
+            #expect(applied.state == .stateA)
+            #expect(outcome.journal[0].verificationEvidence?.disposition == .applied)
+            #expect(outcome.journal[0].compensationEvidence?.disposition == .verified)
+
+            let injected = try #require(outcome.journal[1].executionResult)
+            #expect(injected.state == .stateC)
+            #expect(!injected.writeBoundaryCrossed)
+            #expect(injected.detail.contains("qualification_fault_injected_partial_state"))
+            #expect(outcome.journal[1].verificationEvidence?.disposition == .notApplied)
+            #expect(outcome.journal[1].compensationEvidence?.disposition == .notNeeded)
+
+            // Live surface: volume rolled back, the injected rename never landed.
+            #expect(fixture.surface.snapshot(0)?.volume == 0.25)
+            #expect(fixture.surface.snapshot(1)?.name == "Keys")
+        }
+    }
+
+    /// TEST (b), reverse-order rigor: a 3-step plan with two applied steps proves
+    /// compensation dispatches the inverses in REVERSE order and that the
+    /// injected last step never dispatched (no "mixer.set_pan" anywhere).
+    @Test("partial_state fault compensates the applied prefix in reverse order")
+    func partialStateFaultCompensatesAppliedPrefixInReverse() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let tracks = [
+                TrackState(id: 0, name: "Lead", type: .audio),
+                TrackState(id: 1, name: "Pad", type: .softwareInstrument, volume: 0.2),
+                TrackState(id: 2, name: "FX", type: .audio, pan: 0),
+            ]
+            let seam = SagaPartialStateFaultSeam.resolve(
+                environment: ["LOGIC_PRO_MCP_FAULT_INJECT": "partial_state"],
+                stepCount: 3
+            )
+            let fixture = await makeSeamFixture(tracks: tracks, faultSeam: seam)
+            let plan = SagaPlan(
+                steps: [
+                    step(.tracksRename, target: fixture.targets[0], value: .string("Lead Vox")),
+                    step(.mixerSetVolume, target: fixture.targets[1], value: .double(0.9)),
+                    step(.mixerSetPan, target: fixture.targets[2], value: .double(-0.5)),
+                ],
+                idempotencyKey: "partial-state-three-step"
+            )
+
+            let outcome = await MutationSaga(
+                targetRegistry: fixture.registry,
+                enabled: true,
+                routeAvailable: { _ in true }
+            ).execute(plan, executor: fixture.executor)
+
+            // Forward rename + volume, then inverses in REVERSE order (volume
+            // before rename). The injected pan step is absent from the channel.
+            #expect(await fixture.channel.recordedCalls().map(\.operation) == [
+                "track.rename",
+                "mixer.set_volume",
+                "mixer.set_volume",
+                "track.rename",
+            ])
+
+            #expect(outcome.state == .fullyCompensated)
+            #expect(outcome.journal[0].compensationEvidence?.disposition == .verified)
+            #expect(outcome.journal[1].compensationEvidence?.disposition == .verified)
+            #expect(outcome.journal[2].compensationEvidence?.disposition == .notNeeded)
+            let injected = try #require(outcome.journal[2].executionResult)
+            #expect(injected.state == .stateC)
+            #expect(!injected.writeBoundaryCrossed)
+
+            // Live surface fully restored; the injected pan never landed.
+            #expect(fixture.surface.snapshot(0)?.name == "Lead")
+            #expect(fixture.surface.snapshot(1)?.volume == 0.2)
+            #expect(fixture.surface.snapshot(2)?.pan == 0)
+        }
+    }
 }
