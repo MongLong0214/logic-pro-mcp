@@ -410,7 +410,16 @@ struct OperationRegistryTests {
             #expect(spec.verification == entry.verification)
             #expect(spec.retry == .neverAutomatic)
             #expect(spec.deadline == entry.deadline)
-            #expect(spec.availability == .defaultInstall)
+            // PRD-014: trace-op availability is generated from the feature
+            // policy (defaultInstall only when tracing was enabled when the
+            // registry was built); everything else stays defaultInstall.
+            #expect(spec.availability == (
+                OperationRegistry.traceOperationIDs.contains(id)
+                    ? OperationRegistry.traceAvailability(
+                        traceEnabled: OperationRegistry.traceEnabledAtRegistryBuild
+                    )
+                    : .defaultInstall
+            ))
             #expect(spec.capability.rawValue == entry.id)
         }
     }
@@ -621,7 +630,16 @@ struct OperationRegistryTests {
             #expect(spec.verification == entry.verification)
             #expect(spec.retry == .neverAutomatic)
             #expect(spec.deadline == entry.deadline)
-            #expect(spec.availability == .defaultInstall)
+            // PRD-014: trace-op availability is generated from the feature
+            // policy (defaultInstall only when tracing was enabled when the
+            // registry was built); everything else stays defaultInstall.
+            #expect(spec.availability == (
+                OperationRegistry.traceOperationIDs.contains(id)
+                    ? OperationRegistry.traceAvailability(
+                        traceEnabled: OperationRegistry.traceEnabledAtRegistryBuild
+                    )
+                    : .defaultInstall
+            ))
             #expect(spec.capability.rawValue == entry.id)
         }
     }
@@ -849,7 +867,16 @@ struct OperationRegistryTests {
             #expect(spec.verification == entry.verification)
             #expect(spec.retry == .neverAutomatic)
             #expect(spec.deadline == entry.deadline)
-            #expect(spec.availability == .defaultInstall)
+            // PRD-014: trace-op availability is generated from the feature
+            // policy (defaultInstall only when tracing was enabled when the
+            // registry was built); everything else stays defaultInstall.
+            #expect(spec.availability == (
+                OperationRegistry.traceOperationIDs.contains(id)
+                    ? OperationRegistry.traceAvailability(
+                        traceEnabled: OperationRegistry.traceEnabledAtRegistryBuild
+                    )
+                    : .defaultInstall
+            ))
             #expect(spec.capability.rawValue == entry.id)
         }
     }
@@ -979,7 +1006,16 @@ struct OperationRegistryTests {
             #expect(spec.verification == entry.verification)
             #expect(spec.retry == .neverAutomatic)
             #expect(spec.deadline == entry.deadline)
-            #expect(spec.availability == .defaultInstall)
+            // PRD-014: trace-op availability is generated from the feature
+            // policy (defaultInstall only when tracing was enabled when the
+            // registry was built); everything else stays defaultInstall.
+            #expect(spec.availability == (
+                OperationRegistry.traceOperationIDs.contains(id)
+                    ? OperationRegistry.traceAvailability(
+                        traceEnabled: OperationRegistry.traceEnabledAtRegistryBuild
+                    )
+                    : .defaultInstall
+            ))
             #expect(spec.capability.rawValue == entry.id)
         }
     }

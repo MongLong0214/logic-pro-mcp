@@ -119,6 +119,26 @@ struct OperationDispatchCensusTests {
         #expect(hint.contains("play"))
     }
 
+    /// PRD-014: trace-operation availability is GENERATED from the feature
+    /// policy — both branches of the pure derivation, plus the registry's
+    /// actual value matching this process's flag state (the flag is
+    /// environment-derived and process-constant, so the static registry
+    /// value is decided exactly once and must agree with it).
+    @Test func traceAvailabilityIsGeneratedFromFeaturePolicy() {
+        #expect(OperationRegistry.traceAvailability(traceEnabled: true) == .defaultInstall)
+        #expect(OperationRegistry.traceAvailability(traceEnabled: false) == .experimental)
+        let expected = OperationRegistry.traceAvailability(
+            traceEnabled: OperationRegistry.traceEnabledAtRegistryBuild
+        )
+        for id in OperationRegistry.traceOperationIDs {
+            let spec = OperationRegistry.specs.first { $0.id == id }
+            #expect(spec?.availability == expected, Comment(rawValue: id.rawValue))
+        }
+        // Non-trace system ops stay unconditionally defaultInstall.
+        let health = OperationRegistry.specs.first { $0.id == .systemHealth }
+        #expect(health?.availability == .defaultInstall)
+    }
+
     /// The derived handled-command sets are definitionally registry-equal —
     /// pinned so a future hand-written override reintroducing drift fails.
     @Test func handledCommandSetsAreRegistryDerived() {
