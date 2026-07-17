@@ -459,5 +459,142 @@ enum SemanticOracleFixtures {
                 "ax_occluded":false,"data":{"categories":["Bass"],"source":"ax"}}
                 """
         ),
+
+        // ── #373 Phase B1 — verified-write State-A fixtures ──────────────────
+        // Each is a faithful State-A payload from the op's `encodeStateA` /
+        // `encodeV2StateA` path. `observed` is the DETENT/TOLERANCE-quantized
+        // read-back where the handler quantizes (mixer sliders, set_param_verified)
+        // — deliberately ≠ `requested` — so the fixtures model the real verified
+        // shape, not an idealized requested==observed. Readback is unused (no
+        // oracle here cross-checks), so it is a bare `{}`.
+
+        // AccessibilityChannel+Mixer.defaultSetMixerValue (.volume): requested
+        // 0.5 lands on the nearest AX detent, observed 0.48 == observed_after.
+        .mixerSetVolume: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "operation":"mixer.set_volume","track":0,"control":"volume",\
+                "requested":0.5,"target_identity":{"track_index":0,"control":"volume"},\
+                "observed_before":0.30,"observed_after":0.48,"observed":0.48,\
+                "observed_raw":48.0,"target_raw":50.0,"detent_raw_step":10,\
+                "verify_source":"ax_slider","write_method":"ax_increment_decrement",\
+                "nudge_steps":3,"quantization_note":"nearest representable level"}
+                """,
+            readback: "{}"
+        ),
+        // AccessibilityChannel+Mixer.defaultSetMixerValue (.pan): centered range.
+        .mixerSetPan: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "operation":"mixer.set_pan","track":1,"control":"pan",\
+                "requested":-0.30,"target_identity":{"track_index":1,"control":"pan"},\
+                "observed_before":0.0,"observed_after":-0.28,"observed":-0.28,\
+                "observed_raw":36.0,"target_raw":35.0,"detent_raw_step":10,\
+                "verify_source":"ax_slider","write_method":"ax_increment_decrement",\
+                "nudge_steps":2,"quantization_note":"nearest representable level"}
+                """,
+            readback: "{}"
+        ),
+        // MCUChannel.executeSetMasterVolume: track "master" (string), MCU echo.
+        // observed is 14-bit-echo-quantized ≈ requested (0.5001 vs 0.5, within
+        // 2/16383 ≈ 0.000122) — near, deliberately not equal.
+        .mixerSetMasterVolume: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "requested":0.5,"observed":0.5001,"track":"master",\
+                "readback_source":"mcu_echo"}
+                """,
+            readback: "{}"
+        ),
+        // AccessibilityChannel+Tracks.defaultSelectTrack: requested==selected==observed.
+        .tracksSelect: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "requested":2,"selected":2,"observed":2}
+                """,
+            readback: "{}"
+        ),
+        // AccessibilityChannel+Tracks.defaultRenameTrack: observed name == requested.
+        .tracksRename: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","track":2,\
+                "requested":"Lead Synth","observed":"Lead Synth","via":"ax_set_value"}
+                """,
+            readback: "{}"
+        ),
+        // AccessibilityChannel+Tracks.defaultSetTrackToggle (Mute): requested==observed bool.
+        .tracksMute: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","track":1,\
+                "button":"Mute","requested":true,"verification_source":"ax_value",\
+                "observed":true,"action":"press"}
+                """,
+            readback: "{}"
+        ),
+        .tracksSolo: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","track":1,\
+                "button":"Solo","requested":true,"verification_source":"ax_value",\
+                "observed":true,"action":"press"}
+                """,
+            readback: "{}"
+        ),
+        .tracksArm: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","track":1,\
+                "button":"Record","requested":true,"verification_source":"ax_value",\
+                "observed":true,"action":"mouse-click"}
+                """,
+            readback: "{}"
+        ),
+        // TrackDispatcher.arm_only: armed==target_track, requested_enabled==observed_enabled.
+        .tracksArmOnly: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "operation":"track.arm_only","armed":2,"target_track":2,\
+                "armedSuccess":true,"requested_enabled":true,"observed_enabled":true,\
+                "verification_source":"ax_value","disarmed":[0,1],\
+                "unverifiedDisarm":[],"failedDisarm":[],"detail":"track 2 armed"}
+                """,
+            readback: "{}"
+        ),
+        // MCUChannel.executeAutomation (fast path): mode == observed_mode.
+        .tracksSetAutomation: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "function":"set_automation","track":1,"mode":"read",\
+                "observed_mode":"read","write_attempted":false}
+                """,
+            readback: "{}"
+        ),
+        // AccessibilityChannel+Library.setTrackInstrument: observed preset == requested.
+        .tracksSetInstrument: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "requested":"Deep Sub","requested_patch_name":"Deep Sub",\
+                "requested_category":"Bass","requested_path":"Bass/Deep Sub",\
+                "category":"Bass","preset":"Deep Sub","path":"Bass/Deep Sub",\
+                "target_track_index":1,"target_track_name":"Bass",\
+                "observed":"Deep Sub","observed_patch_name":"Deep Sub",\
+                "verify_source":"library_selected_children","readback_state":"verified"}
+                """,
+            readback: "{}"
+        ),
+        // AccessibilityChannel+VerifiedPlugins.defaultSetParamVerified (HC v2):
+        // hc_schema 2, same-surface write/verify. Compressor Threshold — a real
+        // catalog param whose unit is 0..100 (normalized %) with tolerance 1.0, so
+        // observed_normalized 60.5 is within the payload's OWN tolerance of the
+        // requested 60.0 (|0.5| ≤ 1.0) — exercising the data-driven `.field` bound.
+        .pluginsSetParamVerified: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","hc_schema":2,\
+                "operation":"logic_plugins.set_param_verified",\
+                "target_identity":{"track":0,"insert":0,"plugin_id":"logic.stock.compressor"},\
+                "param":"threshold","requested_normalized":60.0,"observed_normalized":60.5,\
+                "observed_display":"60.5 %","display_unit":"%","tolerance":1.0,\
+                "write_source":"ax_plugin_window","verify_source":"ax_plugin_window"}
+                """,
+            readback: "{}"
+        ),
     ]
 }

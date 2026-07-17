@@ -44,6 +44,20 @@ enum JSONType: String, Sendable, Equatable {
     case null
 }
 
+/// How `.numericNear` bounds the gap between its two keys.
+///
+/// `.absolute` is right where the handler's convergence tolerance is a HARD-CODED
+/// constant — the mixer AX-slider detent gate (`|observed_raw − target_raw| ≤ 6`)
+/// and the MCU 14-bit echo tolerance (`2/16383`). `.field` reads the bound from
+/// the payload's OWN tolerance key, which is the only faithful choice where the
+/// handler's tolerance is DATA-DRIVEN and unit-specific: `set_param_verified`
+/// carries a per-parameter `tolerance` in the parameter's own unit (0..1 for some
+/// controls, 0..100 for others), so no single constant could bound it soundly.
+enum NearnessBound: Sendable, Equatable {
+    case absolute(Double)
+    case field(String)
+}
+
 /// One declarative check against an operation's response payload.
 ///
 /// `key` is a dotted key path resolved against the parsed response:
@@ -73,6 +87,21 @@ enum OracleConstraint: Sendable {
     /// closure. Fails closed when the readback is absent or unparseable — an
     /// unverifiable cross-check is not a pass. Bool-vs-number safe on both sides.
     case crossCheck(responseKey: String, readbackKey: String)
+    /// Two numeric key paths WITHIN THE SAME payload agree to within a tolerance:
+    /// `|value(keyA) − value(keyB)| ≤ bound`. The honest form of "the write landed
+    /// near what was requested" for QUANTIZED writes, where an exact `fieldsEqual`
+    /// would false-reject a legitimate verified write: an AX fader converges to
+    /// the nearest ~10-raw-unit detent, an MCU echo to 14-bit resolution, a plugin
+    /// slider to a per-parameter tolerance. NUMBERS ONLY, with the same
+    /// bool-vs-number discipline as the rest of the model — a bool is never "near"
+    /// a number (`number(of:)` rejects booleans) — and fails closed on a missing
+    /// key, a non-number, or (for `.field`) a missing/negative tolerance.
+    case numericNear(keyA: String, keyB: String, within: NearnessBound)
+    /// Field must be an array with EXACTLY zero elements. The mirror of
+    /// `.nonEmptyArray`, for pinning a "nothing went wrong" gate in the payload —
+    /// e.g. a multi-step op that reaches State A only when its failure/uncertainty
+    /// lists are empty. Fails closed on a missing key or a non-array.
+    case emptyArray(key: String)
 
     /// The primary RESPONSE-side key path — the one the generic mutator drops
     /// and error messages cite. For the relational cases it is the response side
@@ -85,7 +114,9 @@ enum OracleConstraint: Sendable {
              .nonEmptyArray(let key),
              .typedField(let key, _),
              .fieldsEqual(let key, _),
-             .crossCheck(let key, _):
+             .crossCheck(let key, _),
+             .numericNear(let key, _, _),
+             .emptyArray(let key):
             return key
         }
     }
@@ -97,9 +128,9 @@ enum OracleConstraint: Sendable {
     /// oracle carrying one is never a checkbox oracle.
     var isValueConstraint: Bool {
         switch self {
-        case .valueEquals, .numericRange, .enumMember, .fieldsEqual, .crossCheck:
+        case .valueEquals, .numericRange, .enumMember, .fieldsEqual, .crossCheck, .numericNear:
             return true
-        case .nonEmptyArray, .typedField:
+        case .nonEmptyArray, .typedField, .emptyArray:
             return false
         }
     }
@@ -137,6 +168,28 @@ enum OracleConstraint: Sendable {
                   let a = JSONPath.resolve(root, keyPath: responseKey),
                   let b = JSONPath.resolve(readback, keyPath: readbackKey) else { return false }
             return JSONInspector.leavesEqual(a, b)
+        case .numericNear(let keyA, let keyB, let within):
+            // NUMBERS ONLY: `number(of:)` rejects booleans, so a bool is never
+            // "near" a number. A missing key, a non-number, or (for `.field`) a
+            // missing/negative tolerance all fail closed.
+            guard let aValue = JSONPath.resolve(root, keyPath: keyA),
+                  let bValue = JSONPath.resolve(root, keyPath: keyB),
+                  let a = JSONInspector.number(of: aValue),
+                  let b = JSONInspector.number(of: bValue) else { return false }
+            let bound: Double
+            switch within {
+            case .absolute(let value):
+                bound = value
+            case .field(let toleranceKey):
+                guard let raw = JSONPath.resolve(root, keyPath: toleranceKey),
+                      let tolerance = JSONInspector.number(of: raw),
+                      tolerance >= 0 else { return false }
+                bound = tolerance
+            }
+            return abs(a - b) <= bound
+        case .emptyArray(let key):
+            guard let array = JSONPath.resolve(root, keyPath: key) as? [Any] else { return false }
+            return array.isEmpty
         }
     }
 }

@@ -115,6 +115,80 @@ struct SemanticOracleEngineTests {
         #expect(!OracleConstraint.fieldsEqual(keyA: "x", keyB: "z").isSatisfied(by: nested))
     }
 
+    /// #373 B1 equality-matrix — pins the exact `.fieldsEqual` contract every
+    /// safe-mutation oracle's requested==observed leans on (grok-ratified). It
+    /// must accept `3`/`3.0` (JSON does not distinguish int/double), reject a
+    /// number-vs-string `3`/`"3"`, and — crucially — never read an ABSENT key as
+    /// agreement: `null`/missing and `""`/missing both fail closed.
+    @Test func fieldsEqualEqualityMatrixPinsTheSafeMutationContract() {
+        let eq = OracleConstraint.fieldsEqual(keyA: "a", keyB: "b")
+        // 3 / 3.0 → pass.
+        #expect(eq.isSatisfied(by: root(#"{"a":3,"b":3.0}"#)))
+        // 3 / "3" → fail (a number is not the string "3").
+        #expect(!eq.isSatisfied(by: root(#"{"a":3,"b":"3"}"#)))
+        // null / missing → fail (a present null cannot agree with an absent key).
+        #expect(!eq.isSatisfied(by: root(#"{"a":null}"#)))
+        // "" / missing → fail (empty string present; other side absent).
+        #expect(!eq.isSatisfied(by: root(#"{"a":""}"#)))
+        // The boundary the matrix protects is ABSENCE and TYPE, not a blanket
+        // rejection: two PRESENT equal leaves agree — including null==null.
+        #expect(eq.isSatisfied(by: root(#"{"a":null,"b":null}"#)))
+        #expect(eq.isSatisfied(by: root(#"{"a":"","b":""}"#)))
+    }
+
+    // MARK: - numericNear / emptyArray (Phase B1)
+
+    /// The quantized-write invariant: `|observed − requested| ≤ ε`. Equal, within
+    /// ε, and exactly on the boundary pass; beyond ε fails. Replaces the
+    /// tautological `fieldsEqual(observed, observed_after)` for detent/echo writes.
+    @Test func numericNearHoldsWithinToleranceAndFailsBeyondIt() {
+        let near = OracleConstraint.numericNear(keyA: "observed", keyB: "requested", within: .absolute(6.0))
+        #expect(near.isSatisfied(by: root(#"{"observed":50,"requested":50}"#)))
+        #expect(near.isSatisfied(by: root(#"{"observed":48,"requested":50}"#)))
+        #expect(near.isSatisfied(by: root(#"{"observed":56,"requested":50}"#)))   // |56−50|=6 ≤ 6
+        #expect(!near.isSatisfied(by: root(#"{"observed":57,"requested":50}"#)))  // |57−50|=7 > 6
+    }
+
+    /// Same bool-vs-number discipline as the rest of the model: a bool is never
+    /// "near" a number, and a non-number / missing key fails closed.
+    @Test func numericNearRejectsBoolsNonNumbersAndMissingKeys() {
+        let near = OracleConstraint.numericNear(keyA: "a", keyB: "b", within: .absolute(1.0))
+        #expect(!near.isSatisfied(by: root(#"{"a":true,"b":1}"#)))
+        #expect(!near.isSatisfied(by: root(#"{"a":1,"b":true}"#)))
+        #expect(!near.isSatisfied(by: root(#"{"a":1,"b":"1"}"#)))
+        #expect(!near.isSatisfied(by: root(#"{"a":1}"#)))
+        #expect(!near.isSatisfied(by: root(#"{"b":1}"#)))
+    }
+
+    /// `.field` reads the tolerance from the payload's OWN key — the faithful
+    /// choice for set_param_verified's per-parameter, unit-specific `tolerance`.
+    /// A tighter tolerance fails the same gap; a missing/negative one fails closed.
+    @Test func numericNearFieldBoundReadsToleranceFromThePayload() {
+        let near = OracleConstraint.numericNear(
+            keyA: "observed_normalized", keyB: "requested_normalized", within: .field("tolerance")
+        )
+        #expect(near.isSatisfied(by: root(#"{"observed_normalized":60.5,"requested_normalized":60,"tolerance":1.0}"#)))
+        #expect(!near.isSatisfied(by: root(#"{"observed_normalized":62,"requested_normalized":60,"tolerance":1.0}"#)))
+        #expect(!near.isSatisfied(by: root(#"{"observed_normalized":60.5,"requested_normalized":60,"tolerance":0.1}"#)))
+        #expect(!near.isSatisfied(by: root(#"{"observed_normalized":60,"requested_normalized":60}"#)))
+        #expect(!near.isSatisfied(by: root(#"{"observed_normalized":60,"requested_normalized":60,"tolerance":-1}"#)))
+    }
+
+    @Test func emptyArrayAcceptsEmptyAndRejectsNonEmptyMissingAndNonArrays() {
+        #expect(OracleConstraint.emptyArray(key: "x").isSatisfied(by: root(#"{"x":[]}"#)))
+        #expect(!OracleConstraint.emptyArray(key: "x").isSatisfied(by: root(#"{"x":[1]}"#)))
+        #expect(!OracleConstraint.emptyArray(key: "x").isSatisfied(by: root(#"{"x":{}}"#)))
+        #expect(!OracleConstraint.emptyArray(key: "x").isSatisfied(by: root(#"{"y":[]}"#)))
+    }
+
+    /// numericNear is a VALUE constraint (it asserts a concrete agreement between
+    /// two observed numbers); emptyArray is a shape/cardinality check like
+    /// nonEmptyArray, so the strength gate still bites on a presence-only oracle.
+    @Test func numericNearIsValueBearingAndEmptyArrayIsNot() {
+        #expect(OracleConstraint.numericNear(keyA: "a", keyB: "b", within: .absolute(1)).isValueConstraint)
+        #expect(!OracleConstraint.emptyArray(key: "a").isValueConstraint)
+    }
+
     @Test func crossCheckAgreesAcrossPayloadsAndFailsOnDivergenceOrMissingReadback() {
         let response = root(#"{"value":-6.0,"name":"Bass"}"#)
         let constraint = OracleConstraint.crossCheck(responseKey: "value", readbackKey: "observed_value")
@@ -211,12 +285,17 @@ struct SemanticOracleCensusTests {
         #expect(missing.isEmpty, "read-only specs with no oracle: \(missing.map(\.rawValue).sorted())")
     }
 
-    /// The mirror image: an oracle for something that is not a qualifying
-    /// read-only spec is dead weight that would never run.
-    @Test func everyOracleMapsToAReadOnlySpec() {
+    /// The mirror image, generalized for the #373 B1 DUAL census: an oracle must
+    /// map to a SUPPORTED spec — the fully-covered read-only surface UNION the
+    /// mutating surface. An oracle outside that union is dead weight (no spec) or
+    /// bound to an `.unsupported` spec, either of which would never run.
+    @Test func everyOracleMapsToASupportedSpec() {
         let extra = Set(SemanticOracleTable.byOperationID.keys)
-            .subtracting(SemanticOracleTable.coveredSpecIDs)
-        #expect(extra.isEmpty, "oracles with no read-only spec: \(extra.map(\.rawValue).sorted())")
+            .subtracting(SemanticOracleTable.supportedOracleSurface)
+        #expect(
+            extra.isEmpty,
+            "oracles with no supported (read-only or mutating) spec: \(extra.map(\.rawValue).sorted())"
+        )
     }
 
     @Test func healthKeepsItsBespokeValidatorAndIsNotInTheTable() {
@@ -243,6 +322,64 @@ struct SemanticOracleCensusTests {
         #expect(clearTraces?.mutability == .readOnly)
         let refreshCache = OperationRegistry.specs.first { $0.id == .systemRefreshCache }
         #expect(refreshCache?.mutability == .readOnly)
+    }
+
+    // MARK: - #373 Phase B1 — mutating-surface increment (dual census)
+
+    /// The mutating oracles present are EXACTLY the declared Phase-B1 increment —
+    /// no accidental add or drop. Pinning the set (not just a count) is what makes
+    /// the increment a deliberate, reviewable diff.
+    @Test func mutatingOraclesAreExactlyThePhaseB1Increment() {
+        let mutatingOracles = Set(SemanticOracleTable.byOperationID.keys)
+            .intersection(SemanticOracleTable.mutatingSpecIDs)
+        #expect(mutatingOracles == SemanticOracleTable.phaseB1MutatingOperationIDs)
+        #expect(SemanticOracleTable.phaseB1MutatingOperationIDs.count == 12)
+    }
+
+    /// Soundness of the increment: every id it names is a REAL `.mutating`,
+    /// non-`.unsupported` registry spec — a read-only id or a typo cannot
+    /// masquerade as mutating coverage.
+    @Test func everyPhaseB1IDIsARealMutatingSpec() {
+        #expect(
+            SemanticOracleTable.phaseB1MutatingOperationIDs
+                .isSubset(of: SemanticOracleTable.mutatingSpecIDs)
+        )
+        for id in SemanticOracleTable.phaseB1MutatingOperationIDs {
+            let spec = OperationRegistry.specs.first { $0.id == id }
+            #expect(spec?.mutability == .mutating, "\(id.rawValue) is not mutating")
+            #expect(spec?.availability != .unsupported, "\(id.rawValue) is unsupported")
+        }
+    }
+
+    /// The census DELIBERATELY does not yet require full mutating coverage: B1 is
+    /// an increment, and B2/B3 add the rest. If this ever reaches parity, the
+    /// mutating census contract must flip from "incremental" to "complete".
+    @Test func mutatingCoverageIsIncrementalNotYetComplete() {
+        let covered = Set(SemanticOracleTable.byOperationID.keys)
+            .intersection(SemanticOracleTable.mutatingSpecIDs)
+        #expect(covered.count < SemanticOracleTable.mutatingSpecIDs.count)
+        // mixer.set_plugin_param is the canonical NOT-yet-covered case: it is a
+        // send-only State-B write (Scripter), so it has no State A to verify and
+        // deliberately carries no B1 verified-write oracle.
+        #expect(!covered.contains(.mixerSetPluginParam))
+        #expect(SemanticOracleTable.mutatingSpecIDs.contains(.mixerSetPluginParam))
+    }
+
+    /// FIX 5 — the structural-exclusion allowlist is EXPLICIT: every entry is a
+    /// real mutating spec, is DISJOINT from the covered increment, and carries a
+    /// reason, so the uncovered surface is a reviewed decision, not implicit.
+    @Test func structuralExclusionsAreExplicitDisjointAndReasoned() {
+        let exclusions = SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs
+        #expect(!exclusions.isEmpty)
+        #expect(exclusions[.mixerSetPluginParam] != nil)
+        for (id, reason) in exclusions {
+            #expect(SemanticOracleTable.mutatingSpecIDs.contains(id), "\(id.rawValue) is not a mutating spec")
+            #expect(
+                !SemanticOracleTable.phaseB1MutatingOperationIDs.contains(id),
+                "\(id.rawValue) is both covered and excluded"
+            )
+            #expect(reason.count > 20, "\(id.rawValue) exclusion reason is too thin")
+        }
     }
 }
 
@@ -436,9 +573,12 @@ struct SemanticOracleMutationTests {
         #expect(!declined, "\(operationID.rawValue) declined to render a verdict on its own fixture")
     }
 
-    /// Wiring: the validator must actually consult the table, not just own it.
+    /// Wiring: the validator must actually consult the table, not just own it —
+    /// for EVERY oracle it carries (read-only AND the B1 mutating oracles; the
+    /// validator routes both, even though the offline runner only live-runs the
+    /// read-only surface).
     @Test(arguments: SemanticOracleTable.all.map(\.operationID))
-    func validatorRoutesEachReadOnlyOperationToItsOracle(operationID: OperationID) throws {
+    func validatorRoutesEachOracleOperationToItsOracle(operationID: OperationID) throws {
         let fixture = try #require(SemanticOracleFixtures.byOperationID[operationID])
         let routed = try #require(QualificationSemanticReadbackValidator.validate(
             operationID: operationID.rawValue,
@@ -561,10 +701,10 @@ struct SafeMutationOracleTests {
 @Suite("#373 Phase B0 relational mutation")
 struct SemanticOracleRelationalMutationTests {
     /// The relational constraints are load-bearing under the SAME generic
-    /// mutation harness the B1–B3 mutating oracles will run through: every mutant
-    /// the mutator derives for a `fieldsEqual` must sink the oracle. Proven on a
-    /// synthetic oracle because the table carries no mutating oracle yet — the
-    /// read-only census stays at 20 (see SemanticOracleB0CensusTests).
+    /// mutation harness the B1 mutating oracles run through: every mutant the
+    /// mutator derives for a `fieldsEqual` must sink the oracle. Kept as a focused
+    /// engine-level proof on a synthetic oracle; the table-driven proof for the
+    /// real B1 verified-write oracles is `everyConstraintRejectsItsMutants`.
     @Test func fieldsEqualMutantsAreAllRejected() throws {
         let response = #"{"requested":-6.0,"observed":-6.0}"#
         let root = try #require(JSONInspector.parse(Data(response.utf8)))
@@ -617,26 +757,23 @@ struct SemanticOracleRelationalMutationTests {
     }
 }
 
-// MARK: - census non-regression (Phase B0)
+// MARK: - read-only census non-regression (Phase B0 → B1)
 
-@Suite("#373 Phase B0 census non-regression")
+@Suite("#373 read-only census non-regression")
 struct SemanticOracleB0CensusTests {
-    /// B0 adds FRAMEWORK ONLY — no oracle was added to the table, so the
-    /// read-only census is unchanged and the mutating surface stays UNCOVERED
-    /// (its 50 oracles land in B1–B3). Pinning this catches a premature mutating
-    /// oracle and proves the mutating-census scaffold stays satisfiable at zero.
-    @Test func b0AddsNoTableOracleAndLeavesTheReadOnlyCensusAtTwenty() {
-        #expect(SemanticOracleTable.all.count == 20)
+    /// The read-only census is a STANDING invariant across phases. B0 added
+    /// framework only; B1 adds the mutating increment WITHOUT perturbing the
+    /// fully-covered read-only surface. So the read-only census stays exactly 20,
+    /// and the table's total is the read-only 20 plus the pinned B1 increment — a
+    /// premature or miscounted mutating oracle fails here.
+    @Test func readOnlyCensusStaysTwentyAndB1AddsTheMutatingIncrement() {
         #expect(SemanticOracleTable.coveredSpecIDs.count == 20)
-
-        let mutatingSpecIDs = Set(
-            OperationRegistry.specs.filter { $0.mutability == .mutating }.map(\.id)
-        )
-        let mutatingOraclesPresent = Set(SemanticOracleTable.byOperationID.keys)
-            .intersection(mutatingSpecIDs)
+        let readOnlyOracles = Set(SemanticOracleTable.byOperationID.keys)
+            .intersection(SemanticOracleTable.coveredSpecIDs)
+        #expect(readOnlyOracles.count == 20)
         #expect(
-            mutatingOraclesPresent.isEmpty,
-            "B0 must not author mutating oracles: \(mutatingOraclesPresent.map(\.rawValue).sorted())"
+            SemanticOracleTable.all.count
+                == 20 + SemanticOracleTable.phaseB1MutatingOperationIDs.count
         )
     }
 }
@@ -693,6 +830,30 @@ enum JSONMutator {
             if let current = JSONPath.resolve(root, keyPath: responseKey) {
                 mutants.append(contentsOf: replacements(root, responseKey, [("diverge", divergent(from: current))]))
             }
+        case .numericNear(let keyA, let keyB, let within):
+            // Break nearness by pushing EITHER side clearly beyond the bound
+            // (distance bound+1, so it exceeds even a tiny tolerance), plus a
+            // non-number to exercise the numbers-only rule. (drop keyA is added
+            // generically via `key`.)
+            let bound: Double
+            switch within {
+            case .absolute(let value):
+                bound = value
+            case .field(let toleranceKey):
+                bound = JSONPath.resolve(root, keyPath: toleranceKey)
+                    .flatMap(JSONInspector.number(of:)) ?? 0
+            }
+            if let aValue = JSONPath.resolve(root, keyPath: keyA),
+               let a = JSONInspector.number(of: aValue) {
+                mutants.append(contentsOf: replacements(root, keyB, [("beyond-near", a + bound + 1.0)]))
+                mutants.append(contentsOf: replacements(root, keyA, [("non-number", "not-a-number")]))
+            }
+            if let bValue = JSONPath.resolve(root, keyPath: keyB),
+               let b = JSONInspector.number(of: bValue) {
+                mutants.append(contentsOf: replacements(root, keyA, [("beyond-near", b + bound + 1.0)]))
+            }
+        case .emptyArray(let key):
+            mutants.append(contentsOf: replacements(root, key, [("non-empty", [1] as [Any])]))
         }
         return mutants
     }
