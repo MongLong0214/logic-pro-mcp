@@ -731,3 +731,122 @@ extension OperationTraceTests {
         })
     }
 }
+
+/// Renders a three-state `Bool?` as a distinct non-Optional token. `#expect` on
+/// an `Optional<Bool>` compared to a `nil`/`true`/`false` literal is one of this
+/// repo's known DEAD assertion forms — it passes regardless of the actual value.
+/// Projecting to `String` first keeps the comparison live and makes the failure
+/// message name the state that leaked.
+private func describeThreeStateFlag(_ value: Bool?) -> String {
+    guard let value else { return "nil" }
+    return value ? "true" : "false"
+}
+
+/// LPMCP-PRD-003 residual: `finalizeTrace` injects `trace_id` into the first
+/// text block, and that injection must be surgical. It previously rebuilt the
+/// whole result through `toolTextResult(merged, isError:)`, which silently
+/// discarded block 0's annotations/`_meta`, every later content block, the
+/// result-level `_meta`, and flattened a nil `isError` to `false`.
+extension OperationTraceTests {
+    private static let preservedAnnotations = Resource.Annotations(
+        audience: [.assistant],
+        priority: 0.5,
+        lastModified: "2026-07-17T00:00:00Z"
+    )
+
+    private static let preservedBlockMeta = Metadata(
+        additionalFields: ["block_meta": .string("preserved")]
+    )
+
+    private static let preservedResultMeta = Metadata(
+        additionalFields: ["result_meta": .string("preserved")]
+    )
+
+    /// A multi-block State-A result carrying annotations and `_meta` on both
+    /// block 0 and the result itself. Only block 0's JSON may change.
+    private static func preservationFixture(isError: Bool?) -> CallTool.Result {
+        let raw = HonestContract.encodeStateA(extras: ["operation": "transport.play"])
+        return CallTool.Result(
+            content: [
+                .text(
+                    text: raw,
+                    annotations: preservedAnnotations,
+                    _meta: preservedBlockMeta
+                ),
+                .image(
+                    data: "aW1hZ2U=",
+                    mimeType: "image/png",
+                    annotations: nil,
+                    _meta: nil
+                ),
+            ],
+            structuredContent: structuredContentValue(fromToolText: raw),
+            isError: isError,
+            _meta: preservedResultMeta
+        )
+    }
+
+    private func assertTracePreservesResult(isError: Bool?) async throws {
+        let traceID = await OperationTraceStore.shared.start(
+            operationID: OperationID.transportPlay.rawValue
+        )
+        let original = Self.preservationFixture(isError: isError)
+        let finalized = await TransportDispatcher.finalizeTrace(original, traceID: traceID)
+
+        // isError is a THREE-state field: nil must survive as nil, never coerce
+        // to false. Compare through a non-Optional projection — `#expect` on an
+        // `Optional<Bool>` compared against `nil`/`true`/`false` expands to a
+        // DEAD check that passes even when the values differ (proven here: the
+        // pre-fix `isError: false` rebuild did not trip `== nil`).
+        #expect(
+            describeThreeStateFlag(finalized.isError) == describeThreeStateFlag(isError),
+            "isError must carry through verbatim (three-state: nil/true/false)"
+        )
+
+        // Block 0: trace_id merged in, annotations/_meta carried through.
+        // #require, not #expect: a dropped block would otherwise trap on the
+        // index below and kill the whole test process instead of failing.
+        try #require(finalized.content.count == 2, "later content blocks must survive")
+        guard case .text(let mergedText, let annotations, let meta) = finalized.content[0] else {
+            #expect(Bool(false), "block 0 must remain text")
+            return
+        }
+        let body = try #require(
+            (try? JSONSerialization.jsonObject(with: Data(mergedText.utf8))) as? [String: Any]
+        )
+        #expect(body["trace_id"] as? String == traceID.rawValue)
+        #expect(body["state"] as? String == "A")
+        #expect(body["operation"] as? String == "transport.play")
+        #expect(annotations == Self.preservedAnnotations, "block 0 annotations dropped")
+        #expect(meta == Self.preservedBlockMeta, "block 0 _meta dropped")
+
+        // Block 1 is untouched — only block 0 is text-merged.
+        #expect(finalized.content[1] == original.content[1], "second content block mutated")
+
+        // Result-level _meta survives; structuredContent tracks the merged JSON
+        // so it cannot desync from block 0's text.
+        #expect(finalized._meta == Self.preservedResultMeta, "result _meta dropped")
+        #expect(finalized.structuredContent == structuredContentValue(fromToolText: mergedText))
+        let structured = try #require(finalized.structuredContent)
+        #expect(structured.objectValue?["trace_id"]?.stringValue == traceID.rawValue)
+
+        await OperationTraceStore.shared.clear()
+    }
+
+    @Test func finalizeTracePreservesResultWhenIsErrorIsNil() async throws {
+        try await assertTracePreservesResult(isError: nil)
+    }
+
+    @Test func finalizeTracePreservesResultWhenIsErrorIsFalse() async throws {
+        try await assertTracePreservesResult(isError: false)
+    }
+
+    /// isError == true with a State-A body is deliberately contradictory: it
+    /// pins that finalizeTrace carries isError through verbatim rather than
+    /// re-deriving it from the envelope. (`addExtras` refuses success:false
+    /// bodies, so a State-C body would early-return before the rebuild and
+    /// never exercise this path.)
+    @Test func finalizeTracePreservesResultWhenIsErrorIsTrue() async throws {
+        try await assertTracePreservesResult(isError: true)
+    }
+}
