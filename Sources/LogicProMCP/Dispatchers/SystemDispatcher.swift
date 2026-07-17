@@ -368,6 +368,27 @@ struct SystemDispatcher: OperationTraceDispatching {
                         onFirstWrite: { await recordWriteBoundary(traceID) }
                     )
                 }
+                // PRD-011 TOCTOU close: the pre-write containment check ran
+                // against the requested path, but a symlink/mount planted
+                // between that check and directory creation could leave the
+                // materialized bundle outside the root. Re-resolve the CREATED
+                // directory through realpath; if it escaped, delete it and fail
+                // closed rather than reporting a State A for an out-of-root write.
+                guard Self.createdBundleDirectoryIsContained(result.directory) else {
+                    try? FileManager.default.removeItem(at: result.directory)
+                    return await finalizeTrace(
+                        toolTextResult(
+                            HonestContract.encodeStateC(
+                                error: .supportBundleExportFailed,
+                                hint: "support bundle directory escaped the containment root "
+                                    + "after creation; refused",
+                                extras: ["write_attempted": true]
+                            ),
+                            isError: true
+                        ),
+                        traceID: traceID
+                    )
+                }
                 return await finalizeTrace(
                     toolTextResult(HonestContract.encodeStateA(extras: [
                         "bundle_path": result.directory.path,
@@ -777,11 +798,17 @@ struct SystemDispatcher: OperationTraceDispatching {
     /// Overridable for tests via environment (never in production launchd
     /// plists) so containment behavior is provable against a temp root.
     static var supportBundleRoot: URL {
+        // PRD-011: the root override is a TEST-ONLY hook (DEBUG builds), never
+        // honored in a release binary — otherwise a hostile environment could
+        // repoint the containment root in production and defeat the whole
+        // guard. Release builds always use the fixed user Logs location.
+        #if DEBUG
         if let override = ProcessInfo.processInfo
             .environment["LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"],
             !override.isEmpty {
             return URL(fileURLWithPath: override, isDirectory: true).standardizedFileURL
         }
+        #endif
         return FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/LogicProMCP/support-bundles", isDirectory: true)
             .standardizedFileURL
@@ -797,11 +824,12 @@ struct SystemDispatcher: OperationTraceDispatching {
     /// escape containment. The result must be STRICTLY inside (the root
     /// itself is not a valid bundle directory).
     static func resolvedSupportBundleDirectory(requested: String) -> URL? {
-        let rootPath = realpathResolvedPath(supportBundleRoot)
+        // Fail closed if either root or candidate cannot be canonicalized.
+        guard let rootPath = realpathResolvedPath(supportBundleRoot) else { return nil }
         let candidate: URL = requested.hasPrefix("/")
             ? URL(fileURLWithPath: requested, isDirectory: true)
             : supportBundleRoot.appendingPathComponent(requested, isDirectory: true)
-        let resolvedPath = realpathResolvedPath(candidate)
+        guard let resolvedPath = realpathResolvedPath(candidate) else { return nil }
         // String-level containment on realpath output — URL standardization
         // is deliberately avoided post-realpath because Foundation strips the
         // /private prefix only for EXISTING paths, which makes root/candidate
@@ -813,11 +841,25 @@ struct SystemDispatcher: OperationTraceDispatching {
         return URL(fileURLWithPath: resolvedPath, isDirectory: true)
     }
 
+    /// PRD-011 TOCTOU close: after the bundle directory is created, re-resolve
+    /// it through realpath and confirm it is still strictly inside the root —
+    /// a symlink or mount planted between the pre-write check and creation
+    /// cannot leave a bundle outside the containment root. Returns false if
+    /// the created directory escaped (caller must refuse and not write).
+    static func createdBundleDirectoryIsContained(_ directory: URL) -> Bool {
+        guard let rootPath = realpathResolvedPath(supportBundleRoot),
+              let resolved = realpathResolvedPath(directory) else { return false }
+        return resolved.hasPrefix(rootPath + "/")
+            && !resolved.split(separator: "/").contains("..")
+    }
+
     /// realpath-resolves the deepest EXISTING prefix of `url` (following every
     /// symlink in it) and re-appends the not-yet-existing tail literally.
     /// Returns a plain path string so both sides of the containment check use
     /// the same canonical form.
-    private static func realpathResolvedPath(_ url: URL) -> String {
+    /// Returns nil (fail-closed) when the deepest existing prefix cannot be
+    /// canonicalized — an unresolved path must never be treated as contained.
+    private static func realpathResolvedPath(_ url: URL) -> String? {
         var existing = url.standardizedFileURL
         var tail: [String] = []
         while !FileManager.default.fileExists(atPath: existing.path),
@@ -825,11 +867,9 @@ struct SystemDispatcher: OperationTraceDispatching {
             tail.append(existing.lastPathComponent)
             existing = existing.deletingLastPathComponent()
         }
-        var base = existing.path
-        if let raw = realpath(existing.path, nil) {
-            base = String(cString: raw)
-            free(raw)
-        }
+        guard let raw = realpath(existing.path, nil) else { return nil }
+        var base = String(cString: raw)
+        free(raw)
         for component in tail.reversed() {
             base += "/" + component
         }

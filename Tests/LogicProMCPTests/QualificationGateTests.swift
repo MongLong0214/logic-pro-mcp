@@ -580,6 +580,44 @@ struct QualificationGateTests {
         ])
     }
 
+    /// Finding-1 (adversarial review): an observed-Creator-Studio host — or a
+    /// host misdetected as Creator Studio — with no desktop evidence must never
+    /// promote. The required matrix is the STATIC 2 desktop axes
+    /// (`shipVariants == [.desktop]`) and `requiredAxes(...)` is
+    /// variant-independent, so observing a creator variant can never collapse
+    /// the required set to empty and slip an unqualified build through. Both
+    /// desktop axes are unexecuted (`.notQualified`) with an honest availability
+    /// explanation and NO waiver, so both are rejected.
+    @Test func observedCreatorHostCannotPromoteDesktopMatrix() {
+        let observedAxis = QualificationAxis(
+            variant: .creatorStudio,
+            locale: .enUS,
+            profile: .core,
+            cache: .cold,
+            fixture: .empty
+        )
+        let cases = QualificationAxis.requiredCombinations.map { axis in
+            qualificationCase(
+                id: axis.key,
+                status: .notQualified,
+                reason: "required axis unavailable: observed Creator Studio host",
+                axis: axis,
+                availabilityReason: availabilityReason(for: axis, observedAxis: observedAxis)
+            )
+        }
+
+        let decision = evaluate(cases: cases, logicVariant: .creatorStudio)
+
+        #expect(!decision.promotable)
+        for axis in QualificationAxis.requiredCombinations {
+            #expect(decision.rejections.contains(
+                .requiredCombinationNotQualified(key: axis.key)
+            ))
+        }
+        // The required set never collapses to empty: exactly the 2 desktop axes.
+        #expect(QualificationAxis.requiredCombinations.count == 2)
+    }
+
     private func evaluate(
         cases: [QualificationCase],
         waivers: [QualificationWaiver] = [],
@@ -588,14 +626,16 @@ struct QualificationGateTests {
         expectedBinarySHA256: String? = nil,
         presentArtifacts: Set<String>? = nil,
         attestationSHA256: String? = nil,
-        requiredOperationIDs: Set<String>? = nil
+        requiredOperationIDs: Set<String>? = nil,
+        logicVariant: LogicVariant = .desktop
     ) -> PromotionDecision {
         PromotionGate().evaluate(
             attestation: attestation(
                 serverVersion: attestationVersion,
                 binarySHA256: attestationSHA256,
                 cases: cases,
-                waivers: waivers
+                waivers: waivers,
+                logicVariant: logicVariant
             ),
             releaseVersion: releaseVersion,
             expectedBinarySHA256: expectedBinarySHA256 ?? binarySHA256,
@@ -611,14 +651,15 @@ struct QualificationGateTests {
         serverVersion: String = "1.2.3",
         binarySHA256: String? = nil,
         cases: [QualificationCase],
-        waivers: [QualificationWaiver]
+        waivers: [QualificationWaiver],
+        logicVariant: LogicVariant = .desktop
     ) -> ReleaseQualificationAttestation {
         ReleaseQualificationAttestation(
             schema: "release-qualification-attestation/v2",
             serverVersion: serverVersion,
             commitSHA: String(repeating: "c", count: 40),
             binarySHA256: binarySHA256 ?? self.binarySHA256,
-            logicVariant: .desktop,
+            logicVariant: logicVariant,
             logicVersion: "11.2.0",
             locale: .enUS,
             profile: .core,
