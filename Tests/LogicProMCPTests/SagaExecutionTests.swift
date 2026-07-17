@@ -528,7 +528,7 @@ struct SagaExecutionTests {
                     idempotencyKey: "production-failure-\(failureAt)"
                 )
 
-                let outcome = await MutationSaga(targetRegistry: registry, enabled: true)
+                let outcome = await MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true })
                     .execute(plan, executor: executor)
                 let operations = await channel.recordedCalls().map(\.operation)
                 let expectedOperations: [String]

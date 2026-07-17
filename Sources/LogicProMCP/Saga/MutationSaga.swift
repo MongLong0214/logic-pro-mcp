@@ -160,15 +160,17 @@ actor MutationSaga {
     private let enabled: Bool
     private var sessions: [String: SagaOutcome] = [:]
 
-    /// Route-health probe for preflight. `nil` skips the check (pure unit
-    /// contexts without a router); the public dispatcher always wires the
-    /// real channel-health probe.
-    private let routeAvailable: (@Sendable (OperationID) async -> Bool)?
+    /// Route-health probe for preflight. REQUIRED — a silent skip default
+    /// would be fail-open (a future construction site forgetting the probe
+    /// would silently drop route checks; adversarial review flagged exactly
+    /// that regression path). Pure unit contexts pass `{ _ in true }`
+    /// explicitly; the public dispatcher wires the real channel-health probe.
+    private let routeAvailable: @Sendable (OperationID) async -> Bool
 
     init(
         targetRegistry: TargetRegistry,
         enabled: Bool = FeatureFlags.adr004MutationSaga,
-        routeAvailable: (@Sendable (OperationID) async -> Bool)? = nil
+        routeAvailable: @escaping @Sendable (OperationID) async -> Bool
     ) {
         self.targetRegistry = targetRegistry
         self.enabled = enabled
@@ -214,7 +216,7 @@ actor MutationSaga {
                     ))
                 }
             }
-            if let routeAvailable, await !routeAvailable(step.operationID) {
+            if await !routeAvailable(step.operationID) {
                 issues.append(.routeUnavailable(
                     stepIndex: index,
                     operationID: step.operationID
@@ -262,17 +264,24 @@ actor MutationSaga {
             }
         }
 
-        // ADR-004: reject before step 1 when the plan's worst-case duration
-        // (sum of registry deadlines) cannot fit the saga-execute command
-        // budget — otherwise the whole-command deadline could fire mid-plan.
+        // ADR-004: reject before step 1 when the plan's modeled duration
+        // cannot fit the saga-execute command budget — otherwise the
+        // whole-command deadline could fire mid-plan. HONEST SCOPE: the model
+        // is COARSE — 2× the per-step registry deadline (write + verification
+        // readback); availability capture, cache refresh, and a late-failure
+        // compensation replay are NOT reserved, so a mid-flight timeout
+        // remains possible for pathological plans — this check bounds the
+        // obvious overcommit, it does not guarantee completion. Rejection is
+        // >= (an exact-fit plan has zero headroom for the unmodeled work).
         // The budget is registry-derived, never a local constant.
         let budgetSeconds = OperationRegistry.spec(
             tool: ToolID.logicSystem.rawValue,
             command: "saga_execute"
         )?.deadline.seconds ?? DeadlineClass.long.seconds
-        if worstCaseSeconds > budgetSeconds {
+        let modeledSeconds = worstCaseSeconds * 2
+        if modeledSeconds >= budgetSeconds {
             issues.append(.deadlineBudgetExceeded(
-                totalSeconds: worstCaseSeconds,
+                totalSeconds: modeledSeconds,
                 budgetSeconds: budgetSeconds
             ))
         }

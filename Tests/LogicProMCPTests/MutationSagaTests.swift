@@ -170,17 +170,19 @@ struct MutationSagaTests {
         #expect(await executor.runCount() == 0)
     }
 
-    /// ADR-004: a plan whose worst-case registry-deadline sum exceeds the
-    /// saga-execute budget rejects before step 1. The 6 allowlisted ops are
-    /// DeadlineClass.short (25s) and the budget is DeadlineClass.long (300s),
-    /// so 13 steps (325s) overflow while 12 (300s) fit exactly.
+    /// ADR-004: a plan whose modeled duration (2× per-step registry deadline —
+    /// write + verification readback) reaches the saga-execute budget rejects
+    /// before step 1, on >= (an exact fit has zero headroom for unmodeled
+    /// work). The 6 allowlisted ops are DeadlineClass.short (25s → 50s
+    /// modeled) and the budget is DeadlineClass.long (300s), so 6 steps
+    /// (300s modeled) reject while 5 (250s) pass the budget check.
     @Test
     func preflightRejectsPlansExceedingDeadlineBudget() async {
         let registry = TargetRegistry()
         let valid = await bind(registry, index: 0, name: "Valid")
         let executor = MockSagaExecutor(states: [valid: .string("Before")], behaviors: [])
-        let saga = MutationSaga(targetRegistry: registry, enabled: true)
-        let steps = (0..<13).map { index in
+        let saga = MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true })
+        let steps = (0..<6).map { index in
             step(.tracksRename, target: valid, value: .string("After-\(index)"))
         }
         let outcome = await saga.execute(
@@ -189,9 +191,30 @@ struct MutationSagaTests {
         )
         #expect(!outcome.complete)
         #expect(outcome.preflightIssues.contains(
-            .deadlineBudgetExceeded(totalSeconds: 325, budgetSeconds: 300)
+            .deadlineBudgetExceeded(totalSeconds: 300, budgetSeconds: 300)
         ))
         #expect(await executor.runCount() == 0)
+    }
+
+    /// Boundary control: a 5-step plan (250s modeled < 300s budget) passes the
+    /// budget check and executes — proving the gate discriminates rather than
+    /// blanket-rejecting multi-step plans.
+    @Test
+    func preflightAllowsPlansWithinDeadlineBudget() async {
+        let registry = TargetRegistry()
+        let valid = await bind(registry, index: 0, name: "Valid")
+        let executor = MockSagaExecutor(states: [valid: .string("Before")], behaviors: [])
+        let saga = MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true })
+        let steps = (0..<5).map { index in
+            step(.tracksRename, target: valid, value: .string("After-\(index)"))
+        }
+        let outcome = await saga.execute(
+            SagaPlan(steps: steps, idempotencyKey: "budget-within-plan"),
+            executor: executor
+        )
+        #expect(outcome.preflightIssues.isEmpty)
+        #expect(outcome.complete)
+        #expect(await executor.runCount() == 5)
     }
 
     /// ADR-004: a step whose registry spec declares a confirmation policy is
@@ -203,7 +226,7 @@ struct MutationSagaTests {
         let registry = TargetRegistry()
         let valid = await bind(registry, index: 0, name: "Valid")
         let executor = MockSagaExecutor(states: [valid: .string("Before")], behaviors: [])
-        let saga = MutationSaga(targetRegistry: registry, enabled: true)
+        let saga = MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true })
         let outcome = await saga.execute(
             SagaPlan(
                 steps: [step(.projectOpen, target: valid, value: .string("/tmp/x.logicx"))],
@@ -228,7 +251,7 @@ struct MutationSagaTests {
         await registry.bumpTopologyGeneration()
         let valid = await bind(registry, index: 1, name: "Valid")
         let executor = MockSagaExecutor(states: [valid: .string("Before")], behaviors: [])
-        let saga = MutationSaga(targetRegistry: registry, enabled: true)
+        let saga = MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true })
 
         let staleOutcome = await saga.execute(
             SagaPlan(
@@ -274,7 +297,7 @@ struct MutationSagaTests {
             states: [renameTarget: .string("Bass"), volumeTarget: .double(0.25)],
             behaviors: [.applyStateA, .applyStateA]
         )
-        let saga = MutationSaga(targetRegistry: registry, enabled: true)
+        let saga = MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true })
         let outcome = await saga.execute(
             SagaPlan(
                 steps: [
@@ -320,7 +343,7 @@ struct MutationSagaTests {
             ],
             behaviors: [.applyStateA, .applyStateA, .failBeforeWrite, .applyStateA, .applyStateA]
         )
-        let saga = MutationSaga(targetRegistry: registry, enabled: true)
+        let saga = MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true })
         let outcome = await saga.execute(
             SagaPlan(
                 steps: [
@@ -356,7 +379,7 @@ struct MutationSagaTests {
             behaviors: [.applyStateA, .applyStateA]
         )
         let cancellation = StepBoundaryCancellationProbe()
-        let outcome = await MutationSaga(targetRegistry: registry, enabled: true).execute(
+        let outcome = await MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true }).execute(
             SagaPlan(
                 steps: [step(.tracksRename, target: target, value: .string("After"))],
                 idempotencyKey: "cancel-after-verified-write"
@@ -392,7 +415,7 @@ struct MutationSagaTests {
             behaviors: [.applyStateA, .applyStateA],
             beforeFirstRead: { await probe.block() }
         )
-        let saga = MutationSaga(targetRegistry: registry, enabled: true)
+        let saga = MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true })
         let execution = Task {
             await saga.execute(
                 plan,
@@ -441,7 +464,7 @@ struct MutationSagaTests {
             states: [appliedTarget: .bool(false)],
             behaviors: [.ambiguousApplied, .applyStateA]
         )
-        let appliedOutcome = await MutationSaga(targetRegistry: registry, enabled: true).execute(
+        let appliedOutcome = await MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true }).execute(
             SagaPlan(
                 steps: [step(.tracksMute, target: appliedTarget, value: .bool(true))],
                 idempotencyKey: "ambiguous-applied"
@@ -456,7 +479,7 @@ struct MutationSagaTests {
             states: [notAppliedTarget: .bool(false)],
             behaviors: [.ambiguousNotApplied]
         )
-        let notAppliedOutcome = await MutationSaga(targetRegistry: registry, enabled: true).execute(
+        let notAppliedOutcome = await MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true }).execute(
             SagaPlan(
                 steps: [step(.tracksSolo, target: notAppliedTarget, value: .bool(true))],
                 idempotencyKey: "ambiguous-not-applied"
@@ -472,7 +495,7 @@ struct MutationSagaTests {
             states: [unknownTarget: .bool(false)],
             behaviors: [.ambiguousUnknown]
         )
-        let unknownOutcome = await MutationSaga(targetRegistry: registry, enabled: true).execute(
+        let unknownOutcome = await MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true }).execute(
             SagaPlan(
                 steps: [step(.tracksArm, target: unknownTarget, value: .bool(true))],
                 idempotencyKey: "ambiguous-unknown"
@@ -494,7 +517,7 @@ struct MutationSagaTests {
             states: [firstTarget: .string("First"), secondTarget: .double(0.1)],
             behaviors: [.applyStateA, .failBeforeWrite, .failBeforeWrite]
         )
-        let saga = MutationSaga(targetRegistry: registry, enabled: true)
+        let saga = MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true })
         let outcome = await saga.execute(
             SagaPlan(
                 steps: [
@@ -537,7 +560,7 @@ struct MutationSagaTests {
             states: [target: .string("Before")],
             behaviors: [.applyStateA]
         )
-        let disabledOutcome = await MutationSaga(targetRegistry: registry).execute(
+        let disabledOutcome = await MutationSaga(targetRegistry: registry, routeAvailable: { _ in true }).execute(
             plan,
             executor: disabledExecutor
         )
@@ -550,7 +573,7 @@ struct MutationSagaTests {
             states: [target: .string("Before")],
             behaviors: [.applyStateA]
         )
-        let saga = MutationSaga(targetRegistry: registry, enabled: true)
+        let saga = MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true })
         let first = await saga.execute(plan, executor: executor)
         let second = await saga.execute(plan, executor: executor)
         #expect(first == second)
