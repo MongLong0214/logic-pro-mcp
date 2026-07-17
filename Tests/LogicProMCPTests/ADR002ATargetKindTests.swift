@@ -35,6 +35,13 @@ private actor ADR002ATestChannel: Channel {
 
 @Suite(.serialized)
 struct ADR002ATargetKindTests {
+    /// PRD-007: the LIVE header scan corresponding to `cacheWithTracks`. The
+    /// seed-set ops corroborate against the live surface, never the cache, so
+    /// index-path tests must supply both.
+    private let liveTrackHeaders: @Sendable () -> [Int: String]? = {
+        [0: "Kick", 1: "Snare", 2: "Bass"]
+    }
+
     private func cacheWithTracks() async -> StateCache {
         let cache = StateCache()
         await cache.updateTracks([
@@ -551,10 +558,11 @@ struct ADR002ATargetKindTests {
             let (duplicateRouter, _) = await router(ids: [.accessibility, .midiKeyCommands, .cgEvent])
             let result = await TrackDispatcher.handle(
                 command: "duplicate",
-                params: ["index": .int(2)],
+                params: ["index": .int(2), "expected_name": .string("Bass")],
                 router: duplicateRouter,
                 cache: cache,
-                targetRegistry: registry
+                targetRegistry: registry,
+                liveTrackNames: liveTrackHeaders
             )
             #expect(result.isError == false)
             #expect(await registry.currentTopologyGeneration == 1)
@@ -581,10 +589,15 @@ struct ADR002ATargetKindTests {
             let (router, _) = await router()
             let result = await TrackDispatcher.handle(
                 command: "set_instrument",
-                params: ["index": .int(2), "path": .string("/tmp/instrument.patch")],
+                params: [
+                    "index": .int(2),
+                    "path": .string("/tmp/instrument.patch"),
+                    "expected_name": .string("Bass"),
+                ],
                 router: router,
                 cache: cache,
-                targetRegistry: registry
+                targetRegistry: registry,
+                liveTrackNames: liveTrackHeaders
             )
             #expect(result.isError == false)
             #expect(await registry.currentTopologyGeneration == 1)
@@ -605,10 +618,15 @@ struct ADR002ATargetKindTests {
             let (mutationRouter, _) = await router()
             let mutation = await TrackDispatcher.handle(
                 command: "set_instrument",
-                params: ["index": .int(2), "path": .string("/tmp/instrument.patch")],
+                params: [
+                    "index": .int(2),
+                    "path": .string("/tmp/instrument.patch"),
+                    "expected_name": .string("Bass"),
+                ],
                 router: mutationRouter,
                 cache: cache,
-                targetRegistry: registry
+                targetRegistry: registry,
+                liveTrackNames: liveTrackHeaders
             )
             #expect(mutation.isError == false)
             #expect(await registry.currentTopologyGeneration == 1)

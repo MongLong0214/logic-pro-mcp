@@ -335,6 +335,14 @@ extension OperationTraceTests {
     }
 }
 
+/// PRD-007: the LIVE header surface the corroborated ops check against. Single
+/// unique row so the seed-set ops clear the binding gate and their traced write
+/// path stays exercised by this census.
+let operationTraceCoverageTrackName = "Trace Coverage Track"
+private let operationTraceCoverageLiveTrackNames: @Sendable () -> [Int: String]? = {
+    [0: operationTraceCoverageTrackName]
+}
+
 private func dispatchOperationTraceCoverageSpec(
     _ spec: OperationSpec,
     params: [String: Value],
@@ -384,7 +392,8 @@ private func dispatchOperationTraceCoverageSpec(
             command: spec.command,
             params: params,
             router: router,
-            cache: cache
+            cache: cache,
+            liveTrackNames: operationTraceCoverageLiveTrackNames
         )
     case .logicEdit:
         return await EditDispatcher.handle(
@@ -424,7 +433,8 @@ private func dispatchOperationTraceCoverageSpec(
             command: spec.command,
             params: params,
             router: router,
-            cache: cache
+            cache: cache,
+            liveTrackNames: operationTraceCoverageLiveTrackNames
         )
     }
 }
@@ -482,6 +492,9 @@ private func operationTraceCoverageParams(
             "track": .int(0), "insert": .int(0), "plugin": .string("Gain"),
             "mode": .string("duplicate_applyback"),
             "project_expected_path": .string(fixtures.projectPath),
+            // PRD-007 `.corroborated`: the binding gate precedes the traced
+            // write, so the trace census must clear it.
+            OperationRegistry.corroborationParam: .string(operationTraceCoverageTrackName),
         ]
     case .editQuantize:
         return ["value": .string("1/16")]
@@ -532,8 +545,13 @@ private func operationTraceCoverageParams(
         return ["note": .int(60), "duration": .string("1/16")]
     case .midiMMCLocate:
         return ["bar": .int(1)]
-    case .tracksSelect, .tracksDelete, .tracksDuplicate, .tracksArmOnly:
+    case .tracksSelect, .tracksArmOnly:
         return ["index": .int(0)]
+    case .tracksDelete, .tracksDuplicate:
+        return [
+            "index": .int(0),
+            OperationRegistry.corroborationParam: .string(operationTraceCoverageTrackName),
+        ]
     case .tracksRename:
         return ["index": .int(0), "name": .string("Trace Coverage")]
     case .tracksMute, .tracksSolo, .tracksArm:
@@ -543,7 +561,11 @@ private func operationTraceCoverageParams(
     case .tracksSetAutomation:
         return ["index": .int(0), "mode": .string("read")]
     case .tracksSetInstrument:
-        return ["index": .int(0), "path": .string("Pianos/Trace Coverage.patch")]
+        return [
+            "index": .int(0),
+            "path": .string("Pianos/Trace Coverage.patch"),
+            OperationRegistry.corroborationParam: .string(operationTraceCoverageTrackName),
+        ]
     case .tracksResolvePath:
         return ["path": .string("Pianos/Trace Coverage.patch")]
     case .audioAnalyzeFile:

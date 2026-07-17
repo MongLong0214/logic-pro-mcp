@@ -12,7 +12,7 @@ struct TrackDispatcher: OperationTraceDispatching {
 
     static let tool = Tool(
         name: "logic_tracks",
-        description: "Track actions in Logic Pro. Commands: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets. Params: select -> { index: Int } or { name: String }; rename -> { name: String, index: Int (≥0) } or, when LOGIC_MCP_ADR002_TARGET_REF=1, { name: String, target_ref: String, index?: Int }; when the flag is off, supplying target_ref fails closed with target_ref_unavailable; omit it to use index; mute/solo/arm/arm_only/set_automation/set_instrument ALL require explicit { index: Int (≥0) }; mute/solo/arm -> also { enabled: Bool }; arm_only disarms all others + arms target, returns error on partial disarm failure; record_sequence -> { bar?: Int (default 1), notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\" (BREAKING since v3.1.6: optional `ch` field is 1-based, range 1..16 — pre-v3.1.6 was 0-based; whole-parse-fail on any invalid segment; SMF end <= 3,600,000 ms), tempo?: Float } SMF-import path: generates a Standard MIDI File server-side, forces playhead to bar 1, imports via AX menu — byte-exact timing, creates a new track each call, then verifies the imported region by AX readback. Successful responses include `created_track`, `target_track_index`, `target_track_name`, `region_name`, `start_bar`, `end_bar`, `note_count`, and `verify_source`; structured error JSON distinguishes `import_failure`, `audibility_unverified`, `import_unverified`, `wrong_track_import`, `timing_mismatch`, and `unreadable_readback`. If Logic imports GM Device / External MIDI lanes, record_sequence fails closed instead of promoting region readback to audible success. v3.0.8 REMOVED the internal instrument auto-load: response always carries `\"instrument\":\"not-attempted\"`; callers that want a specific patch must follow up with explicit `set_instrument` on a Software Instrument track. The legacy `instrument_path` param is accepted for wire compat but ignored (surfaces as `\"ignored:<path>\"` in the response) — see CHANGELOG v3.0.8 for why the inline auto-load was unsafe (could load the wrong track's patch, corrupting a pre-existing track); create_* -> {}; delete/duplicate -> { index: Int }; set_automation -> { mode: read|write|touch|latch|trim } (independent readback required for State A); set_instrument -> { path: String } or { category: String, preset: String } — path mode preferred and only `resolve_path` results with kind=`leaf` and loadable=true are valid apply candidates; scan_library -> { mode?: \"ax\"|\"disk\"|\"both\" } (default disk — dedupes user and app-bundle Instrument `.patch` candidates with Panel-taxonomy remap; ax is the legacy live Library Panel scan; both returns diff summary); resolve_path -> { path: String } cache-backed read-only classifier returning kind/source/loadable; scan_plugin_presets -> { submenuOpenDelayMs?: Int }. ADR-002 (LOGIC_MCP_ADR002_TARGET_REF=1): select, delete, duplicate, mute, solo, arm, arm_only, set_automation, and set_instrument ALSO accept a session-stable { target_ref: String } (a trk_… value from the logic://tracks resource) in place of the explicit index; when both target_ref and index are supplied they must agree or the op fails closed (stale_target_reference); when the flag is off, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use the explicit index path.",
+        description: "Track actions in Logic Pro. Commands: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets. Params: select -> { index: Int } or { name: String }; rename -> { name: String, index: Int (≥0) } or, when LOGIC_MCP_ADR002_TARGET_REF=1, { name: String, target_ref: String, index?: Int }; when the flag is off, supplying target_ref fails closed with target_ref_unavailable; omit it to use index; mute/solo/arm/arm_only/set_automation/set_instrument ALL require explicit { index: Int (≥0) }; mute/solo/arm -> also { enabled: Bool }; arm_only disarms all others + arms target, returns error on partial disarm failure; record_sequence -> { bar?: Int (default 1), notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\" (BREAKING since v3.1.6: optional `ch` field is 1-based, range 1..16 — pre-v3.1.6 was 0-based; whole-parse-fail on any invalid segment; SMF end <= 3,600,000 ms), tempo?: Float } SMF-import path: generates a Standard MIDI File server-side, forces playhead to bar 1, imports via AX menu — byte-exact timing, creates a new track each call, then verifies the imported region by AX readback. Successful responses include `created_track`, `target_track_index`, `target_track_name`, `region_name`, `start_bar`, `end_bar`, `note_count`, and `verify_source`; structured error JSON distinguishes `import_failure`, `audibility_unverified`, `import_unverified`, `wrong_track_import`, `timing_mismatch`, and `unreadable_readback`. If Logic imports GM Device / External MIDI lanes, record_sequence fails closed instead of promoting region readback to audible success. v3.0.8 REMOVED the internal instrument auto-load: response always carries `\"instrument\":\"not-attempted\"`; callers that want a specific patch must follow up with explicit `set_instrument` on a Software Instrument track. The legacy `instrument_path` param is accepted for wire compat but ignored (surfaces as `\"ignored:<path>\"` in the response) — see CHANGELOG v3.0.8 for why the inline auto-load was unsafe (could load the wrong track's patch, corrupting a pre-existing track); create_* -> {}; delete/duplicate -> { index: Int, expected_name: String } (PRD-007 index binding: delete, duplicate and set_instrument are `corroborated` — a bare index is REFUSED with index_binding_corroboration_required; supply expected_name (the track name you expect at that index, corroborated against the live header and required to be unique) or a target_ref instead; expected_name + target_ref together is invalid_params; every binding failure is pre-write with write_attempted:false); set_automation -> { mode: read|write|touch|latch|trim } (independent readback required for State A); set_instrument -> { path: String, expected_name: String } or { category: String, preset: String, expected_name: String } — path mode preferred and only `resolve_path` results with kind=`leaf` and loadable=true are valid apply candidates; scan_library -> { mode?: \"ax\"|\"disk\"|\"both\" } (default disk — dedupes user and app-bundle Instrument `.patch` candidates with Panel-taxonomy remap; ax is the legacy live Library Panel scan; both returns diff summary); resolve_path -> { path: String } cache-backed read-only classifier returning kind/source/loadable; scan_plugin_presets -> { submenuOpenDelayMs?: Int }. ADR-002 (LOGIC_MCP_ADR002_TARGET_REF=1): select, delete, duplicate, mute, solo, arm, arm_only, set_automation, and set_instrument ALSO accept a session-stable { target_ref: String } (a trk_… value from the logic://tracks resource) in place of the explicit index; when both target_ref and index are supplied they must agree or the op fails closed (stale_target_reference); when the flag is off, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use the explicit index path.",
         inputSchema: commandParamsToolSchema(commandDescription: "Track command to execute")
     )
 
@@ -43,6 +43,16 @@ struct TrackDispatcher: OperationTraceDispatching {
             operation: "track.\(command)"
         ) {
             return projectFailure
+        }
+
+        // PRD-007: reject two competing bindings BEFORE ref resolution, so a
+        // stale ref cannot mask the caller's actual mistake.
+        if let conflict = IndexBindingGuard.conflictingBindingFailure(
+            policy: indexBindingPolicy(for: command),
+            operation: "track.\(command)",
+            params: params
+        ) {
+            return conflict
         }
 
         if let operation = modalGuardedTrackOperation(for: command), dialogPresent() {
@@ -174,6 +184,15 @@ struct TrackDispatcher: OperationTraceDispatching {
             case .failure(let result):
                 return result
             }
+            if let bindingFailure = IndexBindingGuard.evaluate(
+                policy: indexBindingPolicy(for: "delete"),
+                operation: "track.delete",
+                params: params,
+                index: index,
+                liveTrackNames: liveTrackNames
+            ) {
+                return bindingFailure
+            }
             let traceID = await startTraceIfEnabled(command: command)
             await recordWriteBoundary(traceID)
             let selectResult = await router.route(
@@ -242,6 +261,15 @@ struct TrackDispatcher: OperationTraceDispatching {
                 resolvedFingerprint = resolved.binding?.observedFingerprint
             case .failure(let result):
                 return result
+            }
+            if let bindingFailure = IndexBindingGuard.evaluate(
+                policy: indexBindingPolicy(for: "duplicate"),
+                operation: "track.duplicate",
+                params: params,
+                index: index,
+                liveTrackNames: liveTrackNames
+            ) {
+                return bindingFailure
             }
             let traceID = await startTraceIfEnabled(command: command)
             await recordWriteBoundary(traceID)
@@ -687,6 +715,21 @@ struct TrackDispatcher: OperationTraceDispatching {
                     traceID: traceID
                 )
             }
+            // PRD-007: LAST gate before the write. Deliberately ordered after
+            // request-shape validation and the blocking-dialog precondition: a
+            // malformed request is malformed whatever it points at, and a wedged
+            // session is wedged for every target — reporting an unproven binding
+            // for either would answer a question the caller didn't ask yet.
+            // Binding is the final question: "is this the thing you meant?"
+            if let bindingFailure = IndexBindingGuard.evaluate(
+                policy: indexBindingPolicy(for: "set_instrument"),
+                operation: "track.set_instrument",
+                params: params,
+                index: index,
+                liveTrackNames: liveTrackNames
+            ) {
+                return await finalizeTrace(bindingFailure, traceID: traceID)
+            }
             await recordWriteBoundary(traceID)
             let result = await router.route(
                 operation: "track.set_instrument",
@@ -789,6 +832,13 @@ struct TrackDispatcher: OperationTraceDispatching {
     /// set op, then surfaces a #106 State-B (unverified) channel success as an
     /// error. Per-command error-hint strings are preserved verbatim via
     /// `command`; `operation` is the channel op ("track.set_mute", etc.).
+    /// PRD-007: the registry is the single source of the index-binding tier —
+    /// dispatchers never hardcode which ops are ratcheted, so a seed-set change
+    /// is one registry edit and the census catches any drift.
+    private static func indexBindingPolicy(for command: String) -> IndexBindingPolicy? {
+        OperationRegistry.spec(tool: ToolID.logicTracks.rawValue, command: command)?.indexBinding
+    }
+
     private static func handleToggle(
         command: String,
         operation: String,

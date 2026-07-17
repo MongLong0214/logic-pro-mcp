@@ -59,9 +59,10 @@ private actor StateBSelectMockChannel: Channel {
     // Act
     let result = await TrackDispatcher.handle(
         command: "delete",
-        params: ["index": .int(2)],
+        params: ["index": .int(2), "expected_name": .string("Target")],
         router: router,
-        cache: StateCache()
+        cache: StateCache(),
+        liveTrackNames: sharedLiveTrackNames([2: "Target"])
     )
 
     // Assert — dispatcher returned an error and never routed `track.delete`.
@@ -95,9 +96,10 @@ private actor StateBSelectMockChannel: Channel {
 
     let result = await TrackDispatcher.handle(
         command: "delete",
-        params: ["index": .int(3)],
+        params: ["index": .int(3), "expected_name": .string("Target")],
         router: router,
-        cache: StateCache()
+        cache: StateCache(),
+        liveTrackNames: sharedLiveTrackNames([3: "Target"])
     )
 
     #expect(!(result.isError!), "delete must succeed on State A select")
@@ -126,9 +128,10 @@ private actor StateBSelectMockChannel: Channel {
 
     let result = await TrackDispatcher.handle(
         command: "duplicate",
-        params: ["index": .int(3)],
+        params: ["index": .int(3), "expected_name": .string("Target")],
         router: router,
-        cache: StateCache()
+        cache: StateCache(),
+        liveTrackNames: sharedLiveTrackNames([3: "Target"])
     )
 
     #expect(result.isError!, "duplicate must error on State B select")
@@ -159,9 +162,10 @@ private actor StateBSelectMockChannel: Channel {
 
     let result = await TrackDispatcher.handle(
         command: "duplicate",
-        params: ["index": .int(4)],
+        params: ["index": .int(4), "expected_name": .string("Target")],
         router: router,
-        cache: StateCache()
+        cache: StateCache(),
+        liveTrackNames: sharedLiveTrackNames([4: "Target"])
     )
 
     #expect(!(result.isError!), "duplicate must succeed on State A select")
@@ -187,9 +191,10 @@ private actor StateBSelectMockChannel: Channel {
 
     let result = await TrackDispatcher.handle(
         command: "delete",
-        params: ["index": .int(7)],
+        params: ["index": .int(7), "expected_name": .string("Target")],
         router: router,
-        cache: StateCache()
+        cache: StateCache(),
+        liveTrackNames: sharedLiveTrackNames([7: "Target"])
     )
 
     let text = sharedToolText(result)

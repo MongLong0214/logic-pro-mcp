@@ -64,7 +64,47 @@ Every tool in `tools/list` advertises an `outputSchema`. Mixed command tools adv
 `logic://session-players/{id}`, `logic://workflow-plans/session?prompt={prompt}`,
 `logic://workflow-skills/{id}`, `logic://workflow-skills/search?query={query}`.
 
-Registered operations reject unknown command-parameter keys at the runtime boundary by default, before cache access, mutation gates, or dispatcher invocation. The State C `invalid_params` response includes sorted `unknown_params` and `allowed_params`. Selector keys are operation-scoped: `target_ref` is recognized only when the operation's target policy is `requiresStableTarget`, while `index` and `track` appear only on operations whose dispatcher consumes those aliases. The exact per-operation set is published by `logic://system/operations`; `record_sequence` also preserves its ignored `instrument` / `instrument_path` inputs. Set `LOGIC_MCP_ADR003_STRICT_PARAMS=0` only as a temporary compatibility escape hatch for registered-command parameter pass-through; it does not expose unregistered commands or dispatcher-only aliases.
+Registered operations reject unknown command-parameter keys at the runtime boundary by default, before cache access, mutation gates, or dispatcher invocation. The State C `invalid_params` response includes sorted `unknown_params` and `allowed_params`. Selector keys are operation-scoped: `target_ref` is recognized only when the operation's target policy is `accepts_stable_target`, while `index` and `track` appear only on operations whose dispatcher consumes those aliases. `expected_name` is recognized only on the `corroborated` index-binding tier (see [Index binding](#index-binding)). The exact per-operation set is published by `logic://system/operations`; `record_sequence` also preserves its ignored `instrument` / `instrument_path` inputs. Set `LOGIC_MCP_ADR003_STRICT_PARAMS=0` only as a temporary compatibility escape hatch for registered-command parameter pass-through; it does not expose unregistered commands or dispatcher-only aliases.
+
+### Index binding
+
+A track index is an **ordinal, not an identity**. Between the moment you read `logic://tracks` and the moment your write lands, a drag, a track creation, or a folder collapse can shift every row — and an index-keyed write then lands on a track you never named. `target_ref` (ADR-002) solves this by binding to a session-stable identity, but it is opt-in, so the registry declares what each operation demands of a **bare index** on a second, orthogonal axis: `index_binding`, published per-operation by `logic://system/operations`.
+
+The field is present only on operations that are both target-bearing (`target` = `accepts_stable_target`) and mutating — the only ones with an index path that can hit a wrong target. Read-only and non-target operations omit it entirely rather than publishing a null.
+
+| Tier | Meaning | Today |
+| --- | --- | --- |
+| `ref_required` | A bare index is refused; only `target_ref` binds. | **No operations.** Implemented and tested; the first promotion is a registry row flip and will appear as a catalog diff. |
+| `corroborated` | A bare index must be corroborated by `expected_name`. | `tracks.delete`, `tracks.duplicate`, `tracks.set_instrument`, `plugins.insert_verified` |
+| `legacy_index_allowed` | The historical unguarded index path. | **Deprecated** — see below. |
+
+#### The corroboration contract
+
+For a `corroborated` operation called **without** `target_ref`, supply `expected_name`: the track name you believe sits at the index. (It is not spelled `name` because several of these operations already spend `name` on an operand — `tracks.rename`'s new name, `tracks.select`'s by-name selector.) The server then reads the **live** track header before writing — never the state cache, which lags an out-of-band reorder by the poll interval and would therefore agree with exactly the stale view being defended against.
+
+Every failure below is fail-closed and **pre-write**: `write_attempted: false` is a fact, not a claim — the operation returns before anything is routed.
+
+| Condition | State C error | `safe_to_retry` |
+| --- | --- | --- |
+| No `expected_name` and no `target_ref` | `index_binding_corroboration_required` | `true` — supply either binding |
+| Live name at the index ≠ `expected_name` | `target_identity_mismatch` (`reason: name_mismatch`) | `false` — re-read `logic://tracks` first |
+| Live header unreadable | `target_identity_mismatch` (`reason: header_unreadable`) | `false` — an unreadable surface is never read as agreement |
+| `expected_name` matches but names >1 live track | `target_name_ambiguous` | `false` — use `target_ref` |
+| `expected_name` **and** `target_ref` both supplied | `invalid_params` | `true` — send exactly one binding |
+
+Uniqueness is not a nicety. Two tracks sharing a name can swap positions and leave `(index, name)` self-consistent at **both** ordinals, so a match would prove nothing; `target_ref` is the only binding a swap cannot fool. Supplying `target_ref` bypasses this path entirely — the reference machinery carries its own live-identity and ambiguity checks, and the two are never stacked.
+
+**Corroboration is a pre-write proof, not atomic with the write.** It reads the live header, then writes; a reorder that lands in that narrow guard-to-write interval can still put the write on the wrong track. Corroboration *narrows* the wrong-target window (from "any time since your last read" down to "the guard-to-write interval"); it does not eliminate it. Only `target_ref` — and the future `ref_required` tier — bind an identity that holds across the write and close the window entirely. Prefer `target_ref` when wrong-target cost is high.
+
+`expected_name` is a binding proof, not a write parameter: it is never forwarded to the channel, and a matching, unique corroboration leaves the existing index write path completely unchanged.
+
+#### Deprecation: `legacy_index_allowed`
+
+This tier is the pre-ratchet behaviour and is **deprecated**. Its members still write to a bare, unproven ordinal; each remains only because a wrong-target write there is *recoverable* (`mixer.set_volume`, `mixer.set_pan`, `plugins.set_param_verified`, `tracks.select`, `tracks.rename`, `tracks.mute`, `tracks.solo`, `tracks.arm`, `tracks.arm_only`, `tracks.set_automation`). The set is pinned by census and may only shrink. Prefer `target_ref` on these operations today; do not build on the assumption that a bare index will keep being accepted.
+
+A gap is tracked rather than papered over: two mutating operations key on a track strip yet carry target policy `none` — **`mixer.insert_plugin`** (irreversible insert) and **`mixer.set_plugin_param`** (reversible param write). Because they accept no `target_ref`, the corroboration refusal could not honestly offer one as an alternative, so neither carries a tier. Ratcheting either requires first making it target-bearing (`insert_plugin` would then become `corroborated`; `set_plugin_param`, being reversible, `legacy_index_allowed`).
+
+This exact set is pinned by census — it may only shrink, and any new operation added to the class fails CI until an explicit decision is made. The census discriminator is: **mutating**, target policy **`none`**, and carrying a track-strip selector (`track` or `track_index`). The bare `index` alias is deliberately *not* part of the discriminator: the operations that take `index` without a track-strip selector are the marker operations (`navigate.goto_marker`, `navigate.delete_marker`, `navigate.rename_marker`), whose `index` addresses a marker, not a track — a different wrong-target class that ADR-002 index binding does not cover.
 
 ### Track state values (`logic://tracks`)
 
@@ -95,6 +135,8 @@ Read current state from `logic://transport/state` after any transport mutation.
 Use explicit indices or names. Track mutation fails closed when the target cannot be identified or read back.
 
 Common commands: `select`, `create_audio`, `create_instrument`, `create_drummer`, `create_external_midi`, `delete`, `duplicate`, `rename`, `mute`, `solo`, `arm`, `arm_only`, `record_sequence`, `set_automation`, `set_instrument`, `list_library`, `scan_library`, `resolve_path`, `scan_plugin_presets`.
+
+**`delete`, `duplicate`, and `set_instrument` no longer accept a bare index.** They are `corroborated` (see [Index binding](#index-binding)): pass `expected_name` (the track name you expect at that index) or `target_ref`. Without one, they fail closed with `index_binding_corroboration_required` and write nothing.
 
 `set_automation` is State B (MCU write, no readback echo).
 

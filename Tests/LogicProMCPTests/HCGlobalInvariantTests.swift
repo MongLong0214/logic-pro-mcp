@@ -78,15 +78,15 @@ struct HCGlobalInvariantTests {
             RouteCase(tool: "logic_tracks", command: "create_instrument", params: [:], operation: "track.create_instrument", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_tracks", command: "create_drummer", params: [:], operation: "track.create_drummer", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_tracks", command: "create_external_midi", params: [:], operation: "track.create_external_midi", destinations: [], invariant: .minimumV1),
-            RouteCase(tool: "logic_tracks", command: "delete", params: ["index": .int(0)], operation: "track.delete", destinations: [], invariant: .minimumV1),
-            RouteCase(tool: "logic_tracks", command: "duplicate", params: ["index": .int(0)], operation: "track.duplicate", destinations: [], invariant: .minimumV1),
+            RouteCase(tool: "logic_tracks", command: "delete", params: ["index": .int(2), "expected_name": .string("Bass")], operation: "track.delete", destinations: [], invariant: .minimumV1),
+            RouteCase(tool: "logic_tracks", command: "duplicate", params: ["index": .int(2), "expected_name": .string("Bass")], operation: "track.duplicate", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_tracks", command: "rename", params: ["index": .int(0), "name": .string("HC Renamed")], operation: "track.rename", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_tracks", command: "mute", params: ["index": .int(0), "enabled": .bool(true)], operation: "track.set_mute", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_tracks", command: "solo", params: ["index": .int(0), "enabled": .bool(true)], operation: "track.set_solo", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_tracks", command: "arm", params: ["index": .int(0), "enabled": .bool(true)], operation: "track.set_arm", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_tracks", command: "arm_only", params: ["index": .int(1)], operation: "track.arm_only", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_tracks", command: "set_automation", params: ["index": .int(0), "mode": .string("read")], operation: "track.set_automation", destinations: [], invariant: .minimumV1),
-            RouteCase(tool: "logic_tracks", command: "set_instrument", params: ["index": .int(0), "path": .string("/Library/Application Support/Logic/Patches/Instrument/HC.patch")], operation: "track.set_instrument", destinations: [], invariant: .minimumV1),
+            RouteCase(tool: "logic_tracks", command: "set_instrument", params: ["index": .int(2), "path": .string("/Library/Application Support/Logic/Patches/Instrument/HC.patch"), "expected_name": .string("Bass")], operation: "track.set_instrument", destinations: [], invariant: .minimumV1),
 
             RouteCase(tool: "logic_mixer", command: "set_volume", params: ["track": .int(0), "value": .double(0.5)], operation: "mixer.set_volume", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_mixer", command: "set_pan", params: ["track": .int(0), "value": .double(0)], operation: "mixer.set_pan", destinations: [], invariant: .minimumV1),
@@ -308,7 +308,7 @@ struct HCGlobalInvariantTests {
             RouteCase(tool: "logic_system", command: "saga_cancel", params: [:], operation: "system.saga_cancel", destinations: [], invariant: .minimumV1),
 
             RouteCase(tool: "logic_plugins", command: "set_param_verified", params: ["track": .int(0), "insert": .int(0), "plugin": .string("logic.stock.gain"), "param": .string("gain_db"), "value": .double(0), "unit": .string("dB"), "mode": .string("duplicate_applyback"), "project_expected_path": .string(fixtures.existingProjectPath)], operation: "plugin.set_param_verified", destinations: [], invariant: .minimumV1),
-            RouteCase(tool: "logic_plugins", command: "insert_verified", params: ["track": .int(0), "insert": .int(0), "plugin": .string("Gain"), "mode": .string("duplicate_applyback"), "project_expected_path": .string(fixtures.existingProjectPath)], operation: "plugin.insert_verified", destinations: [], invariant: .minimumV1),
+            RouteCase(tool: "logic_plugins", command: "insert_verified", params: ["track": .int(2), "insert": .int(0), "plugin": .string("Gain"), "mode": .string("duplicate_applyback"), "project_expected_path": .string(fixtures.existingProjectPath), "expected_name": .string("Bass")], operation: "plugin.insert_verified", destinations: [], invariant: .minimumV1),
         ]
     }
 
@@ -441,7 +441,7 @@ struct HCGlobalInvariantTests {
                 sleep: { _ in }
             )
         case "logic_tracks":
-            return await TrackDispatcher.handle(command: routeCase.command, params: routeCase.params, router: router, cache: cache)
+            return await TrackDispatcher.handle(command: routeCase.command, params: routeCase.params, router: router, cache: cache, liveTrackNames: hcLiveTrackHeaders)
         case "logic_mixer":
             return await MixerDispatcher.handle(command: routeCase.command, params: routeCase.params, router: router, cache: cache)
         case "logic_midi":
@@ -472,11 +472,17 @@ struct HCGlobalInvariantTests {
                 }
             )
         case "logic_plugins":
-            return await PluginsDispatcher.handle(command: routeCase.command, params: routeCase.params, router: router, cache: cache)
+            return await PluginsDispatcher.handle(command: routeCase.command, params: routeCase.params, router: router, cache: cache, liveTrackNames: hcLiveTrackHeaders)
         default:
             Issue.record("Unhandled HC invariant tool \(routeCase.tool)")
             return toolTextResult("Unhandled HC invariant tool \(routeCase.tool)", isError: true)
         }
+    }
+
+    /// PRD-007: LIVE header scan mirroring `seedCache`, including its duplicate
+    /// "Kick" — the seed-set routes corroborate against this, not the cache.
+    private static let hcLiveTrackHeaders: @Sendable () -> [Int: String]? = {
+        [0: "Kick", 1: "Kick", 2: "Bass"]
     }
 
     private static func seedCache(_ cache: StateCache) async {

@@ -475,6 +475,20 @@ def create_audio_track(client: MCPClient) -> Optional[int]:
     return index
 
 
+def live_track_name(client: MCPClient, track_index: int) -> Optional[str]:
+    """PRD-007: the live name at a track index, for corroborating the seed-set
+    ops (insert_verified / delete) that no longer accept a bare index."""
+    tracks = tracks_snapshot(client)
+    if not isinstance(tracks, list):
+        return None
+    for track in tracks:
+        if isinstance(track, dict) and track.get("id") == track_index:
+            name = track.get("name")
+            if isinstance(name, str) and name.strip():
+                return name
+    return None
+
+
 def insert_channel_eq(client: MCPClient, track_index: int, insert_index: int, project_path: str) -> bool:
     send_escape("pre_insert_escape")
     params = {
@@ -484,6 +498,12 @@ def insert_channel_eq(client: MCPClient, track_index: int, insert_index: int, pr
         "mode": "duplicate_applyback",
         "project_expected_path": project_path,
     }
+    # PRD-007 index binding: insert_verified is `.corroborated`, so a bare track
+    # index is refused. Corroborate against the live header name of the track we
+    # created earlier in this spike.
+    expected_name = live_track_name(client, track_index)
+    if expected_name is not None:
+        params["expected_name"] = expected_name
     response = call_tool(client, "logic_plugins", "insert_verified", params, timeout=60)
     payload = tool_json(response)
     send_escape("post_insert_escape")
@@ -498,7 +518,13 @@ def cleanup_created_track(client: MCPClient, track_index: Optional[int]) -> None
         emit("cleanup_track_delete", "missing", reason="no created track index")
         send_escape("cleanup_post_escape")
         return
-    response = call_tool(client, "logic_tracks", "delete", {"index": track_index}, timeout=30)
+    # PRD-007 index binding: tracks.delete is `.corroborated` — corroborate the
+    # index against the live header name before the irreversible delete.
+    delete_params: Dict[str, Any] = {"index": track_index}
+    expected_name = live_track_name(client, track_index)
+    if expected_name is not None:
+        delete_params["expected_name"] = expected_name
+    response = call_tool(client, "logic_tracks", "delete", delete_params, timeout=30)
     payload = tool_json(response)
     emit("cleanup_track_delete", "ok" if isinstance(payload, dict) and payload.get("state") == "A" else "failed", index=track_index, response=payload or response)
     send_escape("cleanup_post_escape")
