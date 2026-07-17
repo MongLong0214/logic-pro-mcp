@@ -393,6 +393,14 @@ struct HCGlobalInvariantTests {
 
     @Test("all mock-executable mutating routes return HC JSON")
     func all_mutating_routes_return_hc_json() async throws {
+        // PRD-011: the support-bundle route case uses a temp path; point the
+        // bundle root at the temp tree so containment accepts it.
+        let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
+        let previousRoot = getenv(rootKey).map { String(cString: $0) }
+        setenv(rootKey, FileManager.default.temporaryDirectory.path, 1)
+        defer {
+            if let previousRoot { setenv(rootKey, previousRoot, 1) } else { unsetenv(rootKey) }
+        }
         let projectPath = try Self.makeLogicProjectPath(create: true)
         defer { try? FileManager.default.removeItem(atPath: projectPath) }
         let fixtures = Fixtures(

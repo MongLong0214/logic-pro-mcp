@@ -10,6 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed — BREAKING (honesty contract)
 
+- **Release qualification is desktop-only by product scope.** The required same-artifact matrix is Desktop Logic Pro × {en-US, ko-KR} (2 axes). Logic Pro Creator Studio is permanently out of scope (never installed/supported); it is excluded from the qualification matrix rather than perpetually waived. Health still reports the Creator variant as not installed. (Owner decision 2026-07-17.)
+
 - **Release promotion is fail-closed until real per-operation qualification evidence exists.** The 106 blanket operation waivers were removed as invalid; `PromotionGate` rejects every uncovered operation, and the release workflow verifies the exact artifact through a pinned independent verifier bound to the released commit. No release can promote until the coverage program (#373) lands evidence.
 - **Flag-off `clear_traces` no longer claims success.** With operation tracing disabled, a confirmed `clear_traces` returns a typed State C (`error: trace_disabled`, `write_attempted: false`) instead of `success: true` — a no-op never surfaces as success. Cleanup flows that called `clear_traces` unconditionally under the default configuration must treat this outcome as the expected disabled response.
 - **Trace operation availability is generated from the feature policy.** `list_recent_traces`, `get_trace`, and `clear_traces` advertise `default_install` only when tracing is enabled for the process; otherwise they advertise `experimental` in the operation catalog. Promotion requirements are unaffected (all registered operations remain required).

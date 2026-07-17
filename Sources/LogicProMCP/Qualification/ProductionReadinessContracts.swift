@@ -227,7 +227,7 @@ enum ProductionReadinessContractEvaluator {
         }
         let expectedQualificationLines = [
             "echo \"managed-fixture-matrix\"",
-            "echo \"required-matrix-axes:4\"",
+            "echo \"required-matrix-axes:2\"",
             "test -n \"$QUALIFICATION_EVIDENCE_URL\"",
             "test -n \"$QUALIFICATION_EVIDENCE_SHA256\"",
             "test -n \"$TRUSTED_QUALIFICATION_PUBLIC_KEY\"",

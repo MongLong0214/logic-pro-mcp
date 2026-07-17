@@ -15,35 +15,13 @@ struct QualificationGateTests {
     }
 
     @Test func promotionGateDistinguishesGovernedAndUngovernedUnavailableAxes() {
+        // Desktop-only matrix: the two required axes differ by LOCALE
+        // (desktop/en-US vs desktop/ko-KR). A single live run observes one
+        // locale; the other required locale is unexecuted. Without an explicit
+        // governed waiver it must not be promotable even with an honest
+        // availability explanation.
         let liveAxis = QualificationAxis.requiredCombinations[0]
         let governedCases = QualificationAxis.requiredCombinations.map { axis in
-            qualificationCase(
-                id: axis.key,
-                status: axis.variant == liveAxis.variant ? .passed : .notQualified,
-                reason: axis.variant == liveAxis.variant
-                    ? nil
-                    : "required axis unavailable: different observed Logic variant or UI locale",
-                axis: axis,
-                availabilityReason: axis.variant == liveAxis.variant ? nil : availabilityReason(
-                    for: axis,
-                    observedAxis: liveAxis
-                )
-            )
-        }
-
-        let governed = evaluate(cases: governedCases)
-        #expect(!governed.promotable)
-        for axis in QualificationAxis.requiredCombinations where axis.variant != liveAxis.variant {
-            #expect(governed.rejections.contains(
-                .requiredCombinationNotQualified(key: axis.key)
-            ))
-        }
-
-        let creatorInstalled = qualificationAvailabilityObservation(
-            for: liveAxis,
-            creatorInstalled: true
-        )
-        let unjustifiedVariantSkips = QualificationAxis.requiredCombinations.map { axis in
             qualificationCase(
                 id: axis.key,
                 status: axis == liveAxis ? .passed : .notQualified,
@@ -54,11 +32,17 @@ struct QualificationGateTests {
                 availabilityReason: axis == liveAxis ? nil : availabilityReason(
                     for: axis,
                     observedAxis: liveAxis
-                ),
-                availabilityObservation: creatorInstalled
+                )
             )
         }
-        #expect(!evaluate(cases: unjustifiedVariantSkips).promotable)
+
+        let governed = evaluate(cases: governedCases)
+        #expect(!governed.promotable)
+        for axis in QualificationAxis.requiredCombinations where axis != liveAxis {
+            #expect(governed.rejections.contains(
+                .requiredCombinationNotQualified(key: axis.key)
+            ))
+        }
 
         var arbitraryCases = governedCases
         arbitraryCases[1] = qualificationCase(
@@ -147,35 +131,38 @@ struct QualificationGateTests {
         #expect(decision.rejections.isEmpty)
     }
 
-    @Test func trulyUninstalledVariantStillRequiresExplicitWaiver() {
+    /// Ship-scope note: creator axes left the required matrix (product
+    /// decision), so the "truly uninstalled variant" scenario no longer has a
+    /// required representative. The invariant this pinned survives as: an
+    /// UNEXECUTED required axis (here the non-observed desktop locale) is
+    /// never implicitly passed — without an explicit governed waiver the
+    /// promotion is rejected, even though the availability observation
+    /// honestly explains why the axis did not run.
+    @Test func unexecutedRequiredAxisStillRequiresExplicitWaiver() {
         let liveAxis = QualificationAxis.requiredCombinations[0]
-        let secondLiveLocale = QualificationAxis.requiredCombinations[1]
+        let unexecutedAxis = QualificationAxis.requiredCombinations[1]
         let cases = QualificationAxis.requiredCombinations.map { axis in
             qualificationCase(
                 id: axis.key,
-                status: axis.variant == .desktop ? .passed : .notQualified,
-                reason: axis.variant == .desktop
+                status: axis == liveAxis ? .passed : .notQualified,
+                reason: axis == liveAxis
                     ? nil
                     : "required axis unavailable: different observed Logic variant or UI locale",
                 axis: axis,
-                availabilityReason: axis.variant == .desktop ? nil : availabilityReason(
+                availabilityReason: axis == liveAxis ? nil : availabilityReason(
                     for: axis,
                     observedAxis: liveAxis
                 ),
-                availabilityObservation: axis == secondLiveLocale
-                    ? qualificationAvailabilityObservation(for: secondLiveLocale)
-                    : qualificationAvailabilityObservation(for: liveAxis)
+                availabilityObservation: qualificationAvailabilityObservation(for: liveAxis)
             )
         }
 
         let decision = evaluate(cases: cases)
 
         #expect(!decision.promotable)
-        for axis in QualificationAxis.requiredCombinations where axis.variant == .creatorStudio {
-            #expect(decision.rejections.contains(
-                .requiredCombinationNotQualified(key: axis.key)
-            ))
-        }
+        #expect(decision.rejections.contains(
+            .requiredCombinationNotQualified(key: unexecutedAxis.key)
+        ))
     }
 
     @Test func promotionDoesNotCountProtocolSmokeAsQualified() throws {
@@ -583,13 +570,52 @@ struct QualificationGateTests {
     }
 
     @Test func requiredCombinationKeysAreExact() {
-        #expect(QualificationAxis.requiredCombinations.count == 4)
+        // Ship-scope decision (2026-07-17): desktop-only matrix. Creator
+        // Studio is permanently out of product scope and never enters the
+        // required combinations.
+        #expect(QualificationAxis.requiredCombinations.count == 2)
         #expect(QualificationAxis.requiredCombinations.map(\.key) == [
             "desktop/en-US/core/cold/empty",
             "desktop/ko-KR/core/cold/empty",
-            "creator/en-US/core/cold/empty",
-            "creator/ko-KR/core/cold/empty",
         ])
+    }
+
+    /// Finding-1 (adversarial review): an observed-Creator-Studio host — or a
+    /// host misdetected as Creator Studio — with no desktop evidence must never
+    /// promote. The required matrix is the STATIC 2 desktop axes
+    /// (`shipVariants == [.desktop]`) and `requiredAxes(...)` is
+    /// variant-independent, so observing a creator variant can never collapse
+    /// the required set to empty and slip an unqualified build through. Both
+    /// desktop axes are unexecuted (`.notQualified`) with an honest availability
+    /// explanation and NO waiver, so both are rejected.
+    @Test func observedCreatorHostCannotPromoteDesktopMatrix() {
+        let observedAxis = QualificationAxis(
+            variant: .creatorStudio,
+            locale: .enUS,
+            profile: .core,
+            cache: .cold,
+            fixture: .empty
+        )
+        let cases = QualificationAxis.requiredCombinations.map { axis in
+            qualificationCase(
+                id: axis.key,
+                status: .notQualified,
+                reason: "required axis unavailable: observed Creator Studio host",
+                axis: axis,
+                availabilityReason: availabilityReason(for: axis, observedAxis: observedAxis)
+            )
+        }
+
+        let decision = evaluate(cases: cases, logicVariant: .creatorStudio)
+
+        #expect(!decision.promotable)
+        for axis in QualificationAxis.requiredCombinations {
+            #expect(decision.rejections.contains(
+                .requiredCombinationNotQualified(key: axis.key)
+            ))
+        }
+        // The required set never collapses to empty: exactly the 2 desktop axes.
+        #expect(QualificationAxis.requiredCombinations.count == 2)
     }
 
     private func evaluate(
@@ -600,14 +626,16 @@ struct QualificationGateTests {
         expectedBinarySHA256: String? = nil,
         presentArtifacts: Set<String>? = nil,
         attestationSHA256: String? = nil,
-        requiredOperationIDs: Set<String>? = nil
+        requiredOperationIDs: Set<String>? = nil,
+        logicVariant: LogicVariant = .desktop
     ) -> PromotionDecision {
         PromotionGate().evaluate(
             attestation: attestation(
                 serverVersion: attestationVersion,
                 binarySHA256: attestationSHA256,
                 cases: cases,
-                waivers: waivers
+                waivers: waivers,
+                logicVariant: logicVariant
             ),
             releaseVersion: releaseVersion,
             expectedBinarySHA256: expectedBinarySHA256 ?? binarySHA256,
@@ -623,14 +651,15 @@ struct QualificationGateTests {
         serverVersion: String = "1.2.3",
         binarySHA256: String? = nil,
         cases: [QualificationCase],
-        waivers: [QualificationWaiver]
+        waivers: [QualificationWaiver],
+        logicVariant: LogicVariant = .desktop
     ) -> ReleaseQualificationAttestation {
         ReleaseQualificationAttestation(
             schema: "release-qualification-attestation/v2",
             serverVersion: serverVersion,
             commitSHA: String(repeating: "c", count: 40),
             binarySHA256: binarySHA256 ?? self.binarySHA256,
-            logicVariant: .desktop,
+            logicVariant: logicVariant,
             logicVersion: "11.2.0",
             locale: .enUS,
             profile: .core,

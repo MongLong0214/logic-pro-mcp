@@ -56,6 +56,14 @@ extension OperationTraceTests {
     @Test func OperationTraceCoverageAllRegistryMutations() async throws {
         let previous = replaceOperationTraceCoverageFlag(with: "1")
         defer { _ = replaceOperationTraceCoverageFlag(with: previous) }
+        // PRD-011: bundle output must resolve inside the support-bundle root;
+        // point the root at the temp tree so the census fixture stays contained.
+        let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
+        let previousRoot = getenv(rootKey).map { String(cString: $0) }
+        setenv(rootKey, FileManager.default.temporaryDirectory.path, 1)
+        defer {
+            if let previousRoot { setenv(rootKey, previousRoot, 1) } else { unsetenv(rootKey) }
+        }
 
         let projectRoot = try makeExecTempDir()
         let outputRoot = try makeExecTempDir()
