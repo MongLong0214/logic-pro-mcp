@@ -1198,6 +1198,13 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
         // honestly flip to "1". Tracked as PRD-007 follow-up, not fixed here.
         environment["LOGIC_MCP_ADR002_TARGET_REF"] = "0"
         environment["LOGIC_MCP_ADR003_STRICT_PARAMS"] = "1"
+        // ADR-005 #288 R2: operation tracing is now DEFAULT ON, so this "1" no
+        // longer pins a special-case configuration — it pins the SAME behavior a
+        // default deployment runs. Unlike the ADR-002 pin above, promotion
+        // REMOVES the divergence rather than introducing one: qualification and
+        // production now agree here. Left as an explicit "1" (no pin change) so
+        // the intent stays legible and a future kill-switch default flip can't
+        // silently drift qualification off the shipped behavior.
         environment["LOGIC_MCP_ADR005_OPERATION_TRACE"] = "1"
         process.executableURL = request.executableURL.standardizedFileURL
         process.currentDirectoryURL = request.executableURL.deletingLastPathComponent()

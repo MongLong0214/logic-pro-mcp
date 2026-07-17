@@ -51,11 +51,20 @@ enum FeatureFlags: Sendable {
         return ProcessInfo.processInfo.environment["LOGIC_MCP_ADR004_MUTATION_SAGA"] == "1"
     }
 
+    /// PRD (ADR-005 #288 R2): promoted from opt-in to DEFAULT ON, so the
+    /// variable is now a kill-switch — read with `!= "0"` because an absent
+    /// variable must mean ON. Only the exact string "0" rolls back; deployments
+    /// already passing the pre-promotion "1" see no change. R2 debate ratified
+    /// the flip: measured overhead is 45.7µs/op (see OperationTraceOverheadBench)
+    /// — 3-4 orders of magnitude under AX round-trip latency; the store is
+    /// bounded (128 traces / 8MiB FIFO); the write-time privacy allowlist is
+    /// live-verified; so the support value — a `trace_id` on every result — is
+    /// worth carrying by default.
     static var adr005OperationTrace: Bool {
         #if DEBUG
         if let adr005OperationTraceOverride { return adr005OperationTraceOverride }
         #endif
-        return ProcessInfo.processInfo.environment["LOGIC_MCP_ADR005_OPERATION_TRACE"] == "1"
+        return ProcessInfo.processInfo.environment["LOGIC_MCP_ADR005_OPERATION_TRACE"] != "0"
     }
 
     #if DEBUG

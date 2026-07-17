@@ -1197,7 +1197,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             guard FeatureFlags.adr005OperationTrace else {
                 return toolStateCResult(
                     .notSupported,
-                    hint: "Operation tracing is disabled; set LOGIC_MCP_ADR005_OPERATION_TRACE=1",
+                    hint: "Operation tracing is on by default; it was disabled with LOGIC_MCP_ADR005_OPERATION_TRACE=0",
                     extras: [
                         "operation": "system.get_trace",
                         "trace_disabled": true,
@@ -1253,8 +1253,9 @@ struct SystemDispatcher: OperationTraceDispatching {
                 return toolTextResult(
                     HonestContract.encodeStateC(
                         error: .traceDisabled,
-                        hint: "Operation tracing is disabled; nothing was cleared. "
-                            + "Enable LOGIC_MCP_ADR005_OPERATION_TRACE=1 to record and manage traces.",
+                        hint: "Operation tracing is on by default; it was disabled with "
+                            + "LOGIC_MCP_ADR005_OPERATION_TRACE=0, so nothing was cleared. "
+                            + "Unset the variable (or set it to any value other than \"0\") to record and manage traces.",
                         extras: ["trace_disabled": true, "write_attempted": false]
                     ),
                     isError: true

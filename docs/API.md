@@ -248,7 +248,7 @@ Common commands: `health`, `permissions`, `refresh_cache`, `export_support_bundl
 
 Use `health` for channel readiness and `help` for command summaries. `help` accepts category `all`, `transport`, `tracks`, `mixer`, `midi`, `edit`, `navigate`, `project`, `audio`, `plugins`, or `system`.
 
-With `LOGIC_MCP_ADR005_OPERATION_TRACE=1`, `list_recent_traces` returns bounded summaries from the in-process trace store and accepts optional `limit`.
+Operation tracing is on by default (set `LOGIC_MCP_ADR005_OPERATION_TRACE=0` to disable), so every **successful** mutating result (State A/B) carries a `trace_id`; State C failures do not (nothing was traced to completion). `list_recent_traces` returns bounded summaries from the in-process trace store and accepts optional `limit`.
 `get_trace` returns one stored trace by required `trace_id`.
 `clear_traces` clears only the in-process trace store and requires `confirmed:true` because it destroys in-session diagnostic evidence.
 
