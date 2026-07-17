@@ -814,6 +814,74 @@ struct SystemDispatcher: OperationTraceDispatching {
             .standardizedFileURL
     }
 
+    /// PRD-015 (ADR-005 #288): the directory the `clear_traces` audit receipt is
+    /// written under, OUTSIDE the in-process trace store it records the clearing
+    /// of. Overridable for tests via a DEBUG-only environment hook (never
+    /// honored in a release binary, mirroring `supportBundleRoot`) so the
+    /// fail-closed / append-only behavior is provable against a temp root.
+    static var auditLogRoot: URL {
+        #if DEBUG
+        if let override = ProcessInfo.processInfo
+            .environment["LOGIC_MCP_AUDIT_LOG_ROOT_OVERRIDE"],
+            !override.isEmpty {
+            return URL(fileURLWithPath: override, isDirectory: true).standardizedFileURL
+        }
+        #endif
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/LogicProMCP/audit", isDirectory: true)
+            .standardizedFileURL
+    }
+
+    /// PRD-015 receipt schema tag. Bumped only on a breaking field change so a
+    /// consumer can branch on the version rather than sniff individual keys.
+    static let traceClearReceiptSchema = "logic_pro_mcp_trace_clear_receipt.v1"
+
+    /// The append-only audit log the `clear_traces` receipt is appended to.
+    static var traceClearReceiptURL: URL {
+        auditLogRoot.appendingPathComponent("trace-clear.log", isDirectory: false)
+    }
+
+    private enum TraceClearReceiptError: Error {
+        case encodingFailed
+        case openFailed(errno: Int32)
+        case writeFailed
+    }
+
+    /// PRD-015: append ONE JSON line recording a successful trace clear to the
+    /// durable audit log. The receipt survives the store clear (it lives outside
+    /// it) and carries counts/timestamps ONLY — never trace contents, paths, or
+    /// params — so the log itself leaks nothing about the cleared evidence.
+    /// Opened `O_APPEND` (never truncated); intermediate directories are created
+    /// fail-closed (a create/append error propagates so the caller refuses the
+    /// clear). Returns the receipt file path for the response body.
+    private static func appendTraceClearReceipt(clearedTraceCount: Int) throws -> String {
+        let root = auditLogRoot
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let receiptURL = traceClearReceiptURL
+        // Counts + timestamps ONLY. `authorization` records the boundary that
+        // sanctioned the clear so a future operator-approval integration can
+        // slot in without a schema bump. No path/param/trace content ever.
+        let receipt: [String: Any] = [
+            "schema": traceClearReceiptSchema,
+            "cleared_at": ISO8601DateFormatter.cacheFormatter.string(from: Date()),
+            "cleared_trace_count": clearedTraceCount,
+            "authorization": "mcp_confirmed_param",
+            "server_version": ServerConfig.serverVersion,
+            "pid": Int(ProcessInfo.processInfo.processIdentifier),
+        ]
+        let data = try JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys])
+        guard let line = String(data: data, encoding: .utf8) else {
+            throw TraceClearReceiptError.encodingFailed
+        }
+        let bytes = Array((line + "\n").utf8)
+        let fd = open(receiptURL.path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+        guard fd >= 0 else { throw TraceClearReceiptError.openFailed(errno: errno) }
+        defer { close(fd) }
+        let written = bytes.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
+        guard written == bytes.count else { throw TraceClearReceiptError.writeFailed }
+        return receiptURL.path
+    }
+
     /// Resolves a caller-requested bundle directory strictly inside the
     /// support-bundle root, or nil. Relative subpaths resolve against the
     /// root; absolute paths must already be under it. `..` is collapsed by
@@ -1061,8 +1129,36 @@ struct SystemDispatcher: OperationTraceDispatching {
                     isError: true
                 )
             }
+            // PRD-015 (ADR-005 #288): the authorization boundary for this
+            // destructive op stays `confirmed:true` — this is a LOCAL,
+            // single-user MCP server, so the durable boundary is (a) the
+            // registry's l2 confirmation gate checked above and (b) an
+            // append-only audit receipt written OUTSIDE the cleared store,
+            // below. `authorization` is recorded in the receipt so a future
+            // operator-approval integration slots in without a schema change.
+            //
+            // Fail closed: capture the count, then write the receipt BEFORE
+            // clearing. If the receipt cannot be written the store is left
+            // intact and a typed State C is returned — never destroy evidence
+            // without a surviving durable record of the clear.
+            let clearedTraceCount = await OperationTraceStore.shared.recent(limit: .max).count
+            let receiptPath: String
+            do {
+                receiptPath = try appendTraceClearReceipt(clearedTraceCount: clearedTraceCount)
+            } catch {
+                return toolStateCResult(
+                    .traceClearReceiptFailed,
+                    hint: "clear_traces refused: the durable audit receipt could not be written; "
+                        + "the trace store was left intact. Fix the audit-log location and retry.",
+                    extras: ["write_attempted": false]
+                )
+            }
             await OperationTraceStore.shared.clear()
-            return toolTextResult(HonestContract.jsonString(["success": true]))
+            return toolTextResult(HonestContract.jsonString([
+                "success": true,
+                "receipt_path": receiptPath,
+                "cleared_trace_count": clearedTraceCount,
+            ]))
 
         default:
             return nil

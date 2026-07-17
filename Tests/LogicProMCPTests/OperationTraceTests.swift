@@ -335,6 +335,17 @@ struct OperationTraceTests {
     @Test func OperationTraceSystemLifecycle() async throws {
         let previous = replaceOperationTraceFlag(with: "1")
         defer { _ = replaceOperationTraceFlag(with: previous) }
+        // PRD-015: contain the clear_traces audit receipt under a temp root so
+        // the successful clear below never writes to the real user Logs dir.
+        let auditKey = "LOGIC_MCP_AUDIT_LOG_ROOT_OVERRIDE"
+        let previousAudit = getenv(auditKey).map { String(cString: $0) }
+        let auditRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lpmcp-prd015-lifecycle-\(UUID().uuidString)", isDirectory: true)
+        setenv(auditKey, auditRoot.path, 1)
+        defer {
+            if let previousAudit { setenv(auditKey, previousAudit, 1) } else { unsetenv(auditKey) }
+            try? FileManager.default.removeItem(at: auditRoot)
+        }
         await OperationTraceStore.shared.clear()
 
         let id = await OperationTraceStore.shared.start(operationID: OperationID.transportPlay.rawValue)

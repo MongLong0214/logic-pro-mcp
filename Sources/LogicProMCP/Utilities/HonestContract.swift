@@ -188,6 +188,14 @@ enum HonestContract {
         /// disabled — a no-op must never surface as success.
         case traceDisabled = "trace_disabled"
         case supportBundleExportFailed = "support_bundle_export_failed"
+        /// PRD-015 (ADR-005 #288): `clear_traces` could not write its durable,
+        /// append-only audit receipt (directory-create or append error), so the
+        /// clear was REFUSED and the in-process trace store left intact —
+        /// destroying evidence without a surviving receipt is the failure mode
+        /// this debt closes. Terminal: no fallback channel or retry can create a
+        /// filesystem path the operator's environment denies; the caller must
+        /// fix the audit-log location.
+        case traceClearReceiptFailed = "trace_clear_receipt_failed"
         case sagaInProgress = "saga_in_progress"
         case idempotencyKeyConflict = "idempotency_key_conflict"
         case sagaJournalCapacityExceeded = "saga_journal_capacity_exceeded"
@@ -372,6 +380,10 @@ enum HonestContract {
         // classification consistency.)
         FailureError.unknownCategory.rawValue,
         FailureError.supportBundleExportFailed.rawValue,
+        // PRD-015: a trace-clear receipt-write failure is terminal — no channel
+        // or retry can create a path the operator's environment denies; the
+        // store is left intact and the caller must fix the audit-log location.
+        FailureError.traceClearReceiptFailed.rawValue,
         FailureError.idempotencyKeyConflict.rawValue,
         FailureError.sagaJournalCapacityExceeded.rawValue,
     ]

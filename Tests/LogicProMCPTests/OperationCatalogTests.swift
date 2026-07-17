@@ -55,12 +55,22 @@ struct OperationCatalogTests {
         let key = "LOGIC_MCP_ADR005_OPERATION_TRACE"
         let previous = getenv(key).map { String(cString: $0) }
         setenv(key, "1", 1)
+        // PRD-015: contain the clear_traces audit receipt under a temp root so
+        // the successful clear exercised by this suite never writes to the real
+        // user Logs directory.
+        let auditKey = "LOGIC_MCP_AUDIT_LOG_ROOT_OVERRIDE"
+        let previousAudit = getenv(auditKey).map { String(cString: $0) }
+        let auditRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lpmcp-prd015-catalog-\(UUID().uuidString)", isDirectory: true)
+        setenv(auditKey, auditRoot.path, 1)
         defer {
             if let previous {
                 setenv(key, previous, 1)
             } else {
                 unsetenv(key)
             }
+            if let previousAudit { setenv(auditKey, previousAudit, 1) } else { unsetenv(auditKey) }
+            try? FileManager.default.removeItem(at: auditRoot)
         }
         return try await operation()
     }
