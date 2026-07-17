@@ -578,7 +578,15 @@ struct SystemDispatcher: OperationTraceDispatching {
                     dialogPresent: dialogPresent,
                     liveReadback: sagaLiveReadback ?? .unavailable,
                     liveTrackName: liveTrackName,
-                    liveTrackNames: liveTrackNames
+                    liveTrackNames: liveTrackNames,
+                    // ADR-004 / issue #287 — qualification-only fault seam. nil
+                    // in normal operation; engages only when the operator sets
+                    // LOGIC_PRO_MCP_FAULT_INJECT=partial_state to qualify real
+                    // reverse-order compensation. Never a product code path.
+                    faultSeam: SagaPartialStateFaultSeam.resolve(
+                        environment: ProcessInfo.processInfo.environment,
+                        stepCount: plan.steps.count
+                    )
                 )
                 let saga = MutationSaga(
                     targetRegistry: targetRegistry,

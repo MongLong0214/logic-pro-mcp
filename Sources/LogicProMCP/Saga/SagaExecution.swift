@@ -79,6 +79,82 @@ extension SagaLiveReadback {
     )
 }
 
+/// ADR-004 / issue #287 — a QUALIFICATION-ONLY saga fault seam.
+///
+/// This is a test affordance, NOT a product feature. It is a completely dead
+/// branch unless `LOGIC_PRO_MCP_FAULT_INJECT=partial_state` is explicitly set:
+/// `resolve(environment:stepCount:)` returns nil in every other case, so the
+/// executor holds no seam and `run` takes its normal path unchanged.
+///
+/// When engaged it fails EXACTLY ONE forward saga step BEFORE that step's real
+/// write — the returned StepResult is State C with `writeBoundaryCrossed=false`,
+/// and no dispatch happens, so the injected step mutates nothing. Earlier steps
+/// really apply, so the saga's own `compensate()` runs REAL reverse-order
+/// compensation over them: exercising that path is the whole reason this seam
+/// exists. It NEVER touches `readState`, so the before-state a rollback restores
+/// stays truthful.
+///
+/// Mirrors `QualificationFaultInjection(environment:)`'s nil-unless-set contract
+/// exactly: same env key, same `partial_state` mode. Only that mode engages the
+/// saga — `.timeout` belongs to the transport probe and leaves the saga inert.
+final class SagaPartialStateFaultSeam: @unchecked Sendable {
+    /// Optional operator override pinning WHICH forward step fails. Zero-based;
+    /// an absent, unparseable, or out-of-range value falls back to the LAST
+    /// step so the affordance stays predictable.
+    static let stepEnvironmentKey = "LOGIC_PRO_MCP_FAULT_INJECT_STEP"
+
+    private let injectedStepIndex: Int
+    private let lock = NSLock()
+    private var forwardCursor = 0
+
+    private init(injectedStepIndex: Int) {
+        self.injectedStepIndex = injectedStepIndex
+    }
+
+    /// Returns nil unless `LOGIC_PRO_MCP_FAULT_INJECT=partial_state` is set —
+    /// the dead-branch guard. `stepCount` (the plan's step count, known only at
+    /// construction) resolves the default LAST target.
+    static func resolve(
+        environment: [String: String],
+        stepCount: Int
+    ) -> SagaPartialStateFaultSeam? {
+        guard stepCount > 0,
+              let injection = QualificationFaultInjection(environment: environment),
+              injection.mode == .partialState else {
+            return nil
+        }
+        let injectedStepIndex: Int
+        if let raw = environment[stepEnvironmentKey]?.trimmingCharacters(in: .whitespaces),
+           let parsed = Int(raw),
+           parsed >= 0,
+           parsed < stepCount {
+            injectedStepIndex = parsed
+        } else {
+            injectedStepIndex = stepCount - 1
+        }
+        return SagaPartialStateFaultSeam(injectedStepIndex: injectedStepIndex)
+    }
+
+    /// Advances the run cursor and, iff this run is the injected step, returns a
+    /// State-C result that short-circuits the executor BEFORE the real write.
+    /// Monotonic and single-shot by construction: the cursor only equals
+    /// `injectedStepIndex` on the intended forward step; every later run —
+    /// including the compensation inverses — sees a higher cursor and returns
+    /// nil, so real compensation dispatches for real.
+    func injectionResult(for step: SagaStep) -> StepResult? {
+        lock.lock()
+        let cursor = forwardCursor
+        forwardCursor += 1
+        lock.unlock()
+        guard cursor == injectedStepIndex else { return nil }
+        return StepResult(
+            state: .stateC,
+            writeBoundaryCrossed: false,
+            detail: "\(step.operationID.rawValue): error=qualification_fault_injected_partial_state"
+        )
+    }
+}
+
 struct ProductionSagaStepExecutor: SagaStepExecutor {
     private static let allowlist: Set<OperationID> = [
         .tracksRename,
@@ -111,6 +187,11 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
     /// deterministic; `sampled_at` is provenance metadata and never an input to
     /// a saga decision.
     private let now: @Sendable () -> Date
+    /// ADR-004 / issue #287 — qualification-only fault seam. nil in all normal
+    /// operation (env unset); non-nil ONLY when the operator explicitly set
+    /// `LOGIC_PRO_MCP_FAULT_INJECT=partial_state` to qualify compensation. A
+    /// test affordance, never a product code path — see SagaPartialStateFaultSeam.
+    private let faultSeam: SagaPartialStateFaultSeam?
 
     init(
         router: ChannelRouter,
@@ -120,7 +201,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         liveReadback: SagaLiveReadback,
         liveTrackName: (@Sendable (Int) -> String?)? = nil,
         liveTrackNames: (@Sendable () -> [Int: String]?)? = nil,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        faultSeam: SagaPartialStateFaultSeam? = nil
     ) {
         self.router = router
         self.cache = cache
@@ -130,9 +212,20 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         self.liveTrackName = liveTrackName
         self.liveTrackNames = liveTrackNames
         self.now = now
+        self.faultSeam = faultSeam
     }
 
     func run(_ step: SagaStep) async -> StepResult {
+        // ADR-004 / issue #287 — QUALIFICATION-ONLY fault seam. Completely dead
+        // unless `LOGIC_PRO_MCP_FAULT_INJECT=partial_state` was set at
+        // construction (faultSeam is nil otherwise, so this whole branch is
+        // skipped and the path below is byte-for-byte today's behaviour). When
+        // engaged for the injected step it returns State C BEFORE any dispatch —
+        // no trace scope, no write, no mutation — so earlier steps' real
+        // compensation can be exercised. Never a product code path.
+        if let faultSeam, let injected = faultSeam.injectionResult(for: step) {
+            return injected
+        }
         // ADR-005: each saga step dispatch gets a NESTED trace context
         // carrying the parent saga trace ID — without it a child's trace
         // start would clobber the parent's registration in the shared box,
