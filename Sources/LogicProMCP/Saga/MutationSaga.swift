@@ -102,6 +102,18 @@ enum PreflightIssue: Equatable, Sendable {
     case projectEpochMismatch(stepIndex: Int)
     case invalidExpectedInverse(stepIndex: Int)
     case automaticReplayBlocked
+    /// The registry declares a confirmation policy for this operation; the
+    /// saga wire carries no confirmation flow, so such plans reject before
+    /// step 1. Defense-in-depth today (the reversible allowlist is all
+    /// ConfirmationPolicy.none) — this fails closed the day the allowlist
+    /// grows a confirmation-requiring operation.
+    case confirmationRequired(stepIndex: Int, operationID: OperationID)
+    /// No healthy route can serve this step right now (checked before any
+    /// step executes, so a dead channel cannot strand a half-applied plan).
+    case routeUnavailable(stepIndex: Int, operationID: OperationID)
+    /// The worst-case sum of the steps' registry deadlines exceeds the
+    /// saga-execute command budget — the plan could time out mid-flight.
+    case deadlineBudgetExceeded(totalSeconds: Double, budgetSeconds: Double)
 }
 
 enum PreflightStatus: Equatable, Sendable {
@@ -148,12 +160,21 @@ actor MutationSaga {
     private let enabled: Bool
     private var sessions: [String: SagaOutcome] = [:]
 
+    /// Route-health probe for preflight. REQUIRED — a silent skip default
+    /// would be fail-open (a future construction site forgetting the probe
+    /// would silently drop route checks; adversarial review flagged exactly
+    /// that regression path). Pure unit contexts pass `{ _ in true }`
+    /// explicitly; the public dispatcher wires the real channel-health probe.
+    private let routeAvailable: @Sendable (OperationID) async -> Bool
+
     init(
         targetRegistry: TargetRegistry,
-        enabled: Bool = FeatureFlags.adr004MutationSaga
+        enabled: Bool = FeatureFlags.adr004MutationSaga,
+        routeAvailable: @escaping @Sendable (OperationID) async -> Bool
     ) {
         self.targetRegistry = targetRegistry
         self.enabled = enabled
+        self.routeAvailable = routeAvailable
     }
 
     func preflight(_ plan: SagaPlan) async -> PreflightResult {
@@ -177,10 +198,26 @@ actor MutationSaga {
         }
 
         let projectEpoch = await targetRegistry.currentProjectEpoch
+        var worstCaseSeconds: Double = 0
         for (index, step) in plan.steps.enumerated() {
             let registeredSpec = OperationRegistry.specs.first { $0.id == step.operationID }
             if registeredSpec == nil {
                 issues.append(.operationNotRegistered(
+                    stepIndex: index,
+                    operationID: step.operationID
+                ))
+            }
+            if let spec = registeredSpec {
+                worstCaseSeconds += spec.deadline.seconds
+                if spec.confirmation != .none {
+                    issues.append(.confirmationRequired(
+                        stepIndex: index,
+                        operationID: step.operationID
+                    ))
+                }
+            }
+            if await !routeAvailable(step.operationID) {
+                issues.append(.routeUnavailable(
                     stepIndex: index,
                     operationID: step.operationID
                 ))
@@ -225,6 +262,28 @@ actor MutationSaga {
             if binding.projectEpoch != projectEpoch {
                 issues.append(.projectEpochMismatch(stepIndex: index))
             }
+        }
+
+        // ADR-004: reject before step 1 when the plan's modeled duration
+        // cannot fit the saga-execute command budget — otherwise the
+        // whole-command deadline could fire mid-plan. HONEST SCOPE: the model
+        // is COARSE — 2× the per-step registry deadline (write + verification
+        // readback); availability capture, cache refresh, and a late-failure
+        // compensation replay are NOT reserved, so a mid-flight timeout
+        // remains possible for pathological plans — this check bounds the
+        // obvious overcommit, it does not guarantee completion. Rejection is
+        // >= (an exact-fit plan has zero headroom for the unmodeled work).
+        // The budget is registry-derived, never a local constant.
+        let budgetSeconds = OperationRegistry.spec(
+            tool: ToolID.logicSystem.rawValue,
+            command: "saga_execute"
+        )?.deadline.seconds ?? DeadlineClass.long.seconds
+        let modeledSeconds = worstCaseSeconds * 2
+        if modeledSeconds >= budgetSeconds {
+            issues.append(.deadlineBudgetExceeded(
+                totalSeconds: modeledSeconds,
+                budgetSeconds: budgetSeconds
+            ))
         }
 
         return PreflightResult(

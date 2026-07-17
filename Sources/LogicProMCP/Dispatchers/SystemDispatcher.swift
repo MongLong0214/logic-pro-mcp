@@ -415,7 +415,10 @@ struct SystemDispatcher: OperationTraceDispatching {
                 liveTrackName: liveTrackName,
                 liveTrackNames: liveTrackNames
             )
-            let preflight = await MutationSaga(targetRegistry: targetRegistry).preflight(plan)
+            let preflight = await MutationSaga(
+                targetRegistry: targetRegistry,
+                routeAvailable: Self.sagaRouteProbe(router: router)
+            ).preflight(plan)
             let availability = await executor.captureBeforeStateAvailability(plan: plan)
             let availabilityIssues = SagaWire.availabilityIssues(availability, plan: plan)
             let issues = preflight.issues.map(SagaWire.preflightIssue)
@@ -521,7 +524,10 @@ struct SystemDispatcher: OperationTraceDispatching {
                     liveTrackName: liveTrackName,
                     liveTrackNames: liveTrackNames
                 )
-                let saga = MutationSaga(targetRegistry: targetRegistry)
+                let saga = MutationSaga(
+                    targetRegistry: targetRegistry,
+                    routeAvailable: Self.sagaRouteProbe(router: router)
+                )
                 let preflight = await saga.preflight(plan)
                 let availability = await executor.captureBeforeStateAvailability(plan: plan)
                 let availabilityIssues = SagaWire.availabilityIssues(availability, plan: plan)
@@ -820,6 +826,18 @@ struct SystemDispatcher: OperationTraceDispatching {
             )
         )
         return try await SupportBundleBuilder().build(input, at: directory, onFirstWrite: onFirstWrite)
+    }
+
+    /// ADR-004 preflight route probe: every reversible-allowlist operation
+    /// executes through the accessibility channel, so a plan is routable only
+    /// while that channel reports available. Checked before step 1 so a dead
+    /// channel cannot strand a half-applied plan.
+    private static func sagaRouteProbe(
+        router: ChannelRouter
+    ) -> @Sendable (OperationID) async -> Bool {
+        { _ in
+            await router.healthReport()[.accessibility]?.available ?? false
+        }
     }
 
     private static func unknownCommandResult(_ command: String) -> CallTool.Result {
