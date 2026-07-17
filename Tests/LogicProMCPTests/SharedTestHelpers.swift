@@ -13,6 +13,17 @@ let codexSeatbeltCoreMIDIDisabled: ConditionTrait = .disabled(
     "Codex seatbelt denies the CoreMIDI service connection; this remains live qualification."
 )
 
+/// PRD-007 — live AX header-scan fixture for `.corroborated` ops.
+///
+/// Mirrors `AXLogicProElements.trackNames()`'s shape (`[Int: String]?`, nil ==
+/// unreadable). Seed-set ops (`tracks.delete` / `duplicate` / `set_instrument`,
+/// `logic_plugins.insert_verified`) refuse a bare index, so any deterministic
+/// test that wants one of them to REACH the router must supply both this scan
+/// and a matching `expected_name` — exactly what a real caller must now do.
+func sharedLiveTrackNames(_ names: [Int: String]) -> @Sendable () -> [Int: String]? {
+    { names }
+}
+
 /// Extract text from a CallTool.Result, supporting both .text and .resource content types.
 func sharedToolText(_ result: CallTool.Result) -> String {
     guard let first = result.content.first else { return "" }

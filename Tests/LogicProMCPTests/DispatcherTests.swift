@@ -1300,17 +1300,32 @@ private func liveTransportJSON(
     await router.register(ax)
     let cache = StateCache()
 
+    // PRD-007: set_instrument is `.corroborated` — a bare index no longer
+    // reaches the router, so this routing test now states the target identity
+    // the way a real caller must.
+    let liveNames = sharedLiveTrackNames([1: "Bass Legacy", 2: "Bass Path"])
     let pathResult = await TrackDispatcher.handle(
         command: "set_instrument",
-        params: ["index": .string("2"), "path": .string("Bass/Sub Bass")],
+        params: [
+            "index": .string("2"),
+            "path": .string("Bass/Sub Bass"),
+            "expected_name": .string("Bass Path"),
+        ],
         router: router,
-        cache: cache
+        cache: cache,
+        liveTrackNames: liveNames
     )
     let legacyResult = await TrackDispatcher.handle(
         command: "set_instrument",
-        params: ["index": .int(1), "category": .string("Bass"), "preset": .string("Sub Bass")],
+        params: [
+            "index": .int(1),
+            "category": .string("Bass"),
+            "preset": .string("Sub Bass"),
+            "expected_name": .string("Bass Legacy"),
+        ],
         router: router,
-        cache: cache
+        cache: cache,
+        liveTrackNames: liveNames
     )
     let resolveResult = await TrackDispatcher.handle(
         command: "resolve_path",
@@ -1593,17 +1608,22 @@ private func liveTransportJSON(
     await successRouter.register(keyCmd)
     let cache = StateCache()
 
+    // PRD-007: delete/duplicate are `.corroborated`, so reaching the selection
+    // flow at all now requires proving what sits at index 2.
+    let liveNames = sharedLiveTrackNames([2: "Bass"])
     let deleteResult = await TrackDispatcher.handle(
         command: "delete",
-        params: ["index": .int(2)],
+        params: ["index": .int(2), "expected_name": .string("Bass")],
         router: successRouter,
-        cache: cache
+        cache: cache,
+        liveTrackNames: liveNames
     )
     let duplicateResult = await TrackDispatcher.handle(
         command: "duplicate",
-        params: ["index": .int(2)],
+        params: ["index": .int(2), "expected_name": .string("Bass")],
         router: successRouter,
-        cache: cache
+        cache: cache,
+        liveTrackNames: liveNames
     )
 
     #expect(!deleteResult.isError!)
@@ -1621,14 +1641,23 @@ private func liveTransportJSON(
 
     let failureRouter = ChannelRouter()
     await failureRouter.register(keyCmd)
+    // PRD-007: corroborate index 9 so this still exercises the SELECT-failure
+    // path it was written for. Without it the call would fail closed earlier on
+    // the binding proof and this assertion would pass for the wrong reason.
     let failureResult = await TrackDispatcher.handle(
         command: "delete",
-        params: ["index": .int(9)],
+        params: ["index": .int(9), "expected_name": .string("Orphan")],
         router: failureRouter,
-        cache: cache
+        cache: cache,
+        liveTrackNames: sharedLiveTrackNames([9: "Orphan"])
     )
 
     #expect(failureResult.isError!)
+    #expect(
+        sharedJSONObject(dispatcherText(failureResult))?["error"] as? String
+            != "index_binding_corroboration_required",
+        "must reach the selection-failure path, not stop at the binding gate"
+    )
 }
 
 /// Mock channel that returns a State A envelope (`success:true`,
@@ -1670,11 +1699,14 @@ actor VerifiedSelectMockChannel: Channel {
     await router.register(mcu)
     await router.register(keyCmd)
 
+    // PRD-007: corroborate so this still reaches the selection-failure path
+    // rather than stopping at the binding gate.
     let result = await TrackDispatcher.handle(
         command: "duplicate",
-        params: ["index": .int(9)],
+        params: ["index": .int(9), "expected_name": .string("Orphan")],
         router: router,
-        cache: StateCache()
+        cache: StateCache(),
+        liveTrackNames: sharedLiveTrackNames([9: "Orphan"])
     )
 
     #expect(result.isError!)

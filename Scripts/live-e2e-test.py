@@ -547,6 +547,22 @@ def read_tracks_data(client):
     return data if isinstance(data, list) else None
 
 
+def live_track_name(client, index):
+    """PRD-007: the live name at a track index, for corroborating the seed-set
+    ops (delete / duplicate / set_instrument) that no longer accept a bare
+    index. Returns None if the header is unreadable, in which case the caller's
+    seed-op will honestly fail closed with index_binding_corroboration_required."""
+    tracks = read_tracks_data(client)
+    if not isinstance(tracks, list):
+        return None
+    for track in tracks:
+        if isinstance(track, dict) and track.get("id") == index:
+            name = track.get("name")
+            if isinstance(name, str) and name.strip():
+                return name
+    return None
+
+
 def read_track_regions(client, index):
     regions = safe_json(resource_text(read_resource(client, f"logic://tracks/{index}/regions")))
     return regions if isinstance(regions, list) else None
@@ -1783,12 +1799,18 @@ def main():
     # (`panel_open_after_failure`), and a library read between the two attempts
     # must still succeed (panel not wedged).
     invalid_path = "ZZZNoSuchCategory/ZZZNoSuchPreset"
+    # PRD-007 index binding: set_instrument is `.corroborated`. The binding gate
+    # runs AFTER request-shape validation but BEFORE the (invalid-)path load, so
+    # to still exercise the #222 invalid-path drift behavior we must clear the
+    # gate first by corroborating index 0 against its live header name.
+    name0 = live_track_name(client, 0)
+    corro = {"expected_name": name0} if name0 else {}
     d1 = tool_json(call_tool(client, "logic_tracks", "set_instrument",
-                             {"index": 0, "path": invalid_path})) or {}
+                             {"index": 0, "path": invalid_path, **corro})) or {}
     mid = read_resource(client, "logic://library/inventory")
     mid_ok = mid is not None and safe_json(resource_text(mid)) is not None
     d2 = tool_json(call_tool(client, "logic_tracks", "set_instrument",
-                             {"index": 0, "path": invalid_path})) or {}
+                             {"index": 0, "path": invalid_path, **corro})) or {}
     T("set_instrument invalid path is a deterministic State C (#222)", "ok",
       lambda _: d1.get("success") is False and isinstance(d1.get("error"), str))
     T("set_instrument failure does not cascade on the next attempt (#222)", "ok",

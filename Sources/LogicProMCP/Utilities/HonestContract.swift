@@ -101,6 +101,41 @@ enum HonestContract {
         case staleSnapshot = "stale_snapshot"
         case staleTargetReference = "stale_target_reference"
         case targetRefUnavailable = "target_ref_unavailable"
+
+        // PRD-007 (ADR-002 #285) — index-binding ratchet. These describe the
+        // INDEX path's binding proof and are deliberately NOT folded into
+        // `.staleTargetReference`, which means something different and
+        // narrower: a `target_ref` token that no longer resolves. Here no ref
+        // exists at all, so reporting one as stale would send the caller
+        // hunting a token they never held.
+        //
+        // CLASSIFICATION (CTO ruling, PRD-007 P2-5): these four are deliberately
+        // NOT added to `terminalErrorCodes`. Every one is raised pre-route and
+        // pre-write, and every one is caller-correctable in place — supply or fix
+        // `expected_name` (or switch to `target_ref`) and retry. That is exactly
+        // the retryable posture of `.targetRefUnavailable`, not a terminal
+        // channel-exhaustion or unsupported-surface failure. Re-classifying to
+        // terminal is a separate decision, warranted only if live soak shows
+        // callers hammering an uncorrectable case; nothing here is uncorrectable.
+        /// A `.corroborated` op was called with a bare index and no
+        /// `expected_name` (and no `target_ref`), so the ordinal is unproven.
+        /// Nothing was read or written — supplying either binding is a safe retry.
+        case indexBindingCorroborationRequired = "index_binding_corroboration_required"
+        /// The live header at the supplied index does not carry the
+        /// `expected_name` the caller corroborated with — the ordinal moved
+        /// under them — or the header could not be read at all
+        /// (`reason: header_unreadable`), which is never read as agreement.
+        /// Fail-closed pre-write: the wrong track was NOT touched.
+        case targetIdentityMismatch = "target_identity_mismatch"
+        /// `expected_name` matched the live header at the supplied index but is
+        /// NOT unique across the live surface. Two same-named tracks can swap
+        /// positions and keep (index, name) self-consistent, so a match proves
+        /// nothing; only a `target_ref` survives the swap.
+        case targetNameAmbiguous = "target_name_ambiguous"
+        /// A `.refRequired` op was called with a bare index. Unlike
+        /// `.indexBindingCorroborationRequired`, no `expected_name` can rescue
+        /// this — a stable `target_ref` is the only accepted binding.
+        case stableTargetRequired = "stable_target_required"
         case windowOpenFailed = "window_open_failed"
         case windowIdentityUnresolved = "window_identity_unresolved"
         case paramControlNotFound = "param_control_not_found"

@@ -14,6 +14,14 @@ struct HandlerDependencies: Sendable {
     /// dispatch census) inject a stub so exercising `launch`/`quit` cases
     /// can never touch the real app lifecycle.
     let projectLifecycleExecute: (@Sendable (String) async -> ProjectDispatcher.LifecycleExecution)?
+    /// PRD-007: explicit seam for the LIVE AX track-header scan that the
+    /// index-binding ratchet corroborates a bare index against. `nil` =
+    /// production `AXLogicProElements.trackNames()`. Tests inject a fixed
+    /// surface so `.corroborated` ops stay deterministically exercisable
+    /// end-to-end — without this seam the only way to drive them through the
+    /// real handler would be live AX, and their index path would silently drop
+    /// out of the deterministic census.
+    let liveTrackNames: (@Sendable () -> [Int: String]?)?
 
     init(
         router: ChannelRouter,
@@ -24,7 +32,8 @@ struct HandlerDependencies: Sendable {
         supportBundleExporter: SystemDispatcher.SupportBundleExporter?,
         sagaJournal: SagaJournal = SagaJournal(),
         mutationGate: LogicMutationGate? = nil,
-        projectLifecycleExecute: (@Sendable (String) async -> ProjectDispatcher.LifecycleExecution)? = nil
+        projectLifecycleExecute: (@Sendable (String) async -> ProjectDispatcher.LifecycleExecution)? = nil,
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil
     ) {
         self.router = router
         self.cache = cache
@@ -35,6 +44,13 @@ struct HandlerDependencies: Sendable {
         self.sagaJournal = sagaJournal
         self.mutationGate = mutationGate
         self.projectLifecycleExecute = projectLifecycleExecute
+        self.liveTrackNames = liveTrackNames
+    }
+
+    /// The live header reader to hand a dispatcher: the injected seam when a
+    /// test supplies one, else the production AX scan.
+    var liveTrackNamesReader: @Sendable () -> [Int: String]? {
+        liveTrackNames ?? { AXLogicProElements.trackNames() }
     }
 }
 
@@ -222,7 +238,7 @@ enum OperationHandlerRegistry {
                     // track-header reader so the target_ref mutation boundary
                     // fails closed on an out-of-band reorder.
                     liveTrackName: { AXLogicProElements.trackName(at: $0) },
-                    liveTrackNames: { AXLogicProElements.trackNames() }
+                    liveTrackNames: dependencies.liveTrackNamesReader
                 )
             }
         case .logicNavigate:
@@ -255,7 +271,7 @@ enum OperationHandlerRegistry {
                     // track-header reader so saga-replayed target_ref track/mixer
                     // steps fail closed on an out-of-band reorder.
                     liveTrackName: { AXLogicProElements.trackName(at: $0) },
-                    liveTrackNames: { AXLogicProElements.trackNames() },
+                    liveTrackNames: dependencies.liveTrackNamesReader,
                     // LPMCP-PRD-004 — saga before-state/verification/compensation
                     // read the live AX surface, never the cache mirror.
                     sagaLiveReadback: .production
@@ -268,7 +284,8 @@ enum OperationHandlerRegistry {
                     params: params,
                     router: dependencies.router,
                     cache: dependencies.cache,
-                    targetRegistry: dependencies.targetRegistry
+                    targetRegistry: dependencies.targetRegistry,
+                    liveTrackNames: dependencies.liveTrackNamesReader
                 )
             }
         case .logicEdit:
@@ -330,7 +347,7 @@ enum OperationHandlerRegistry {
                     // track-header reader so the target_ref mutation boundary
                     // fails closed on an out-of-band reorder.
                     liveTrackName: { AXLogicProElements.trackName(at: $0) },
-                    liveTrackNames: { AXLogicProElements.trackNames() }
+                    liveTrackNames: dependencies.liveTrackNamesReader
                 )
             }
         }

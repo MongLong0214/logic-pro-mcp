@@ -41,7 +41,7 @@ struct PluginsDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_plugins",
-        description: "Verified plugin apply-back for Logic Pro (logic_plugins.*). Commands: get_inventory, set_param_verified, insert_verified. Unlike legacy logic_mixer.set_plugin_param (Scripter, unverified State B), this surface identifies the target track/insert/plugin/param via AX, writes, and reads back — State A only when the observed value matches within tolerance. get_inventory -> { track: Int (required, >= 0) } returns a drift-safe insert chain (physical slot index, read_status ok|empty|unreadable, complete). set_param_verified -> { track: Int, insert: Int, plugin: canonical logic.stock.* id or alias, param: key (e.g. gain_db), value: Float, unit: String, mode: \"duplicate_applyback\", project_expected_path: String (required) }. insert_verified -> { track: Int, insert: Int, plugin: Gain|Channel EQ|Compressor, mode: \"duplicate_applyback\", project_expected_path: String (required) }. mode confirmed_live is not supported in Release 1 (State C unsupported_mode). ADR-002 (LOGIC_MCP_ADR002_TARGET_REF=1): set_param_verified and insert_verified ALSO accept a session-stable { target_ref: String } from logic://tracks (trk_…) or logic_plugins.get_inventory (ins_…); plugin-insert refs resolve track and physical insert, and explicit track/insert values must agree when supplied or the op fails closed (stale_target_reference); when the flag is off, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use explicit selectors.",
+        description: "Verified plugin apply-back for Logic Pro (logic_plugins.*). Commands: get_inventory, set_param_verified, insert_verified. Unlike legacy logic_mixer.set_plugin_param (Scripter, unverified State B), this surface identifies the target track/insert/plugin/param via AX, writes, and reads back — State A only when the observed value matches within tolerance. get_inventory -> { track: Int (required, >= 0) } returns a drift-safe insert chain (physical slot index, read_status ok|empty|unreadable, complete). set_param_verified -> { track: Int, insert: Int, plugin: canonical logic.stock.* id or alias, param: key (e.g. gain_db), value: Float, unit: String, mode: \"duplicate_applyback\", project_expected_path: String (required) }. insert_verified -> { track: Int, insert: Int, plugin: Gain|Channel EQ|Compressor, mode: \"duplicate_applyback\", project_expected_path: String (required), expected_name: String }. PRD-007 index binding: insert_verified is `corroborated` — a bare `track` index is REFUSED with index_binding_corroboration_required; supply expected_name (the track name you expect at that index, corroborated against the live header and required to be unique across the surface) or a target_ref instead; expected_name + target_ref together is invalid_params; every binding failure is pre-write with write_attempted:false and takes no verified-op gate. mode confirmed_live is not supported in Release 1 (State C unsupported_mode). ADR-002 (LOGIC_MCP_ADR002_TARGET_REF=1): set_param_verified and insert_verified ALSO accept a session-stable { target_ref: String } from logic://tracks (trk_…) or logic_plugins.get_inventory (ins_…); plugin-insert refs resolve track and physical insert, and explicit track/insert values must agree when supplied or the op fails closed (stale_target_reference); when the flag is off, any supplied target_ref fails closed with target_ref_unavailable; omit target_ref to use explicit selectors.",
         commandDescription: "Verified plugin command to execute"
     )
 
@@ -50,7 +50,18 @@ struct PluginsDispatcher: OperationTraceDispatching {
         params: [String: Value],
         router: ChannelRouter,
         cache: StateCache,
-        targetRegistry: TargetRegistry? = nil
+        targetRegistry: TargetRegistry? = nil,
+        // PRD-007 — live AX track-header scan for `insert_verified`'s index-path
+        // corroboration. The verified plugin surface historically passed nil to
+        // the resolver and did its F1 identity cross-check INSIDE the AX write
+        // (via `expected_track_name`), which is unreachable on the bare-index
+        // path and cannot see across tracks to detect a duplicate name. The
+        // ratchet needs a pre-write, dispatcher-side check with a typed
+        // fail-closed shape, so the scan is threaded in here the way
+        // TrackDispatcher already does. Nil by default: the deterministic suite
+        // never touches live AX; production wires the real reader at the
+        // dispatch chokepoint.
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil
     ) async -> CallTool.Result {
         if let projectFailure = await TargetRefResolver.validateProjectReference(
             params,
@@ -58,6 +69,16 @@ struct PluginsDispatcher: OperationTraceDispatching {
             operation: "plugin.\(command)"
         ) {
             return projectFailure
+        }
+
+        // PRD-007: reject two competing bindings BEFORE ref resolution, so a
+        // stale ref cannot mask the caller's actual mistake.
+        if let conflict = IndexBindingGuard.conflictingBindingFailure(
+            policy: indexBindingPolicy(for: command),
+            operation: "logic_plugins.\(command)",
+            params: params
+        ) {
+            return conflict
         }
 
         switch command {
@@ -139,6 +160,21 @@ struct PluginsDispatcher: OperationTraceDispatching {
             )
 
         case "insert_verified":
+            // PRD-007: corroborate the bare-index target BEFORE taking the
+            // verified-op gate or starting a trace — a refusal here has no side
+            // effect of any kind. Skipped when `track` is absent/malformed: the
+            // channel's own schema step reports that precisely, and a missing
+            // selector cannot mutate a wrong target anyway.
+            if let requestedTrack = intParamOrNil(params, "track"), requestedTrack >= 0,
+               let bindingFailure = IndexBindingGuard.evaluate(
+                   policy: indexBindingPolicy(for: command),
+                   operation: "logic_plugins.insert_verified",
+                   params: params,
+                   index: requestedTrack,
+                   liveTrackNames: liveTrackNames
+               ) {
+                return bindingFailure
+            }
             let traceID = await startTraceIfEnabled(command: command)
             var resolvedReference: TargetReference?
             var resolvedFingerprint: String?
@@ -200,6 +236,12 @@ struct PluginsDispatcher: OperationTraceDispatching {
         default:
             return Self.unhandledCommandResult(command, label: "plugins")
         }
+    }
+
+    /// PRD-007: the registry is the single source of the index-binding tier —
+    /// dispatchers never hardcode which ops are ratcheted.
+    private static func indexBindingPolicy(for command: String) -> IndexBindingPolicy? {
+        OperationRegistry.spec(tool: ToolID.logicPlugins.rawValue, command: command)?.indexBinding
     }
 
     // MARK: - Verified-op serialization (R14)
