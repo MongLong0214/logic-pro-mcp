@@ -196,12 +196,27 @@ struct OperationCatalogTests {
 
     private static func expectedAllowedParams(for spec: OperationSpec) -> Set<String> {
         var expected = spec.allowedParams.intersection(["index", "project_ref", "track"])
-        if spec.target == .requiresStableTarget {
+        if spec.target == .acceptsStableTarget {
             expected.insert("target_ref")
+        }
+        // PRD-007: the corroboration param rides exactly the `.corroborated`
+        // tier. This mirrors the target_ref derivation above; the seed set
+        // itself is pinned independently, by explicit op-ID list, in the
+        // IndexBinding census (so this staying derived is not a tautology).
+        if spec.indexBinding == .corroborated {
+            expected.insert(OperationRegistry.corroborationParam)
         }
         return expected
             .union(commandParams[spec.id] ?? [])
             .union(legacyIgnoredParams[spec.id] ?? [])
+    }
+
+    /// PRD-007: LIVE header scan mirroring `routedSelectorInvocations`'s cache
+    /// (`Track 0`…`Track 8`, all unique). Injected through the
+    /// `HandlerDependencies` seam so the `.corroborated` ops stay provable
+    /// deterministically instead of dropping to live-only qualification.
+    private static let selectorProbeLiveTrackNames: @Sendable () -> [Int: String]? = {
+        Dictionary(uniqueKeysWithValues: (0...8).map { ($0, "Track \($0)") })
     }
 
     private static func validSelectorParams(
@@ -224,8 +239,12 @@ struct OperationCatalogTests {
             params["plugin_name"] = .string("Gain")
             params["confirmed"] = .bool(true)
         case .navigateGotoMarker, .navigateDeleteMarker,
-             .tracksSelect, .tracksDelete, .tracksDuplicate, .tracksArmOnly:
+             .tracksSelect, .tracksArmOnly:
             break
+        case .tracksDelete, .tracksDuplicate:
+            // PRD-007 `.corroborated`: prove the target before the selector can
+            // be forwarded. Matches `selectorProbeLiveTrackNames`.
+            params[OperationRegistry.corroborationParam] = .string("Track \(value)")
         case .navigateRenameMarker, .tracksRename:
             params["name"] = .string("Selector Probe")
         case .tracksMute, .tracksSolo, .tracksArm:
@@ -234,6 +253,7 @@ struct OperationCatalogTests {
             params["mode"] = .string("read")
         case .tracksSetInstrument:
             params["path"] = .string("/tmp/selector-probe.patch")
+            params[OperationRegistry.corroborationParam] = .string("Track \(value)")
         default:
             return nil
         }
@@ -272,7 +292,8 @@ struct OperationCatalogTests {
                 runtime: .fastTest
             ),
             dialogPresent: { false },
-            supportBundleExporter: nil
+            supportBundleExporter: nil,
+            liveTrackNames: Self.selectorProbeLiveTrackNames
         )
         let handler = try #require(OperationHandlerRegistry.handler(for: spec.id))
         _ = await handler(dependencies, params)
@@ -311,7 +332,7 @@ struct OperationCatalogTests {
     private static func wire(_ value: TargetPolicy) -> String {
         switch value {
         case .none: "none"
-        case .requiresStableTarget: "requires_stable_target"
+        case .acceptsStableTarget: "accepts_stable_target"
         }
     }
 
@@ -630,7 +651,7 @@ struct OperationCatalogTests {
         let handlers = await LogicProServer().makeHandlers()
 
         for spec in OperationRegistry.specs {
-            let requiresTarget = spec.target == .requiresStableTarget
+            let requiresTarget = spec.target == .acceptsStableTarget
             #expect(spec.allowedParams.contains("target_ref") == requiresTarget, "\(spec.id.rawValue)")
 
             if requiresTarget {
@@ -751,7 +772,7 @@ struct OperationCatalogTests {
             $0.allowedParams.contains("target_ref")
         }.map(\.id))
         let targetBearing = Set(OperationRegistry.specs.filter {
-            $0.target == .requiresStableTarget
+            $0.target == .acceptsStableTarget
         }.map(\.id))
         #expect(actualIndex.count == 17)
         #expect(actualTrack.count == 16)
@@ -878,18 +899,26 @@ struct OperationCatalogTests {
             #expect(row["allowedParams"] as? [String] == spec.allowedParams.sorted())
             #expect(
                 (row["allowedParams"] as? [String])?.contains("target_ref")
-                    == (spec.target == .requiresStableTarget)
+                    == (spec.target == .acceptsStableTarget)
             )
             #expect(row["capability"] as? String == spec.capability.rawValue)
             #expect(
                 row["dirtySections"] as? [String]
                     == spec.dirtySections.map(\.rawValue).sorted()
             )
-            #expect(row.keys.sorted() == [
+            var expectedKeys = [
                 "allowedParams", "availability", "capability", "command", "confirmation",
                 "deadline", "dirtySections", "id", "mutability", "retry", "target",
                 "tool", "verification",
-            ])
+            ]
+            // PRD-007: `indexBinding` is published ONLY for the tiered
+            // (target-bearing mutating) ops. Ops with no target to mis-bind omit
+            // the key entirely rather than publishing a null, so a client can
+            // tell "no tier applies" from any tier value.
+            if spec.indexBinding != nil {
+                expectedKeys.append("indexBinding")
+            }
+            #expect(row.keys.sorted() == expectedKeys.sorted(), "\(spec.id.rawValue)")
         }
 
         let toolCommands = operations.compactMap { row -> String? in

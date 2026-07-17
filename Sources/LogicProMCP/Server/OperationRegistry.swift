@@ -133,9 +133,35 @@ enum ConfirmationPolicy: Sendable, Equatable {
     case l3
 }
 
+/// Whether an operation will ACCEPT a session-stable `target_ref` in place of a
+/// raw index. Deliberately named `acceptsStableTarget` (PRD-007): the old
+/// `requiresStableTarget` spelling claimed a requirement the registry never
+/// enforced — these ops have always accepted a bare index too. What is actually
+/// required of the index path is declared by `IndexBindingPolicy`, a separate
+/// axis. No alias case: the rename is the point, so every stale use site breaks
+/// at compile time rather than silently reading the old meaning.
 enum TargetPolicy: Sendable, Equatable {
     case none
-    case requiresStableTarget
+    case acceptsStableTarget
+}
+
+/// PRD-007 — what an index-keyed mutating operation demands before it will write
+/// to a bare ordinal. Orthogonal to `TargetPolicy` (which describes what the op
+/// accepts) and applied only when no `target_ref` is supplied.
+///
+/// The tiers form a ratchet: ops move `.legacyIndexAllowed` → `.corroborated` →
+/// `.refRequired` as their index paths are closed, and each move is a registry
+/// row flip whose census diff is the receipt.
+enum IndexBindingPolicy: Sendable, Equatable, CaseIterable {
+    /// A bare index is refused outright — only a stable `target_ref` binds.
+    /// Assigned to ZERO production ops today; see `refRequiredOperationIDs`.
+    case refRequired
+    /// A bare index must be corroborated by an `expected_name` that matches the
+    /// LIVE header at that index AND is unique across the live surface.
+    case corroborated
+    /// The historical unguarded index path. Deprecated — every remaining member
+    /// is pinned by census so shrinking the set is a deliberate diff.
+    case legacyIndexAllowed
 }
 
 enum VerificationPolicy: Sendable, Equatable {
@@ -198,6 +224,14 @@ struct OperationSpec: Sendable {
     /// whole world changed); everything else currently relies on the poller
     /// and targeted post-write updates, declared as an empty set.
     let dirtySections: Set<CacheSectionID>
+    /// PRD-007: what this op demands of a bare index. Non-nil for EXACTLY the
+    /// target-bearing mutating ops — the only specs with an index path that can
+    /// hit the wrong target — and nil everywhere else, because the tier would be
+    /// meaningless on an op that has no target to mis-bind. Derived, never
+    /// hand-set per row: `indexBinding(for:target:mutability:)` is the one place
+    /// the seed set is declared, so a new spec cannot forget the axis.
+    /// The census asserts both halves of that invariant.
+    let indexBinding: IndexBindingPolicy?
 
     init(
         id: OperationID,
@@ -214,6 +248,11 @@ struct OperationSpec: Sendable {
         capability: CapabilityID,
         dirtySections: Set<CacheSectionID> = []
     ) {
+        self.indexBinding = OperationRegistry.indexBinding(
+            for: id,
+            target: target,
+            mutability: mutability
+        )
         self.id = id
         self.tool = tool
         self.command = command
@@ -368,16 +407,85 @@ enum OperationRegistry {
         .tracksRecordSequence: ["port"],
     ]
 
+    /// PRD-007 seed set — the index-keyed ops whose index path is ratcheted to
+    /// `.corroborated`.
+    ///
+    /// DELIBERATELY NOT DERIVED from `ConfirmationPolicy` or any destructiveness
+    /// flag: those are orthogonal axes and derivation would be wrong in both
+    /// directions. `tracks.delete` is `confirmation: .none` yet is the single
+    /// most wrong-target-irreversible op in the registry; `mixer.insert_plugin`
+    /// is `.l2` yet is not even target-bearing. Confirmation answers "did the
+    /// human mean to do this?"; index binding answers "is this the thing they
+    /// meant to do it TO?". A human can confirm an intent perfectly and still
+    /// have it land on the wrong track. Hence: an explicit list.
+    ///
+    /// Membership test = wrong-target irreversibility, not blast radius:
+    ///   - tracks.delete        destroys the wrong track outright.
+    ///   - tracks.duplicate     mutates topology; wrong-target = phantom copy.
+    ///   - tracks.set_instrument replace-class; overwrites the wrong strip's patch.
+    ///   - plugins.insert_verified insert-class topology on a trackIndex-keyed target.
+    /// Excluded: reversible param writes and state toggles (mixer.set_volume /
+    /// set_pan, plugins.set_param_verified, tracks.select / rename / mute / solo
+    /// / arm / arm_only / set_automation) — a wrong-target write there is
+    /// recoverable, so the ratchet's cost is not yet earned.
+    ///
+    /// KNOWN RESIDUAL (next batch): `mixer.insert_plugin` is an index-keyed
+    /// plugin insert that this tier CANNOT cover, because its `TargetPolicy` is
+    /// `.none` — it accepts no `target_ref`, so `.corroborated`'s "or supply a
+    /// target_ref" escape hatch would be unofferable. Ratcheting it requires
+    /// first making it target-bearing.
+    static let corroboratedOperationIDs: Set<OperationID> = [
+        .tracksDelete, .tracksDuplicate, .tracksSetInstrument, .pluginsInsertVerified,
+    ]
+
+    /// PRD-007: pinned empty this increment. `.refRequired` is implemented and
+    /// unit-tested via a synthetic spec, but assigned to no production op — the
+    /// promotion is a registry row flip in a later batch, so this set going
+    /// non-empty IS the promotion receipt in the census diff.
+    /// Planned first promotion: `tracks.delete` (already `.corroborated`), once
+    /// `FeatureFlags.adr002TargetRef` defaults ON and `target_ref` is reachable
+    /// by every caller — until then `.refRequired` would strand the index path
+    /// with no usable alternative.
+    static let refRequiredOperationIDs: Set<OperationID> = []
+
+    /// The corroboration parameter. NOT `name`: several target-bearing ops
+    /// already spend `name` on an operand (`tracks.rename`'s NEW name,
+    /// `tracks.select`'s by-name selector), so overloading it would make the
+    /// binding proof indistinguishable from the payload.
+    static let corroborationParam = "expected_name"
+
+    /// The single source of the index-binding axis. Non-nil exactly for
+    /// target-bearing mutating specs (see `OperationSpec.indexBinding`).
+    static func indexBinding(
+        for operationID: OperationID,
+        target: TargetPolicy,
+        mutability: Mutability
+    ) -> IndexBindingPolicy? {
+        guard target == .acceptsStableTarget, mutability == Mutability.`mutating` else {
+            return nil
+        }
+        if refRequiredOperationIDs.contains(operationID) { return .refRequired }
+        if corroboratedOperationIDs.contains(operationID) { return .corroborated }
+        return .legacyIndexAllowed
+    }
+
     private static func allowedParams(
         for operationID: OperationID,
         target: TargetPolicy = .none,
+        mutability: Mutability = Mutability.`mutating`,
         commandSpecific: Set<String>
     ) -> Set<String> {
         var allowed = commandSpecific
             .union(legacyIgnoredParamsByOperation[operationID] ?? [])
-        if target == .requiresStableTarget {
+        if target == .acceptsStableTarget {
             allowed.insert("target_ref")
             allowed.insert("project_ref")
+        }
+        // PRD-007: the corroboration param is accepted only where it is
+        // meaningful — a `.corroborated` op's index path. Adding it registry-wide
+        // would advertise a binding proof that most ops silently ignore.
+        if indexBinding(for: operationID, target: target, mutability: mutability) == .corroborated {
+            allowed.insert(corroborationParam)
         }
         return allowed
     }
@@ -416,10 +524,10 @@ enum OperationRegistry {
             .mixerSetVolume,
             "set_volume",
             .none,
-            TargetPolicy.requiresStableTarget,
+            TargetPolicy.acceptsStableTarget,
             ["index", "track", "value", "volume"]
         ),
-        (.mixerSetPan, "set_pan", .none, .requiresStableTarget, ["index", "pan", "track", "value"]),
+        (.mixerSetPan, "set_pan", .none, .acceptsStableTarget, ["index", "pan", "track", "value"]),
         (.mixerSetMasterVolume, "set_master_volume", .none, .none, ["value", "volume"]),
         (
             .mixerSetPluginParam,
@@ -559,7 +667,7 @@ enum OperationRegistry {
             Mutability.`mutating`,
             DeadlineClass.medium,
             VerificationPolicy.readbackRequired,
-            TargetPolicy.requiresStableTarget,
+            TargetPolicy.acceptsStableTarget,
             [
                 "insert", "mode", "param", "plugin", "plugin_id", "plugin_name",
                 "project_expected_path", "track", "unit", "value",
@@ -571,7 +679,7 @@ enum OperationRegistry {
             Mutability.`mutating`,
             DeadlineClass.medium,
             VerificationPolicy.readbackRequired,
-            TargetPolicy.requiresStableTarget,
+            TargetPolicy.acceptsStableTarget,
             [
                 "insert", "mode", "plugin", "plugin_id", "plugin_name", "project_expected_path",
                 "slot", "track",
@@ -592,6 +700,7 @@ enum OperationRegistry {
             allowedParams: allowedParams(
                 for: entry.0,
                 target: entry.5,
+                mutability: entry.2,
                 commandSpecific: entry.6
             ),
             capability: CapabilityID(rawValue: entry.0.rawValue)
@@ -739,23 +848,23 @@ enum OperationRegistry {
             Mutability.`mutating`,
             DeadlineClass.short,
             VerificationPolicy.readbackRequired,
-            TargetPolicy.requiresStableTarget,
+            TargetPolicy.acceptsStableTarget,
             ["index", "name", "track"]
         ),
         (.tracksCreateAudio, "create_audio", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.none, []),
         (.tracksCreateInstrument, "create_instrument", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.none, []),
         (.tracksCreateDrummer, "create_drummer", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.none, []),
         (.tracksCreateExternalMIDI, "create_external_midi", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.none, []),
-        (.tracksDelete, "delete", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["index", "track"]),
-        (.tracksDuplicate, "duplicate", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none, TargetPolicy.requiresStableTarget, ["index", "track"]),
-        (.tracksRename, "rename", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["index", "name", "track"]),
-        (.tracksMute, "mute", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["enabled", "index", "track"]),
-        (.tracksSolo, "solo", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["enabled", "index", "track"]),
-        (.tracksArm, "arm", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["enabled", "index", "track"]),
-        (.tracksArmOnly, "arm_only", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["index", "track"]),
+        (.tracksDelete, "delete", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["index", "track"]),
+        (.tracksDuplicate, "duplicate", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none, TargetPolicy.acceptsStableTarget, ["index", "track"]),
+        (.tracksRename, "rename", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["index", "name", "track"]),
+        (.tracksMute, "mute", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["enabled", "index", "track"]),
+        (.tracksSolo, "solo", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["enabled", "index", "track"]),
+        (.tracksArm, "arm", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["enabled", "index", "track"]),
+        (.tracksArmOnly, "arm_only", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["index", "track"]),
         (.tracksRecordSequence, "record_sequence", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, TargetPolicy.none, ["bar", "notes", "tempo"]),
-        (.tracksSetAutomation, "set_automation", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["index", "mode", "track"]),
-        (.tracksSetInstrument, "set_instrument", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired, TargetPolicy.requiresStableTarget, ["category", "index", "path", "preset"]),
+        (.tracksSetAutomation, "set_automation", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["index", "mode", "track"]),
+        (.tracksSetInstrument, "set_instrument", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["category", "index", "path", "preset"]),
         (.tracksListLibrary, "list_library", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none, TargetPolicy.none, []),
         (.tracksScanLibrary, "scan_library", Mutability.readOnly, DeadlineClass.long, VerificationPolicy.none, TargetPolicy.none, ["mode"]),
         (.tracksResolvePath, "resolve_path", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, TargetPolicy.none, ["path"]),
@@ -775,6 +884,7 @@ enum OperationRegistry {
             allowedParams: allowedParams(
                 for: entry.0,
                 target: entry.5,
+                mutability: entry.2,
                 commandSpecific: entry.6
             ),
             capability: CapabilityID(rawValue: entry.0.rawValue)

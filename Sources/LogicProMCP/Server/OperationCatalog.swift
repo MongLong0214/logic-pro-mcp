@@ -28,6 +28,10 @@ struct OperationCatalogEntry: Codable, Sendable, Equatable {
     let allowedParams: [String]
     let capability: String
     let dirtySections: [String]
+    /// PRD-007: absent for ops with no target to mis-bind (see
+    /// `OperationSpec.indexBinding`), so the wire distinguishes "not applicable"
+    /// from any tier value rather than flattening both into a string.
+    let indexBinding: String?
 }
 
 enum OperationCatalog {
@@ -48,7 +52,8 @@ enum OperationCatalog {
                     availability: wire(spec.availability),
                     allowedParams: spec.allowedParams.sorted(),
                     capability: spec.capability.rawValue,
-                    dirtySections: spec.dirtySections.map(\.rawValue).sorted()
+                    dirtySections: spec.dirtySections.map(\.rawValue).sorted(),
+                    indexBinding: spec.indexBinding.map(wire)
                 )
             }
         return OperationCatalogSnapshot(
@@ -69,7 +74,15 @@ enum OperationCatalog {
     private static func wire(_ value: TargetPolicy) -> String {
         switch value {
         case .none: "none"
-        case .requiresStableTarget: "requires_stable_target"
+        case .acceptsStableTarget: "accepts_stable_target"
+        }
+    }
+
+    private static func wire(_ value: IndexBindingPolicy) -> String {
+        switch value {
+        case .refRequired: "ref_required"
+        case .corroborated: "corroborated"
+        case .legacyIndexAllowed: "legacy_index_allowed"
         }
     }
 

@@ -65,7 +65,7 @@ struct OperationRegistryCoverageTests {
         let mutating = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
         let readOnly = OperationRegistry.specs.filter { $0.mutability == .readOnly }
         let targetBearingIDs = Set(mutating
-            .filter { $0.target == .requiresStableTarget }
+            .filter { $0.target == .acceptsStableTarget }
             .map(\.id))
         let targetless = mutating.filter { $0.target == .none }
         let expectedTargetBearingIDs: Set<OperationID> = [

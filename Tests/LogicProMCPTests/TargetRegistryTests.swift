@@ -350,22 +350,30 @@ struct TargetRegistryTests {
                 cache: StateCache(),
                 targetRegistry: trackRegistry
             )
+            // PRD-007: delete/duplicate are `.corroborated` — they must clear
+            // the binding gate to reach the write that bumps the generation.
+            let liveNames = sharedLiveTrackNames([0: "Generation Track"])
             _ = await TrackDispatcher.handle(
                 command: "delete",
-                params: ["index": .int(0)],
+                params: ["index": .int(0), "expected_name": .string("Generation Track")],
                 router: trackRouter,
                 cache: StateCache(),
-                targetRegistry: trackRegistry
+                targetRegistry: trackRegistry,
+                liveTrackNames: liveNames
             )
             _ = await TrackDispatcher.handle(
                 command: "duplicate",
-                params: ["index": .int(0)],
+                params: ["index": .int(0), "expected_name": .string("Generation Track")],
                 router: trackRouter,
                 cache: StateCache(),
-                targetRegistry: trackRegistry
+                targetRegistry: trackRegistry,
+                liveTrackNames: liveNames
             )
             #expect(await trackRegistry.currentTopologyGeneration == 3)
 
+            // insert_verified supplies no `track`, so the binding gate is skipped
+            // (the channel reports the missing selector) and this still exercises
+            // the generation bump exactly as before.
             _ = await PluginsDispatcher.handle(
                 command: "insert_verified",
                 params: [:],

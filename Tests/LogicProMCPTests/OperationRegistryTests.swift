@@ -173,7 +173,7 @@ struct OperationRegistryTests {
             #expect(spec.command == command)
             #expect(spec.mutability == Mutability.`mutating`)
             #expect(spec.confirmation == (command == "insert_plugin" ? .l2 : .none))
-            #expect(spec.target == (targetBearingCommands.contains(command) ? .requiresStableTarget : .none))
+            #expect(spec.target == (targetBearingCommands.contains(command) ? .acceptsStableTarget : .none))
             #expect(spec.verification == .readbackRequired)
             #expect(spec.retry == .neverAutomatic)
             #expect(spec.deadline == .short)
@@ -404,7 +404,7 @@ struct OperationRegistryTests {
             #expect(spec.confirmation == (id == .systemClearTraces ? .l2 : .none))
             #expect(spec.target == (
                 id == .pluginsSetParamVerified || id == .pluginsInsertVerified
-                    ? .requiresStableTarget
+                    ? .acceptsStableTarget
                     : .none
             ))
             #expect(spec.verification == entry.verification)
@@ -1002,7 +1002,7 @@ struct OperationRegistryTests {
             #expect(spec.command == entry.command)
             #expect(spec.mutability == entry.mutability)
             #expect(spec.confirmation == .none)
-            #expect(spec.target == (targetBearingCommands.contains(entry.command) ? .requiresStableTarget : .none))
+            #expect(spec.target == (targetBearingCommands.contains(entry.command) ? .acceptsStableTarget : .none))
             #expect(spec.verification == entry.verification)
             #expect(spec.retry == .neverAutomatic)
             #expect(spec.deadline == entry.deadline)
