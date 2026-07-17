@@ -159,11 +159,12 @@ extension TrackDispatcher {
         // above), so the goto-dialog is enabled on any non-empty project,
         // and on an empty project the playhead is already at bar 1 and the
         // slider fallback succeeds trivially.
-        await recordWriteBoundary(traceID)
-        let gotoResult = await router.route(
-            operation: "transport.goto_position",
-            params: ["bar": "1"]
-        )
+        let gotoResult = await withWriteBoundaryArmed(traceID) {
+            await router.route(
+                operation: "transport.goto_position",
+                params: ["bar": "1"]
+            )
+        }
         guard gotoResult.isSuccess else {
             return toolTextResult(
                 "record_sequence failed to reset playhead to bar 1 (required for accurate import): \(gotoResult.message)",

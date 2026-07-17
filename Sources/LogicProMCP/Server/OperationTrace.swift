@@ -4,6 +4,70 @@ enum OperationTraceParentBoundary {
     @TaskLocal static var onWriteBoundary: (@Sendable () async -> Void)?
 }
 
+/// #389: arm/commit carrier for `write_boundary.crossed`.
+///
+/// The phase used to be recorded by the dispatcher *before* it routed, which
+/// made it a claim of intent rather than an observation: a route that resolved
+/// no channel (unknown op, empty chain, unregistered/unhealthy channel, or a
+/// preflight skip) still stamped a boundary it never crossed. The dispatcher now
+/// only ARMS the boundary; the router COMMITS it at the first channel that is
+/// actually dispatched, so the phase can only appear when a channel executed.
+///
+/// The arm is deliberately scoped to exactly ONE `router.route` call (see
+/// `withWriteBoundaryArmed`) and is cleared on scope exit whether or not the
+/// commit fired. A sticky, op-lifetime arm is FORBIDDEN: dispatchers that read
+/// before they write (the `toggle_metronome` read-then-write class) would commit
+/// the boundary onto the *pre-read's* channel.started — a false boundary earlier
+/// than the write. TaskLocal scoping makes that structurally impossible instead
+/// of relying on call-site ordering staying as it is today.
+final class OperationTraceWriteBoundaryArm: @unchecked Sendable {
+    /// Sibling TaskLocal, never state on `ChannelRouter` (a shared actor would
+    /// leak arms across concurrent ops) nor on `OperationTraceStore`.
+    @TaskLocal static var current: OperationTraceWriteBoundaryArm?
+
+    private let lock = NSLock()
+    private let traceID: TraceID?
+    private var committed = false
+
+    init(traceID: TraceID?) {
+        self.traceID = traceID
+    }
+
+    /// Once-commit bit: true for the first armed channel.started only, so a
+    /// fallback chain that retries on a second channel records one boundary.
+    private func claimCommit() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if committed { return false }
+        committed = true
+        return true
+    }
+
+    /// Called by `ChannelRouter` at each channel.started. No arm (read route,
+    /// or a write route outside an arm scope) means no-op.
+    static func commitIfArmed() async {
+        guard let arm = current, arm.claimCommit() else { return }
+        // Saga parents inherit the corrected timing through the same hook the
+        // pre-route emit used, so a child's first real write moves the parent
+        // boundary too.
+        if let onWriteBoundary = OperationTraceParentBoundary.onWriteBoundary {
+            await onWriteBoundary()
+        }
+        // Explicit ID: `OperationTraceContext.record` no-ops when the op's
+        // trace is not registered in this task's context (dispatcher-scoped
+        // tests, saga children), but the boundary is still honest there.
+        guard let traceID = arm.traceID else { return }
+        await OperationTraceStore.shared.record(traceID, phase: .writeBoundaryCrossed)
+    }
+
+    /// Arm the boundary for the duration of `route` only.
+    static func armed<T>(_ traceID: TraceID?, _ route: () async -> T) async -> T {
+        await $current.withValue(OperationTraceWriteBoundaryArm(traceID: traceID)) {
+            await route()
+        }
+    }
+}
+
 /// ADR-005: task-scoped carrier that lets deep seams (router, channels,
 /// verification polls, saga) record onto the active operation trace without
 /// threading a TraceID through every signature. The server opens one scope
@@ -81,6 +145,19 @@ enum TracePhase: String, Codable, Sendable, CaseIterable {
     case mutationGateAcquired = "mutation_gate.acquired"
     case routeEvaluated = "route.evaluated"
     case channelStarted = "channel.started"
+    /// #389 — diagnostic only. Means: the first channel-execute entry under an
+    /// armed write route (or, for the non-router writers, the genuine first
+    /// external effect: support-bundle/export materialization and the project
+    /// lifecycle AppleScript). It is NOT the HC `write_attempted` flag and NOT
+    /// saga compensation input — both of those stay envelope-driven via
+    /// `StepResult.writeBoundaryCrossed`, which this phase never feeds.
+    ///
+    /// Known residual (accepted): when an armed route's first channel fails
+    /// before its effect lands and a fallback channel then succeeds, the
+    /// boundary sits at the first attempt, not the channel that wrote. Moving
+    /// it would need commit-inside-the-channel, which is out of scope; the
+    /// phase's contract is "a channel began executing this write", not "this
+    /// exact channel wrote".
     case writeBoundaryCrossed = "write_boundary.crossed"
     case channelCompleted = "channel.completed"
     case verificationPoll = "verification.poll"

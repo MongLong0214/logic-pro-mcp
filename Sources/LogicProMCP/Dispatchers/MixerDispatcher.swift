@@ -77,14 +77,16 @@ struct MixerDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = TargetRefResolver.addEvidence(
-                resolvedReference,
-                fingerprint: resolvedFingerprint,
-                to: await routedTextResult(router, operation: "mixer.set_volume", params: [
+            let routed = await withWriteBoundaryArmed(traceID) {
+                await routedTextResult(router, operation: "mixer.set_volume", params: [
                     "index": String(index),
                     "volume": String(volume),
                 ])
+            }
+            let result = TargetRefResolver.addEvidence(
+                resolvedReference,
+                fingerprint: resolvedFingerprint,
+                to: routed
             )
             return await finalizeTrace(result, traceID: traceID)
 
@@ -124,14 +126,16 @@ struct MixerDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = TargetRefResolver.addEvidence(
-                resolvedReference,
-                fingerprint: resolvedFingerprint,
-                to: await routedTextResult(router, operation: "mixer.set_pan", params: [
+            let routed = await withWriteBoundaryArmed(traceID) {
+                await routedTextResult(router, operation: "mixer.set_pan", params: [
                     "index": String(index),
                     "pan": String(pan),
                 ])
+            }
+            let result = TargetRefResolver.addEvidence(
+                resolvedReference,
+                fingerprint: resolvedFingerprint,
+                to: routed
             )
             return await finalizeTrace(result, traceID: traceID)
 
@@ -159,10 +163,11 @@ struct MixerDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await routedTextResult(router, operation: "mixer.set_master_volume", params: [
-                "volume": String(volume),
-            ])
+            let result = await withWriteBoundaryArmed(traceID) {
+                await routedTextResult(router, operation: "mixer.set_master_volume", params: [
+                    "volume": String(volume),
+                ])
+            }
             return await finalizeTrace(result, traceID: traceID)
 
         case "toggle_eq":
@@ -212,12 +217,13 @@ struct MixerDispatcher: OperationTraceDispatching {
                 return toolInvalidParamsResult("insert_plugin \(hint)")
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let channelResult = await router.route(operation: "plugin.insert", params: [
-                "track": String(track),
-                "slot": String(slot),
-                "plugin_name": spec.canonicalName,
-            ])
+            let channelResult = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: "plugin.insert", params: [
+                    "track": String(track),
+                    "slot": String(slot),
+                    "plugin_name": spec.canonicalName,
+                ])
+            }
             if FeatureFlags.adr002TargetRef, channelResultIsVerified(channelResult) {
                 await targetRegistry?.bumpTopologyGeneration()
             }
@@ -280,11 +286,12 @@ struct MixerDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let selectResult = await router.route(
-                operation: "track.select",
-                params: ["index": String(track)]
-            )
+            let selectResult = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "track.select",
+                    params: ["index": String(track)]
+                )
+            }
             guard selectResult.isSuccess else {
                 return await finalizeTrace(
                     toolTextResult(selectResult.message, isError: true),

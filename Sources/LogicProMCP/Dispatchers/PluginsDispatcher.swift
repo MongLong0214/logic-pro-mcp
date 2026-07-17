@@ -146,9 +146,10 @@ struct PluginsDispatcher: OperationTraceDispatching {
                         return result
                     }
                 }
-                await recordWriteBoundary(traceID)
-                return await routedTextResult(router, operation: "plugin.set_param_verified",
-                                              params: writeParams)
+                return await withWriteBoundaryArmed(traceID) {
+                    await routedTextResult(router, operation: "plugin.set_param_verified",
+                                           params: writeParams)
+                }
             }
             return await finalizeTrace(
                 TargetRefResolver.addEvidence(
@@ -214,11 +215,12 @@ struct PluginsDispatcher: OperationTraceDispatching {
                         return result
                     }
                 }
-                await recordWriteBoundary(traceID)
-                let result = await router.route(
-                    operation: "plugin.insert_verified",
-                    params: writeParams
-                )
+                let result = await withWriteBoundaryArmed(traceID) {
+                    await router.route(
+                        operation: "plugin.insert_verified",
+                        params: writeParams
+                    )
+                }
                 if FeatureFlags.adr002TargetRef, channelResultIsVerified(result) {
                     await targetRegistry?.bumpTopologyGeneration()
                 }

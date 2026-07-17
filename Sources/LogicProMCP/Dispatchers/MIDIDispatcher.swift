@@ -108,10 +108,11 @@ struct MIDIDispatcher: OperationTraceDispatching {
             case .success(let port):
                 let opKey = port == "midi" ? "midi.play_sequence" : "midi.play_sequence.\(port)"
                 let traceID = await startTraceIfEnabled(command: command)
-                await recordWriteBoundary(traceID)
-                let result = await routedTextResult(router, operation: opKey, params: [
-                    "notes": notes,
-                ])
+                let result = await withWriteBoundaryArmed(traceID) {
+                    await routedTextResult(router, operation: opKey, params: [
+                        "notes": notes,
+                    ])
+                }
                 return await finalizeTrace(result, traceID: traceID)
             }
 
@@ -199,8 +200,9 @@ struct MIDIDispatcher: OperationTraceDispatching {
             case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await routedTextResult(router, operation: "midi.send_sysex", params: ["data": data])
+            let result = await withWriteBoundaryArmed(traceID) {
+                await routedTextResult(router, operation: "midi.send_sysex", params: ["data": data])
+            }
             return await finalizeTrace(result, traceID: traceID)
 
         case "import_file":
@@ -213,10 +215,11 @@ struct MIDIDispatcher: OperationTraceDispatching {
             case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await routedTextResult(router, operation: "midi.import_file", params: [
-                "path": path,
-            ])
+            let result = await withWriteBoundaryArmed(traceID) {
+                await routedTextResult(router, operation: "midi.import_file", params: [
+                    "path": path,
+                ])
+            }
             return await finalizeTrace(result, traceID: traceID)
 
         case "create_virtual_port":
@@ -224,10 +227,11 @@ struct MIDIDispatcher: OperationTraceDispatching {
                 return reject
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await routedTextResult(router, operation: "midi.create_virtual_port", params: [
-                "name": stringParam(params, "name", default: "Virtual Port"),
-            ])
+            let result = await withWriteBoundaryArmed(traceID) {
+                await routedTextResult(router, operation: "midi.create_virtual_port", params: [
+                    "name": stringParam(params, "name", default: "Virtual Port"),
+                ])
+            }
             return await finalizeTrace(result, traceID: traceID)
 
         case "list_ports":
@@ -241,8 +245,9 @@ struct MIDIDispatcher: OperationTraceDispatching {
                 return reject
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await routedTextResult(router, operation: "mmc.play")
+            let result = await withWriteBoundaryArmed(traceID) {
+                await routedTextResult(router, operation: "mmc.play")
+            }
             return await finalizeTrace(result, traceID: traceID)
 
         case "mmc_stop":
@@ -250,8 +255,9 @@ struct MIDIDispatcher: OperationTraceDispatching {
                 return reject
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await routedTextResult(router, operation: "mmc.stop")
+            let result = await withWriteBoundaryArmed(traceID) {
+                await routedTextResult(router, operation: "mmc.stop")
+            }
             return await finalizeTrace(result, traceID: traceID)
 
         case "mmc_record":
@@ -259,8 +265,9 @@ struct MIDIDispatcher: OperationTraceDispatching {
                 return reject
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await routedTextResult(router, operation: "mmc.record_strobe")
+            let result = await withWriteBoundaryArmed(traceID) {
+                await routedTextResult(router, operation: "mmc.record_strobe")
+            }
             return await finalizeTrace(result, traceID: traceID)
 
         case "mmc_locate":
@@ -287,11 +294,12 @@ struct MIDIDispatcher: OperationTraceDispatching {
                 // `verified:false` — it never confirmed the playhead landed.
                 let position = "\(bar).1.1.1"
                 let traceID = await startTraceIfEnabled(command: command)
-                await recordWriteBoundary(traceID)
-                let result = await router.route(
-                    operation: "transport.goto_position",
-                    params: ["position": position]
-                )
+                let result = await withWriteBoundaryArmed(traceID) {
+                    await router.route(
+                        operation: "transport.goto_position",
+                        params: ["position": position]
+                    )
+                }
                 let finalized = await TransportDispatcher.finalizeGotoPositionResult(
                     result,
                     requestedPosition: position,
@@ -304,10 +312,11 @@ struct MIDIDispatcher: OperationTraceDispatching {
                 return toolInvalidParamsResult("mmc_locate 'time' must be HH:MM:SS:FF")
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await routedTextResult(router, operation: "mmc.locate", params: [
-                "time": time,
-            ])
+            let result = await withWriteBoundaryArmed(traceID) {
+                await routedTextResult(router, operation: "mmc.locate", params: [
+                    "time": time,
+                ])
+            }
             return await finalizeTrace(result, traceID: traceID)
 
         case "step_input":
@@ -328,11 +337,12 @@ struct MIDIDispatcher: OperationTraceDispatching {
             case .failure(let msg): return toolInvalidParamsResult(msg.message)
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await routedTextResult(router, operation: "midi.step_input", params: [
-                "note": String(note),
-                "duration": duration,
-            ])
+            let result = await withWriteBoundaryArmed(traceID) {
+                await routedTextResult(router, operation: "midi.step_input", params: [
+                    "note": String(note),
+                    "duration": duration,
+                ])
+            }
             return await finalizeTrace(result, traceID: traceID)
 
         default:
@@ -368,8 +378,9 @@ struct MIDIDispatcher: OperationTraceDispatching {
                 var allParams = additionalParams
                 allParams["channel"] = String(wireChannel)
                 let traceID = await startTraceIfEnabled(command: command)
-                await recordWriteBoundary(traceID)
-                let result = await routedTextResult(router, operation: opKey, params: allParams)
+                let result = await withWriteBoundaryArmed(traceID) {
+                    await routedTextResult(router, operation: opKey, params: allParams)
+                }
                 return await finalizeTrace(result, traceID: traceID)
             }
         }

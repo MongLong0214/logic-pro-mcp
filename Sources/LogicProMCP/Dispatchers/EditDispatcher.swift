@@ -86,11 +86,12 @@ struct EditDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            await recordWriteBoundary(traceID)
-            let result = await router.route(
-                operation: "edit.quantize",
-                params: ["value": value]
-            )
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(
+                    operation: "edit.quantize",
+                    params: ["value": value]
+                )
+            }
             return await finalizeTrace(
                 toolTextResultTreatingUnverifiedAsError(result),
                 traceID: traceID
@@ -106,12 +107,15 @@ struct EditDispatcher: OperationTraceDispatching {
         router: ChannelRouter,
         traceID: TraceID?
     ) async -> CallTool.Result {
-        await recordWriteBoundary(traceID)
         switch route {
         case .regular(let operation):
-            return await routedTextResult(router, operation: operation)
+            return await withWriteBoundaryArmed(traceID) {
+                await routedTextResult(router, operation: operation)
+            }
         case .unverifiedIsError(let operation):
-            let result = await router.route(operation: operation)
+            let result = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: operation)
+            }
             return toolTextResultTreatingUnverifiedAsError(result)
         }
     }

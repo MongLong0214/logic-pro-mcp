@@ -207,14 +207,15 @@ struct OperationTraceTests {
         let trace = try #require(await OperationTraceStore.shared.trace(TraceID(rawValue: rawID)))
         #expect(context.traceID?.rawValue == rawID)
         // transport.play performs three routed calls — the pre-state probe,
-        // the mutation itself (write boundary recorded just before it), and
-        // the verification readback — and every one is visible on the trace.
+        // the mutation itself, and the verification readback — and every one is
+        // visible on the trace. #389: the write boundary sits INSIDE the second
+        // (mutating) route, committed by the router at that channel's start —
+        // never in the pre-read's channel group and never before any route.
         #expect(trace.events.map(\.phase) == [
             .requestReceived, .inputValidated,
             .mutationGateWaitStarted, .mutationGateAcquired,
             .routeEvaluated, .channelStarted, .channelCompleted,
-            .writeBoundaryCrossed,
-            .routeEvaluated, .channelStarted, .channelCompleted,
+            .routeEvaluated, .channelStarted, .writeBoundaryCrossed, .channelCompleted,
             .routeEvaluated, .channelStarted, .channelCompleted,
             .verificationCompleted, .resultEmitted,
         ])
@@ -227,6 +228,54 @@ struct OperationTraceTests {
                 OperationTraceStore.attributePrivacyClasses.keys
             ))
         })
+    }
+
+    /// #389 read-then-write pin. `toggle_metronome` probes live transport state
+    /// BEFORE it writes, so it is the class that a sticky, op-lifetime write-boundary
+    /// arm gets wrong: the arm would commit on the PRE-READ's channel.started and
+    /// report a boundary the op had not yet crossed. The arm is scoped to the write
+    /// route alone, so the boundary must land inside the second route group — after
+    /// the pre-read's channel bracket closes, never inside it.
+    @Test func OperationTraceReadThenWriteBoundarySkipsPreReadChannel() async throws {
+        let previous = replaceOperationTraceFlag(with: "1")
+        defer { _ = replaceOperationTraceFlag(with: previous) }
+        await OperationTraceStore.shared.clear()
+
+        let channel = OperationTraceTransportChannel(states: [
+            #"{"isPlaying":false,"isRecording":false,"position":"1.1.1.1","tempo":120}"#,
+            #"{"isPlaying":false,"isRecording":false,"position":"1.1.1.1","tempo":120}"#,
+        ])
+        let router = ChannelRouter()
+        await router.register(channel)
+
+        let context = OperationTraceContext(mutationGateAcquired: true)
+        _ = await OperationTraceContext.$current.withValue(context) {
+            await TransportDispatcher.handle(
+                command: "toggle_metronome",
+                params: [:],
+                router: router,
+                cache: StateCache(),
+                sleep: { _ in }
+            )
+        }
+
+        let traceID = try #require(context.traceID)
+        let trace = try #require(await OperationTraceStore.shared.trace(traceID))
+        let phases = trace.events.map(\.phase)
+        let boundary = try #require(phases.firstIndex(of: .writeBoundaryCrossed))
+        // The pre-read routes first; the boundary belongs to the route AFTER it.
+        let routesBeforeBoundary = phases[..<boundary].filter { $0 == .routeEvaluated }.count
+        #expect(
+            routesBeforeBoundary == 2,
+            "boundary must sit in the WRITE route group, not the pre-read's (routes before it: \(routesBeforeBoundary))"
+        )
+        // The pre-read's channel bracket must be fully closed before the boundary.
+        let firstCompleted = try #require(phases.firstIndex(of: .channelCompleted))
+        #expect(boundary > firstCompleted, "boundary must not land inside the pre-read channel group")
+        let executed = await channel.executedOperations
+        #expect(executed.first == "transport.get_state")
+        #expect(executed.contains("transport.toggle_metronome"))
+        await OperationTraceStore.shared.clear()
     }
 
     /// Saga-child correlation: a context carrying a parent trace ID stamps
@@ -608,6 +657,58 @@ extension OperationTraceTests {
         })
     }
 
+    /// #389: write_boundary.crossed must (a) never be recorded when the op
+    /// resolves no route (no channel is dispatched), and (b) on a successful op
+    /// sit at/after the writing channel.started and before verification.
+    @Test
+    func writeBoundaryHonorsChannelDispatch() async throws {
+        let previous = replaceOperationTraceFlag(with: "1")
+        defer { _ = replaceOperationTraceFlag(with: previous) }
+
+        // (a) No channel registered → route resolves nothing → NO write boundary.
+        await OperationTraceStore.shared.clear()
+        let deadContext = OperationTraceContext(mutationGateAcquired: true)
+        _ = await OperationTraceContext.$current.withValue(deadContext) {
+            await MixerDispatcher.handle(
+                command: "set_volume",
+                params: ["track": .int(2), "value": .double(0.5)],
+                router: ChannelRouter(),
+                cache: StateCache()
+            )
+        }
+        let deadTraceID = try #require(deadContext.traceID)
+        let deadTrace = try #require(await OperationTraceStore.shared.trace(deadTraceID))
+        let deadPhases = deadTrace.events.map(\.phase)
+        #expect(!deadPhases.contains(.channelStarted))
+        #expect(
+            !deadPhases.contains(.writeBoundaryCrossed),
+            "a write with no dispatched channel must not record write_boundary.crossed"
+        )
+
+        // (b) Healthy channel → boundary at/after channel.started, before verify.
+        await OperationTraceStore.shared.clear()
+        let router = ChannelRouter()
+        await router.register(OperationTraceMixerChannel())
+        let context = OperationTraceContext(mutationGateAcquired: true)
+        _ = await OperationTraceContext.$current.withValue(context) {
+            await MixerDispatcher.handle(
+                command: "set_volume",
+                params: ["track": .int(2), "value": .double(0.5)],
+                router: router,
+                cache: StateCache()
+            )
+        }
+        let traceID = try #require(context.traceID)
+        let trace = try #require(await OperationTraceStore.shared.trace(traceID))
+        let phases = trace.events.map(\.phase)
+        let boundary = try #require(phases.firstIndex(of: .writeBoundaryCrossed))
+        let started = try #require(phases.firstIndex(of: .channelStarted))
+        let verified = try #require(phases.firstIndex(of: .verificationCompleted))
+        #expect(boundary >= started, "write_boundary.crossed must be at/after channel.started")
+        #expect(boundary < verified, "write_boundary.crossed must be before verification.completed")
+        await OperationTraceStore.shared.clear()
+    }
+
     @Test(arguments: ["set_volume", "set_pan"])
     func OperationTraceMixerInvalidParamsDoNotTrace(command: String) async {
         let previous = replaceOperationTraceFlag(with: "1")
@@ -679,6 +780,45 @@ extension OperationTraceTests {
         #expect(sharedJSONObject(sharedToolText(result))?["trace_id"] == nil)
         #expect(await channel.executedOperations == [operation])
         #expect(await OperationTraceStore.shared.recent().isEmpty)
+    }
+
+    /// #389 scoped ordering pin for the tracks surface. The tracks dispatcher
+    /// routes its writes through `handleToggle`, a seam the transport/mixer pins
+    /// do not cover — under a trace context its boundary must be committed BY the
+    /// router at the channel it dispatched, never stamped ahead of it.
+    @Test(arguments: ["rename", "mute"])
+    func OperationTraceTracksScopedBoundaryFollowsChannelStarted(command: String) async throws {
+        let previous = replaceOperationTraceFlag(with: "1")
+        defer { _ = replaceOperationTraceFlag(with: previous) }
+        await OperationTraceStore.shared.clear()
+
+        let channel = OperationTraceTrackChannel()
+        let router = ChannelRouter()
+        await router.register(channel)
+
+        let context = OperationTraceContext(mutationGateAcquired: true)
+        _ = await OperationTraceContext.$current.withValue(context) {
+            await TrackDispatcher.handle(
+                command: command,
+                params: command == "rename"
+                    ? ["index": .int(2), "name": .string("Trace Track")]
+                    : ["index": .int(2), "enabled": .bool(true)],
+                router: router,
+                cache: StateCache()
+            )
+        }
+
+        let traceID = try #require(context.traceID)
+        let trace = try #require(await OperationTraceStore.shared.trace(traceID))
+        let phases = trace.events.map(\.phase)
+        let boundary = try #require(phases.firstIndex(of: .writeBoundaryCrossed))
+        let started = try #require(phases.firstIndex(of: .channelStarted))
+        let verified = try #require(phases.firstIndex(of: .verificationCompleted))
+        #expect(boundary >= started, "write_boundary.crossed must be at/after channel.started")
+        #expect(boundary < verified, "write_boundary.crossed must be before verification.completed")
+        let operation = command == "rename" ? "track.rename" : "track.set_mute"
+        #expect(await channel.executedOperations == [operation])
+        await OperationTraceStore.shared.clear()
     }
 
     @Test(arguments: ["rename", "mute"])
