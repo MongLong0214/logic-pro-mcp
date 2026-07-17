@@ -850,3 +850,53 @@ extension OperationTraceTests {
         try await assertTracePreservesResult(isError: true)
     }
 }
+
+// MARK: - Live-discovered defects (2026-07-17)
+
+extension OperationTraceTests {
+    /// #388 (P1): every get_trace event `timestamp` must be an ISO-8601 UTC
+    /// wall-clock string (the same format as the trace-clear `cleared_at` and
+    /// saga `sampled_at` receipts), never a raw `ContinuousClock.Instant` debug
+    /// string like "Instant(_value: 2451508.288 seconds)". RED-first.
+    @Test func getTraceEmitsISO8601Timestamps() async throws {
+        let previous = replaceOperationTraceFlag(with: "1")
+        defer { _ = replaceOperationTraceFlag(with: previous) }
+        await OperationTraceStore.shared.clear()
+
+        let id = await OperationTraceStore.shared.start(
+            operationID: OperationID.transportPlay.rawValue
+        )
+        await OperationTraceStore.shared.record(
+            id, phase: .requestReceived, attributes: ["command": "play"]
+        )
+        await OperationTraceStore.shared.record(id, phase: .writeBoundaryCrossed)
+        await OperationTraceStore.shared.record(id, phase: .resultEmitted)
+        await OperationTraceStore.shared.complete(id)
+
+        let getResult = await SystemDispatcher.handle(
+            command: "get_trace",
+            params: ["trace_id": .string(id.rawValue)],
+            router: ChannelRouter(),
+            cache: StateCache()
+        )
+        let get = try #require(sharedJSONObject(sharedToolText(getResult)))
+        let events = try #require(get["events"] as? [[String: Any]])
+        #expect(!events.isEmpty)
+
+        // Matches ISO8601DateFormatter.cacheFormatter ([.withInternetDateTime,
+        // .withFractionalSeconds]) output, e.g. 2026-07-17T12:34:56.789Z.
+        let isoPattern = #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$"#
+        for event in events {
+            let timestamp = try #require(event["timestamp"] as? String)
+            #expect(
+                !timestamp.contains("Instant("),
+                "timestamp leaked a ContinuousClock.Instant debug string: \(timestamp)"
+            )
+            #expect(
+                timestamp.range(of: isoPattern, options: .regularExpression) != nil,
+                "timestamp is not ISO-8601 UTC: \(timestamp)"
+            )
+        }
+        await OperationTraceStore.shared.clear()
+    }
+}

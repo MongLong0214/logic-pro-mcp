@@ -231,7 +231,7 @@ struct SupportBundleBuilder: Sendable {
                     }
                     return TraceEventRecord(
                         phase: event.phase.rawValue,
-                        timestamp: String(describing: event.timestamp),
+                        timestamp: ISO8601DateFormatter.cacheFormatter.string(from: event.wallClock),
                         attributes: attributes,
                         privacyClasses: classes
                     )

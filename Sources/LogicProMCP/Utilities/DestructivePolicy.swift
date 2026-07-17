@@ -60,7 +60,7 @@ enum DestructivePolicy {
             "status": "confirmation_required",
             "command": command,
             "level": levelLabel,
-            "message": "이 작업은 프로젝트 상태를 변경하거나 데이터 손실을 유발할 수 있습니다.",
+            "message": "This operation may change project state or cause data loss.",
             "confirm_command": "logic_project(\"\(command)\", {confirmed: true})",
         ])
     }
