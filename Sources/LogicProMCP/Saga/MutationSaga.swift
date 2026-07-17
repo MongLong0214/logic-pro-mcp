@@ -710,6 +710,13 @@ actor MutationSaga {
             // captured at step time, and the proof is an independent live
             // readback compared within the operation's epsilon — a quantized
             // fader that restores to 0.249 has restored 0.25.
+            //
+            // No ambiguous zone here (unlike `classify`): this asks ONE
+            // question — is the surface back at the before-state? — and
+            // compares against the before-state alone. Where the desired value
+            // sits within epsilon of the before-state, the two are the same
+            // value under the declared tolerance, so no second hypothesis
+            // competes and no different action could follow from one.
             let comparison = SagaValueComparator.evidence(
                 observed: readback?.value,
                 desired: beforeState.value,
@@ -749,6 +756,17 @@ actor MutationSaga {
     /// State-B/C reconciliation: the write path could NOT verify itself, so the
     /// saga decides from an independent live read, compared within the
     /// operation's declared epsilon.
+    ///
+    /// THE AMBIGUOUS ZONE: an epsilon-tolerant comparison — unlike the exact `==`
+    /// it replaced — can match the readback against BOTH the desired value and
+    /// the before-state at once, whenever `|desired - before| <= epsilon`. A pan
+    /// step from -1.0 to -0.96 (eps 0.05) whose write failed leaves the surface
+    /// at -1.0, and -1.0 matches the desired -0.96 within epsilon. Checking
+    /// desired first would call that failed write `applied` — a false success
+    /// with no compensation. The two hypotheses (it landed / it never landed)
+    /// are indistinguishable from this read, so the honest disposition is
+    /// `unknown`: the operator is told we cannot tell, and the plan reconciles
+    /// as uncertain instead of claiming a success it did not observe.
     private func classify(
         _ readback: ObservedState?,
         desiredValue: Value,
@@ -756,21 +774,20 @@ actor MutationSaga {
         operationID: OperationID
     ) -> VerificationDisposition {
         guard let readback else { return .unknown }
-        if SagaValueComparator.equals(
+        let matchesDesired = SagaValueComparator.equals(
             observed: readback.value,
             expected: desiredValue,
             op: operationID
-        ) {
-            return .applied
-        }
-        if SagaValueComparator.equals(
+        )
+        let matchesBefore = SagaValueComparator.equals(
             observed: readback.value,
             expected: beforeState.value,
             op: operationID
-        ) {
-            return .notApplied
+        )
+        if matchesDesired {
+            return matchesBefore ? .unknown : .applied
         }
-        return .unknown
+        return matchesBefore ? .notApplied : .unknown
     }
 
     /// State A means the DISPATCHER already verified the write against the live

@@ -333,6 +333,107 @@ struct SagaValueComparatorTests {
         #expect(result == .unknown)
     }
 
+    // MARK: - Engine: the ambiguous epsilon zone
+
+    /// The epsilon that fixed the false-rollback opened a mirrored hole: when
+    /// `|desired - before| <= epsilon`, a readback matches BOTH. Here the write
+    /// FAILED (State B) and the surface never moved off -1.0 — but -1.0 is
+    /// within the pan epsilon (0.05) of the desired -0.96. Checking desired
+    /// first called that `applied`: a false success on a failed write, with no
+    /// compensation. Exact `==` never had this failure.
+    @Test("pan write that failed inside the epsilon zone is unknown, never applied")
+    func ambiguousPanZoneIsUnknownNotApplied() async {
+        let result = await disposition(
+            .mixerSetPan,
+            desired: .double(-0.96),
+            before: .double(-1.0),
+            readback: .double(-1.0),
+            state: .stateB,
+            key: "pan-ambiguous-zone"
+        )
+        #expect(result == .unknown)
+        #expect(result != .applied)
+    }
+
+    /// The ambiguous zone must reconcile as UNCERTAIN, not as a success. Pre-fix
+    /// the step was booked `applied`, compensation "restored" a surface that had
+    /// never moved, and the plan reported `fullyCompensated` — a clean-rollback
+    /// claim built on a write nobody observed land.
+    @Test("ambiguous-zone plan reconciles as rollbackUncertain, not a clean rollback")
+    func ambiguousZonePlanIsRollbackUncertain() async throws {
+        let registry = TargetRegistry()
+        let target = await bind(registry, index: 0, name: "Bass")
+        let executor = StubReadbackExecutor(
+            before: .double(-1.0),
+            readback: .double(-1.0),
+            result: StepResult(state: .stateB, writeBoundaryCrossed: true, detail: "stub B")
+        )
+        let outcome = await MutationSaga(
+            targetRegistry: registry,
+            enabled: true,
+            routeAvailable: { _ in true }
+        ).execute(
+            SagaPlan(
+                steps: [step(.mixerSetPan, target: target, value: .double(-0.96))],
+                idempotencyKey: "pan-ambiguous-zone-outcome"
+            ),
+            executor: executor
+        )
+        #expect(outcome.state == .rollbackUncertain)
+        #expect(outcome.state != .fullyCompensated)
+        #expect(!outcome.complete)
+        #expect(outcome.stateHistory.contains(.reconciling))
+        let record = try #require(outcome.journal.first)
+        #expect(record.verificationEvidence?.disposition == .unknown)
+        #expect(record.compensationEvidence?.disposition == .uncertain)
+    }
+
+    /// The same hole on the volume epsilon (0.01), on an analog step an operator
+    /// would plausibly request: 0.70 → 0.705 is a real request, and a failed
+    /// write leaves a readback that matches the desired within epsilon.
+    @Test("volume write that failed inside the epsilon zone is unknown, never applied")
+    func ambiguousVolumeZoneIsUnknownNotApplied() async {
+        let result = await disposition(
+            .mixerSetVolume,
+            desired: .double(0.705),
+            before: .double(0.70),
+            readback: .double(0.70),
+            state: .stateB,
+            key: "volume-ambiguous-zone"
+        )
+        #expect(result == .unknown)
+        #expect(result != .applied)
+    }
+
+    /// Control: outside the ambiguous zone a failed write still reads as the
+    /// before-state and is unambiguously `notApplied` — the fix must not turn
+    /// every failed write into `unknown`.
+    @Test("failed write outside the epsilon zone still classifies notApplied")
+    func unambiguousFailedWriteStaysNotApplied() async {
+        #expect(await disposition(
+            .mixerSetVolume,
+            desired: .double(0.8),
+            before: .double(0.2),
+            readback: .double(0.2),
+            state: .stateB,
+            key: "volume-unambiguous-not-applied"
+        ) == .notApplied)
+    }
+
+    /// Control: a write the surface DID take, far from the before-state, has no
+    /// ambiguity to resolve and stays `applied`.
+    @Test("landed write outside the epsilon zone still classifies applied")
+    func unambiguousLandedWriteStaysApplied() async {
+        #expect(await disposition(
+            .mixerSetVolume,
+            desired: .double(0.8),
+            before: .double(0.2),
+            readback: .double(0.8),
+            state: .stateB,
+            key: "volume-unambiguous-applied"
+        ) == .applied)
+    }
+
     @Test("verification evidence carries the comparator that decided it")
     func verificationEvidenceCarriesComparator() async throws {
         let registry = TargetRegistry()
