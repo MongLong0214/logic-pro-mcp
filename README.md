@@ -4,11 +4,15 @@ A local Model Context Protocol (MCP) server that lets Claude Code, Claude Deskto
 
 [Install](#1-install) · [Watch demo](docs/media/logic-pro-mcp-demo.mp4) · [What it controls](#what-it-controls)
 
+> ### 🏆 Selected for Anthropic's [Claude for Open Source](https://claude.com/contact-sales/claude-for-oss) program
+> Logic Pro MCP has been **officially selected for Anthropic's Claude for Open Source program** — recognition from the makers of Claude that this project is open-source work worth supporting. This server is built with Claude, for Claude-powered agents — and is now officially supported by the program.
+
 <p align="center">
   <img src="https://img.shields.io/badge/Logic_Pro-MCP_Server-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Logic Pro MCP Server" />
 </p>
 
 <p align="center">
+  <a href="https://claude.com/contact-sales/claude-for-oss"><img src="https://img.shields.io/badge/Claude_for_Open_Source-Selected-D97757.svg?style=flat-square&logo=anthropic&logoColor=white" alt="Claude for Open Source — Selected" /></a>
   <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-6.0+-F05138.svg?style=flat-square" /></a>
   <a href="https://developer.apple.com/macos/"><img src="https://img.shields.io/badge/macOS-14+-000000.svg?style=flat-square&logo=apple" /></a>
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-0.10-blue.svg?style=flat-square" /></a>
