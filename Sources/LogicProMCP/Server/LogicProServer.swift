@@ -666,8 +666,17 @@ actor LogicProServer {
         return await withCheckedContinuation { continuation in
             let race = DeadlineRace()
             let timeoutHandle = DeadlineTimeoutHandle()
+            // ADR-005: the trace context scope must open INSIDE the detached
+            // task — Task.detached severs TaskLocal inheritance, so a scope
+            // opened in the caller would be invisible to the dispatcher and
+            // every seam below it.
+            let traceContext = OperationTraceContext(
+                mutationGateAcquired: heldClaim != nil
+            )
             let workTask = Task.detached(priority: .userInitiated) {
-                let result = await work()
+                let result = await OperationTraceContext.$current.withValue(traceContext) {
+                    await work()
+                }
                 if let heldClaim { heldMutationGate?.release(heldClaim) }
                 let didWin = race.resume(continuation, returning: result)
                 if didWin {

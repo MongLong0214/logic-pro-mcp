@@ -164,13 +164,142 @@ struct OperationTraceTests {
         #expect(result.isError == false)
         #expect(trace.operationID == OperationID.transportPlay.rawValue)
         #expect(trace.events.map(\.phase) == [
-            .requestReceived, .writeBoundaryCrossed, .verificationCompleted, .resultEmitted,
+            .requestReceived, .inputValidated, .writeBoundaryCrossed, .verificationCompleted,
+            .resultEmitted,
         ])
-        #expect(trace.events[2].attributes["readback_state"] == "A")
+        #expect(trace.events[3].attributes["readback_state"] == "A")
         #expect(trace.completedAt != nil)
         #expect(await channel.executedOperations == [
             "transport.get_state", "transport.play", "transport.get_state",
         ])
+    }
+
+    /// ADR-005 phase wiring: under the server's trace-context scope (as
+    /// runWithDeadline opens it inside the deadline task), a verified mutation
+    /// records the full phase sequence — input validation, the try-acquire
+    /// gate pair, route evaluation, and the channel bracket — exactly once
+    /// each and all attributes stay within the privacy allowlist.
+    @Test func OperationTraceServerScopedFullSequence() async throws {
+        let previous = replaceOperationTraceFlag(with: "1")
+        defer { _ = replaceOperationTraceFlag(with: previous) }
+        await OperationTraceStore.shared.clear()
+
+        let channel = OperationTraceTransportChannel(states: [
+            #"{"isPlaying":false,"isRecording":false,"position":"1.1.1.1","tempo":120}"#,
+            #"{"isPlaying":true,"isRecording":false,"position":"1.1.1.1","tempo":120}"#,
+        ])
+        let router = ChannelRouter()
+        await router.register(channel)
+
+        let context = OperationTraceContext(mutationGateAcquired: true)
+        let result = await OperationTraceContext.$current.withValue(context) {
+            await TransportDispatcher.handle(
+                command: "play",
+                params: [:],
+                router: router,
+                cache: StateCache(),
+                sleep: { _ in }
+            )
+        }
+
+        let resultObject = try #require(sharedJSONObject(sharedToolText(result)))
+        let rawID = try #require(resultObject["trace_id"] as? String)
+        let trace = try #require(await OperationTraceStore.shared.trace(TraceID(rawValue: rawID)))
+        #expect(context.traceID?.rawValue == rawID)
+        // transport.play performs three routed calls — the pre-state probe,
+        // the mutation itself (write boundary recorded just before it), and
+        // the verification readback — and every one is visible on the trace.
+        #expect(trace.events.map(\.phase) == [
+            .requestReceived, .inputValidated,
+            .mutationGateWaitStarted, .mutationGateAcquired,
+            .routeEvaluated, .channelStarted, .channelCompleted,
+            .writeBoundaryCrossed,
+            .routeEvaluated, .channelStarted, .channelCompleted,
+            .routeEvaluated, .channelStarted, .channelCompleted,
+            .verificationCompleted, .resultEmitted,
+        ])
+        let route = try #require(trace.events.first { $0.phase == .routeEvaluated })
+        #expect(route.attributes["chain"]?.contains("accessibility") == true)
+        let completed = try #require(trace.events.first { $0.phase == .channelCompleted })
+        #expect(completed.attributes["outcome"] == "success")
+        #expect(trace.events.allSatisfy { event in
+            Set(event.attributes.keys).isSubset(of: Set(
+                OperationTraceStore.attributePrivacyClasses.keys
+            ))
+        })
+    }
+
+    /// Saga-child correlation: a context carrying a parent trace ID stamps
+    /// `parent_trace_id` onto the child's request event.
+    @Test func OperationTraceChildCarriesParentTraceID() async throws {
+        let previous = replaceOperationTraceFlag(with: "1")
+        defer { _ = replaceOperationTraceFlag(with: previous) }
+        await OperationTraceStore.shared.clear()
+
+        let parentID = await OperationTraceStore.shared.start(
+            operationID: OperationID.systemSagaExecute.rawValue
+        )
+        let channel = OperationTraceTransportChannel(states: [
+            #"{"isPlaying":false,"isRecording":false,"position":"1.1.1.1","tempo":120}"#,
+            #"{"isPlaying":true,"isRecording":false,"position":"1.1.1.1","tempo":120}"#,
+        ])
+        let router = ChannelRouter()
+        await router.register(channel)
+
+        let childContext = OperationTraceContext(parentTraceID: parentID)
+        let result = await OperationTraceContext.$current.withValue(childContext) {
+            await TransportDispatcher.handle(
+                command: "play",
+                params: [:],
+                router: router,
+                cache: StateCache(),
+                sleep: { _ in }
+            )
+        }
+
+        let resultObject = try #require(sharedJSONObject(sharedToolText(result)))
+        let rawID = try #require(resultObject["trace_id"] as? String)
+        let trace = try #require(await OperationTraceStore.shared.trace(TraceID(rawValue: rawID)))
+        #expect(rawID != parentID.rawValue)
+        let request = try #require(trace.events.first { $0.phase == .requestReceived })
+        #expect(request.attributes["parent_trace_id"] == parentID.rawValue)
+    }
+
+    /// TaskLocal isolation: two concurrent scoped dispatches register into
+    /// their own contexts — no cross-contamination of trace IDs.
+    @Test func OperationTraceConcurrentContextsStayIsolated() async throws {
+        let previous = replaceOperationTraceFlag(with: "1")
+        defer { _ = replaceOperationTraceFlag(with: previous) }
+        await OperationTraceStore.shared.clear()
+
+        @Sendable func dispatchOnce() async throws -> (context: OperationTraceContext, traceID: String) {
+            let channel = OperationTraceTransportChannel(states: [
+                #"{"isPlaying":false,"isRecording":false,"position":"1.1.1.1","tempo":120}"#,
+                #"{"isPlaying":true,"isRecording":false,"position":"1.1.1.1","tempo":120}"#,
+            ])
+            let router = ChannelRouter()
+            await router.register(channel)
+            let context = OperationTraceContext(mutationGateAcquired: true)
+            let result = await OperationTraceContext.$current.withValue(context) {
+                await TransportDispatcher.handle(
+                    command: "play",
+                    params: [:],
+                    router: router,
+                    cache: StateCache(),
+                    sleep: { _ in }
+                )
+            }
+            let object = try #require(sharedJSONObject(sharedToolText(result)))
+            let rawID = try #require(object["trace_id"] as? String)
+            return (context, rawID)
+        }
+
+        async let first = dispatchOnce()
+        async let second = dispatchOnce()
+        let (a, b) = try await (first, second)
+        #expect(a.traceID != b.traceID)
+        #expect(a.context.traceID?.rawValue == a.traceID)
+        #expect(b.context.traceID?.rawValue == b.traceID)
     }
 
     @Test func OperationTraceTransportNoWrite() async throws {
@@ -197,9 +326,9 @@ struct OperationTraceTests {
         let trace = try #require(await OperationTraceStore.shared.trace(TraceID(rawValue: rawID)))
         #expect(!trace.events.map(\.phase).contains(.writeBoundaryCrossed))
         #expect(trace.events.map(\.phase) == [
-            .requestReceived, .verificationCompleted, .resultEmitted,
+            .requestReceived, .inputValidated, .verificationCompleted, .resultEmitted,
         ])
-        #expect(trace.events[1].attributes["readback_state"] == "A")
+        #expect(trace.events[2].attributes["readback_state"] == "A")
         #expect(await channel.executedOperations == ["transport.get_state"])
     }
 
@@ -447,9 +576,10 @@ extension OperationTraceTests {
         #expect(result.isError == false)
         #expect(trace.operationID == operationID.rawValue)
         #expect(trace.events.map(\.phase) == [
-            .requestReceived, .writeBoundaryCrossed, .verificationCompleted, .resultEmitted,
+            .requestReceived, .inputValidated, .writeBoundaryCrossed, .verificationCompleted,
+            .resultEmitted,
         ])
-        #expect(trace.events[2].attributes["readback_state"] == "A")
+        #expect(trace.events[3].attributes["readback_state"] == "A")
         #expect(trace.completedAt != nil)
         #expect(await channel.executedOperations == [operationID.rawValue])
 
@@ -567,9 +697,10 @@ extension OperationTraceTests {
         #expect(result.isError == false)
         #expect(trace.operationID == operationID.rawValue)
         #expect(trace.events.map(\.phase) == [
-            .requestReceived, .writeBoundaryCrossed, .verificationCompleted, .resultEmitted,
+            .requestReceived, .inputValidated, .writeBoundaryCrossed, .verificationCompleted,
+            .resultEmitted,
         ])
-        #expect(trace.events[2].attributes["readback_state"] == "A")
+        #expect(trace.events[3].attributes["readback_state"] == "A")
         #expect(trace.completedAt != nil)
         #expect(await channel.executedOperations == [operation])
 

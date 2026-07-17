@@ -222,10 +222,34 @@ extension OperationTraceDispatching {
             return nil
         }
         let id = await OperationTraceStore.shared.start(operationID: spec.id.rawValue)
-        await OperationTraceStore.shared.record(id, phase: .requestReceived, attributes: [
+        var requestAttributes = [
             "operation_id": spec.id.rawValue,
             "command": command,
-        ])
+        ]
+        let context = OperationTraceContext.current
+        if let parent = context?.parentTraceID {
+            requestAttributes["parent_trace_id"] = parent.rawValue
+        }
+        await OperationTraceStore.shared.record(
+            id, phase: .requestReceived, attributes: requestAttributes
+        )
+        // Reaching dispatch means server-side strict parameter validation
+        // already accepted the call (rejections never start a trace).
+        await OperationTraceStore.shared.record(id, phase: .inputValidated)
+        // The server's mutation gate is try-acquire: there is no queueing
+        // wait, so both gate phases record at registration with honest
+        // zero-wait semantics.
+        if context?.mutationGateAcquired == true {
+            await OperationTraceStore.shared.record(
+                id, phase: .mutationGateWaitStarted,
+                attributes: ["gate_mode": "try_acquire"]
+            )
+            await OperationTraceStore.shared.record(
+                id, phase: .mutationGateAcquired,
+                attributes: ["gate_mode": "try_acquire"]
+            )
+        }
+        context?.register(id)
         return id
     }
 

@@ -228,7 +228,8 @@ struct SupportBundleTests {
         let traceID = try #require(successObject["trace_id"] as? String)
         let trace = try #require(await OperationTraceStore.shared.trace(.init(rawValue: traceID)))
         #expect(trace.events.map(\.phase) == [
-            .requestReceived, .writeBoundaryCrossed, .verificationCompleted, .resultEmitted,
+            .requestReceived, .inputValidated, .writeBoundaryCrossed,
+            .verificationCompleted, .resultEmitted,
         ])
 
         let failure = await SystemDispatcher.handle(
