@@ -311,10 +311,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             return await finalizeTrace(result, traceID: traceID)
 
         default:
-            return toolInvalidParamsResult(
-                "Unknown mixer command: \(command). Available: set_volume, set_pan, set_master_volume, set_plugin_param, insert_plugin",
-                extras: ["operation": "mixer.\(command)"]
-            )
+            return Self.unhandledCommandResult(command, label: "mixer")
         }
     }
 

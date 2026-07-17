@@ -336,10 +336,7 @@ struct MIDIDispatcher: OperationTraceDispatching {
             return await finalizeTrace(result, traceID: traceID)
 
         default:
-            return toolTextResult(
-                "Unknown MIDI command: \(command). Available: send_note, send_chord, send_cc, send_program_change, send_pitch_bend, send_aftertouch, send_sysex, play_sequence, import_file, list_ports, create_virtual_port, step_input, mmc_play, mmc_stop, mmc_record, mmc_locate",
-                isError: true
-            )
+            return Self.unhandledCommandResult(command, label: "MIDI")
         }
     }
 

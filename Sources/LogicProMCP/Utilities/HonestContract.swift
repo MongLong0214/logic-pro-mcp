@@ -178,6 +178,12 @@ enum HonestContract {
         /// can tell a typo'd category apart from a missing required argument,
         /// and so an unknown category never silently returns full help. #219.
         case unknownCategory = "unknown_category"
+        /// A REGISTERED command reached a dispatcher without a matching
+        /// switch case — registry↔dispatch drift. Unregistered commands are
+        /// rejected at the server layer and never produce this; the
+        /// executable dispatch census asserts it never fires for any
+        /// registered operation.
+        case unhandledRegisteredCommand = "unhandled_registered_command"
         case supportBundleExportFailed = "support_bundle_export_failed"
         case sagaInProgress = "saga_in_progress"
         case idempotencyKeyConflict = "idempotency_key_conflict"

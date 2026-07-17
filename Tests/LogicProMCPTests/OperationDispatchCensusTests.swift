@@ -71,15 +71,52 @@ struct OperationDispatchCensusTests {
                 Comment(rawValue: "\(spec.id.rawValue) has no bound handler")
             )
             let result = await handler(dependencies, [:])
-            guard case .text(let text, _, _) = result.content.first else {
+            // Fail closed on content shape: a dispatch outcome must be
+            // inspectable text — an empty or non-text response would
+            // otherwise be a silent census pass.
+            let first = try #require(
+                result.content.first,
+                Comment(rawValue: "\(spec.id.rawValue) returned empty content")
+            )
+            guard case .text(let text, _, _) = first else {
+                #expect(
+                    Bool(false),
+                    Comment(rawValue: "\(spec.id.rawValue) returned non-text first content")
+                )
                 continue
             }
-            let fellThrough = text.contains("Unknown ") && text.contains(" command: ")
+            // Typed contract, not prose matching: a registered command that
+            // reaches a dispatcher without a matching switch case produces
+            // the shared unhandled_registered_command State-C envelope.
+            let body = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
+            let fellThrough = body?["error"] as? String
+                == HonestContract.FailureError.unhandledRegisteredCommand.rawValue
             #expect(
                 !fellThrough,
-                Comment(rawValue: "\(spec.id.rawValue) fell through to the unknown-command envelope: \(text.prefix(120))")
+                Comment(rawValue: "\(spec.id.rawValue) fell through to the unhandled-command envelope: \(text.prefix(120))")
             )
         }
+    }
+
+    /// The typed fallthrough envelope itself is discriminating: an
+    /// out-of-registry command through a dispatcher default arm produces
+    /// exactly the unhandled_registered_command code the census scans for.
+    @Test func fallthroughEnvelopeCarriesTypedCode() throws {
+        let result = TransportDispatcher.unhandledCommandResult(
+            "no_such_command", label: "transport"
+        )
+        guard case .text(let text, _, _) = result.content.first else {
+            #expect(Bool(false), "fallthrough must be text")
+            return
+        }
+        let body = try #require(
+            (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
+        )
+        #expect(body["error"] as? String == "unhandled_registered_command")
+        #expect(result.isError == true)
+        let hint = try #require(body["hint"] as? String)
+        #expect(hint.contains("Unknown transport command: no_such_command"))
+        #expect(hint.contains("play"))
     }
 
     /// The derived handled-command sets are definitionally registry-equal —

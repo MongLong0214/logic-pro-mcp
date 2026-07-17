@@ -198,10 +198,7 @@ struct PluginsDispatcher: OperationTraceDispatching {
             )
 
         default:
-            return toolTextResult(
-                "Unknown plugins command: \(command). Available: get_inventory, set_param_verified, insert_verified",
-                isError: true
-            )
+            return Self.unhandledCommandResult(command, label: "plugins")
         }
     }
 

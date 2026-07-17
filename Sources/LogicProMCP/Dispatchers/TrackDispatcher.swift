@@ -780,10 +780,7 @@ struct TrackDispatcher: OperationTraceDispatching {
             return toolTextResult(result)
 
         default:
-            return toolInvalidParamsResult(
-                "Unknown track command: \(command). Available: select, create_audio, create_instrument, create_drummer, create_external_midi, delete, duplicate, rename, mute, solo, arm, arm_only, record_sequence, set_automation, set_instrument, list_library, scan_library, resolve_path, scan_plugin_presets",
-                extras: ["operation": "track.\(command)"]
-            )
+            return Self.unhandledCommandResult(command, label: "track")
         }
     }
 

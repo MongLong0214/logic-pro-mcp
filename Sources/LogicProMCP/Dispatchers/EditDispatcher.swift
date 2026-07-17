@@ -97,10 +97,7 @@ struct EditDispatcher: OperationTraceDispatching {
             )
 
         default:
-            return toolTextResult(
-                "Unknown edit command: \(command). Available: undo, redo, cut, copy, paste, delete, select_all, split, join, quantize, bounce_in_place, normalize, duplicate, toggle_step_input",
-                isError: true
-            )
+            return Self.unhandledCommandResult(command, label: "edit")
         }
     }
 

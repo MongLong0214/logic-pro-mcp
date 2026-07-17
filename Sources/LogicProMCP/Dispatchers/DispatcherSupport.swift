@@ -215,6 +215,30 @@ protocol OperationTraceDispatching {
 }
 
 extension OperationTraceDispatching {
+    /// Typed fallthrough for a REGISTERED command that reached this
+    /// dispatcher without a matching switch case. Unregistered commands never
+    /// get here (the server rejects them before dispatch), so this envelope
+    /// firing means registry↔dispatch drift; the executable dispatch census
+    /// asserts it never fires for any registered operation. The hint keeps
+    /// the human-readable phrasing (and the registry-derived command list);
+    /// the error code is the machine contract.
+    static func unhandledCommandResult(_ command: String, label: String) -> CallTool.Result {
+        let available = OperationRegistry.specs
+            .filter { $0.tool.rawValue == tool.name }
+            .map(\.command)
+            .joined(separator: ", ")
+        return toolTextResult(
+            HonestContract.encodeStateC(
+                error: .unhandledRegisteredCommand,
+                hint: "Unknown \(label) command: \(command). Available: \(available)",
+                extras: ["tool": tool.name, "command": command]
+            ),
+            isError: true
+        )
+    }
+}
+
+extension OperationTraceDispatching {
     static func startTraceIfEnabled(command: String) async -> TraceID? {
         guard FeatureFlags.adr005OperationTrace,
               let spec = OperationRegistry.spec(tool: tool.name, command: command),

@@ -837,16 +837,7 @@ struct SystemDispatcher: OperationTraceDispatching {
     }
 
     private static func unknownCommandResult(_ command: String) -> CallTool.Result {
-        // ADR-003: the available-command list is registry-derived (registry
-        // order), so a new logic_system operation can never be missing here.
-        let available = OperationRegistry.specs
-            .filter { $0.tool == .logicSystem }
-            .map(\.command)
-            .joined(separator: ", ")
-        return toolTextResult(
-            "Unknown system command: \(command). Available: \(available)",
-            isError: true
-        )
+        unhandledCommandResult(command, label: "system")
     }
 
     private static func handleTraceCommand(

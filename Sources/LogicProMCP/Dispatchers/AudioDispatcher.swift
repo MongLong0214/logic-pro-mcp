@@ -1,7 +1,7 @@
 import Foundation
 import MCP
 
-struct AudioDispatcher {
+struct AudioDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
     static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicAudio)
 
@@ -37,10 +37,7 @@ struct AudioDispatcher {
             )
 
         default:
-            return toolTextResult(
-                "Unknown audio command: \(command). Available: analyze_file",
-                isError: true
-            )
+            return Self.unhandledCommandResult(command, label: "audio")
         }
     }
 
