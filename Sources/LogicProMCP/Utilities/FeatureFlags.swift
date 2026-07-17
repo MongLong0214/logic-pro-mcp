@@ -8,11 +8,15 @@ enum FeatureFlags: Sendable {
     @TaskLocal static var adr005OperationTraceOverride: Bool?
     #endif
 
+    /// PRD-007 Part 2 (ADR-002 #285): promoted from opt-in to DEFAULT ON, so the
+    /// variable is now a kill-switch — read with `!= "0"` because an absent
+    /// variable must mean ON. Only the exact string "0" rolls back; deployments
+    /// already passing the pre-promotion "1" see no change.
     static var adr002TargetRef: Bool {
         #if DEBUG
         if let adr002TargetRefOverride { return adr002TargetRefOverride }
         #endif
-        return ProcessInfo.processInfo.environment["LOGIC_MCP_ADR002_TARGET_REF"] == "1"
+        return ProcessInfo.processInfo.environment["LOGIC_MCP_ADR002_TARGET_REF"] != "0"
     }
 
     #if DEBUG

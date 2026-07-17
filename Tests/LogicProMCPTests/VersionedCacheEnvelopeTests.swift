@@ -61,6 +61,17 @@ struct VersionedCacheEnvelopeTests {
         }
     }
 
+    /// Pins that ADR-006 OFF contributes no envelope fields, against the
+    /// SHIPPED default of every other flag (this deliberately does not pin
+    /// `adr002TargetRef`, so the baseline tracks what users actually receive).
+    ///
+    /// PRD-007 Part 2 — DELIBERATE PIN DIFF, `"data":[\n\n]` -> `"data":[]`.
+    /// The expectation moved because `adr002TargetRef` is now default ON, which
+    /// routes `logic://tracks` through the ref-capable `JSONSerialization`
+    /// builder instead of the legacy string-concatenation path. The two spell an
+    /// empty array differently. The change is whitespace-only and semantically
+    /// identical (`[]` and `[\n\n]` both parse to an empty array), but it IS a
+    /// byte-level wire change for every caller — noted rather than hidden.
     @Test func flagOffStateResourceEnvelopeIsByteIdentical() async throws {
         try await withVersionedCacheFlag(false) {
             let result = try await ResourceHandlers.read(
@@ -71,7 +82,7 @@ struct VersionedCacheEnvelopeTests {
                 fileReader: headlessFileReader
             )
 
-            #expect(sharedResourceText(result) == "{\"cache_age_sec\":null,\"fetched_at\":null,\"ax_occluded\":false,\"source\":\"default\",\"data\":[\n\n]}")
+            #expect(sharedResourceText(result) == "{\"cache_age_sec\":null,\"fetched_at\":null,\"ax_occluded\":false,\"source\":\"default\",\"data\":[]}")
         }
     }
 
@@ -164,11 +175,16 @@ struct VersionedCacheEnvelopeTests {
     /// at 0 because the epoch bump was gated on the adr002 flag alone, making
     /// the envelope's cross-project discriminator a constant. The pre-fix
     /// suite could not catch this because it bumped the registry directly.
+    ///
+    /// PRD-007 Part 2: target refs are now DEFAULT ON, so "off" must be pinned
+    /// with the explicit `=0` kill-switch. This test previously spelled it as
+    /// `unsetenv` — which after the promotion means ON, silently inverting the
+    /// very coupling under test while still passing.
     @Test func lifecycleInvalidationAdvancesEpochWithoutTargetRefFlag() async throws {
         try await withVersionedCacheFlag(true) {
             let adr002Key = "LOGIC_MCP_ADR002_TARGET_REF"
             let previous = ProcessInfo.processInfo.environment[adr002Key]
-            unsetenv(adr002Key)
+            setenv(adr002Key, "0", 1)
             defer {
                 if let previous {
                     setenv(adr002Key, previous, 1)

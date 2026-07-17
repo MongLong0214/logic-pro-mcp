@@ -442,10 +442,12 @@ enum OperationRegistry {
     /// unit-tested via a synthetic spec, but assigned to no production op — the
     /// promotion is a registry row flip in a later batch, so this set going
     /// non-empty IS the promotion receipt in the census diff.
-    /// Planned first promotion: `tracks.delete` (already `.corroborated`), once
-    /// `FeatureFlags.adr002TargetRef` defaults ON and `target_ref` is reachable
-    /// by every caller — until then `.refRequired` would strand the index path
-    /// with no usable alternative.
+    /// Planned first promotion: `tracks.delete` (already `.corroborated`).
+    /// PRD-007 Part 2 flipped `FeatureFlags.adr002TargetRef` to default ON, so
+    /// the reachability precondition is now met — but the promotion is still a
+    /// DELIBERATE separate row flip, not an automatic consequence: it must be
+    /// taken with its own catalog diff and census receipt, and it strands any
+    /// caller running the `=0` kill-switch. Left pinned empty here on purpose.
     static let refRequiredOperationIDs: Set<OperationID> = []
 
     /// The corroboration parameter. NOT `name`: several target-bearing ops

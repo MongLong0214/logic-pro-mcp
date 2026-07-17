@@ -1187,6 +1187,15 @@ private final class QualificationSubprocessSession: @unchecked Sendable {
         }
         try verifyExecutableIdentity()
         var environment = request.environment
+        // PRD-007 Part 2 DIVERGENCE, deliberate and open: `adr002TargetRef` is
+        // now DEFAULT ON in production, so this `=0` no longer pins the shipped
+        // default — it pins the kill-switch path. It is left off because target
+        // refs are minted as `trk_<random UUID>` (see `TargetReference`), which
+        // would make qualification transcripts non-reproducible run-to-run.
+        // The cost is real and NOT waived: qualification currently attests to a
+        // configuration no default deployment runs. Closing it needs a
+        // ref-redaction/normalization pass over the transcript before this can
+        // honestly flip to "1". Tracked as PRD-007 follow-up, not fixed here.
         environment["LOGIC_MCP_ADR002_TARGET_REF"] = "0"
         environment["LOGIC_MCP_ADR003_STRICT_PARAMS"] = "1"
         environment["LOGIC_MCP_ADR005_OPERATION_TRACE"] = "1"

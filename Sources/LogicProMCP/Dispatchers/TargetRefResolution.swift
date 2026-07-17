@@ -374,7 +374,7 @@ enum TargetRefResolver {
     ) -> CallTool.Result {
         toolStateCResult(
             .targetRefUnavailable,
-            hint: "stable target reference requires LOGIC_MCP_ADR002_TARGET_REF=1 and an active target resolver",
+            hint: "stable target reference requires an active target resolver and LOGIC_MCP_ADR002_TARGET_REF unset or != \"0\" (on by default)",
             extras: [
                 "operation": operation,
                 "target_ref": rawReference ?? "",
@@ -389,7 +389,7 @@ enum TargetRefResolver {
     ) -> CallTool.Result {
         toolStateCResult(
             .targetRefUnavailable,
-            hint: "project_ref requires LOGIC_MCP_ADR002_TARGET_REF=1 and an active project identity",
+            hint: "project_ref requires an active project identity and LOGIC_MCP_ADR002_TARGET_REF unset or != \"0\" (on by default)",
             extras: [
                 "operation": operation,
                 "project_ref": rawReference ?? "",
