@@ -103,7 +103,7 @@ No merge or successor work is allowed until the committed exact-head gate is com
 - An independent receipt audit found the R-MATRIX and R-PUB repository contracts closing on **workflow text**, not reality: an `echo "required-matrix-axes:4"` marker satisfied R-MATRIX while no managed fixture exists, and listing release assets satisfied R-PUB while GitHub release assets remain owner-replaceable (no immutable/transparency-bound publication). Same self-attestation class this remediation purged elsewhere.
 - Fixed: R-MATRIX now additionally requires managed fixtures to exist as **content** (a fixture manifest whose entries carry relative paths + 64-hex SHA-256 and whose files exist — `Fixtures/qualification/fixture-manifest.json`); R-PUB now opens whenever no immutability mechanism exists, regardless of the asset list (the list only refines the finding detail).
 - The aggregate contract bar now pins **three** open debts exactly: `R-MATRIX`, `R-PUB`, `R-SEM`. Any other debt opening fails CI; closing any of the three forces the honest assertion flip.
-- Closure paths: R-MATRIX — author + SHA-bind the managed empty/medium/large fixtures (also feeds the attestation fixture-SHA field); R-PUB — establish a non-replaceable/transparency-bound evidence publication; R-SEM — #373 coverage program.
+- Closure paths: R-MATRIX — author + SHA-bind the managed empty/medium/large fixtures (wiring these SHAs into an attestation fixture-SHA field is deferred until that field exists); R-PUB — establish a non-replaceable/transparency-bound evidence publication; R-SEM — #373 coverage program.
 
 ---
 
@@ -112,3 +112,12 @@ No merge or successor work is allowed until the committed exact-head gate is com
 - Owner product decision: Logic Pro Creator Studio (`com.apple.mobilelogic`) is permanently out of scope — never installed, never supported. Desktop Logic Pro is the only ship surface.
 - Modeling (grok-reviewed, Option A): the required same-artifact matrix is derived from an explicit `QualificationAxis.shipVariants = [.desktop]` allowlist → `desktop × {en-US, ko-KR}` = 2 required axes. Creator is NOT expressed as a perpetual waiver (waivers are for temporary inability on ship claims, never product scope). The `LogicVariant.creatorStudio` case remains as world-model/health-reporting truth; a contract test pins the exact 2-axis set so a variant re-entering or a locale dropping fails CI. Release workflow marker updated to `required-matrix-axes:2`.
 - Consequence: the ADR-001 live matrix is now 2 axes (desktop en/ko), both live-bound. PRD-020 (non-EN plugin-editor blocking) is the current blocker for the ko axis.
+
+---
+
+## 39. R-MATRIX repository-content half closed — managed fixtures SHA-bound (2026-07-18)
+
+- Scope closed (honest, exact): the **repository-content half** of R-MATRIX. Managed desktop x {en-US, ko-KR} fixture descriptors now exist under `Fixtures/qualification/` (empty/medium/large sizes), and `fixture-manifest.json` SHA-256-binds each one. The closer `ProductionReadinessContractEvaluator.managedFixturesPresent` was hardened to recompute every fixture's SHA-256 and require digest equality **and** to require that every ship-required axis key (`QualificationAxis.requiredCombinations` = desktop x {en-US, ko-KR}, empty) is covered by a fixture whose SHA-bound descriptor declares that key. Any byte drift, missing file, malformed digest, unsafe path, or missing required axis fails closed, keeping R-MATRIX OPEN — the contract itself, not a side test, now guarantees identity + coverage.
+- NOT claimed: a live/consumed matrix load. These files are canonical, reproducible fixture **descriptors** (a consumer that drives them through a live Logic Pro session does not exist yet). Driving them end-to-end belongs to the ADR-001 live-matrix program, not to this repository-content debt; nothing here implies it is done.
+- Aggregate contract bar now pins **two** open debts exactly: `R-PUB`, `R-SEM`. `productionReadinessContractsAreSatisfiedOnCurrentTree` flips accordingly; closing either remaining debt forces the next honest flip.
+- Base SHA pin unchanged: cc5922e5c5c2786c401713fd80b1bd40d1e15f14.

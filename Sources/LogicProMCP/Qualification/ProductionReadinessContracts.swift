@@ -662,27 +662,50 @@ enum ProductionReadinessContractEvaluator {
 
     static let fixtureManifestRelativePath = "Fixtures/qualification/fixture-manifest.json"
 
-    /// Content check, not a label check: managed fixtures exist only when the
-    /// manifest decodes to a non-empty list whose entries each carry a relative
-    /// path and a 64-hex SHA-256, and every referenced fixture file exists.
+    /// Identity + coverage check performed by the R-MATRIX closer itself, not a
+    /// side test. Managed fixtures are present only when the manifest decodes to
+    /// a non-empty list of safe relative-path entries AND, for every entry, the
+    /// referenced file's recomputed SHA-256 equals the manifest digest — so the
+    /// fixture identity is bound to the actual bytes, never a label — AND every
+    /// ship-required axis key (`QualificationAxis.requiredCombinations`) is
+    /// covered by a fixture whose own SHA-bound descriptor declares that key.
+    /// Any byte drift, missing file, malformed digest, unsafe path, or missing
+    /// required axis fails closed here, keeping R-MATRIX OPEN.
     static func managedFixturesPresent(atRepositoryRoot root: URL) -> Bool {
         struct FixtureManifestEntry: Decodable {
             let path: String
             let sha256: String
+        }
+        struct FixtureDescriptor: Decodable {
+            let key: String
         }
         let manifestURL = root.appendingPathComponent(fixtureManifestRelativePath)
         guard let data = try? Data(contentsOf: manifestURL),
               let entries = try? JSONDecoder().decode([FixtureManifestEntry].self, from: data),
               !entries.isEmpty else { return false }
         let hexDigits = CharacterSet(charactersIn: "0123456789abcdef")
-        return entries.allSatisfy { entry in
-            entry.sha256.count == 64
-                && entry.sha256.unicodeScalars.allSatisfy { hexDigits.contains($0) }
-                && !entry.path.isEmpty
-                && !entry.path.hasPrefix("/")
-                && FileManager.default.fileExists(
-                    atPath: root.appendingPathComponent(entry.path).path
-                )
+        var coveredKeys: Set<String> = []
+        for entry in entries {
+            guard entry.sha256.count == 64,
+                  entry.sha256.unicodeScalars.allSatisfy({ hexDigits.contains($0) }),
+                  !entry.path.isEmpty,
+                  !entry.path.hasPrefix("/"),
+                  !entry.path.split(separator: "/", omittingEmptySubsequences: false)
+                      .contains("..") else {
+                return false
+            }
+            let fileURL = root.appendingPathComponent(entry.path)
+            guard let fileData = try? Data(contentsOf: fileURL),
+                  SupportBundleBuilder.sha256(fileData) == entry.sha256,
+                  let descriptor = try? JSONDecoder().decode(
+                      FixtureDescriptor.self,
+                      from: fileData
+                  ) else {
+                return false
+            }
+            coveredKeys.insert(descriptor.key)
         }
+        return Set(QualificationAxis.requiredCombinations.map(\.key))
+            .isSubset(of: coveredKeys)
     }
 }

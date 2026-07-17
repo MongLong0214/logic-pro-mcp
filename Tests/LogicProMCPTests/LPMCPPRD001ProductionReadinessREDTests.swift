@@ -776,15 +776,16 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         }
     }
 
-    /// Aggregate production-readiness bar. Three debts are OPEN and honestly
-    /// tracked until reality changes — R-MATRIX (managed reproducible fixtures
-    /// do not exist; a workflow text marker used to self-attest this closed),
-    /// R-PUB (release assets are owner-replaceable; no immutable/transparency
-    /// publication exists — the asset list used to self-attest this closed),
-    /// and R-SEM (semantic coverage is 1/107 until the coverage program lands).
-    /// Every other contract must stay closed. This assertion fails if any
-    /// other debt opens (regression) and when any of the three closes
-    /// (forcing the honest flip).
+    /// Aggregate production-readiness bar. Two debts remain OPEN and honestly
+    /// tracked until reality changes — R-PUB (release assets are owner-replaceable;
+    /// no immutable/transparency publication exists — the asset list used to
+    /// self-attest this closed) and R-SEM (semantic coverage is 1/107 until the
+    /// coverage program lands). R-MATRIX is CLOSED: the managed desktop x {en-US,
+    /// ko-KR} fixtures now exist as SHA-bound content under `Fixtures/qualification`
+    /// (see `managedFixtureManifestSHAsBindActualContent` and
+    /// `managedFixtureMatrixCoversRequiredShipAxes`). Every other contract must
+    /// stay closed. This assertion fails if any other debt opens (regression) and
+    /// when either remaining debt closes (forcing the honest flip).
     @Test func productionReadinessContractsAreSatisfiedOnCurrentTree() throws {
         let report = try ProductionReadinessContractEvaluator.evaluateRepositoryRoot(
             repositoryRoot,
@@ -792,12 +793,161 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         )
         #expect(
             report.openDebts == [
-                .managedFixtureMatrixUnbound,
                 .publishedImmutableEvidenceMissing,
                 .semanticCoverageIncomplete,
             ],
             "LPMCP-PRD-001 open debts: \(report.openDebts.map(\.rawValue).joined(separator: ",")) — \(report.findings.map(\.detail).joined(separator: " | "))"
         )
+    }
+
+    // MARK: - R-MATRIX managed fixtures (closed on the current tree)
+
+    /// The managed-fixture manifest is recognized by the contract, so R-MATRIX
+    /// is closed on the current tree. Removing the manifest or fixtures reopens it.
+    @Test func managedFixturesAreBoundAndRMatrixIsClosedOnCurrentTree() throws {
+        #expect(ProductionReadinessContractEvaluator.managedFixturesPresent(
+            atRepositoryRoot: repositoryRoot
+        ))
+        let report = try ProductionReadinessContractEvaluator.evaluateRepositoryRoot(
+            repositoryRoot,
+            expectedAuthorityBaseSHA: expectedBaseSHA
+        )
+        #expect(!report.openDebts.contains(.managedFixtureMatrixUnbound))
+    }
+
+    /// Every manifest SHA-256 binds the actual fixture bytes on disk. Tampering
+    /// with any fixture body or manifest digit changes a recomputed digest and
+    /// fails this — the fixture identity is verified, not a label.
+    @Test func managedFixtureManifestSHAsBindActualContent() throws {
+        struct Entry: Decodable {
+            let path: String
+            let sha256: String
+        }
+        let manifestURL = repositoryRoot.appendingPathComponent(
+            ProductionReadinessContractEvaluator.fixtureManifestRelativePath
+        )
+        let entries = try JSONDecoder().decode(
+            [Entry].self,
+            from: Data(contentsOf: manifestURL)
+        )
+        #expect(!entries.isEmpty)
+        for entry in entries {
+            let fileURL = repositoryRoot.appendingPathComponent(entry.path)
+            let recomputed = SupportBundleBuilder.sha256(try Data(contentsOf: fileURL))
+            #expect(recomputed == entry.sha256, "SHA-256 drift for \(entry.path)")
+        }
+    }
+
+    /// The managed fixtures cover the required desktop x {en-US, ko-KR} ship
+    /// matrix (the `.empty` axes) plus the empty/medium/large sizes, and every
+    /// descriptor's embedded axis matches its manifest entry.
+    @Test func managedFixtureMatrixCoversRequiredShipAxes() throws {
+        struct Entry: Decodable {
+            let path: String
+            let axis: String
+        }
+        struct Descriptor: Decodable {
+            struct Axis: Decodable {
+                let variant: String
+                let locale: String
+                let profile: String
+                let cache: String
+                let fixture: String
+            }
+            let key: String
+            let axis: Axis
+        }
+        let manifestURL = repositoryRoot.appendingPathComponent(
+            ProductionReadinessContractEvaluator.fixtureManifestRelativePath
+        )
+        let entries = try JSONDecoder().decode(
+            [Entry].self,
+            from: Data(contentsOf: manifestURL)
+        )
+        var presentKeys: Set<String> = []
+        for entry in entries {
+            let data = try Data(
+                contentsOf: repositoryRoot.appendingPathComponent(entry.path)
+            )
+            let descriptor = try JSONDecoder().decode(Descriptor.self, from: data)
+            let composedKey = [
+                descriptor.axis.variant,
+                descriptor.axis.locale,
+                descriptor.axis.profile,
+                descriptor.axis.cache,
+                descriptor.axis.fixture,
+            ].joined(separator: "/")
+            #expect(descriptor.key == composedKey)
+            #expect(descriptor.key == entry.axis)
+            presentKeys.insert(descriptor.key)
+        }
+        let requiredKeys = Set(QualificationAxis.requiredCombinations.map(\.key))
+        #expect(requiredKeys.isSubset(of: presentKeys))
+        #expect(presentKeys == Set([
+            "desktop/en-US/core/cold/empty",
+            "desktop/en-US/core/cold/medium",
+            "desktop/en-US/core/cold/large",
+            "desktop/ko-KR/core/cold/empty",
+            "desktop/ko-KR/core/cold/medium",
+            "desktop/ko-KR/core/cold/large",
+        ]))
+    }
+
+    /// A byte drift in a managed fixture (manifest digest unchanged) fails the
+    /// R-MATRIX closer and reopens the debt through the contract's `openDebts` —
+    /// the contract itself, not a side test, catches the identity drift.
+    @Test func fixtureByteDriftReopensRMatrixViaContract() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(
+            "lpmcp-fixture-drift-\(UInt64.random(in: 0..<UInt64.max))"
+        )
+        let fixturesDir = root.appendingPathComponent("Fixtures/qualification")
+        try fm.createDirectory(at: fixturesDir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+        let manifestURL = root.appendingPathComponent(
+            ProductionReadinessContractEvaluator.fixtureManifestRelativePath
+        )
+
+        let requiredKeys = QualificationAxis.requiredCombinations.map(\.key)
+        func fixtureURL(_ key: String) -> URL {
+            fixturesDir.appendingPathComponent(
+                key.replacingOccurrences(of: "/", with: "-") + ".json"
+            )
+        }
+        var entries: [String] = []
+        for key in requiredKeys {
+            let data = Data("{\"key\":\"\(key)\"}".utf8)
+            try data.write(to: fixtureURL(key))
+            let path = "Fixtures/qualification/\(fixtureURL(key).lastPathComponent)"
+            entries.append("{\"path\": \"\(path)\", \"sha256\": \"\(SupportBundleBuilder.sha256(data))\"}")
+        }
+        try Data("[\(entries.joined(separator: ","))]".utf8).write(to: manifestURL)
+
+        func openDebtsWithTreeFixtures() -> [LPMCPPRD001DebtID] {
+            ProductionReadinessContractEvaluator.evaluate(
+                releaseWorkflowYAML: fullGreenWorkflowYAML(),
+                registeredOperationIDs: ["system.health"],
+                semanticValidatorOperationIDs: ["system.health"],
+                requiredMatrixAxisCount: QualificationAxis.requiredCombinations.count,
+                debtBoardMarkdown: nil,
+                expectedAuthorityBaseSHA: nil,
+                publishedReleaseEvidencePresent: true,
+                mutationRestoreCompensationEvidencePresent: true,
+                independentProvenanceEnforced: true,
+                managedFixturesPresent: ProductionReadinessContractEvaluator
+                    .managedFixturesPresent(atRepositoryRoot: root)
+            ).openDebts
+        }
+
+        // Intact SHA-bound fixtures covering the required axes → R-MATRIX closed.
+        #expect(!openDebtsWithTreeFixtures().contains(.managedFixtureMatrixUnbound))
+
+        // Drift one fixture byte while the manifest digest stays the same.
+        try Data("{\"key\":\"\(requiredKeys[0])\",\"drift\":true}".utf8)
+            .write(to: fixtureURL(requiredKeys[0]))
+
+        // The closer recomputes the SHA, fails closed, and reopens R-MATRIX.
+        #expect(openDebtsWithTreeFixtures().contains(.managedFixtureMatrixUnbound))
     }
 
     @Test func workflowTextMarkersAloneCannotCloseFixtureMatrixDebt() throws {
@@ -871,34 +1021,54 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             ProductionReadinessContractEvaluator.fixtureManifestRelativePath
         )
 
+        // A descriptor whose SHA-bound content self-declares its axis key.
+        func writeDescriptor(_ key: String) throws -> (path: String, sha256: String) {
+            let filename = key.replacingOccurrences(of: "/", with: "-") + ".json"
+            let data = Data("{\"key\":\"\(key)\"}".utf8)
+            try data.write(to: fixturesDir.appendingPathComponent(filename))
+            return ("Fixtures/qualification/\(filename)", SupportBundleBuilder.sha256(data))
+        }
+        func writeManifest(_ entries: [(path: String, sha256: String)]) throws {
+            let body = entries
+                .map { "{\"path\": \"\($0.path)\", \"sha256\": \"\($0.sha256)\"}" }
+                .joined(separator: ",")
+            try Data("[\(body)]".utf8).write(to: manifestURL)
+        }
+        func present() -> Bool {
+            ProductionReadinessContractEvaluator.managedFixturesPresent(atRepositoryRoot: root)
+        }
+        let requiredKeys = QualificationAxis.requiredCombinations.map(\.key)
+        let required = try requiredKeys.map { try writeDescriptor($0) }
+
         // Absent manifest → false.
-        #expect(!ProductionReadinessContractEvaluator.managedFixturesPresent(atRepositoryRoot: root))
+        #expect(!present())
         // Empty list → false.
         try Data("[]".utf8).write(to: manifestURL)
-        #expect(!ProductionReadinessContractEvaluator.managedFixturesPresent(atRepositoryRoot: root))
-        // Valid-shape entry whose fixture file is missing → false.
-        let sha = String(repeating: "ab", count: 32)
-        try Data("""
-        [{"path": "Fixtures/qualification/empty.logicx.tar", "sha256": "\(sha)"}]
-        """.utf8).write(to: manifestURL)
-        #expect(!ProductionReadinessContractEvaluator.managedFixturesPresent(atRepositoryRoot: root))
-        // Fixture file exists but the sha is not 64-hex → false.
-        let fixtureURL = fixturesDir.appendingPathComponent("empty.logicx.tar")
-        try Data("fixture-bytes".utf8).write(to: fixtureURL)
-        try Data("""
-        [{"path": "Fixtures/qualification/empty.logicx.tar", "sha256": "not-a-sha"}]
-        """.utf8).write(to: manifestURL)
-        #expect(!ProductionReadinessContractEvaluator.managedFixturesPresent(atRepositoryRoot: root))
-        // Absolute path → false.
-        try Data("""
-        [{"path": "/etc/hosts", "sha256": "\(sha)"}]
-        """.utf8).write(to: manifestURL)
-        #expect(!ProductionReadinessContractEvaluator.managedFixturesPresent(atRepositoryRoot: root))
-        // Well-formed entry + existing file → true.
-        try Data("""
-        [{"path": "Fixtures/qualification/empty.logicx.tar", "sha256": "\(sha)"}]
-        """.utf8).write(to: manifestURL)
-        #expect(ProductionReadinessContractEvaluator.managedFixturesPresent(atRepositoryRoot: root))
+        #expect(!present())
+        // Correct digests + every required axis covered → true.
+        try writeManifest(required)
+        #expect(present())
+        // A required axis is missing from the manifest → false (coverage enforced).
+        try writeManifest([required[0]])
+        #expect(!present())
+        // A referenced fixture file is missing → false.
+        try writeManifest(required + [("Fixtures/qualification/absent.json", required[0].sha256)])
+        #expect(!present())
+        // Digest is not 64-hex → false.
+        try writeManifest([(required[0].path, "not-a-sha"), required[1]])
+        #expect(!present())
+        // Absolute path → false (never read).
+        try writeManifest([("/etc/hosts", required[0].sha256), required[1]])
+        #expect(!present())
+        // Byte drift: manifest keeps the old digest, the fixture bytes change → false.
+        try writeManifest(required)
+        #expect(present())
+        try Data("{\"key\":\"\(requiredKeys[0])\",\"drift\":true}".utf8).write(
+            to: fixturesDir.appendingPathComponent(
+                requiredKeys[0].replacingOccurrences(of: "/", with: "-") + ".json"
+            )
+        )
+        #expect(!present())
     }
 
     // MARK: - Helpers

@@ -1,0 +1,32 @@
+[
+  {
+    "axis": "desktop/en-US/core/cold/empty",
+    "path": "Fixtures/qualification/desktop-en-US-empty.json",
+    "sha256": "0d6fcbd5f8a5404fb44c08804563dbf533ac1dd095a83d115bbd31e7dcb7a3f5"
+  },
+  {
+    "axis": "desktop/en-US/core/cold/large",
+    "path": "Fixtures/qualification/desktop-en-US-large.json",
+    "sha256": "3eb5ebd484ae2dbd0bad35c26f59a80e65c55aa2d6c8b559ebd394f8b09489b9"
+  },
+  {
+    "axis": "desktop/en-US/core/cold/medium",
+    "path": "Fixtures/qualification/desktop-en-US-medium.json",
+    "sha256": "206c82c6e8aa59c834d8adfc5d523a61fa65e28a8f9454f685e18e71b44cc063"
+  },
+  {
+    "axis": "desktop/ko-KR/core/cold/empty",
+    "path": "Fixtures/qualification/desktop-ko-KR-empty.json",
+    "sha256": "8245fa4f3d2d28d9982f91cac69f3788fea11a184d395fba6863c4fa87b157d8"
+  },
+  {
+    "axis": "desktop/ko-KR/core/cold/large",
+    "path": "Fixtures/qualification/desktop-ko-KR-large.json",
+    "sha256": "0397ef56d6c39cc30e0cd99422095eec19f6181a48648a25e1251a1fa09fe3c3"
+  },
+  {
+    "axis": "desktop/ko-KR/core/cold/medium",
+    "path": "Fixtures/qualification/desktop-ko-KR-medium.json",
+    "sha256": "b0e91451705d46cdd8dc6a98838bec40d82be2ec9fee358955ee6c5d0fe4e258"
+  }
+]
