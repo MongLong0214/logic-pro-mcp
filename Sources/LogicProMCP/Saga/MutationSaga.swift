@@ -491,6 +491,12 @@ actor MutationSaga {
         executor: Executor,
         outcome initialOutcome: SagaOutcome
     ) async -> SagaOutcome {
+        // ADR-005: compensation begin is visible on the PARENT saga trace
+        // (the step scopes below carry parent_trace_id for the inverse
+        // dispatches themselves).
+        await OperationTraceContext.record(.compensationStarted, attributes: [
+            "outcome": rollbackIsUncertain ? "rollback_uncertain" : "partially_applied",
+        ])
         var outcome = initialOutcome
         if outcome.state != .partiallyApplied && outcome.state != .reconciling {
             advance(.partiallyApplied, outcome: &outcome)

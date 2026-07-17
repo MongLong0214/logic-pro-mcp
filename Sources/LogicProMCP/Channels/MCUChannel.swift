@@ -628,6 +628,11 @@ actor MCUChannel: Channel {
             if let axReadback = self.axReadback {
                 for attempt in 0..<10 {
                     observedMode = await axReadback.readAutomationMode(track)
+                    // ADR-005: every verification poll attempt is a traced
+                    // phase (no-op without an active mutation trace).
+                    await OperationTraceContext.record(.verificationPoll, attributes: [
+                        "outcome": observedMode == requestedMode ? "matched" : "pending",
+                    ])
                     if observedMode == requestedMode { break }
                     if attempt < 9 { try? await Task.sleep(nanoseconds: 50_000_000) }
                 }
