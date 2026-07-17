@@ -5,11 +5,7 @@ import MCP
 
 struct SystemDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
-    static let handledCommands: Set<String> = [
-        "health", "permissions", "refresh_cache", "export_support_bundle", "help",
-        "list_recent_traces", "get_trace", "clear_traces",
-        "saga_preflight", "saga_execute", "saga_status", "saga_cancel",
-    ]
+    static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicSystem)
 
     typealias SupportBundleExporter = @Sendable (
         URL,

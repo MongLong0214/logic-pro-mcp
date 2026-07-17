@@ -779,6 +779,15 @@ enum OperationRegistry {
         )
     }
 
+    /// ADR-003/PRD-002: the registry is the single source of a tool's command
+    /// set — dispatchers derive their handled-command sets from here instead
+    /// of hand-maintaining parallel lists that can drift from the specs.
+    /// Executable dispatch truth (every command reaches a real switch case)
+    /// is proven separately by the dispatch census test.
+    static func commands(for tool: ToolID) -> Set<String> {
+        Set(specs.filter { $0.tool == tool }.map(\.command))
+    }
+
     /// Lifecycle transitions swap the whole open-project world; the project
     /// dispatcher's invalidate-on-success derives from this declaration.
     /// Typed helper (not inline) to keep the large `specs` literal within the

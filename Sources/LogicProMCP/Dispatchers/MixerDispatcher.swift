@@ -3,9 +3,7 @@ import MCP
 
 struct MixerDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
-    static let handledCommands: Set<String> = [
-        "set_volume", "set_pan", "set_master_volume", "set_plugin_param", "insert_plugin",
-    ]
+    static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicMixer)
     static let notExposedCommands: Set<String> = [
         "set_send", "set_output", "set_input", "toggle_eq", "reset_strip", "bypass_plugin",
     ]

@@ -9,6 +9,11 @@ struct HandlerDependencies: Sendable {
     let supportBundleExporter: SystemDispatcher.SupportBundleExporter?
     let sagaJournal: SagaJournal
     let mutationGate: LogicMutationGate?
+    /// Explicit seam for the project lifecycle AppleScript executor.
+    /// `nil` = production osascript path. Tests (notably the executable
+    /// dispatch census) inject a stub so exercising `launch`/`quit` cases
+    /// can never touch the real app lifecycle.
+    let projectLifecycleExecute: (@Sendable (String) async -> ProjectDispatcher.LifecycleExecution)?
 
     init(
         router: ChannelRouter,
@@ -18,7 +23,8 @@ struct HandlerDependencies: Sendable {
         dialogPresent: @escaping @Sendable () -> Bool,
         supportBundleExporter: SystemDispatcher.SupportBundleExporter?,
         sagaJournal: SagaJournal = SagaJournal(),
-        mutationGate: LogicMutationGate? = nil
+        mutationGate: LogicMutationGate? = nil,
+        projectLifecycleExecute: (@Sendable (String) async -> ProjectDispatcher.LifecycleExecution)? = nil
     ) {
         self.router = router
         self.cache = cache
@@ -28,6 +34,7 @@ struct HandlerDependencies: Sendable {
         self.supportBundleExporter = supportBundleExporter
         self.sagaJournal = sagaJournal
         self.mutationGate = mutationGate
+        self.projectLifecycleExecute = projectLifecycleExecute
     }
 }
 
@@ -272,7 +279,18 @@ enum OperationHandlerRegistry {
             }
         case .logicProject:
             return { dependencies, params in
-                await ProjectDispatcher.handle(
+                if let lifecycle = dependencies.projectLifecycleExecute {
+                    return await ProjectDispatcher.handle(
+                        command: command,
+                        params: params,
+                        router: dependencies.router,
+                        cache: dependencies.cache,
+                        targetRegistry: dependencies.targetRegistry,
+                        executeLifecycleScript: lifecycle,
+                        dialogPresent: dependencies.dialogPresent
+                    )
+                }
+                return await ProjectDispatcher.handle(
                     command: command,
                     params: params,
                     router: dependencies.router,
