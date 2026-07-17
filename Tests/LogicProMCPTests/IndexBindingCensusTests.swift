@@ -71,11 +71,12 @@ struct IndexBindingCensusTests {
         // PINNED EMPTY. `.refRequired` is implemented and unit-tested via a
         // synthetic spec, but no production op carries it yet.
         //
-        // PLANNED PROMOTION: `tracks.delete` (today `.corroborated`) moves here
-        // once `FeatureFlags.adr002TargetRef` defaults ON — until every caller
-        // can actually obtain a `target_ref`, `.refRequired` would strand the
-        // index path with no usable alternative, which is a refusal to serve
-        // rather than a safety gain.
+        // PLANNED PROMOTION: `tracks.delete` (today `.corroborated`) moves here.
+        // PRD-007 Part 2 flipped `FeatureFlags.adr002TargetRef` to default ON,
+        // so the "every caller can obtain a target_ref" precondition is met —
+        // this set stays empty by DELIBERATE choice, not by blocker. Promoting
+        // is its own row flip + catalog diff, and it would still strand callers
+        // running the `=0` kill-switch with no usable alternative.
         //
         // This set going non-empty IS the promotion receipt.
         #expect(OperationRegistry.refRequiredOperationIDs.isEmpty)

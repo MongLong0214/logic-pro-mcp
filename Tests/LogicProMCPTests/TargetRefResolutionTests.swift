@@ -171,6 +171,67 @@ struct TargetRefResolutionTests {
         }
     }
 
+    // MARK: - PRD-007 Part 2: the DEFAULT path (no override)
+
+    /// Every other test in this file forces the flag through the `@TaskLocal`
+    /// override, which SHORT-CIRCUITS the env read entirely — so none of them
+    /// can observe the shipped default. These two drive the resolver with no
+    /// override at all, which is the only way the promotion to default-ON is
+    /// actually load-bearing at the dispatcher level.
+    ///
+    /// HAZARD: `setenv`/`unsetenv` are process-global and `.serialized` only
+    /// orders tests WITHIN a suite — `FeatureFlagsTests` mutates this same
+    /// variable in a sibling suite. These are reliable under `--no-parallel`
+    /// (what CI runs); do not assume they are safe under a default parallel run.
+    private func withTargetRefEnv<Result>(_ value: String?, _ body: () async throws -> Result) async rethrows -> Result {
+        let key = "LOGIC_MCP_ADR002_TARGET_REF"
+        let previous = ProcessInfo.processInfo.environment[key]
+        if let value { setenv(key, value, 1) } else { unsetenv(key) }
+        defer {
+            if let previous { setenv(key, previous, 1) } else { unsetenv(key) }
+        }
+        return try await body()
+    }
+
+    @Test("(d) under the shipped default, a target_ref resolves — no override")
+    func testResolverDefaultAcceptsTargetRef() async {
+        await withTargetRefEnv(nil) {
+            let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
+            let outcome = await TargetRefResolver.resolveMutationIndex(
+                ["target_ref": .string(reference.rawValue)],
+                targetRegistry: registry,
+                cache: cache,
+                operation: "track.delete",
+                invalidIndexResult: dummyInvalid()
+            )
+            guard case .success(let resolved) = outcome else {
+                Issue.record("expected the default (unset env) to accept target_ref")
+                return
+            }
+            #expect(resolved.index == 2)
+            #expect(resolved.reference == reference)
+        }
+    }
+
+    @Test("(d) the =0 kill-switch still fails a target_ref closed — now the explicit-off path")
+    func testResolverKillSwitchEnvRefusesTargetRef() async {
+        await withTargetRefEnv("0") {
+            let (registry, cache, reference) = await boundTrack(index: 2)
+            let outcome = await TargetRefResolver.resolveMutationIndex(
+                ["target_ref": .string(reference.rawValue)],
+                targetRegistry: registry,
+                cache: cache,
+                operation: "track.delete",
+                invalidIndexResult: dummyInvalid()
+            )
+            guard case .failure(let result) = outcome else {
+                Issue.record("expected the =0 kill-switch to fail target_ref closed")
+                return
+            }
+            #expect(errorCode(result) == "target_ref_unavailable")
+        }
+    }
+
     @Test
     func testResolverFlagOffTargetRefFailsClosedBeforeIndexFallback() async {
         await FeatureFlags.withAdr002TargetRefForTests(false) {
@@ -189,8 +250,15 @@ struct TargetRefResolutionTests {
             let body = sharedJSONObject(sharedToolText(result)) ?? [:]
             #expect(errorCode(result) == "target_ref_unavailable")
             #expect(body["target_ref"] as? String == reference.rawValue)
-            #expect(body["write_attempted"] as? Bool == false)
-            #expect((body["hint"] as? String)?.contains("LOGIC_MCP_ADR002_TARGET_REF=1") == true)
+            // Bare/force-unwrapped spellings: `as? Bool == false` and
+            // `Bool? == true` are DEAD under this toolchain and pass
+            // unconditionally. These two assertions were dead — the hint one
+            // still pinned the pre-PRD-007 "=1" wording and did not fail when
+            // that wording changed.
+            let writeAttempted = body["write_attempted"] as! Bool
+            #expect(!writeAttempted)
+            let hint = body["hint"] as! String
+            #expect(hint.contains("LOGIC_MCP_ADR002_TARGET_REF"))
         }
     }
 

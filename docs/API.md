@@ -68,7 +68,7 @@ Registered operations reject unknown command-parameter keys at the runtime bound
 
 ### Index binding
 
-A track index is an **ordinal, not an identity**. Between the moment you read `logic://tracks` and the moment your write lands, a drag, a track creation, or a folder collapse can shift every row — and an index-keyed write then lands on a track you never named. `target_ref` (ADR-002) solves this by binding to a session-stable identity, but it is opt-in, so the registry declares what each operation demands of a **bare index** on a second, orthogonal axis: `index_binding`, published per-operation by `logic://system/operations`.
+A track index is an **ordinal, not an identity**. Between the moment you read `logic://tracks` and the moment your write lands, a drag, a track creation, or a folder collapse can shift every row — and an index-keyed write then lands on a track you never named. `target_ref` (ADR-002) solves this by binding to a session-stable identity. It is accepted **by default** — set `LOGIC_MCP_ADR002_TARGET_REF=0` to disable the machinery, after which any supplied `target_ref` fails closed with `target_ref_unavailable`. But the server being willing to accept a `target_ref` does not make callers send one: the bare-index path stays open, so the registry declares what each operation demands of a **bare index** on a second, orthogonal axis: `index_binding`, published per-operation by `logic://system/operations`.
 
 The field is present only on operations that are both target-bearing (`target` = `accepts_stable_target`) and mutating — the only ones with an index path that can hit a wrong target. Read-only and non-target operations omit it entirely rather than publishing a null.
 
