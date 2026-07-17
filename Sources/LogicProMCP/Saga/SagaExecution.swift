@@ -38,6 +38,19 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
     }
 
     func run(_ step: SagaStep) async -> StepResult {
+        // ADR-005: each saga step dispatch gets a NESTED trace context
+        // carrying the parent saga trace ID — without it a child's trace
+        // start would clobber the parent's registration in the shared box,
+        // and child traces would be uncorrelated orphans.
+        let parentTraceID = OperationTraceContext.current?.traceID
+        return await OperationTraceContext.$current.withValue(
+            OperationTraceContext(parentTraceID: parentTraceID)
+        ) {
+            await runInChildTraceScope(step)
+        }
+    }
+
+    private func runInChildTraceScope(_ step: SagaStep) async -> StepResult {
         guard Self.allowlist.contains(step.operationID) else {
             return StepResult(
                 state: .stateC,

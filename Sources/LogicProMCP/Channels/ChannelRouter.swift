@@ -111,6 +111,12 @@ actor ChannelRouter {
             return .success("No channel required for \(operation)")
         }
 
+        // ADR-005: no-op unless an active mutation trace registered in this
+        // task's context (flag on + mutating op).
+        await OperationTraceContext.record(.routeEvaluated, attributes: [
+            "chain": chain.map(\.rawValue).joined(separator: ","),
+        ])
+
         var lastError: String = "No channels available"
         let isBypass = Self.bypassReadinessOps.contains(operation)
 
@@ -152,7 +158,14 @@ actor ChannelRouter {
                 continue
             }
 
+            await OperationTraceContext.record(.channelStarted, attributes: [
+                "channel": channelID.rawValue,
+            ])
             let result = await channel.execute(operation: operation, params: params)
+            await OperationTraceContext.record(.channelCompleted, attributes: [
+                "channel": channelID.rawValue,
+                "outcome": result.isSuccess ? "success" : "error",
+            ])
             switch result {
             case .success:
                 Log.debug("\(operation) succeeded via \(channelID.rawValue)", subsystem: "router")

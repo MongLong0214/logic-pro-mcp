@@ -4,6 +4,56 @@ enum OperationTraceParentBoundary {
     @TaskLocal static var onWriteBoundary: (@Sendable () async -> Void)?
 }
 
+/// ADR-005: task-scoped carrier that lets deep seams (router, channels,
+/// verification polls, saga) record onto the active operation trace without
+/// threading a TraceID through every signature. The server opens one scope
+/// per tool call (inside the deadline task — `Task.detached` severs TaskLocal
+/// inheritance, so the scope must live within the detached work); the
+/// dispatcher's trace start registers into it. Saga child dispatches open a
+/// nested scope with a fresh box carrying the parent's trace ID so child
+/// traces correlate instead of clobbering the parent registration.
+final class OperationTraceContext: @unchecked Sendable {
+    @TaskLocal static var current: OperationTraceContext?
+
+    private let lock = NSLock()
+    private var registeredTraceID: TraceID?
+
+    /// Parent saga trace, set when this box scopes a saga child dispatch.
+    let parentTraceID: TraceID?
+    /// The server's mutation gate is try-acquire (no queueing wait); true when
+    /// a claim was held for this call, letting the trace record the gate
+    /// phases with honest zero-wait semantics.
+    let mutationGateAcquired: Bool
+
+    init(parentTraceID: TraceID? = nil, mutationGateAcquired: Bool = false) {
+        self.parentTraceID = parentTraceID
+        self.mutationGateAcquired = mutationGateAcquired
+    }
+
+    var traceID: TraceID? {
+        lock.lock()
+        defer { lock.unlock() }
+        return registeredTraceID
+    }
+
+    func register(_ id: TraceID) {
+        lock.lock()
+        defer { lock.unlock() }
+        registeredTraceID = id
+    }
+
+    /// Record a phase on the active trace, if one is registered in the current
+    /// task's context. Deep seams call this without knowing whether tracing is
+    /// enabled — no registered trace (flag off / read-only op) means no-op.
+    static func record(
+        _ phase: TracePhase,
+        attributes: [String: String] = [:]
+    ) async {
+        guard let id = current?.traceID else { return }
+        await OperationTraceStore.shared.record(id, phase: phase, attributes: attributes)
+    }
+}
+
 struct TraceID: RawRepresentable, Codable, Sendable, Hashable, CustomStringConvertible {
     let rawValue: String
 
@@ -72,6 +122,12 @@ actor OperationTraceStore {
         "project_path_hash": .hashed,
         "readback_state": .publicDiagnostic,
         "error_code": .publicDiagnostic,
+        // ADR-005 phase wiring — all runtime-structural, never user content.
+        "channel": .publicDiagnostic,
+        "chain": .publicDiagnostic,
+        "outcome": .publicDiagnostic,
+        "parent_trace_id": .publicDiagnostic,
+        "gate_mode": .publicDiagnostic,
     ]
 
     let maximumTraceCount: Int

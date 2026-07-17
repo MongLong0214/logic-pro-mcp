@@ -142,6 +142,12 @@ enum TargetRefResolver {
             ) {
                 return .failure(liveIdentityFailure)
             }
+            // ADR-005: a stable-reference resolution that survived every
+            // continuity/fingerprint/live-identity guard is a traced phase.
+            await OperationTraceContext.record(.targetResolved, attributes: [
+                "target_ref": binding.reference.rawValue,
+                "outcome": "resolved",
+            ])
             return .success(Resolved(
                 index: binding.descriptor.trackIndex,
                 reference: binding.reference,
