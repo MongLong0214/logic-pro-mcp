@@ -161,4 +161,28 @@ struct OperationDispatchCensusTests {
             )
         }
     }
+
+    /// Owner product decision (2026-07-17): the release qualification matrix is
+    /// DESKTOP-ONLY (Creator Studio permanently out of scope, never installed).
+    /// This pins the exact required-axis set so the matrix can only change by a
+    /// deliberate ship-scope edit — a variant re-entering (e.g. Creator) or a
+    /// desktop locale dropping fails here. Required matrix = ship claims; the
+    /// LogicVariant enum stays a full world model and must NOT auto-populate it.
+    @Test func requiredMatrixIsDesktopOnlyShipScope() {
+        #expect(QualificationAxis.shipVariants == [.desktop])
+        #expect(Set(QualificationAxis.shipLocales) == [.enUS, .koKR])
+        let axes = Set(QualificationAxis.requiredCombinations.map { "\($0.variant.rawValue)/\($0.locale.rawValue)" })
+        #expect(axes == ["desktop/en-US", "desktop/ko-KR"])
+        #expect(QualificationAxis.requiredCombinations.count == 2)
+        // Creator must not be a ship/required variant, but must remain in the
+        // enum world model for honest "not installed" health reporting.
+        #expect(!QualificationAxis.requiredCombinations.contains { $0.variant == .creatorStudio })
+        #expect(LogicVariant.allCases.contains(.creatorStudio))
+        // Every required axis is core/cold/empty.
+        for axis in QualificationAxis.requiredCombinations {
+            #expect(axis.profile == .core)
+            #expect(axis.cache == .cold)
+            #expect(axis.fixture == .empty)
+        }
+    }
 }

@@ -31,7 +31,7 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             releaseWorkflowYAML: yaml,
             registeredOperationIDs: ["system.health"],
             semanticValidatorOperationIDs: ["system.health"],
-            requiredMatrixAxisCount: 4,
+            requiredMatrixAxisCount: 2,
             debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
             expectedAuthorityBaseSHA: expectedBaseSHA,
             publishedReleaseEvidencePresent: true,
@@ -60,7 +60,7 @@ struct LPMCPPRD001ProductionReadinessREDTests {
                 ),
                 registeredOperationIDs: ["system.health"],
                 semanticValidatorOperationIDs: ["system.health"],
-                requiredMatrixAxisCount: 4,
+                requiredMatrixAxisCount: 2,
                 debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
                 expectedAuthorityBaseSHA: expectedBaseSHA,
                 publishedReleaseEvidencePresent: true,
@@ -93,7 +93,7 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             releaseWorkflowYAML: fixture,
             registeredOperationIDs: ["system.health"],
             semanticValidatorOperationIDs: ["system.health"],
-            requiredMatrixAxisCount: 4,
+            requiredMatrixAxisCount: 2,
             debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
             expectedAuthorityBaseSHA: expectedBaseSHA,
             publishedReleaseEvidencePresent: true,
@@ -124,7 +124,7 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             releaseWorkflowYAML: fixture,
             registeredOperationIDs: ["system.health"],
             semanticValidatorOperationIDs: ["system.health"],
-            requiredMatrixAxisCount: 4,
+            requiredMatrixAxisCount: 2,
             debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
             expectedAuthorityBaseSHA: expectedBaseSHA,
             publishedReleaseEvidencePresent: true,
@@ -674,7 +674,7 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             """,
             registeredOperationIDs: ops,
             semanticValidatorOperationIDs: ["system.health"],
-            requiredMatrixAxisCount: 4,
+            requiredMatrixAxisCount: 2,
             debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
             expectedAuthorityBaseSHA: expectedBaseSHA,
             publishedReleaseEvidencePresent: true,
@@ -714,7 +714,7 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             """,
             registeredOperationIDs: ["system.health"],
             semanticValidatorOperationIDs: ["system.health"],
-            requiredMatrixAxisCount: 4,
+            requiredMatrixAxisCount: 2,
             debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
             expectedAuthorityBaseSHA: expectedBaseSHA,
             publishedReleaseEvidencePresent: false,
@@ -731,7 +731,7 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             releaseWorkflowYAML: fullGreenWorkflowYAML(),
             registeredOperationIDs: ["system.health"],
             semanticValidatorOperationIDs: ["system.health"],
-            requiredMatrixAxisCount: 4,
+            requiredMatrixAxisCount: 2,
             debtBoardMarkdown: nil,
             expectedAuthorityBaseSHA: expectedBaseSHA,
             publishedReleaseEvidencePresent: true,
@@ -744,7 +744,7 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             releaseWorkflowYAML: fullGreenWorkflowYAML(),
             registeredOperationIDs: ["system.health"],
             semanticValidatorOperationIDs: ["system.health"],
-            requiredMatrixAxisCount: 4,
+            requiredMatrixAxisCount: 2,
             debtBoardMarkdown: "Exact base: deadbeef",
             expectedAuthorityBaseSHA: expectedBaseSHA,
             publishedReleaseEvidencePresent: true,
@@ -926,7 +926,7 @@ struct LPMCPPRD001ProductionReadinessREDTests {
                   TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
                 run: |
                   echo "managed-fixture-matrix"
-                  echo "required-matrix-axes:4"
+                  echo "required-matrix-axes:2"
                   test -n "$QUALIFICATION_EVIDENCE_URL"
                   test -n "$QUALIFICATION_EVIDENCE_SHA256"
                   test -n "$TRUSTED_QUALIFICATION_PUBLIC_KEY"

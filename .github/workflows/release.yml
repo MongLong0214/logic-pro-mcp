@@ -162,7 +162,7 @@ jobs:
         # .testFormulaInstallPathsMatchRepoAndReleaseStaging.
         run: bash Scripts/release-verify-formula-install-paths.sh
 
-      # managed-fixture-matrix / required-matrix-axes:4
+      # managed-fixture-matrix / required-matrix-axes:2
       # The independently produced bundle must cover Desktop/Creator × en-US/ko-KR,
       # every registered operation by semantic readback or a governed default-profile
       # waiver, and mutation/readback/restore/compensation. Missing evidence fails closed.
@@ -183,7 +183,7 @@ jobs:
           TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
         run: |
           echo "managed-fixture-matrix"
-          echo "required-matrix-axes:4"
+          echo "required-matrix-axes:2"
           test -n "$QUALIFICATION_EVIDENCE_URL"
           test -n "$QUALIFICATION_EVIDENCE_SHA256"
           test -n "$TRUSTED_QUALIFICATION_PUBLIC_KEY"

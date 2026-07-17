@@ -104,3 +104,11 @@ No merge or successor work is allowed until the committed exact-head gate is com
 - Fixed: R-MATRIX now additionally requires managed fixtures to exist as **content** (a fixture manifest whose entries carry relative paths + 64-hex SHA-256 and whose files exist — `Fixtures/qualification/fixture-manifest.json`); R-PUB now opens whenever no immutability mechanism exists, regardless of the asset list (the list only refines the finding detail).
 - The aggregate contract bar now pins **three** open debts exactly: `R-MATRIX`, `R-PUB`, `R-SEM`. Any other debt opening fails CI; closing any of the three forces the honest assertion flip.
 - Closure paths: R-MATRIX — author + SHA-bind the managed empty/medium/large fixtures (also feeds the attestation fixture-SHA field); R-PUB — establish a non-replaceable/transparency-bound evidence publication; R-SEM — #373 coverage program.
+
+---
+
+## 38. Qualification matrix reduced to desktop-only ship scope (2026-07-17)
+
+- Owner product decision: Logic Pro Creator Studio (`com.apple.mobilelogic`) is permanently out of scope — never installed, never supported. Desktop Logic Pro is the only ship surface.
+- Modeling (grok-reviewed, Option A): the required same-artifact matrix is derived from an explicit `QualificationAxis.shipVariants = [.desktop]` allowlist → `desktop × {en-US, ko-KR}` = 2 required axes. Creator is NOT expressed as a perpetual waiver (waivers are for temporary inability on ship claims, never product scope). The `LogicVariant.creatorStudio` case remains as world-model/health-reporting truth; a contract test pins the exact 2-axis set so a variant re-entering or a locale dropping fails CI. Release workflow marker updated to `required-matrix-axes:2`.
+- Consequence: the ADR-001 live matrix is now 2 axes (desktop en/ko), both live-bound. PRD-020 (non-EN plugin-editor blocking) is the current blocker for the ko axis.

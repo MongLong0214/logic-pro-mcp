@@ -999,7 +999,7 @@ struct QualificationRunnerTests {
         ))
     }
 
-    @Test func productionAxisVocabularyCanonicalizesCreatorAndKoreanLocale() async throws {
+    @Test func productionAxisVocabularyCanonicalizesLocaleAndKeepsCreatorOutOfShipAxes() async throws {
         let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
         let observedLocale = QualificationTransport.qualificationLocaleIdentifier("ko_KR")
         let driveResult = Self.driveResult(
@@ -1024,13 +1024,26 @@ struct QualificationRunnerTests {
             ReleaseQualificationAttestation.self,
             from: Data(contentsOf: fixture.attestationURL)
         )
-        let observed = try #require(attestation.cases.first {
-            $0.id == "creator/ko-KR/core/cold/empty"
+        // Creator Studio is permanently out of ship scope (owner decision,
+        // ADR-001). A `--variant creator` run still canonicalizes the observed
+        // axis vocabulary ("creator_studio" -> "creator", "ko_KR" -> "ko-KR")
+        // for honest health reporting, but must NOT synthesize a promotable
+        // creator required-axis case: only the desktop ship axes populate the
+        // required matrix.
+        #expect(attestation.cases.first { $0.id == "creator/ko-KR/core/cold/empty" } == nil)
+        let requiredAxisIDs = attestation.cases
+            .filter { !$0.id.hasPrefix("in-process/") }
+            .map(\.id)
+        #expect(requiredAxisIDs == QualificationAxis.requiredCombinations.map(\.key))
+        #expect(requiredAxisIDs.allSatisfy { $0.hasPrefix("desktop/") })
+        // The observed operation case still records the canonicalized creator
+        // vocabulary — that is where canonicalization is asserted now that no
+        // creator aggregate axis case exists.
+        let observedOperation = try #require(attestation.cases.first {
+            $0.id == "in-process/\(OperationID.systemHealth.rawValue)"
         })
-        let evidence = try fixture.evidence(for: observed)
+        let evidence = try fixture.evidence(for: observedOperation)
 
-        #expect(observed.status == .passed)
-        #expect(observed.verified)
         #expect(attestation.logicVariant == .creatorStudio)
         #expect(attestation.logicVersion == "11.2")
         #expect(attestation.locale == .koKR)
@@ -1379,7 +1392,7 @@ struct QualificationRunnerTests {
     @Test func runnerRecordsExactExecutableSHAAndCodableSchema() async throws {
         let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
         let observedAxis = QualificationAxis(
-            variant: .creatorStudio,
+            variant: .desktop,
             locale: .koKR,
             profile: .full,
             cache: .warm,
@@ -1387,7 +1400,7 @@ struct QualificationRunnerTests {
         )
         let driveResult = Self.driveResult(
             specs: specs,
-            observedVariant: "creator_studio",
+            observedVariant: "desktop",
             observedLocale: "ko-KR"
         )
         let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
@@ -1400,7 +1413,7 @@ struct QualificationRunnerTests {
             "--out", fixture.attestationURL.path,
             "--waivers", fixture.waiversURL.path,
             "--release-version", "1.2.3",
-            "--variant", "creator",
+            "--variant", "desktop",
             "--locale", "ko",
             "--profile", "full",
             "--cache", "warm",
@@ -1421,7 +1434,7 @@ struct QualificationRunnerTests {
         #expect(attestation.serverVersion == "1.2.3")
         #expect(attestation.commitSHA == fixture.commitSHA)
         #expect(attestation.binarySHA256 == SupportBundleBuilder.sha256(fixture.executableData))
-        #expect(attestation.logicVariant == .creatorStudio)
+        #expect(attestation.logicVariant == .desktop)
         #expect(attestation.logicVersion == "11.2")
         #expect(attestation.locale == .koKR)
         #expect(attestation.profile == .full)
@@ -1429,7 +1442,10 @@ struct QualificationRunnerTests {
         #expect(attestation.fixture == .empty)
         #expect(json["cache"] as? String == "warm")
         #expect(attestation.waivers == waivers)
-        #expect(attestation.total == 5)
+        // 1 operation case (system.health) + the 2 desktop ship axes.
+        // The one non-observed ship axis (desktop/en-US) is covered by the
+        // per-axis waiver; the observed axis (desktop/ko-KR) passes.
+        #expect(attestation.total == 3)
         #expect(attestation.total == attestation.cases.count)
         let aggregateIDs = attestation.cases
             .filter { !$0.id.hasPrefix("in-process/") }
@@ -1475,8 +1491,11 @@ struct QualificationRunnerTests {
         #expect(aggregateCases.map(\.id) == QualificationAxis.requiredCombinations.map(\.key))
         #expect(attestation.cases.map(\.id).count == Set(attestation.cases.map(\.id)).count)
         #expect(aggregateCases.filter { $0.status == .passed }.isEmpty)
+        // Desktop-only ship matrix (2 axes): the observed axis (desktop/en-US)
+        // fails because mutating ops are not live-run, and the sole remaining
+        // ship axis (desktop/ko-KR) is not qualified (no waiver supplied).
         #expect(aggregateCases.filter { $0.status == .failed }.count == 1)
-        #expect(aggregateCases.filter { $0.status == .notQualified }.count == 3)
+        #expect(aggregateCases.filter { $0.status == .notQualified }.count == 1)
         #expect(operationCases.filter { $0.status == .passed }.count == 1)
         #expect(operationCases.filter { $0.status == .protocolSmoke }.count == 20)
         #expect(operationCases.filter { $0.status == .notQualified }.count == 86)
@@ -1623,7 +1642,9 @@ struct QualificationRunnerTests {
             from: Data(contentsOf: fixture.attestationURL)
         )
         #expect(attestation.cases.last == external)
-        #expect(attestation.total == 6)
+        // 1 operation case (specs.prefix(1)) + 2 desktop ship axes + 1 bound
+        // external case.
+        #expect(attestation.total == 4)
     }
 
     @Test func tamperedExternalCaseBindingRejectsPromotion() async throws {

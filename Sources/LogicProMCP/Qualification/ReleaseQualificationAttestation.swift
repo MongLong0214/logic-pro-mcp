@@ -553,36 +553,31 @@ struct QualificationAxis: Codable, Equatable, Hashable, Sendable {
     let cache: CacheState
     let fixture: ProjectFixture
 
-    static let requiredCombinations: [QualificationAxis] = [
-        QualificationAxis(
-            variant: .desktop,
-            locale: .enUS,
-            profile: .core,
-            cache: .cold,
-            fixture: .empty
-        ),
-        QualificationAxis(
-            variant: .desktop,
-            locale: .koKR,
-            profile: .core,
-            cache: .cold,
-            fixture: .empty
-        ),
-        QualificationAxis(
-            variant: .creatorStudio,
-            locale: .enUS,
-            profile: .core,
-            cache: .cold,
-            fixture: .empty
-        ),
-        QualificationAxis(
-            variant: .creatorStudio,
-            locale: .koKR,
-            profile: .core,
-            cache: .cold,
-            fixture: .empty
-        ),
-    ]
+    /// Variants the product actually ships and therefore qualifies. This is
+    /// an explicit allowlist, NOT `LogicVariant.allCases` — adding a variant
+    /// to the enum (world model) must never auto-add it to the gate (ship
+    /// claims). Owner product decision (2026-07-17): Logic Pro Creator Studio
+    /// (`com.apple.mobilelogic`) is permanently out of scope and will not be
+    /// installed or supported; Desktop Logic Pro is the only ship surface.
+    /// Recorded in docs/adr/README.md (ADR-001) and the CHANGELOG. The
+    /// `LogicVariant.creatorStudio` case stays for honest health reporting
+    /// ("creator not installed") and bundle-id→variant misdetect tests.
+    /// Required matrix = ship claims; waivers are for temporary inability on
+    /// ship claims, never to express product scope.
+    static let shipVariants: [LogicVariant] = [.desktop]
+    static let shipLocales: [QualificationLocale] = [.enUS, .koKR]
+
+    static let requiredCombinations: [QualificationAxis] = shipVariants.flatMap { variant in
+        shipLocales.map { locale in
+            QualificationAxis(
+                variant: variant,
+                locale: locale,
+                profile: .core,
+                cache: .cold,
+                fixture: .empty
+            )
+        }
+    }
 
     static func requiredAxes(
         profile: SetupProfile,
