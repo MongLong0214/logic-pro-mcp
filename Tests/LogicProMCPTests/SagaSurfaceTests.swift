@@ -6,19 +6,24 @@ import Testing
 private actor SagaSurfaceWriteProbeChannel: Channel {
     nonisolated let id: ChannelID = .accessibility
     private let cache: StateCache
+    private let surface: SagaLiveTrackSurface?
     private let failureCalls: Set<Int>
-    private let updatesCache: Bool
+    /// Whether a write actually lands. `false` models a write Logic silently
+    /// ignored: neither the live surface nor the cache moves.
+    private let updatesState: Bool
     private var calls: [(operation: String, params: [String: String])] = []
     private var boundarySeenAtFirstDispatch = false
 
     init(
         cache: StateCache = StateCache(),
+        surface: SagaLiveTrackSurface? = nil,
         failureCalls: Set<Int> = [],
-        updatesCache: Bool = true
+        updatesState: Bool = true
     ) {
         self.cache = cache
+        self.surface = surface
         self.failureCalls = failureCalls
-        self.updatesCache = updatesCache
+        self.updatesState = updatesState
     }
 
     func start() async throws {}
@@ -45,12 +50,18 @@ private actor SagaSurfaceWriteProbeChannel: Channel {
             guard let name = params["name"] else {
                 return .error(HonestContract.encodeStateC(error: .invalidParams))
             }
-            if updatesCache { await cache.updateTrack(at: index) { $0.name = name } }
+            if updatesState {
+                surface?.update(index) { $0.name = name }
+                await cache.updateTrack(at: index) { $0.name = name }
+            }
         case "mixer.set_volume":
             guard let rawValue = params["volume"], let value = Double(rawValue) else {
                 return .error(HonestContract.encodeStateC(error: .invalidParams))
             }
-            if updatesCache { await cache.updateTrack(at: index) { $0.volume = value } }
+            if updatesState {
+                surface?.update(index) { $0.volume = value }
+                await cache.updateTrack(at: index) { $0.volume = value }
+            }
         default:
             return .error(HonestContract.encodeStateC(error: .commandNotExposed))
         }
@@ -106,6 +117,12 @@ private actor BlockingSagaRefreshProbe {
     }
 }
 
+private actor SagaRefreshCounter {
+    private var calls = 0
+    func note() { calls += 1 }
+    func count() -> Int { calls }
+}
+
 private actor SagaPhaseBarrier {
     private var entered = false
     private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
@@ -136,6 +153,8 @@ struct SagaSurfaceTests {
     private struct Fixture: Sendable {
         let router: ChannelRouter
         let cache: StateCache
+        /// The live AX surface the saga reads — distinct from `cache`.
+        let surface: SagaLiveTrackSurface
         let targetRegistry: TargetRegistry
         let journal: SagaJournal
         let channel: SagaSurfaceWriteProbeChannel
@@ -187,10 +206,13 @@ struct SagaSurfaceTests {
         )
     }
 
+    /// `populateState` seeds BOTH the live surface and the cache mirror. An
+    /// empty live surface is what makes a before-state unavailable now — the
+    /// cache is no longer a saga read source at all.
     private func makeFixture(
         failureCalls: Set<Int> = [],
-        populateCache: Bool = true,
-        updatesCache: Bool = true,
+        populateState: Bool = true,
+        updatesState: Bool = true,
         journal: SagaJournal = SagaJournal()
     ) async -> Fixture {
         let cache = StateCache()
@@ -198,7 +220,8 @@ struct SagaSurfaceTests {
             TrackState(id: 0, name: "Bass", type: .audio, volume: 0.25),
             TrackState(id: 1, name: "Keys", type: .softwareInstrument, volume: 0.2),
         ]
-        if populateCache { await cache.updateTracks(tracks) }
+        if populateState { await cache.updateTracks(tracks) }
+        let surface = SagaLiveTrackSurface(populateState ? tracks : [])
         let targetRegistry = TargetRegistry()
         var targets: [TargetReference] = []
         for track in tracks {
@@ -211,14 +234,16 @@ struct SagaSurfaceTests {
         }
         let channel = SagaSurfaceWriteProbeChannel(
             cache: cache,
+            surface: surface,
             failureCalls: failureCalls,
-            updatesCache: updatesCache
+            updatesState: updatesState
         )
         let router = ChannelRouter()
         await router.register(channel)
         return Fixture(
             router: router,
             cache: cache,
+            surface: surface,
             targetRegistry: targetRegistry,
             journal: journal,
             channel: channel,
@@ -289,7 +314,8 @@ struct SagaSurfaceTests {
             sagaJournal: fixture.journal,
             mutationGate: mutationGate,
             sagaAfterJournalBegin: sagaAfterJournalBegin,
-            sagaRefreshAfterWrite: sagaRefreshAfterWrite
+            sagaRefreshAfterWrite: sagaRefreshAfterWrite,
+            sagaLiveReadback: fixture.surface.readback
         )
     }
 
@@ -539,7 +565,7 @@ struct SagaSurfaceTests {
             #expect(readyAvailability.allSatisfy { ($0["available"] as? Bool)! })
             #expect(await ready.channel.writeCount() == 0)
 
-            let unavailable = await makeFixture(populateCache: false)
+            let unavailable = await makeFixture(populateState: false)
             let unavailableResult = await dispatch(
                 command: "saga_preflight",
                 params: plan(idempotencyKey: "preflight-unavailable", steps: [
@@ -593,7 +619,36 @@ struct SagaSurfaceTests {
                 #expect(stepResult["state"] as? String == "A")
                 #expect(verification["disposition"] as? String == "applied")
                 #expect(!(try #require(readback["evidence"] as? String)).isEmpty)
+
+                // LPMCP-PRD-004: every serialized saga observation names an
+                // independent LIVE read, structurally — not just in prose.
+                let before = try #require(evidence["before_state"] as? [String: Any])
+                for observation in [before, readback] {
+                    let summary = try #require(observation["evidence"] as? String)
+                    #expect(summary.hasPrefix("ax_live "))
+                    #expect(!summary.contains("state_cache"))
+                    #expect(observation["provenance"] as? String == "live_independent")
+                    #expect(observation["track_index"] is NSNumber)
+                    #expect(!(try #require(observation["read_source"] as? String)).isEmpty)
+                    #expect(!(try #require(observation["field"] as? String)).isEmpty)
+                    #expect(!(try #require(observation["sampled_at"] as? String)).isEmpty)
+                }
+
+                // ...and the comparator that decided it is on the wire.
+                let comparison = try #require(verification["comparison"] as? [String: Any])
+                let comparator = try #require(comparison["comparator"] as? String)
+                #expect(["exact", "abs_eps"].contains(comparator))
+                #expect(try #require(comparison["equal"] as? Bool))
             }
+
+            // The whole envelope must never claim a cache provenance anywhere.
+            guard case .text(let rawBody, _, _) = result.content.first else {
+                Issue.record("expected text tool result")
+                return
+            }
+            #expect(!rawBody.contains("state_cache"))
+            #expect(rawBody.contains("ax_live"))
+            #expect(rawBody.contains("live_independent"))
             let volumeEvidence = try #require(steps[1]["evidence"] as? [String: Any])
             let volumeVerification = try #require(
                 volumeEvidence["verification"] as? [String: Any]
@@ -609,10 +664,21 @@ struct SagaSurfaceTests {
         }
     }
 
-    @Test("surface refreshes observed state after a verified channel write")
-    func executeRefreshesBeforeEngineVerification() async throws {
+    /// LPMCP-PRD-004 — the debt, at the public surface. `refreshAfterWrite` is a
+    /// RESOURCE-cache mitigation and nothing more: it must never be able to
+    /// manufacture a saga verification.
+    ///
+    /// Here the write does NOT land (the live fader stays 0.2) but the refresh
+    /// writes the desired 0.75 into the cache mirror. Pre-fix, the saga read
+    /// that cache, saw its own refresh echoed back, and reported a clean State A
+    /// for a write that never happened — the cache verifying the cache. Now the
+    /// saga reads the live surface, sees 0.2 against a desired 0.75, and reports
+    /// drift instead of a false success.
+    @Test("refreshAfterWrite cannot manufacture a saga verification")
+    func refreshAfterWriteCannotManufactureVerification() async throws {
         try await withSagaFeatures {
-            let fixture = await makeFixture(updatesCache: false)
+            let fixture = await makeFixture(updatesState: false)
+            let refreshed = SagaRefreshCounter()
             let result = try resultObject(await dispatch(
                 command: "saga_execute",
                 params: plan(idempotencyKey: "refresh-before-verify", steps: [
@@ -625,12 +691,28 @@ struct SagaSurfaceTests {
                 ]),
                 fixture: fixture,
                 sagaRefreshAfterWrite: {
+                    await refreshed.note()
                     await fixture.cache.updateTrack(at: 1) { $0.volume = 0.75 }
                 }
             ))
 
-            #expect(result["state"] as? String == "A")
+            // refreshAfterWrite still runs on the write path (it stays as the
+            // resource-cache mitigation it was always meant to be)...
+            #expect(await refreshed.count() == 1)
+            #expect(await fixture.cache.getTracks()[1].volume == 0.75)
             #expect(await fixture.channel.writeCount() == 1)
+
+            // ...but it did NOT buy a State A. The live fader never moved.
+            #expect(result["state"] as? String != "A")
+            #expect(fixture.surface.snapshot(1)?.volume == 0.2)
+
+            let steps = try #require(result["steps"] as? [[String: Any]])
+            let evidence = try #require(steps.first?["evidence"] as? [String: Any])
+            let verification = try #require(evidence["verification"] as? [String: Any])
+            #expect(verification["disposition"] as? String == "unknown")
+            let readback = try #require(verification["readback"] as? [String: Any])
+            #expect(readback["provenance"] as? String == "live_independent")
+            #expect(readback["value"] as? Double == 0.2)
         }
     }
 
@@ -712,7 +794,7 @@ struct SagaSurfaceTests {
     @Test("execute classifies unavailable before-state separately from malformed input")
     func executeUnavailableBeforeStateIsReadbackUnavailable() async throws {
         try await withSagaFeatures {
-            let fixture = await makeFixture(populateCache: false)
+            let fixture = await makeFixture(populateState: false)
             let result = try resultObject(await dispatch(
                 command: "saga_execute",
                 params: plan(idempotencyKey: "execute-no-before", steps: [
@@ -1084,7 +1166,7 @@ struct SagaSurfaceTests {
     @Test("cancellation racing rejected preflight reaches a verified terminal record")
     func sagaCancellationAtRejectedPreflightDoesNotRemainPending() async throws {
         try await withSagaFeatures {
-            let fixture = await makeFixture(populateCache: false)
+            let fixture = await makeFixture(populateState: false)
             let barrier = SagaPhaseBarrier()
             let params = plan(idempotencyKey: "cancel-preflight-refusal", steps: [
                 step(

@@ -46,9 +46,70 @@ struct StepResult: Codable, Equatable, Sendable {
     let detail: String
 }
 
+/// Which live AX primitive produced a saga observation. These are the SAME
+/// primitives the dispatchers use for their State-A verification — the saga
+/// reads the surface, never the cache mirror.
+enum SagaReadSource: String, Codable, Equatable, Sendable {
+    case axTrackHeaderFader = "ax_track_header_fader"
+    case axTrackHeaderPan = "ax_track_header_pan"
+    case axTrackName = "ax_track_name"
+    case axTrackToggle = "ax_track_toggle"
+
+    /// Short label for the human summary string.
+    var label: String {
+        switch self {
+        case .axTrackHeaderFader: "header_fader"
+        case .axTrackHeaderPan: "header_pan"
+        case .axTrackName: "track_name"
+        case .axTrackToggle: "track_toggle"
+        }
+    }
+}
+
+/// LPMCP-PRD-004: every saga observation is an INDEPENDENT live read. The enum
+/// has exactly one case on purpose — there is no legal cache-sourced saga
+/// observation, so no `state_cache` provenance can be constructed.
+enum SagaProvenance: String, Codable, Equatable, Sendable {
+    case liveIndependent = "live_independent"
+}
+
+/// Structured provenance for one saga observation. Serialized into the journal
+/// so an operator can audit WHERE a rollback value came from.
+struct SagaReadEvidence: Codable, Equatable, Sendable {
+    let readSource: SagaReadSource
+    let provenance: SagaProvenance
+    let trackIndex: Int
+    let field: String
+    let observed: Value
+    let sampledAt: String
+
+    /// Human summary, e.g. `ax_live tracks[3].volume (header_fader)`.
+    var summary: String {
+        "ax_live tracks[\(trackIndex)].\(field) (\(readSource.label))"
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case readSource = "read_source"
+        case provenance
+        case trackIndex = "track_index"
+        case field
+        case observed
+        case sampledAt = "sampled_at"
+    }
+}
+
 struct ObservedState: Codable, Equatable, Sendable {
     let value: Value
     let evidence: String
+    var read: SagaReadEvidence?
+}
+
+extension ObservedState {
+    /// Build an observation from a live read — the value, the human summary,
+    /// and the structured provenance always agree because they share one source.
+    init(read: SagaReadEvidence) {
+        self.init(value: read.observed, evidence: read.summary, read: read)
+    }
 }
 
 protocol SagaStepExecutor: Sendable {
@@ -65,6 +126,10 @@ enum VerificationDisposition: String, Codable, Equatable, Sendable {
 struct VerificationEvidence: Codable, Equatable, Sendable {
     let disposition: VerificationDisposition
     let readback: ObservedState?
+    /// How the disposition was decided (comparator/epsilon/desired/observed/
+    /// delta). Absent when no comparison ran — e.g. a pre-write State C, where
+    /// `notApplied` follows from the write never crossing the boundary.
+    var comparison: SagaComparisonEvidence?
 }
 
 enum CompensationDisposition: String, Codable, Equatable, Sendable {
@@ -78,6 +143,9 @@ struct CompensationEvidence: Codable, Equatable, Sendable {
     let disposition: CompensationDisposition
     let executionResult: StepResult?
     let readback: ObservedState?
+    /// Live readback vs the captured live before-state, within the operation's
+    /// epsilon. Absent when no inverse was dispatched.
+    var comparison: SagaComparisonEvidence?
 }
 
 struct CompensationJournalRecord: Codable, Equatable, Sendable {
@@ -143,18 +211,55 @@ actor MutationSaga {
         let tool: ToolID
         let command: String
         let valueParameter: String
+        /// LPMCP-PRD-004: how an observed live value is compared to an expected
+        /// one for THIS operation. Declared next to the inverse contract so a
+        /// future allowlist entry cannot be added without deciding it.
+        let tolerance: SagaTolerance
     }
 
+    /// Epsilon rationale (absolute, on the operation's normalized range):
+    /// - rename: a name is a discrete string — `"A"` and `"A "` are different
+    ///   tracks to the operator, so exact.
+    /// - mute/solo/arm: booleans have no near-miss.
+    /// - volume (0...1, eps 0.01): the AX header fader is exposed in ~10-raw-unit
+    ///   detents, so a verified write lands on the nearest representable level,
+    ///   not the requested double.
+    /// - pan (-1...1, eps 0.05): the same detent quantization over a range twice
+    ///   as wide, and the pan control is coarser still.
     private static let reversibleDefinitions: [OperationID: ReversibleDefinition] = [
-        .tracksRename: ReversibleDefinition(tool: .logicTracks, command: "rename", valueParameter: "name"),
-        .mixerSetVolume: ReversibleDefinition(tool: .logicMixer, command: "set_volume", valueParameter: "value"),
-        .mixerSetPan: ReversibleDefinition(tool: .logicMixer, command: "set_pan", valueParameter: "value"),
-        .tracksMute: ReversibleDefinition(tool: .logicTracks, command: "mute", valueParameter: "enabled"),
-        .tracksSolo: ReversibleDefinition(tool: .logicTracks, command: "solo", valueParameter: "enabled"),
-        .tracksArm: ReversibleDefinition(tool: .logicTracks, command: "arm", valueParameter: "enabled"),
+        .tracksRename: ReversibleDefinition(
+            tool: .logicTracks, command: "rename", valueParameter: "name",
+            tolerance: .exact
+        ),
+        .mixerSetVolume: ReversibleDefinition(
+            tool: .logicMixer, command: "set_volume", valueParameter: "value",
+            tolerance: .absoluteEpsilon(0.01)
+        ),
+        .mixerSetPan: ReversibleDefinition(
+            tool: .logicMixer, command: "set_pan", valueParameter: "value",
+            tolerance: .absoluteEpsilon(0.05)
+        ),
+        .tracksMute: ReversibleDefinition(
+            tool: .logicTracks, command: "mute", valueParameter: "enabled",
+            tolerance: .exact
+        ),
+        .tracksSolo: ReversibleDefinition(
+            tool: .logicTracks, command: "solo", valueParameter: "enabled",
+            tolerance: .exact
+        ),
+        .tracksArm: ReversibleDefinition(
+            tool: .logicTracks, command: "arm", valueParameter: "enabled",
+            tolerance: .exact
+        ),
     ]
 
     nonisolated static let reversibleOperationIDs: Set<OperationID> = Set(reversibleDefinitions.keys)
+
+    /// The declared comparison contract for `operationID`, or nil when the
+    /// operation is not saga-reversible.
+    nonisolated static func tolerance(for operationID: OperationID) -> SagaTolerance? {
+        reversibleDefinitions[operationID]?.tolerance
+    }
 
     private let targetRegistry: TargetRegistry
     private let enabled: Bool
@@ -388,14 +493,19 @@ actor MutationSaga {
             switch executionResult.state {
             case .stateA:
                 let readback = await executor.readState(step)
-                let disposition = classify(
+                let disposition = classifyVerifiedWrite(
                     readback,
                     desiredValue: desiredValue,
-                    beforeState: beforeState
+                    operationID: step.operationID
                 )
                 outcome.journal[index].verificationEvidence = VerificationEvidence(
                     disposition: disposition,
-                    readback: readback
+                    readback: readback,
+                    comparison: SagaValueComparator.evidence(
+                        observed: readback?.value,
+                        desired: desiredValue,
+                        op: step.operationID
+                    )
                 )
                 if disposition == .applied {
                     appliedIndices.append(index)
@@ -429,11 +539,17 @@ actor MutationSaga {
                 let disposition = classify(
                     readback,
                     desiredValue: desiredValue,
-                    beforeState: beforeState
+                    beforeState: beforeState,
+                    operationID: step.operationID
                 )
                 outcome.journal[index].verificationEvidence = VerificationEvidence(
                     disposition: disposition,
-                    readback: readback
+                    readback: readback,
+                    comparison: SagaValueComparator.evidence(
+                        observed: readback?.value,
+                        desired: desiredValue,
+                        op: step.operationID
+                    )
                 )
                 if disposition == .applied { appliedIndices.append(index) }
                 if disposition != .applied {
@@ -458,11 +574,17 @@ actor MutationSaga {
                     let disposition = classify(
                         readback,
                         desiredValue: desiredValue,
-                        beforeState: beforeState
+                        beforeState: beforeState,
+                        operationID: step.operationID
                     )
                     outcome.journal[index].verificationEvidence = VerificationEvidence(
                         disposition: disposition,
-                        readback: readback
+                        readback: readback,
+                        comparison: SagaValueComparator.evidence(
+                            observed: readback?.value,
+                            desired: desiredValue,
+                            op: step.operationID
+                        )
                     )
                     if disposition == .applied { appliedIndices.append(index) }
                     if disposition != .applied {
@@ -584,8 +706,17 @@ actor MutationSaga {
 
             let compensationResult = await executor.run(inverse)
             let readback = await executor.readState(inverse)
+            // LPMCP-PRD-004: the restore target is the LIVE before-state
+            // captured at step time, and the proof is an independent live
+            // readback compared within the operation's epsilon — a quantized
+            // fader that restores to 0.249 has restored 0.25.
+            let comparison = SagaValueComparator.evidence(
+                observed: readback?.value,
+                desired: beforeState.value,
+                op: inverse.operationID
+            )
             let disposition: CompensationDisposition
-            if readback?.value == beforeState.value {
+            if comparison.equal {
                 disposition = .verified
                 verifiedCount += 1
             } else if readback == nil && compensationResult.writeBoundaryCrossed {
@@ -597,7 +728,8 @@ actor MutationSaga {
             outcome.journal[index].compensationEvidence = CompensationEvidence(
                 disposition: disposition,
                 executionResult: compensationResult,
-                readback: readback
+                readback: readback,
+                comparison: comparison
             )
             sessions[outcome.idempotencyKey] = outcome
         }
@@ -614,14 +746,52 @@ actor MutationSaga {
         return outcome
     }
 
+    /// State-B/C reconciliation: the write path could NOT verify itself, so the
+    /// saga decides from an independent live read, compared within the
+    /// operation's declared epsilon.
     private func classify(
         _ readback: ObservedState?,
         desiredValue: Value,
-        beforeState: ObservedState
+        beforeState: ObservedState,
+        operationID: OperationID
     ) -> VerificationDisposition {
-        if readback?.value == desiredValue { return .applied }
-        if readback?.value == beforeState.value { return .notApplied }
+        guard let readback else { return .unknown }
+        if SagaValueComparator.equals(
+            observed: readback.value,
+            expected: desiredValue,
+            op: operationID
+        ) {
+            return .applied
+        }
+        if SagaValueComparator.equals(
+            observed: readback.value,
+            expected: beforeState.value,
+            op: operationID
+        ) {
+            return .notApplied
+        }
         return .unknown
+    }
+
+    /// State A means the DISPATCHER already verified the write against the live
+    /// AX surface at the moment it landed. LPMCP-PRD-004: re-deciding that from
+    /// a second, later read is strictly worse information — a concurrent
+    /// operator nudge, or plain quantization under the old exact `==`, would
+    /// downgrade a verified write to `notApplied` and roll back a change that
+    /// actually applied. So a State-A step is `applied`. A corroborating live
+    /// read is optional evidence that can only escalate to `unknown` (drift we
+    /// cannot explain), never demote to `notApplied`.
+    private func classifyVerifiedWrite(
+        _ readback: ObservedState?,
+        desiredValue: Value,
+        operationID: OperationID
+    ) -> VerificationDisposition {
+        guard let readback else { return .applied }
+        return SagaValueComparator.equals(
+            observed: readback.value,
+            expected: desiredValue,
+            op: operationID
+        ) ? .applied : .unknown
     }
 
     private func markReconciliation(outcome: inout SagaOutcome) {

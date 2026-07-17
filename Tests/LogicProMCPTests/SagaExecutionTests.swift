@@ -25,6 +25,7 @@ private actor SagaRecordingChannel: Channel {
     nonisolated let id: ChannelID = .accessibility
 
     private let cache: StateCache
+    private let surface: SagaLiveTrackSurface
     private let failureAt: Int?
     private let failureCode: String
     private let failureWriteAttempted: Bool?
@@ -34,6 +35,7 @@ private actor SagaRecordingChannel: Channel {
 
     init(
         cache: StateCache,
+        surface: SagaLiveTrackSurface,
         failureAt: Int? = nil,
         failureCode: String = "invalid_params",
         failureWriteAttempted: Bool? = nil,
@@ -41,6 +43,7 @@ private actor SagaRecordingChannel: Channel {
         failureSuccess: Bool = false
     ) {
         self.cache = cache
+        self.surface = surface
         self.failureAt = failureAt
         self.failureCode = failureCode
         self.failureWriteAttempted = failureWriteAttempted
@@ -72,27 +75,36 @@ private actor SagaRecordingChannel: Channel {
         guard let rawIndex = params["index"], let index = Int(rawIndex) else {
             return .error(HonestContract.encodeStateC(error: .invalidParams))
         }
+        // A write lands on the LIVE surface (what Logic actually holds) and is
+        // mirrored into the cache, exactly as production's refreshAfterWrite
+        // eventually would. Tests that need a stale mirror desync them by hand.
         switch operation {
         case "track.rename":
             guard let name = params["name"] else {
                 return .error(HonestContract.encodeStateC(error: .invalidParams))
             }
+            surface.update(index) { $0.name = name }
             await cache.updateTrack(at: index) { $0.name = name }
         case "mixer.set_volume":
             guard let raw = params["volume"], let value = Double(raw) else {
                 return .error(HonestContract.encodeStateC(error: .invalidParams))
             }
+            surface.update(index) { $0.volume = value }
             await cache.updateTrack(at: index) { $0.volume = value }
         case "mixer.set_pan":
             guard let raw = params["pan"], let value = Double(raw) else {
                 return .error(HonestContract.encodeStateC(error: .invalidParams))
             }
+            surface.update(index) { $0.pan = value }
             await cache.updateTrack(at: index) { $0.pan = value }
         case "track.set_mute":
+            surface.update(index) { $0.isMuted = params["enabled"] == "true" }
             await cache.updateTrack(at: index) { $0.isMuted = params["enabled"] == "true" }
         case "track.set_solo":
+            surface.update(index) { $0.isSoloed = params["enabled"] == "true" }
             await cache.updateTrack(at: index) { $0.isSoloed = params["enabled"] == "true" }
         case "track.set_arm":
+            surface.update(index) { $0.isArmed = params["enabled"] == "true" }
             await cache.updateTrack(at: index) { $0.isArmed = params["enabled"] == "true" }
         default:
             return .error(HonestContract.encodeStateC(error: .commandNotExposed))
@@ -109,6 +121,26 @@ private actor SagaRecordingChannel: Channel {
     }
 }
 
+/// Fails the rename step AFTER its write boundary so the preceding volume
+/// step's compensation runs — while leaving the live-read seams under test
+/// entirely untouched.
+private struct RenameFailingExecutor: SagaStepExecutor {
+    let base: ProductionSagaStepExecutor
+
+    func run(_ step: SagaStep) async -> StepResult {
+        guard step.operationID == .tracksRename else { return await base.run(step) }
+        return StepResult(
+            state: .stateC,
+            writeBoundaryCrossed: true,
+            detail: "tracks.rename: error=ax_write_failed"
+        )
+    }
+
+    func readState(_ step: SagaStep) async -> ObservedState? {
+        await base.readState(step)
+    }
+}
+
 @Suite("Production saga execution", .serialized)
 struct SagaExecutionTests {
     private struct Scenario: Sendable {
@@ -122,6 +154,7 @@ struct SagaExecutionTests {
         let executor: ProductionSagaStepExecutor
         let channel: SagaRecordingChannel
         let cache: StateCache
+        let surface: SagaLiveTrackSurface
         let registry: TargetRegistry
         let target: TargetReference
     }
@@ -134,19 +167,19 @@ struct SagaExecutionTests {
         failureSuccess: Bool = false,
         dialogPresent: @escaping @Sendable () -> Bool = { false }
     ) async -> Fixture {
+        let track = TrackState(
+            id: 0,
+            name: "Bass",
+            type: .audio,
+            isMuted: false,
+            isSoloed: true,
+            isArmed: false,
+            volume: 0.25,
+            pan: -0.5
+        )
         let cache = StateCache()
-        await cache.updateTracks([
-            TrackState(
-                id: 0,
-                name: "Bass",
-                type: .audio,
-                isMuted: false,
-                isSoloed: true,
-                isArmed: false,
-                volume: 0.25,
-                pan: -0.5
-            ),
-        ])
+        await cache.updateTracks([track])
+        let surface = SagaLiveTrackSurface([track])
         let registry = TargetRegistry()
         let descriptor = TargetDescriptor(trackIndex: 0, trackName: "Bass")
         let target = await registry.bind(
@@ -156,6 +189,7 @@ struct SagaExecutionTests {
         )
         let channel = SagaRecordingChannel(
             cache: cache,
+            surface: surface,
             failureAt: failureAt,
             failureCode: failureCode,
             failureWriteAttempted: failureWriteAttempted,
@@ -169,10 +203,12 @@ struct SagaExecutionTests {
                 router: router,
                 cache: cache,
                 targetRegistry: registry,
-                dialogPresent: dialogPresent
+                dialogPresent: dialogPresent,
+                liveReadback: surface.readback
             ),
             channel: channel,
             cache: cache,
+            surface: surface,
             registry: registry,
             target: target
         )
@@ -184,42 +220,42 @@ struct SagaExecutionTests {
             Scenario(
                 before: .string("Bass"),
                 desired: .string("Lead"),
-                evidence: "state_cache tracks[0].name",
+                evidence: "ax_live tracks[0].name (track_name)",
                 channelOperation: "track.rename"
             )
         case .mixerSetVolume:
             Scenario(
                 before: .double(0.25),
                 desired: .double(0.75),
-                evidence: "state_cache tracks[0].volume",
+                evidence: "ax_live tracks[0].volume (header_fader)",
                 channelOperation: "mixer.set_volume"
             )
         case .mixerSetPan:
             Scenario(
                 before: .double(-0.5),
                 desired: .double(0.5),
-                evidence: "state_cache tracks[0].pan",
+                evidence: "ax_live tracks[0].pan (header_pan)",
                 channelOperation: "mixer.set_pan"
             )
         case .tracksMute:
             Scenario(
                 before: .bool(false),
                 desired: .bool(true),
-                evidence: "state_cache tracks[0].isMuted",
+                evidence: "ax_live tracks[0].isMuted (track_toggle)",
                 channelOperation: "track.set_mute"
             )
         case .tracksSolo:
             Scenario(
                 before: .bool(true),
                 desired: .bool(false),
-                evidence: "state_cache tracks[0].isSoloed",
+                evidence: "ax_live tracks[0].isSoloed (track_toggle)",
                 channelOperation: "track.set_solo"
             )
         case .tracksArm:
             Scenario(
                 before: .bool(false),
                 desired: .bool(true),
-                evidence: "state_cache tracks[0].isArmed",
+                evidence: "ax_live tracks[0].isArmed (track_toggle)",
                 channelOperation: "track.set_arm"
             )
         default:
@@ -440,11 +476,13 @@ struct SagaExecutionTests {
 
     @Test("before-state capture is all-or-nothing")
     func captureBeforeStateReturnsEmptyWhenAnyStepCannotBeRead() async {
-        let cache = StateCache()
-        await cache.updateTracks([
+        let tracks = [
             TrackState(id: 0, name: "Bass", type: .audio, volume: 0.25),
             TrackState(id: 1, name: "Keys", type: .softwareInstrument, pan: -0.25),
-        ])
+        ]
+        let cache = StateCache()
+        await cache.updateTracks(tracks)
+        let surface = SagaLiveTrackSurface(tracks)
         let registry = TargetRegistry()
         let staleDescriptor = TargetDescriptor(trackIndex: 1, trackName: "Keys")
         let stale = await registry.bind(
@@ -459,14 +497,15 @@ struct SagaExecutionTests {
             descriptor: validDescriptor,
             fingerprint: validDescriptor.fingerprint
         )
-        let channel = SagaRecordingChannel(cache: cache)
+        let channel = SagaRecordingChannel(cache: cache, surface: surface)
         let router = ChannelRouter()
         await router.register(channel)
         let executor = ProductionSagaStepExecutor(
             router: router,
             cache: cache,
             targetRegistry: registry,
-            dialogPresent: { false }
+            dialogPresent: { false },
+            liveReadback: surface.readback
         )
 
         let validPlan = SagaPlan(
@@ -490,16 +529,106 @@ struct SagaExecutionTests {
         #expect(await executor.captureBeforeState(plan: invalidPlan).isEmpty)
     }
 
+    /// LPMCP-PRD-004 (the debt itself). The cache is a poller mirror; it can be
+    /// stale by a poll interval. Pre-fix, `readState` read it — so a saga whose
+    /// mirror still said 0.25 while the operator had already moved the fader to
+    /// 0.80 would capture 0.25 as the before-state and, on rollback, "restore"
+    /// a value the operator never had. That is a rollback that is itself a
+    /// destructive mutation. The before-state must come from the live surface.
+    @Test("stale cache never sources the before-state a rollback restores")
+    func staleCacheNeverSourcesBeforeState() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = await makeFixture()
+            // Live truth diverges from the mirror: the operator moved the
+            // fader out-of-band and the poller has not caught up.
+            fixture.surface.update(0) { $0.volume = 0.80 }
+            #expect(await fixture.cache.getTracks().first?.volume == 0.25)
+
+            let before = await fixture.executor.readState(
+                step(.mixerSetVolume, target: fixture.target, value: .double(0.5))
+            )
+            #expect(before?.value == .double(0.80))
+            #expect(before?.value != .double(0.25))
+            #expect(before?.read?.provenance == .liveIndependent)
+            #expect(before?.read?.readSource == .axTrackHeaderFader)
+
+            // And end-to-end: the compensation restores the LIVE 0.80, not the
+            // cached 0.25.
+            let plan = SagaPlan(
+                steps: [
+                    step(.mixerSetVolume, target: fixture.target, value: .double(0.5)),
+                    step(.tracksRename, target: fixture.target, value: .string("Nope")),
+                ],
+                idempotencyKey: "stale-cache-before-state"
+            )
+            let outcome = await MutationSaga(
+                targetRegistry: fixture.registry,
+                enabled: true,
+                routeAvailable: { _ in true }
+            ).execute(plan, executor: RenameFailingExecutor(base: fixture.executor))
+
+            #expect(outcome.journal[0].beforeState?.value == .double(0.80))
+            #expect(outcome.journal[0].compensationEvidence?.disposition == .verified)
+            #expect(fixture.surface.snapshot(0)?.volume == 0.80)
+        }
+    }
+
+    /// LPMCP-PRD-004: saga evidence must name a live, independent read — and
+    /// must never claim the cache. `state_cache` appearing anywhere in a saga
+    /// journal is the bug this debt closed.
+    @Test("saga evidence is live-provenanced and never cache-provenanced")
+    func sagaEvidenceIsLiveProvenanced() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = await makeFixture()
+            let observed = try #require(await fixture.executor.readState(
+                step(.mixerSetVolume, target: fixture.target, value: .double(0.5))
+            ))
+            #expect(observed.evidence == "ax_live tracks[0].volume (header_fader)")
+            #expect(!observed.evidence.contains("state_cache"))
+
+            let read = try #require(observed.read)
+            #expect(read.provenance.rawValue == "live_independent")
+            #expect(read.readSource.rawValue == "ax_track_header_fader")
+            #expect(read.trackIndex == 0)
+            #expect(read.field == "volume")
+            #expect(read.observed == .double(0.25))
+            #expect(!read.sampledAt.isEmpty)
+        }
+    }
+
+    /// The live seam is the ONLY source: with the seam unavailable there is no
+    /// cache fallback to quietly answer from, even though the cache is
+    /// populated and the binding resolves.
+    @Test("unreadable live surface fails closed instead of falling back to cache")
+    func unreadableLiveSurfaceFailsClosed() async {
+        await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = await makeFixture()
+            let blindExecutor = ProductionSagaStepExecutor(
+                router: ChannelRouter(),
+                cache: fixture.cache,
+                targetRegistry: fixture.registry,
+                dialogPresent: { false },
+                liveReadback: .unavailable
+            )
+            #expect(await fixture.cache.getTracks().first?.volume == 0.25)
+            #expect(await blindExecutor.readState(
+                step(.mixerSetVolume, target: fixture.target, value: .double(0.5))
+            ) == nil)
+        }
+    }
+
     @Test("engine compensates every applied prefix in reverse")
     func mutationSagaFailurePositionMatrix() async {
         await FeatureFlags.withAdr002TargetRefForTests(true) {
             for failureAt in 1...3 {
-                let cache = StateCache()
-                await cache.updateTracks([
+                let tracks = [
                     TrackState(id: 0, name: "Lead", type: .audio),
                     TrackState(id: 1, name: "Pad", type: .softwareInstrument, volume: 0.2),
                     TrackState(id: 2, name: "FX", type: .audio, pan: 0),
-                ])
+                ]
+                let cache = StateCache()
+                await cache.updateTracks(tracks)
+                let surface = SagaLiveTrackSurface(tracks)
                 let registry = TargetRegistry()
                 var targets: [TargetReference] = []
                 for track in await cache.getTracks() {
@@ -510,14 +639,19 @@ struct SagaExecutionTests {
                         fingerprint: descriptor.fingerprint
                     ))
                 }
-                let channel = SagaRecordingChannel(cache: cache, failureAt: failureAt)
+                let channel = SagaRecordingChannel(
+                    cache: cache,
+                    surface: surface,
+                    failureAt: failureAt
+                )
                 let router = ChannelRouter()
                 await router.register(channel)
                 let executor = ProductionSagaStepExecutor(
                     router: router,
                     cache: cache,
                     targetRegistry: registry,
-                    dialogPresent: { false }
+                    dialogPresent: { false },
+                    liveReadback: surface.readback
                 )
                 let plan = SagaPlan(
                     steps: [
@@ -550,10 +684,11 @@ struct SagaExecutionTests {
                 }
                 #expect(operations == expectedOperations, "failure position \(failureAt)")
 
-                let tracks = await cache.getTracks()
-                #expect(tracks[0].name == "Lead", "failure position \(failureAt)")
-                #expect(tracks[1].volume == 0.2, "failure position \(failureAt)")
-                #expect(tracks[2].pan == 0, "failure position \(failureAt)")
+                // Assert on the LIVE surface: it, not the cache mirror, is what
+                // the operator's Logic actually holds after compensation.
+                #expect(surface.snapshot(0)?.name == "Lead", "failure position \(failureAt)")
+                #expect(surface.snapshot(1)?.volume == 0.2, "failure position \(failureAt)")
+                #expect(surface.snapshot(2)?.pan == 0, "failure position \(failureAt)")
                 for index in 0..<failureAt - 1 {
                     #expect(
                         outcome.journal[index].compensationEvidence?.disposition == .verified,
