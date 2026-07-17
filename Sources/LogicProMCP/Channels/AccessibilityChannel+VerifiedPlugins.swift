@@ -1207,7 +1207,7 @@ extension AccessibilityChannel {
             + [targetSlot]
             + rankedControls.filter { $0.rank != 0 }.map(\.element)
         for element in attempts {
-            guard pressOrClick(element, runtime: runtime.ax) else { continue }
+            guard pressElement(element, runtime: runtime.ax) else { continue }
             switch await pollOpenPluginWindow(
                 trackName: trackName,
                 axDescription: axDescription,
@@ -1334,11 +1334,12 @@ extension AccessibilityChannel {
         return .none
     }
 
-    private static func pressOrClick(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
-        if AXHelpers.performAction(element, kAXPressAction as String, runtime: runtime) {
-            return true
-        }
-        return clickElementCenter(element, runtime: runtime)
+    /// ADR-001 coordinate ban: open the plugin window from its slot control via
+    /// AXPress only. The former element-derived `clickElementCenter` fallback is
+    /// removed; `openPluginWindowFromTargetSlot` fails closed (`window_open_failed`)
+    /// when no ranked control responds to AXPress, never a coordinate click.
+    private static func pressElement(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
+        AXHelpers.performAction(element, kAXPressAction as String, runtime: runtime)
     }
 
     private static func pluginWindowAcquisitionDiagnostics(
@@ -2063,10 +2064,12 @@ extension AccessibilityChannel {
         _ item: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Bool {
-        if clickElementCenter(item, runtime: runtime) {
-            return true
-        }
-        return AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime)
+        // ADR-001 coordinate ban: open the menu-bar item via AXPress only
+        // (menu-bar items respond to AXPress). The former element-derived
+        // clickElementCenter-first rung is removed. The features this serves keep
+        // non-coordinate fallbacks — mixer reveal falls back to the cgevent key-7
+        // channel and Edit▸Undo to Cmd+Z — so no feature is degraded.
+        AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime)
     }
 
     private static func menuItem(
@@ -2686,8 +2689,9 @@ extension AccessibilityChannel {
                 maxDepth: 4,
                 runtime: runtime.ax
             ) {
-                if AXHelpers.performAction(cancel, kAXPressAction as String, runtime: runtime.ax)
-                    || clickElementCenter(cancel, runtime: runtime.ax) {
+                // ADR-001 coordinate ban: dismiss via AXPress only (Escape remains
+                // the terminal non-coordinate fallback below).
+                if AXHelpers.performAction(cancel, kAXPressAction as String, runtime: runtime.ax) {
                     continue
                 }
             }
@@ -2699,8 +2703,8 @@ extension AccessibilityChannel {
                 )
                 return subrole == kAXCloseButtonSubrole as String
             }) {
+                // ADR-001 coordinate ban: AXPress only; no element-derived click.
                 _ = AXHelpers.performAction(close, kAXPressAction as String, runtime: runtime.ax)
-                    || clickElementCenter(close, runtime: runtime.ax)
             } else {
                 AXMouseHelper.pressEscape()
             }

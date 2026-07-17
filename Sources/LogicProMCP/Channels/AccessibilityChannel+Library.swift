@@ -53,10 +53,11 @@ extension AccessibilityChannel {
     // MARK: - F2 plugin.scan_presets minimal handler (T0 verdict MIXED)
 
     /// Production `plugin.scan_presets` path — relies on currently-focused plugin
-    /// window. CGEvent-clicks the Setting popup to open the menu, then walks via
-    /// AXPress on AXMenuItems (T0 v0.6 empirical — popup AXPress unreliable, menu
-    /// item AXPress 100% reliable). Returns serialized PluginPresetNode tree.
-    /// Full T6 (cache, persistence, identity gate) is follow-up.
+    /// window. Opens the Setting popup via the AXShowMenu→AXPress ladder (ADR-001:
+    /// no CGEvent last-resort), then walks via AXPress on AXMenuItems (T0 v0.6
+    /// empirical — popup AXPress unreliable, menu item AXPress 100% reliable).
+    /// Returns serialized PluginPresetNode tree. Full T6 (cache, persistence,
+    /// identity gate) is follow-up.
     static func runLivePluginPresetScan(
         runtime: AXLogicProElements.Runtime,
         settleMs: Int = 250
@@ -73,12 +74,11 @@ extension AccessibilityChannel {
         guard let popup = PluginInspector.findSettingPopupAX(in: pluginWin) else {
             return .error("Setting popup not found in plugin window")
         }
-        // 4. Open the menu — AX-first ladder. AXShowMenu is the canonical popup
-        //    action per NSAccessibility; AXPress sometimes works on Logic's
-        //    custom popups; CGEvent click is the last-resort fallback.
-        //    T0 verdict (v0.6) said raw AXPress was unreliable — we re-test here
-        //    and only fall through to CGEvent if both AX actions fail to surface
-        //    the AXMenu within the settle window.
+        // 4. Open the menu — AX-only ladder (ADR-001: no CGEvent last-resort).
+        //    AXShowMenu is the canonical popup action per NSAccessibility; AXPress
+        //    is the secondary. T0 verdict (v0.6) said raw AXPress was unreliable,
+        //    so AXShowMenu leads; if neither surfaces the AXMenu within the settle
+        //    window the scan fails closed rather than reaching a coordinate click.
         var menu: AXUIElement?
         let axOpenActions = [kAXShowMenuAction, kAXPressAction]
         for action in axOpenActions {
@@ -90,18 +90,13 @@ extension AccessibilityChannel {
                 }
             }
         }
-        if menu == nil {
-            guard let center = PluginInspector.centerPoint(of: popup) else {
-                return .error("Setting popup has no readable position/size; AXShowMenu/AXPress also failed")
-            }
-            guard LibraryAccessor.productionMouseClick(at: center) else {
-                return .error("AXShowMenu/AXPress failed and CGEvent click on Setting popup also failed (Post-Event permission?)")
-            }
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            menu = PluginInspector.findOpenSettingMenuAX(in: appRoot)
-        }
+        // ADR-001 coordinate ban: the Setting popup is opened via the AXShowMenu →
+        // AXPress ladder only (AXShowMenu is the canonical NSAccessibility popup
+        // action and is the primary here). The former element-derived CGEvent
+        // click last-resort is removed; if neither AX action surfaces the menu,
+        // fail closed rather than reaching a coordinate primitive.
         guard let menu = menu else {
-            return .error("Setting menu did not appear after AXShowMenu/AXPress/CGEvent (or already dismissed)")
+            return .error("Setting menu did not appear after AXShowMenu/AXPress (or already dismissed)")
         }
         // 6. Build live probe + walk
         let probe = PluginInspector.liveMenuProbe(rootMenu: menu, settleMs: settleMs)
@@ -535,8 +530,9 @@ extension AccessibilityChannel {
             return false
         }
 
-        if !clickAXElementCenter(viewMenu, runtime: runtime.ax),
-           !AXHelpers.performAction(viewMenu, kAXPressAction as String, runtime: runtime.ax) {
+        // ADR-001 coordinate ban: open the View menu via AXPress only (menu-bar
+        // items respond to AXPress); no element-derived click fallback.
+        if !AXHelpers.performAction(viewMenu, kAXPressAction as String, runtime: runtime.ax) {
             return false
         }
         try? await Task.sleep(nanoseconds: 120_000_000)
@@ -562,23 +558,13 @@ extension AccessibilityChannel {
             return false
         }
 
-        if clickAXElementCenter(item, runtime: runtime.ax)
-            || AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax) {
+        // ADR-001 coordinate ban: activate the Show Library menu item via AXPress
+        // only; fail closed (Escape) if it does not respond.
+        if AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax) {
             return true
         }
         AXMouseHelper.pressEscape()
         return false
-    }
-
-    private static func clickAXElementCenter(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
-        guard let pos = AXHelpers.getPosition(element, runtime: runtime),
-              let size = AXHelpers.getSize(element, runtime: runtime),
-              size.width > 0, size.height > 0 else {
-            return false
-        }
-        return LibraryAccessor.productionMouseClick(
-            at: CGPoint(x: pos.x + size.width / 2, y: pos.y + size.height / 2)
-        )
     }
 
     /// One-shot, thread-safe latch so a deadline race resumes its continuation

@@ -236,7 +236,7 @@ extension ChannelRouter {
         // reintroduced only through an allowlisted AX mixer-slot path.
         "plugin.list":                [.accessibility],
         "plugin.set_param":           [.scripter],  // deterministic plugin parameter path
-        "plugin.scan_presets":        [.accessibility],  // F2 — empirical T0 verdict MIXED (CGEvent popup + AXPress menu)
+        "plugin.scan_presets":        [.accessibility],  // F2 — AX-only ladder (AXShowMenu→AXPress); ADR-001 removed the CGEvent popup last-resort
 
         // Automation
         "automation.get_mode":        [.accessibility],

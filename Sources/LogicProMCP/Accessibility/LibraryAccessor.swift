@@ -758,18 +758,15 @@ enum LibraryAccessor {
             )
             guard orientation == kAXHorizontalOrientationValue as String else { continue }
             guard horizontallyOverlaps(scrollBar, browserFrame: browserFrame, runtime: runtime) else { continue }
+            // ADR-001 coordinate ban: reset the stuck horizontal scrollbar by
+            // writing AXValue 0 only; the former element-derived cliclick nudge
+            // is removed.
             didReset = AXHelpers.setAttribute(
                 scrollBar,
                 kAXValueAttribute,
                 NSNumber(value: 0),
                 runtime: runtime
             ) || didReset
-            if let scrollFrame = frame(of: scrollBar, runtime: runtime) {
-                let resetPoint = CGPoint(x: scrollFrame.minX + 6, y: scrollFrame.midY)
-                debugLibraryClick("reset scrollbar frame=\(scrollFrame) point=\(resetPoint)")
-                _ = postCliclick(command: "c", at: resetPoint)
-                didReset = true
-            }
         }
         if didReset {
             Thread.sleep(forTimeInterval: 0.10)
