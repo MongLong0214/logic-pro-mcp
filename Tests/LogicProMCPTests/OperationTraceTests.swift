@@ -49,7 +49,9 @@ private actor OperationTraceTransportChannel: Channel {
 @Suite(.serialized)
 struct OperationTraceTests {
     @Test func OperationTraceTransportFlagOff() async {
-        let previous = replaceOperationTraceFlag(with: nil)
+        // ADR-005 #288 R2: tracing is DEFAULT ON, so proving the OFF path needs
+        // the explicit "0" kill-switch — an unset variable now means ON.
+        let previous = replaceOperationTraceFlag(with: "0")
         defer { _ = replaceOperationTraceFlag(with: previous) }
 
         let router = ChannelRouter()
@@ -582,7 +584,9 @@ private actor OperationTraceMixerChannel: Channel {
 extension OperationTraceTests {
     @Test(arguments: ["set_volume", "set_pan"])
     func OperationTraceMixerFlagOff(command: String) async {
-        let previous = replaceOperationTraceFlag(with: nil)
+        // ADR-005 #288 R2: DEFAULT ON — the OFF path is pinned via the "0"
+        // kill-switch, not an unset variable.
+        let previous = replaceOperationTraceFlag(with: "0")
         defer { _ = replaceOperationTraceFlag(with: previous) }
         await OperationTraceStore.shared.clear()
 
@@ -759,7 +763,9 @@ private actor OperationTraceTrackChannel: Channel {
 extension OperationTraceTests {
     @Test(arguments: ["rename", "mute"])
     func OperationTraceTracksFlagOff(command: String) async {
-        let previous = replaceOperationTraceFlag(with: nil)
+        // ADR-005 #288 R2: DEFAULT ON — the OFF path is pinned via the "0"
+        // kill-switch, not an unset variable.
+        let previous = replaceOperationTraceFlag(with: "0")
         defer { _ = replaceOperationTraceFlag(with: previous) }
         await OperationTraceStore.shared.clear()
 

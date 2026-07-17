@@ -87,10 +87,41 @@ struct FeatureFlagEnvironmentTests {
         }
     }
 
-    @Test("ADR-005 operation trace stays default OFF")
-    func operationTraceDefaultsToFalse() {
+    // ADR-005 #288 R2: `LOGIC_MCP_ADR005_OPERATION_TRACE` is DEFAULT ON. Same
+    // kill-switch shape as ADR-002 above — read with `!= "0"`, so an absent
+    // variable means ON and only the exact string "0" disables tracing. Bare /
+    // negated `#expect` spellings only (see the suite header: `== true/false`
+    // is DEAD under this toolchain and would pass against the old `== "1"`).
+    @Test("(a) ADR-005 no env and no override reads as ON — the shipped default")
+    func operationTraceDefaultsToOn() {
         Self.withEnv("LOGIC_MCP_ADR005_OPERATION_TRACE", nil) {
+            #expect(FeatureFlags.adr005OperationTrace)
+        }
+    }
+
+    @Test("(b) ADR-005 the =0 kill-switch disables tracing — the rollback path")
+    func operationTraceKillSwitchZeroDisables() {
+        Self.withEnv("LOGIC_MCP_ADR005_OPERATION_TRACE", "0") {
             #expect(!FeatureFlags.adr005OperationTrace)
+        }
+    }
+
+    @Test("(c) ADR-005 the pre-promotion =1 opt-in spelling still reads as ON")
+    func operationTraceExplicitOneStaysOn() {
+        Self.withEnv("LOGIC_MCP_ADR005_OPERATION_TRACE", "1") {
+            #expect(FeatureFlags.adr005OperationTrace)
+        }
+    }
+
+    @Test("ADR-005 kill-switch matches \"0\" exactly — =false does NOT disable")
+    func operationTraceKillSwitchMatchesZeroExactly() {
+        for notDisabled in ["false", "off", "no", "", " 0", "00"] {
+            Self.withEnv("LOGIC_MCP_ADR005_OPERATION_TRACE", notDisabled) {
+                #expect(
+                    FeatureFlags.adr005OperationTrace,
+                    "LOGIC_MCP_ADR005_OPERATION_TRACE=\(notDisabled) must NOT read as disabled — only \"0\" is the kill-switch"
+                )
+            }
         }
     }
 }

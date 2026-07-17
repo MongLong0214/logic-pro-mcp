@@ -70,7 +70,7 @@ Kernel increments merged to `main`. State-changing pilot paths stay behind their
 - Merged: #318.
 
 ### ADR-005 — Operation Trace and Support Bundle (`In Implementation`)
-- `OperationTraceStore` actor (bounded ring buffer, privacy allowlist), trace-ID + event-phase model with explicit `write_boundary.crossed` instrumentation behind `FeatureFlags.adr005OperationTrace`. `logic_system` trace query commands added.
+- `OperationTraceStore` actor (bounded ring buffer, privacy allowlist), trace-ID + event-phase model with explicit `write_boundary.crossed` instrumentation. **Default-ON** as of the #288 R2 promotion (`FeatureFlags.adr005OperationTrace`, kill-switch `LOGIC_MCP_ADR005_OPERATION_TRACE=0`): successful mutating results carry a `trace_id` by default; measured overhead ~45.7µs/op (3-4 orders under AX latency). `logic_system` trace query commands added.
 - **Coverage is registry-driven across all 86 mutating operations on 9 dispatchers** (a permanent gate iterates `OperationRegistry.specs` and pins the census), not just the original transport/mixer/tracks pilot. Honest scope: this proves trace *existence* per mutating op; write-boundary placement against real AX writes and the richer phase set (route/target/gate/verification-poll/reconciliation/compensation) remain outstanding — 9 of 13 declared `TracePhase` cases are not yet recorded anywhere, and saga child traces are not yet correlated to their parent.
 - Local-only support bundle ships (`doctor.json`, `manifest.json`, `metadata.json`, `redaction_report.json`, `traces.json`, `SHA256SUMS`) with a privacy-class registry and a leak scan; a broader CI fixture corpus is still outstanding.
 - Merged: #317, #320, #330.
