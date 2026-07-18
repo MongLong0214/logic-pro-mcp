@@ -337,6 +337,71 @@ struct SystemDispatcher: OperationTraceDispatching {
             }
             return toolTextResult("State refresh triggered. Cache will be updated on next poll cycle.")
 
+        case "setup_arm_key":
+            // Consent-based one-time automation of the coordinate-free record-arm
+            // key command (the track-header Record-Enable AXPress is a no-op, so a
+            // key command is the only coord-free arm; it ships unassigned and
+            // Logic 12.2+ blocks programmatic import). Fails closed without consent.
+            let consent = params["consent"]?.stringValue == "true"
+            let keyCode: CGKeyCode
+            let modifiers: CGEventFlags
+            switch AccessibilityChannel.resolveArmChord() {
+            case .resolved(let code, let flags):
+                keyCode = code
+                modifiers = flags
+            case .invalidKeyCode(let raw):
+                return toolTextResult(HonestContract.encodeStateC(
+                    error: .armKeyConfigInvalid,
+                    hint: "LOGIC_PRO_MCP_ARM_KEYCODE '\(raw)' is not a valid decimal keycode.",
+                    extras: ["stage": "resolve_chord"]
+                ), isError: true)
+            case .invalidModifierToken(let token):
+                return toolTextResult(HonestContract.encodeStateC(
+                    error: .armKeyConfigInvalid,
+                    hint: "LOGIC_PRO_MCP_ARM_KEY_MODIFIERS has an unknown modifier token '\(token)'.",
+                    extras: ["stage": "resolve_chord"]
+                ), isError: true)
+            }
+            let chordText = ArmKeyCommandSetup.chordLabel(keyCode: keyCode, modifiers: modifiers)
+            let armSetupOutcome = ArmKeyCommandSetup.run(
+                consent: consent,
+                keyCode: keyCode,
+                modifiers: modifiers,
+                runtime: .production(verifyArmFlip: { AccessibilityChannel.armSetupVerify() })
+            )
+            switch armSetupOutcome {
+            case .consentRequired:
+                return toolTextResult(HonestContract.encodeStateC(
+                    error: .invalidParams,
+                    hint: "One-time setup assigns Logic's \"\(ArmKeyCommandSetup.commandName)\" command to "
+                        + "\(chordText) so tracks arm coordinate-free. The server drives the Key Commands "
+                        + "window on your behalf (no mouse). Re-run with consent:\"true\" to proceed.",
+                    extras: ["stage": "consent", "chord": chordText, "command": ArmKeyCommandSetup.commandName]
+                ), isError: true)
+            case .configuredAndVerified:
+                return toolTextResult(HonestContract.encodeStateA(extras: [
+                    "chord": chordText,
+                    "command": ArmKeyCommandSetup.commandName,
+                    "verified": true,
+                    "detail": "Key command assigned and confirmed by a live record-arm flip.",
+                ]))
+            case .configuredUnverified(let why):
+                return toolTextResult(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: [
+                        "chord": chordText,
+                        "command": ArmKeyCommandSetup.commandName,
+                        "detail": "Key command assigned; could not confirm a live flip (\(why)).",
+                    ]
+                ))
+            case .failed(let stage, let hint):
+                return toolTextResult(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: hint,
+                    extras: ["stage": stage, "chord": chordText]
+                ), isError: true)
+            }
+
         case "export_support_bundle":
             let createdAt = Date()
             let directory: URL

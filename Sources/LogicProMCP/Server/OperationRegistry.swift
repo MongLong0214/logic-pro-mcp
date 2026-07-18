@@ -38,6 +38,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case systemSagaExecute = "system.saga_execute"
     case systemSagaStatus = "system.saga_status"
     case systemSagaCancel = "system.saga_cancel"
+    case systemSetupArmKey = "system.setup_arm_key"
     case pluginsGetInventory = "plugins.get_inventory"
     case pluginsSetParamVerified = "plugins.set_param_verified"
     case pluginsInsertVerified = "plugins.insert_verified"
@@ -300,6 +301,7 @@ enum OperationRegistry {
             "system.list_recent_traces", "system.get_trace", "system.clear_traces",
             "system.export_support_bundle", "system.help", "system.saga_preflight",
             "system.saga_execute", "system.saga_status", "system.saga_cancel",
+            "system.setup_arm_key",
         ],
         ToolID.logicPlugins.rawValue: [
             "plugins.get_inventory", "plugins.set_param_verified", "plugins.insert_verified",
@@ -353,6 +355,7 @@ enum OperationRegistry {
             "health", "permissions", "refresh_cache", "export_support_bundle", "help",
             "list_recent_traces", "get_trace", "clear_traces",
             "saga_preflight", "saga_execute", "saga_status", "saga_cancel",
+            "setup_arm_key",
         ],
         ToolID.logicPlugins.rawValue: [
             "get_inventory", "set_param_verified", "insert_verified",
@@ -636,6 +639,10 @@ enum OperationRegistry {
         (.systemSagaExecute, "saga_execute", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, ["idempotency_key", "steps"]),
         (.systemSagaStatus, "saga_status", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["idempotency_key"]),
         (.systemSagaCancel, "saga_cancel", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, ["idempotency_key"]),
+        // Consent-gated one-time Key-Commands GUI automation for the coord-free
+        // arm chord; long deadline (opens/searches/learns/closes the KC window),
+        // self-verifies via a live record-arm flip.
+        (.systemSetupArmKey, "setup_arm_key", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, ["consent"]),
     ] as [(OperationID, String, Mutability, DeadlineClass, VerificationPolicy, Set<String>)]).map { entry in
         OperationSpec(
             id: entry.0,

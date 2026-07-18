@@ -406,6 +406,40 @@ extension AccessibilityChannel {
         )
     }
 
+    /// Ground-truth verification for the arm-key auto-setup: drive a real
+    /// record-arm on track 0 through the configured chord and report whether
+    /// record-enable actually flipped (State A from the coordinate-free arm
+    /// ladder means the observed flip happened). Returns nil when there is no
+    /// track to test on. Restores track 0's original arm state either way.
+    /// ArmKeyCommandSetup calls this after assigning the key command — if the
+    /// chord flips arm here, the assignment took; if not, setup fails closed.
+    static func armSetupVerify(
+        runtime: AXLogicProElements.Runtime = .production,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool? {
+        guard let armButton = AXLogicProElements.findTrackArmButton(trackIndex: 0, runtime: runtime),
+              let curNum = AXHelpers.getValue(armButton, runtime: runtime.ax) as? NSNumber else {
+            return nil
+        }
+        let current = curNum.intValue != 0
+        let toggle = defaultSetTrackToggle(
+            params: ["index": "0", "enabled": String(!current)],
+            button: "Record",
+            runtime: runtime,
+            environment: environment
+        )
+        let flipped: Bool
+        if case .success = toggle { flipped = true } else { flipped = false }
+        // Restore the original arm state regardless of the verify outcome.
+        _ = defaultSetTrackToggle(
+            params: ["index": "0", "enabled": String(current)],
+            button: "Record",
+            runtime: runtime,
+            environment: environment
+        )
+        return flipped
+    }
+
     /// A single coordinate-free actuation rung: `actuate` either fires (then the
     /// caller polls the AX read-back up to `pollMs` to decide State A) or REFUSES
     /// and fails closed. A refusal NEVER posts a key.
