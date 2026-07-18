@@ -59,7 +59,11 @@ struct CoordFreeTrackToggleTests {
     /// A Logic-12-shaped fake: an AXList("Track Headers") of AXLayoutItem rows,
     /// each carrying Mute/Solo/Record-Enable AXCheckBoxes (value 0) plus an
     /// AXSelected flag. `selected` seeds which rows report AXSelected == true.
-    private func makeToggleFixture(trackCount: Int = 1, selected: Set<Int> = [0]) -> ToggleFixture {
+    private func makeToggleFixture(
+        trackCount: Int = 1,
+        selected: Set<Int> = [0],
+        nilSelected: Set<Int> = []
+    ) -> ToggleFixture {
         let b = FakeAXRuntimeBuilder()
         let app = b.element(9000)
         let window = b.element(9001)
@@ -71,7 +75,7 @@ struct CoordFreeTrackToggleTests {
         b.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
         b.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
         // Control bar with the transport Record checkbox (value 0 = not
-        // recording) so `isTransportRecording` can read it in arm tests.
+        // recording) so `transportRecordingState` can read it in arm tests.
         b.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
         b.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
         b.setChildren(controlBar, [recordCheckbox])
@@ -91,7 +95,11 @@ struct CoordFreeTrackToggleTests {
             let arm = b.element(base + 3)
             b.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
             b.setAttribute(header, kAXTitleAttribute as String, "Track \(i + 1)")
-            b.setAttribute(header, kAXSelectedAttribute as String, selected.contains(i))
+            // `nilSelected` leaves AXSelected UNSET (nil/unreadable) for those rows,
+            // modelling headers that omit the attribute (#5 fail-closed input).
+            if !nilSelected.contains(i) {
+                b.setAttribute(header, kAXSelectedAttribute as String, selected.contains(i))
+            }
             for (control, desc) in [(mute, "Mute"), (solo, "Solo"), (arm, "Record Enable")] {
                 b.setAttribute(control, kAXRoleAttribute as String, kAXCheckBoxRole as String)
                 b.setAttribute(control, kAXDescriptionAttribute as String, desc)
@@ -259,8 +267,10 @@ struct CoordFreeTrackToggleTests {
     func armKeyboardActuatorFlipsStateA() async throws {
         let f = makeToggleFixture()
         let arm = f.arm[0]
-        let armCode = AccessibilityChannel.resolvedArmKeyCode()
-        let armFlags = AccessibilityChannel.resolvedArmModifiers()
+        guard case let .resolved(armCode, armFlags) = AccessibilityChannel.resolveArmChord() else {
+            Issue.record("default arm chord must resolve to a valid code + modifier flags")
+            return
+        }
         let key = KeyMouseRecorder()
         // Correct "Toggle Track Record Enable": flips the track's record-enable,
         // does NOT touch the transport Record checkbox.
@@ -308,7 +318,10 @@ struct CoordFreeTrackToggleTests {
     @Test("arm honesty: a key that starts transport RECORDING fails closed, never a false arm")
     func armFailsClosedWhenKeyStartsRecording() async throws {
         let f = makeToggleFixture()
-        let armCode = AccessibilityChannel.resolvedArmKeyCode()
+        guard case let .resolved(armCode, _) = AccessibilityChannel.resolveArmChord() else {
+            Issue.record("default arm chord must resolve")
+            return
+        }
         let key = KeyMouseRecorder()
         // Mis-assigned key = transport Record: it starts recording (control-bar
         // Record → 1) and does NOT arm the track.
@@ -386,36 +399,296 @@ struct CoordFreeTrackToggleTests {
 
     // MARK: - Configurable arm keycode
 
-    @Test("arm chord: default Ctrl+Shift+E (14); keycode + modifiers env-overridable")
-    func armChordResolution() {
-        // Keycode: default 'e' (14), override parsed, bad value falls back.
+    // MARK: - #7 configurable arm chord: config errors fail closed, never fall open
+
+    /// Helper: does `resolveArmChord` return `.resolved` satisfying `check`?
+    private func resolvedChord(
+        _ env: [String: String],
+        _ check: (CGKeyCode, CGEventFlags) -> Bool
+    ) -> Bool {
+        if case let .resolved(code, flags) = AccessibilityChannel.resolveArmChord(environment: env) {
+            return check(code, flags)
+        }
+        return false
+    }
+
+    @Test("#7 arm chord resolution: absent→default; valid→parsed; bad keycode / unknown modifier → config error; empty → bare")
+    func armChordResolutionContract() {
         #expect(AccessibilityChannel.defaultArmKeyCode == 14)
-        #expect(AccessibilityChannel.resolvedArmKeyCode(environment: [:]) == 14)
-        #expect(AccessibilityChannel.resolvedArmKeyCode(
-            environment: ["LOGIC_PRO_MCP_ARM_KEYCODE": "60"]
-        ) == 60)
-        #expect(AccessibilityChannel.resolvedArmKeyCode(
-            environment: ["LOGIC_PRO_MCP_ARM_KEYCODE": "not-a-number"]
-        ) == 14)
 
-        // Modifiers: default control+shift when absent.
-        let def = AccessibilityChannel.resolvedArmModifiers(environment: [:])
-        #expect(def.contains(.maskControl))
-        #expect(def.contains(.maskShift))
-        #expect(!def.contains(.maskCommand))
-        #expect(!def.contains(.maskAlternate))
-        #expect(AccessibilityChannel.defaultArmModifiers == def)
+        // Row: ABSENT → default Ctrl+Shift+E (14). Force-unwrapped via closure so
+        // the assertion is live (never a DEAD `optionalBool == true`).
+        #expect(resolvedChord([:]) { code, flags in
+            code == 14 && flags.contains(.maskControl) && flags.contains(.maskShift)
+                && !flags.contains(.maskCommand) && !flags.contains(.maskAlternate)
+        })
+        #expect(AccessibilityChannel.defaultArmModifiers == [.maskControl, .maskShift])
 
-        // Override parses the comma list…
-        let ov = AccessibilityChannel.resolvedArmModifiers(
-            environment: ["LOGIC_PRO_MCP_ARM_KEY_MODIFIERS": "command, option"]
+        // Row: present + valid keycode + valid modifier list → parsed.
+        #expect(resolvedChord([
+            "LOGIC_PRO_MCP_ARM_KEYCODE": "60",
+            "LOGIC_PRO_MCP_ARM_KEY_MODIFIERS": "command, option"
+        ]) { code, flags in
+            code == 60 && flags.contains(.maskCommand) && flags.contains(.maskAlternate)
+                && !flags.contains(.maskControl)
+        })
+
+        // Row: `ARM_KEYCODE=not-a-number` → INVALID (no silent fallback to 14).
+        #expect({
+            if case .invalidKeyCode = AccessibilityChannel.resolveArmChord(
+                environment: ["LOGIC_PRO_MCP_ARM_KEYCODE": "not-a-number"]
+            ) { return true }
+            return false
+        }())
+
+        // Row: `ARM_KEY_MODIFIERS=controle,shft` (typos) → INVALID (no dropped tokens).
+        #expect({
+            if case .invalidModifierToken = AccessibilityChannel.resolveArmChord(
+                environment: ["LOGIC_PRO_MCP_ARM_KEY_MODIFIERS": "controle,shft"]
+            ) { return true }
+            return false
+        }())
+
+        // Row: `ARM_KEY_MODIFIERS=` (present-empty) → resolved as a BARE key (no
+        // flags). The arm PATH then refuses this as unsafe (see behavioral test).
+        #expect(resolvedChord(["LOGIC_PRO_MCP_ARM_KEY_MODIFIERS": ""]) { _, flags in
+            flags.isEmpty
+        })
+    }
+
+    @Test("#7 arm path fails closed (arm_key_config_invalid) on an unparseable keycode override — key NOT posted")
+    func armRefusesInvalidKeycodeConfig() {
+        let f = makeToggleFixture()
+        let key = KeyMouseRecorder()
+        let logic = f.builder.makeLogicRuntime(
+            appElement: f.app, setAttributeHandler: nil, performActionHandler: nil
         )
-        #expect(ov.contains(.maskCommand))
-        #expect(ov.contains(.maskAlternate))
-        #expect(!ov.contains(.maskControl))
-        // …and an explicit EMPTY var means no modifiers (a bare key).
-        #expect(AccessibilityChannel.resolvedArmModifiers(
-            environment: ["LOGIC_PRO_MCP_ARM_KEY_MODIFIERS": ""]
-        ).isEmpty)
+        let result = AccessibilityChannel.defaultSetTrackToggle(
+            params: ["index": "0", "enabled": "true"],
+            button: "Record",
+            runtime: logic,
+            keyRuntime: key.runtime(),
+            processRuntime: noopProcessRuntime(),
+            environment: ["LOGIC_PRO_MCP_ARM_KEYCODE": "not-a-number"]
+        )
+        #expect(!result.isSuccess)
+        let obj = object(result.message)
+        #expect(obj?["state"] as? String == "C")
+        #expect(obj?["error"] as? String == "arm_key_config_invalid")
+        // The chord was never posted — a fail-open default would have posted 14.
+        #expect(key.flaggedKeyEvents.isEmpty)
+        #expect(!boolValue(f, f.arm[0])!)
+    }
+
+    @Test("#7 arm path refuses a BARE (no-modifier) key override as unsafe — key NOT posted")
+    func armRefusesBareKeyConfig() {
+        let f = makeToggleFixture()
+        let key = KeyMouseRecorder()
+        let logic = f.builder.makeLogicRuntime(
+            appElement: f.app, setAttributeHandler: nil, performActionHandler: nil
+        )
+        let result = AccessibilityChannel.defaultSetTrackToggle(
+            params: ["index": "0", "enabled": "true"],
+            button: "Record",
+            runtime: logic,
+            keyRuntime: key.runtime(),
+            processRuntime: noopProcessRuntime(),
+            environment: ["LOGIC_PRO_MCP_ARM_KEY_MODIFIERS": ""]  // present-empty → bare
+        )
+        #expect(!result.isSuccess)
+        let obj = object(result.message)
+        #expect(obj?["state"] as? String == "C")
+        #expect(obj?["error"] as? String == "arm_key_config_invalid")
+        #expect(key.flaggedKeyEvents.isEmpty)
+        #expect(key.keyEvents.isEmpty)
+    }
+
+    // MARK: - #3 double-toggle halt barrier
+
+    @Test("#3 halt barrier: rung-1 flips but its poll misses ⇒ rung-2 is NOT fired, result State A (no toggle-back)")
+    func haltBarrierStopsSecondRungAfterLatePress() {
+        // Scripted read-back: the barrier BEFORE the press reads 0 (proceed); the
+        // press's poll MISSES (injected false); then — modelling an AXValue that
+        // published only after the press poll window — the barrier BEFORE the
+        // keyboard rung reads 1 (== desired) and HALTS. A ladder without the
+        // barrier would advance and fire (toggle back) the keyboard rung.
+        var pressFired = false
+        var keyboardFired = false
+        let press: AccessibilityChannel.TrackToggleRung = ("press", 250, {
+            pressFired = true
+            return .actuated
+        })
+        let keyboard: AccessibilityChannel.TrackToggleRung = ("keyboard-mute", 600, {
+            keyboardFired = true
+            return .actuated
+        })
+        let reads: [Bool?] = [false, true]  // barrier-before-press, barrier-before-keyboard
+        var idx = 0
+        let outcome = AccessibilityChannel.runTrackToggleLadder(
+            rungs: [press, keyboard],
+            desired: true,
+            readValue: {
+                defer { idx += 1 }
+                return reads[min(idx, reads.count - 1)]
+            },
+            pollMatched: { _ in false }  // press poll MISSES
+        )
+
+        #expect(pressFired)
+        #expect(!keyboardFired)  // ← load-bearing: barrier halted before rung-2
+        #expect({
+            if case .landed(let action) = outcome { return action == "press" }
+            return false
+        }())
+    }
+
+    // MARK: - #5 nil AXSelected is not proof of "unselected"
+
+    @Test("#5 exclusive-select confirm: a non-target header with nil/unreadable AXSelected ⇒ NOT exclusive (fail closed)")
+    func nonTargetNilSelectedIsNotExclusive() {
+        // Target (0) selected; header 1 omits AXSelected entirely (nil). We cannot
+        // PROVE header 1 is unselected, so exclusivity is unproven → refuse.
+        let f = makeToggleFixture(trackCount: 2, selected: [0], nilSelected: [1])
+        let logic = f.builder.makeLogicRuntime(
+            appElement: f.app, setAttributeHandler: nil, performActionHandler: nil
+        )
+        let exclusive = AccessibilityChannel.confirmExclusiveSelection(
+            index: 0, runtime: logic, processRuntime: noopProcessRuntime()
+        )
+        #expect(!exclusive)
+    }
+
+    // MARK: - #4 select→key TOCTOU
+
+    /// Marks a second header selected on the Nth AXPress of a watched header —
+    /// modelling a concurrent multi-select that appears between the first exclusive
+    /// confirm and the atomic re-confirm right before the key post.
+    private final class HeaderPressFlip: @unchecked Sendable {
+        let builder: FakeAXRuntimeBuilder
+        let watch: AXUIElement
+        let onNthPress: Int
+        let select: AXUIElement
+        var presses = 0
+        init(builder: FakeAXRuntimeBuilder, watch: AXUIElement, onNthPress: Int, select: AXUIElement) {
+            self.builder = builder
+            self.watch = watch
+            self.onNthPress = onNthPress
+            self.select = select
+        }
+        func handler(_ element: AXUIElement, _ action: String) -> Bool {
+            if action == (kAXPressAction as String), element == watch {
+                presses += 1
+                if presses == onNthPress {
+                    builder.setAttribute(select, kAXSelectedAttribute as String, true)
+                }
+            }
+            return true
+        }
+    }
+
+    @Test("#4 select→key TOCTOU: selection lost between confirm and post ⇒ fail closed, key NOT posted")
+    func selectionLostBeforeKeyFailsClosed() async throws {
+        let f = makeToggleFixture(trackCount: 2, selected: [0])  // header 1 starts unselected
+        let key = KeyMouseRecorder()
+        key.onKeyEvent = { code in
+            if code == AccessibilityChannel.trackMuteKeyCode {
+                f.builder.setAttribute(f.mute[0], kAXValueAttribute as String, 1)
+            }
+        }
+        // The keyboard rung re-confirms exclusivity IMMEDIATELY before the key. The
+        // SECOND confirm's own selectTrackViaAX presses header 0 (press #2 overall),
+        // and at that instant header 1 becomes selected too — so the re-check sees a
+        // non-exclusive selection and must refuse without posting.
+        let flip = HeaderPressFlip(builder: f.builder, watch: f.headers[0], onNthPress: 2, select: f.headers[1])
+        let channel = makeChannel(f, keyRuntime: key.runtime(), performAction: { flip.handler($0, $1) })
+
+        let result = await channel.execute(operation: "track.set_mute", params: ["index": "0", "enabled": "true"])
+
+        #expect(!result.isSuccess)
+        let obj = object(result.message)
+        #expect(obj?["state"] as? String == "C")
+        #expect(obj?["error"] as? String == "selection_not_exclusive")
+        // Load-bearing: the TOCTOU re-check caught the change → key NEVER posted.
+        #expect(key.keyEvents.isEmpty)
+        #expect(!boolValue(f, f.mute[0])!)  // live force-unwrap (fixture always sets 0/1)
+    }
+
+    // MARK: - #6 keyboard-focus gate
+
+    @Test("#6 focus gate: a focused editable text field ⇒ mute refuses the synthetic key (unsafe_focus_for_synthetic_key)")
+    func muteRefusesWhenFocusIsEditableText() async throws {
+        let f = makeToggleFixture()
+        // Focus is on a rename/search text field — a synthetic 'm' would type text.
+        let textField = f.builder.element(9500)
+        f.builder.setAttribute(textField, kAXRoleAttribute as String, kAXTextFieldRole as String)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, textField)
+        let key = KeyMouseRecorder()
+        key.onKeyEvent = { code in
+            if code == AccessibilityChannel.trackMuteKeyCode {
+                f.builder.setAttribute(f.mute[0], kAXValueAttribute as String, 1)
+            }
+        }
+        let channel = makeChannel(f, keyRuntime: key.runtime())
+
+        let result = await channel.execute(operation: "track.set_mute", params: ["index": "0", "enabled": "true"])
+
+        #expect(!result.isSuccess)
+        let obj = object(result.message)
+        #expect(obj?["state"] as? String == "C")
+        #expect(obj?["error"] as? String == "unsafe_focus_for_synthetic_key")
+        #expect(key.keyEvents.isEmpty)  // key NEVER posted
+        #expect(!boolValue(f, f.mute[0])!)
+    }
+
+    @Test("#6 focus gate: a focused editable text field ⇒ arm refuses the synthetic chord")
+    func armRefusesWhenFocusIsEditableText() async throws {
+        let f = makeToggleFixture()
+        let textField = f.builder.element(9500)
+        f.builder.setAttribute(textField, kAXRoleAttribute as String, kAXTextFieldRole as String)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, textField)
+        let key = KeyMouseRecorder()
+        let channel = makeChannel(f, keyRuntime: key.runtime())
+
+        let result = await channel.execute(operation: "track.set_arm", params: ["index": "0", "enabled": "true"])
+
+        #expect(!result.isSuccess)
+        let obj = object(result.message)
+        #expect(obj?["state"] as? String == "C")
+        #expect(obj?["error"] as? String == "unsafe_focus_for_synthetic_key")
+        #expect(key.flaggedKeyEvents.isEmpty)  // chord NEVER posted
+        #expect(!boolValue(f, f.arm[0])!)
+    }
+
+    // MARK: - #2 transport unreadable ⇒ arm fails closed (never State A while maybe recording)
+
+    @Test("#2 arm honesty: transport Record UNREADABLE at post-actuate ⇒ transport_state_unknown, not State A")
+    func armFailsClosedWhenTransportUnreadable() async throws {
+        let f = makeToggleFixture()
+        let arm = f.arm[0]
+        guard case let .resolved(armCode, _) = AccessibilityChannel.resolveArmChord() else {
+            Issue.record("default arm chord must resolve")
+            return
+        }
+        // Make the control-bar Record checkbox UNREADABLE (a non-numeric AXValue →
+        // readControlBarCheckboxValue returns nil), so transport state is unknown.
+        f.builder.setAttribute(f.recordCheckbox, kAXValueAttribute as String, "unreadable")
+        let key = KeyMouseRecorder()
+        // The arm key genuinely flips the record-enable checkbox — but with the
+        // transport state unreadable we still cannot honestly claim a clean arm.
+        key.onFlaggedKey = { code, _ in
+            if code == armCode { f.builder.setAttribute(arm, kAXValueAttribute as String, 1) }
+        }
+        let channel = makeChannel(f, keyRuntime: key.runtime())
+
+        let result = await channel.execute(operation: "track.set_arm", params: ["index": "0", "enabled": "true"])
+
+        #expect(!result.isSuccess)
+        let obj = object(result.message)
+        #expect(obj?["state"] as? String == "C")
+        #expect(obj?["error"] as? String == "transport_state_unknown")
+        // The checkbox DID flip, yet arm is NOT claimed as State A (success:false
+        // + State C error above prove it was never a verified clean arm).
+        #expect(boolValue(f, arm)!)
+        #expect(key.mouseEvents.isEmpty)
     }
 }
