@@ -241,6 +241,33 @@ enum HonestContract {
         case sagaOutcomeUnavailable = "saga_outcome_unavailable"
         case notSupported = "not_supported"
         case sagaExecutionFailed = "saga_execution_failed"
+
+        // #106 coordinate-free track M/S/R actuator — fail-closed honesty codes.
+        /// The transport Record state was UNREADABLE at the arm post-actuate
+        /// check, so the server cannot prove the arm key did not instead start
+        /// transport recording. Distinct from `.axWriteFailed`: the write may have
+        /// landed on the checkbox, but the honesty claim is unverifiable, so arm
+        /// fails closed instead of returning State A (#2). NOT terminal — another
+        /// channel (e.g. MCU) may arm through a different mechanism.
+        case transportStateUnknown = "transport_state_unknown"
+        /// A mute/arm key command was refused because the target track could not
+        /// be proven EXCLUSIVELY selected (another track selected, or a header's
+        /// selection state unreadable). Distinct from the generic write-fail hint
+        /// so an operator is not misdirected to the key binding when selection is
+        /// the problem (#5/#9). The key was never posted.
+        case selectionNotExclusive = "selection_not_exclusive"
+        case logicNotFrontmost = "logic_not_frontmost"
+        /// A mute/arm synthetic key was refused because Logic's keyboard focus is
+        /// not known-safe (an editable text field/sheet/combo box is focused), so
+        /// posting the key would corrupt text or hit the wrong command (#6). The
+        /// key was never posted.
+        case unsafeFocusForSyntheticKey = "unsafe_focus_for_synthetic_key"
+        /// The record-arm key override (`LOGIC_PRO_MCP_ARM_KEYCODE` /
+        /// `LOGIC_PRO_MCP_ARM_KEY_MODIFIERS`) is present but invalid (unparseable
+        /// keycode, unknown modifier token, or a bare no-modifier key). The arm
+        /// path fails closed rather than silently posting the default or a partial
+        /// chord (#7). The key was never posted.
+        case armKeyConfigInvalid = "arm_key_config_invalid"
     }
 
     // MARK: - Encoding primitives

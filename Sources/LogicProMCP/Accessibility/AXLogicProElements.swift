@@ -92,9 +92,9 @@ enum AXLogicProElements {
     /// updates while a blocking sheet is up.
     static func dialogPresent(runtime: Runtime = .production) -> Bool {
         guard let app = appRoot(runtime: runtime) else { return false }
-        let windows: [AXUIElement] = AXHelpers.getAttribute(
+        guard let windows: [AXUIElement] = AXHelpers.getAttribute(
             app, kAXWindowsAttribute, runtime: runtime.ax
-        ) ?? []
+        ) else { return true }
         return windows.contains { isBlockingDialogWindow($0, runtime: runtime.ax) }
     }
 

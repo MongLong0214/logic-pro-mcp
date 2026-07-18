@@ -21,6 +21,7 @@ private final class ProcessRuntimeHarness: @unchecked Sendable {
                 self.activateCalls += 1
                 return self.activateResult
             },
+            logicIsFrontmost: { true },
             logicProBundleURL: { self.bundleURL }
         )
     }

@@ -800,11 +800,15 @@ enum SemanticOracleTable {
         ]
     )
 
-    /// The `defaultSetTrackToggle` write strategies — the `action` a State-A
-    /// toggle records as the path that actually landed the write. Pinned as a
+    /// The `defaultSetTrackToggle` coordinate-free actuator rungs — the
+    /// `action` a State-A toggle records as the path that actually landed the
+    /// write (#106 / ADR-001: the former value-write / HID `mouse-click` rungs
+    /// are removed). `no-op` = already at desired (toggle-from-read); `press` =
+    /// AXPress on the checkbox; `keyboard-mute` / `keyboard-solo` /
+    /// `keyboard-arm` = exclusive-select then a CGEvent key command. Pinned as a
     /// domain so a toggle claiming an unknown strategy is caught.
     static let trackToggleActions = [
-        "no-op", "press", "confirm", "value-nsnumber", "value-cfbool", "mouse-click",
+        "no-op", "press", "keyboard-mute", "keyboard-solo", "keyboard-arm",
     ]
 
     // AccessibilityChannel+Tracks `defaultSetTrackToggle` (button "Mute") →

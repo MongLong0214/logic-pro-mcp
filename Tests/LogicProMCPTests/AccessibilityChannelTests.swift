@@ -203,6 +203,7 @@ private func makeProcessRuntime(isRunning: Bool = true) -> ProcessUtils.Runtime 
         fallbackLogicProPID: { 4242 },
         logicProRunning: { isRunning },
         activateLogicPro: { true },
+        logicIsFrontmost: { true },
         logicProBundleURL: { nil }
     )
 }
@@ -288,6 +289,12 @@ private func makeAXBackedAccessibilityChannel(
         postUnicodeScalar: { _ in false },
         sleepMicros: { _ in }
     ),
+    trackToggleKeyRuntime: AXMouseHelper.Runtime = AXMouseHelper.Runtime(
+        postMouseEvent: { _, _, _ in false },
+        postKeyEvent: { _ in false },
+        postUnicodeScalar: { _ in false },
+        sleepMicros: { _ in }
+    ),
     processRuntime: ProcessUtils.Runtime = makeProcessRuntime(),
     confirmNewTrackDialog: @escaping @Sendable () -> Void = {},
     canPostEvents: @escaping @Sendable () -> Bool = { true },
@@ -299,6 +306,7 @@ private func makeAXBackedAccessibilityChannel(
         logicRuntime: logicRuntime ?? builder.makeLogicRuntime(appElement: app),
         controlBarMouseRuntime: controlBarMouseRuntime,
         trackRenameMouseRuntime: trackRenameMouseRuntime,
+        trackToggleKeyRuntime: trackToggleKeyRuntime,
         processRuntime: processRuntime,
         confirmNewTrackDialog: confirmNewTrackDialog,
         canPostEvents: canPostEvents,
@@ -2631,6 +2639,7 @@ private func makeTempoSliderFixture(
     builder.setChildren(window, [trackList])
     builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
     builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, trackList)
     builder.setChildren(trackList, [header])
 
     // v3.1.8 (Issue #7) — strict allTrackHeaders requires AXLayoutItem role
@@ -2657,7 +2666,18 @@ private func makeTempoSliderFixture(
     builder.setAttribute(armButton, kAXDescriptionAttribute as String, "Record Track 1")
     builder.setAttribute(armButton, kAXValueAttribute as String, 1)
 
-    let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app)
+    // #106 / ADR-001: mute is coordinate-free-actuated — AXPress no-ops on the
+    // real Logic checkbox, so the primary is exclusive-select + CGEvent key 'm'
+    // (keycode 46). Model that faithfully: pressing key 46 toggles muteButton.
+    let muteKeyRecorder = ControlBarMouseRecorder()
+    muteKeyRecorder.onKeyEvent = { code in
+        guard code == AccessibilityChannel.trackMuteKeyCode else { return }
+        let current = (builder.attributeValue(muteButton, kAXValueAttribute as String) as? NSNumber)?.boolValue ?? false
+        builder.setAttribute(muteButton, kAXValueAttribute as String, NSNumber(value: !current))
+    }
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder, app: app, trackToggleKeyRuntime: muteKeyRecorder.runtime()
+    )
 
     let tracksResult = await channel.execute(operation: "track.get_tracks", params: [:])
     #expect(tracksResult.isSuccess)
@@ -2683,10 +2703,17 @@ private func makeTempoSliderFixture(
     #expect(muteNoopResult.isSuccess)
     #expect(muteNoopResult.message.contains("\"action\":\"no-op\""))
     #expect(!builder.actionCalls.contains { $0.elementID == builder.elementID(muteButton) && $0.action == kAXPressAction as String })
-    // Explicitly request disable (enabled=false) — current=true, desired=false → press.
+    // Explicitly request disable (enabled=false) — current=true, desired=false.
+    // AXPress runs first (natural primary; a no-op on the real control), then
+    // the exclusive-select + key 'm' rung flips the value → verified State A.
     let muteOffResult = await channel.execute(operation: "track.set_mute", params: ["index": "0", "enabled": "false"])
     #expect(muteOffResult.isSuccess)
+    #expect(muteOffResult.message.contains("\"action\":\"keyboard-mute\""))
+    #expect(muteKeyRecorder.keyEvents.contains(AccessibilityChannel.trackMuteKeyCode))
+    // ADR-001: zero mouse/coordinate events — the actuator is keyboard-only.
+    #expect(muteKeyRecorder.mouseEvents.isEmpty)
     #expect(builder.actionCalls.contains { $0.elementID == builder.elementID(muteButton) && $0.action == kAXPressAction as String })
+    #expect((builder.attributeValue(muteButton, kAXValueAttribute as String) as? NSNumber)?.boolValue == false)
 
     let renameResult = await channel.execute(operation: "track.rename", params: ["index": "0", "name": "Lead"])
     #expect(renameResult.isSuccess)
@@ -3420,17 +3447,13 @@ private final class LockedFlag: @unchecked Sendable {
     builder.setChildren(header, [soloButton])
     builder.setAttribute(soloButton, kAXRoleAttribute as String, kAXButtonRole as String)
     builder.setAttribute(soloButton, kAXDescriptionAttribute as String, "Solo Track 1")
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, trackList)
+    builder.setAttribute(header, kAXSelectedAttribute as String, true)
 
-    // With performAction disabled, the fallback to direct AXValue write still
-    // succeeds (fake builder stores the value and read-back matches). New
-    // post-hardening contract: the handler reports success via "value-written"
-    // action marker rather than erroring out, because the desired state was
-    // actually reached through the alternate write path.
     let soloFailure = await failingChannel.execute(operation: "track.set_solo", params: ["index": "0"])
-    #expect(soloFailure.isSuccess)
-    // Strategy name: "value-nsnumber" is the first write-based strategy that
-    // succeeds in the fake builder (NSNumber round-trip works, press doesn't).
-    #expect(soloFailure.message.contains("\"action\":\"value-nsnumber\""))
+    #expect(!soloFailure.isSuccess)
+    #expect(soloFailure.message.contains("\"error\":\"ax_write_failed\""))
+    #expect(soloFailure.message.contains("\"state\":\"C\""))
 }
 
 @Test func testAccessibilityChannelAXBackedMixerAndProjectDefaultsUseFakeAXTree() async throws {

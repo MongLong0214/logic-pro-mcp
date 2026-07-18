@@ -184,6 +184,7 @@ actor AccessibilityChannel: Channel {
             logicRuntime: AXLogicProElements.Runtime = .production,
             controlBarMouseRuntime: AXMouseHelper.Runtime = .production,
             trackRenameMouseRuntime: AXMouseHelper.Runtime = .production,
+            trackToggleKeyRuntime: AXMouseHelper.Runtime = .production,
             processRuntime: ProcessUtils.Runtime = .production,
             confirmNewTrackDialog: @escaping @Sendable () -> Void = {
                 AccessibilityChannel.sendReturnKey()
@@ -224,7 +225,15 @@ actor AccessibilityChannel: Channel {
                 trackStates: { AccessibilityChannel.defaultGetTrackStates(runtime: logicRuntime) },
                 selectedTrack: { AccessibilityChannel.defaultGetSelectedTrack(runtime: logicRuntime) },
                 selectTrack: { await AccessibilityChannel.defaultSelectTrack(params: $0, runtime: logicRuntime) },
-                setTrackToggle: { AccessibilityChannel.defaultSetTrackToggle(params: $0, button: $1, runtime: logicRuntime) },
+                setTrackToggle: {
+                    AccessibilityChannel.defaultSetTrackToggle(
+                        params: $0,
+                        button: $1,
+                        runtime: logicRuntime,
+                        keyRuntime: trackToggleKeyRuntime,
+                        processRuntime: processRuntime
+                    )
+                },
                 renameTrack: {
                     AccessibilityChannel.defaultRenameTrack(
                         params: $0,

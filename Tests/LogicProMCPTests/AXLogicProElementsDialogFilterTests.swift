@@ -210,12 +210,18 @@ import Testing
     #expect(!(AXLogicProElements.dialogPresent(runtime: runtime)))
 }
 
-@Test func testDialogPresentReturnsFalseWhenNoWindowsExposed() {
-    // No kAXWindowsAttribute set — treated as "no dialogs known".
+@Test func testDialogPresentFailsClosedWhenWindowsAreUnreadable() {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(1)
-    let runtime = builder.makeLogicRuntime(appElement: app)
-    #expect(!(AXLogicProElements.dialogPresent(runtime: runtime)))
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueHandler: { _, attribute in
+            attribute == kAXWindowsAttribute as String ? .some(nil) : nil
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+    #expect(AXLogicProElements.dialogPresent(runtime: runtime))
 }
 
 // MARK: - #234 plugin-editor window classification

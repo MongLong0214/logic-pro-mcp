@@ -108,7 +108,10 @@ extension AccessibilityChannel {
     static func defaultSetTrackToggle(
         params: [String: String],
         button buttonName: String,
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        keyRuntime: AXMouseHelper.Runtime = .production,
+        processRuntime: ProcessUtils.Runtime = .production,
+        environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> ChannelResult {
         guard let indexStr = params["index"], let index = Int(indexStr) else {
             return .error("Missing or invalid 'index' parameter")
@@ -122,18 +125,7 @@ extension AccessibilityChannel {
         guard let button = finder(index) else {
             return .error("Cannot find \(buttonName) button on track \(index)")
         }
-        // Press toggles state. To make `enabled: true/false` idempotent (the
-        // user-visible contract), read current AXValue — only press when the
-        // target state differs. This fixes the class of bug where `arm off`
-        // was a silent no-op because MCU release-only was being sent and the
-        // AX press was unconditionally toggling regardless of desired state.
         let desired: Bool = (params["enabled"] ?? "true") == "true"
-        let current: Bool? = {
-            if let raw = AXHelpers.getValue(button, runtime: runtime.ax) as? Int { return raw != 0 }
-            if let raw = AXHelpers.getValue(button, runtime: runtime.ax) as? Bool { return raw }
-            if let raw = AXHelpers.getValue(button, runtime: runtime.ax) as? NSNumber { return raw.boolValue }
-            return nil
-        }()
         let baseExtras: [String: Any] = [
             "track": index,
             "button": buttonName,
@@ -141,96 +133,661 @@ extension AccessibilityChannel {
             "verification_source": "ax_value"
         ]
 
-        if let cur = current, cur == desired {
+        // Success is judged ONLY by re-reading this checkbox AXValue (the
+        // observed effect), NEVER by an AX action's return code: on real Logic
+        // 12.x the track-header M/S/R actions return non-zero even when they
+        // no-op (#106 sites-6/7), so trusting the return would fabricate a
+        // State A on a control that never moved.
+        func readValue() -> Bool? {
+            guard let v = AXHelpers.getValue(button, runtime: runtime.ax) else { return nil }
+            if let n = v as? NSNumber { return n.boolValue }
+            if let b = v as? Bool { return b }
+            if let i = v as? Int { return i != 0 }
+            if let s = v as? String {
+                switch s.lowercased() {
+                case "1", "true": return true
+                case "0", "false": return false
+                default: return nil
+                }
+            }
+            return nil
+        }
+
+        // Toggle-from-read: already at the desired state → verified no-op. No
+        // rung runs, so no keyboard/coordinate event is ever fired.
+        if let current = readValue(), current == desired {
             return .success(HonestContract.encodeStateA(extras: baseExtras.merging([
                 "observed": desired,
                 "action": "no-op"
             ]) { _, new in new }))
         }
 
-        func readCurrent() -> Bool? {
-            guard let v = AXHelpers.getValue(button, runtime: runtime.ax) else { return nil }
-            if let n = v as? NSNumber { return n.boolValue }
-            if let b = v as? Bool { return b }
-            if let i = v as? Int { return i != 0 }
-            if let s = v as? String { return s == "1" || s.lowercased() == "true" }
-            return nil
-        }
-
-        // #106: Logic 12.x track-header M/S/R checkboxes are `settable=false`
-        // and ignore `AXPress`/`AXConfirm`/value writes entirely — only a real
-        // mouse click at the control toggles Logic's internal state
-        // (live-confirmed: AXPress leaves the value at 0 indefinitely; a HID
-        // click flips it to 1 within ~350 ms). The earlier fixed 50 ms
-        // read-back was also too fast for Logic to publish the new AX value
-        // after a successful click, so even the arm path (whose locator did
-        // find the checkbox) reported a false `ax_write_failed` *after*
-        // physically toggling the control — a silent malfunction. The write
-        // now polls the read-back up to a per-strategy deadline, and the
-        // mouse-click last resort brings Logic frontmost first so the synthetic
-        // click lands on the (un-occluded) track header.
         func pollMatched(deadlineMs: Int) -> Bool {
             let deadline = Date().addingTimeInterval(Double(deadlineMs) / 1000.0)
             repeat {
-                if let after = readCurrent(), after == desired { return true }
+                if let after = readValue(), after == desired { return true }
                 usleep(40_000)
             } while Date() < deadline
             return false
         }
 
-        let strategies: [(name: String, pollMs: Int, action: () -> Void)] = [
-            ("press", 160, { _ = AXHelpers.performAction(button, kAXPressAction, runtime: runtime.ax) }),
-            ("confirm", 160, { _ = AXHelpers.performAction(button, kAXConfirmAction, runtime: runtime.ax) }),
-            ("value-nsnumber", 160, {
-                let n: NSNumber = desired ? 1 : 0
-                AXHelpers.setAttribute(button, kAXValueAttribute, n as CFTypeRef, runtime: runtime.ax)
-            }),
-            ("value-cfbool", 160, {
-                let b: CFBoolean = desired ? kCFBooleanTrue : kCFBooleanFalse
-                AXHelpers.setAttribute(button, kAXValueAttribute, b, runtime: runtime.ax)
-            }),
-            ("mouse-click", 1_000, {
-                _ = ProcessUtils.Runtime.production.activateLogicPro()
-                usleep(120_000)
-                Self.postMouseClickAt(element: button, runtime: runtime.ax)
-            }),
-        ]
-        for strategy in strategies {
-            strategy.action()
-            if pollMatched(deadlineMs: strategy.pollMs) {
-                return .success(HonestContract.encodeStateA(extras: baseExtras.merging([
-                    "observed": desired,
-                    "action": strategy.name
-                ]) { _, new in new }))
+        // #106 / ADR-001: coordinate-free per-op actuator ladder. Every rung
+        // actuates WITHOUT any mouse/coordinate primitive (the former HID-click
+        // last resort is deleted). Live-verified on Logic 12.3: SOLO flips on
+        // AXPress; MUTE needs exclusive-select + key 'm'; ARM needs
+        // exclusive-select + the configurable "Toggle Track Record Enable" key
+        // chord. The read-back — not each rung's return value — decides State A.
+        //
+        // ARM honesty baseline: capture whether transport is ALREADY recording
+        // (nil = UNREADABLE, kept distinct from readable-false) so a mis-assigned
+        // arm key that instead triggers transport Record is caught by the guard
+        // below, and an unreadable transport can never be coerced to "not
+        // recording" under an arm State-A claim (#2).
+        let recordingBaselineState: Bool? =
+            (buttonName == "Record") ? transportRecordingState(runtime: runtime) : nil
+
+        let outcome = runTrackToggleLadder(
+            rungs: trackToggleLadder(
+                button: button,
+                buttonName: buttonName,
+                index: index,
+                desired: desired,
+                readValue: readValue,
+                runtime: runtime,
+                keyRuntime: keyRuntime,
+                processRuntime: processRuntime,
+                environment: environment
+            ),
+            desired: desired,
+            readValue: readValue,
+            pollMatched: { pollMatched(deadlineMs: $0) }
+        )
+
+        switch outcome {
+        case .refused(let refusal):
+            // A refused rung posted NO key, so our action caused no transport
+            // side effect — return the distinct fail-closed reason directly.
+            return .error(HonestContract.encodeStateC(
+                error: refusal.error,
+                hint: refusal.hint,
+                extras: baseExtras.merging(refusal.extras) { _, new in new }
+            ))
+
+        case .landed(let action):
+            // ARM honesty guard — only when we would otherwise claim State A.
+            if buttonName == "Record" {
+                guard let post = transportRecordingState(runtime: runtime) else {
+                    // Transport Record UNREADABLE post-actuate: we cannot prove the
+                    // arm key did not instead start transport recording, so never
+                    // claim a clean arm (#2). Fail closed, distinct from State A.
+                    return .error(HonestContract.encodeStateC(
+                        error: .transportStateUnknown,
+                        hint: armTransportUnknownHint(index: index),
+                        extras: baseExtras.merging(["transport_state": "unknown"]) { _, new in new }
+                    ))
+                }
+                if post, recordingBaselineState != true {
+                    // A mis-assigned key started transport Record instead of
+                    // record-enable — fail closed even if the checkbox reads armed.
+                    return .error(HonestContract.encodeStateC(
+                        error: .axWriteFailed,
+                        hint: armRecordingStartedHint(index: index),
+                        extras: baseExtras.merging(["recording_started": true]) { _, new in new }
+                    ))
+                }
+                if recordingBaselineState == true, !post {
+                    return .error(HonestContract.encodeStateC(
+                        error: .readbackMismatch,
+                        hint: armRecordingStoppedHint(index: index),
+                        extras: baseExtras.merging(["recording_stopped": true]) { _, new in new }
+                    ))
+                }
             }
+            return .success(HonestContract.encodeStateA(extras: baseExtras.merging([
+                "observed": desired,
+                "action": action
+            ]) { _, new in new }))
+
+        case .exhausted:
+            // Even a FAILED arm may have started transport Record via a
+            // mis-assigned key — surface that distinctly when it is readable.
+            if buttonName == "Record",
+               let post = transportRecordingState(runtime: runtime),
+               post, recordingBaselineState != true {
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: armRecordingStartedHint(index: index),
+                    extras: baseExtras.merging(["recording_started": true]) { _, new in new }
+                ))
+            }
+            // Fail closed — NEVER a coordinate fallback.
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: trackToggleFailHint(buttonName: buttonName, index: index, desired: desired),
+                extras: baseExtras
+            ))
         }
-        return .error(HonestContract.encodeStateC(
-            error: .axWriteFailed,
-            hint: "tried press/confirm/value-nsnumber/value-cfbool/mouse-click; read-back never matched on track \(index) \(buttonName)=\(desired)",
-            extras: baseExtras
-        ))
     }
 
-    /// Simulate a real user mouse-click at the screen center of an AX element.
-    /// Used as a last resort when AXPress / AXValue writes don't propagate to
-    /// Logic Pro's internal handlers (observed with Logic 12 rec-arm checkboxes).
-    private static func postMouseClickAt(element: AXUIElement, runtime: AXHelpers.Runtime) {
-        var posValue: AnyObject?
-        var sizeValue: AnyObject?
-        let pr = AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &posValue)
-        let sr = AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeValue)
-        // H2 (P2-5): fail-closed on non-AXValue / wrong-subtype rather than
-        // posting a click at (0,0).
-        guard pr == .success, sr == .success,
-              let pt = AXHelpers.point(fromRawAttribute: posValue),
-              let sz = AXHelpers.size(fromRawAttribute: sizeValue) else { return }
-        let center = CGPoint(x: pt.x + sz.width / 2, y: pt.y + sz.height / 2)
-        let src = CGEventSource(stateID: .hidSystemState)
-        if let down = CGEvent(mouseEventSource: src, mouseType: .leftMouseDown, mouseCursorPosition: center, mouseButton: .left),
-           let up = CGEvent(mouseEventSource: src, mouseType: .leftMouseUp, mouseCursorPosition: center, mouseButton: .left) {
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
+    // MARK: - Ladder runner (#3 double-toggle halt barrier)
+
+    enum RungOutcome {
+        case actuated
+        case alreadyLanded
+        case landed
+        case refused(RungRefusal)
+        case exhausted
+    }
+
+    /// A fail-closed refusal from a rung: a distinct Honest-Contract error, an
+    /// operator-facing hint, and structured extras merged into the State C body.
+    struct RungRefusal {
+        let error: HonestContract.FailureError
+        let hint: String
+        let extras: [String: Any]
+    }
+
+    /// Terminal result of running the actuator ladder.
+    enum LadderOutcome {
+        case landed(action: String)
+        case refused(RungRefusal)
+        case exhausted
+    }
+
+    /// Run the actuator ladder with a HALT BARRIER between rungs (#3). Every rung
+    /// is a TOGGLE, not a set: if an earlier rung actually flipped the control but
+    /// its AXValue published only AFTER that rung's poll window closed, firing the
+    /// next toggle rung would flip it straight BACK. So BEFORE actuating each rung
+    /// (which includes re-reading after a prior rung's poll failed) we re-read the
+    /// live value; if it ALREADY equals `desired`, we STOP and report State A
+    /// attributed to the rung that actually moved it — never actuating again.
+    /// `readValue` / `pollMatched` are injected so the barrier is unit-testable
+    /// without live timing.
+    static func runTrackToggleLadder(
+        rungs: [TrackToggleRung],
+        desired: Bool,
+        readValue: () -> Bool?,
+        pollMatched: (Int) -> Bool
+    ) -> LadderOutcome {
+        var lastActuated: String?
+        for rung in rungs {
+            // #3 halt barrier — re-read before EVERY actuation.
+            if let current = readValue(), current == desired {
+                return .landed(action: lastActuated ?? rung.name)
+            }
+            switch rung.actuate(pollMatched) {
+            case .refused(let refusal):
+                return .refused(refusal)
+            case .alreadyLanded:
+                return .landed(action: lastActuated ?? rung.name)
+            case .landed:
+                return .landed(action: rung.name)
+            case .exhausted:
+                return .exhausted
+            case .actuated:
+                lastActuated = rung.name
+                if pollMatched(rung.pollMs) {
+                    return .landed(action: rung.name)
+                }
+            }
         }
+        return .exhausted
+    }
+
+    // MARK: - Coordinate-free track-toggle actuator (#106 / ADR-001)
+
+    /// `kVK_ANSI_M` (46) — Logic's default "Mute selected tracks" key command.
+    /// With the target track exclusively selected, pressing it flips that
+    /// track-header Mute checkbox (live-verified on Logic 12.3); AXPress on the
+    /// checkbox itself is a no-op.
+    static let trackMuteKeyCode: CGKeyCode = 46
+
+    /// `kVK_ANSI_S` (1) — Logic's default "Solo selected tracks" key command.
+    /// AXPress on the track-header Solo checkbox is a live no-op on Logic 12.3.
+    static let trackSoloKeyCode: CGKeyCode = 1
+
+    static let logicFrontmostPollIntervalMicros: useconds_t = 100_000
+    static let logicFrontmostStabilityPollCount = 4
+    static let logicFrontmostStabilityTimeoutMicros: useconds_t = 2_000_000
+    static let logicKeyWindowSettleMicros: useconds_t = 800_000
+    static let syntheticKeyRetryAttempts = 3
+    static let syntheticKeyRetryPollMs = 600
+    static let syntheticKeyRetrySettleMicros: useconds_t = 200_000
+
+    /// `kVK_ANSI_R` (15) — bare 'r' IS transport Record. NEVER post it for arm
+    /// (it would start recording instead of toggling record-enable).
+    static let transportRecordKeyCode: CGKeyCode = 15
+
+    /// Default key CHORD for the record-ARM key command: Ctrl+Shift+E
+    /// (`kVK_ANSI_E` (14) + control + shift). Live-confirmed target: Logic's
+    /// "Toggle Track Record Enable" command, which toggles record-enable on the
+    /// SELECTED track (distinct from transport Record). It ships UNASSIGNED, so
+    /// the operator assigns it to this chord (or overrides via
+    /// `LOGIC_PRO_MCP_ARM_KEYCODE` / `LOGIC_PRO_MCP_ARM_KEY_MODIFIERS`).
+    static let defaultArmKeyCode: CGKeyCode = 14
+    static let defaultArmModifiers: CGEventFlags = [.maskControl, .maskShift]
+
+    /// Environment override keys for the record-arm chord.
+    static let armKeyCodeEnvVar = "LOGIC_PRO_MCP_ARM_KEYCODE"
+    static let armKeyModifiersEnvVar = "LOGIC_PRO_MCP_ARM_KEY_MODIFIERS"
+
+    /// Outcome of resolving the record-arm key chord from the environment. A
+    /// PRESENT-but-unparseable override is a CONFIGURATION ERROR — surfaced so the
+    /// arm path fails closed with `arm_key_config_invalid` instead of silently
+    /// falling back to the default chord or dropping unknown modifier tokens (#7).
+    /// An ABSENT override still uses the built-in default.
+    enum ArmChordResolution: Equatable {
+        case resolved(code: CGKeyCode, flags: CGEventFlags)
+        case invalidKeyCode(String)
+        case invalidModifierToken(String)
+    }
+
+    /// Resolve the record-arm chord. `LOGIC_PRO_MCP_ARM_KEYCODE` (decimal virtual
+    /// keycode) and `LOGIC_PRO_MCP_ARM_KEY_MODIFIERS` (comma list of
+    /// control/shift/option/command) override the Ctrl+Shift+E default:
+    ///   - ABSENT var → the built-in default (correct, silent).
+    ///   - present + valid → parsed value.
+    ///   - present keycode that does not parse → `.invalidKeyCode` (NO silent
+    ///     fallback to 14).
+    ///   - present modifiers with an unknown token → `.invalidModifierToken` (NO
+    ///     silently dropped token).
+    ///   - present-but-EMPTY modifiers → `.resolved` with no flags (a bare key),
+    ///     which the arm path then refuses as unsafe.
+    /// Injectable environment for deterministic tests.
+    static func resolveArmChord(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> ArmChordResolution {
+        let code: CGKeyCode
+        if let raw = environment[armKeyCodeEnvVar] {
+            let trimmed = raw.trimmingCharacters(in: .whitespaces)
+            guard let parsed = UInt16(trimmed) else { return .invalidKeyCode(trimmed) }
+            code = CGKeyCode(parsed)
+        } else {
+            code = defaultArmKeyCode
+        }
+
+        let flags: CGEventFlags
+        if let raw = environment[armKeyModifiersEnvVar] {
+            var parsed: CGEventFlags = []
+            for token in raw.split(separator: ",") {
+                let name = token.trimmingCharacters(in: .whitespaces).lowercased()
+                if name.isEmpty { continue }
+                switch name {
+                case "control", "ctrl": parsed.insert(.maskControl)
+                case "shift": parsed.insert(.maskShift)
+                case "option", "opt", "alt": parsed.insert(.maskAlternate)
+                case "command", "cmd": parsed.insert(.maskCommand)
+                default: return .invalidModifierToken(name)
+                }
+            }
+            flags = parsed
+        } else {
+            flags = defaultArmModifiers
+        }
+        return .resolved(code: code, flags: flags)
+    }
+
+    /// Read whether Logic's transport is currently RECORDING (control-bar Record
+    /// checkbox), returning nil when it is UNREADABLE. The arm honesty guard MUST
+    /// keep nil DISTINCT from a readable `false`: coercing nil→false would let an
+    /// unreadable transport masquerade as "not recording" under a State-A arm
+    /// claim (#2).
+    static func transportRecordingState(runtime: AXLogicProElements.Runtime) -> Bool? {
+        AXLogicProElements.readControlBarCheckboxValue(
+            named: "녹음", englishName: "Record", runtime: runtime
+        )
+    }
+
+    typealias TrackToggleRung = (
+        name: String,
+        pollMs: Int,
+        actuate: (_ pollMatched: (Int) -> Bool) -> RungOutcome
+    )
+
+    /// Per-op coordinate-free ladder. AXPress is always the natural primary
+    /// (cheap; its return code is ignored and only read-back decides success).
+    /// Mute/solo/arm add an exclusive-select-then-keyboard rung whose
+    /// synthetic key is gated by: exclusive selection re-confirmed ATOMICALLY
+    /// before the post (#4/#5), a safe keyboard focus (#6), and — for arm — a
+    /// valid, non-bare key chord (#7). Any gate failing ⇒ the rung REFUSES (fails
+    /// closed) without posting a key.
+    static func trackToggleLadder(
+        button: AXUIElement,
+        buttonName: String,
+        index: Int,
+        desired: Bool,
+        readValue: @escaping () -> Bool?,
+        runtime: AXLogicProElements.Runtime,
+        keyRuntime: AXMouseHelper.Runtime,
+        processRuntime: ProcessUtils.Runtime,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [TrackToggleRung] {
+        let pressRung: TrackToggleRung = ("press", 250, { _ in
+            _ = AXHelpers.performAction(button, kAXPressAction, runtime: runtime.ax)
+            return .actuated
+        })
+
+        func retryingKeyOutcome(
+            pollMatched: (Int) -> Bool,
+            postKey: () -> Void
+        ) -> RungOutcome {
+            if let refusal = syntheticKeyFocusRefusal(runtime: runtime) {
+                return .refused(refusal)
+            }
+            if let refusal = confirmExclusiveSelectionRefusal(
+                index: index,
+                runtime: runtime,
+                processRuntime: processRuntime,
+                sleepMicros: keyRuntime.sleepMicros
+            ) { return .refused(refusal) }
+
+            for attempt in 0..<syntheticKeyRetryAttempts {
+                // Fresh live halt barrier before EVERY post: a late read-back
+                // must never turn a successful toggle into a second toggle.
+                if readValue() == desired {
+                    return attempt == 0 ? .alreadyLanded : .landed
+                }
+                guard processRuntime.logicIsFrontmost() else {
+                    return .refused(logicNotFrontmostRefusal(index: index))
+                }
+                guard selectionIsExclusive(index: index, runtime: runtime) else {
+                    return .refused(selectionNotExclusiveRefusal(index: index))
+                }
+                if let refusal = syntheticKeyFocusRefusal(runtime: runtime) {
+                    return .refused(refusal)
+                }
+                postKey()
+                if pollMatched(syntheticKeyRetryPollMs) { return .landed }
+                if attempt < syntheticKeyRetryAttempts - 1 {
+                    keyRuntime.sleepMicros(syntheticKeyRetrySettleMicros)
+                }
+            }
+            return .exhausted
+        }
+
+        switch buttonName {
+        case "Solo":
+            let keyRung: TrackToggleRung = ("keyboard-solo", syntheticKeyRetryPollMs, { poll in
+                retryingKeyOutcome(pollMatched: poll) {
+                    _ = keyRuntime.postKeyEvent(trackSoloKeyCode)
+                }
+            })
+            return [pressRung, keyRung]
+        case "Mute":
+            let keyRung: TrackToggleRung = ("keyboard-mute", syntheticKeyRetryPollMs, { poll in
+                retryingKeyOutcome(pollMatched: poll) {
+                    _ = keyRuntime.postKeyEvent(trackMuteKeyCode)
+                }
+            })
+            return [pressRung, keyRung]
+        case "Record":
+            let keyRung: TrackToggleRung = ("keyboard-arm", syntheticKeyRetryPollMs, { poll in
+                // #7 configurable chord — a present-but-invalid override is a
+                // config error, never a silent fallback to the default chord.
+                let code: CGKeyCode
+                let flags: CGEventFlags
+                switch resolveArmChord(environment: environment) {
+                case .resolved(let resolvedCode, let resolvedFlags):
+                    code = resolvedCode
+                    flags = resolvedFlags
+                case .invalidKeyCode(let bad):
+                    return .refused(armConfigInvalidRefusal(
+                        reason: "\(armKeyCodeEnvVar)=\"\(bad)\" is not a valid decimal virtual keycode"
+                    ))
+                case .invalidModifierToken(let bad):
+                    return .refused(armConfigInvalidRefusal(
+                        reason: "\(armKeyModifiersEnvVar) contains an unknown modifier token \"\(bad)\""
+                    ))
+                }
+                // A bare (no-modifier) arm key is unsafe: bare 'r' IS transport
+                // Record, and any bare key is a global single-key command. Refuse
+                // it — the default chord (Ctrl+Shift+E) carries modifiers, so only
+                // an explicit empty-modifier override reaches here.
+                if flags.isEmpty {
+                    return .refused(armConfigInvalidRefusal(
+                        reason: "a bare arm key with no modifiers is unsafe (bare 'r' starts transport "
+                            + "recording; any bare key triggers a global command) — configure a modifier chord"
+                    ))
+                }
+                return retryingKeyOutcome(pollMatched: poll) {
+                    _ = keyRuntime.postFlaggedKeyEvent(code, flags)
+                }
+            })
+            return [pressRung, keyRung]
+        default:
+            return [pressRung]
+        }
+    }
+
+    /// Exclusive single-track selection guard. Keyboard mute/solo/arm act on the
+    /// SELECTED track, so before posting any key we (1) activate Logic, (2) drive
+    /// the AX `AXSelectedChildren` selection path, and (3) READ BACK that the target —
+    /// and ONLY the target — is selected. Returns false (⇒ the key is NOT
+    /// posted, so a wrong/multi selection can never toggle the wrong track)
+    /// until exclusivity is confirmed within a bounded settle budget.
+    static func confirmExclusiveSelection(
+        index: Int,
+        runtime: AXLogicProElements.Runtime
+    ) -> Bool {
+        _ = AXLogicProElements.selectTrackViaAX(at: index, runtime: runtime)
+        for attempt in 0..<4 {
+            if selectionIsExclusive(index: index, runtime: runtime) { return true }
+            if attempt < 3 { usleep(80_000) }
+        }
+        return false
+    }
+
+    /// Read-only exclusivity predicate: the target — and ONLY the target — is
+    /// selected. #5 fail-closed on uncertainty: EVERY non-target header must
+    /// report a DEFINITIVE `AXSelected == false`; any nil/unreadable non-target
+    /// selection state means we cannot PROVE it is unselected, so exclusivity is
+    /// treated as UNPROVEN (returns false) rather than optimistically ignored. The
+    /// target itself must read a definitive `true`.
+    static func selectionIsExclusive(
+        index: Int,
+        runtime: AXLogicProElements.Runtime
+    ) -> Bool {
+        let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
+        guard index >= 0, index < headers.count else { return false }
+        let states = headers.map { AXValueExtractors.extractSelectedState($0, runtime: runtime.ax) }
+        guard states[index] == true else { return false }
+        return states.enumerated().allSatisfy { offset, state in
+            offset == index || state == false
+        }
+    }
+
+    /// Confirm exclusive selection with an ATOMIC re-check immediately before the
+    /// key post (#4 TOCTOU): a second `confirmExclusiveSelection` right before the
+    /// caller posts the key. Returns a distinct `selection_not_exclusive` refusal
+    /// (#9) — NOT the generic write-fail hint — when exclusivity cannot be
+    /// (re)proven, so the key is never posted onto a wrong/multi selection.
+    /// nil ⇒ safe to post.
+    static func confirmExclusiveSelectionRefusal(
+        index: Int,
+        runtime: AXLogicProElements.Runtime,
+        processRuntime: ProcessUtils.Runtime,
+        sleepMicros: (useconds_t) -> Void
+    ) -> RungRefusal? {
+        _ = ProcessUtils.activateLogicPro(runtime: processRuntime)
+
+        var stablePolls = 0
+        var elapsedMicros: useconds_t = 0
+        var frontmostSettled = false
+        while elapsedMicros < logicFrontmostStabilityTimeoutMicros {
+            stablePolls = processRuntime.logicIsFrontmost() ? stablePolls + 1 : 0
+            sleepMicros(logicFrontmostPollIntervalMicros)
+            elapsedMicros += logicFrontmostPollIntervalMicros
+            if stablePolls == logicFrontmostStabilityPollCount {
+                guard processRuntime.logicIsFrontmost() else {
+                    stablePolls = 0
+                    continue
+                }
+                sleepMicros(logicKeyWindowSettleMicros)
+                frontmostSettled = processRuntime.logicIsFrontmost()
+                if frontmostSettled { break }
+                stablePolls = 0
+            }
+        }
+        guard frontmostSettled else { return logicNotFrontmostRefusal(index: index) }
+        guard confirmExclusiveSelection(index: index, runtime: runtime) else {
+            return selectionNotExclusiveRefusal(index: index)
+        }
+        // Re-confirm atomically right before the key — selection can change
+        // between the first confirm and the post (multi-select, user shift-click,
+        // Logic reselection). If it no longer holds, fail closed without posting.
+        guard confirmExclusiveSelection(index: index, runtime: runtime) else {
+            return selectionNotExclusiveRefusal(index: index)
+        }
+        guard processRuntime.logicIsFrontmost() else {
+            return logicNotFrontmostRefusal(index: index)
+        }
+        return nil
+    }
+
+    /// #6 — refuse a synthetic global command key when Logic's keyboard focus is
+    /// NOT known-safe: a modal/sheet is present, or the focused element is an
+    /// editable text surface (rename field, Notes, search/combo box, or any
+    /// element exposing a text insertion point). Posting 'm', 's', or the arm chord into
+    /// such focus would type text or trigger the wrong command. Returns a refusal
+    /// (⇒ do NOT post the key) on POSITIVE danger; nil ⇒ no unsafe focus detected
+    /// (a nil focus is the common non-text case — the modal check covers sheets).
+    /// Mute, Solo, and arm all use this gate before their synthetic key rung.
+    static func syntheticKeyFocusRefusal(
+        runtime: AXLogicProElements.Runtime
+    ) -> RungRefusal? {
+        if AXLogicProElements.dialogPresent(runtime: runtime) {
+            return unsafeFocusRefusal(reason: "a modal dialog or sheet is present", focus: "modal")
+        }
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else {
+            return unsafeFocusRefusal(
+                reason: "the Logic application root is unreadable — focus safety cannot be proven",
+                focus: "app_root_unreadable"
+            )
+        }
+        guard let focused: AXUIElement = AXHelpers.getAttribute(
+            app, kAXFocusedUIElementAttribute, runtime: runtime.ax
+        ) else {
+            return unsafeFocusRefusal(
+                reason: "Logic's focused element is unreadable — focus safety cannot be proven",
+                focus: "focus_unreadable"
+            )
+        }
+        guard let role = AXHelpers.getRole(focused, runtime: runtime.ax) else {
+            return unsafeFocusRefusal(
+                reason: "the focused element's role is unreadable — focus safety cannot be proven",
+                focus: "role_unreadable"
+            )
+        }
+        let editableRoles: Set<String> = [
+            kAXTextFieldRole as String,
+            kAXTextAreaRole as String,
+            kAXComboBoxRole as String
+        ]
+        if editableRoles.contains(role) {
+            return unsafeFocusRefusal(
+                reason: "an editable text field is focused (role \(role))", focus: role
+            )
+        }
+        // A text insertion point marks an editable text surface even when the role
+        // is unusual — a synthetic key would type into it.
+        if let _: NSNumber = AXHelpers.getAttribute(
+            focused, kAXInsertionPointLineNumberAttribute, runtime: runtime.ax
+        ) {
+            return unsafeFocusRefusal(
+                reason: "a text-editing surface with an insertion point is focused",
+                focus: role
+            )
+        }
+        return nil
+    }
+
+    /// Fail-closed hint (read-back never flipped). Arm points the operator at
+    /// the required "Toggle Track Record Enable" key-command assignment — the
+    /// only coordinate-free arm path on Logic 12.x.
+    static func trackToggleFailHint(buttonName: String, index: Int, desired: Bool) -> String {
+        switch buttonName {
+        case "Record":
+            return "arm requires the Logic key command 'Toggle Track Record Enable' assigned to the "
+                + "configured key (default Ctrl+Shift+E); assign it in Logic ▸ Key Commands, or set "
+                + "LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key."
+        case "Mute":
+            return "track \(index) Mute=\(desired): read-back never matched after AXPress + "
+                + "exclusive-select then key 'm' (coordinate-free actuators only)."
+        case "Solo":
+            return "track \(index) Solo=\(desired): read-back never matched after AXPress + "
+                + "exclusive-select then key 's' (coordinate-free actuators only)."
+        default:
+            return "track \(index) \(buttonName)=\(desired): read-back never matched after AXPress "
+                + "on the checkbox (coordinate-free actuators only)."
+        }
+    }
+
+    /// Arm fail-closed hint for the mis-assignment case: the configured key
+    /// started transport RECORDING instead of toggling record-enable.
+    static func armRecordingStartedHint(index: Int) -> String {
+        "arm aborted: the configured key started transport recording instead of arming track "
+            + "\(index) — it is not assigned to 'Toggle Track Record Enable'. Stop the recording, then "
+            + "assign that command (default Ctrl+Shift+E) in Logic ▸ Key Commands, or set "
+            + "LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key."
+    }
+
+    static func armRecordingStoppedHint(index: Int) -> String {
+        "arm aborted: the configured key stopped active transport recording instead of only arming track "
+            + "\(index) — it is not assigned to 'Toggle Track Record Enable'. Restore recording as needed, then "
+            + "assign that command (default Ctrl+Shift+E) in Logic ▸ Key Commands, or set "
+            + "LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key."
+    }
+
+    /// #2 — arm fail-closed hint when the transport Record state is UNREADABLE at
+    /// the post-actuate check, so a clean arm cannot be honestly claimed.
+    static func armTransportUnknownHint(index: Int) -> String {
+        "arm could not be confirmed for track \(index): the transport Record state was UNREADABLE, so "
+            + "the server cannot prove the arm key did not instead start transport recording. Fail-closed "
+            + "(no State A) — make Logic's control bar (with the Record button) visible, then retry."
+    }
+
+    /// #5/#9 — fail closed when exclusive selection cannot be proven.
+    static func selectionNotExclusiveRefusal(index: Int) -> RungRefusal {
+        RungRefusal(
+            error: .selectionNotExclusive,
+            hint: "track \(index) could not be exclusively selected before the key command "
+                + "(another track is selected, or a header's selection state was unreadable). "
+                + "Deselect other tracks and retry — the key was NOT posted.",
+            extras: ["selection_error": "selection_not_exclusive"]
+        )
+    }
+
+    static func logicNotFrontmostRefusal(index: Int) -> RungRefusal {
+        RungRefusal(
+            error: .logicNotFrontmost,
+            hint: "track \(index) is exclusively selected, but Logic could not be confirmed frontmost. "
+                + "Bring Logic frontmost and retry — the key was NOT posted.",
+            extras: ["frontmost_error": "logic_not_frontmost"]
+        )
+    }
+
+    /// #6 — refusal when Logic's keyboard focus is not known-safe for a synthetic
+    /// global command key. The key was never posted.
+    static func unsafeFocusRefusal(reason: String, focus: String) -> RungRefusal {
+        RungRefusal(
+            error: .unsafeFocusForSyntheticKey,
+            hint: "refused to post the track key command: \(reason). Click the arrange/tracks area "
+                + "(or dismiss the dialog) so keyboard focus is safe, then retry — the key was NOT posted.",
+            extras: ["focus_guard": focus]
+        )
+    }
+
+    /// #7 — refusal when the record-arm key override is present but invalid
+    /// (unparseable keycode, unknown modifier token, or a bare no-modifier key).
+    /// The key was never posted.
+    static func armConfigInvalidRefusal(reason: String) -> RungRefusal {
+        RungRefusal(
+            error: .armKeyConfigInvalid,
+            hint: "record-arm key configuration is invalid: \(reason). Fix "
+                + "\(armKeyCodeEnvVar)/\(armKeyModifiersEnvVar) (or unset them to use the default "
+                + "Ctrl+Shift+E) — the key was NOT posted.",
+            extras: ["arm_key_config": "invalid"]
+        )
     }
 
     static func defaultRenameTrack(
