@@ -49,7 +49,8 @@ private final class LiveFixture: @unchecked Sendable {
         otherTracks: Int = 0,
         duplicateTrackNameAt: Int? = nil,
         emptyInsertChain: Bool = false,
-        pluginWindowRejectsDirectDemotion: Bool = false
+        pluginWindowRejectsDirectDemotion: Bool = false,
+        slotPressReturnsFalse: Bool = false
     ) {
         let b = builder
         let windowsAddedOnSlotPress = MutableBox<[AXUIElement]>([])
@@ -195,7 +196,10 @@ private final class LiveFixture: @unchecked Sendable {
                 }
                 b.setAttribute(pluginWindow, kAXMainAttribute as String, true)
                 b.setAttribute(pluginWindow, kAXFocusedAttribute as String, true)
-                return true
+                // Model real Logic 12.3: the slot/open-control AXPress opens the
+                // window but reports a NON-ZERO AX status. The observed-window
+                // poll must succeed regardless of this return.
+                return !slotPressReturnsFalse
             }
         )
         self.app = app
@@ -572,6 +576,44 @@ private func runChannelEQFixture(
     #expect(obj["state"] as? String == "A")
     #expect(obj["observed_normalized"] as? Double == 60)
     #expect(fixture.currentSliderValue == 60)
+}
+
+@Test func testOpenerReachesStateAWhenSlotPressReturnsFalseButWindowOpens() async {
+    // Regression guard for the coord-removal feature-loss bug. On real Logic
+    // 12.3 the slot/open-control AXPress can open the plugin window while
+    // reporting a NON-ZERO AX status. The old loop did `guard pressElement …
+    // else { continue }`, skipping the observed-window poll on that false
+    // return, so the window that DID open was never claimed → window_open_failed.
+    // The fix consults `pollOpenPluginWindow` regardless of the press return; the
+    // op MUST now reach State A.
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        slotPressReturnsFalse: true
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(obj["observed_normalized"] as? Double == 60)
+    #expect(fixture.currentSliderValue == 60)
+}
+
+@Test func testOpenerStaysFailClosedWhenSlotPressReturnsFalseAndNoWindowOpens() async {
+    // Complement: the press fires (and returns false) but NOTHING opens. The fix
+    // must remain fail-closed (window_open_failed), never fabricate State A.
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: false,
+        slotPressReturnsFalse: true
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "C")
+    #expect(obj["error"] as? String == "window_open_failed")
+    #expect(!((obj["write_attempted"] as? Bool)!))
+    #expect(fixture.currentSliderValue == 51)
 }
 
 @Test func testManualPreopenFallsBackToRaisingArrangeWhenFocusedCannotBeClearedDirectly() async {

@@ -1407,7 +1407,11 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(state.tempo == 127.0)
 }
 
-@Test func testAccessibilityChannelControlBarToggleUsesMouseClickAndVerifiesReadback() async {
+@Test func testAccessibilityChannelControlBarToggleUsesAXPressAndPostsNoMouseEvents() async throws {
+    // ADR-001 coordinate ban: control-bar toggles are actuated by AXPress only.
+    // Even with a fully wired mouse runtime available, a clear-win toggle must
+    // post ZERO mouse events (the element-derived mouse-click rung was removed)
+    // and still verify its read-back via the AX path.
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(120)
     let window = builder.element(121)
@@ -1423,18 +1427,28 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     builder.setAttribute(cycle, kAXRoleAttribute as String, kAXCheckBoxRole as String)
     builder.setAttribute(cycle, kAXTitleAttribute as String, "Cycle")
     builder.setAttribute(cycle, kAXValueAttribute as String, NSNumber(value: false))
+    // Position/size ARE present: a re-introduced mouse-click rung would fire
+    // here, so `mouse.mouseEvents.isEmpty` is a real regression guard.
     builder.setAttribute(cycle, kAXPositionAttribute as String, axPoint(100, 200))
     builder.setAttribute(cycle, kAXSizeAttribute as String, axSize(24, 18))
 
-    let mouse = ControlBarMouseRecorder()
-    mouse.onMouseEvent = { type, _, _ in
-        if type == .leftMouseUp {
-            builder.setAttribute(cycle, kAXValueAttribute as String, NSNumber(value: true))
+    // Real Logic control-bar checkboxes flip on AXPress (unlike track-header M/S/R).
+    let logicRuntime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            if element == cycle && action == kAXPressAction as String {
+                builder.setAttribute(cycle, kAXValueAttribute as String, NSNumber(value: true))
+                return true
+            }
+            return true
         }
-    }
+    )
+    let mouse = ControlBarMouseRecorder()
     let channel = makeAXBackedAccessibilityChannel(
         builder: builder,
         app: app,
+        logicRuntime: logicRuntime,
         controlBarMouseRuntime: mouse.runtime()
     )
 
@@ -1442,11 +1456,195 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     let object = decodeAccessibilityJSON(result.message)
 
     #expect(result.isSuccess)
-    #expect((object["verified"] as? Bool)!)
-    #expect(object["action"] as? String == "mouse-click")
-    #expect(mouse.mouseEvents.map(\.type) == [.leftMouseDown, .leftMouseUp])
-    #expect(builder.actionCalls.isEmpty)
-    #expect(((builder.attributeValue(cycle, kAXValueAttribute as String) as? NSNumber)?.boolValue)!)
+    #expect(try #require(object["verified"] as? Bool))
+    // The successful strategy was AXPress (not "mouse-click"), and the checkbox
+    // actually flipped — together proving the AX path actuated the control.
+    #expect(try #require(object["action"] as? String) == "axpress")
+    #expect(try #require(builder.attributeValue(cycle, kAXValueAttribute as String) as? NSNumber).boolValue)
+    // Load-bearing (ADR-001): the coordinate rung is gone — zero mouse events,
+    // even though a live mouse runtime and a clickable frame were available.
+    #expect(mouse.mouseEvents.isEmpty)
+}
+
+@Test func testAccessibilityChannelCountInToggleUsesAXPressAndPostsNoMouseEvents() async throws {
+    // ADR-001: Count-In is actuated by AXPress (native toggle, #255). Its route is
+    // [.accessibility, .midiKeyCommands, .cgEvent] — midiKeyCommands carries CC99
+    // as a fallback; only the cgEvent channel lacks a key mapping. This proves the
+    // AX path carries the toggle with ZERO mouse events even when a live mouse
+    // runtime and a clickable frame are present.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(150)
+    let window = builder.element(151)
+    let controlBar = builder.element(152)
+    let countIn = builder.element(153)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [controlBar])
+    builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
+    builder.setChildren(controlBar, [countIn])
+
+    builder.setAttribute(countIn, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(countIn, kAXTitleAttribute as String, "Count In")
+    builder.setAttribute(countIn, kAXValueAttribute as String, NSNumber(value: false))
+    builder.setAttribute(countIn, kAXPositionAttribute as String, axPoint(140, 200))
+    builder.setAttribute(countIn, kAXSizeAttribute as String, axSize(24, 18))
+
+    let logicRuntime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            if element == countIn && action == kAXPressAction as String {
+                builder.setAttribute(countIn, kAXValueAttribute as String, NSNumber(value: true))
+                return true
+            }
+            return true
+        }
+    )
+    let mouse = ControlBarMouseRecorder()
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder,
+        app: app,
+        logicRuntime: logicRuntime,
+        controlBarMouseRuntime: mouse.runtime()
+    )
+
+    let result = await channel.execute(operation: "transport.toggle_count_in", params: [:])
+    let object = decodeAccessibilityJSON(result.message)
+
+    #expect(result.isSuccess)
+    #expect(try #require(object["verified"] as? Bool))
+    #expect(try #require(object["action"] as? String) == "axpress")
+    #expect(try #require(builder.attributeValue(countIn, kAXValueAttribute as String) as? NSNumber).boolValue)
+    // Load-bearing (ADR-001): no coordinate rung remains for Count-In.
+    #expect(mouse.mouseEvents.isEmpty)
+}
+
+@Test func testAccessibilityChannelControlBarToggleReturnsHonestStateBWhenValueUnreadable() async throws {
+    // ADR-001 + honesty edge case: a control-bar checkbox that exposes NO readable
+    // value but accepts AXPress is reported as State B readback_unavailable (never
+    // a fabricated State A), and still posts ZERO mouse events.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(160)
+    let window = builder.element(161)
+    let controlBar = builder.element(162)
+    let cycle = builder.element(163)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [controlBar])
+    builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
+    builder.setChildren(controlBar, [cycle])
+
+    builder.setAttribute(cycle, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(cycle, kAXTitleAttribute as String, "Cycle")
+    // Deliberately NO kAXValueAttribute → controlBarCheckboxValue == nil.
+    builder.setAttribute(cycle, kAXPositionAttribute as String, axPoint(100, 200))
+    builder.setAttribute(cycle, kAXSizeAttribute as String, axSize(24, 18))
+
+    let logicRuntime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            element == cycle && action == kAXPressAction as String
+        }
+    )
+    let mouse = ControlBarMouseRecorder()
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder, app: app, logicRuntime: logicRuntime, controlBarMouseRuntime: mouse.runtime()
+    )
+
+    let result = await channel.execute(operation: "transport.toggle_cycle", params: [:])
+    let object = decodeAccessibilityJSON(result.message)
+
+    #expect(result.isSuccess)   // State B is success:true, verified:false
+    #expect(try #require(object["state"] as? String) == "B")
+    #expect(try #require(object["reason"] as? String) == "readback_unavailable")
+    #expect(try #require(object["action"] as? String) == "axpress")
+    // Load-bearing (ADR-001): no coordinate rung even on the unverifiable path.
+    #expect(mouse.mouseEvents.isEmpty)
+}
+
+@Test func testAccessibilityChannelControlBarToggleFailsClosedWhenAllAXActionsRejected() async throws {
+    // ADR-001 CORE guarantee: with the coordinate rung gone, a checkbox whose
+    // value is unreadable AND which rejects EVERY AX action fails CLOSED (State C
+    // ax_write_failed). It must never silently "succeed" via a mouse click, and
+    // must post ZERO mouse events even though a clickable frame + mouse runtime
+    // are both present.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(170)
+    let window = builder.element(171)
+    let controlBar = builder.element(172)
+    let cycle = builder.element(173)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [controlBar])
+    builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
+    builder.setChildren(controlBar, [cycle])
+
+    builder.setAttribute(cycle, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(cycle, kAXTitleAttribute as String, "Cycle")
+    // Clickable frame present (a re-introduced mouse rung would fire); no value.
+    builder.setAttribute(cycle, kAXPositionAttribute as String, axPoint(100, 200))
+    builder.setAttribute(cycle, kAXSizeAttribute as String, axSize(24, 18))
+
+    let logicRuntime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { _, _ in false }   // every AX action rejected
+    )
+    let mouse = ControlBarMouseRecorder()
+    let channel = makeAXBackedAccessibilityChannel(
+        builder: builder, app: app, logicRuntime: logicRuntime, controlBarMouseRuntime: mouse.runtime()
+    )
+
+    let result = await channel.execute(operation: "transport.toggle_cycle", params: [:])
+    let object = decodeAccessibilityJSON(result.message)
+
+    #expect(!result.isSuccess)
+    #expect(try #require(object["state"] as? String) == "C")
+    #expect(try #require(object["error"] as? String) == "ax_write_failed")
+    // Load-bearing (ADR-001): fail-closed, never a silent coordinate "success".
+    #expect(mouse.mouseEvents.isEmpty)
+}
+
+@Test func testAccessibilityChannelTrackSelectFailsClosedWhenEveryAXStepRejected() async throws {
+    // ADR-001: track.select's Step-5 coordinate click is gone. When the header's
+    // parent group is not AXSelectedChildren-writable AND Steps 2-4 (AXSelected /
+    // AXPress) are all rejected, selectTrackViaAX fails and the op returns honest
+    // State C ax_write_failed — never a silent success, never a coordinate click.
+    // The header carries a real frame so a re-introduced Step-5 would actuate it.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(620)
+    let window = builder.element(621)
+    let trackList = builder.element(622)
+    let header = builder.element(623)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [trackList])
+    builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setChildren(trackList, [header])
+    builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    builder.setAttribute(header, kAXTitleAttribute as String, "Track 1")
+    builder.setAttribute(header, kAXPositionAttribute as String, axPoint(10, 100))
+    builder.setAttribute(header, kAXSizeAttribute as String, axSize(180, 40))
+
+    // Every AX action (AXPress on header/children) is rejected.
+    let logicRuntime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { _, _ in false }
+    )
+    let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app, logicRuntime: logicRuntime)
+
+    let result = await channel.execute(operation: "track.select", params: ["index": "0"])
+    let object = decodeAccessibilityJSON(result.message)
+
+    #expect(!result.isSuccess)
+    #expect(try #require(object["state"] as? String) == "C")
+    #expect(try #require(object["error"] as? String) == "ax_write_failed")
 }
 
 @Test func testAccessibilityChannelControlBarToggleDoesNotTrustNoopAXPress() async {

@@ -46,14 +46,15 @@ extension AccessibilityChannel {
                 extras: ["requested": index]
             ))
         }
-        // v3.0.3+ — activate Logic so any coord-click fallback can land, then
-        // go through the AX-native selection ladder.
+        // v3.0.3+ — activate Logic so the frontmost-dependent AX selection can
+        // land, then go through the AX-native selection ladder (ADR-001: no
+        // coordinate fallback — fail closed if every AX step is rejected).
         _ = ProcessUtils.Runtime.production.activateLogicPro()
         try? await Task.sleep(nanoseconds: 150_000_000)
         guard AXLogicProElements.selectTrackViaAX(at: index, runtime: runtime) else {
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "Failed to select track \(index) via AX or coord click",
+                hint: "Failed to select track \(index) via the AX selection ladder",
                 extras: ["requested": index]
             ))
         }

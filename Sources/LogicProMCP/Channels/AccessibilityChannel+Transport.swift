@@ -1065,7 +1065,7 @@ extension AccessibilityChannel {
         if let before {
             return .error(HonestContract.encodeStateC(
                 error: .readbackMismatch,
-                hint: "control-bar checkbox '\(english)' did not change after real click / AXPress attempts",
+                hint: "control-bar checkbox '\(english)' did not change after AXPress / AXConfirm attempts",
                 extras: [
                     "button": english,
                     "control": korean,
@@ -1157,7 +1157,7 @@ extension AccessibilityChannel {
         let observed = controlBarCheckboxValue(cb, runtime: runtime) as Any
         return .error(HonestContract.encodeStateC(
             error: .readbackMismatch,
-            hint: "control-bar checkbox '\(english)' did not reach desired=\(desired) after real click / AXPress attempts",
+            hint: "control-bar checkbox '\(english)' did not reach desired=\(desired) after AXPress / AXConfirm attempts",
             extras: baseExtras.merging([
                 "observed": observed,
                 "attempts": attempts,
@@ -1176,24 +1176,15 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime,
         mouseRuntime: AXMouseHelper.Runtime
     ) -> [ControlBarClickStrategy] {
-        [
-            ControlBarClickStrategy(name: "mouse-click", action: {
-                guard let position = AXHelpers.getPosition(element, runtime: runtime.ax),
-                      let size = AXHelpers.getSize(element, runtime: runtime.ax),
-                      position.x.isFinite,
-                      position.y.isFinite,
-                      size.width.isFinite,
-                      size.height.isFinite,
-                      size.width > 0,
-                      size.height > 0 else {
-                    return false
-                }
-                let center = CGPoint(
-                    x: position.x + size.width / 2,
-                    y: position.y + size.height / 2
-                )
-                return AXMouseHelper.click(at: center, runtime: mouseRuntime)
-            }),
+        // ADR-001 coordinate ban: the control-bar checkboxes are actuated by
+        // AXPress/AXConfirm only. The former mouse-click (element-derived HID
+        // click) rung is removed — Cycle/Metronome retain keycmd (C/K) channel
+        // fallbacks and Count-In routes native AXPress-first (#255), so the
+        // non-coordinate paths preserve full function. `mouseRuntime` is left in
+        // the signature (still threaded by the test doubles) but is no longer
+        // read here; a clear-win control-bar toggle must never post a mouse event.
+        _ = mouseRuntime
+        return [
             ControlBarClickStrategy(name: "axpress", action: {
                 AXHelpers.performAction(element, kAXPressAction, runtime: runtime.ax)
             }),

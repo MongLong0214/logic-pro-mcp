@@ -137,19 +137,13 @@ extension AXLogicProElements {
             }
         }
 
-        // Step 5 — last resort: coord click at the header's name area.
-        var posRaw: AnyObject?
-        var sizeRaw: AnyObject?
-        guard
-            AXUIElementCopyAttributeValue(header, kAXPositionAttribute as CFString, &posRaw) == .success,
-            AXUIElementCopyAttributeValue(header, kAXSizeAttribute as CFString, &sizeRaw) == .success,
-            // H2 (P2-5): fail-closed on non-AXValue / wrong-subtype rather than
-            // a (0,0) misclick.
-            let pt = AXHelpers.point(fromRawAttribute: posRaw),
-            let sz = AXHelpers.size(fromRawAttribute: sizeRaw)
-        else { return false }
-        let clickPoint = CGPoint(x: pt.x + min(60, sz.width / 4), y: pt.y + sz.height / 2)
-        return LibraryAccessor.productionMouseClick(at: clickPoint)
+        // ADR-001 coordinate ban: the former Step 5 (element-derived HID click on
+        // the header's name area) is removed. Step 1 (AXSelectedChildren on the
+        // parent group) is the live-verified primary that actually moves Logic's
+        // selection (v3.0.9, 10/10 indices on a 10-track project), and
+        // `track.select` also routes to the MCU channel — so failing closed here
+        // preserves function without a coordinate fallback.
+        return false
     }
 
     /// Enumerate all track header rows.
