@@ -422,6 +422,14 @@ extension AccessibilityChannel {
             return nil
         }
         let current = curNum.intValue != 0
+
+        // HIGH#6: the arm actuator exclusive-selects track 0, which would silently
+        // clobber whatever track the user had selected. Capture the prior single
+        // selection (the one header that OBSERVED-reads selected) so we can put it
+        // back afterwards. Multi/none/unreadable selection → nil (nothing to
+        // deterministically restore).
+        let priorSelection = observedSingleSelectedTrackIndex(runtime: runtime)
+
         let toggle = defaultSetTrackToggle(
             params: ["index": "0", "enabled": String(!current)],
             button: "Record",
@@ -430,14 +438,53 @@ extension AccessibilityChannel {
         )
         let flipped: Bool
         if case .success = toggle { flipped = true } else { flipped = false }
-        // Restore the original arm state regardless of the verify outcome.
-        _ = defaultSetTrackToggle(
+
+        // HIGH#6: restore track 0's ORIGINAL arm state and VERIFY the restore took
+        // (defaultSetTrackToggle returns .success only on an OBSERVED read-back),
+        // not fire-and-forget. One retry: a single missed read-back must not leave
+        // track 0 armed the wrong way.
+        var restore = defaultSetTrackToggle(
             params: ["index": "0", "enabled": String(current)],
             button: "Record",
             runtime: runtime,
             environment: environment
         )
+        if case .success = restore {} else {
+            restore = defaultSetTrackToggle(
+                params: ["index": "0", "enabled": String(current)],
+                button: "Record",
+                runtime: runtime,
+                environment: environment
+            )
+        }
+        _ = restore
+
+        // HIGH#6: restore the user's prior track selection (best-effort, confirmed
+        // exclusive) — driving the verify exclusive-selected track 0. Re-selection
+        // is AX-only (AXSelectedChildren), so it posts no key/chord.
+        if let priorSelection, priorSelection != 0 {
+            _ = confirmExclusiveSelection(
+                index: priorSelection,
+                runtime: runtime,
+                processRuntime: .production
+            )
+        }
+
         return flipped
+    }
+
+    /// The index of the single OBSERVED-selected track header, or nil when zero
+    /// or more than one reads selected (or none is readable). Captures the
+    /// caller's selection before an exclusive-select side effect so it can be
+    /// restored (HIGH#6).
+    private static func observedSingleSelectedTrackIndex(
+        runtime: AXLogicProElements.Runtime
+    ) -> Int? {
+        let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
+        let selected = headers.indices.filter {
+            AXValueExtractors.extractSelectedState(headers[$0], runtime: runtime.ax) == true
+        }
+        return selected.count == 1 ? selected[0] : nil
     }
 
     /// A single coordinate-free actuation rung: `actuate` either fires (then the

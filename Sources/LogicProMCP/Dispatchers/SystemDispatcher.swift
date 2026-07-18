@@ -176,7 +176,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             Diagnostics, help, and saga coordination for the Logic Pro MCP server. \
             Commands: health, permissions, refresh_cache, export_support_bundle, saga_preflight, \
             saga_execute, saga_status, saga_cancel, list_recent_traces, get_trace, clear_traces, \
-            help. \
+            help, setup_arm_key. \
             Params by command: \
             help -> { category: String } (returns full param docs for a dispatcher); \
             refresh_cache -> {} (force AX re-poll); \
@@ -185,7 +185,9 @@ struct SystemDispatcher: OperationTraceDispatching {
             clear_traces -> { confirmed: Bool }; \
             export_support_bundle -> { dir?: String } (local files only; never uploaded); \
             saga_preflight/saga_execute -> { steps: [step], idempotency_key: String }; \
-            saga_status/saga_cancel -> { idempotency_key: String }. \
+            saga_status/saga_cancel -> { idempotency_key: String }; \
+            setup_arm_key -> { consent: "true" } (one-time consent-gated Key Commands GUI \
+            drive that assigns the coordinate-free record-arm chord; no mouse). \
             Saga work is ordered best-effort work with compensation; it does not promise \
             all-or-nothing completion or durable recovery. The journal is session-only and \
             cleared when the server session ends, including process restart. \
@@ -342,6 +344,9 @@ struct SystemDispatcher: OperationTraceDispatching {
             // key command (the track-header Record-Enable AXPress is a no-op, so a
             // key command is the only coord-free arm; it ships unassigned and
             // Logic 12.2+ blocks programmatic import). Fails closed without consent.
+            // ADR-005: a mutating op, so it emits an operation trace like every
+            // other mutating system command (started here, finalized on each exit).
+            let armTraceID = await startTraceIfEnabled(command: command)
             let consent = params["consent"]?.stringValue == "true"
             let keyCode: CGKeyCode
             let modifiers: CGEventFlags
@@ -350,17 +355,17 @@ struct SystemDispatcher: OperationTraceDispatching {
                 keyCode = code
                 modifiers = flags
             case .invalidKeyCode(let raw):
-                return toolTextResult(HonestContract.encodeStateC(
+                return await finalizeTrace(toolTextResult(HonestContract.encodeStateC(
                     error: .armKeyConfigInvalid,
                     hint: "LOGIC_PRO_MCP_ARM_KEYCODE '\(raw)' is not a valid decimal keycode.",
                     extras: ["stage": "resolve_chord"]
-                ), isError: true)
+                ), isError: true), traceID: armTraceID)
             case .invalidModifierToken(let token):
-                return toolTextResult(HonestContract.encodeStateC(
+                return await finalizeTrace(toolTextResult(HonestContract.encodeStateC(
                     error: .armKeyConfigInvalid,
                     hint: "LOGIC_PRO_MCP_ARM_KEY_MODIFIERS has an unknown modifier token '\(token)'.",
                     extras: ["stage": "resolve_chord"]
-                ), isError: true)
+                ), isError: true), traceID: armTraceID)
             }
             let chordText = ArmKeyCommandSetup.chordLabel(keyCode: keyCode, modifiers: modifiers)
             let armSetupOutcome = ArmKeyCommandSetup.run(
@@ -371,35 +376,38 @@ struct SystemDispatcher: OperationTraceDispatching {
             )
             switch armSetupOutcome {
             case .consentRequired:
-                return toolTextResult(HonestContract.encodeStateC(
+                return await finalizeTrace(toolTextResult(HonestContract.encodeStateC(
                     error: .invalidParams,
                     hint: "One-time setup assigns Logic's \"\(ArmKeyCommandSetup.commandName)\" command to "
                         + "\(chordText) so tracks arm coordinate-free. The server drives the Key Commands "
                         + "window on your behalf (no mouse). Re-run with consent:\"true\" to proceed.",
                     extras: ["stage": "consent", "chord": chordText, "command": ArmKeyCommandSetup.commandName]
-                ), isError: true)
+                ), isError: true), traceID: armTraceID)
             case .configuredAndVerified:
-                return toolTextResult(HonestContract.encodeStateA(extras: [
+                return await finalizeTrace(toolTextResult(HonestContract.encodeStateA(extras: [
                     "chord": chordText,
                     "command": ArmKeyCommandSetup.commandName,
                     "verified": true,
                     "detail": "Key command assigned and confirmed by a live record-arm flip.",
-                ]))
+                ])), traceID: armTraceID)
             case .configuredUnverified(let why):
-                return toolTextResult(HonestContract.encodeStateB(
+                // HIGH#3: nothing observed the assignment on this path (no track to
+                // test), so we must NOT claim "assigned" — report the steps ran but
+                // the assignment is unproven.
+                return await finalizeTrace(toolTextResult(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
                     extras: [
                         "chord": chordText,
                         "command": ArmKeyCommandSetup.commandName,
-                        "detail": "Key command assigned; could not confirm a live flip (\(why)).",
+                        "detail": "Setup steps ran, but the assignment is UNPROVEN — \(why).",
                     ]
-                ))
+                )), traceID: armTraceID)
             case .failed(let stage, let hint):
-                return toolTextResult(HonestContract.encodeStateC(
+                return await finalizeTrace(toolTextResult(HonestContract.encodeStateC(
                     error: .axWriteFailed,
                     hint: hint,
                     extras: ["stage": stage, "chord": chordText]
-                ), isError: true)
+                ), isError: true), traceID: armTraceID)
             }
 
         case "export_support_bundle":

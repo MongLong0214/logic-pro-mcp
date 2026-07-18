@@ -14,23 +14,32 @@ import Foundation
 /// key-command *import*. So the assignment must be made through the Key Commands
 /// GUI. This type does that entirely coordinate-free (no mouse/CGEvent-mouse):
 ///   1. Option+K keystroke opens the Key Commands window.
-///   2. The command list is collapsed with a **search-field AXValue write**
-///      (avoids walking the ~2200-row outline, which times out).
-///   3. The command row is selected via `AXSelected`.
-///   4. The "Learn by Key Label" **AXCheckBox** is driven via AXPress (it is a
-///      checkbox, not a button — the reason an earlier button-only hunt missed
-///      it), the chord is sent as a CGEvent **keyboard** chord (keystrokes are
-///      not coordinates), then Learn is toggled back off.
+///   2. The command list is collapsed by **typing the command name** into the
+///      search field (typed keystrokes trigger Logic's list filter; a bare
+///      AXValue write does NOT filter and leaves a ~26s full-outline walk).
+///      Typing is gated on OBSERVED focus: Logic must be frontmost and the
+///      search field must not read as unfocused, else we fail closed.
+///   3. The command row is selected via `AXSelected`, and the selection is READ
+///      BACK before proceeding (an unconfirmed selection would let Learn bind
+///      the previously-selected command).
+///   4. The "Learn by Key Label" **AXCheckBox** is driven to ON via AXPress (it
+///      is a checkbox, not a button — the reason an earlier button-only hunt
+///      missed it). Learn is ENSURED on (pressed only when observed off) and its
+///      ON state is READ BACK before the chord is sent; if Learn never reports
+///      on, we FAIL CLOSED without sending the chord (never bind to nothing/the
+///      wrong focus). The chord is a CGEvent **keyboard** chord (keystrokes are
+///      not coordinates); afterwards Learn is restored to its prior state.
 ///   5. The window is closed via **AXPress on its close button** — never a
 ///      second Option+K, which would type into the focused search field and
-///      leave the window open (starving track reads).
+///      leave the window open (starving track reads) — and the close is READ
+///      BACK (poll until the window is gone).
 ///
 /// Consent is mandatory (Isaac's rule: never modify the user's Logic config
 /// without consent). Every step's success is judged by a polled OBSERVED effect
-/// (window appeared / command row appeared / checkbox value changed), never by
-/// an AX action's return code. On any step whose effect does not materialise it
-/// fails closed with an actionable manual-fallback hint. Idempotent: re-running
-/// re-learns the same chord.
+/// (window appeared / command row appeared+selected / Learn value on / window
+/// gone), never by an AX action's return code. On any step whose effect does not
+/// materialise it fails closed with an actionable manual-fallback hint.
+/// Idempotent: re-running re-learns the same chord.
 enum ArmKeyCommandSetup {
     /// EN command name / checkbox title. Locale-dependent: non-EN Logic shows
     /// localised strings, so a non-EN run fails closed at `commandNotFound`
@@ -41,13 +50,18 @@ enum ArmKeyCommandSetup {
     enum Outcome: Equatable {
         case consentRequired
         case configuredAndVerified               // State A — assignment made AND a live arm flip observed
-        case configuredUnverified(why: String)   // State B — assignment made, could not confirm a flip
+        case configuredUnverified(why: String)   // State B — steps ran, no track to confirm a flip on
         case failed(stage: String, hint: String) // State C — a step's observed effect never materialised
     }
 
     struct Runtime {
-        /// Bring Logic frontmost so synthetic keystrokes route to it.
-        var activateLogic: @Sendable () -> Void
+        /// Bring Logic frontmost (strong activation) so synthetic keystrokes
+        /// route to it. Returns the activation actuation result; frontmost is
+        /// separately OBSERVED via `logicIsFrontmost` (never trust this return).
+        var activateLogic: @Sendable () -> Bool
+        /// OBSERVED: Logic is the frontmost application right now. Gates every
+        /// keystroke burst so typing can never land on another app / surface.
+        var logicIsFrontmost: @Sendable () -> Bool
         /// Post a modified key chord (used for Option+K and the arm chord).
         var postChord: @Sendable (CGKeyCode, CGEventFlags) -> Void
         /// Type text as real keystrokes into the focused element. Used to fill
@@ -66,11 +80,12 @@ enum ArmKeyCommandSetup {
 
         static func production(verifyArmFlip: @escaping @Sendable () -> Bool?) -> Runtime {
             Runtime(
-                activateLogic: {
-                    if let pid = ProcessUtils.logicProPID(),
-                       let app = NSRunningApplication(processIdentifier: pid) {
-                        app.activate(options: [])
-                    }
+                // HIGH#5: the stronger AppleScript+AppKit activation, not a bare
+                // NSRunningApplication.activate(options: []).
+                activateLogic: { ProcessUtils.Runtime.production.activateLogicPro() },
+                logicIsFrontmost: {
+                    guard let pid = ProcessUtils.logicProPID() else { return false }
+                    return NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
                 },
                 postChord: { keyCode, flags in
                     _ = AXMouseHelper.Runtime.production.postFlaggedKeyEvent(keyCode, flags)
@@ -98,7 +113,7 @@ enum ArmKeyCommandSetup {
     ) -> Outcome {
         guard consent else { return .consentRequired }
 
-        runtime.activateLogic()
+        _ = runtime.activateLogic()
         runtime.sleep(0.4)
 
         // 1. Open the Key Commands window (Option+K), polling for the window.
@@ -132,6 +147,17 @@ enum ArmKeyCommandSetup {
         _ = AXHelpers.setAttribute(searchField, kAXValueAttribute, "" as CFTypeRef, runtime: runtime.ax)
         _ = AXHelpers.setAttribute(searchField, kAXFocusedAttribute, kCFBooleanTrue, runtime: runtime.ax)
         runtime.sleep(0.3)
+        // HIGH#5: prove focus BEFORE typing — otherwise the command name lands on
+        // another app or the wrong Logic surface (piano roll / notes / another
+        // field). Fail closed if focus cannot be established.
+        guard focusEstablished(on: searchField, runtime: runtime) else {
+            closeWindow(kcWindow, runtime: runtime)
+            return .failed(
+                stage: "focus_search_field",
+                hint: "Could not confirm Logic is frontmost with the Key Commands search field focused; "
+                    + "refused to type (the command name could have gone elsewhere). Assign \"\(commandName)\" manually."
+            )
+        }
         runtime.typeText(commandName)
         runtime.sleep(1.0)  // let the filter collapse the list
 
@@ -150,9 +176,22 @@ enum ArmKeyCommandSetup {
                     + "Assign the record-arm command to \(chordLabel(keyCode: keyCode, modifiers: modifiers)) manually."
             )
         }
-        selectEnclosingRow(commandEl, runtime: runtime)
+        let selectedRow = selectEnclosingRow(commandEl, runtime: runtime)
+        // HIGH#4: confirm the row is ACTUALLY selected (observed) before Learn —
+        // a fire-and-forget AXSelected set that silently failed would let Learn
+        // bind onto the PREVIOUSLY selected command. Fail closed if unconfirmed.
+        guard poll(runtime: runtime, deadline: 1.5, {
+            elementSelected(selectedRow, runtime: runtime) ? true : nil
+        }) != nil else {
+            closeWindow(kcWindow, runtime: runtime)
+            return .failed(
+                stage: "select_command",
+                hint: "Found the \"\(commandName)\" command but Logic did not confirm its row selected; "
+                    + "refused to Learn onto an unconfirmed selection. Assign \"\(commandName)\" manually."
+            )
+        }
 
-        // 4. Drive "Learn by Key Label" (an AXCheckBox), send the chord, stop learning.
+        // 4. Drive "Learn by Key Label" (an AXCheckBox) to ON, then send the chord.
         guard let learn = firstDescendant(in: kcWindow, runtime: runtime, where: { el in
             AXHelpers.getRole(el, runtime: runtime.ax) == (kAXCheckBoxRole as String)
                 && (AXHelpers.getTitle(el, runtime: runtime.ax) ?? "") == learnCheckboxTitle
@@ -163,22 +202,52 @@ enum ArmKeyCommandSetup {
                 hint: "Could not find the \"\(learnCheckboxTitle)\" control. Assign \"\(commandName)\" manually."
             )
         }
-        _ = AXHelpers.performAction(learn, kAXPressAction as String, runtime: runtime.ax)
-        // Observed effect: the checkbox reports learning (value 1). Poll, don't
-        // trust the AXPress return.
-        _ = poll(runtime: runtime, deadline: 1.5) { checkboxOn(learn, runtime: runtime) ? true : nil }
+        // HIGH#2: ENSURE on, do not blind-toggle — a press on an already-on Learn
+        // would turn it OFF and the chord would post while NOT learning.
+        let learnWasOn = checkboxOn(learn, runtime: runtime)
+        if !learnWasOn {
+            _ = AXHelpers.performAction(learn, kAXPressAction as String, runtime: runtime.ax)
+        }
+        // HIGH#1: the chord is only safe to send while Learn is OBSERVED on (poll
+        // the value; never trust the AXPress return). If Learn never engages, FAIL
+        // CLOSED before the chord — do not bind to nothing / the wrong focus.
+        guard poll(runtime: runtime, deadline: 1.5, {
+            checkboxOn(learn, runtime: runtime) ? true : nil
+        }) != nil else {
+            restoreLearn(learn, wasOn: learnWasOn, runtime: runtime)
+            closeWindow(kcWindow, runtime: runtime)
+            return .failed(
+                stage: "learn_engage",
+                hint: "Could not confirm Logic's \"\(learnCheckboxTitle)\" mode engaged; refused to send "
+                    + "\(chordLabel(keyCode: keyCode, modifiers: modifiers)) (nothing was assigned). "
+                    + "Assign \"\(commandName)\" manually."
+            )
+        }
+        // HIGH#5: re-confirm Logic is frontmost right before the chord — focus can
+        // shift between engaging Learn and posting the key.
+        guard runtime.logicIsFrontmost() else {
+            restoreLearn(learn, wasOn: learnWasOn, runtime: runtime)
+            closeWindow(kcWindow, runtime: runtime)
+            return .failed(
+                stage: "focus_chord",
+                hint: "Logic left the foreground before \(chordLabel(keyCode: keyCode, modifiers: modifiers)) "
+                    + "could be sent; refused to post it. Re-run, or assign \"\(commandName)\" manually."
+            )
+        }
 
         runtime.postChord(keyCode, modifiers)
         runtime.sleep(0.3)
 
-        // Turn Learn back off if it is still on (idempotent).
-        if checkboxOn(learn, runtime: runtime) {
-            _ = AXHelpers.performAction(learn, kAXPressAction as String, runtime: runtime.ax)
-            runtime.sleep(0.2)
-        }
+        // Restore Learn to its prior state (idempotent): only turn it off if it
+        // was off before AND is still on.
+        restoreLearn(learn, wasOn: learnWasOn, runtime: runtime)
 
-        // 5. Close the window via its close button (NOT Option+K).
+        // 5. Close the window via its close button (NOT Option+K), then MEDIUM#7
+        //    confirm it actually closed — a stuck KC window starves track reads.
         closeWindow(kcWindow, runtime: runtime)
+        _ = poll(runtime: runtime, deadline: 2.0) {
+            keyCommandsWindow(runtime: runtime) == nil ? true : nil
+        }
         runtime.sleep(0.3)
 
         // Re-focus Logic's main window and let focus settle BEFORE verifying.
@@ -186,7 +255,7 @@ enum ArmKeyCommandSetup {
         // focus state (the arm actuator's focus gate / exclusive-select needs the
         // tracks area focused, not the just-closed floating KC window) — that made
         // an otherwise-good assignment self-report as unverified.
-        runtime.activateLogic()
+        _ = runtime.activateLogic()
         runtime.sleep(0.9)
 
         // 6. Ground-truth verify by driving a real arm.
@@ -201,7 +270,7 @@ enum ArmKeyCommandSetup {
             )
         case .none:
             return .configuredUnverified(
-                why: "no selectable track to test on; arm a track to confirm "
+                why: "no selectable track to test on; arm a track and re-run to confirm "
                     + "\(chordLabel(keyCode: keyCode, modifiers: modifiers)) works"
             )
         }
@@ -226,22 +295,57 @@ enum ArmKeyCommandSetup {
     }
 
     /// Select the command's enclosing AXRow (falls back to selecting the element
-    /// itself when the list is flat).
-    private static func selectEnclosingRow(_ el: AXUIElement, runtime: Runtime) {
+    /// itself when the list is flat). Returns the node AXSelected was set on so
+    /// the caller can READ BACK that the selection actually took (HIGH#4).
+    private static func selectEnclosingRow(_ el: AXUIElement, runtime: Runtime) -> AXUIElement {
         var node: AXUIElement? = el
         for _ in 0..<8 {
             guard let cur = node else { break }
             if AXHelpers.getRole(cur, runtime: runtime.ax) == (kAXRowRole as String) {
                 _ = AXHelpers.setAttribute(cur, kAXSelectedAttribute, kCFBooleanTrue, runtime: runtime.ax)
-                return
+                return cur
             }
             node = AXHelpers.getAttribute(cur, kAXParentAttribute, runtime: runtime.ax)
         }
         _ = AXHelpers.setAttribute(el, kAXSelectedAttribute, kCFBooleanTrue, runtime: runtime.ax)
+        return el
+    }
+
+    /// HIGH#5: focus is "established" when Logic is OBSERVED frontmost and the
+    /// search field does not READ as unfocused. A nil (unreadable) focus state
+    /// does not fail closed — some Logic builds do not surface AXFocused on the
+    /// KC search field, and frontmost + the explicit focus set above carry it;
+    /// only a definitive `focused == false` is treated as wrong focus.
+    private static func focusEstablished(on field: AXUIElement, runtime: Runtime) -> Bool {
+        guard runtime.logicIsFrontmost() else { return false }
+        return poll(runtime: runtime, deadline: 1.0) {
+            elementFocusedState(field, runtime: runtime) == false ? nil : true
+        } ?? false
+    }
+
+    /// Restore Learn to its prior state: turn it back off ONLY if it was off
+    /// before AND currently reads on (idempotent; never leaves Learn stuck on).
+    private static func restoreLearn(_ learn: AXUIElement, wasOn: Bool, runtime: Runtime) {
+        guard !wasOn, checkboxOn(learn, runtime: runtime) else { return }
+        _ = AXHelpers.performAction(learn, kAXPressAction as String, runtime: runtime.ax)
+        runtime.sleep(0.2)
     }
 
     private static func checkboxOn(_ el: AXUIElement, runtime: Runtime) -> Bool {
         (AXHelpers.getValue(el, runtime: runtime.ax) as? NSNumber)?.intValue ?? 0 != 0
+    }
+
+    /// Observed AXSelected (definitively true), used to confirm a selection took.
+    private static func elementSelected(_ el: AXUIElement, runtime: Runtime) -> Bool {
+        let n: NSNumber? = AXHelpers.getAttribute(el, kAXSelectedAttribute, runtime: runtime.ax)
+        return (n?.intValue ?? 0) != 0
+    }
+
+    /// Observed AXFocused as an optional: true/false when readable, nil when the
+    /// element does not expose focus state.
+    private static func elementFocusedState(_ el: AXUIElement, runtime: Runtime) -> Bool? {
+        let n: NSNumber? = AXHelpers.getAttribute(el, kAXFocusedAttribute, runtime: runtime.ax)
+        return n.map { $0.intValue != 0 }
     }
 
     private static func closeWindow(_ window: AXUIElement, runtime: Runtime) {

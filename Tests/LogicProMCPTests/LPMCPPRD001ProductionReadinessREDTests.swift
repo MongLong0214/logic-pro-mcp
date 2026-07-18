@@ -779,7 +779,7 @@ struct LPMCPPRD001ProductionReadinessREDTests {
     /// Aggregate production-readiness bar. Two debts remain OPEN and honestly
     /// tracked until reality changes — R-PUB (release assets are owner-replaceable;
     /// no immutable/transparency publication exists — the asset list used to
-    /// self-attest this closed) and R-SEM (semantic coverage is 1/107 until the
+    /// self-attest this closed) and R-SEM (semantic coverage is 1/108 until the
     /// coverage program lands). R-MATRIX is CLOSED: the managed desktop x {en-US,
     /// ko-KR} fixtures now exist as SHA-bound content under `Fixtures/qualification`
     /// (see `managedFixtureManifestSHAsBindActualContent` and

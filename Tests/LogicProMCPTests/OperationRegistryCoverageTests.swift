@@ -24,7 +24,7 @@ struct OperationRegistryCoverageTests {
         let missing = Self.publicOperations.subtracting(Self.registeredOperations).sorted()
         let orphans = Self.registeredOperations.subtracting(Self.publicOperations).sorted()
 
-        #expect(OperationRegistry.specs.count == 107)
+        #expect(OperationRegistry.specs.count == 108)
         #expect(OperationRegistry.registeredToolRawValues == Set(WorkflowSkillCatalog.publicCommands.keys))
         #expect(Self.registeredOperations.count == OperationRegistry.specs.count)
         #expect(missing.isEmpty, "missing specs: \(missing)")
@@ -85,10 +85,12 @@ struct OperationRegistryCoverageTests {
             .tracksSetInstrument,
         ]
 
-        #expect(mutating.count == 86)
+        #expect(mutating.count == 87)
         #expect(readOnly.count == 21)
         #expect(targetBearingIDs == expectedTargetBearingIDs)
-        #expect(targetless.count == 72)
+        // setup_arm_key is a targetless mutating config utility (assigns a Logic
+        // key command; no track/target to mis-bind) → targetless, not target-bearing.
+        #expect(targetless.count == 73)
         #expect(targetBearingIDs.count + targetless.count == mutating.count)
         #expect(readOnly.allSatisfy { $0.target == .none })
     }

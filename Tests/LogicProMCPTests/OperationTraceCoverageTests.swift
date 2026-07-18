@@ -186,8 +186,8 @@ extension OperationTraceTests {
         let mutatingSpecs = OperationRegistry.specs.filter {
             $0.mutability == Mutability.`mutating`
         }
-        #expect(OperationRegistry.specs.count == 107)
-        #expect(mutatingSpecs.count == 86)
+        #expect(OperationRegistry.specs.count == 108)
+        #expect(mutatingSpecs.count == 87)
 
         for spec in mutatingSpecs {
             await OperationTraceStore.shared.clear()
@@ -287,9 +287,9 @@ extension OperationTraceTests {
 
         let readOnlySpecs = OperationRegistry.specs.filter { $0.mutability == .readOnly }
         let mutatingSpecs = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
-        #expect(OperationRegistry.specs.count == 107)
+        #expect(OperationRegistry.specs.count == 108)
         #expect(readOnlySpecs.count == 21)
-        // Mutability is total: the mutating census (86) and this inverse gate
+        // Mutability is total: the mutating census (87) and this inverse gate
         // (21) together account for every registered spec, so a new operation
         // cannot land outside both gates.
         #expect(readOnlySpecs.count + mutatingSpecs.count == OperationRegistry.specs.count)
