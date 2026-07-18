@@ -11,7 +11,7 @@ import Foundation
 ///     Unsupported or unverified parameters fail closed at capability preflight.
 ///   - `plugin.insert_verified` — live validation gates (schema/mode/path/
 ///     identity/inventory-complete/slot-empty) followed by the
-///     target slot's own popup menu, driven by CGEvent clicks. The
+///     target slot's own popup menu, driven by coordinate-free AX actions. The
 ///     slot-popup path preserves the target slot context, and
 ///     a post-insert `get_inventory` readback is the SOLE State A precondition —
 ///     State A is reachable only when the requested plugin is observed at the
@@ -1453,7 +1453,7 @@ extension AccessibilityChannel {
     /// The injectable live-insert seam. Performs the live insert sequence and
     /// returns a structured outcome plus a `select_trace` diagnostic dict. Injected
     /// so the gate→outcome→envelope mapping is unit-testable without ever issuing
-    /// real CGEvent/menu actions; the production default (`liveExactSlotPopupInsert`)
+    /// real slot/menu AX actions; the production default (`liveExactSlotPopupInsert`)
     /// is the only path that touches the live UI.
     typealias PluginInsertDriver = @Sendable (
         _ track: Int,
@@ -1483,7 +1483,7 @@ extension AccessibilityChannel {
     /// Guarded verified insert entry. The write-preceding gates run live and are
     /// honest: schema → mode → project path → identity → inventory `complete:true`
     /// → slot-empty. Only after every gate passes does the op drive the requested
-    /// slot's own popup menu by physical CGEvent clicks, then a post-insert
+    /// slot's own popup menu by coordinate-free AX actions, then a post-insert
     /// `get_inventory` readback (pre/post diff) is the SOLE State A precondition.
     ///
     /// State A is reachable ONLY when the readback observes the requested plugin
@@ -1822,7 +1822,7 @@ extension AccessibilityChannel {
     /// Production exact-slot popup insert driver. Drives the target insert slot's
     /// own popup menu and returns a structured outcome plus a `select_trace`
     /// diagnostic dict. This is the default path that issues real slot/menu
-    /// CGEvents; `defaultInsertVerified` is unit-tested against an injected fake.
+    /// AX actions; `defaultInsertVerified` is unit-tested against an injected fake.
     ///
     /// Sequence:
     ///   0. hide any stray plugin windows (a front plugin window from a prior
@@ -1854,7 +1854,7 @@ extension AccessibilityChannel {
             "strategies_attempted": [String](),
         ]
 
-        trace["go_to_position_closed"] = closeGoToPositionDialog(runtime: runtime)
+        trace["go_to_position_closed"] = await closeGoToPositionDialog(runtime: runtime)
         trace["plugin_windows_hidden"] = await hideAllPluginWindows(runtime: runtime)
         try? await Task.sleep(for: .milliseconds(150))
 
@@ -1889,13 +1889,25 @@ extension AccessibilityChannel {
         }
         trace["target_slot_found"] = true
 
-        guard clickElementCenter(targetSlot.element, runtime: runtime.ax) else {
-            return (.transientSetupFailure(stage: "target_slot_click_failed"), trace)
+        // ADR-001 coordinate ban: open the insert-slot plugin picker via the
+        // AXShowMenu → AXPress ladder (the canonical NSAccessibility popup
+        // actions). Fire each action SEPARATELY and poll for the popup between
+        // them, IGNORING every return code — on Logic 12.3 an action that opens
+        // the popup still reports a non-zero AX status, and firing both blind can
+        // toggle a control open-then-closed. Success is the observed anchored
+        // popup below (pollSlotPopupMenu + slotPopupMenuIsAnchored), never the
+        // action return; stop on the first action that surfaces the menu.
+        var openedMenu: AXUIElement?
+        for action in [kAXShowMenuAction, kAXPressAction] {
+            _ = AXHelpers.performAction(targetSlot.element, action as String, runtime: runtime.ax)
+            if let menu = await pollSlotPopupMenu(runtime: runtime, timeoutMs: 700) {
+                openedMenu = menu
+                break
+            }
         }
-        trace["slot_popup_open_clicked"] = true
-        try? await Task.sleep(for: .milliseconds(250))
+        trace["slot_popup_open_attempted"] = true
 
-        guard let rootMenu = await pollSlotPopupMenu(runtime: runtime, timeoutMs: 1_200) else {
+        guard let rootMenu = openedMenu else {
             AXMouseHelper.pressEscape()
             return (.transientSetupFailure(stage: "slot_popup_menu_not_found"), trace)
         }
@@ -2023,10 +2035,9 @@ extension AccessibilityChannel {
                     continue
                 }
 
-                if !openMenuBarItem(barItem, runtime: runtime.ax) {
+                if !(await openMenuBarItem(barItem, runtime: runtime.ax)) {
                     continue
                 }
-                try? await Task.sleep(for: .milliseconds(120))
 
                 guard let item = menuItem(
                     matching: candidate.item,
@@ -2045,7 +2056,13 @@ extension AccessibilityChannel {
                     continue
                 }
 
-                if clickElementCenter(item, runtime: runtime.ax) {
+                // ADR-001 coordinate ban: select the menu item via AXPress,
+                // IGNORE the return (non-zero on success on Logic 12.3), and
+                // confirm by the OBSERVED effect — the menu closing (selection
+                // committed). If it did not close, the press was a noop: Escape to
+                // recover the open menu and keep trying.
+                _ = AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax)
+                if await pollMenuBarItemMenuClosed(barItem, runtime: runtime.ax, timeoutMs: 600) {
                     return (true, true, attempt)
                 }
                 AXMouseHelper.pressEscape()
@@ -2067,16 +2084,53 @@ extension AccessibilityChannel {
         return AXLocalePolicy.findMenuBarItem(in: menuBar, matching: labels, runtime: runtime.ax)
     }
 
-    private static func openMenuBarItem(
+    /// Observed-effect probe: does this menu-bar item currently have an OPEN
+    /// menu — an `AXMenu` child populated with items? The signal that a menu
+    /// opened (or, negated, closed) after an AXPress whose return code is
+    /// unreliable on Logic 12.3.
+    static func menuBarItemMenuOpen(_ item: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
+        for child in AXHelpers.getChildren(item, runtime: runtime)
+            where (AXHelpers.getRole(child, runtime: runtime) ?? "") == (kAXMenuRole as String) {
+            if !AXHelpers.getChildren(child, runtime: runtime).isEmpty {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func pollMenuBarItemMenuOpen(
+        _ item: AXUIElement, runtime: AXHelpers.Runtime, timeoutMs: Int
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+        repeat {
+            if menuBarItemMenuOpen(item, runtime: runtime) { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        } while Date() < deadline
+        return false
+    }
+
+    private static func pollMenuBarItemMenuClosed(
+        _ item: AXUIElement, runtime: AXHelpers.Runtime, timeoutMs: Int
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+        repeat {
+            if !menuBarItemMenuOpen(item, runtime: runtime) { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        } while Date() < deadline
+        return false
+    }
+
+    /// Open a menu-bar item and confirm by OBSERVED effect. Fires AXPress and
+    /// IGNORES its return code (Logic 12.3 reports a non-zero AX status even when
+    /// the menu opens — the `afb9bdb` failure class); success is the menu
+    /// actually becoming populated within a short settle poll, never the return.
+    /// `internal` (not private) so the observed-effect gate is unit-testable.
+    static func openMenuBarItem(
         _ item: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> Bool {
-        // ADR-001 coordinate ban: open the menu-bar item via AXPress only
-        // (menu-bar items respond to AXPress). The former element-derived
-        // clickElementCenter-first rung is removed. The features this serves keep
-        // non-coordinate fallbacks — mixer reveal falls back to the cgevent key-7
-        // channel and Edit▸Undo to Cmd+Z — so no feature is degraded.
-        AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime)
+    ) async -> Bool {
+        _ = AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime)
+        return await pollMenuBarItemMenuOpen(item, runtime: runtime, timeoutMs: 600)
     }
 
     private static func menuItem(
@@ -2103,10 +2157,9 @@ extension AccessibilityChannel {
             guard let barItem = menuBarItem(matching: candidate.bar, runtime: runtime) else {
                 continue
             }
-            if !openMenuBarItem(barItem, runtime: runtime.ax) {
+            if !(await openMenuBarItem(barItem, runtime: runtime.ax)) {
                 continue
             }
-            try? await Task.sleep(for: .milliseconds(120))
             guard let item = menuItem(
                 matching: candidate.item,
                 mode: candidate.itemMode,
@@ -2122,10 +2175,17 @@ extension AccessibilityChannel {
                 AXMouseHelper.pressEscape()
                 return .disabled
             }
-            if clickElementCenter(item, runtime: runtime.ax) {
+            // ADR-001 coordinate ban: select the Undo item via AXPress, IGNORE
+            // the return, and confirm by the OBSERVED effect — the Edit menu
+            // closing. If it did not close, the press was a noop: Escape to
+            // recover and report honestly (the rollback caller's inventory
+            // readback stays authoritative).
+            _ = AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax)
+            if await pollMenuBarItemMenuClosed(barItem, runtime: runtime.ax, timeoutMs: 600) {
                 return .ok
             }
             AXMouseHelper.pressEscape()
+            return .missing
         }
         return .missing
     }
@@ -2284,7 +2344,7 @@ extension AccessibilityChannel {
         strategies.append("slot_popup_direct_exact_leaf")
         if let item = directExactPopupMenuItem(displayName: displayName, in: rootMenu, runtime: runtime),
            let label = popupMenuItemLabel(item, runtime: runtime),
-           await clickPopupPluginLeaf(item, runtime: runtime) {
+           await clickPopupPluginLeaf(item, rootMenu: rootMenu, runtime: runtime) {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_direct_exact_leaf",
                 path: [label],
@@ -2296,7 +2356,7 @@ extension AccessibilityChannel {
         if await filterSlotPopupSearchField(displayName: displayName, rootMenu: rootMenu, runtime: runtime),
            let item = directExactPopupMenuItem(displayName: displayName, in: rootMenu, runtime: runtime),
            let label = popupMenuItemLabel(item, runtime: runtime),
-           await clickPopupPluginLeaf(item, runtime: runtime) {
+           await clickPopupPluginLeaf(item, rootMenu: rootMenu, runtime: runtime) {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_search_exact_leaf",
                 path: [label],
@@ -2308,6 +2368,7 @@ extension AccessibilityChannel {
         if let result = await clickPopupExactLeafRecursively(
             displayName: displayName,
             menu: rootMenu,
+            rootMenu: rootMenu,
             path: [],
             runtime: runtime,
             maxDepth: 5
@@ -2353,6 +2414,7 @@ extension AccessibilityChannel {
     private static func clickPopupExactLeafRecursively(
         displayName: String,
         menu: AXUIElement,
+        rootMenu: AXUIElement,
         path: [String],
         runtime: AXHelpers.Runtime,
         maxDepth: Int
@@ -2361,7 +2423,7 @@ extension AccessibilityChannel {
 
         if let direct = directExactPopupMenuItem(displayName: displayName, in: menu, runtime: runtime),
            let label = popupMenuItemLabel(direct, runtime: runtime),
-           await clickPopupPluginLeaf(direct, runtime: runtime) {
+           await clickPopupPluginLeaf(direct, rootMenu: rootMenu, runtime: runtime) {
             return path + [label]
         }
 
@@ -2369,10 +2431,14 @@ extension AccessibilityChannel {
         for item in items {
             guard let label = popupMenuItemLabel(item, runtime: runtime),
                   !popupMenuItemMatches(item, displayName: displayName, runtime: runtime),
-                  menuItemEnabled(item, runtime: runtime),
-                  moveElementCenter(item, runtime: runtime) else {
+                  menuItemEnabled(item, runtime: runtime) else {
                 continue
             }
+            // ADR-001 coordinate ban: open the category submenu via AXPress
+            // (fire-and-ignore-return), then confirm it opened by the observed
+            // AXMenu child — the live-verified navigateMenu pattern. Works even
+            // when the row is scrolled off-screen, unlike a mouse hover.
+            _ = AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime)
             try? await Task.sleep(for: .milliseconds(140))
             guard let submenu = visibleSubmenu(of: item, runtime: runtime) else {
                 continue
@@ -2380,6 +2446,7 @@ extension AccessibilityChannel {
             if let found = await clickPopupExactLeafRecursively(
                 displayName: displayName,
                 menu: submenu,
+                rootMenu: rootMenu,
                 path: path + [label],
                 runtime: runtime,
                 maxDepth: maxDepth - 1
@@ -2390,17 +2457,41 @@ extension AccessibilityChannel {
         return nil
     }
 
-    private static func clickPopupPluginLeaf(
+    /// Select a plugin from the anchored slot popup coordinate-free, deciding
+    /// success by OBSERVED effect — never the AXPress return (non-zero even on
+    /// success on Logic 12.3). AXPress on the exact-match item either selects it
+    /// (terminal leaf) or opens its format submenu (Stereo/Mono/…); when a format
+    /// submenu appears, AXPress the preferred format leaf once. A committed
+    /// selection dismisses the whole popup, so success is the ROOT menu becoming
+    /// invisible within a short settle poll. Returns false when nothing commits —
+    /// so the caller falls through to the search / recursive strategies instead
+    /// of short-circuiting on a blind true. `internal` for unit-testability.
+    static func clickPopupPluginLeaf(
         _ item: AXUIElement,
+        rootMenu: AXUIElement,
         runtime: AXHelpers.Runtime
     ) async -> Bool {
-        guard moveElementCenter(item, runtime: runtime) else { return false }
-        try? await Task.sleep(for: .milliseconds(120))
-        if let submenu = visibleSubmenu(of: item, runtime: runtime),
-           let leaf = preferredFormatLeaf(in: submenu, runtime: runtime) {
-            return clickElementCenter(leaf, runtime: runtime)
-        }
-        return clickElementCenter(item, runtime: runtime)
+        _ = AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime)
+        var formatLeafPressed = false
+        let deadline = Date().addingTimeInterval(0.4)
+        repeat {
+            // A format submenu opened under this item → AXPress the preferred
+            // format leaf once (that press commits the insert).
+            if !formatLeafPressed,
+               let submenu = visibleSubmenu(of: item, runtime: runtime),
+               let leaf = preferredFormatLeaf(in: submenu, runtime: runtime) {
+                _ = AXHelpers.performAction(leaf, kAXPressAction as String, runtime: runtime)
+                formatLeafPressed = true
+            }
+            // Observed commit: selecting a leaf (terminal or format) dismisses the
+            // whole popup. That disappearance — NOT the AXPress return — is the
+            // success signal; a noop press leaves the popup up and returns false.
+            if !isVisibleMenu(rootMenu, runtime: runtime) {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        } while Date() < deadline
+        return false
     }
 
     private static func popupExactLeafPaths(
@@ -2489,9 +2580,11 @@ extension AccessibilityChannel {
         of item: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> AXUIElement? {
+        // ADR-001: role-only match (no isVisibleMenu geometry gate) — the
+        // AXPress-populated submenu is a role==AXMenu child regardless of whether
+        // it is on-screen, matching the live-verified navigateMenu probe.
         AXHelpers.getChildren(item, runtime: runtime).first {
             (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
-                && isVisibleMenu($0, runtime: runtime)
         }
     }
 
@@ -2499,9 +2592,11 @@ extension AccessibilityChannel {
         in submenu: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> AXUIElement? {
+        // ADR-001: no elementCenter frame-gate — AXPress selects a format leaf
+        // even when it is scrolled off-screen, so filter by role + enabled only.
         let items = AXHelpers.getChildren(submenu, runtime: runtime).filter {
             (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuItemRole as String)
-                && elementCenter($0, runtime: runtime) != nil
+                && menuItemEnabled($0, runtime: runtime)
         }
         for labels in AXLocalePolicy.pluginFormatLeafPriority {
             if let match = items.first(where: {
@@ -2511,43 +2606,6 @@ extension AccessibilityChannel {
             }
         }
         return items.first
-    }
-
-    @discardableResult
-    private static func moveElementCenter(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
-        guard let center = elementCenter(element, runtime: runtime) else { return false }
-        let source = CGEventSource(stateID: .combinedSessionState)
-        guard let move = CGEvent(
-            mouseEventSource: source,
-            mouseType: .mouseMoved,
-            mouseCursorPosition: center,
-            mouseButton: .left
-        ) else { return false }
-        move.post(tap: .cghidEventTap)
-        return true
-    }
-
-    @discardableResult
-    private static func clickElementCenter(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
-        guard let center = elementCenter(element, runtime: runtime) else { return false }
-        let source = CGEventSource(stateID: .combinedSessionState)
-        if let down = CGEvent(mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: center, mouseButton: .left),
-           let up = CGEvent(mouseEventSource: source, mouseType: .leftMouseUp, mouseCursorPosition: center, mouseButton: .left) {
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
-            return true
-        }
-        return false
-    }
-
-    /// Screen centre of an element, or nil when its frame is degenerate (the
-    /// R12 frameless-leaf failure mode: a (0, screen-bottom) / zero-size rect is
-    /// rejected so we never misclick at the screen corner).
-    private static func elementCenter(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> CGPoint? {
-        guard let pos = AXHelpers.getPosition(element, runtime: runtime),
-              let size = AXHelpers.getSize(element, runtime: runtime),
-              size.width > 1, size.height > 1 else { return nil }
-        return CGPoint(x: pos.x + size.width / 2, y: pos.y + size.height / 2)
     }
 
     /// One readable, occupied insert slot observed during a strip inventory pass:
@@ -2674,49 +2732,71 @@ extension AccessibilityChannel {
 
     /// Close a leftover "위치로 이동" / "Go to Position" floating dialog (a prior
     /// AX side effect) so it cannot steal focus / keep the Mix menu disabled.
-    /// Best-effort via AX + CGEvent only: click Cancel/close if present, otherwise
-    /// Escape. Returns whether a matching dialog was found.
+    /// Best-effort via AX only: AXPress Cancel/close if present, otherwise Escape.
+    /// Returns whether a matching dialog was present (and a dismissal was
+    /// attempted).
     @discardableResult
-    private static func closeGoToPositionDialog(runtime: AXLogicProElements.Runtime) -> Bool {
-        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return false }
+    static func closeGoToPositionDialog(runtime: AXLogicProElements.Runtime) async -> Bool {
+        guard let dialog = goToPositionDialogWindow(runtime: runtime) else { return false }
+        // ADR-001 coordinate ban: dismiss via AXPress, IGNORE the return, and
+        // confirm by the OBSERVED disappearance of the dialog before escalating. A
+        // blind Close/Escape off a non-zero-on-success return could dismiss another
+        // surface or steal focus mid-insert. Cancel → poll absence; else Close →
+        // poll absence; else a single terminal Escape.
+        if let cancel = AXLocalePolicy.findDescendant(
+            of: dialog,
+            role: kAXButtonRole as String,
+            matching: AXLocalePolicy.cancelButton,
+            maxDepth: 4,
+            runtime: runtime.ax
+        ) {
+            _ = AXHelpers.performAction(cancel, kAXPressAction as String, runtime: runtime.ax)
+            if await pollGoToPositionDialogAbsent(runtime: runtime, timeoutMs: 500) {
+                return true
+            }
+        }
+        if let close = AXHelpers.findAllDescendants(
+            of: dialog, role: kAXButtonRole as String, maxDepth: 4, runtime: runtime.ax
+        ).first(where: {
+            let subrole: String? = AXHelpers.getAttribute(
+                $0, kAXSubroleAttribute as String, runtime: runtime.ax
+            )
+            return subrole == kAXCloseButtonSubrole as String
+        }) {
+            _ = AXHelpers.performAction(close, kAXPressAction as String, runtime: runtime.ax)
+            if await pollGoToPositionDialogAbsent(runtime: runtime, timeoutMs: 500) {
+                return true
+            }
+        }
+        AXMouseHelper.pressEscape()
+        return true
+    }
+
+    /// The open "Go to Position" dialog window, if present.
+    private static func goToPositionDialogWindow(
+        runtime: AXLogicProElements.Runtime
+    ) -> AXUIElement? {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return nil }
         let windows: [AXUIElement] = AXHelpers.getAttribute(
             app, kAXWindowsAttribute as String, runtime: runtime.ax
         ) ?? []
-        var found = false
-        for window in windows {
-            let title = AXHelpers.getTitle(window, runtime: runtime.ax) ?? ""
-            guard AXLocalePolicy.goToPositionDialogTitle.matches(title, mode: .contains) else {
-                continue
-            }
-            found = true
-            if let cancel = AXLocalePolicy.findDescendant(
-                of: window,
-                role: kAXButtonRole as String,
-                matching: AXLocalePolicy.cancelButton,
-                maxDepth: 4,
-                runtime: runtime.ax
-            ) {
-                // ADR-001 coordinate ban: dismiss via AXPress only (Escape remains
-                // the terminal non-coordinate fallback below).
-                if AXHelpers.performAction(cancel, kAXPressAction as String, runtime: runtime.ax) {
-                    continue
-                }
-            }
-            if let close = AXHelpers.findAllDescendants(
-                of: window, role: kAXButtonRole as String, maxDepth: 4, runtime: runtime.ax
-            ).first(where: {
-                let subrole: String? = AXHelpers.getAttribute(
-                    $0, kAXSubroleAttribute as String, runtime: runtime.ax
-                )
-                return subrole == kAXCloseButtonSubrole as String
-            }) {
-                // ADR-001 coordinate ban: AXPress only; no element-derived click.
-                _ = AXHelpers.performAction(close, kAXPressAction as String, runtime: runtime.ax)
-            } else {
-                AXMouseHelper.pressEscape()
-            }
+        return windows.first {
+            AXLocalePolicy.goToPositionDialogTitle.matches(
+                AXHelpers.getTitle($0, runtime: runtime.ax) ?? "", mode: .contains
+            )
         }
-        return found
+    }
+
+    /// Poll until the "Go to Position" dialog is observed GONE, or the deadline.
+    private static func pollGoToPositionDialogAbsent(
+        runtime: AXLogicProElements.Runtime, timeoutMs: Int
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+        repeat {
+            if goToPositionDialogWindow(runtime: runtime) == nil { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        } while Date() < deadline
+        return false
     }
 
     /// Honest outcome of a verified rollback attempt.

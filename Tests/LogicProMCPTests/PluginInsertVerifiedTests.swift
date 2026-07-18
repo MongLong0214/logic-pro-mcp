@@ -244,6 +244,200 @@ private func insertParams(
     #expect(path == ["Gain"])
 }
 
+// MARK: - Coordinate-free selection: AXPress + OBSERVED effect, never the return code
+
+/// Records AX actions posted through the fake runtime's `performAction` seam so a
+/// test can assert the selection path uses AXPress on AXMenuItems only — never a
+/// mouse/CGEvent primitive (the fake has no mouse seam, and the source no longer
+/// contains one). All handlers below return `false` to model Logic 12.3 (which
+/// reports a non-zero AX status even when the action succeeds) — the code must
+/// decide by the OBSERVED AX tree, never that return.
+private final class PluginPickerActionRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var calls: [(id: Int, action: String)] = []
+    func record(_ id: Int, _ action: String) {
+        lock.lock(); defer { lock.unlock() }
+        calls.append((id, action))
+    }
+    func pressed(_ id: Int) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return calls.contains { $0.id == id && $0.action == (kAXPressAction as String) }
+    }
+    var actions: [String] {
+        lock.lock(); defer { lock.unlock() }
+        return calls.map(\.action)
+    }
+    var pressCount: Int {
+        lock.lock(); defer { lock.unlock() }
+        return calls.filter { $0.action == (kAXPressAction as String) }.count
+    }
+}
+
+// clickPopupPluginLeaf decides success by the OBSERVED commit — a selected leaf
+// dismisses the whole popup — never the AXPress return. The actuated menu items
+// are FRAMELESS (no AXPosition/AXSize), which the deleted coordinate path
+// (`elementCenter`) would have rejected outright, proving no coordinate primitive
+// remains; the (observation-only) root menu carries a frame and the handler
+// models the commit by making it invisible.
+@Test func testSlotPopupLeafCommitDecidedByObservedDismissalNotReturn() async {
+    let b = FakeAXRuntimeBuilder()
+    let leaf = addMenuItem(b, 9001, title: "Gain")   // frameless terminal leaf, no submenu
+    let rootMenu = addMenu(b, 9300, children: [leaf])
+    b.setAttribute(rootMenu, kAXPositionAttribute as String, axPoint(10, 10))
+    b.setAttribute(rootMenu, kAXSizeAttribute as String, axSize(200, 300))   // visible
+    let recorder = PluginPickerActionRecorder()
+    let leafID = b.elementID(leaf)
+    let runtime = b.makeAXRuntime(
+        setAttributeHandler: nil,
+        performActionHandler: { [b, leafID] element, action in
+            recorder.record(b.elementID(element), action)
+            if b.elementID(element) == leafID {                                  // leaf press commits →
+                b.setAttribute(b.element(9300), kAXSizeAttribute as String, axSize(0, 0))  // popup dismisses
+            }
+            return false                                                         // Logic 12.3 lies; ignore
+        }
+    )
+
+    let ok = await AccessibilityChannel.clickPopupPluginLeaf(leaf, rootMenu: rootMenu, runtime: runtime)
+
+    #expect(ok)                            // succeeded on OBSERVED dismissal, not the false return
+    #expect(recorder.pressed(leafID))      // via AXPress on the frameless leaf
+    #expect(recorder.pressCount == 1)      // exactly one selecting AXPress
+    #expect(recorder.actions.allSatisfy { $0 == (kAXPressAction as String) })  // AX actions only
+}
+
+// The strategy-fallthrough fix: a noop leaf press (nothing commits, popup stays
+// up) must return FALSE so clickPluginInAnchoredSlotPopup falls through to the
+// search / recursive strategies instead of short-circuiting on a blind true.
+@Test func testSlotPopupLeafNoopReturnsFalseSoStrategiesFallThrough() async {
+    let b = FakeAXRuntimeBuilder()
+    let leaf = addMenuItem(b, 9001, title: "Gain")
+    let rootMenu = addMenu(b, 9300, children: [leaf])
+    b.setAttribute(rootMenu, kAXPositionAttribute as String, axPoint(10, 10))
+    b.setAttribute(rootMenu, kAXSizeAttribute as String, axSize(200, 300))   // stays visible
+    let recorder = PluginPickerActionRecorder()
+    let runtime = b.makeAXRuntime(
+        setAttributeHandler: nil,
+        performActionHandler: { [b] element, action in
+            recorder.record(b.elementID(element), action)   // press issued, but nothing commits
+            return false
+        }
+    )
+
+    let ok = await AccessibilityChannel.clickPopupPluginLeaf(leaf, rootMenu: rootMenu, runtime: runtime)
+
+    #expect(!ok)                                 // no observed commit → false (NOT a blind true)
+    #expect(recorder.pressed(b.elementID(leaf))) // the press WAS attempted
+}
+
+// Format-variant plugin: AXPress the exact item opens its format submenu, then
+// AXPress the preferred off-screen format leaf, whose press commits + dismisses
+// the popup. All actuated items frameless; success decided by observed dismissal.
+@Test func testSlotPopupFormatLeafCommitViaAXPressOffScreen() async {
+    let b = FakeAXRuntimeBuilder()
+    let stereo = addMenuItem(b, 9102, title: "Stereo")            // frameless format leaf
+    let formatSubmenu = addMenu(b, 9103, children: [stereo])      // frameless submenu
+    let parent = addMenuItem(b, 9101, title: "ChannelEQ", children: [formatSubmenu])
+    let rootMenu = addMenu(b, 9300, children: [parent])
+    b.setAttribute(rootMenu, kAXPositionAttribute as String, axPoint(10, 10))
+    b.setAttribute(rootMenu, kAXSizeAttribute as String, axSize(200, 300))
+    let recorder = PluginPickerActionRecorder()
+    let stereoID = b.elementID(stereo)
+    let runtime = b.makeAXRuntime(
+        setAttributeHandler: nil,
+        performActionHandler: { [b, stereoID] element, action in
+            recorder.record(b.elementID(element), action)
+            if b.elementID(element) == stereoID {                                // format-leaf press commits
+                b.setAttribute(b.element(9300), kAXSizeAttribute as String, axSize(0, 0))
+            }
+            return false
+        }
+    )
+
+    let ok = await AccessibilityChannel.clickPopupPluginLeaf(parent, rootMenu: rootMenu, runtime: runtime)
+
+    #expect(ok)
+    #expect(recorder.pressed(b.elementID(parent)))   // AXPress opened the format submenu
+    #expect(recorder.pressed(stereoID))              // AXPress selected the off-screen Stereo leaf
+    #expect(recorder.pressCount == 2)                // parent-open + format-leaf-select only
+}
+
+// openMenuBarItem decides by OBSERVED menu contents (an AXMenu child that becomes
+// populated), never the AXPress return. Case A: the press opens the menu but
+// reports false → true. Case B: the press reports true but nothing populates →
+// false (the return is ignored; only the observed effect governs).
+@Test func testOpenMenuBarItemDecidedByObservedMenuNotReturn() async {
+    let b = FakeAXRuntimeBuilder()
+    _ = addMenuItem(b, 9402, title: "Item")               // becomes the opened menu's child
+    _ = addMenu(b, 9401, children: [])                    // empty menu until "opened"
+    let barItem = b.element(9400)
+    b.setAttribute(barItem, kAXRoleAttribute as String, kAXMenuBarItemRole as String)
+    b.setChildren(barItem, [b.element(9401)])
+    let barItemID = b.elementID(barItem)
+    let runtimeA = b.makeAXRuntime(
+        setAttributeHandler: nil,
+        performActionHandler: { [b, barItemID] element, _ in
+            if b.elementID(element) == barItemID {
+                b.setChildren(b.element(9401), [b.element(9402)])   // the press opens (populates) the menu
+            }
+            return false                                            // …while reporting failure
+        }
+    )
+    let openedResult = await AccessibilityChannel.openMenuBarItem(barItem, runtime: runtimeA)
+    #expect(openedResult)   // true because the menu was OBSERVED populated, not the return
+
+    let b2 = FakeAXRuntimeBuilder()
+    _ = addMenu(b2, 9411, children: [])
+    let barItem2 = b2.element(9410)
+    b2.setAttribute(barItem2, kAXRoleAttribute as String, kAXMenuBarItemRole as String)
+    b2.setChildren(barItem2, [b2.element(9411)])
+    let runtimeB = b2.makeAXRuntime(
+        setAttributeHandler: nil,
+        performActionHandler: { _, _ in true }              // claims success, opens nothing
+    )
+    let notOpened = await AccessibilityChannel.openMenuBarItem(barItem2, runtime: runtimeB)
+    #expect(!notOpened)   // false because no menu contents were observed
+}
+
+// closeGoToPositionDialog dismisses via AXPress but decides by the OBSERVED
+// disappearance of the dialog — not the AXPress return. When Cancel actually
+// dismisses (handler removes the dialog) despite returning false, the function
+// must NOT also actuate Close (no double-actuation that could steal focus /
+// dismiss another surface mid-insert).
+@Test func testCloseGoToPositionDialogPollsAbsenceAndDoesNotDoubleActuate() async {
+    let b = FakeAXRuntimeBuilder()
+    let app = b.element(9500)
+    let dialog = b.element(9501)
+    let cancel = b.element(9502)
+    let close = b.element(9503)
+    b.setAttribute(dialog, kAXTitleAttribute as String, "Go to Position")
+    b.setChildren(dialog, [cancel, close])
+    b.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+    b.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+    b.setAttribute(close, kAXRoleAttribute as String, kAXButtonRole as String)
+    b.setAttribute(close, kAXSubroleAttribute as String, kAXCloseButtonSubrole as String)
+    b.setAttribute(app, kAXWindowsAttribute as String, [dialog])
+    let recorder = PluginPickerActionRecorder()
+    let cancelID = b.elementID(cancel)
+    let runtime = b.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { [b, cancelID] element, action in
+            recorder.record(b.elementID(element), action)
+            if b.elementID(element) == cancelID {                    // Cancel actually dismisses →
+                b.setAttribute(b.element(9500), kAXWindowsAttribute as String, [] as [AXUIElement])
+            }
+            return false                                             // …while reporting failure
+        }
+    )
+
+    let handled = await AccessibilityChannel.closeGoToPositionDialog(runtime: runtime)
+
+    #expect(handled)                                // a dialog was present and dismissal confirmed
+    #expect(recorder.pressed(cancelID))             // Cancel was AXPressed
+    #expect(!recorder.pressed(b.elementID(close)))  // Close was NOT actuated (no double-actuation)
+}
+
 // MARK: - State C: readback subtree unreadable after the insert
 
 @Test func testInsertVerifiedReadbackUnavailableIsStateC() async {
