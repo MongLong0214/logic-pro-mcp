@@ -523,11 +523,12 @@ enum SemanticOracleFixtures {
             readback: "{}"
         ),
         // AccessibilityChannel+Tracks.defaultSetTrackToggle (Mute): requested==observed bool.
+        // Mute's coordinate-free primary is exclusive-select + key 'm' (#106).
         .tracksMute: SemanticOracleFixture(
             response: """
                 {"success":true,"verified":true,"state":"A","track":1,\
                 "button":"Mute","requested":true,"verification_source":"ax_value",\
-                "observed":true,"action":"press"}
+                "observed":true,"action":"keyboard-mute"}
                 """,
             readback: "{}"
         ),
@@ -539,11 +540,13 @@ enum SemanticOracleFixtures {
                 """,
             readback: "{}"
         ),
+        // Arm's coordinate-free path is exclusive-select + a user-assigned
+        // "Toggle Track Record Enable" key command (#106; 'r' is transport Record).
         .tracksArm: SemanticOracleFixture(
             response: """
                 {"success":true,"verified":true,"state":"A","track":1,\
                 "button":"Record","requested":true,"verification_source":"ax_value",\
-                "observed":true,"action":"mouse-click"}
+                "observed":true,"action":"keyboard-arm"}
                 """,
             readback: "{}"
         ),

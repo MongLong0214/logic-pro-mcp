@@ -108,7 +108,9 @@ extension AccessibilityChannel {
     static func defaultSetTrackToggle(
         params: [String: String],
         button buttonName: String,
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        keyRuntime: AXMouseHelper.Runtime = .production,
+        processRuntime: ProcessUtils.Runtime = .production
     ) -> ChannelResult {
         guard let indexStr = params["index"], let index = Int(indexStr) else {
             return .error("Missing or invalid 'index' parameter")
@@ -122,18 +124,7 @@ extension AccessibilityChannel {
         guard let button = finder(index) else {
             return .error("Cannot find \(buttonName) button on track \(index)")
         }
-        // Press toggles state. To make `enabled: true/false` idempotent (the
-        // user-visible contract), read current AXValue — only press when the
-        // target state differs. This fixes the class of bug where `arm off`
-        // was a silent no-op because MCU release-only was being sent and the
-        // AX press was unconditionally toggling regardless of desired state.
         let desired: Bool = (params["enabled"] ?? "true") == "true"
-        let current: Bool? = {
-            if let raw = AXHelpers.getValue(button, runtime: runtime.ax) as? Int { return raw != 0 }
-            if let raw = AXHelpers.getValue(button, runtime: runtime.ax) as? Bool { return raw }
-            if let raw = AXHelpers.getValue(button, runtime: runtime.ax) as? NSNumber { return raw.boolValue }
-            return nil
-        }()
         let baseExtras: [String: Any] = [
             "track": index,
             "button": buttonName,
@@ -141,14 +132,12 @@ extension AccessibilityChannel {
             "verification_source": "ax_value"
         ]
 
-        if let cur = current, cur == desired {
-            return .success(HonestContract.encodeStateA(extras: baseExtras.merging([
-                "observed": desired,
-                "action": "no-op"
-            ]) { _, new in new }))
-        }
-
-        func readCurrent() -> Bool? {
+        // Success is judged ONLY by re-reading this checkbox AXValue (the
+        // observed effect), NEVER by an AX action's return code: on real Logic
+        // 12.x the track-header M/S/R actions return non-zero even when they
+        // no-op (#106 sites-6/7), so trusting the return would fabricate a
+        // State A on a control that never moved.
+        func readValue() -> Bool? {
             guard let v = AXHelpers.getValue(button, runtime: runtime.ax) else { return nil }
             if let n = v as? NSNumber { return n.boolValue }
             if let b = v as? Bool { return b }
@@ -157,80 +146,251 @@ extension AccessibilityChannel {
             return nil
         }
 
-        // #106: Logic 12.x track-header M/S/R checkboxes are `settable=false`
-        // and ignore `AXPress`/`AXConfirm`/value writes entirely — only a real
-        // mouse click at the control toggles Logic's internal state
-        // (live-confirmed: AXPress leaves the value at 0 indefinitely; a HID
-        // click flips it to 1 within ~350 ms). The earlier fixed 50 ms
-        // read-back was also too fast for Logic to publish the new AX value
-        // after a successful click, so even the arm path (whose locator did
-        // find the checkbox) reported a false `ax_write_failed` *after*
-        // physically toggling the control — a silent malfunction. The write
-        // now polls the read-back up to a per-strategy deadline, and the
-        // mouse-click last resort brings Logic frontmost first so the synthetic
-        // click lands on the (un-occluded) track header.
+        // Toggle-from-read: already at the desired state → verified no-op. No
+        // rung runs, so no keyboard/coordinate event is ever fired.
+        if let current = readValue(), current == desired {
+            return .success(HonestContract.encodeStateA(extras: baseExtras.merging([
+                "observed": desired,
+                "action": "no-op"
+            ]) { _, new in new }))
+        }
+
         func pollMatched(deadlineMs: Int) -> Bool {
             let deadline = Date().addingTimeInterval(Double(deadlineMs) / 1000.0)
             repeat {
-                if let after = readCurrent(), after == desired { return true }
+                if let after = readValue(), after == desired { return true }
                 usleep(40_000)
             } while Date() < deadline
             return false
         }
 
-        let strategies: [(name: String, pollMs: Int, action: () -> Void)] = [
-            ("press", 160, { _ = AXHelpers.performAction(button, kAXPressAction, runtime: runtime.ax) }),
-            ("confirm", 160, { _ = AXHelpers.performAction(button, kAXConfirmAction, runtime: runtime.ax) }),
-            ("value-nsnumber", 160, {
-                let n: NSNumber = desired ? 1 : 0
-                AXHelpers.setAttribute(button, kAXValueAttribute, n as CFTypeRef, runtime: runtime.ax)
-            }),
-            ("value-cfbool", 160, {
-                let b: CFBoolean = desired ? kCFBooleanTrue : kCFBooleanFalse
-                AXHelpers.setAttribute(button, kAXValueAttribute, b, runtime: runtime.ax)
-            }),
-            ("mouse-click", 1_000, {
-                _ = ProcessUtils.Runtime.production.activateLogicPro()
-                usleep(120_000)
-                Self.postMouseClickAt(element: button, runtime: runtime.ax)
-            }),
-        ]
-        for strategy in strategies {
-            strategy.action()
-            if pollMatched(deadlineMs: strategy.pollMs) {
-                return .success(HonestContract.encodeStateA(extras: baseExtras.merging([
-                    "observed": desired,
-                    "action": strategy.name
-                ]) { _, new in new }))
+        // #106 / ADR-001: coordinate-free per-op actuator ladder. Every rung
+        // actuates WITHOUT any mouse/coordinate primitive (the former HID-click
+        // last resort is deleted). Live-verified on Logic 12.3: SOLO flips on
+        // AXPress; MUTE needs exclusive-select + key 'm'; ARM needs
+        // exclusive-select + the configurable "Toggle Track Record Enable" key
+        // chord. The read-back below — not each rung's return value — decides
+        // State A.
+        //
+        // ARM honesty baseline: capture whether transport is ALREADY recording
+        // so a (mis-assigned) arm key that instead triggers transport Record can
+        // be detected as a state CHANGE by the guard below.
+        let recordingBaseline = (buttonName == "Record") && isTransportRecording(runtime: runtime)
+
+        var landedAction: String?
+        for rung in trackToggleLadder(
+            button: button,
+            buttonName: buttonName,
+            index: index,
+            desired: desired,
+            runtime: runtime,
+            keyRuntime: keyRuntime,
+            processRuntime: processRuntime
+        ) {
+            rung.actuate()
+            if pollMatched(deadlineMs: rung.pollMs) {
+                landedAction = rung.name
+                break
             }
         }
+
+        // ARM honesty guard: a mis-assigned key can fire transport Record rather
+        // than record-enable. If recording STARTED as a side effect, fail closed
+        // even if the checkbox reads "armed" — never claim a clean arm.
+        if buttonName == "Record", !recordingBaseline, isTransportRecording(runtime: runtime) {
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: armRecordingStartedHint(index: index),
+                extras: baseExtras.merging(["recording_started": true]) { _, new in new }
+            ))
+        }
+
+        if let landedAction {
+            return .success(HonestContract.encodeStateA(extras: baseExtras.merging([
+                "observed": desired,
+                "action": landedAction
+            ]) { _, new in new }))
+        }
+
+        // Fail closed — NEVER a coordinate fallback.
         return .error(HonestContract.encodeStateC(
             error: .axWriteFailed,
-            hint: "tried press/confirm/value-nsnumber/value-cfbool/mouse-click; read-back never matched on track \(index) \(buttonName)=\(desired)",
+            hint: trackToggleFailHint(buttonName: buttonName, index: index, desired: desired),
             extras: baseExtras
         ))
     }
 
-    /// Simulate a real user mouse-click at the screen center of an AX element.
-    /// Used as a last resort when AXPress / AXValue writes don't propagate to
-    /// Logic Pro's internal handlers (observed with Logic 12 rec-arm checkboxes).
-    private static func postMouseClickAt(element: AXUIElement, runtime: AXHelpers.Runtime) {
-        var posValue: AnyObject?
-        var sizeValue: AnyObject?
-        let pr = AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &posValue)
-        let sr = AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeValue)
-        // H2 (P2-5): fail-closed on non-AXValue / wrong-subtype rather than
-        // posting a click at (0,0).
-        guard pr == .success, sr == .success,
-              let pt = AXHelpers.point(fromRawAttribute: posValue),
-              let sz = AXHelpers.size(fromRawAttribute: sizeValue) else { return }
-        let center = CGPoint(x: pt.x + sz.width / 2, y: pt.y + sz.height / 2)
-        let src = CGEventSource(stateID: .hidSystemState)
-        if let down = CGEvent(mouseEventSource: src, mouseType: .leftMouseDown, mouseCursorPosition: center, mouseButton: .left),
-           let up = CGEvent(mouseEventSource: src, mouseType: .leftMouseUp, mouseCursorPosition: center, mouseButton: .left) {
-            down.post(tap: .cghidEventTap)
-            up.post(tap: .cghidEventTap)
+    // MARK: - Coordinate-free track-toggle actuator (#106 / ADR-001)
+
+    /// `kVK_ANSI_M` (46) — Logic's default "Mute selected tracks" key command.
+    /// With the target track exclusively selected, pressing it flips that
+    /// track-header Mute checkbox (live-verified on Logic 12.3); AXPress on the
+    /// checkbox itself is a no-op.
+    static let trackMuteKeyCode: CGKeyCode = 46
+
+    /// `kVK_ANSI_R` (15) — bare 'r' IS transport Record. NEVER post it for arm
+    /// (it would start recording instead of toggling record-enable).
+    static let transportRecordKeyCode: CGKeyCode = 15
+
+    /// Default key CHORD for the record-ARM key command: Ctrl+Shift+E
+    /// (`kVK_ANSI_E` (14) + control + shift). Live-confirmed target: Logic's
+    /// "Toggle Track Record Enable" command, which toggles record-enable on the
+    /// SELECTED track (distinct from transport Record). It ships UNASSIGNED, so
+    /// the operator assigns it to this chord (or overrides via
+    /// `LOGIC_PRO_MCP_ARM_KEYCODE` / `LOGIC_PRO_MCP_ARM_KEY_MODIFIERS`).
+    static let defaultArmKeyCode: CGKeyCode = 14
+    static let defaultArmModifiers: CGEventFlags = [.maskControl, .maskShift]
+
+    /// Environment override keys for the record-arm chord.
+    static let armKeyCodeEnvVar = "LOGIC_PRO_MCP_ARM_KEYCODE"
+    static let armKeyModifiersEnvVar = "LOGIC_PRO_MCP_ARM_KEY_MODIFIERS"
+
+    /// Resolve the record-arm keycode: `LOGIC_PRO_MCP_ARM_KEYCODE` (decimal
+    /// virtual keycode) when set and parseable, else `defaultArmKeyCode`. The
+    /// environment is injectable so the override is deterministically testable
+    /// without mutating the process-global environment.
+    static func resolvedArmKeyCode(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> CGKeyCode {
+        if let raw = environment[armKeyCodeEnvVar],
+           let parsed = UInt16(raw.trimmingCharacters(in: .whitespaces)) {
+            return CGKeyCode(parsed)
         }
+        return defaultArmKeyCode
+    }
+
+    /// Resolve the record-arm modifier flags from `LOGIC_PRO_MCP_ARM_KEY_MODIFIERS`
+    /// (comma list of control/shift/option/command). An ABSENT var → the
+    /// Ctrl+Shift default; a PRESENT-but-empty var → no modifiers (an explicit
+    /// bare key). Unknown tokens are ignored. Injectable for deterministic tests.
+    static func resolvedArmModifiers(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> CGEventFlags {
+        guard let raw = environment[armKeyModifiersEnvVar] else { return defaultArmModifiers }
+        var flags: CGEventFlags = []
+        for token in raw.split(separator: ",") {
+            switch token.trimmingCharacters(in: .whitespaces).lowercased() {
+            case "control", "ctrl": flags.insert(.maskControl)
+            case "shift": flags.insert(.maskShift)
+            case "option", "opt", "alt": flags.insert(.maskAlternate)
+            case "command", "cmd": flags.insert(.maskCommand)
+            default: break
+            }
+        }
+        return flags
+    }
+
+    /// Read whether Logic's transport is currently RECORDING (control-bar
+    /// Record checkbox). Used by the arm honesty guard to detect a mis-assigned
+    /// key that triggers transport Record instead of record-enable.
+    static func isTransportRecording(runtime: AXLogicProElements.Runtime) -> Bool {
+        AXLogicProElements.readControlBarCheckboxValue(
+            named: "녹음", englishName: "Record", runtime: runtime
+        ) ?? false
+    }
+
+    /// A single coordinate-free actuation rung: perform `actuate`, then the
+    /// caller polls the AX read-back up to `pollMs` to decide State A.
+    typealias TrackToggleRung = (name: String, pollMs: Int, actuate: () -> Void)
+
+    /// Per-op coordinate-free ladder. AXPress is always the natural primary
+    /// (cheap; flips solo, no-ops mute/arm on 12.x — we never depend on its
+    /// return code). Mute/arm add an exclusive-select-then-keyboard rung.
+    static func trackToggleLadder(
+        button: AXUIElement,
+        buttonName: String,
+        index: Int,
+        desired: Bool,
+        runtime: AXLogicProElements.Runtime,
+        keyRuntime: AXMouseHelper.Runtime,
+        processRuntime: ProcessUtils.Runtime
+    ) -> [TrackToggleRung] {
+        let pressRung: TrackToggleRung = ("press", 250, {
+            _ = AXHelpers.performAction(button, kAXPressAction, runtime: runtime.ax)
+        })
+        switch buttonName {
+        case "Solo":
+            // AXPress on the Solo checkbox flips it directly; keyboard 's' is a
+            // no-op for the track-header control, so there is no keyboard rung.
+            return [pressRung]
+        case "Mute":
+            let keyRung: TrackToggleRung = ("keyboard-mute", 600, {
+                guard confirmExclusiveSelection(
+                    index: index, runtime: runtime, processRuntime: processRuntime
+                ) else { return }
+                _ = keyRuntime.postKeyEvent(trackMuteKeyCode)
+            })
+            return [pressRung, keyRung]
+        case "Record":
+            let armCode = resolvedArmKeyCode()
+            let armFlags = resolvedArmModifiers()
+            let keyRung: TrackToggleRung = ("keyboard-arm", 600, {
+                guard confirmExclusiveSelection(
+                    index: index, runtime: runtime, processRuntime: processRuntime
+                ) else { return }
+                // Never fire bare 'r' — that IS transport Record. A MODIFIED 'r'
+                // is a distinct command and is allowed; the recording guard in
+                // defaultSetTrackToggle is the runtime backstop for a mis-assign.
+                if armCode == transportRecordKeyCode, armFlags.isEmpty { return }
+                _ = keyRuntime.postFlaggedKeyEvent(armCode, armFlags)
+            })
+            return [pressRung, keyRung]
+        default:
+            return [pressRung]
+        }
+    }
+
+    /// Exclusive single-track selection guard. Keyboard mute/arm act on the
+    /// SELECTED track, so before posting any key we (1) bring Logic frontmost
+    /// (synthetic keystrokes only land on the focused app), (2) drive the AX
+    /// `AXSelectedChildren` selection path, and (3) READ BACK that the target —
+    /// and ONLY the target — is selected. Returns false (⇒ the key is NOT
+    /// posted, so a wrong/multi selection can never toggle the wrong track)
+    /// until exclusivity is confirmed within a bounded settle budget.
+    static func confirmExclusiveSelection(
+        index: Int,
+        runtime: AXLogicProElements.Runtime,
+        processRuntime: ProcessUtils.Runtime
+    ) -> Bool {
+        _ = ProcessUtils.activateLogicPro(runtime: processRuntime)
+        _ = AXLogicProElements.selectTrackViaAX(at: index, runtime: runtime)
+        for attempt in 0..<4 {
+            let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
+            guard index >= 0, index < headers.count else { return false }
+            let states = headers.map { AXValueExtractors.extractSelectedState($0, runtime: runtime.ax) }
+            let targetSelected = states[index] == true
+            let anyOtherSelected = states.enumerated().contains { $0.offset != index && $0.element == true }
+            if targetSelected && !anyOtherSelected { return true }
+            if attempt < 3 { usleep(80_000) }
+        }
+        return false
+    }
+
+    /// Fail-closed hint (read-back never flipped). Arm points the operator at
+    /// the required "Toggle Track Record Enable" key-command assignment — the
+    /// only coordinate-free arm path on Logic 12.x.
+    static func trackToggleFailHint(buttonName: String, index: Int, desired: Bool) -> String {
+        switch buttonName {
+        case "Record":
+            return "arm requires the Logic key command 'Toggle Track Record Enable' assigned to the "
+                + "configured key (default Ctrl+Shift+E); assign it in Logic ▸ Key Commands, or set "
+                + "LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key."
+        case "Mute":
+            return "track \(index) Mute=\(desired): read-back never matched after AXPress + "
+                + "exclusive-select then key 'm' (coordinate-free actuators only)."
+        default:
+            return "track \(index) \(buttonName)=\(desired): read-back never matched after AXPress "
+                + "on the checkbox (coordinate-free actuators only)."
+        }
+    }
+
+    /// Arm fail-closed hint for the mis-assignment case: the configured key
+    /// started transport RECORDING instead of toggling record-enable.
+    static func armRecordingStartedHint(index: Int) -> String {
+        "arm aborted: the configured key started transport recording instead of arming track "
+            + "\(index) — it is not assigned to 'Toggle Track Record Enable'. Stop the recording, then "
+            + "assign that command (default Ctrl+Shift+E) in Logic ▸ Key Commands, or set "
+            + "LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key."
     }
 
     static func defaultRenameTrack(

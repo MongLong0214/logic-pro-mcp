@@ -18,6 +18,26 @@ enum AXMouseHelper {
         let postKeyEvent: @Sendable (CGKeyCode) -> Bool
         let postUnicodeScalar: @Sendable (UniChar) -> Bool
         let sleepMicros: @Sendable (useconds_t) -> Void
+        /// Post a key chord WITH modifier flags (e.g. Ctrl+Shift+E). Kept
+        /// separate from `postKeyEvent` (bare key) so callers that never need
+        /// modifiers stay untouched; defaults to a no-op so existing `Runtime`
+        /// constructions compile unchanged. Used by the #106 record-arm path
+        /// (Logic's configurable "Toggle Track Record Enable" key command).
+        let postFlaggedKeyEvent: @Sendable (CGKeyCode, CGEventFlags) -> Bool
+
+        init(
+            postMouseEvent: @escaping @Sendable (CGEventType, CGPoint, Int64) -> Bool,
+            postKeyEvent: @escaping @Sendable (CGKeyCode) -> Bool,
+            postUnicodeScalar: @escaping @Sendable (UniChar) -> Bool,
+            sleepMicros: @escaping @Sendable (useconds_t) -> Void,
+            postFlaggedKeyEvent: @escaping @Sendable (CGKeyCode, CGEventFlags) -> Bool = { _, _ in false }
+        ) {
+            self.postMouseEvent = postMouseEvent
+            self.postKeyEvent = postKeyEvent
+            self.postUnicodeScalar = postUnicodeScalar
+            self.sleepMicros = sleepMicros
+            self.postFlaggedKeyEvent = postFlaggedKeyEvent
+        }
 
         static let production = Runtime(
             postMouseEvent: { type, point, clickCount in
@@ -55,7 +75,19 @@ enum AXMouseHelper {
                 up.post(tap: .cghidEventTap)
                 return true
             },
-            sleepMicros: { usleep($0) }
+            sleepMicros: { usleep($0) },
+            postFlaggedKeyEvent: { keyCode, flags in
+                let source = CGEventSource(stateID: .combinedSessionState)
+                guard
+                    let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
+                    let up = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
+                else { return false }
+                down.flags = flags
+                up.flags = flags
+                down.post(tap: .cghidEventTap)
+                up.post(tap: .cghidEventTap)
+                return true
+            }
         )
     }
 
