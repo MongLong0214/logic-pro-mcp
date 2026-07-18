@@ -67,11 +67,11 @@ extension AccessibilityChannel {
             return .error("Logic Pro is not running")
         }
         // 2. Find focused plugin window (heuristic: has AXPopUpButton with "Preset"/"기본" value)
-        guard let pluginWin = PluginInspector.findFocusedPluginWindowAX(in: appRoot) else {
+        guard let pluginWin = PluginInspector.findFocusedPluginWindowAX(in: appRoot, runtime: runtime.ax) else {
             return .error("No plugin window with Setting dropdown found. Open an instrument plugin window first.")
         }
         // 3. Locate Setting popup
-        guard let popup = PluginInspector.findSettingPopupAX(in: pluginWin) else {
+        guard let popup = PluginInspector.findSettingPopupAX(in: pluginWin, runtime: runtime.ax) else {
             return .error("Setting popup not found in plugin window")
         }
         // 4. Open the menu — AX-only ladder (ADR-001: no CGEvent last-resort).
@@ -82,12 +82,19 @@ extension AccessibilityChannel {
         var menu: AXUIElement?
         let axOpenActions = [kAXShowMenuAction, kAXPressAction]
         for action in axOpenActions {
-            if AXHelpers.performAction(popup, action, runtime: runtime.ax) {
-                try? await Task.sleep(nanoseconds: 350_000_000)
-                if let found = PluginInspector.findOpenSettingMenuAX(in: appRoot) {
-                    menu = found
-                    break
-                }
+            // Fire the action but IGNORE its return code, then poll the AX tree
+            // for the actually-open AXMenu. On real Logic 12.3 the Setting
+            // AXPopUpButton returns a NON-ZERO AX status even when the action
+            // succeeds (AXShowMenu → -25206 actionUnsupported; AXPress → -25204
+            // cannotComplete WHILE the menu still opens). Gating the poll on the
+            // performAction return therefore fails closed on a menu that is in
+            // fact open. Honest-contract: trust the OBSERVED state, not the
+            // unreliable return code — fire, settle, then observe.
+            _ = AXHelpers.performAction(popup, action, runtime: runtime.ax)
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            if let found = PluginInspector.findOpenSettingMenuAX(in: appRoot, runtime: runtime.ax) {
+                menu = found
+                break
             }
         }
         // ADR-001 coordinate ban: the Setting popup is opened via the AXShowMenu →
@@ -99,7 +106,7 @@ extension AccessibilityChannel {
             return .error("Setting menu did not appear after AXShowMenu/AXPress (or already dismissed)")
         }
         // 6. Build live probe + walk
-        let probe = PluginInspector.liveMenuProbe(rootMenu: menu, settleMs: settleMs)
+        let probe = PluginInspector.liveMenuProbe(rootMenu: menu, settleMs: settleMs, runtime: runtime.ax)
         let scanStart = Date()
         do {
             let (root, cycleCount) = try await PluginInspector.enumerateMenuTree(

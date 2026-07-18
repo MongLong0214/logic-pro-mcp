@@ -1207,7 +1207,14 @@ extension AccessibilityChannel {
             + [targetSlot]
             + rankedControls.filter { $0.rank != 0 }.map(\.element)
         for element in attempts {
-            guard pressElement(element, runtime: runtime.ax) else { continue }
+            // Fire AXPress but IGNORE its return code, then consult the observed
+            // window poll REGARDLESS of that return. On real Logic 12.3 an AXPress
+            // that actually opens the plugin window can still report a NON-ZERO AX
+            // status; gating the poll on the return (the former `guard … else
+            // continue`) skips past a control that DID open the window. Honest-
+            // contract: trust the OBSERVED window, not the unreliable return —
+            // only advance to the next ranked control if the poll shows no window.
+            _ = pressElement(element, runtime: runtime.ax)
             switch await pollOpenPluginWindow(
                 trackName: trackName,
                 axDescription: axDescription,
