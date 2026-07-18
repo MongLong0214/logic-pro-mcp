@@ -88,3 +88,26 @@ private final class AXMouseHelperRecorder: @unchecked Sendable {
     #expect(recorder.unicodeEvents == [0xD83C, 0xDFB9])
     #expect(recorder.sleeps == [12_000, 12_000])
 }
+
+@Test func axMouseHelperKeyboardEventsCarryExplicitFlagsAndClearChordState() throws {
+    let source = try #require(CGEventSource(stateID: .combinedSessionState))
+    let chordFlags: CGEventFlags = [.maskControl, .maskShift]
+    let chord = try #require(AXMouseHelper.Runtime.keyboardEvents(
+        source: source,
+        keyCode: 0x0E,
+        flags: chordFlags,
+        clearModifiersAfter: true
+    ))
+    let bare = try #require(AXMouseHelper.Runtime.keyboardEvents(
+        source: source,
+        keyCode: 0x2E,
+        flags: CGEventFlags(rawValue: 0)
+    ))
+
+    #expect(chord.down.flags == chordFlags)
+    #expect(chord.up.flags == chordFlags)
+    #expect(chord.modifierClear?.flags == CGEventFlags(rawValue: 0))
+    #expect(bare.down.flags == CGEventFlags(rawValue: 0))
+    #expect(bare.up.flags == CGEventFlags(rawValue: 0))
+    #expect(bare.modifierClear == nil)
+}

@@ -56,6 +56,10 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
                 if let handled = attributeValueHandler?(element, attribute) {
                     return handled
                 }
+                if attribute == kAXWindowsAttribute as String,
+                   attributes[key(for: element)]?[attribute] == nil {
+                    return NSArray()
+                }
                 return bridge(attributes[key(for: element)]?[attribute])
             },
             setAttributeValue: { [self] element, attribute, value in

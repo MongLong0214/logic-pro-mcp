@@ -9,6 +9,7 @@ enum ProcessUtils {
         let fallbackLogicProPID: @Sendable () -> pid_t?
         let logicProRunning: @Sendable () -> Bool
         let activateLogicPro: @Sendable () -> Bool
+        let logicIsFrontmost: @Sendable () -> Bool
         let logicProBundleURL: @Sendable () -> URL?
 
         static let production = Runtime(
@@ -39,6 +40,11 @@ enum ProcessUtils {
                         ProcessUtils.activateLogicProViaAppleScript()
                     }
                 )
+            },
+            logicIsFrontmost: {
+                guard let app = NSWorkspace.shared.frontmostApplication,
+                      app.bundleIdentifier != nil else { return false }
+                return ProcessUtils.isKnownLogicPID(app.processIdentifier)
             },
             logicProBundleURL: {
                 // RB-2 (v3.4.0): same rationale as `logicProApp()` — both

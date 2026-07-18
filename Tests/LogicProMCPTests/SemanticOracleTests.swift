@@ -482,6 +482,16 @@ struct SemanticOracleMutationTests {
         #expect(verdict, "\(operationID.rawValue) rejected its own realistic fixture")
     }
 
+    @Test("Solo keyboard State A passes qualification")
+    func soloKeyboardStateAPassesQualification() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.tracksSolo])
+        let fixture = try #require(SemanticOracleFixtures.byOperationID[.tracksSolo])
+        #expect(oracle.evaluate(
+            responseData: fixture.responseData,
+            readbackData: fixture.readbackData
+        )!)
+    }
+
     /// The anti-checkbox tool. For every constraint of every declarative oracle,
     /// corrupt the fixture the way that constraint exists to catch (drop the
     /// key, push the value out of domain, wrong-type it) and require the oracle
