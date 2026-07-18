@@ -438,6 +438,38 @@ extension AccessibilityChannel {
         )
     }
 
+    /// Ground-truth verification for the arm-key auto-setup: drive a real
+    /// record-arm on track 0 through the configured chord and report whether
+    /// record-enable actually flipped. NOTE: this is the pre-#407 shape and must
+    /// be reworked into a narrow through-chord adapter against the merged #407
+    /// actuator (do not ignore the restore result). See #408 review findings.
+    static func armSetupVerify(
+        runtime: AXLogicProElements.Runtime = .production,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool? {
+        guard let armButton = AXLogicProElements.findTrackArmButton(trackIndex: 0, runtime: runtime),
+              let curNum = AXHelpers.getValue(armButton, runtime: runtime.ax) as? NSNumber else {
+            return nil
+        }
+        let current = curNum.intValue != 0
+        let toggle = defaultSetTrackToggle(
+            params: ["index": "0", "enabled": String(!current)],
+            button: "Record",
+            runtime: runtime,
+            environment: environment
+        )
+        let flipped: Bool
+        if case .success = toggle { flipped = true } else { flipped = false }
+        // Restore the original arm state regardless of the verify outcome.
+        _ = defaultSetTrackToggle(
+            params: ["index": "0", "enabled": String(current)],
+            button: "Record",
+            runtime: runtime,
+            environment: environment
+        )
+        return flipped
+    }
+
     typealias TrackToggleRung = (
         name: String,
         pollMs: Int,
