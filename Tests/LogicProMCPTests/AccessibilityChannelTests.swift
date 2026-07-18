@@ -2934,7 +2934,14 @@ private func makeTempoSliderFixture(
     #expect(obj["observed"] as? Int == 0)
 }
 
-@Test func testAccessibilityChannelSetInstrumentReturnsTargetAndPatchVerificationMetadata() async {
+@Test func testAccessibilityChannelSetInstrumentLoadUnconfirmedWithoutInstrumentDelta() async {
+    // Coordinate ban + honesty (grok #1): the preset SELECTS (path resolves,
+    // track selection verified, panel highlights the preset), but with NO
+    // channel-strip instrument delta observed, the coord-free commit ladder
+    // cannot honestly claim a LOAD. Interim honest outcome = State C
+    // `load_unconfirmed` (NOT a false verified:true). Panel selection ≠ load.
+    // The confirmed coord-free load rung/signal is pending live validation; the
+    // target/selection metadata is still reported.
     let fixture = makeSetInstrumentFixture()
     let logicRuntime = fixture.builder.makeLogicRuntime(
         appElement: fixture.app,
@@ -2959,23 +2966,26 @@ private func makeTempoSliderFixture(
         params: ["index": "1", "path": "Bass/Sub Bass"]
     )
 
-    #expect(result.isSuccess)
+    #expect(!result.isSuccess)
     let obj = decodeAccessibilityJSON(result.message)
-    #expect((obj["verified"] as? Bool)!)
+    #expect(obj["error"] as? String == "readback_unavailable")
+    #expect(obj["precondition"] as? String == "coord_free_load_unsupported")
+    #expect(obj["verify_source"] as? String == "channel_strip_instrument_delta")
+    #expect(obj["observed_patch_name"] as? String == "Sub Bass")
     #expect(obj["requested_patch_name"] as? String == "Sub Bass")
     #expect(obj["requested_path"] as? String == "Bass/Sub Bass")
-    #expect(obj["observed_patch_name"] as? String == "Sub Bass")
     #expect(obj["target_track_index"] as? Int == 1)
     #expect(obj["target_track_name"] as? String == "Bass Track")
-    #expect((obj["target_track_selection_verified"] as? Bool)!)
-    #expect(obj["target_track_selection_reason"] as? String == "verified")
-    #expect(obj["target_track_selection_observed_index"] as? Int == 1)
-    #expect(obj["target_track_selection_verify_source"] as? String == "ax_selected")
-    #expect(obj["verify_source"] as? String == "library_selected_children")
-    #expect(obj["readback_state"] as? String == "verified")
+    // NOT the misleading "path not resolvable" — the path DID resolve.
+    #expect(obj["error"] as? String != "ax_write_failed")
 }
 
-@Test func testAccessibilityChannelSetInstrumentTrimsLibraryReadbackPadding() async {
+@Test func testAccessibilityChannelSetInstrumentTrimsLibraryReadbackPaddingInLoadUnconfirmed() async {
+    // The panel row value carries filesystem padding ("Sub Bass "). The
+    // load-unconfirmed branch compares the TRIMMED Library read-back against the
+    // requested preset, so it still recognises the highlighted preset (proving
+    // the trim) — and reports the honest State C `load_unconfirmed`, not a false
+    // verified load (no channel-strip instrument delta observed).
     let fixture = makeSetInstrumentFixture()
     fixture.builder.setAttribute(fixture.preset, kAXValueAttribute as String, "Sub Bass ")
     let logicRuntime = fixture.builder.makeLogicRuntime(
@@ -3001,12 +3011,14 @@ private func makeTempoSliderFixture(
         params: ["index": "1", "path": "Bass/Sub Bass"]
     )
 
-    #expect(result.isSuccess)
+    #expect(!result.isSuccess)
     let obj = decodeAccessibilityJSON(result.message)
-    #expect((obj["verified"] as? Bool)!)
-    #expect(obj["requested_patch_name"] as? String == "Sub Bass")
+    // readback_unavailable (not ax_write_failed) PROVES the padded panel value
+    // was trimmed and matched the requested preset in the load-unconfirmed gate.
+    #expect(obj["error"] as? String == "readback_unavailable")
+    #expect(obj["precondition"] as? String == "coord_free_load_unsupported")
     #expect(obj["observed_patch_name"] as? String == "Sub Bass")
-    #expect(obj["readback_state"] as? String == "verified")
+    #expect(obj["requested_patch_name"] as? String == "Sub Bass")
 }
 
 @Test func testAccessibilityChannelSetInstrumentFailsClosedWhenTrackSelectionIsUnverified() async {
@@ -3214,8 +3226,12 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     let menuBar = builder.element(30_001)
     let viewMenu = builder.element(30_002)
     let libraryItem = builder.element(30_003)
+    let window = builder.element(30_004)
+    let libraryBrowser = builder.element(30_005)
 
     builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [])   // panel starts closed
     builder.setChildren(menuBar, [viewMenu])
     builder.setAttribute(viewMenu, kAXTitleAttribute as String, "View")
     builder.setChildren(viewMenu, [libraryItem])
@@ -3231,6 +3247,11 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
             if builder.elementID(element) == builder.elementID(libraryItem),
                action == kAXPressAction as String {
                 menuClick.clicked = true
+                // #3: the Show-Library press OPENS the panel; success is judged
+                // by observing the panel, not the AXPress return code.
+                builder.setAttribute(libraryBrowser, kAXRoleAttribute as String, kAXBrowserRole as String)
+                builder.setAttribute(libraryBrowser, kAXDescriptionAttribute as String, "Library")
+                builder.setChildren(window, [libraryBrowser])
             }
             return true
         }
@@ -3239,6 +3260,52 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     await AccessibilityChannel.openLibraryPanelViaKeyCommand(runtime: runtime)
 
     #expect(menuClick.clicked)
+    // Observed panel state is now open — the AXPress is judged by this, not its
+    // return code.
+    #expect(LibraryAccessor.isLibraryPanelOpen(runtime: runtime))
+}
+
+@Test func testLibraryPanelOpenPrefersControlBarLibraryCheckbox() async {
+    // #3 (live 12.3): the reliable coord-free open is an AXPress on the
+    // control-bar "Library" AXCheckBox, judged by the OBSERVED panel state.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(31_000)
+    let window = builder.element(31_001)
+    let controlBar = builder.element(31_002)
+    let libraryCheckbox = builder.element(31_003)
+    let libraryBrowser = builder.element(31_004)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [controlBar])   // no browser yet → panel closed
+    builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
+    builder.setChildren(controlBar, [libraryCheckbox])
+    builder.setAttribute(libraryCheckbox, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(libraryCheckbox, kAXDescriptionAttribute as String, "Library")
+    builder.setAttribute(libraryCheckbox, kAXValueAttribute as String, NSNumber(value: 0))
+
+    final class PressBox: @unchecked Sendable { var pressed = false }
+    let box = PressBox()
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            if builder.elementID(element) == builder.elementID(libraryCheckbox),
+               action == kAXPressAction as String {
+                box.pressed = true
+                // Simulate the panel opening as a result of the checkbox toggle.
+                builder.setAttribute(libraryBrowser, kAXRoleAttribute as String, kAXBrowserRole as String)
+                builder.setAttribute(libraryBrowser, kAXDescriptionAttribute as String, "Library")
+                builder.setChildren(window, [controlBar, libraryBrowser])
+            }
+            return true
+        }
+    )
+
+    await AccessibilityChannel.openLibraryPanelViaKeyCommand(runtime: runtime)
+
+    #expect(box.pressed)
+    #expect(LibraryAccessor.isLibraryPanelOpen(runtime: runtime))
 }
 
 @Test func testSetInstrumentReopensPanelLeftClosedByFailedNav() async {

@@ -4,6 +4,13 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
+/// Typed @Sendable "load observed" stub for commit tests that exercise the
+/// selection/ladder MECHANISM. In production the channel layer injects the real
+/// channel-strip instrument delta; the LibraryAccessor default is fail-closed.
+/// Named (not an inline `{ true }`) so it survives the `#expect` macro's
+/// @Sendable inference.
+private let loadObserved: @Sendable () -> Bool = { true }
+
 private func libraryAXPoint(_ x: CGFloat, _ y: CGFloat) -> AXValue {
     var point = CGPoint(x: x, y: y)
     return AXValueCreate(.cgPoint, &point)!
@@ -12,42 +19,6 @@ private func libraryAXPoint(_ x: CGFloat, _ y: CGFloat) -> AXValue {
 private func libraryAXSize(_ width: CGFloat, _ height: CGFloat) -> AXValue {
     var size = CGSize(width: width, height: height)
     return AXValueCreate(.cgSize, &size)!
-}
-
-private final class LibraryDoubleClickRecorder: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage: [CGPoint] = []
-
-    func record(_ point: CGPoint) -> Bool {
-        lock.lock()
-        storage.append(point)
-        lock.unlock()
-        return true
-    }
-
-    func points() -> [CGPoint] {
-        lock.lock()
-        defer { lock.unlock() }
-        return storage
-    }
-}
-
-private final class LibraryClickRecorder: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage: [CGPoint] = []
-
-    func record(_ point: CGPoint) -> Bool {
-        lock.lock()
-        storage.append(point)
-        lock.unlock()
-        return true
-    }
-
-    func points() -> [CGPoint] {
-        lock.lock()
-        defer { lock.unlock() }
-        return storage
-    }
 }
 
 private final class LibraryEventRecorder: @unchecked Sendable {
@@ -73,7 +44,6 @@ private func makeLibraryPanelFixture() -> (
     window: AXUIElement,
     browser: AXUIElement,
     runtime: AXLogicProElements.Runtime,
-    library: LibraryAccessor.Runtime,
     categoryList: AXUIElement,
     presetList: AXUIElement,
     horizontalScrollBar: AXUIElement
@@ -122,12 +92,7 @@ private func makeLibraryPanelFixture() -> (
     builder.setAttribute(presetList, kAXSelectedChildrenAttribute as String, [sub])
 
     let runtime = builder.makeLogicRuntime(appElement: app)
-    let library = LibraryAccessor.Runtime(
-        ax: runtime.ax,
-        postMouseClick: { _ in true },
-        postMouseDoubleClick: { _ in true }
-    )
-    return (builder, app, window, browser, runtime, library, categoryList, presetList, horizontalScrollBar)
+    return (builder, app, window, browser, runtime, categoryList, presetList, horizontalScrollBar)
 }
 
 @Test func libraryAccessorEnumerateUsesInjectedAXRuntimeForColumnsAndSelection() {
@@ -223,24 +188,23 @@ private func makeLibraryPanelFixture() -> (
 }
 
 @Test func libraryAccessorSelectionUsesInjectedSetAttributeAndActionRuntime() {
+    // Coord-free selection wires AXSelectedChildren (on the containing AXList)
+    // + AXPress. No mouse primitive exists anymore (compile-time guarantee:
+    // there is no `library:` parameter and no post-mouse field to inject).
     let fixture = makeLibraryPanelFixture()
 
-    #expect(LibraryAccessor.selectCategory(
-        named: "Bass",
-        runtime: fixture.runtime,
-        library: fixture.library
-    ))
+    #expect(LibraryAccessor.selectCategory(named: "Bass", runtime: fixture.runtime))
     #expect(LibraryAccessor.selectPreset(
         named: "Sub",
         runtime: fixture.runtime,
-        library: fixture.library
+        observeCommitted: loadObserved
     ))
     #expect(LibraryAccessor.setInstrument(
         category: "Bass",
         preset: "Sub",
         settleDelay: 0,
         runtime: fixture.runtime,
-        library: fixture.library
+        observeCommitted: loadObserved
     ))
 
     #expect(fixture.builder.setCalls.contains { $0.attribute == kAXSelectedChildrenAttribute as String })
@@ -255,27 +219,8 @@ private func makeLibraryPanelFixture() -> (
     #expect(LibraryAccessor.selectPreset(
         named: "Padded Sub",
         runtime: fixture.runtime,
-        library: fixture.library
+        observeCommitted: loadObserved
     ))
-}
-
-@Test func libraryAccessorCategoryUsesNativeClickAfterAXSelection() {
-    let fixture = makeLibraryPanelFixture()
-    let clicks = LibraryClickRecorder()
-    let library = LibraryAccessor.Runtime(
-        ax: fixture.runtime.ax,
-        postMouseClick: { point in
-            clicks.record(point)
-        },
-        postMouseDoubleClick: { _ in false }
-    )
-
-    #expect(LibraryAccessor.selectCategory(
-        named: "Bass",
-        runtime: fixture.runtime,
-        library: library
-    ))
-    #expect(clicks.points().count == 1)
 }
 
 @Test func libraryAccessorCategoryResetsHorizontalBrowserScrollBeforeSelection() {
@@ -287,11 +232,7 @@ private func makeLibraryPanelFixture() -> (
             kAXValueAttribute as String
         ) as? NSNumber)?.intValue == 1
     )
-    #expect(LibraryAccessor.selectCategory(
-        named: "Bass",
-        runtime: fixture.runtime,
-        library: fixture.library
-    ))
+    #expect(LibraryAccessor.selectCategory(named: "Bass", runtime: fixture.runtime))
     #expect(
         (fixture.builder.attributeValue(
             fixture.horizontalScrollBar,
@@ -309,11 +250,7 @@ private func makeLibraryPanelFixture() -> (
     fixture.builder.setAttribute(siblingScrollBar, kAXOrientationAttribute as String, kAXHorizontalOrientationValue as String)
     fixture.builder.setAttribute(siblingScrollBar, kAXValueAttribute as String, NSNumber(value: 1))
 
-    #expect(LibraryAccessor.selectCategory(
-        named: "Bass",
-        runtime: fixture.runtime,
-        library: fixture.library
-    ))
+    #expect(LibraryAccessor.selectCategory(named: "Bass", runtime: fixture.runtime))
     #expect(
         (fixture.builder.attributeValue(
             siblingScrollBar,
@@ -322,108 +259,39 @@ private func makeLibraryPanelFixture() -> (
     )
 }
 
-@Test func libraryAccessorPresetFallsBackToNativeDoubleClickWhenAXPressCannotComplete() {
+@Test func libraryAccessorPresetDoesNotSelectSameNamedLeftColumnCategory() {
+    // A left-column category name ("Bass") must NOT be selectable as a preset
+    // (which prefers the right-most active column), even when the two AXList
+    // frames overlap.
     let fixture = makeLibraryPanelFixture()
-    let doubleClicks = LibraryDoubleClickRecorder()
-    let runtime = fixture.builder.makeLogicRuntime(
-        appElement: fixture.app,
-        setAttributeHandler: nil,
-        performActionHandler: { _, action in
-            action != kAXPressAction as String
-        }
-    )
-    let library = LibraryAccessor.Runtime(
-        ax: runtime.ax,
-        postMouseClick: { _ in false },
-        postMouseDoubleClick: { point in
-            doubleClicks.record(point)
-        }
-    )
-
-    #expect(LibraryAccessor.selectPreset(
-        named: "Sub",
-        runtime: runtime,
-        library: library
-    ))
-    #expect(doubleClicks.points().count == 1)
-}
-
-@Test func libraryAccessorPresetCommitsWithNativeDoubleClickAfterAXSelection() {
-    let fixture = makeLibraryPanelFixture()
-    let doubleClicks = LibraryDoubleClickRecorder()
-    let library = LibraryAccessor.Runtime(
-        ax: fixture.runtime.ax,
-        postMouseClick: { _ in false },
-        postMouseDoubleClick: { point in
-            doubleClicks.record(point)
-        }
-    )
-
-    #expect(LibraryAccessor.selectPreset(
-        named: "Sub",
-        runtime: fixture.runtime,
-        library: library
-    ))
-    #expect(doubleClicks.points().count == 1)
-}
-
-@Test func libraryAccessorPresetDoesNotClickSameNamedLeftColumnCategory() {
-    let fixture = makeLibraryPanelFixture()
-    let clicks = LibraryClickRecorder()
-    let doubleClicks = LibraryDoubleClickRecorder()
     fixture.builder.setAttribute(fixture.categoryList, kAXPositionAttribute as String, libraryAXPoint(80, 80))
     fixture.builder.setAttribute(fixture.categoryList, kAXSizeAttribute as String, libraryAXSize(360, 180))
     fixture.builder.setAttribute(fixture.presetList, kAXPositionAttribute as String, libraryAXPoint(80, 80))
     fixture.builder.setAttribute(fixture.presetList, kAXSizeAttribute as String, libraryAXSize(360, 180))
-    let library = LibraryAccessor.Runtime(
-        ax: fixture.runtime.ax,
-        postMouseClick: { point in
-            clicks.record(point)
-        },
-        postMouseDoubleClick: { point in
-            doubleClicks.record(point)
-        }
-    )
 
     #expect(!(LibraryAccessor.selectPreset(
         named: "Bass",
-        runtime: fixture.runtime,
-        library: library
+        runtime: fixture.runtime
     )))
-    #expect(clicks.points().isEmpty)
-    #expect(doubleClicks.points().isEmpty)
 }
 
 @Test func libraryAccessorPresetRequiresASecondVisibleColumn() {
     let fixture = makeLibraryPanelFixture()
-    let clicks = LibraryClickRecorder()
-    let doubleClicks = LibraryDoubleClickRecorder()
     fixture.builder.setChildren(fixture.browser, [fixture.categoryList, fixture.horizontalScrollBar])
-    let library = LibraryAccessor.Runtime(
-        ax: fixture.runtime.ax,
-        postMouseClick: { point in
-            clicks.record(point)
-        },
-        postMouseDoubleClick: { point in
-            doubleClicks.record(point)
-        }
-    )
 
     #expect(!(LibraryAccessor.selectPreset(
         named: "Bass",
         commit: false,
-        runtime: fixture.runtime,
-        library: library
+        runtime: fixture.runtime
     )))
-    #expect(clicks.points().isEmpty)
-    #expect(doubleClicks.points().isEmpty)
 }
 
 @Test func libraryAccessorPresetSearchesRightmostColumnWithVerticalScroll() {
+    // The vertical scroll-to-realize (scrollbar AXValue write) is coord-free and
+    // still needed to bring an off-screen row into the AX tree before selection.
     let fixture = makeLibraryPanelFixture()
     let verticalScrollBar = fixture.builder.element(10_010)
     let festivalDrop = fixture.builder.element(10_011)
-    let doubleClicks = LibraryDoubleClickRecorder()
     let events = LibraryEventRecorder()
 
     fixture.builder.setChildren(
@@ -457,133 +325,115 @@ private func makeLibraryPanelFixture() -> (
         },
         performActionHandler: { _, _ in true }
     )
-    let library = LibraryAccessor.Runtime(
-        ax: runtime.ax,
-        postMouseClick: { _ in false },
-        postMouseDoubleClick: { point in
-            doubleClicks.record(point)
-        }
-    )
 
     #expect(LibraryAccessor.selectPreset(
         named: "Festival Drop",
         runtime: runtime,
-        library: library
+        observeCommitted: loadObserved
     ))
     #expect(events.events().contains("vertical-scroll"))
-    #expect(doubleClicks.points().count == 1)
 }
 
-@Test func libraryAccessorPresetCanSelectIntermediateFolderWithoutDoubleClickCommit() {
+@Test func libraryAccessorPresetCanSelectIntermediateFolderWithoutCommit() {
     let fixture = makeLibraryPanelFixture()
-    let doubleClicks = LibraryDoubleClickRecorder()
-    let library = LibraryAccessor.Runtime(
-        ax: fixture.runtime.ax,
-        postMouseClick: { _ in false },
-        postMouseDoubleClick: { point in
-            doubleClicks.record(point)
-        }
-    )
 
     #expect(LibraryAccessor.selectPreset(
         named: "Sub",
         commit: false,
-        runtime: fixture.runtime,
-        library: library
+        runtime: fixture.runtime
     ))
-    #expect(doubleClicks.points().isEmpty)
 }
 
-@Test func libraryAccessorIntermediateFolderUsesNativeClickWithoutDoubleClickCommit() {
+// MARK: - Coord-free honesty + commit-ladder coverage (ADR-001)
+
+@Test func libraryAccessorSelectionIsObservedEffectGatedNotDispatchGated() {
+    // Honesty fix for the former `clicked || selectedChildrenOK || pressOK`
+    // false-success: a DROPPED AXSelectedChildren write (the set "succeeds" and
+    // AXPress dispatches) must still return FALSE because the selection
+    // read-back never shows the target. Selecting "Drums" while the initial
+    // selection stays "Bass" must fail closed.
     let fixture = makeLibraryPanelFixture()
-    let clicks = LibraryClickRecorder()
-    let doubleClicks = LibraryDoubleClickRecorder()
-    let library = LibraryAccessor.Runtime(
-        ax: fixture.runtime.ax,
-        postMouseClick: { point in
-            clicks.record(point)
-        },
-        postMouseDoubleClick: { point in
-            doubleClicks.record(point)
-        }
+    let runtime = fixture.builder.makeLogicRuntime(
+        appElement: fixture.app,
+        setAttributeHandler: { _, _, _ in true },   // writes "succeed" but store nothing
+        performActionHandler: { _, _ in true }        // AXPress "succeeds"
     )
 
-    #expect(LibraryAccessor.selectPreset(
-        named: "Sub",
-        commit: false,
-        runtime: fixture.runtime,
-        library: library
-    ))
-    #expect(clicks.points().count == 1)
-    #expect(doubleClicks.points().isEmpty)
+    #expect(!(LibraryAccessor.selectCategory(named: "Drums", runtime: runtime)))
 }
 
-@Test func libraryAccessorPresetClickUsesPointCapturedBeforeAXMutation() {
+@Test func libraryAccessorCommitLadderFiresCoordFreeRungsAndFailsClosed() {
+    // observeCommitted:false → the LOAD is never observed, so the coord-free
+    // ladder fires its universal action (AXPress) and then FAILS CLOSED. Live
+    // 12.3: no coord-free action loads a preset. The disruptive AXConfirm and
+    // the no-op Return are NOT in the ladder.
+    let fixture = makeLibraryPanelFixture()
+
+    let ok = LibraryAccessor.selectPreset(
+        named: "Sub",
+        runtime: fixture.runtime,
+        observeCommitted: { false }
+    )
+
+    #expect(!ok)
+    #expect(fixture.builder.actionCalls.contains { $0.action == kAXPressAction as String })
+    // AXConfirm is deliberately excluded (opens Controller Assignments on 12.3).
+    #expect(!fixture.builder.actionCalls.contains { $0.action == kAXConfirmAction as String })
+}
+
+@Test func libraryAccessorCommitSucceedsOnlyWhenLoadObserverWitnessesTheLoad() {
+    // observeCommitted:true → the (simulated) instrument delta IS witnessed after
+    // the fired action, so the ladder returns true. Proves the observer→State-A
+    // wiring works WHEN a real load is observed (the channel layer supplies the
+    // real delta in production).
+    let fixture = makeLibraryPanelFixture()
+
+    let ok = LibraryAccessor.selectPreset(
+        named: "Sub",
+        runtime: fixture.runtime,
+        observeCommitted: { true }
+    )
+
+    #expect(ok)
+    #expect(fixture.builder.actionCalls.contains { $0.action == kAXPressAction as String })
+}
+
+@Test func libraryAccessorCommitLadderFiresAdvertisedAXPickFirst() {
+    // When the row advertises AXPick it is fired FIRST (before the universal
+    // AXPress). With an observed load, the ladder short-circuits at AXPick.
     let fixture = makeLibraryPanelFixture()
     let sub = fixture.builder.element(10_007)
-    let clicks = LibraryClickRecorder()
     let runtime = fixture.builder.makeLogicRuntime(
         appElement: fixture.app,
-        setAttributeHandler: { _, attribute, _ in
-            if attribute == kAXSelectedChildrenAttribute as String {
-                fixture.builder.setAttribute(sub, kAXPositionAttribute as String, libraryAXPoint(100, 100))
-            }
-            return true
-        },
-        performActionHandler: { _, _ in
-            fixture.builder.setAttribute(sub, kAXPositionAttribute as String, libraryAXPoint(100, 100))
-            return true
+        setAttributeHandler: nil,
+        performActionHandler: nil,
+        actionNamesHandler: { element in
+            fixture.builder.elementID(element) == fixture.builder.elementID(sub)
+                ? [kAXPressAction as String, kAXPickAction as String]
+                : []
         }
     )
-    let library = LibraryAccessor.Runtime(
-        ax: runtime.ax,
-        postMouseClick: { point in
-            clicks.record(point)
-        },
-        postMouseDoubleClick: { _ in false }
+
+    let ok = LibraryAccessor.selectPreset(
+        named: "Sub",
+        runtime: runtime,
+        observeCommitted: { true }
     )
 
-    #expect(LibraryAccessor.selectPreset(
-        named: "Sub",
-        commit: false,
-        runtime: runtime,
-        library: library
-    ))
-    #expect(clicks.points() == [CGPoint(x: 300, y: 110)])
+    #expect(ok)
+    #expect(fixture.builder.actionCalls.contains { $0.action == kAXPickAction as String })
 }
 
-@Test func libraryAccessorIntermediateFolderClicksBeforeAXSelectionCanSlideColumn() {
+@Test func libraryAccessorCommitFailsClosedWithoutLoadObserver() {
+    // grok #1 + live wall: with NO injected load observer, a commit:true
+    // selectPreset MUST fail closed. No coord-free action loads a preset, and
+    // panel selection cannot witness a load, so returning true would be a false
+    // State A. The ladder still fires its coord-free action (AXPress, no mouse),
+    // but the honest return is false — the caller then reports State C.
     let fixture = makeLibraryPanelFixture()
-    let events = LibraryEventRecorder()
-    let runtime = fixture.builder.makeLogicRuntime(
-        appElement: fixture.app,
-        setAttributeHandler: { _, attribute, _ in
-            if attribute == kAXSelectedChildrenAttribute as String {
-                events.record("set")
-            }
-            return true
-        },
-        performActionHandler: { _, action in
-            if action == kAXPressAction as String {
-                events.record("press")
-            }
-            return true
-        }
-    )
-    let library = LibraryAccessor.Runtime(
-        ax: runtime.ax,
-        postMouseClick: { _ in
-            events.record("click")
-            return true
-        },
-        postMouseDoubleClick: { _ in false }
-    )
 
-    #expect(LibraryAccessor.selectPreset(
-        named: "Sub",
-        commit: false,
-        runtime: runtime,
-        library: library
-    ))
-    #expect(events.events().first == "click")
+    let ok = LibraryAccessor.selectPreset(named: "Sub", runtime: fixture.runtime)
+
+    #expect(!ok)   // fail closed — no load observed
+    #expect(fixture.builder.actionCalls.contains { $0.action == kAXPressAction as String })
 }

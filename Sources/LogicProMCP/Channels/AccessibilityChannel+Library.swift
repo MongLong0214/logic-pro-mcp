@@ -360,6 +360,26 @@ extension AccessibilityChannel {
         return inv?.currentPreset
     }
 
+    /// #1 (grok BLOCKER) — the coord-free LOAD observer's signal: the target
+    /// track's channel-strip instrument/plugin signature (the joined occupied
+    /// plugin-slot names). A Library patch load swaps the channel-strip
+    /// instrument, so this CHANGES on a real load — unlike the Library panel
+    /// selection, which only reflects a highlight. Returns nil when the strip is
+    /// unreadable (Mixer not resolvable / index out of range / no occupied
+    /// slots) so the observer fails closed (honest State C: load unverified).
+    static func channelStripInstrumentSignature(
+        trackIndex: Int?,
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> String? {
+        guard let trackIndex, trackIndex >= 0,
+              let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else { return nil }
+        let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax)
+        guard trackIndex < strips.count else { return nil }
+        let names = AXLogicProElements.pluginSlots(in: strips[trackIndex], runtime: runtime.ax)
+            .map(\.name)
+        return names.isEmpty ? nil : names.joined(separator: "\u{1F}")
+    }
+
     static func resolveLibraryPath(
         params: [String: String],
         lastPanelScan: LibraryRoot?,
@@ -524,7 +544,33 @@ extension AccessibilityChannel {
     ) async {
         _ = ProcessUtils.activateLogicPro()
         try? await Task.sleep(nanoseconds: 150_000_000)
+        // #3 (live 12.3): the PROVEN coordinate-free open is the control-bar
+        // "Library" AXCheckBox toggle (the Cmd+L keystroke did NOT open it, and
+        // the View > Show Library menu AXPress is unproven live). Try the
+        // checkbox first; fall back to the View menu.
+        if await toggleLibraryControlBarCheckbox(runtime: runtime) { return }
         _ = await clickLibraryMenuItem(runtime: runtime)
+    }
+
+    /// #3 (live 12.3): open the Library panel via the control-bar "Library"
+    /// AXCheckBox (desc/title "Library", value 0→1) — the reliable coord-free
+    /// path. AXPress only when the panel is currently CLOSED (the checkbox is a
+    /// toggle; never toggle an open panel shut), and judge success by the
+    /// OBSERVED panel state, not the AXPress return code.
+    private static func toggleLibraryControlBarCheckbox(
+        runtime: AXLogicProElements.Runtime
+    ) async -> Bool {
+        if LibraryAccessor.isLibraryPanelOpen(runtime: runtime) { return true }
+        guard let checkbox = AXLogicProElements.findControlBarCheckbox(
+            named: "라이브러리", englishName: "Library", runtime: runtime
+        ) else { return false }
+        _ = AXHelpers.performAction(checkbox, kAXPressAction as String, runtime: runtime.ax)
+        let deadline = Date().addingTimeInterval(1.0)
+        repeat {
+            if LibraryAccessor.isLibraryPanelOpen(runtime: runtime) { return true }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        } while Date() < deadline
+        return false
     }
 
     private static func clickLibraryMenuItem(runtime: AXLogicProElements.Runtime) async -> Bool {
@@ -537,11 +583,10 @@ extension AccessibilityChannel {
             return false
         }
 
-        // ADR-001 coordinate ban: open the View menu via AXPress only (menu-bar
-        // items respond to AXPress); no element-derived click fallback.
-        if !AXHelpers.performAction(viewMenu, kAXPressAction as String, runtime: runtime.ax) {
-            return false
-        }
+        // ADR-001 + honesty (#3): fire AXPress and IGNORE its return code
+        // (non-zero even on success on 12.3). Whether the View menu actually
+        // opened is judged by whether its items become findable below.
+        _ = AXHelpers.performAction(viewMenu, kAXPressAction as String, runtime: runtime.ax)
         try? await Task.sleep(nanoseconds: 120_000_000)
 
         let libraryMenuItem = AXLocalePolicy.LabelSet(
@@ -565,11 +610,15 @@ extension AccessibilityChannel {
             return false
         }
 
-        // ADR-001 coordinate ban: activate the Show Library menu item via AXPress
-        // only; fail closed (Escape) if it does not respond.
-        if AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax) {
-            return true
-        }
+        // #3 honesty: fire AXPress and judge by the OBSERVED panel state, not
+        // the return code (non-zero even on success on 12.3). Poll briefly for
+        // the Library panel to open; Escape only if it never does.
+        _ = AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax)
+        let deadline = Date().addingTimeInterval(1.0)
+        repeat {
+            if LibraryAccessor.isLibraryPanelOpen(runtime: runtime) { return true }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        } while Date() < deadline
         AXMouseHelper.pressEscape()
         return false
     }
@@ -877,10 +926,26 @@ extension AccessibilityChannel {
         // timeout, hanging the stdio loop. Fail closed with a typed State C
         // instead of hanging. The happy path resolves in a few seconds, well
         // under this ceiling.
+        // #1 (grok BLOCKER) — inject the REAL load observer: the target track's
+        // channel-strip instrument signature must CHANGE for the coord-free
+        // commit ladder to claim a load. Panel selection ≠ load. Snapshot BEFORE
+        // nav; the observer (run after each commit rung) returns true only on a
+        // non-nil CHANGE. Unreadable strip → nil → never true → fail closed
+        // (honest State C). No mouse fallback (coordinate ban).
+        let loadTrackIndex = targetTrackIndex
+        let beforeInstrument = Self.channelStripInstrumentSignature(
+            trackIndex: loadTrackIndex, runtime: runtime
+        )
+        let loadObserver: @Sendable () -> Bool = {
+            let now = Self.channelStripInstrumentSignature(trackIndex: loadTrackIndex, runtime: runtime)
+            return now != nil && now != beforeInstrument
+        }
         let navOutcome = await AccessibilityChannel.runWithDeadline(
             seconds: Self.setInstrumentLibraryNavigationDeadlineSeconds
         ) {
-            LibraryAccessor.selectPath(segments: pathSegments, runtime: runtime)
+            LibraryAccessor.selectPath(
+                segments: pathSegments, runtime: runtime, observeCommitted: loadObserver
+            )
         }
         guard let didSelect = navOutcome else {
             // #222 — leave the Library panel in a known-open baseline before
@@ -924,6 +989,30 @@ extension AccessibilityChannel {
             // path genuinely did not resolve); the side effect is the no-drift
             // guarantee, surfaced via `panel_open_after_failure`.
             let restaged = await Self.restageLibraryPanelAfterFailure(staging: staging, runtime: runtime)
+            // #1 — distinguish "path resolved + preset highlighted but the
+            // coord-free LOAD was never observed" from a genuine nav failure. If
+            // the panel now shows the requested preset, the path DID resolve;
+            // the honest state is `load_unconfirmed` (State C), NOT a misleading
+            // "path not resolvable". No mouse fallback (coordinate ban).
+            if AccessibilityChannel.readBackLibraryPreset(runtime: runtime) == preset {
+                return .error(HonestContract.encodeStateC(
+                    error: .readbackUnavailable,
+                    hint: "Preset '\(preset)' was selected in the Library (navigation IS coordinate-free), but LOADING it onto the channel strip requires a double-click — and no coordinate-free AX action on Logic 12.3 loads a preset (the row's only advertised action, AXPress, merely highlights; AXConfirm opens Controller Assignments; Return/AXPick are no-ops). Coordinate actuation is banned, so the load cannot be completed here. The preset is highlighted — complete it with a manual double-click, or map a Logic key command for the load.",
+                    extras: setInstrumentBaseExtras(
+                        requestedPath: resolvedPath,
+                        category: category,
+                        preset: preset,
+                        targetTrackIndex: targetTrackIndex as Any? ?? NSNull(),
+                        targetTrackName: targetTrackName
+                    ).merging([
+                        "precondition": "coord_free_load_unsupported",
+                        "observed_patch_name": preset,
+                        "verify_source": "channel_strip_instrument_delta",
+                        "panel_open_after_failure": restaged.panelOpen,
+                        "panel_restaged_after_failure": restaged.reopened,
+                    ]) { _, new in new }
+                ))
+            }
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: "Library path not fully resolvable: \(resolvedPath)",
@@ -958,7 +1047,11 @@ extension AccessibilityChannel {
         )
         base["observed"] = observed ?? NSNull()
         base["observed_patch_name"] = observed ?? NSNull()
-        base["verify_source"] = "library_selected_children"
+        // State A/B here is reached only when the injected load observer saw the
+        // channel-strip instrument CHANGE (a real load); the panel read-back
+        // below confirms it landed on the requested preset.
+        base["verify_source"] = "channel_strip_instrument_delta"
+        base["load_verified"] = true
         if requestedTrackIndex != nil {
             base["target_track_selection_verified"] = true
             base["target_track_selection_reason"] = "verified"

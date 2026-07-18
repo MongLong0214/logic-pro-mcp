@@ -719,7 +719,10 @@ actor AccessibilityChannel: Channel {
                 let okCat = LibraryAccessor.selectCategory(named: c, runtime: runtime)
                 if !okCat { return false }
                 try? await Task.sleep(nanoseconds: 150_000_000)
-                return LibraryAccessor.selectPreset(named: p, runtime: runtime)
+                // Restore the browse POSITION (highlight) only — `commit: false`.
+                // A scan must not LOAD the preset onto the track (a mutation),
+                // and the commit path fails closed without a load observer.
+                return LibraryAccessor.selectPreset(named: p, commit: false, runtime: runtime)
             },
             writeJSON: { root in Self.writeInventoryJSON(root, source: "ax") },
             onComplete: { root in await channel.setLastScan(root, source: "panel") },

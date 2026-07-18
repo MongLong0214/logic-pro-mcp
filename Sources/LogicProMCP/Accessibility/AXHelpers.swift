@@ -11,6 +11,30 @@ enum AXHelpers {
         let children: @Sendable (AXUIElement) -> [AXUIElement]
         let performAction: @Sendable (AXUIElement, String) -> Bool
         let childCount: @Sendable (AXUIElement) -> Int?
+        /// Copy the element's advertised AX action names
+        /// (`AXUIElementCopyActionNames`). Injected for tests; the coord-free
+        /// Library commit ladder fires only actions the element actually
+        /// advertises. Defaults to empty so existing `Runtime` constructions
+        /// (test doubles) compile unchanged.
+        let actionNames: @Sendable (AXUIElement) -> [String]
+
+        init(
+            axApp: @escaping @Sendable (pid_t) -> AXUIElement,
+            attributeValue: @escaping @Sendable (AXUIElement, String) -> AnyObject?,
+            setAttributeValue: @escaping @Sendable (AXUIElement, String, CFTypeRef) -> Bool,
+            children: @escaping @Sendable (AXUIElement) -> [AXUIElement],
+            performAction: @escaping @Sendable (AXUIElement, String) -> Bool,
+            childCount: @escaping @Sendable (AXUIElement) -> Int?,
+            actionNames: @escaping @Sendable (AXUIElement) -> [String] = { _ in [] }
+        ) {
+            self.axApp = axApp
+            self.attributeValue = attributeValue
+            self.setAttributeValue = setAttributeValue
+            self.children = children
+            self.performAction = performAction
+            self.childCount = childCount
+            self.actionNames = actionNames
+        }
 
         static let production = Runtime(
             axApp: { pid in
@@ -47,6 +71,12 @@ enum AXHelpers {
                 let result = AXUIElementGetAttributeValueCount(element, kAXChildrenAttribute as CFString, &count)
                 guard result == .success else { return nil }
                 return count
+            },
+            actionNames: { element in
+                var names: CFArray?
+                guard AXUIElementCopyActionNames(element, &names) == .success,
+                      let list = names as? [String] else { return [] }
+                return list
             }
         )
     }
@@ -102,6 +132,13 @@ enum AXHelpers {
     @discardableResult
     static func performAction(_ element: AXUIElement, _ action: String, runtime: Runtime = .production) -> Bool {
         runtime.performAction(element, action)
+    }
+
+    /// The AX action names an element advertises (e.g. AXPress, AXPick,
+    /// AXConfirm, AXOpen, AXShowMenu). Read-only; the coord-free Library commit
+    /// ladder uses this to fire only actions the element actually supports.
+    static func actionNames(_ element: AXUIElement, runtime: Runtime = .production) -> [String] {
+        runtime.actionNames(element)
     }
 
     /// Get the role string of an element (e.g. "AXButton", "AXSlider").

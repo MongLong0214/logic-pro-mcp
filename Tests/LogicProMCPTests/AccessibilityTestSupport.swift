@@ -44,6 +44,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
+        actionNamesHandler: (@Sendable (AXUIElement) -> [String])? = nil,
         executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
             await AppleScriptChannel.executeAppleScript($0)
         }
@@ -78,7 +79,8 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
             },
             childCount: { [self] element in
                 children[key(for: element)]?.count
-            }
+            },
+            actionNames: { element in actionNamesHandler?(element) ?? [] }
         )
     }
 
@@ -97,6 +99,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
+        actionNamesHandler: (@Sendable (AXUIElement) -> [String])? = nil,
         executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
             await AppleScriptChannel.executeAppleScript($0)
         }
@@ -107,7 +110,8 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
                 appElement: appElement,
                 attributeValueHandler: attributeValueHandler,
                 setAttributeHandler: setAttributeHandler,
-                performActionHandler: performActionHandler
+                performActionHandler: performActionHandler,
+                actionNamesHandler: actionNamesHandler
             ),
             executeAppleScript: executeAppleScript
         )

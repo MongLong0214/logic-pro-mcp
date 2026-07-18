@@ -219,32 +219,6 @@ enum LibraryAccessor {
         let currentPreset: String?
     }
 
-    struct Runtime: Sendable {
-        let ax: AXHelpers.Runtime
-        let postMouseClick: @Sendable (CGPoint) -> Bool
-        let postMouseDoubleClick: @Sendable (CGPoint) -> Bool
-
-        static let production = Runtime(
-            ax: .production,
-            postMouseClick: { point in
-                return LibraryAccessor.productionMouseClick(at: point)
-            },
-            postMouseDoubleClick: { point in
-                _ = ProcessUtils.activateLogicPro()
-                usleep(120_000)
-                CGWarpMouseCursorPosition(point)
-                usleep(30_000)
-                // Prefer the native CGEvent double-click (audit #16): spawning
-                // cliclick per click is FD-leak-class. Fall back to cliclick only
-                // if the native post fails.
-                if AXMouseHelper.doubleClick(at: point) {
-                    return true
-                }
-                return LibraryAccessor.postCliclick(command: "dc", at: point)
-            }
-        )
-    }
-
     // MARK: - T4 scan orchestration (testable pure-function layer)
 
     public struct ScanResult: Sendable {
@@ -655,13 +629,12 @@ enum LibraryAccessor {
     /// map. Requires the Library panel to be open.
     static func enumerateAll(
         settleDelay: TimeInterval = 0.5,
-        runtime: AXLogicProElements.Runtime = .production,
-        library: Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production
     ) -> Inventory? {
         guard let first = enumerate(runtime: runtime) else { return nil }
         var all: [String: [String]] = [:]
         for category in first.categories {
-            guard selectCategory(named: category, runtime: runtime, library: library) else { continue }
+            guard selectCategory(named: category, runtime: runtime) else { continue }
             Thread.sleep(forTimeInterval: settleDelay)
             all[category] = currentPresets(runtime: runtime)
         }
@@ -673,14 +646,14 @@ enum LibraryAccessor {
         )
     }
 
-    /// Select a category by name. Logic's Library can report successful AX
-    /// selection without changing the visible column, so this also posts a
-    /// native click at the row center when coordinates are readable.
+    /// Select a category by name — coord-free. Sets `AXSelectedChildren` on the
+    /// row's containing `AXList` and fires `AXPress`, then returns TRUE only when
+    /// the row is OBSERVED selected via AX read-back. Logic slides column 2 to
+    /// the category's presets.
     @discardableResult
     static func selectCategory(
         named name: String,
-        runtime: AXLogicProElements.Runtime = .production,
-        library: Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production
     ) -> Bool {
         guard let browser = findLibraryBrowser(runtime: runtime) else { return false }
         resetHorizontalScroll(for: browser, runtime: runtime.ax)
@@ -695,29 +668,80 @@ enum LibraryAccessor {
             visibleIn: visibleFrame,
             runtime: runtime.ax
         ) else { return false }
-        let targetFrame = frame(of: targetEl, runtime: runtime.ax)
-        let targetPoint = position(of: targetEl, runtime: runtime.ax)
-        var selectedChildrenOK = false
-        if let parent = AXHelpers.getAttribute(
-            targetEl, kAXParentAttribute, runtime: runtime.ax
-        ) as AXUIElement? {
-            selectedChildrenOK = AXHelpers.setAttribute(
-                parent,
-                kAXSelectedChildrenAttribute,
-                [targetEl] as CFArray,
-                runtime: runtime.ax
+        // Coord-free selection (R1: container = nearest AXList ancestor, NOT
+        // kAXParent). The former `clicked || selectedChildrenOK || pressOK`
+        // return is REPLACED by an observed-effect gate (honesty fix): success
+        // is the AX read-back showing the row selected, never a dispatched call.
+        selectRow(targetEl, named: name, runtime: runtime.ax)
+        return observeRowSelected(targetEl, named: name, runtime: runtime.ax)
+    }
+
+    /// Coord-free row-selection primitive shared by category / folder / preset
+    /// selection: set `AXSelectedChildren` on the row's nearest containing
+    /// `AXList` (R1) then fire `AXPress`. Both AX return codes are intentionally
+    /// ignored — on real Logic 12.3 they are non-zero even on success; callers
+    /// judge success by observing the selection read-back.
+    private static func selectRow(
+        _ targetEl: AXUIElement,
+        named name: String,
+        runtime: AXHelpers.Runtime
+    ) {
+        if let container = containingList(of: targetEl, runtime: runtime) {
+            _ = AXHelpers.setAttribute(
+                container, kAXSelectedChildrenAttribute, [targetEl] as CFArray, runtime: runtime
             )
         }
-        let pressOK = AXHelpers.performAction(targetEl, kAXPressAction, runtime: runtime.ax)
-        let clicked: Bool
-        if let pos = targetPoint {
-            debugLibraryClick("selectCategory name=\(name) frame=\(String(describing: targetFrame)) point=\(pos)")
-            clicked = library.postMouseClick(pos)
-        } else {
-            clicked = false
+        _ = AXHelpers.performAction(targetEl, kAXPressAction, runtime: runtime)
+    }
+
+    /// The nearest `AXList` ancestor of a Library row (R1). The browser nests
+    /// each column's rows under an `AXList`; the row's immediate `kAXParent` may
+    /// be an intermediate `AXCell`/`AXGroup`, so setting `AXSelectedChildren`
+    /// there is a no-op. Falls back to `kAXParent` only when no AXList ancestor
+    /// is found within 4 hops.
+    private static func containingList(
+        of element: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        // R1/#5: the selection container MUST be an AXList. No `kAXParent`
+        // fallback — a non-list parent silently ignores `AXSelectedChildren`
+        // (no-op) which then echo-reads as a false success. Return nil so the
+        // selection fails closed instead of writing into the wrong object.
+        ancestorRole(element, role: kAXListRole as String, maxDepth: 4, runtime: runtime)
+    }
+
+    /// Bounded poll of the row's containing-AXList `AXSelectedChildren`, TRUE as
+    /// soon as its selected-child value equals `name`. This is the coord-free
+    /// observed-effect gate — a genuine AX read-back, not a dispatch result.
+    private static func observeRowSelected(
+        _ targetEl: AXUIElement,
+        named name: String,
+        timeout: TimeInterval = 0.8,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        guard let container = containingList(of: targetEl, runtime: runtime) else { return false }
+        let target = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if selectedChildValue(of: container, runtime: runtime) == target { return true }
+            Thread.sleep(forTimeInterval: 0.05)
+        } while Date() < deadline
+        return false
+    }
+
+    /// First selected child's trimmed AXValue for an AXList container, or nil.
+    private static func selectedChildValue(
+        of container: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> String? {
+        guard let selected: [AXUIElement] = AXHelpers.getAttribute(
+            container, kAXSelectedChildrenAttribute, runtime: runtime
+        ), let first = selected.first,
+        let value: String = AXHelpers.getAttribute(first, kAXValueAttribute, runtime: runtime) else {
+            return nil
         }
-        Thread.sleep(forTimeInterval: 0.30)
-        return clicked || selectedChildrenOK || pressOK
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     @discardableResult
@@ -786,17 +810,22 @@ enum LibraryAccessor {
             && elementFrame.minX <= browserFrame.maxX + 8
     }
 
-    /// Select a preset by name in the currently-active category. v3.0.3: Logic
-    /// Pro 12's Library commits preset loading on **double-click**, not single
-    /// click — a single click only highlights the row in the panel. Using
-    /// `AXMouseHelper.doubleClick` (clickCount=2 on the second down/up pair)
-    /// is what actually swaps the track's channel-strip instrument.
+    /// Select (and, when `commit`, LOAD) a preset by name — coord-free.
+    ///
+    /// SELECT: `AXSelectedChildren` on the containing `AXList` + `AXPress`, gated
+    /// on the observed selection read-back.
+    ///
+    /// COMMIT (v3.0.3 loaded on **double-click**): the double-click is REMOVED.
+    /// The load is now driven by a coord-free ladder of the actions the row
+    /// advertises (see `commitSelectedPreset`), judged by an observed effect —
+    /// never by an AX return code, and with NO mouse fallback (the coordinate
+    /// ban is absolute).
     @discardableResult
     static func selectPreset(
         named name: String,
         commit: Bool = true,
         runtime: AXLogicProElements.Runtime = .production,
-        library: Runtime = .production
+        observeCommitted: (@Sendable () -> Bool)? = nil
     ) -> Bool {
         guard let browser = findLibraryBrowser(runtime: runtime) else { return false }
         let visibleFrame = frame(of: browser, runtime: runtime.ax)
@@ -816,37 +845,89 @@ enum LibraryAccessor {
             visibleIn: visibleFrame,
             runtime: runtime.ax
         ) else { return false }
-        let targetFrame = frame(of: targetEl, runtime: runtime.ax)
-        let targetPoint = position(of: targetEl, runtime: runtime.ax)
-        if !commit, let pos = targetPoint {
-            debugLibraryClick("selectPreset name=\(name) commit=\(commit) frame=\(String(describing: targetFrame)) point=\(pos)")
-            let clicked = library.postMouseClick(pos)
+        // Coord-free selection, gated on the observed selection read-back.
+        selectRow(targetEl, named: name, runtime: runtime.ax)
+        let selected = observeRowSelected(targetEl, named: name, runtime: runtime.ax)
+        guard commit else { return selected }
+        guard selected else { return false }
+        return commitSelectedPreset(
+            targetEl: targetEl,
+            observeCommitted: observeCommitted,
+            runtime: runtime.ax
+        )
+    }
+
+    /// Coord-free preset-LOAD commit. Fires, in the mandated order, the
+    /// coord-free actions the row advertises — AXPick → focus+Return →
+    /// AXConfirm → AXOpen → AXPress — settling and re-checking `observeCommitted`
+    /// after each rung, and returning TRUE on the first observed load. NEVER
+    /// returns on an AX action's return code (non-zero even on success on Logic
+    /// 12.3). No mouse / double-click fallback: if no rung produces an observed
+    /// load, returns FALSE so the caller fails closed (State C).
+    ///
+    /// UNVALIDATED-LIVE: which rung (if any) actually swaps the channel-strip
+    /// instrument on Logic 12.3 is pending live validation. The default observer
+    /// reads the Library panel's selected-preset, which confirms the row is
+    /// committed IN THE PANEL but cannot by itself distinguish load from
+    /// highlight; a caller with a track target can inject a stronger observer.
+    private static func commitSelectedPreset(
+        targetEl: AXUIElement,
+        observeCommitted: (@Sendable () -> Bool)?,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        let advertised = Set(AXHelpers.actionNames(targetEl, runtime: runtime))
+        // #1 (grok BLOCKER + LIVE WALL): a LOAD claim needs a REAL load signal.
+        // Live Logic 12.3 (team-lead) proved NO coordinate-free AX action on a
+        // preset row LOADS it — the row advertises only AXPress (highlight, no
+        // load); AXPick/AXOpen are unadvertised; AXConfirm opens Controller
+        // Assignments (disruptive, not a load); Return does nothing. Only a
+        // mouse double-click loads, which the coordinate ban forbids. So we fire
+        // the advertised, NON-DISRUPTIVE actions as a best-effort/future-proof
+        // attempt and return TRUE only if the injected observer witnesses the
+        // load (the channel-strip instrument delta). With no observer, or when
+        // nothing loads (the 12.3 reality), FAIL CLOSED → State C.
+        let observe: () -> Bool = observeCommitted ?? { false }
+        for rung in commitLadder(advertised: advertised) {
+            debugLibraryClick("commit rung=\(rung.name) advertised=\(Array(advertised).sorted())")
+            rung.fire(targetEl, runtime)
             Thread.sleep(forTimeInterval: 0.30)
-            if clicked { return true }
+            if observe() {
+                debugLibraryClick("commit observed-load after rung=\(rung.name)")
+                return true
+            }
         }
-        guard let parent = AXHelpers.getAttribute(
-            targetEl, kAXParentAttribute, runtime: runtime.ax
-        ) as AXUIElement? else {
-            guard let pos = targetPoint else { return false }
-            let clicked = commit ? library.postMouseDoubleClick(pos) : library.postMouseClick(pos)
-            Thread.sleep(forTimeInterval: 0.2)
-            return clicked
+        return false
+    }
+
+    private struct CommitRung {
+        let name: String
+        let fire: (AXUIElement, AXHelpers.Runtime) -> Void
+    }
+
+    /// The coord-free LOAD ladder. Live Logic 12.3 proved none of these actually
+    /// LOADS a Library preset (see `commitSelectedPreset`), so it fires only the
+    /// advertised OPEN-style actions (AXPick / AXOpen) plus the universal
+    /// AXPress — deliberately EXCLUDING AXConfirm (opens Controller Assignments —
+    /// disruptive, never a load) and the keyboard Return (does nothing, and a
+    /// blind keystroke is unsafe). Success is decided SOLELY by the injected
+    /// instrument-delta observer, so a non-loading action can never fake a
+    /// State A; AXPress here only re-highlights (harmless) on the current row.
+    private static func commitLadder(advertised: Set<String>) -> [CommitRung] {
+        var rungs: [CommitRung] = []
+        if advertised.contains(kAXPickAction as String) {
+            rungs.append(CommitRung(name: "AXPick") { el, rt in
+                _ = AXHelpers.performAction(el, kAXPickAction as String, runtime: rt)
+            })
         }
-        let arr = [targetEl] as CFArray
-        let selectedChildrenOK = AXHelpers.setAttribute(parent, kAXSelectedChildrenAttribute, arr, runtime: runtime.ax)
-        Thread.sleep(forTimeInterval: 0.20)   // let the scroll settle
-        let pressResult = AXHelpers.performAction(targetEl, kAXPressAction, runtime: runtime.ax)
-        Thread.sleep(forTimeInterval: 0.30)
-        guard commit else {
-            return selectedChildrenOK || pressResult
+        if advertised.contains("AXOpen") {
+            rungs.append(CommitRung(name: "AXOpen") { el, rt in
+                _ = AXHelpers.performAction(el, "AXOpen", runtime: rt)
+            })
         }
-        if let pos = targetPoint {
-            debugLibraryClick("selectPreset name=\(name) commit=\(commit) frame=\(String(describing: targetFrame)) point=\(pos)")
-            let doubleClicked = library.postMouseDoubleClick(pos)
-            Thread.sleep(forTimeInterval: 0.50)
-            return doubleClicked || selectedChildrenOK || pressResult
-        }
-        return selectedChildrenOK || pressResult
+        rungs.append(CommitRung(name: "AXPress") { el, rt in
+            _ = AXHelpers.performAction(el, kAXPressAction, runtime: rt)
+        })
+        return rungs
     }
 
     enum ColumnPreference {
@@ -1029,13 +1110,17 @@ enum LibraryAccessor {
         preset: String,
         settleDelay: TimeInterval = 0.6,
         runtime: AXLogicProElements.Runtime = .production,
-        library: Runtime = .production
+        observeCommitted: (@Sendable () -> Bool)? = nil
     ) -> Bool {
-        guard selectCategory(named: category, runtime: runtime, library: library) else {
+        guard selectCategory(named: category, runtime: runtime) else {
             return false
         }
         Thread.sleep(forTimeInterval: settleDelay)
-        return selectPreset(named: preset, runtime: runtime, library: library)
+        return selectPreset(
+            named: preset,
+            runtime: runtime,
+            observeCommitted: observeCommitted
+        )
     }
 
     /// v3.0.4 — N-segment live navigation through the 2-column sliding Library
@@ -1047,36 +1132,32 @@ enum LibraryAccessor {
     /// parent AXList's `AXSelectedChildren`, fire AXPress. Logic handles the
     /// slide automatically.
     ///
-    /// Returns true if every segment's click dispatched successfully. Returns
-    /// false on the first segment whose name isn't found in the currently-
-    /// visible Library browser.
+    /// Returns true only when every segment was OBSERVED selected (and the final
+    /// leaf observed loaded) via AX read-back. Returns false on the first
+    /// segment whose name isn't found, whose selection isn't observed, or (leaf)
+    /// whose load isn't observed — all coord-free.
     @discardableResult
     static func selectPath(
         segments: [String],
         settleDelay: TimeInterval = 1.0,
         runtime: AXLogicProElements.Runtime = .production,
-        library: Runtime = .production
+        observeCommitted: (@Sendable () -> Bool)? = nil
     ) -> Bool {
         guard !segments.isEmpty else { return false }
         for (idx, seg) in segments.enumerated() {
-            // First segment: may require selectCategory semantics if the panel
-            // is currently showing a subcategory view rather than top level.
-            // In practice `selectCategory` and `selectPreset` do the same
-            // AXSelectedChildren+AXPress thing on whatever is currently
-            // visible, so either works for "click this name in the current
-            // browser". We deliberately use `selectPreset` for all but the
-            // first segment because `selectPreset`'s coord-click fallback
-            // (when the parent AXList isn't reachable) is what actually
-            // handles edge cases in deep viewports.
+            // First segment uses selectCategory semantics; every segment does the
+            // same coord-free AXSelectedChildren-on-containing-AXList + AXPress,
+            // gated on the observed selection read-back. The final leaf also runs
+            // the coord-free commit ladder to LOAD the preset.
             let ok: Bool
             if idx == 0 {
-                ok = selectCategory(named: seg, runtime: runtime, library: library)
+                ok = selectCategory(named: seg, runtime: runtime)
             } else {
                 ok = selectPreset(
                     named: seg,
                     commit: idx == segments.count - 1,
                     runtime: runtime,
-                    library: library
+                    observeCommitted: idx == segments.count - 1 ? observeCommitted : nil
                 )
             }
             if !ok { return false }
@@ -1100,6 +1181,14 @@ enum LibraryAccessor {
                     rightmostColumnOnly: true,
                     runtime: runtime
                 )
+                // #4 (grok HIGH): the slide is only PROVEN when the next
+                // segment's row is actually realized in the newly-revealed
+                // column — an INDEPENDENT signal, not the `AXSelectedChildren`
+                // we wrote. If it never appears the selection did not commit;
+                // fail closed instead of pressing on against a stale column.
+                guard segmentIsVisible(
+                    named: nextSeg, rightmostColumnOnly: true, runtime: runtime
+                ) else { return false }
             }
         }
         return true
