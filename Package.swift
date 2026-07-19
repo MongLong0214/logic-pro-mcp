@@ -34,6 +34,14 @@ let package = Package(
                 .product(name: "MCP", package: "swift-sdk"),
             ],
             path: "Sources/LogicProMCP",
+            swiftSettings: [
+                // #399 (CEO audit P0) — the qualification fault-injection seam is
+                // a TEST affordance, never a shipped feature. Compiling it only in
+                // debug guarantees a release binary contains no
+                // `LOGIC_PRO_MCP_FAULT_INJECT` string and no code path that acts on
+                // it, so its ordinary process environment cannot activate a fault.
+                .define("QUALIFICATION_FAULT_SEAM", .when(configuration: .debug)),
+            ],
             linkerSettings: [
                 .linkedFramework("CoreMIDI"),
                 .linkedFramework("ApplicationServices"),

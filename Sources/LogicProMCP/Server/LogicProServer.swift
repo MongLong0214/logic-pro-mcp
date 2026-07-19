@@ -434,6 +434,13 @@ actor LogicProServer {
                     return invalidParams
                 }
                 let cmdParams: [String: Value] = rawCmdParams?.objectValue ?? [:]
+                // #399 (CEO audit P0) — the transport fault-injection probe is a
+                // qualification-only affordance compiled solely in debug via
+                // `QUALIFICATION_FAULT_SEAM`. In a release binary this block does
+                // not exist: `__adr001b_no_write_probe` on transport.play falls
+                // straight through to normal strict-param handling, so
+                // `LOGIC_PRO_MCP_FAULT_INJECT` in the environment engages nothing.
+                #if QUALIFICATION_FAULT_SEAM
                 if cmdParams["__adr001b_no_write_probe"]?.boolValue == true,
                    OperationRegistry.spec(tool: name, command: command)?.id == .transportPlay,
                    let injection = QualificationFaultInjection(
@@ -453,6 +460,7 @@ actor LogicProServer {
                         )
                     }
                 }
+                #endif
                 if let invalidParams = Self.strictParamValidationResult(
                     tool: name,
                     command: command,

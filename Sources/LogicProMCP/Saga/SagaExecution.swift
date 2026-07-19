@@ -97,6 +97,11 @@ extension SagaLiveReadback {
 /// Mirrors `QualificationFaultInjection(environment:)`'s nil-unless-set contract
 /// exactly: same env key, same `partial_state` mode. Only that mode engages the
 /// saga — `.timeout` belongs to the transport probe and leaves the saga inert.
+///
+/// #399 (CEO audit P0) — compiled solely in debug via `QUALIFICATION_FAULT_SEAM`
+/// (see Package.swift), so the release binary carries neither this seam nor its
+/// env-key strings.
+#if QUALIFICATION_FAULT_SEAM
 final class SagaPartialStateFaultSeam: @unchecked Sendable {
     /// Optional operator override pinning WHICH forward step fails. Zero-based;
     /// an absent, unparseable, or out-of-range value falls back to the LAST
@@ -154,6 +159,7 @@ final class SagaPartialStateFaultSeam: @unchecked Sendable {
         )
     }
 }
+#endif
 
 struct ProductionSagaStepExecutor: SagaStepExecutor {
     private static let allowlist: Set<OperationID> = [
@@ -191,6 +197,11 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
     /// operation (env unset); non-nil ONLY when the operator explicitly set
     /// `LOGIC_PRO_MCP_FAULT_INJECT=partial_state` to qualify compensation. A
     /// test affordance, never a product code path — see SagaPartialStateFaultSeam.
+    ///
+    /// #399 (CEO audit P0) — the seam property, its init parameter, and the
+    /// branch that consults it are compiled solely in debug via
+    /// `QUALIFICATION_FAULT_SEAM`. The release executor has no seam at all.
+    #if QUALIFICATION_FAULT_SEAM
     private let faultSeam: SagaPartialStateFaultSeam?
 
     init(
@@ -214,6 +225,27 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         self.now = now
         self.faultSeam = faultSeam
     }
+    #else
+    init(
+        router: ChannelRouter,
+        cache: StateCache,
+        targetRegistry: TargetRegistry,
+        dialogPresent: @escaping @Sendable () -> Bool,
+        liveReadback: SagaLiveReadback,
+        liveTrackName: (@Sendable (Int) -> String?)? = nil,
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
+        self.router = router
+        self.cache = cache
+        self.targetRegistry = targetRegistry
+        self.dialogPresent = dialogPresent
+        self.liveReadback = liveReadback
+        self.liveTrackName = liveTrackName
+        self.liveTrackNames = liveTrackNames
+        self.now = now
+    }
+    #endif
 
     func run(_ step: SagaStep) async -> StepResult {
         // ADR-004 / issue #287 — QUALIFICATION-ONLY fault seam. Completely dead
@@ -223,9 +255,11 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         // engaged for the injected step it returns State C BEFORE any dispatch —
         // no trace scope, no write, no mutation — so earlier steps' real
         // compensation can be exercised. Never a product code path.
+        #if QUALIFICATION_FAULT_SEAM
         if let faultSeam, let injected = faultSeam.injectionResult(for: step) {
             return injected
         }
+        #endif
         // ADR-005: each saga step dispatch gets a NESTED trace context
         // carrying the parent saga trace ID — without it a child's trace
         // start would clobber the parent's registration in the shared box,

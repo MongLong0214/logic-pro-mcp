@@ -1162,19 +1162,26 @@ struct QualificationRunnerTests {
         )
     }
 
+    /// #399 (CEO audit P0) — INVERTED. This test used to prove the runner CAUGHT
+    /// a real env-induced `partial_state` fault; that capability was the
+    /// vulnerability. With the fault seam compiled out of release, driving the
+    /// real release binary through the full runner with the fault env set must now
+    /// yield the normal typed zero-write refusal — no `readback_unavailable`, no
+    /// failed case. (The generic "a failed required case is not promotable"
+    /// rejection stays covered by `verificationEmitsEveryApplicableRejection`.)
     @Test(.enabled(
         if: FileManager.default.isExecutableFile(atPath: Self.releaseExecutableURL.path),
-        "Requires `swift build -c release` before running the Runner fault probe."
+        "Requires `swift build -c release` before the Runner fault-exclusion probe."
     ))
-    func runnerRejectsPartialStateObservedFromRealServer() async throws {
+    func runnerIgnoresPartialStateFaultEnvOnRealServer() async throws {
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
         let executableData = try Data(contentsOf: Self.releaseExecutableURL)
         let fixture = try Fixture(
             specs: [spec],
             executableData: executableData,
             environmentAdditions: [
-                QualificationFaultInjection.environmentKey:
-                    QualificationFaultInjection.Mode.partialState.rawValue,
+                "LOGIC_PRO_MCP_FAULT_INJECT": "partial_state",
+                "LOGIC_PRO_MCP_FAULT_INJECT_STEP": "0",
             ],
             drive: { request in
                 let observed = try QualificationTransport(
@@ -1222,14 +1229,15 @@ struct QualificationRunnerTests {
                 && $0["direction"] as? String == "response"
         })
         let responsePayload = try #require(response["payload"] as? String)
-        let promotion = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        let promotionJSON = try Self.resultObject(promotion)
 
         #expect(qualification.exitCode == 0)
-        #expect(responsePayload.contains(#"\"error\":\"readback_unavailable\""#))
-        #expect(operationCase.status == .failed)
-        #expect(promotion.exitCode == 1)
-        #expect(promotionJSON["promotable"] as? Bool == false)
+        // The fault env engaged nothing: the release binary emitted the normal
+        // typed zero-write refusal, never the injected readback_unavailable fault.
+        #expect(!responsePayload.contains("readback_unavailable"))
+        #expect(responsePayload.contains(#"\"error\":\"invalid_params\""#))
+        // transport.play is mutating → the shipped `not_qualified` deferral, not a
+        // fault-induced failure.
+        #expect(operationCase.status == .notQualified)
     }
 
     @Test func handshakeStillFailsClosedBeyondStartupBudget() throws {
