@@ -313,6 +313,84 @@ actor SagaJournal {
         return true
     }
 
+    /// #412: the single first-writer-wins coupling point both saga finishers
+    /// (the work child on normal completion and the lifecycle-timeout handler)
+    /// terminalize through, so the client response body can never disagree with
+    /// the journal terminal record.
+    ///
+    /// If this claim is still live it finalizes with `proposed` — mirroring
+    /// `completeBeforeWrite`'s dual-state switch (`.inProgress` → `.completed`,
+    /// `.cancellationRequested` → `.cancelled`) — and returns `proposed` (which
+    /// is now the terminal body). If the claim already lost the race (the other
+    /// finisher finalized first, so the entry is gone or the generation moved),
+    /// it finalizes NOTHING and returns the body the winner actually stored.
+    /// Either way the returned bytes ARE the journal terminal record — resuming
+    /// a locally-built body after losing the finalize would let the response
+    /// disagree with the terminal record, which this exists to prevent.
+    ///
+    /// `verifiedIfCancelled` is honored only on the `.cancellationRequested`
+    /// branch: the work child passes the real compensation result, the timeout
+    /// handler passes `false` (outcome unknown). It never affects the returned
+    /// body — only the journal `verified` flag surfaced by saga_status.
+    ///
+    /// Returns `didFinalize` — `true` only when THIS call actually terminalized
+    /// the entry, `false` when it lost the first-writer race. The lifecycle-
+    /// timeout handler gates its abandon side effects on this bit so a timeout
+    /// that wins the resume race AFTER the work child already finalized a
+    /// success does not force-mark the gate — winning the race is not the same
+    /// as terminalizing as a timeout.
+    @discardableResult
+    func finalizeReturningWinner(
+        _ claim: Claim,
+        proposed: StoredOutcome,
+        verifiedIfCancelled: Bool = false
+    ) -> (body: StoredOutcome, didFinalize: Bool) {
+        guard claim.generation == generation,
+              let entry = entries[claim.idempotencyKey],
+              entry.claim == claim else {
+            // Lost the first-writer race: return the body the winner stored so
+            // the caller resumes with the journal's terminal bytes, not a local
+            // body (a local body could disagree with the terminal record). Falls
+            // back to `proposed` only if the session was cleared out from under
+            // both finishers. didFinalize is false — this call terminalized
+            // nothing.
+            return (storedTerminalOutcome(for: claim.idempotencyKey) ?? proposed, false)
+        }
+        switch entry.record {
+        case .inProgress:
+            finalize(claim.idempotencyKey, record: .completed(proposed), sequence: claim.sequence)
+        case .cancellationRequested:
+            finalize(
+                claim.idempotencyKey,
+                record: .cancelled(proposed, verified: verifiedIfCancelled),
+                sequence: claim.sequence
+            )
+        }
+        return (proposed, true)
+    }
+
+    /// #412: the lifecycle-timeout finisher. Terminalizes BOTH live states and
+    /// returns the winning body plus `didFinalize` (whether THIS call
+    /// terminalized), exactly like `finalizeReturningWinner` with
+    /// `verifiedIfCancelled: false` (a timed-out outcome is never verified).
+    @discardableResult
+    func completeOnTimeout(
+        _ claim: Claim,
+        outcome: StoredOutcome
+    ) -> (body: StoredOutcome, didFinalize: Bool) {
+        finalizeReturningWinner(claim, proposed: outcome, verifiedIfCancelled: false)
+    }
+
+    /// The stored terminal body for a key that already reached a terminal state
+    /// in this generation, or nil if it is still live / evicted / unknown.
+    private func storedTerminalOutcome(for key: String) -> StoredOutcome? {
+        guard let body = outcomeBodies[key] else { return nil }
+        switch body.record {
+        case .completed(let outcome): return outcome
+        case .cancelled(let outcome, _): return outcome
+        }
+    }
+
     func record(for idempotencyKey: String) -> Record? {
         if let entry = entries[idempotencyKey] {
             switch entry.record {
@@ -697,6 +775,46 @@ enum SagaWire {
             body: HonestContract.jsonString(object),
             isError: stored.isError
         )
+    }
+
+    /// #412: the fail-closed saga wedge/timeout body. The lifecycle timeout
+    /// fires with the step outcome UNKNOWN (a synchronous AX dispatch may be in
+    /// flight and cannot be interrupted), so this NEVER reads the possibly
+    /// lagging journal for its fields: it forces `write_attempted` /
+    /// `write_boundary_crossed = true`, `safe_to_retry = false`, `verified =
+    /// false`, and reports the gate as reclaimable only after the grace window.
+    /// The SAME `StoredOutcome` becomes the journal terminal record via
+    /// `completeOnTimeout`, so the client body and the journal agree.
+    static func sagaWedgeTimeout(
+        idempotencyKey: String,
+        seconds: Double,
+        gateReclaimAfterSec: Double
+    ) -> SagaJournal.StoredOutcome {
+        let extras = sessionFields.merging([
+            "idempotency_key": idempotencyKey,
+            "duplicate": false,
+            "operation": "system.saga_execute",
+            "timeout_sec": seconds,
+            "verified": false,
+            "write_attempted": true,
+            "write_boundary_crossed": true,
+            "safe_to_retry": false,
+            "outcome_retained": true,
+            "underlying_operation_stopped": false,
+            "mutation_gate": "reclaimable_after_grace",
+            "gate_reclaim_after_sec": gateReclaimAfterSec,
+            "recovery_hint": "The saga exceeded its lifecycle deadline and was abandoned so the "
+                + "stdio loop stays responsive. A dispatch may have crossed the write boundary with "
+                + "an unknown outcome; do NOT blindly retry. Reconcile with a live read "
+                + "(system.saga_status, or the relevant read operations).",
+        ]) { _, new in new }
+        let body = HonestContract.encodeStateC(
+            error: .operationTimeout,
+            hint: "system.saga_execute exceeded its \(Int(seconds))s lifecycle deadline and was "
+                + "abandoned; the outcome is unknown (fail-closed).",
+            extras: extras
+        )
+        return SagaJournal.StoredOutcome(body: body, isError: true)
     }
 
     static func storedOutcome(from result: CallTool.Result) -> SagaJournal.StoredOutcome {

@@ -234,7 +234,13 @@ struct SystemDispatcher: OperationTraceDispatching {
         // sites stay deterministic; that default is `.unavailable`, i.e. the
         // saga fails closed at before-state capture rather than reading the
         // stale-able cache mirror. Production dispatch supplies `.production`.
-        sagaLiveReadback: SagaLiveReadback? = nil
+        sagaLiveReadback: SagaLiveReadback? = nil,
+        // #412: the shared absolute saga lifecycle deadline, computed once at
+        // the server dispatch entry so the in-closure abandon race and the outer
+        // transport timer derive from ONE instant. nil when the dispatcher is
+        // driven directly (tests / non-server): the saga path then derives its
+        // own instant from the registry budget.
+        sagaLifecycleDeadline: ContinuousClock.Instant? = nil
     ) async -> CallTool.Result {
         switch command {
         case "list_recent_traces", "get_trace", "clear_traces":
@@ -568,8 +574,18 @@ struct SystemDispatcher: OperationTraceDispatching {
                 } else {
                     mutationClaim = nil
                 }
+                // #412: the mutation gate release is skipped ONLY when the
+                // lifecycle timeout actually terminalized the saga as a timeout.
+                // A healthy saga (work child finalized, or the timeout
+                // fired-but-terminalized-nothing) always releases immediately —
+                // no false 15s pin. A genuinely abandoned saga is force-marked +
+                // grace-reclaimed, never released immediately (which would race
+                // an orphan write) and never pinned permanently.
+                let sagaAbandonedByTimeout = SagaAbandonFlag()
                 defer {
-                    if let mutationClaim { mutationGate?.release(mutationClaim) }
+                    if let mutationClaim, !sagaAbandonedByTimeout.value {
+                        mutationGate?.release(mutationClaim)
+                    }
                 }
                 // ADR-004 / issue #287 — qualification-only fault seam. #399 (CEO
                 // audit P0): the seam and its wiring are compiled solely in debug
@@ -654,43 +670,124 @@ struct SystemDispatcher: OperationTraceDispatching {
                         )
                     }
                 }
-                let outcome = await OperationTraceParentBoundary.$onWriteBoundary.withValue(
-                    onWriteBoundary
-                ) {
-                    await saga.execute(
-                        plan,
-                        executor: surfaceExecutor,
-                        cancellationRequested: {
-                            await sagaJournal.record(for: plan.idempotencyKey) == .cancellationRequested
+                // #412: ONE shared absolute lifecycle deadline. Server dispatch
+                // supplies it (shared with the outer transport timer); a
+                // direct/test call derives it from the registry budget.
+                let lifecycleBudgetSeconds = OperationRegistry.spec(
+                    tool: ToolID.logicSystem.rawValue,
+                    command: "saga_execute"
+                )?.deadline.seconds ?? DeadlineClass.long.seconds
+                let lifecycleDeadline = sagaLifecycleDeadline
+                    ?? ContinuousClock.now.advanced(by: .seconds(lifecycleBudgetSeconds))
+                let deadlineReached: @Sendable () -> Bool = {
+                    ContinuousClock.now >= lifecycleDeadline
+                }
+                let timeoutBody = SagaWire.sagaWedgeTimeout(
+                    idempotencyKey: plan.idempotencyKey,
+                    seconds: lifecycleBudgetSeconds,
+                    gateReclaimAfterSec: LogicProServer.mutationGateReclaimGraceSeconds
+                )
+
+                // #412: the saga lifecycle runs in an UNSTRUCTURED work child
+                // (never awaited at scope exit — a wedged synchronous AX call
+                // cannot be cancelled, so awaiting it would defeat the deadline)
+                // raced against a lifecycle DispatchWorkItem at
+                // `lifecycleDeadline`. Both finishers terminalize through the
+                // SAME claim/generation-guarded journal API
+                // (`finalizeReturningWinner`), so whoever wins the finalize also
+                // determines the client body — response bytes == journal terminal
+                // bytes. Abandon side effects fire ONLY when the timeout actually
+                // terminalized the saga as a timeout, and BEFORE the continuation
+                // resumes so the dispatcher `defer` above observes the flag.
+                let outerTraceContext = OperationTraceContext.current
+                let raceResult: CallTool.Result = await withCheckedContinuation { continuation in
+                    let race = SagaDeadlineRace()
+                    let timeoutHandle = SagaTimeoutHandle()
+                    // Unstructured but NOT detached: `Task { }` inherits the caller's
+                    // task-local values (the ADR feature-flag overrides the saga
+                    // preflight reads, and the trace context) while still running
+                    // independently, so the dispatcher returns via the race without
+                    // awaiting a wedged child. `Task.detached` would sever the flags
+                    // and fail the saga closed as feature-disabled.
+                    let workTask = Task(priority: .userInitiated) {
+                        await OperationTraceContext.$current.withValue(outerTraceContext) {
+                            let outcome = await OperationTraceParentBoundary.$onWriteBoundary.withValue(
+                                onWriteBoundary
+                            ) {
+                                await saga.execute(
+                                    plan,
+                                    executor: surfaceExecutor,
+                                    cancellationRequested: {
+                                        if deadlineReached() { return true }
+                                        return await sagaJournal.record(for: plan.idempotencyKey)
+                                            == .cancellationRequested
+                                    },
+                                    deadlineReached: deadlineReached
+                                )
+                            }
+                            // Preserve the prior behavior: a cancel that raced in
+                            // after the saga's last checkpoint (so it completed)
+                            // compensates the applied writes before terminalizing.
+                            let finalOutcome: SagaOutcome
+                            if await sagaJournal.record(for: plan.idempotencyKey)
+                                == .cancellationRequested,
+                               outcome.state == .completed {
+                                finalOutcome = await saga.cancel(
+                                    outcome: outcome,
+                                    executor: surfaceExecutor,
+                                    deadlineReached: deadlineReached
+                                )
+                            } else {
+                                finalOutcome = outcome
+                            }
+                            let proposed = SagaWire.storedOutcome(plan: plan, outcome: finalOutcome)
+                            let (winner, _) = await sagaJournal.finalizeReturningWinner(
+                                journalClaim,
+                                proposed: proposed,
+                                verifiedIfCancelled: SagaWire.cancellationVerified(finalOutcome)
+                            )
+                            let didWin = race.resume(
+                                continuation,
+                                returning: toolTextResult(winner.body, isError: winner.isError)
+                            )
+                            if didWin { timeoutHandle.cancel() }
                         }
+                    }
+                    let timeoutItem = DispatchWorkItem {
+                        Task {
+                            let (winner, didTerminalizeTimeout) = await sagaJournal.completeOnTimeout(
+                                journalClaim,
+                                outcome: timeoutBody
+                            )
+                            race.resume(
+                                continuation,
+                                returning: toolTextResult(winner.body, isError: winner.isError)
+                            ) {
+                                // #412: abandon side effects fire only when THIS
+                                // timeout actually terminalized the journal as a
+                                // timeout — NOT merely because it won the resume
+                                // race. If the work child already finalized
+                                // (success or otherwise) and this timeout only won
+                                // the race, the saga is done: pinning the gate
+                                // would be a false abandon. Ordered BEFORE the
+                                // continuation resumes, so the abandon flag is
+                                // visible to the dispatcher `defer`.
+                                guard didTerminalizeTimeout else { return }
+                                sagaAbandonedByTimeout.set(true)
+                                if let mutationClaim {
+                                    mutationGate?.markTimedOut(mutationClaim, force: true)
+                                }
+                                workTask.cancel()
+                            }
+                        }
+                    }
+                    timeoutHandle.set(timeoutItem)
+                    DispatchQueue.global(qos: .userInitiated).asyncAfter(
+                        deadline: .now() + LogicProServer.secondsFromNow(until: lifecycleDeadline),
+                        execute: timeoutItem
                     )
                 }
-                let completed = SagaWire.storedOutcome(plan: plan, outcome: outcome)
-                if await sagaJournal.complete(journalClaim, outcome: completed) {
-                    return await finalizeTrace(
-                        toolTextResult(completed.body, isError: completed.isError),
-                        traceID: traceID
-                    )
-                }
-                guard await sagaJournal.record(for: plan.idempotencyKey) == .cancellationRequested else {
-                    return await finalizeTrace(
-                        toolTextResult(completed.body, isError: completed.isError),
-                        traceID: traceID
-                    )
-                }
-                let finalOutcome = outcome.state == .completed
-                    ? await saga.cancel(outcome: outcome, executor: surfaceExecutor)
-                    : outcome
-                let stored = SagaWire.storedOutcome(plan: plan, outcome: finalOutcome)
-                await sagaJournal.completeCancellation(
-                    journalClaim,
-                    outcome: stored,
-                    verified: SagaWire.cancellationVerified(finalOutcome)
-                )
-                return await finalizeTrace(
-                    toolTextResult(stored.body, isError: stored.isError),
-                    traceID: traceID
-                )
+                return await finalizeTrace(raceResult, traceID: traceID)
             }
 
         case "saga_status":
@@ -1621,5 +1718,88 @@ struct SystemDispatcher: OperationTraceDispatching {
                 for detailed command docs per category.
                 """
         }
+    }
+}
+
+// MARK: - #412 saga abandon-race primitives
+
+/// #412: a small `Sendable` flag the lifecycle-timeout handler sets ONLY when it
+/// actually terminalized the saga as a timeout, read by the dispatcher `defer`
+/// to decide whether to release the mutation gate. A healthy saga leaves it
+/// false → immediate release; an abandoned saga sets it true → the gate is
+/// force-marked and grace-reclaimed instead of released.
+final class SagaAbandonFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var flag = false
+
+    func set(_ value: Bool) {
+        lock.lock()
+        flag = value
+        lock.unlock()
+    }
+
+    var value: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return flag
+    }
+}
+
+/// #412: the first-writer-wins single-resume guard for the saga abandon race,
+/// shaped like `LogicProServer.DeadlineRace` but with a `beforeResume` hook. The
+/// winner runs `beforeResume` UNDER the lock, BEFORE the continuation is
+/// resumed, so a timeout winner's abandon side effects (the gate flag the
+/// dispatcher `defer` reads) are ordered ahead of the resume that lets the
+/// `defer` run — closing the race between the two.
+final class SagaDeadlineRace: @unchecked Sendable {
+    private let lock = NSLock()
+    private var resumed = false
+
+    @discardableResult
+    func resume(
+        _ continuation: CheckedContinuation<CallTool.Result, Never>,
+        returning result: CallTool.Result,
+        beforeResume: () -> Void = {}
+    ) -> Bool {
+        lock.lock()
+        if resumed {
+            lock.unlock()
+            return false
+        }
+        resumed = true
+        beforeResume()
+        lock.unlock()
+        continuation.resume(returning: result)
+        return true
+    }
+}
+
+/// #412: cancel-safe handle for the lifecycle timeout `DispatchWorkItem`,
+/// mirroring `LogicProServer.DeadlineTimeoutHandle` — the work child cancels the
+/// pending timeout on a healthy win without a reference cycle, and a `cancel()`
+/// that races `set()` still cancels the work item.
+final class SagaTimeoutHandle: @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: DispatchWorkItem?
+    private var cancelled = false
+
+    func set(_ task: DispatchWorkItem) {
+        lock.lock()
+        if cancelled {
+            lock.unlock()
+            task.cancel()
+            return
+        }
+        self.task = task
+        lock.unlock()
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        let task = self.task
+        self.task = nil
+        lock.unlock()
+        task?.cancel()
     }
 }

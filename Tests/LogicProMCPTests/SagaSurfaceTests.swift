@@ -302,7 +302,8 @@ struct SagaSurfaceTests {
         dialogPresent: @escaping @Sendable () -> Bool = { false },
         mutationGate: LogicMutationGate? = nil,
         sagaAfterJournalBegin: (@Sendable () async -> Void)? = nil,
-        sagaRefreshAfterWrite: (@Sendable () async -> Void)? = nil
+        sagaRefreshAfterWrite: (@Sendable () async -> Void)? = nil,
+        sagaLifecycleDeadline: ContinuousClock.Instant? = nil
     ) async -> CallTool.Result {
         await SystemDispatcher.handle(
             command: command,
@@ -315,7 +316,8 @@ struct SagaSurfaceTests {
             mutationGate: mutationGate,
             sagaAfterJournalBegin: sagaAfterJournalBegin,
             sagaRefreshAfterWrite: sagaRefreshAfterWrite,
-            sagaLiveReadback: fixture.surface.readback
+            sagaLiveReadback: fixture.surface.readback,
+            sagaLifecycleDeadline: sagaLifecycleDeadline
         )
     }
 
@@ -1045,6 +1047,317 @@ struct SagaSurfaceTests {
             operation: OperationID.tracksMute.rawValue,
             now: start.addingTimeInterval(362)
         ) != nil)
+    }
+
+    // MARK: - #412 bounded saga lifecycle deadline
+    //
+    // Single lifecycle budget, no reserved compensation slice: a full-budget
+    // forward leaves ~0 compensation budget, so all applied inverses are
+    // honestly abandoned as `uncertain` (→ `rollbackUncertain`); the saga-level
+    // mid-compensation deadline-flip test exercises that. No
+    // reserved-compensation-budget guarantee is claimed.
+
+    @Test("#412: a force-timed-out releaseOnly saga claim reclaims only after the 15s grace")
+    func sagaGateForceTimeoutIsReclaimableAfterGrace() throws {
+        let gate = LogicMutationGate(staleHolderTTL: 360, timedOutReclaimGrace: 15)
+        let start = Date(timeIntervalSince1970: 5_000)
+        let claim = try #require(gate.tryAcquire(
+            operation: OperationID.systemSagaExecute.rawValue,
+            now: start,
+            reclaimPolicy: .releaseOnly
+        ))
+        let mark = start.addingTimeInterval(2)
+        gate.markTimedOut(claim, force: true, now: mark)
+        // No early free: 14.9s after the force-mark still returns nil.
+        #expect(gate.tryAcquire(
+            operation: OperationID.tracksMute.rawValue,
+            now: mark.addingTimeInterval(14.9)
+        ) == nil)
+        // Reclaimable at the 15s grace.
+        let reclaimed = try #require(gate.tryAcquire(
+            operation: OperationID.tracksMute.rawValue,
+            now: mark.addingTimeInterval(15)
+        ))
+        #expect(reclaimed.operation == OperationID.tracksMute.rawValue)
+    }
+
+    @Test("#412: an un-force-marked releaseOnly claim never reclaims, even past the stale TTL")
+    func sagaGateDefaultTimeoutNeverReclaimsReleaseOnly() throws {
+        let gate = LogicMutationGate(staleHolderTTL: 360, timedOutReclaimGrace: 15)
+        let start = Date(timeIntervalSince1970: 6_000)
+        let claim = try #require(gate.tryAcquire(
+            operation: OperationID.systemSagaExecute.rawValue,
+            now: start,
+            reclaimPolicy: .releaseOnly
+        ))
+        // Default force:false is a no-op on a `.releaseOnly` claim (no timedOutAt),
+        // so it never reclaims even long past the stale TTL.
+        gate.markTimedOut(claim, now: start.addingTimeInterval(10))
+        #expect(gate.tryAcquire(
+            operation: OperationID.tracksMute.rawValue,
+            now: start.addingTimeInterval(1_000)
+        ) == nil)
+    }
+
+    @Test("#412: the outer transport deadline is provably later than the inner")
+    func sagaOuterDeadlineExceedsInnerPlusReserve() {
+        let inner = ContinuousClock.now.advanced(by: .seconds(300))
+        let outer = LogicProServer.sagaOuterAbsoluteDeadline(lifecycleDeadline: inner)
+        let minimum = inner.advanced(
+            by: .seconds(LogicProServer.sagaTerminalizationReserveSeconds)
+        )
+        #expect(outer >= minimum)
+        #expect(outer == inner.advanced(by: .seconds(
+            LogicProServer.sagaTerminalizationReserveSeconds
+                + LogicProServer.sagaOuterLivenessSlackSeconds
+        )))
+    }
+
+    @Test("#412: a wedged saga is abandoned with a fail-closed body, terminal journal, and grace-reclaimable gate")
+    func sagaWedgeTimeoutAbandonsFailClosedWithGraceReclaimableGate() async throws {
+        try await withSagaFeatures {
+            let fixture = await makeFixture()
+            let probe = BlockingSagaRefreshProbe()
+            let gate = LogicMutationGate(staleHolderTTL: 360, timedOutReclaimGrace: 15)
+            let key = "wedge-abandon-key"
+            let params = plan(idempotencyKey: key, steps: [
+                step(
+                    operationID: .mixerSetVolume,
+                    target: fixture.targets[0],
+                    valueParameter: "value",
+                    value: .double(0.75)
+                ),
+            ])
+
+            // The work child gets a deterministic head-start to reach — and wedge
+            // in — the never-signaled refresh (a NON-cancellable await, past the
+            // step executor's `Task.isCancelled` guard) before the lifecycle
+            // timeout fires. The mock work is microseconds; the deadline is 0.5s,
+            // so the block always happens first, then the timeout wins the race
+            // while the run stays blocked. This is not a synchronization sleep —
+            // the block-first ordering is what makes it deterministic.
+            let result = await dispatch(
+                command: "saga_execute",
+                params: params,
+                fixture: fixture,
+                mutationGate: gate,
+                sagaRefreshAfterWrite: { await probe.blockFirstRefresh() },
+                sagaLifecycleDeadline: ContinuousClock.now.advanced(by: .milliseconds(500))
+            )
+            let mark = Date()
+
+            // The work child reached the wedge (after its write) and is STILL
+            // blocked — the probe is never released until the drain below.
+            await probe.waitUntilEntered()
+            #expect(await fixture.channel.writeCount() == 1)   // a dispatch DID start
+
+            // (1) typed State C operation_timeout + fail-closed field set.
+            let object = try resultObject(result)
+            #expect(result.isError!)
+            #expect(object["state"] as? String == "C")
+            #expect(object["error"] as? String == "operation_timeout")
+            #expect((object["write_attempted"] as? Bool)!)
+            #expect((object["write_boundary_crossed"] as? Bool)!)
+            #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+            #expect(!(try #require(object["verified"] as? Bool)))
+            #expect(object["mutation_gate"] as? String == "reclaimable_after_grace")
+
+            // (2) journal reached a TERMINAL record, not stuck inProgress.
+            guard case .completed(let stored) = try #require(
+                await fixture.journal.record(for: key)
+            ) else {
+                Issue.record("expected a terminal completed journal record")
+                return
+            }
+
+            // (4) response bytes == winning journal terminal bytes.
+            guard case .text(let responseText, _, _) = result.content.first else {
+                Issue.record("expected a text result")
+                return
+            }
+            #expect(responseText == stored.body)
+
+            // (5) gate: no early free now; reclaimable only after the 15s grace.
+            #expect(gate.tryAcquire(
+                operation: OperationID.tracksMute.rawValue,
+                now: mark
+            ) == nil)
+            let reclaimed = try #require(gate.tryAcquire(
+                operation: OperationID.tracksMute.rawValue,
+                now: mark.addingTimeInterval(16)
+            ))
+            #expect(reclaimed.operation == OperationID.tracksMute.rawValue)
+
+            // Drain the leaked work child (finalize is already a no-op).
+            await probe.unblock()
+        }
+    }
+
+    @Test("#412: the timeout envelope is fail-closed and never State A")
+    func sagaTimeoutEnvelopeIsFailClosed() async throws {
+        try await withSagaFeatures {
+            let fixture = await makeFixture()
+            let probe = BlockingSagaRefreshProbe()
+            let key = "fail-closed-envelope"
+            let params = plan(idempotencyKey: key, steps: [
+                step(
+                    operationID: .mixerSetVolume,
+                    target: fixture.targets[0],
+                    valueParameter: "value",
+                    value: .double(0.75)
+                ),
+            ])
+            let result = await dispatch(
+                command: "saga_execute",
+                params: params,
+                fixture: fixture,
+                sagaRefreshAfterWrite: { await probe.blockFirstRefresh() },
+                sagaLifecycleDeadline: ContinuousClock.now.advanced(by: .milliseconds(500))
+            )
+            await probe.waitUntilEntered()
+
+            let object = try resultObject(result)
+            #expect(object["state"] as? String == "C")   // never State A on timeout
+            #expect((object["write_attempted"] as? Bool)!)
+            #expect((object["write_boundary_crossed"] as? Bool)!)
+            #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+            #expect(!(try #require(object["verified"] as? Bool)))
+            let outcomeRetained = try #require(object["outcome_retained"] as? Bool)
+            #expect(outcomeRetained)
+            #expect(object["gate_reclaim_after_sec"] != nil)
+
+            // Drain the leaked work child (finalize is already a no-op).
+            await probe.unblock()
+        }
+    }
+
+    @Test("#412: a healthy saga releases the gate immediately, no 15s pin")
+    func sagaHealthyCompletionReleasesGateImmediately() async throws {
+        try await withSagaFeatures {
+            let fixture = await makeFixture()
+            let gate = LogicMutationGate(staleHolderTTL: 360, timedOutReclaimGrace: 15)
+            let key = "healthy-no-pin"
+            let params = plan(idempotencyKey: key, steps: [
+                step(
+                    operationID: .mixerSetVolume,
+                    target: fixture.targets[0],
+                    valueParameter: "value",
+                    value: .double(0.75)
+                ),
+            ])
+            // Default lifecycle deadline (registry 300s budget): the timeout never
+            // fires during the test, the work child wins, and the defer releases.
+            let result = await dispatch(
+                command: "saga_execute",
+                params: params,
+                fixture: fixture,
+                mutationGate: gate
+            )
+            let object = try resultObject(result)
+            #expect(object["state"] as? String == "A")   // completed saga, inner body
+
+            guard case .completed(let stored) = try #require(
+                await fixture.journal.record(for: key)
+            ) else {
+                Issue.record("expected a terminal completed journal record")
+                return
+            }
+            // The inner (work child) body finalized — not the outer legacy body.
+            #expect(!stored.body.contains("held_until_saga_unwinds"))
+
+            // Immediately acquirable: no force-mark, no 15s pin.
+            let acquired = try #require(gate.tryAcquire(
+                operation: OperationID.tracksMute.rawValue,
+                now: Date()
+            ))
+            #expect(acquired.operation == OperationID.tracksMute.rawValue)
+        }
+    }
+
+    @Test("#412: a timeout winning the race after a successful journal finalize does NOT pin the gate")
+    func timeoutWinningRaceAfterSuccessfulFinalizeDoesNotPinGate() async throws {
+        // Reproduces the race window: the work child finalizes SUCCESS (wins the
+        // JOURNAL finalize), then the lifecycle timeout fires and wins the RESUME
+        // race — but `completeOnTimeout` finds the entry already terminal, so it
+        // reports `didFinalize == false`. The dispatcher gates its abandon side
+        // effects on that bit (`guard didTerminalizeTimeout`), so a
+        // successfully-completed saga is NEVER force-marked / gate-pinned. Driven
+        // against a real journal + gate; the exact dispatcher gating decision is
+        // applied inline (a production seam to control the async race window would
+        // be out of scope).
+        let journal = SagaJournal()
+        let sagaPlan = SagaPlan(
+            steps: [SagaStep(
+                operationID: .tracksRename,
+                targetRef: nil,
+                params: ["name": .string("X")],
+                expectedInverse: SagaExpectedInverse(
+                    operationID: .tracksRename,
+                    valueParameter: "name"
+                )
+            )],
+            idempotencyKey: "success-then-timeout-race"
+        )
+        guard case .started(let claim) = await journal.begin(sagaPlan) else {
+            Issue.record("expected a new journal claim")
+            return
+        }
+        let gate = LogicMutationGate(staleHolderTTL: 360, timedOutReclaimGrace: 15)
+        let start = Date(timeIntervalSince1970: 9_000)
+        let sagaClaim = try #require(gate.tryAcquire(
+            operation: OperationID.systemSagaExecute.rawValue,
+            now: start,
+            reclaimPolicy: .releaseOnly
+        ))
+
+        // Work child finalizes SUCCESS first — it DID finalize.
+        let successBody = SagaJournal.StoredOutcome(
+            body: "{\"state\":\"A\",\"success\":true}",
+            isError: false
+        )
+        let workChild = await journal.finalizeReturningWinner(claim, proposed: successBody)
+        #expect(workChild.didFinalize)
+
+        // Timeout fires later and wins the resume race, but terminalized nothing.
+        let timeoutBody = SagaWire.sagaWedgeTimeout(
+            idempotencyKey: sagaPlan.idempotencyKey,
+            seconds: 300,
+            gateReclaimAfterSec: LogicProServer.mutationGateReclaimGraceSeconds
+        )
+        let timeout = await journal.completeOnTimeout(claim, outcome: timeoutBody)
+        #expect(!timeout.didFinalize)
+
+        // (a) The winning body is the SUCCESS body — never operation_timeout.
+        #expect(timeout.body.body == successBody.body)
+        #expect(!(timeout.body.isError))
+
+        // The dispatcher's gating decision, applied verbatim.
+        let sagaAbandonedByTimeout = SagaAbandonFlag()
+        if timeout.didFinalize {
+            sagaAbandonedByTimeout.set(true)
+            gate.markTimedOut(sagaClaim, force: true, now: start)
+        }
+        if !sagaAbandonedByTimeout.value { gate.release(sagaClaim) }
+
+        // (b) No abandon, no force-mark → the gate is reclaimable IMMEDIATELY,
+        //     with no 15s grace.
+        #expect(!sagaAbandonedByTimeout.value)
+        let reacquired = try #require(gate.tryAcquire(
+            operation: OperationID.tracksMute.rawValue,
+            now: start
+        ))
+        #expect(reacquired.operation == OperationID.tracksMute.rawValue)
+
+        // (c) the journal terminal record is the SUCCESS body, equal to the
+        //     winning (client) body.
+        guard case .completed(let stored) = try #require(
+            await journal.record(for: sagaPlan.idempotencyKey)
+        ) else {
+            Issue.record("expected a completed terminal record")
+            return
+        }
+        #expect(stored.body == successBody.body)
+        #expect(stored.body == timeout.body.body)
     }
 
     @Test("saga deadline responses preserve session journal disclosure")

@@ -982,5 +982,64 @@ struct SagaExecutionTests {
             #expect(fixture.surface.snapshot(2)?.pan == 0)
         }
     }
+
+    /// #412 (E2E, deterministic): the qualification fault seam applies a real
+    /// prefix (steps 0,1) then fails the injected step 2 before its write, so the
+    /// saga enters REAL compensation. A compensation-phase deadline flip then
+    /// abandons the remaining inverses as `.uncertain` — no inverse dispatches,
+    /// bounded compensation, terminal `rollbackUncertain`.
+    @Test("partial_state fault + compensation deadline flip yields bounded rollbackUncertain")
+    func partialStateFaultWithCompensationDeadlineFlipRollsBackUncertain() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let tracks = [
+                TrackState(id: 0, name: "Lead", type: .audio),
+                TrackState(id: 1, name: "Pad", type: .softwareInstrument, volume: 0.2),
+                TrackState(id: 2, name: "FX", type: .audio, pan: 0),
+            ]
+            let seam = SagaPartialStateFaultSeam.resolve(
+                environment: ["LOGIC_PRO_MCP_FAULT_INJECT": "partial_state"],
+                stepCount: 3
+            )
+            let fixture = await makeSeamFixture(tracks: tracks, faultSeam: seam)
+            let plan = SagaPlan(
+                steps: [
+                    step(.tracksRename, target: fixture.targets[0], value: .string("Lead Vox")),
+                    step(.mixerSetVolume, target: fixture.targets[1], value: .double(0.9)),
+                    step(.mixerSetPan, target: fixture.targets[2], value: .double(-0.5)),
+                ],
+                idempotencyKey: "fault-seam-compensation-deadline"
+            )
+
+            let outcome = await MutationSaga(
+                targetRegistry: fixture.registry,
+                enabled: true,
+                routeAvailable: { _ in true }
+            ).execute(
+                plan,
+                executor: fixture.executor,
+                // The deadline is already elapsed once compensation begins, so the
+                // real applied prefix is abandoned rather than reverse-dispatched.
+                deadlineReached: { true }
+            )
+
+            // Forward rename + volume only — NO inverse dispatched (the injected
+            // pan never dispatched either).
+            #expect(await fixture.channel.recordedCalls().map(\.operation)
+                == ["track.rename", "mixer.set_volume"])
+
+            #expect(outcome.state == .rollbackUncertain)
+            let c0 = try #require(outcome.journal[0].compensationEvidence)
+            let c1 = try #require(outcome.journal[1].compensationEvidence)
+            #expect(c0.disposition == .uncertain)
+            #expect(c1.disposition == .uncertain)
+            #expect(c0.executionResult == nil)
+            #expect(c1.executionResult == nil)
+
+            // The applied prefix was NOT reverted (compensation was abandoned), so
+            // the live surface still holds the forward writes — honestly uncertain.
+            #expect(fixture.surface.snapshot(0)?.name == "Lead Vox")
+            #expect(fixture.surface.snapshot(1)?.volume == 0.9)
+        }
+    }
     #endif
 }

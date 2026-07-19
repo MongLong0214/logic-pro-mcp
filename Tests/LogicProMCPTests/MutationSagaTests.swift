@@ -102,6 +102,25 @@ private actor StepBoundaryCancellationProbe {
     }
 }
 
+/// #412: a synchronous, counter-based deadline predicate — the saga-level stand
+/// in for the injected `deadlineReached` / the dispatcher's folded deadline. It
+/// flips true after `flipAfter` calls so a test can pin exactly when the budget
+/// elapses, with no wall-clock sleep.
+private final class DeadlineFlipProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var checks = 0
+    private let flipAfter: Int
+
+    init(flipAfter: Int) { self.flipAfter = flipAfter }
+
+    func reached() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        checks += 1
+        return checks > flipAfter
+    }
+}
+
 @Suite("Mutation saga", .serialized)
 struct MutationSagaTests {
     private func bind(
@@ -114,6 +133,20 @@ struct MutationSagaTests {
             kind: .track,
             descriptor: descriptor,
             fingerprint: descriptor.fingerprint
+        )
+    }
+
+    /// A minimal step for journal-only tests (identity/finalize), where the
+    /// step's contents are never executed — only hashed into the plan.
+    private func journalStep() -> SagaStep {
+        SagaStep(
+            operationID: .tracksRename,
+            targetRef: nil,
+            params: ["name": .string("X")],
+            expectedInverse: SagaExpectedInverse(
+                operationID: .tracksRename,
+                valueParameter: "name"
+            )
         )
     }
 
@@ -451,6 +484,169 @@ struct MutationSagaTests {
         #expect(await executor.state(for: target) == .string("Before"))
         let journalEntry = try #require(outcome.journal.first)
         #expect(!journalEntry.writeBoundaryCrossed)
+    }
+
+    // MARK: - #412 bounded saga lifecycle deadline (saga + journal level)
+
+    /// #412: once the deadline trips (modeled here as the dispatcher's folded
+    /// `cancellationRequested`), the forward loop issues NO additional dispatch
+    /// — step 1 is never run; only step 0 and its inverse
+    /// were dispatched. Asserts about NEW dispatch, not interruption.
+    @Test
+    func deadlineFlipStopsAdditionalForwardDispatch() async {
+        let registry = TargetRegistry()
+        let renameTarget = await bind(registry, index: 0, name: "Bass")
+        let volumeTarget = await bind(registry, index: 1, name: "Keys")
+        let executor = MockSagaExecutor(
+            states: [renameTarget: .string("Bass"), volumeTarget: .double(0.25)],
+            behaviors: [.applyStateA, .applyStateA]
+        )
+        // Flips true on the 3rd checkpoint — the post-applied check after step 0's
+        // write, before step 1 is ever entered.
+        let deadline = DeadlineFlipProbe(flipAfter: 2)
+        let outcome = await MutationSaga(
+            targetRegistry: registry,
+            enabled: true,
+            routeAvailable: { _ in true }
+        ).execute(
+            SagaPlan(
+                steps: [
+                    step(.tracksRename, target: renameTarget, value: .string("Sub Bass")),
+                    step(.mixerSetVolume, target: volumeTarget, value: .double(0.75)),
+                ],
+                idempotencyKey: "deadline-forward-stop"
+            ),
+            executor: executor,
+            cancellationRequested: { deadline.reached() }
+        )
+
+        // Only step 0 (forward) + step 0's inverse dispatched — no step 1.
+        #expect(await executor.runCount() == 2)
+        let ops = await executor.runOperations()
+        #expect(!ops.contains(.mixerSetVolume))
+        #expect(outcome.state == .fullyCompensated)
+    }
+
+    /// #412: a deadline that trips DURING compensation abandons the remaining
+    /// inverses as `.uncertain` (never `.failed`, never dispatched) and
+    /// terminates `rollbackUncertain`.
+    @Test
+    func deadlineFlipDuringCompensationAbandonsInversesAsUncertain() async throws {
+        let registry = TargetRegistry()
+        let renameTarget = await bind(registry, index: 0, name: "Lead")
+        let volumeTarget = await bind(registry, index: 1, name: "Pad")
+        let panTarget = await bind(registry, index: 2, name: "FX")
+        let executor = MockSagaExecutor(
+            states: [
+                renameTarget: .string("Lead"),
+                volumeTarget: .double(0.2),
+                panTarget: .double(0),
+            ],
+            behaviors: [.applyStateA, .applyStateA, .failBeforeWrite]
+        )
+        let outcome = await MutationSaga(
+            targetRegistry: registry,
+            enabled: true,
+            routeAvailable: { _ in true }
+        ).execute(
+            SagaPlan(
+                steps: [
+                    step(.tracksRename, target: renameTarget, value: .string("Lead Vox")),
+                    step(.mixerSetVolume, target: volumeTarget, value: .double(0.9)),
+                    step(.mixerSetPan, target: panTarget, value: .double(-0.5)),
+                ],
+                idempotencyKey: "deadline-compensation-flip"
+            ),
+            executor: executor,
+            // The forward phase never trips; the deadline is already elapsed by
+            // the time compensation begins, so the FIRST inverse is abandoned.
+            deadlineReached: { true }
+        )
+
+        #expect(outcome.state == .rollbackUncertain)
+        let c0 = try #require(outcome.journal[0].compensationEvidence)
+        let c1 = try #require(outcome.journal[1].compensationEvidence)
+        #expect(c0.disposition == .uncertain)
+        #expect(c1.disposition == .uncertain)
+        // Directly `.uncertain`, never through an inverse dispatch.
+        #expect(c0.executionResult == nil)
+        #expect(c1.executionResult == nil)
+        // Only the 3 forward runs — no inverse dispatched after the flip.
+        #expect(await executor.runCount() == 3)
+    }
+
+    /// #412: the loser of the first-writer race resumes with the WINNER's stored
+    /// body, never a local body.
+    @Test
+    func finalizeReturningWinnerReturnsTheJournalWinnerBody() async throws {
+        let journal = SagaJournal()
+        let plan = SagaPlan(
+            steps: [journalStep()],
+            idempotencyKey: "ni3-winner-coupling"
+        )
+        guard case .started(let claim) = await journal.begin(plan) else {
+            Issue.record("expected a new journal claim")
+            return
+        }
+        // The winning finisher terminalizes first with body X — it DID finalize.
+        let winnerBody = SagaJournal.StoredOutcome(body: "{\"winner\":true}", isError: false)
+        let winning = await journal.completeOnTimeout(claim, outcome: winnerBody)
+        #expect(winning.body.body == winnerBody.body)
+        #expect(winning.didFinalize)
+
+        // The losing finisher proposes a DIFFERENT local body and MUST read back
+        // the winner — not its own local body — and reports didFinalize == false.
+        let localBody = SagaJournal.StoredOutcome(body: "{\"local\":true}", isError: true)
+        let losing = await journal.finalizeReturningWinner(claim, proposed: localBody)
+        #expect(losing.body.body == winnerBody.body)
+        #expect(losing.body.body != localBody.body)
+        #expect(!losing.didFinalize)
+
+        guard case .completed(let stored) = try #require(
+            await journal.record(for: plan.idempotencyKey)
+        ) else {
+            Issue.record("expected a completed terminal record")
+            return
+        }
+        #expect(stored.body == winnerBody.body)
+    }
+
+    /// #412: `completeOnTimeout` terminalizes BOTH live states, mapping
+    /// `.inProgress → .completed` and `.cancellationRequested → .cancelled`
+    /// (verified:false, because a timed-out outcome is never verified).
+    @Test
+    func completeOnTimeoutTerminalizesBothLiveStates() async throws {
+        // inProgress → completed
+        let journalA = SagaJournal()
+        let planA = SagaPlan(steps: [journalStep()], idempotencyKey: "timeout-inprogress")
+        guard case .started(let claimA) = await journalA.begin(planA) else {
+            Issue.record("expected a claim"); return
+        }
+        let bodyA = SagaJournal.StoredOutcome(body: "{\"t\":\"ip\"}", isError: true)
+        _ = await journalA.completeOnTimeout(claimA, outcome: bodyA)
+        guard case .completed(let storedA) = try #require(
+            await journalA.record(for: planA.idempotencyKey)
+        ) else {
+            Issue.record("expected a completed terminal record"); return
+        }
+        #expect(storedA.body == bodyA.body)
+
+        // cancellationRequested → cancelled(verified:false)
+        let journalB = SagaJournal()
+        let planB = SagaPlan(steps: [journalStep()], idempotencyKey: "timeout-cancelreq")
+        guard case .started(let claimB) = await journalB.begin(planB) else {
+            Issue.record("expected a claim"); return
+        }
+        _ = await journalB.cancel(idempotencyKey: planB.idempotencyKey)
+        let bodyB = SagaJournal.StoredOutcome(body: "{\"t\":\"cr\"}", isError: true)
+        _ = await journalB.completeOnTimeout(claimB, outcome: bodyB)
+        guard case .cancelled(let storedB, let verified) = try #require(
+            await journalB.record(for: planB.idempotencyKey)
+        ) else {
+            Issue.record("expected a cancelled terminal record"); return
+        }
+        #expect(storedB.body == bodyB.body)
+        #expect(!verified)
     }
 
     @Test

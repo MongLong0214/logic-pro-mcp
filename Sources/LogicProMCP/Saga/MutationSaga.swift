@@ -400,7 +400,14 @@ actor MutationSaga {
     func execute<Executor: SagaStepExecutor>(
         _ plan: SagaPlan,
         executor: Executor,
-        cancellationRequested: @Sendable () async -> Bool = { false }
+        cancellationRequested: @Sendable () async -> Bool = { false },
+        // #412: the lifecycle deadline threads through execute -> the private
+        // cancel() -> compensate() so the compensation-abandon checkpoint is
+        // reachable on the main deadline-trip route (the trip enters cancel()
+        // via the forward cancellation checkpoints). Forward is unchanged: the
+        // dispatcher folds deadlineReached into `cancellationRequested`, so the
+        // forward checkpoints need no new branch.
+        deadlineReached: @Sendable () -> Bool = { false }
     ) async -> SagaOutcome {
         let result = await preflight(plan)
         switch result.status {
@@ -437,7 +444,8 @@ actor MutationSaga {
                 return await cancel(
                     appliedIndices: appliedIndices,
                     executor: executor,
-                    outcome: outcome
+                    outcome: outcome,
+                    deadlineReached: deadlineReached
                 )
             }
             guard let beforeState = await executor.readState(step),
@@ -459,7 +467,8 @@ actor MutationSaga {
                     appliedIndices: appliedIndices,
                     rollbackIsUncertain: false,
                     executor: executor,
-                    outcome: outcome
+                    outcome: outcome,
+                    deadlineReached: deadlineReached
                 )
             }
 
@@ -482,7 +491,8 @@ actor MutationSaga {
                 return await cancel(
                     appliedIndices: appliedIndices,
                     executor: executor,
-                    outcome: outcome
+                    outcome: outcome,
+                    deadlineReached: deadlineReached
                 )
             }
             let executionResult = await executor.run(step)
@@ -514,7 +524,8 @@ actor MutationSaga {
                         return await cancel(
                             appliedIndices: appliedIndices,
                             executor: executor,
-                            outcome: outcome
+                            outcome: outcome,
+                            deadlineReached: deadlineReached
                         )
                     }
                     continue
@@ -530,7 +541,8 @@ actor MutationSaga {
                     appliedIndices: appliedIndices,
                     rollbackIsUncertain: disposition == .unknown,
                     executor: executor,
-                    outcome: outcome
+                    outcome: outcome,
+                    deadlineReached: deadlineReached
                 )
 
             case .stateB:
@@ -564,7 +576,8 @@ actor MutationSaga {
                     appliedIndices: appliedIndices,
                     rollbackIsUncertain: disposition == .unknown,
                     executor: executor,
-                    outcome: outcome
+                    outcome: outcome,
+                    deadlineReached: deadlineReached
                 )
 
             case .stateC:
@@ -599,7 +612,8 @@ actor MutationSaga {
                         appliedIndices: appliedIndices,
                         rollbackIsUncertain: disposition == .unknown,
                         executor: executor,
-                        outcome: outcome
+                        outcome: outcome,
+                        deadlineReached: deadlineReached
                     )
                 }
 
@@ -616,7 +630,8 @@ actor MutationSaga {
                     appliedIndices: appliedIndices,
                     rollbackIsUncertain: false,
                     executor: executor,
-                    outcome: outcome
+                    outcome: outcome,
+                    deadlineReached: deadlineReached
                 )
             }
         }
@@ -625,7 +640,8 @@ actor MutationSaga {
             return await cancel(
                 appliedIndices: appliedIndices,
                 executor: executor,
-                outcome: outcome
+                outcome: outcome,
+                deadlineReached: deadlineReached
             )
         }
 
@@ -636,7 +652,8 @@ actor MutationSaga {
 
     func cancel<Executor: SagaStepExecutor>(
         outcome: SagaOutcome,
-        executor: Executor
+        executor: Executor,
+        deadlineReached: @Sendable () -> Bool = { false }
     ) async -> SagaOutcome {
         let appliedIndices = outcome.journal.indices.filter {
             outcome.journal[$0].verificationEvidence?.disposition == .applied
@@ -644,14 +661,16 @@ actor MutationSaga {
         return await cancel(
             appliedIndices: appliedIndices,
             executor: executor,
-            outcome: outcome
+            outcome: outcome,
+            deadlineReached: deadlineReached
         )
     }
 
     private func cancel<Executor: SagaStepExecutor>(
         appliedIndices: [Int],
         executor: Executor,
-        outcome: SagaOutcome
+        outcome: SagaOutcome,
+        deadlineReached: @Sendable () -> Bool
     ) async -> SagaOutcome {
         guard !appliedIndices.isEmpty else {
             var cancelled = outcome
@@ -662,7 +681,8 @@ actor MutationSaga {
             appliedIndices: appliedIndices,
             rollbackIsUncertain: false,
             executor: executor,
-            outcome: outcome
+            outcome: outcome,
+            deadlineReached: deadlineReached
         )
     }
 
@@ -670,7 +690,8 @@ actor MutationSaga {
         appliedIndices: [Int],
         rollbackIsUncertain: Bool,
         executor: Executor,
-        outcome initialOutcome: SagaOutcome
+        outcome initialOutcome: SagaOutcome,
+        deadlineReached: @Sendable () -> Bool
     ) async -> SagaOutcome {
         // ADR-005: compensation begin is visible on the PARENT saga trace
         // (the step scopes below carry parent_trace_id for the inverse
@@ -693,6 +714,19 @@ actor MutationSaga {
         var uncertain = rollbackIsUncertain
 
         for index in appliedIndices.reversed() {
+            // #412: the lifecycle deadline is checked immediately before each
+            // inverse dispatch; once elapsed no further inverse is issued and
+            // every not-yet-run applied index is marked uncertain directly —
+            // never failed (that disposition is only for a real dispatched
+            // inverse whose readback mismatched) and never via `executor.run`.
+            // `uncertain` then drives the honest `rollbackUncertain` terminal.
+            // There is no reserved compensation budget: a full-budget forward
+            // legitimately leaves all inverses abandoned as uncertain.
+            if deadlineReached() {
+                markRemainingUncertain(appliedIndices, from: index, outcome: &outcome)
+                uncertain = true
+                break
+            }
             guard let inverse = outcome.journal[index].inverseOperation,
                   let beforeState = outcome.journal[index].beforeState else {
                 outcome.journal[index].compensationEvidence = CompensationEvidence(
@@ -827,6 +861,28 @@ actor MutationSaga {
             executionResult: nil,
             readback: readback
         )
+        sessions[outcome.idempotencyKey] = outcome
+    }
+
+    /// #412: mark every applied index the compensation loop has NOT yet
+    /// dispatched an inverse for as `.uncertain`, directly — no `executor.run`,
+    /// never `.failed`. `appliedIndices` is appended in ascending forward order
+    /// and the loop consumes it in reverse, so when the deadline trips at
+    /// `index` the un-run remainder is exactly the applied indices `<= index`
+    /// (the larger ones already compensated).
+    private func markRemainingUncertain(
+        _ appliedIndices: [Int],
+        from index: Int,
+        outcome: inout SagaOutcome
+    ) {
+        for applied in appliedIndices where applied <= index {
+            outcome.journal[applied].compensationEvidence = CompensationEvidence(
+                disposition: .uncertain,
+                executionResult: nil,
+                readback: nil,
+                comparison: nil
+            )
+        }
         sessions[outcome.idempotencyKey] = outcome
     }
 
