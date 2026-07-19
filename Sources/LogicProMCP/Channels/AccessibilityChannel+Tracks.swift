@@ -111,7 +111,8 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime = .production,
         keyRuntime: AXMouseHelper.Runtime = .production,
         processRuntime: ProcessUtils.Runtime = .production,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        armChord: (CGKeyCode, CGEventFlags)? = nil
     ) -> ChannelResult {
         guard let indexStr = params["index"], let index = Int(indexStr) else {
             return .error("Missing or invalid 'index' parameter")
@@ -196,7 +197,8 @@ extension AccessibilityChannel {
                 runtime: runtime,
                 keyRuntime: keyRuntime,
                 processRuntime: processRuntime,
-                environment: environment
+                environment: environment,
+                armChord: armChord
             ),
             desired: desired,
             readValue: readValue,
@@ -440,13 +442,26 @@ extension AccessibilityChannel {
 
     /// Ground-truth verification for the arm-key auto-setup: drive a real
     /// record-arm on track 0 through the configured chord and report whether
-    /// record-enable actually flipped. NOTE: this is the pre-#407 shape and must
-    /// be reworked into a narrow through-chord adapter against the merged #407
-    /// actuator (do not ignore the restore result). See #408 review findings.
+    /// record-enable actually flipped.
     static func armSetupVerify(
+        keyCode: CGKeyCode,
+        modifiers: CGEventFlags,
         runtime: AXLogicProElements.Runtime = .production,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        keyRuntime: AXMouseHelper.Runtime = .production,
+        processRuntime: ProcessUtils.Runtime = .production
     ) -> Bool? {
+        guard let priorTransport = transportRecordingState(runtime: runtime) else { return nil }
+        let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
+        let priorSelection = headers.map {
+            AXValueExtractors.extractSelectedState($0, runtime: runtime.ax)
+        }
+        guard !headers.isEmpty, priorSelection.allSatisfy({ $0 != nil }),
+              let trackHeaders = AXLogicProElements.getTrackHeaders(runtime: runtime) else {
+            return nil
+        }
+        let selectedHeaders = priorSelection.enumerated().compactMap { offset, selected in
+            selected == true ? headers[offset] : nil
+        }
         guard let armButton = AXLogicProElements.findTrackArmButton(trackIndex: 0, runtime: runtime),
               let curNum = AXHelpers.getValue(armButton, runtime: runtime.ax) as? NSNumber else {
             return nil
@@ -456,18 +471,77 @@ extension AccessibilityChannel {
             params: ["index": "0", "enabled": String(!current)],
             button: "Record",
             runtime: runtime,
-            environment: environment
+            keyRuntime: keyRuntime,
+            processRuntime: processRuntime,
+            armChord: (keyCode, modifiers)
         )
-        let flipped: Bool
-        if case .success = toggle { flipped = true } else { flipped = false }
-        // Restore the original arm state regardless of the verify outcome.
-        _ = defaultSetTrackToggle(
+        let flippedThroughChord: Bool
+        if case .success(let payload) = toggle,
+           decodedJSONObject(payload)?["action"] as? String == "keyboard-arm",
+           (AXHelpers.getValue(armButton, runtime: runtime.ax) as? NSNumber)?.boolValue == !current {
+            flippedThroughChord = true
+        } else {
+            flippedThroughChord = false
+        }
+        let restore = defaultSetTrackToggle(
             params: ["index": "0", "enabled": String(current)],
             button: "Record",
             runtime: runtime,
-            environment: environment
+            keyRuntime: keyRuntime,
+            processRuntime: processRuntime,
+            armChord: (keyCode, modifiers)
         )
-        return flipped
+        let armRestored = if case .success = restore {
+            (AXHelpers.getValue(armButton, runtime: runtime.ax) as? NSNumber)?.boolValue == current
+        } else {
+            false
+        }
+
+        _ = AXHelpers.setAttribute(
+            trackHeaders,
+            kAXSelectedChildrenAttribute,
+            selectedHeaders as CFArray,
+            runtime: runtime.ax
+        )
+        for (offset, header) in headers.enumerated() {
+            _ = AXHelpers.setAttribute(
+                header,
+                kAXSelectedAttribute,
+                priorSelection[offset] == true ? kCFBooleanTrue : kCFBooleanFalse,
+                runtime: runtime.ax
+            )
+        }
+        var selectionRestored = false
+        for attempt in 0..<4 {
+            let observed = headers.map {
+                AXValueExtractors.extractSelectedState($0, runtime: runtime.ax)
+            }
+            if observed == priorSelection {
+                selectionRestored = true
+                break
+            }
+            if attempt < 3 { usleep(80_000) }
+        }
+        let transportRestored = restoreTransportRecordingState(priorTransport, runtime: runtime)
+        return flippedThroughChord && armRestored && selectionRestored && transportRestored
+    }
+
+    private static func restoreTransportRecordingState(
+        _ prior: Bool,
+        runtime: AXLogicProElements.Runtime
+    ) -> Bool {
+        guard let current = transportRecordingState(runtime: runtime) else { return false }
+        if current != prior {
+            guard let record = AXLogicProElements.findControlBarCheckbox(
+                named: "녹음", englishName: "Record", runtime: runtime
+            ) else { return false }
+            _ = AXHelpers.performAction(record, kAXPressAction, runtime: runtime.ax)
+        }
+        for attempt in 0..<4 {
+            if transportRecordingState(runtime: runtime) == prior { return true }
+            if attempt < 3 { usleep(80_000) }
+        }
+        return false
     }
 
     typealias TrackToggleRung = (
@@ -492,7 +566,8 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime,
         keyRuntime: AXMouseHelper.Runtime,
         processRuntime: ProcessUtils.Runtime,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        armChord: (CGKeyCode, CGEventFlags)? = nil
     ) -> [TrackToggleRung] {
         let pressRung: TrackToggleRung = ("press", 250, { _ in
             _ = AXHelpers.performAction(button, kAXPressAction, runtime: runtime.ax)
@@ -558,18 +633,22 @@ extension AccessibilityChannel {
                 // config error, never a silent fallback to the default chord.
                 let code: CGKeyCode
                 let flags: CGEventFlags
-                switch resolveArmChord(environment: environment) {
-                case .resolved(let resolvedCode, let resolvedFlags):
-                    code = resolvedCode
-                    flags = resolvedFlags
-                case .invalidKeyCode(let bad):
-                    return .refused(armConfigInvalidRefusal(
-                        reason: "\(armKeyCodeEnvVar)=\"\(bad)\" is not a valid decimal virtual keycode"
-                    ))
-                case .invalidModifierToken(let bad):
-                    return .refused(armConfigInvalidRefusal(
-                        reason: "\(armKeyModifiersEnvVar) contains an unknown modifier token \"\(bad)\""
-                    ))
+                if let armChord {
+                    (code, flags) = armChord
+                } else {
+                    switch resolveArmChord(environment: environment) {
+                    case .resolved(let resolvedCode, let resolvedFlags):
+                        code = resolvedCode
+                        flags = resolvedFlags
+                    case .invalidKeyCode(let bad):
+                        return .refused(armConfigInvalidRefusal(
+                            reason: "\(armKeyCodeEnvVar)=\"\(bad)\" is not a valid decimal virtual keycode"
+                        ))
+                    case .invalidModifierToken(let bad):
+                        return .refused(armConfigInvalidRefusal(
+                            reason: "\(armKeyModifiersEnvVar) contains an unknown modifier token \"\(bad)\""
+                        ))
+                    }
                 }
                 // A bare (no-modifier) arm key is unsafe: bare 'r' IS transport
                 // Record, and any bare key is a global single-key command. Refuse

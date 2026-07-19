@@ -36,10 +36,11 @@ struct HCGlobalInvariantTests {
         "logic_project.export_resume",
         "logic_project.launch",
         "logic_project.quit",
+        "logic_system.setup_arm_key",
     ]
 
     // Ratchet: this may only shrink as live-only / legacy non-HC routes become headlessly HC-checkable.
-    private static let hcInvariantAllowlistMaxCount = 6
+    private static let hcInvariantAllowlistMaxCount = 7
 
     private static func makeLogicProjectPath(name: String = UUID().uuidString, create: Bool) throws -> String {
         let path = FileManager.default.temporaryDirectory
@@ -306,7 +307,6 @@ struct HCGlobalInvariantTests {
             RouteCase(tool: "logic_system", command: "export_support_bundle", params: ["dir": .string(fixtures.supportBundlePath)], operation: "system.export_support_bundle", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_system", command: "saga_execute", params: [:], operation: "system.saga_execute", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_system", command: "saga_cancel", params: [:], operation: "system.saga_cancel", destinations: [], invariant: .minimumV1),
-
             RouteCase(tool: "logic_plugins", command: "set_param_verified", params: ["track": .int(0), "insert": .int(0), "plugin": .string("logic.stock.gain"), "param": .string("gain_db"), "value": .double(0), "unit": .string("dB"), "mode": .string("duplicate_applyback"), "project_expected_path": .string(fixtures.existingProjectPath)], operation: "plugin.set_param_verified", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_plugins", command: "insert_verified", params: ["track": .int(2), "insert": .int(0), "plugin": .string("Gain"), "mode": .string("duplicate_applyback"), "project_expected_path": .string(fixtures.existingProjectPath), "expected_name": .string("Bass")], operation: "plugin.insert_verified", destinations: [], invariant: .minimumV1),
         ]
@@ -388,6 +388,7 @@ struct HCGlobalInvariantTests {
             "logic_project.export_resume",
             "logic_project.launch",
             "logic_project.quit",
+            "logic_system.setup_arm_key",
         ]))
     }
 

@@ -57,6 +57,7 @@ enum HonestContract {
         case systemEventsAutomationDenied = "system_events_automation_denied"
         case logicNotRunning = "logic_not_running"
         case invalidParams = "invalid_params"
+        case consentRequired = "consent_required"
         case readbackUnavailable = "readback_unavailable"
         case readbackMismatch = "readback_mismatch"
         /// Operation explicitly not implemented via this channel / build of

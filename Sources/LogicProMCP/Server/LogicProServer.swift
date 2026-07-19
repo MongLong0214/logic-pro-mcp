@@ -426,6 +426,12 @@ actor LogicProServer {
                 let name = params.name
                 let command = params.arguments?["command"]?.stringValue ?? ""
                 let rawCmdParams = params.arguments?["params"]
+                if name == ToolID.logicSystem.rawValue, command == "setup_arm_key",
+                   let refusal = SystemDispatcher.setupArmConsentRequiredResult(
+                    rawCmdParams?.objectValue ?? [:]
+                   ) {
+                    return refusal
+                }
                 if let invalidParams = Self.strictParamContainerValidationResult(
                     tool: name,
                     command: command,

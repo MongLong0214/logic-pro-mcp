@@ -7,6 +7,15 @@ struct SystemDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
     static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicSystem)
 
+    static func setupArmConsentRequiredResult(_ params: [String: Value]) -> CallTool.Result? {
+        guard params["consent"]?.stringValue != "true" else { return nil }
+        return toolTextResult(HonestContract.encodeStateC(
+            error: .consentRequired,
+            hint: "One-time setup changes Logic's Key Commands configuration. Re-run with consent:\"true\" to proceed.",
+            extras: ["stage": "consent", "write_attempted": false]
+        ), isError: true)
+    }
+
     typealias SupportBundleExporter = @Sendable (
         URL,
         @Sendable () async -> Void
@@ -176,7 +185,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             Diagnostics, help, and saga coordination for the Logic Pro MCP server. \
             Commands: health, permissions, refresh_cache, export_support_bundle, saga_preflight, \
             saga_execute, saga_status, saga_cancel, list_recent_traces, get_trace, clear_traces, \
-            help. \
+            setup_arm_key, help. \
             Params by command: \
             help -> { category: String } (returns full param docs for a dispatcher); \
             refresh_cache -> {} (force AX re-poll); \
@@ -184,6 +193,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             get_trace -> { trace_id: String }; \
             clear_traces -> { confirmed: Bool }; \
             export_support_bundle -> { dir?: String } (local files only; never uploaded); \
+            setup_arm_key -> { consent: String }; \
             saga_preflight/saga_execute -> { steps: [step], idempotency_key: String }; \
             saga_status/saga_cancel -> { idempotency_key: String }. \
             Saga work is ordered best-effort work with compensation; it does not promise \
@@ -234,7 +244,19 @@ struct SystemDispatcher: OperationTraceDispatching {
         // sites stay deterministic; that default is `.unavailable`, i.e. the
         // saga fails closed at before-state capture rather than reading the
         // stale-able cache mirror. Production dispatch supplies `.production`.
-        sagaLiveReadback: SagaLiveReadback? = nil
+        sagaLiveReadback: SagaLiveReadback? = nil,
+        armKeySetup: @escaping @Sendable (
+            Bool, CGKeyCode, CGEventFlags
+        ) -> ArmKeyCommandSetup.Outcome = { consent, keyCode, modifiers in
+            ArmKeyCommandSetup.run(
+                consent: consent,
+                keyCode: keyCode,
+                modifiers: modifiers,
+                runtime: .production(verifyArmFlip: { keyCode, modifiers in
+                    AccessibilityChannel.armSetupVerify(keyCode: keyCode, modifiers: modifiers)
+                })
+            )
+        }
     ) async -> CallTool.Result {
         switch command {
         case "list_recent_traces", "get_trace", "clear_traces":
@@ -342,7 +364,8 @@ struct SystemDispatcher: OperationTraceDispatching {
             // key command (the track-header Record-Enable AXPress is a no-op, so a
             // key command is the only coord-free arm; it ships unassigned and
             // Logic 12.2+ blocks programmatic import). Fails closed without consent.
-            let consent = params["consent"]?.stringValue == "true"
+            if let refusal = setupArmConsentRequiredResult(params) { return refusal }
+            let traceID = await startTraceIfEnabled(command: command)
             let keyCode: CGKeyCode
             let modifiers: CGEventFlags
             switch AccessibilityChannel.resolveArmChord() {
@@ -350,57 +373,68 @@ struct SystemDispatcher: OperationTraceDispatching {
                 keyCode = code
                 modifiers = flags
             case .invalidKeyCode(let raw):
-                return toolTextResult(HonestContract.encodeStateC(
+                return await finalizeTrace(toolTextResult(HonestContract.encodeStateC(
                     error: .armKeyConfigInvalid,
                     hint: "LOGIC_PRO_MCP_ARM_KEYCODE '\(raw)' is not a valid decimal keycode.",
                     extras: ["stage": "resolve_chord"]
-                ), isError: true)
+                ), isError: true), traceID: traceID)
             case .invalidModifierToken(let token):
-                return toolTextResult(HonestContract.encodeStateC(
+                return await finalizeTrace(toolTextResult(HonestContract.encodeStateC(
                     error: .armKeyConfigInvalid,
                     hint: "LOGIC_PRO_MCP_ARM_KEY_MODIFIERS has an unknown modifier token '\(token)'.",
                     extras: ["stage": "resolve_chord"]
-                ), isError: true)
+                ), isError: true), traceID: traceID)
             }
             let chordText = ArmKeyCommandSetup.chordLabel(keyCode: keyCode, modifiers: modifiers)
-            let armSetupOutcome = ArmKeyCommandSetup.run(
-                consent: consent,
-                keyCode: keyCode,
-                modifiers: modifiers,
-                runtime: .production(verifyArmFlip: { AccessibilityChannel.armSetupVerify() })
-            )
+            let armSetupOutcome = armKeySetup(true, keyCode, modifiers)
+            let result: CallTool.Result
             switch armSetupOutcome {
             case .consentRequired:
-                return toolTextResult(HonestContract.encodeStateC(
-                    error: .invalidParams,
+                result = toolTextResult(HonestContract.encodeStateC(
+                    error: .consentRequired,
                     hint: "One-time setup assigns Logic's \"\(ArmKeyCommandSetup.commandName)\" command to "
                         + "\(chordText) so tracks arm coordinate-free. The server drives the Key Commands "
                         + "window on your behalf (no mouse). Re-run with consent:\"true\" to proceed.",
                     extras: ["stage": "consent", "chord": chordText, "command": ArmKeyCommandSetup.commandName]
                 ), isError: true)
             case .configuredAndVerified:
-                return toolTextResult(HonestContract.encodeStateA(extras: [
+                result = toolTextResult(HonestContract.encodeStateA(extras: [
                     "chord": chordText,
                     "command": ArmKeyCommandSetup.commandName,
                     "verified": true,
                     "detail": "Key command assigned and confirmed by a live record-arm flip.",
                 ]))
             case .configuredUnverified(let why):
-                return toolTextResult(HonestContract.encodeStateB(
+                result = toolTextResult(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
                     extras: [
                         "chord": chordText,
                         "command": ArmKeyCommandSetup.commandName,
-                        "detail": "Key command assigned; could not confirm a live flip (\(why)).",
+                        "detail": "Configuration was attempted but remains unverified (\(why)).",
                     ]
                 ))
-            case .failed(let stage, let hint):
-                return toolTextResult(HonestContract.encodeStateC(
+            case .configInvalid(let hint):
+                // No-steal hard gate tripped before any window/key: the resolved
+                // chord's keyCode is not in the known-safe glyph map, so it
+                // could not be compared against Logic's assignments. Typed
+                // config error, and honestly no write was attempted.
+                result = toolTextResult(HonestContract.encodeStateC(
+                    error: .armKeyConfigInvalid,
+                    hint: hint,
+                    extras: [
+                        "stage": "arm_key_config_invalid",
+                        "chord": chordText,
+                        "write_attempted": false,
+                    ]
+                ), isError: true)
+            case .failed(let stage, let hint, let writeAttempted):
+                result = toolTextResult(HonestContract.encodeStateC(
                     error: .axWriteFailed,
                     hint: hint,
-                    extras: ["stage": stage, "chord": chordText]
+                    extras: ["stage": stage, "chord": chordText, "write_attempted": writeAttempted]
                 ), isError: true)
             }
+            return await finalizeTrace(result, traceID: traceID)
 
         case "export_support_bundle":
             let createdAt = Date()

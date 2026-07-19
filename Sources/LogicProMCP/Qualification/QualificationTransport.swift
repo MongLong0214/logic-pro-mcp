@@ -191,7 +191,7 @@ struct QualificationOperationResult: Equatable, Sendable {
         return QualificationReadbackEvidence(
             source: readbackSource,
             requestID: readbackRequestID,
-            verified: mutability == .mutating || semanticReadbackValidated == true,
+            verified: status == .passed,
             sha256: SupportBundleBuilder.sha256(readbackArtifactData)
         )
     }
@@ -266,7 +266,7 @@ struct QualificationOperationResult: Equatable, Sendable {
     private var isTypedZeroWriteRefusal: Bool {
         isError == true
             && state == "C"
-            && error == "invalid_params"
+            && ["consent_required", "invalid_params"].contains(error)
             && writeAttempted == false
     }
 

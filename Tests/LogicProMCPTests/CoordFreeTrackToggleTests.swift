@@ -199,6 +199,41 @@ struct CoordFreeTrackToggleTests {
         (fixture.builder.attributeValue(element, kAXValueAttribute as String) as? NSNumber)?.boolValue
     }
 
+    private func armVerifyRuntime(
+        _ fixture: ToggleFixture,
+        armPressFlips: Bool = false,
+        recordPressFlips: Bool = false
+    ) -> AXLogicProElements.Runtime {
+        AXLogicProElements.Runtime(
+            logicProPID: { 4242 },
+            ax: fixture.builder.makeAXRuntime(
+                appElement: fixture.app,
+                setAttributeHandler: nil,
+                performActionHandler: { element, action in
+                    guard action == (kAXPressAction as String) else { return true }
+                    if element == fixture.headers[0] {
+                        for (offset, header) in fixture.headers.enumerated() {
+                            fixture.builder.setAttribute(
+                                header, kAXSelectedAttribute as String, offset == 0
+                            )
+                        }
+                    } else if armPressFlips, element == fixture.arm[0] {
+                        let current = self.boolValue(fixture, fixture.arm[0])!
+                        fixture.builder.setAttribute(
+                            fixture.arm[0], kAXValueAttribute as String, current ? 0 : 1
+                        )
+                    } else if recordPressFlips, element == fixture.recordCheckbox {
+                        let current = self.boolValue(fixture, fixture.recordCheckbox)!
+                        fixture.builder.setAttribute(
+                            fixture.recordCheckbox, kAXValueAttribute as String, current ? 0 : 1
+                        )
+                    }
+                    return true
+                }
+            )
+        )
+    }
+
     // MARK: - Solo
 
     @Test("solo flips on AXPress → verified State A via press, ZERO mouse/key")
@@ -400,6 +435,144 @@ struct CoordFreeTrackToggleTests {
         #expect(key.mouseEvents.isEmpty)
         // Honesty: transport did not start recording.
         #expect(boolValue(f, f.recordCheckbox) == false)
+    }
+
+    @Test("arm setup verification proves configured chord and restores arm plus prior selection")
+    func armSetupVerificationUsesChordAndRestoresState() {
+        let fixture = makeToggleFixture(trackCount: 2, selected: [1])
+        let key = KeyMouseRecorder()
+        key.onFlaggedKey = { code, flags in
+            if code == AccessibilityChannel.defaultArmKeyCode,
+               flags == AccessibilityChannel.defaultArmModifiers {
+                let current = self.boolValue(fixture, fixture.arm[0])!
+                fixture.builder.setAttribute(
+                    fixture.arm[0], kAXValueAttribute as String, current ? 0 : 1
+                )
+            }
+        }
+
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: AccessibilityChannel.defaultArmKeyCode,
+            modifiers: AccessibilityChannel.defaultArmModifiers,
+            runtime: armVerifyRuntime(fixture),
+            keyRuntime: key.runtime(),
+            processRuntime: noopProcessRuntime()
+        )
+
+        #expect(result!)
+        #expect(key.flaggedKeyEvents.count == 2)
+        #expect(boolValue(fixture, fixture.arm[0])! == false)
+        #expect(AXValueExtractors.extractSelectedState(fixture.headers[0], runtime: armVerifyRuntime(fixture).ax)! == false)
+        #expect(AXValueExtractors.extractSelectedState(fixture.headers[1], runtime: armVerifyRuntime(fixture).ax)!)
+    }
+
+    @Test("arm setup verification rejects a flip that did not come through the configured chord")
+    func armSetupVerificationRejectsAXPressFlip() {
+        let fixture = makeToggleFixture()
+        let key = KeyMouseRecorder()
+
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: AccessibilityChannel.defaultArmKeyCode,
+            modifiers: AccessibilityChannel.defaultArmModifiers,
+            runtime: armVerifyRuntime(fixture, armPressFlips: true),
+            keyRuntime: key.runtime(),
+            processRuntime: noopProcessRuntime()
+        )
+
+        #expect(!result!)
+        #expect(key.flaggedKeyEvents.isEmpty)
+        #expect(boolValue(fixture, fixture.arm[0])! == false)
+    }
+
+    @Test("arm setup verification fails when arm restoration is not observed")
+    func armSetupVerificationRequiresObservedArmRestore() {
+        let fixture = makeToggleFixture()
+        let key = KeyMouseRecorder()
+        key.onFlaggedKey = { _, _ in
+            if key.flaggedKeyEvents.count == 1 {
+                fixture.builder.setAttribute(fixture.arm[0], kAXValueAttribute as String, 1)
+            }
+        }
+
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: AccessibilityChannel.defaultArmKeyCode,
+            modifiers: AccessibilityChannel.defaultArmModifiers,
+            runtime: armVerifyRuntime(fixture),
+            keyRuntime: key.runtime(),
+            processRuntime: noopProcessRuntime()
+        )
+
+        #expect(!result!)
+    }
+
+    @Test("arm setup verification restores selection even when the probe flip fails")
+    func armSetupVerificationRestoresSelectionOnFailure() {
+        let fixture = makeToggleFixture(trackCount: 2, selected: [1])
+        let key = KeyMouseRecorder()
+
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: AccessibilityChannel.defaultArmKeyCode,
+            modifiers: AccessibilityChannel.defaultArmModifiers,
+            runtime: armVerifyRuntime(fixture),
+            keyRuntime: key.runtime(),
+            processRuntime: noopProcessRuntime()
+        )
+
+        #expect(!result!)
+        #expect(AXValueExtractors.extractSelectedState(fixture.headers[0], runtime: armVerifyRuntime(fixture).ax)! == false)
+        #expect(AXValueExtractors.extractSelectedState(fixture.headers[1], runtime: armVerifyRuntime(fixture).ax)!)
+    }
+
+    @Test("arm setup verification uses the exact captured chord, not a re-resolved environment")
+    func armSetupVerificationUsesExactCapturedChord() {
+        let fixture = makeToggleFixture()
+        let key = KeyMouseRecorder()
+        let capturedCode: CGKeyCode = 42
+        let capturedModifiers: CGEventFlags = [.maskCommand, .maskShift]
+        key.onFlaggedKey = { code, flags in
+            guard code == capturedCode, flags == capturedModifiers else { return }
+            let current = self.boolValue(fixture, fixture.arm[0])!
+            fixture.builder.setAttribute(
+                fixture.arm[0], kAXValueAttribute as String, current ? 0 : 1
+            )
+        }
+
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: capturedCode,
+            modifiers: capturedModifiers,
+            runtime: armVerifyRuntime(fixture),
+            keyRuntime: key.runtime(),
+            processRuntime: noopProcessRuntime()
+        )
+
+        #expect(result == true)
+        #expect(key.flaggedKeyEvents.count == 2)
+        #expect(key.flaggedKeyEvents.allSatisfy {
+            $0.code == capturedCode && $0.flags == capturedModifiers
+        })
+    }
+
+    @Test("arm setup verification restores transport recording after a wrong chord effect")
+    func armSetupVerificationRestoresTransportRecording() {
+        let fixture = makeToggleFixture()
+        let key = KeyMouseRecorder()
+        key.onFlaggedKey = { _, _ in
+            let current = self.boolValue(fixture, fixture.recordCheckbox)!
+            fixture.builder.setAttribute(
+                fixture.recordCheckbox, kAXValueAttribute as String, current ? 0 : 1
+            )
+        }
+
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: AccessibilityChannel.defaultArmKeyCode,
+            modifiers: AccessibilityChannel.defaultArmModifiers,
+            runtime: armVerifyRuntime(fixture, recordPressFlips: true),
+            keyRuntime: key.runtime(),
+            processRuntime: noopProcessRuntime()
+        )
+
+        #expect(result == false)
+        #expect(boolValue(fixture, fixture.recordCheckbox) == false)
     }
 
     @Test("arm fails closed (State C) with the exact 'Toggle Track Record Enable' key-command hint")

@@ -50,7 +50,7 @@ struct OperationRegistryTests {
         "delete_marker": .requiresKeyBinding,
     ]
 
-    private static let smallToolCount = 16
+    private static let smallToolCount = 17
     private static let expectedRegistryCount =
         commands.count + mixerCommands.count + navigateCommands.count + smallToolCount
             + editCommands.count + projectCommands.count + midiCommands.count + trackCommands.count
@@ -362,6 +362,7 @@ struct OperationRegistryTests {
         ("logic_system", "system.saga_execute", "saga_execute", .mutating, .long, .readbackRequired),
         ("logic_system", "system.saga_status", "saga_status", .readOnly, .short, .none),
         ("logic_system", "system.saga_cancel", "saga_cancel", .mutating, .short, .readbackRequired),
+        ("logic_system", "system.setup_arm_key", "setup_arm_key", .mutating, .long, .readbackRequired),
         ("logic_plugins", "plugins.get_inventory", "get_inventory", .readOnly, .short, .none),
         ("logic_plugins", "plugins.set_param_verified", "set_param_verified", .mutating, .medium, .readbackRequired),
         ("logic_plugins", "plugins.insert_verified", "insert_verified", .mutating, .medium, .readbackRequired),
