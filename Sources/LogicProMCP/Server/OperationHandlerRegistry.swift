@@ -22,6 +22,13 @@ struct HandlerDependencies: Sendable {
     /// real handler would be live AX, and their index path would silently drop
     /// out of the deterministic census.
     let liveTrackNames: (@Sendable () -> [Int: String]?)?
+    /// #412: the shared absolute saga lifecycle deadline, computed once at the
+    /// server dispatch entry and threaded to `SystemDispatcher.saga_execute` so
+    /// its in-closure abandon race and the outer transport timer derive from ONE
+    /// instant. `nil` on every non-saga
+    /// dispatch and whenever the dispatcher is driven directly (tests) — the
+    /// dispatcher then derives its own instant.
+    let sagaLifecycleDeadline: ContinuousClock.Instant?
 
     init(
         router: ChannelRouter,
@@ -33,7 +40,8 @@ struct HandlerDependencies: Sendable {
         sagaJournal: SagaJournal = SagaJournal(),
         mutationGate: LogicMutationGate? = nil,
         projectLifecycleExecute: (@Sendable (String) async -> ProjectDispatcher.LifecycleExecution)? = nil,
-        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil
+        liveTrackNames: (@Sendable () -> [Int: String]?)? = nil,
+        sagaLifecycleDeadline: ContinuousClock.Instant? = nil
     ) {
         self.router = router
         self.cache = cache
@@ -45,12 +53,32 @@ struct HandlerDependencies: Sendable {
         self.mutationGate = mutationGate
         self.projectLifecycleExecute = projectLifecycleExecute
         self.liveTrackNames = liveTrackNames
+        self.sagaLifecycleDeadline = sagaLifecycleDeadline
     }
 
     /// The live header reader to hand a dispatcher: the injected seam when a
     /// test supplies one, else the production AX scan.
     var liveTrackNamesReader: @Sendable () -> [Int: String]? {
         liveTrackNames ?? { AXLogicProElements.trackNames() }
+    }
+
+    /// #412: a per-call copy carrying the shared saga lifecycle deadline. The
+    /// base dependencies are built once per server; this stamps the one field
+    /// that must be computed per saga_execute call.
+    func withSagaLifecycleDeadline(_ deadline: ContinuousClock.Instant) -> HandlerDependencies {
+        HandlerDependencies(
+            router: router,
+            cache: cache,
+            targetRegistry: targetRegistry,
+            poller: poller,
+            dialogPresent: dialogPresent,
+            supportBundleExporter: supportBundleExporter,
+            sagaJournal: sagaJournal,
+            mutationGate: mutationGate,
+            projectLifecycleExecute: projectLifecycleExecute,
+            liveTrackNames: liveTrackNames,
+            sagaLifecycleDeadline: deadline
+        )
     }
 }
 
@@ -274,7 +302,9 @@ enum OperationHandlerRegistry {
                     liveTrackNames: dependencies.liveTrackNamesReader,
                     // LPMCP-PRD-004 — saga before-state/verification/compensation
                     // read the live AX surface, never the cache mirror.
-                    sagaLiveReadback: .production
+                    sagaLiveReadback: .production,
+                    // #412: the shared lifecycle deadline for the saga abandon race.
+                    sagaLifecycleDeadline: dependencies.sagaLifecycleDeadline
                 )
             }
         case .logicPlugins:

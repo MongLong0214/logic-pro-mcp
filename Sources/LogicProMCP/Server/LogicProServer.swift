@@ -186,13 +186,19 @@ final class LogicMutationGate: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         if let active = activeOperation, let since = acquiredAt {
-            if activeReclaimPolicy == .releaseOnly {
-                return nil
-            } else if let timedOutAt, now.timeIntervalSince(timedOutAt) >= timedOutReclaimGrace {
+            // #412: the grace-reclaim branch is checked BEFORE the blanket
+            // `.releaseOnly` bail so a force-timed-out `.releaseOnly` saga claim
+            // becomes reclaimable — but ONLY after the 15s grace, and ONLY once
+            // force-marked (an un-marked `.releaseOnly` claim has no `timedOutAt`,
+            // so it still never reclaims mid-saga). This applies to both an
+            // automatic timed-out holder (#201) and a force-marked saga claim.
+            if let timedOutAt, now.timeIntervalSince(timedOutAt) >= timedOutReclaimGrace {
                 Log.warn(
-                    "Reclaiming timed-out mutation gate from \(active) (grace \(Int(timedOutReclaimGrace))s elapsed) — prior op was abandoned by the command deadline",
+                    "Reclaiming timed-out mutation gate from \(active) (grace \(Int(timedOutReclaimGrace))s elapsed) — prior op was abandoned by the command/lifecycle deadline",
                     subsystem: "server"
                 )
+            } else if activeReclaimPolicy == .releaseOnly {
+                return nil
             } else if now.timeIntervalSince(since) >= staleHolderTTL {
                 Log.warn(
                     "Reclaiming stale mutation gate from \(active) held \(Int(now.timeIntervalSince(since)))s (TTL \(Int(staleHolderTTL))s) — prior op may still be wedged",
@@ -214,9 +220,14 @@ final class LogicMutationGate: @unchecked Sendable {
     /// the command deadline, starting the short `timedOutReclaimGrace` window.
     /// Epoch-guarded so a late mark from an abandoned op cannot affect a
     /// successor that already reclaimed the gate.
-    func markTimedOut(_ claim: Claim, now: Date = Date()) {
+    /// #412: `force` lets the saga lifecycle-timeout path mark even a
+    /// `.releaseOnly` claim as timed-out (the default `force: false` still
+    /// no-ops on `.releaseOnly`, preserving every existing #201 call site and
+    /// the `.releaseOnly` "no stale reclaim mid-saga" semantics). Epoch-guarded,
+    /// so a late mark after a successor reclaimed is harmless.
+    func markTimedOut(_ claim: Claim, force: Bool = false, now: Date = Date()) {
         lock.lock()
-        if epoch == claim.epoch, activeReclaimPolicy == .automatic {
+        if epoch == claim.epoch, force || activeReclaimPolicy == .automatic {
             timedOutAt = now
         }
         lock.unlock()
@@ -512,19 +523,40 @@ actor LogicProServer {
                     tool: name,
                     command: command
                 )
+                // #412: for saga_execute, compute ONE shared absolute lifecycle
+                // deadline HERE, before `work()` runs. It is threaded into BOTH
+                // the dispatcher's in-closure abandon race (the inner,
+                // authoritative bound) and the outer transport timer (a redundant
+                // liveness net derived from the same instant), so the outer is
+                // provably always later than the inner regardless of
+                // begin/gate/preflight pre-execute skew.
+                let isSagaExecute = sagaControlPath && command == "saga_execute"
+                let sagaLifecycleDeadline: ContinuousClock.Instant? = isSagaExecute
+                    ? ContinuousClock.now.advanced(by: .seconds(
+                        OperationRegistry.spec(
+                            tool: name,
+                            command: "saga_execute"
+                        )?.deadline.seconds ?? DeadlineClass.long.seconds
+                    ))
+                    : nil
+                let dispatchDependencies = sagaLifecycleDeadline
+                    .map { handlerDependencies.withSagaLifecycleDeadline($0) }
+                    ?? handlerDependencies
                 return await Self.runWithDeadline(
                     tool: name,
                     command: command,
+                    outerAbsoluteDeadline: sagaLifecycleDeadline
+                        .map { Self.sagaOuterAbsoluteDeadline(lifecycleDeadline: $0) },
                     mutationGate: sagaControlPath ? nil : mutationGate,
-                    externallyManagedMutation: sagaControlPath && command == "saga_execute"
+                    externallyManagedMutation: isSagaExecute
                 ) {
                     if let handler {
-                        return await handler(handlerDependencies, cmdParams)
+                        return await handler(dispatchDependencies, cmdParams)
                     }
                     guard let fallback else {
                         return toolTextResult("Unknown tool: \(name)", isError: true)
                     }
-                    return await fallback(handlerDependencies, cmdParams)
+                    return await fallback(dispatchDependencies, cmdParams)
                 }
             },
             listResources: { _ in
@@ -645,10 +677,45 @@ actor LogicProServer {
     /// work to unwind. The orphaned synchronous AX work (if any) is left to
     /// finish and is discarded — the point is to free the stdio loop, not to
     /// pretend cooperative cancellation can interrupt a blocked system call.
+    /// #412: a few hundred ms covering only the O(1) journal finalize +
+    /// continuation resume on the saga abandon path (no AX). Named so the outer
+    /// transport deadline provably sits above the inner lifecycle deadline.
+    static let sagaTerminalizationReserveSeconds: Double = 0.3
+
+    /// #412: the outer transport timer for `saga_execute` stays a genuine
+    /// last-resort stdio-liveness net, derived from the SAME shared lifecycle
+    /// instant + this slack so it is provably always later than the inner
+    /// abandon machinery regardless of pre-execute skew.
+    static let sagaOuterLivenessSlackSeconds: Double = 60
+
+    /// #412: the outer transport absolute deadline derived from the shared inner
+    /// `lifecycleDeadline` instant. `outerAbsolute >= lifecycleDeadline +
+    /// terminalizationReserve` holds by construction, so the outer timer can
+    /// never fire first while the journal is still live.
+    static func sagaOuterAbsoluteDeadline(
+        lifecycleDeadline: ContinuousClock.Instant
+    ) -> ContinuousClock.Instant {
+        lifecycleDeadline.advanced(
+            by: .seconds(sagaTerminalizationReserveSeconds + sagaOuterLivenessSlackSeconds)
+        )
+    }
+
+    /// Non-negative seconds from now until `instant`, for scheduling a
+    /// `DispatchQueue.asyncAfter` from a shared `ContinuousClock.Instant`.
+    static func secondsFromNow(until instant: ContinuousClock.Instant) -> Double {
+        let components = ContinuousClock.now.duration(to: instant).components
+        return max(0, Double(components.seconds) + Double(components.attoseconds) / 1e18)
+    }
+
     static func runWithDeadline(
         tool: String,
         command: String,
         deadlineOverride: Double? = nil,
+        // #412: when set (saga_execute only), the outer transport timer is
+        // scheduled from this shared absolute instant instead of `.now() +
+        // deadline`, so it is provably later than the inner lifecycle deadline
+        // derived from the same instant.
+        outerAbsoluteDeadline: ContinuousClock.Instant? = nil,
         mutationGate: LogicMutationGate? = nil,
         externallyManagedMutation: Bool = false,
         work: @escaping @Sendable () async -> CallTool.Result
@@ -716,8 +783,10 @@ actor LogicProServer {
                 }
             }
             timeoutHandle.set(timeoutTask)
+            let scheduleAfter = outerAbsoluteDeadline
+                .map { Self.secondsFromNow(until: $0) } ?? deadline
             DispatchQueue.global(qos: .userInitiated).asyncAfter(
-                deadline: .now() + deadline,
+                deadline: .now() + scheduleAfter,
                 execute: timeoutTask
             )
         }
