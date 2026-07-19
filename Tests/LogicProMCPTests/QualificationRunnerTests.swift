@@ -1162,13 +1162,101 @@ struct QualificationRunnerTests {
         )
     }
 
+    /// #399 (CEO audit P0) — INVERTED. This test used to prove the runner CAUGHT
+    /// a real env-induced `partial_state` fault; that capability was the
+    /// vulnerability. With the fault seam compiled out of release, driving the
+    /// real release binary through the full runner with the fault env set must now
+    /// yield the normal typed zero-write refusal — no `readback_unavailable`, no
+    /// failed case. (The generic "a failed required case is not promotable"
+    /// rejection stays covered by `verificationEmitsEveryApplicableRejection`.)
     @Test(.enabled(
         if: FileManager.default.isExecutableFile(atPath: Self.releaseExecutableURL.path),
-        "Requires `swift build -c release` before running the Runner fault probe."
+        "Requires `swift build -c release` before the Runner fault-exclusion probe."
+    ))
+    func runnerIgnoresPartialStateFaultEnvOnRealServer() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
+        let executableData = try Data(contentsOf: Self.releaseExecutableURL)
+        let fixture = try Fixture(
+            specs: [spec],
+            executableData: executableData,
+            environmentAdditions: [
+                "LOGIC_PRO_MCP_FAULT_INJECT": "partial_state",
+                "LOGIC_PRO_MCP_FAULT_INJECT_STEP": "0",
+            ],
+            drive: { request in
+                let observed = try QualificationTransport(
+                    requestTimeout: 30,
+                    shutdownGrace: 1
+                ).drive(request)
+                let baseline = Self.driveResult(specs: [spec])
+                return QualificationDriveResult(
+                    handshake: baseline.handshake,
+                    health: baseline.health,
+                    catalog: baseline.catalog,
+                    expectedOperationCount: baseline.expectedOperationCount,
+                    traceList: baseline.traceList,
+                    traceDetail: baseline.traceDetail,
+                    negative: baseline.negative,
+                    observedLocale: baseline.observedLocale,
+                    operationResults: observed.operationResults,
+                    wireFrames: observed.wireFrames,
+                    mutationRestoreRecords: observed.mutationRestoreRecords,
+                    failureReason: observed.failureReason
+                )
+            }
+        )
+        defer { fixture.remove() }
+
+        let qualification = await fixture.runQualification()
+        let attestationData = try #require(
+            try? Data(contentsOf: fixture.attestationURL),
+            "qualification failed: \(qualification.stderr)"
+        )
+        let attestation = try JSONDecoder().decode(
+            ReleaseQualificationAttestation.self,
+            from: attestationData
+        )
+        let operationCase = try #require(
+            attestation.cases.first { $0.id == "in-process/transport.play" }
+        )
+        let transcript = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: fixture.directory
+                .appendingPathComponent("raw-transcript.json"))) as? [String: Any]
+        )
+        let frames = try #require(transcript["frames"] as? [[String: Any]])
+        let response = try #require(frames.first {
+            $0["operation_id"] as? String == "operation_probe.transport.play"
+                && $0["direction"] as? String == "response"
+        })
+        let responsePayload = try #require(response["payload"] as? String)
+
+        #expect(qualification.exitCode == 0)
+        // The fault env engaged nothing: the release binary emitted the normal
+        // typed zero-write refusal, never the injected readback_unavailable fault.
+        #expect(!responsePayload.contains("readback_unavailable"))
+        #expect(responsePayload.contains(#"\"error\":\"invalid_params\""#))
+        // transport.play is mutating → the shipped `not_qualified` deferral, not a
+        // fault-induced failure.
+        #expect(operationCase.status == .notQualified)
+    }
+
+    /// FINDING 3 (#399) — debug-gated restoration of the runner-rejection
+    /// contract. The inverted `runnerIgnoresPartialStateFaultEnvOnRealServer`
+    /// proves the RELEASE binary ignores the fault env, but it can no longer prove
+    /// the runner REJECTS a real fault-induced failure, because release has no
+    /// seam. This drives the DEBUG binary (which HAS the seam) so `partial_state`
+    /// really induces `readback_unavailable`, then re-asserts the original exact
+    /// contract: the transport.play case is present and FAILED, and verification
+    /// refuses to promote it (exit 1, promotable=false). Compiled solely under
+    /// `QUALIFICATION_FAULT_SEAM` (see Package.swift) — references excluded symbols.
+    #if QUALIFICATION_FAULT_SEAM
+    @Test(.enabled(
+        if: FileManager.default.isExecutableFile(atPath: Self.debugExecutableURL.path),
+        "Requires `swift build` (debug) before the Runner fault-seam probe."
     ))
     func runnerRejectsPartialStateObservedFromRealServer() async throws {
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
-        let executableData = try Data(contentsOf: Self.releaseExecutableURL)
+        let executableData = try Data(contentsOf: Self.debugExecutableURL)
         let fixture = try Fixture(
             specs: [spec],
             executableData: executableData,
@@ -1229,8 +1317,10 @@ struct QualificationRunnerTests {
         #expect(responsePayload.contains(#"\"error\":\"readback_unavailable\""#))
         #expect(operationCase.status == .failed)
         #expect(promotion.exitCode == 1)
-        #expect(promotionJSON["promotable"] as? Bool == false)
+        let promotable = try #require(promotionJSON["promotable"] as? Bool)
+        #expect(!promotable)
     }
+    #endif
 
     @Test func handshakeStillFailsClosedBeyondStartupBudget() throws {
         let fixture = try SlowHandshakeFixture()
@@ -2626,6 +2716,16 @@ struct QualificationRunnerTests {
         fileURLWithPath: FileManager.default.currentDirectoryPath,
         isDirectory: true
     ).appendingPathComponent(".build/release/LogicProMCP")
+
+    // #399 (CEO audit P0) — the DEBUG executable HAS the fault seam compiled in,
+    // so it is what the debug-gated runner-rejection test drives. Only referenced
+    // under `QUALIFICATION_FAULT_SEAM`.
+    #if QUALIFICATION_FAULT_SEAM
+    private static let debugExecutableURL = URL(
+        fileURLWithPath: FileManager.default.currentDirectoryPath,
+        isDirectory: true
+    ).appendingPathComponent(".build/debug/LogicProMCP")
+    #endif
 
     private enum PublicTranscriptMutation: String, CaseIterable, CustomStringConvertible {
         case digestMismatch

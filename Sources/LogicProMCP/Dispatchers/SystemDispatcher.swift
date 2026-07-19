@@ -571,6 +571,12 @@ struct SystemDispatcher: OperationTraceDispatching {
                 defer {
                     if let mutationClaim { mutationGate?.release(mutationClaim) }
                 }
+                // ADR-004 / issue #287 — qualification-only fault seam. #399 (CEO
+                // audit P0): the seam and its wiring are compiled solely in debug
+                // via `QUALIFICATION_FAULT_SEAM`. The release executor is
+                // constructed with no seam, so `LOGIC_PRO_MCP_FAULT_INJECT` in the
+                // process environment cannot engage any fault here.
+                #if QUALIFICATION_FAULT_SEAM
                 let executor = ProductionSagaStepExecutor(
                     router: router,
                     cache: cache,
@@ -579,15 +585,22 @@ struct SystemDispatcher: OperationTraceDispatching {
                     liveReadback: sagaLiveReadback ?? .unavailable,
                     liveTrackName: liveTrackName,
                     liveTrackNames: liveTrackNames,
-                    // ADR-004 / issue #287 — qualification-only fault seam. nil
-                    // in normal operation; engages only when the operator sets
-                    // LOGIC_PRO_MCP_FAULT_INJECT=partial_state to qualify real
-                    // reverse-order compensation. Never a product code path.
                     faultSeam: SagaPartialStateFaultSeam.resolve(
                         environment: ProcessInfo.processInfo.environment,
                         stepCount: plan.steps.count
                     )
                 )
+                #else
+                let executor = ProductionSagaStepExecutor(
+                    router: router,
+                    cache: cache,
+                    targetRegistry: targetRegistry,
+                    dialogPresent: dialogPresent,
+                    liveReadback: sagaLiveReadback ?? .unavailable,
+                    liveTrackName: liveTrackName,
+                    liveTrackNames: liveTrackNames
+                )
+                #endif
                 let saga = MutationSaga(
                     targetRegistry: targetRegistry,
                     routeAvailable: Self.sagaRouteProbe(router: router)

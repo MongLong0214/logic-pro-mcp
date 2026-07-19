@@ -1,3 +1,8 @@
+// #399 (CEO audit P0) — QUALIFICATION-ONLY. Compiled solely in debug via the
+// `QUALIFICATION_FAULT_SEAM` define (see Package.swift). A release binary
+// therefore holds no `LOGIC_PRO_MCP_FAULT_INJECT` string and no code that parses
+// it, so the ordinary process environment can never activate a fault.
+#if QUALIFICATION_FAULT_SEAM
 struct QualificationFaultInjection: Equatable, Sendable {
     static let environmentKey = "LOGIC_PRO_MCP_FAULT_INJECT"
 
@@ -16,3 +21,4 @@ struct QualificationFaultInjection: Equatable, Sendable {
         self.mode = mode
     }
 }
+#endif

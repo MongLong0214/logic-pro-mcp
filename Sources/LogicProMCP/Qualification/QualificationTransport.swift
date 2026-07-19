@@ -496,7 +496,15 @@ struct QualificationTransport: Sendable {
     }
 
     func drive(_ request: QualificationDriveRequest) throws -> QualificationDriveResult {
-        let faultInjection = QualificationFaultInjection(environment: request.environment)
+        // #399 (CEO audit P0) — the fault-injection probe timeout only applies in
+        // debug, where the seam exists. A release build has no
+        // `QualificationFaultInjection`, so `faultActive` is a constant false and
+        // the probe uses its normal request timeout.
+        #if QUALIFICATION_FAULT_SEAM
+        let faultActive = QualificationFaultInjection(environment: request.environment) != nil
+        #else
+        let faultActive = false
+        #endif
         let session = QualificationSubprocessSession(
             request: request,
             requestTimeout: requestTimeout,
@@ -551,12 +559,15 @@ struct QualificationTransport: Sendable {
                         let responseID = nextID
                         nextID += 1
                         responseRequestID = String(responseID)
+                        let probeTimeout: TimeInterval? = faultActive && spec.id == .transportPlay
+                            ? spec.deadline.seconds + 5
+                            : nil
                         response = try operation(
                             session,
                             id: responseID,
                             spec: spec,
                             traceID: traceSummary.traceID,
-                            faultInjection: faultInjection
+                            timeout: probeTimeout
                         )
                     }
                 } catch {
@@ -818,7 +829,7 @@ struct QualificationTransport: Sendable {
         id: Int,
         spec: OperationSpec,
         traceID: String,
-        faultInjection: QualificationFaultInjection?
+        timeout: TimeInterval? = nil
     ) throws -> (text: String, isError: Bool) {
         let result: ToolCallResult = try session.request(
             id: id,
@@ -831,9 +842,7 @@ struct QualificationTransport: Sendable {
                 ],
             ],
             phase: "operation_probe.\(spec.id.rawValue)",
-            timeout: faultInjection != nil && spec.id == .transportPlay
-                ? spec.deadline.seconds + 5
-                : nil
+            timeout: timeout
         )
         return (
             try result.text(phase: "operation_probe.\(spec.id.rawValue)"),
