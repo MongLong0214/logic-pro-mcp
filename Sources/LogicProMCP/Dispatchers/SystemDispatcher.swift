@@ -7,6 +7,61 @@ struct SystemDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
     static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicSystem)
 
+    /// Consent-first refusal for `setup_arm_key`. Returns a State C result when the
+    /// request does not carry explicit `consent:"true"`, else nil. The server
+    /// calls this BEFORE strict-param validation, the mutation gate, the operation
+    /// trace, and any app activation, so the one-time Key Commands configuration is
+    /// never touched — not even probed — without consent (#413).
+    static func setupArmConsentRequiredResult(_ params: [String: Value]) -> CallTool.Result? {
+        guard params["consent"]?.stringValue != "true" else { return nil }
+        return toolTextResult(HonestContract.encodeStateC(
+            error: .consentRequired,
+            hint: "One-time setup changes Logic's Key Commands configuration so tracks can arm "
+                + "coordinate-free. The server drives the Key Commands window on your behalf (no mouse). "
+                + "Re-run with consent:\"true\" to proceed.",
+            extras: ["stage": "consent", "write_source": "none",
+                     "write_attempted": false, "configuration_write_attempted": false]
+        ), isError: true)
+    }
+
+    /// Environment variable that overrides `setup_arm_key`'s server-side deadline
+    /// (in whole milliseconds). Unset uses the default `DeadlineClass.long`; a
+    /// valid value shortens the REAL `runWithDeadline` deadline so a genuine
+    /// timeout can be exercised on the actual path (no injected sleep or seam).
+    static let setupDeadlineEnvVar = "LOGIC_PRO_MCP_SETUP_DEADLINE_MS"
+
+    enum SetupDeadlineOverride: Equatable {
+        case unset
+        case seconds(Double)
+        case invalid(String)
+    }
+
+    /// Parse `LOGIC_PRO_MCP_SETUP_DEADLINE_MS`. Unset/empty → `.unset` (default
+    /// deadline); a POSITIVE integer of milliseconds → `.seconds`; anything else
+    /// (non-numeric, zero, negative, or overflowing `Int`) → `.invalid`, so setup
+    /// fails closed rather than silently falling back to the default (#413).
+    static func parseSetupDeadlineOverride(_ raw: String?) -> SetupDeadlineOverride {
+        guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return .unset
+        }
+        guard let ms = Int(trimmed), ms > 0 else { return .invalid(trimmed) }
+        return .seconds(Double(ms) / 1000.0)
+    }
+
+    /// State C fail-closed envelope for a malformed `LOGIC_PRO_MCP_SETUP_DEADLINE_MS`.
+    /// Returned BEFORE the mutation gate, trace, or any Logic activation — zero side
+    /// effects — so a bad override never silently runs at the default deadline.
+    static func setupArmDeadlineConfigInvalidResult(raw: String) -> CallTool.Result {
+        toolTextResult(HonestContract.encodeStateC(
+            error: .armKeyConfigInvalid,
+            hint: "\(setupDeadlineEnvVar) must be a positive integer number of milliseconds; \"\(raw)\" "
+                + "is not valid. Unset it to use the default deadline, or set a value like 8000. No Key "
+                + "Commands change was attempted.",
+            extras: ["stage": "setup_deadline_config_invalid", "write_source": "none",
+                     "write_attempted": false, "configuration_write_attempted": false]
+        ), isError: true)
+    }
+
     typealias SupportBundleExporter = @Sendable (
         URL,
         @Sendable () async -> Void
@@ -176,7 +231,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             Diagnostics, help, and saga coordination for the Logic Pro MCP server. \
             Commands: health, permissions, refresh_cache, export_support_bundle, saga_preflight, \
             saga_execute, saga_status, saga_cancel, list_recent_traces, get_trace, clear_traces, \
-            help. \
+            setup_arm_key, help. \
             Params by command: \
             help -> { category: String } (returns full param docs for a dispatcher); \
             refresh_cache -> {} (force AX re-poll); \
@@ -185,7 +240,9 @@ struct SystemDispatcher: OperationTraceDispatching {
             clear_traces -> { confirmed: Bool }; \
             export_support_bundle -> { dir?: String } (local files only; never uploaded); \
             saga_preflight/saga_execute -> { steps: [step], idempotency_key: String }; \
-            saga_status/saga_cancel -> { idempotency_key: String }. \
+            saga_status/saga_cancel -> { idempotency_key: String }; \
+            setup_arm_key -> { consent: "true" } (one-time consent-gated Key Commands GUI \
+            drive that assigns the coordinate-free record-arm chord; no mouse). \
             Saga work is ordered best-effort work with compensation; it does not promise \
             all-or-nothing completion or durable recovery. The journal is session-only and \
             cleared when the server session ends, including process restart. \
@@ -240,7 +297,37 @@ struct SystemDispatcher: OperationTraceDispatching {
         // transport timer derive from ONE instant. nil when the dispatcher is
         // driven directly (tests / non-server): the saga path then derives its
         // own instant from the registry budget.
-        sagaLifecycleDeadline: ContinuousClock.Instant? = nil
+        sagaLifecycleDeadline: ContinuousClock.Instant? = nil,
+        // #413 — the consent-gated record-arm key-command assignment. nil-free
+        // default wires the production engine (its functional verifier drives the
+        // real arm actuator); tests inject a canned Outcome to exercise the
+        // envelope mapping without a live Key Commands GUI.
+        armKeySetup: @escaping @Sendable (
+            Bool, CGKeyCode, CGEventFlags
+        ) -> ArmKeyCommandSetup.Outcome = { consent, keyCode, modifiers in
+            // #413: live mutation-gate ownership from the operation's trace context.
+            // A successor that reclaimed the gate makes this false, so the engine
+            // stops every forward key/AX mutation immediately. Defaults
+            // true when driven off-server (tests / no gate held).
+            let ownsGate: @Sendable () -> Bool = { OperationTraceContext.current?.ownsGate() ?? true }
+            return ArmKeyCommandSetup.run(
+                consent: consent,
+                keyCode: keyCode,
+                modifiers: modifiers,
+                runtime: .production(
+                    verifyArmFlip: { code, flags in
+                        // The verify probe posts real chords, so it observes the same
+                        // deadline AND gate-ownership boundary as the GUI drive — no
+                        // key after the deadline or after the gate was reclaimed (#413).
+                        AccessibilityChannel.armSetupVerify(
+                            keyCode: code, modifiers: flags,
+                            isCancelled: { Task.isCancelled || !ownsGate() }
+                        )
+                    },
+                    ownsGate: ownsGate
+                )
+            )
+        }
     ) async -> CallTool.Result {
         switch command {
         case "list_recent_traces", "get_trace", "clear_traces":
@@ -342,6 +429,96 @@ struct SystemDispatcher: OperationTraceDispatching {
                 return toolTextResult("State refresh completed via AX fallback poller.")
             }
             return toolTextResult("State refresh triggered. Cache will be updated on next poll cycle.")
+
+        case "setup_arm_key":
+            // Consent-first: refuse before the trace, the mutation gate, or any
+            // app activation if explicit consent is absent (the server also gates
+            // this ahead of strict-param validation). The one-time Key Commands
+            // configuration is the only coordinate-free way to record-enable a
+            // track (the track-header Record AXPress is a no-op; the command ships
+            // unassigned and Logic 12.2+ blocks programmatic import).
+            if let refusal = Self.setupArmConsentRequiredResult(params) { return refusal }
+            let armTraceID = await startTraceIfEnabled(command: command)
+            let keyCode: CGKeyCode
+            let modifiers: CGEventFlags
+            switch AccessibilityChannel.resolveArmChord() {
+            case .resolved(let code, let flags):
+                keyCode = code
+                modifiers = flags
+            case .invalidKeyCode(let raw):
+                return await finalizeTrace(toolTextResult(HonestContract.encodeStateC(
+                    error: .armKeyConfigInvalid,
+                    hint: "LOGIC_PRO_MCP_ARM_KEYCODE '\(raw)' is not a valid decimal keycode.",
+                    extras: ["stage": "resolve_chord", "write_source": "none",
+                             "write_attempted": false, "configuration_write_attempted": false]
+                ), isError: true), traceID: armTraceID)
+            case .invalidModifierToken(let token):
+                return await finalizeTrace(toolTextResult(HonestContract.encodeStateC(
+                    error: .armKeyConfigInvalid,
+                    hint: "LOGIC_PRO_MCP_ARM_KEY_MODIFIERS has an unknown modifier token '\(token)'.",
+                    extras: ["stage": "resolve_chord", "write_source": "none",
+                             "write_attempted": false, "configuration_write_attempted": false]
+                ), isError: true), traceID: armTraceID)
+            }
+            let chordText = ArmKeyCommandSetup.chordLabel(keyCode: keyCode, modifiers: modifiers)
+            let armResult: CallTool.Result
+            switch armKeySetup(true, keyCode, modifiers) {
+            case .consentRequired:
+                armResult = toolTextResult(HonestContract.encodeStateC(
+                    error: .consentRequired,
+                    hint: "One-time setup assigns Logic's \"\(ArmKeyCommandSetup.commandName)\" command to "
+                        + "\(chordText) so tracks arm coordinate-free. Re-run with consent:\"true\" to proceed.",
+                    extras: ["stage": "consent", "chord": chordText, "write_source": "none",
+                             "write_attempted": false, "configuration_write_attempted": false]
+                ), isError: true)
+            case .configInvalid(let hint):
+                armResult = toolTextResult(HonestContract.encodeStateC(
+                    error: .armKeyConfigInvalid,
+                    hint: hint,
+                    extras: ["stage": "arm_key_config_invalid", "chord": chordText, "write_source": "none",
+                             "write_attempted": false, "configuration_write_attempted": false]
+                ), isError: true)
+            case .alreadyConfigured(let evidence):
+                armResult = toolTextResult(HonestContract.encodeStateA(extras: evidence.extras.merging([
+                    "chord": chordText,
+                    "command": ArmKeyCommandSetup.commandName,
+                    "verified": true,
+                    "detail": "Key-command mapping already configured and functionally verified; no "
+                        + "key-command configuration write performed. Verification mutation was observed "
+                        + "and restored.",
+                ]) { _, new in new }))
+            case .configuredAndVerified(let evidence):
+                armResult = toolTextResult(HonestContract.encodeStateA(extras: evidence.extras.merging([
+                    "chord": chordText,
+                    "command": ArmKeyCommandSetup.commandName,
+                    "verified": true,
+                    "detail": "Key command assigned via the Key Commands GUI and confirmed by a live "
+                        + "record-arm flip.",
+                ]) { _, new in new }))
+            case .configuredUnverified(let why, let evidence):
+                // Nothing observed the assignment on this path (no track to test),
+                // so this must NOT claim "assigned" — report the steps ran but the
+                // assignment is unproven.
+                armResult = toolTextResult(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: evidence.extras.merging([
+                        "chord": chordText,
+                        "command": ArmKeyCommandSetup.commandName,
+                        "detail": "Setup steps ran, but the assignment is UNPROVEN — \(why).",
+                    ]) { _, new in new }
+                ))
+            case .failed(let stage, let hint, let evidence):
+                armResult = toolTextResult(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: hint,
+                    extras: evidence.extras.merging([
+                        "stage": stage,
+                        "chord": chordText,
+                        "write_attempted": evidence.configurationWriteAttempted,
+                    ]) { _, new in new }
+                ), isError: true)
+            }
+            return await finalizeTrace(armResult, traceID: armTraceID)
 
         case "export_support_bundle":
             let createdAt = Date()

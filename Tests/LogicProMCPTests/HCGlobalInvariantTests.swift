@@ -36,10 +36,13 @@ struct HCGlobalInvariantTests {
         "logic_project.export_resume",
         "logic_project.launch",
         "logic_project.quit",
+        // Consent-gated live Key Commands GUI drive (#413): not headlessly
+        // HC-checkable — it needs the real Logic Key Commands window.
+        "logic_system.setup_arm_key",
     ]
 
     // Ratchet: this may only shrink as live-only / legacy non-HC routes become headlessly HC-checkable.
-    private static let hcInvariantAllowlistMaxCount = 6
+    private static let hcInvariantAllowlistMaxCount = 7
 
     private static func makeLogicProjectPath(name: String = UUID().uuidString, create: Bool) throws -> String {
         let path = FileManager.default.temporaryDirectory
@@ -388,6 +391,7 @@ struct HCGlobalInvariantTests {
             "logic_project.export_resume",
             "logic_project.launch",
             "logic_project.quit",
+            "logic_system.setup_arm_key",
         ]))
     }
 

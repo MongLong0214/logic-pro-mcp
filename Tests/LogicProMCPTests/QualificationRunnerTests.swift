@@ -56,12 +56,12 @@ struct QualificationRunnerTests {
         // recorded protocolSmoke ("transport worked, nobody checked meaning").
         // Now every read-only spec has an oracle, so a read that returns its
         // real payload qualifies: passed == 21 (20 oracles + health's bespoke
-        // validator), protocolSmoke == 0. The 86 mutating ops are unchanged —
+        // validator), protocolSmoke == 0. The 87 mutating ops are unchanged —
         // they still defer to ADR-001-c for live mutation.
-        #expect(operationCases.count == 107)
+        #expect(operationCases.count == 108)
         #expect(operationCases.filter { $0.status == .passed }.count == 21)
         #expect(operationCases.filter { $0.status == .protocolSmoke }.isEmpty)
-        #expect(operationCases.filter { $0.status == .notQualified }.count == 86)
+        #expect(operationCases.filter { $0.status == .notQualified }.count == 87)
         #expect(operationCases.filter { $0.status == .failed }.isEmpty)
         #expect(operationCases.filter { $0.status == .passed }.allSatisfy {
             $0.verificationKind == .semanticReadback
@@ -212,11 +212,41 @@ struct QualificationRunnerTests {
         #expect(Self.rejectionReasons(try Self.resultObject(decision)).contains("requiredCaseFailed"))
     }
 
-    @Test func zeroOf107QualifiedOperationsRejectsPromotion() async throws {
+    /// A consent-gated mutating op whose no-write probe refuses `consent_required`
+    /// is a typed zero-write deferral (notQualified), and its nested readback must
+    /// NOT be marked verified — only a passed qualification claims verification
+    /// (#413).
+    @Test func zeroWriteMutatingDeferralDoesNotClaimNestedReadbackVerification() throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemSetupArmKey })
+        let result = QualificationOperationResult(
+            operationID: spec.id.rawValue,
+            tool: spec.tool.rawValue,
+            command: spec.command,
+            mutability: spec.mutability,
+            requestID: "consent-refusal",
+            responseData: Data(#"{"state":"C","error":"consent_required","write_attempted":false}"#.utf8),
+            isError: true,
+            state: "C",
+            error: "consent_required",
+            writeAttempted: false,
+            readbackSource: "logic://system/health",
+            readbackRequestID: "consent-readback",
+            readbackData: Data(#"{"logic_pro_running":true}"#.utf8),
+            failureReason: nil
+        )
+
+        #expect(result.status == .notQualified)
+        #expect(result.verificationKind == .typedDeferral)
+        let readback = try #require(result.readback)
+        #expect(spec.mutability == .mutating)
+        #expect(!readback.verified)
+    }
+
+    @Test func zeroOf108QualifiedOperationsRejectsPromotion() async throws {
         let specs = OperationRegistry.specs
         let driveResult = Self.driveResult(specs: specs, qualifiedReadOperationCount: 0)
         #expect(driveResult.operationResults.values.filter { $0.status == .passed }.isEmpty)
-        #expect(driveResult.operationResults.values.filter { $0.status == .notQualified }.count == 107)
+        #expect(driveResult.operationResults.values.filter { $0.status == .notQualified }.count == 108)
         let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
         defer { fixture.remove() }
 
@@ -233,11 +263,11 @@ struct QualificationRunnerTests {
         ))
     }
 
-    @Test func thirteenLegacyTransportSuccessesAndNinetyFourDeferralsRejectPromotion() async throws {
+    @Test func thirteenLegacyTransportSuccessesAndNinetyFiveDeferralsRejectPromotion() async throws {
         let specs = OperationRegistry.specs
         let driveResult = Self.driveResult(specs: specs, qualifiedReadOperationCount: 13)
         #expect(driveResult.operationResults.values.filter { $0.isError == false }.count == 13)
-        #expect(driveResult.operationResults.values.filter { $0.isError == true }.count == 94)
+        #expect(driveResult.operationResults.values.filter { $0.isError == true }.count == 95)
         let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
         defer { fixture.remove() }
 
@@ -920,7 +950,7 @@ struct QualificationRunnerTests {
         let healthAfter = Data(
             #"{"cache":{"track_count":2},"mcu":{"connected":true,"registered_as_device":true}}"#.utf8
         )
-        let catalog = Data(#"{"operation_count":107}"#.utf8)
+        let catalog = Data(#"{"operation_count":108}"#.utf8)
 
         func result(
             state: String = "C",
@@ -944,7 +974,7 @@ struct QualificationRunnerTests {
         #expect(failClosed.catalogReadStable)
         #expect(failClosed.isFailClosedAndStable)
         #expect(!result(writeAttempted: true).isFailClosedAndStable)
-        #expect(!result(catalogAfter: Data(#"{"operation_count":106}"#.utf8)).isFailClosedAndStable)
+        #expect(!result(catalogAfter: Data(#"{"operation_count":107}"#.utf8)).isFailClosedAndStable)
         #expect(!result(state: "B").isFailClosedAndStable)
     }
 
@@ -1126,7 +1156,7 @@ struct QualificationRunnerTests {
         ))
 
         #expect(result.handshakeOK)
-        #expect(result.catalog?.operationCount == 107)
+        #expect(result.catalog?.operationCount == 108)
         #expect(result.catalogCountMatch)
         #expect(result.traceOK)
 
@@ -1138,7 +1168,7 @@ struct QualificationRunnerTests {
         let smoke = operationResults.filter { $0.status == .protocolSmoke }
 
         #expect(operationResults.count == OperationRegistry.specs.count)
-        #expect(mutating.count == 86)
+        #expect(mutating.count == 87)
         #expect(readOnly.count == 21)
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(operationResults.allSatisfy { $0.responseData != nil && $0.readback != nil })
@@ -1148,7 +1178,16 @@ struct QualificationRunnerTests {
             $0.status == .notQualified
                 && $0.isError == true
                 && $0.state == "C"
-                && $0.error == "invalid_params"
+                // Every mutating op's no-write probe is a typed zero-write refusal
+                // via `invalid_params`, EXCEPT the consent-gated setup_arm_key,
+                // which refuses with `consent_required` BEFORE param validation
+                // (consent-first). Special-case that ONE op; keep invalid_params
+                // required for all others (do not broadly weaken the assertion).
+                && (
+                    $0.operationID == OperationID.systemSetupArmKey.rawValue
+                        ? ($0.error == "consent_required" || $0.error == "invalid_params")
+                        : $0.error == "invalid_params"
+                )
                 && $0.writeAttempted == false
                 && $0.deferral?.code == .liveMutationNotRun
         })
@@ -1625,7 +1664,7 @@ struct QualificationRunnerTests {
         // #373 Phase A: the read-only surface now qualifies semantically.
         #expect(operationCases.filter { $0.status == .passed }.count == 21)
         #expect(operationCases.filter { $0.status == .protocolSmoke }.isEmpty)
-        #expect(operationCases.filter { $0.status == .notQualified }.count == 86)
+        #expect(operationCases.filter { $0.status == .notQualified }.count == 87)
         // #373 Phase A: 20 oracled read-only ops + system.health's bespoke
         // validator. The aggregate axes contribute no passes here.
         #expect(attestation.passed == 21)
