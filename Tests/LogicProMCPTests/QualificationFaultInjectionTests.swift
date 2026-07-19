@@ -14,6 +14,14 @@ import Testing
 /// which has it compiled out.
 @Suite("Qualification fault seam — release exclusion (#399)")
 struct QualificationFaultInjectionTests {
+    // #399 (CEO audit P0) — DEBUG-ONLY seam coverage. `QualificationFaultInjection`
+    // and the transport fault modes are compiled solely under
+    // `QUALIFICATION_FAULT_SEAM` (see Package.swift). This block references those
+    // excluded symbols and/or drives the DEBUG executable (which HAS the seam), so
+    // it compiles/runs only in the debug test build and is absent from a
+    // `-c release` test build. It proves the qualification fault modes STILL WORK
+    // in debug — the coverage the release-exclusion inversion would otherwise drop.
+    #if QUALIFICATION_FAULT_SEAM
     /// TEST (C) — debug seam contract. `QualificationFaultInjection` returns
     /// non-nil ONLY for the exact documented modes; every other value is nil.
     @Test func injectionResolvesOnlyDocumentedModes() throws {
@@ -30,6 +38,77 @@ struct QualificationFaultInjectionTests {
         ]))
         #expect(partial.mode == .partialState)
     }
+
+    /// FINDING 1 (#399) — debug transport-fault E2E, restored. The retired
+    /// `timeoutIsObservedFromRealServerResponse` proved the transport `timeout`
+    /// fault is observable end-to-end from a real server response. The seam is now
+    /// compiled out of release, but it MUST still work in debug — that IS the
+    /// qualification affordance. Driving the DEBUG executable (which has the seam)
+    /// with `LOGIC_PRO_MCP_FAULT_INJECT=timeout` still yields `operation_timeout`,
+    /// State C, and the FAILED classification, over a real request/response frame
+    /// pair — matching what the old test proved.
+    @Test(.enabled(
+        if: FileManager.default.isExecutableFile(atPath: Self.debugExecutableURL.path),
+        "Requires `swift build` (debug) before driving the debug fault seam."
+    ))
+    func debugSeamTimeoutIsObservedFromRealServerResponse() throws {
+        try assertDebugServerFault(mode: .timeout, expectedError: "operation_timeout")
+    }
+
+    /// FINDING 1 (#399) — debug transport-fault E2E, restored. Mirrors the retired
+    /// `partialStateIsObservedFromRealServerResponse`: the DEBUG executable with
+    /// `LOGIC_PRO_MCP_FAULT_INJECT=partial_state` still yields
+    /// `readback_unavailable`, State C, and the FAILED classification.
+    @Test(.enabled(
+        if: FileManager.default.isExecutableFile(atPath: Self.debugExecutableURL.path),
+        "Requires `swift build` (debug) before driving the debug fault seam."
+    ))
+    func debugSeamPartialStateIsObservedFromRealServerResponse() throws {
+        try assertDebugServerFault(mode: .partialState, expectedError: "readback_unavailable")
+    }
+
+    /// Drives the transport.play `__adr001b_no_write_probe` against the DEBUG
+    /// server with the fault mode armed and asserts the fault is observed from the
+    /// real wire response — the exact contract of the retired real-server tests.
+    private func assertDebugServerFault(
+        mode: QualificationFaultInjection.Mode,
+        expectedError: String
+    ) throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
+        var childEnvironment = ProcessInfo.processInfo.environment
+        childEnvironment[QualificationFaultInjection.environmentKey] = mode.rawValue
+        let result = try QualificationTransport(
+            requestTimeout: 30,
+            shutdownGrace: 1
+        ).drive(.init(
+            executableURL: Self.debugExecutableURL,
+            environment: childEnvironment,
+            expectedOperationCount: OperationRegistry.specs.count,
+            operations: [spec]
+        ))
+        let operation = try #require(result.operationResults[spec.id.rawValue])
+        let frames = result.wireFrames.filter {
+            $0.operationID == "operation_probe.\(spec.id.rawValue)"
+        }
+        #expect(frames.map(\.direction) == [.request, .response])
+        let isError = try #require(operation.isError)
+        #expect(isError)
+        let state = try #require(operation.state)
+        #expect(state == "C")
+        let error = try #require(operation.error)
+        #expect(error == expectedError)
+        #expect(operation.status == .failed)
+        let responseData = try #require(operation.responseData)
+        #expect(!responseData.contains(Data("fault_injection".utf8)))
+    }
+
+    private static let debugExecutableURL = ProcessInfo.processInfo.environment[
+        "LPMCP_TEST_DEBUG_SERVER_EXECUTABLE"
+    ].map { URL(fileURLWithPath: $0) } ?? URL(
+        fileURLWithPath: FileManager.default.currentDirectoryPath,
+        isDirectory: true
+    ).appendingPathComponent(".build/debug/LogicProMCP")
+    #endif
 
     /// TEST (A) — dead-string scan. The release binary must not contain the fault
     /// env-key bytes anywhere. RED before #399 (the string was present); GREEN

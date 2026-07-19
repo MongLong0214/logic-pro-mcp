@@ -65,7 +65,18 @@ let package = Package(
                 "LogicProMCP",
                 .product(name: "Testing", package: "swift-testing"),
             ],
-            path: "Tests/LogicProMCPTests"
+            path: "Tests/LogicProMCPTests",
+            swiftSettings: [
+                // #399 (CEO audit P0) — mirror the LogicProMCP target's
+                // configuration-scoped define on the test target. `#if
+                // QUALIFICATION_FAULT_SEAM` test code then aligns with the module
+                // under test: the seam tests compile and run in the debug build
+                // (where the module HAS the seam symbols) and are compiled out of a
+                // `-c release` test build (where the module has NONE), so the
+                // release-config test target references no excluded symbols and
+                // builds clean.
+                .define("QUALIFICATION_FAULT_SEAM", .when(configuration: .debug)),
+            ]
         ),
     ]
 )
