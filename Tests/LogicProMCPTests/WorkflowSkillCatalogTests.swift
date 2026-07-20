@@ -608,7 +608,8 @@ struct WorkflowCommandCensusTests {
             #expect(project.contains(command),
                     "logic_project.\(command) executes in the dispatcher + is documented in API.md but is missing from the census")
         }
-        #expect(WorkflowSkillCatalog.publicCommands["logic_system"]?.contains("export_support_bundle") == true)
+        let v1 = try #require(WorkflowSkillCatalog.publicCommands["logic_system"]?.contains("export_support_bundle"))
+        #expect(v1)
     }
 }
 

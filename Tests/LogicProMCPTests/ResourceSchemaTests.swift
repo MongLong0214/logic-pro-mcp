@@ -487,7 +487,7 @@ func testHealthResponseMCUDisconnected() async {
 }
 
 @Test(codexSeatbeltProcessInspectionDisabled)
-func testHealthResponseFullSchema() async {
+func testHealthResponseFullSchema() async throws {
     let cache = StateCache()
     let router = ChannelRouter()
     let mockChannel = MockChannel(id: .mcu)
@@ -509,8 +509,10 @@ func testHealthResponseFullSchema() async {
     #expect(json["logic_pro_ui_locale"] as? String == "ko-KR")
     let variants = json["logic_pro_variants"] as? [[String: Any]]
     #expect(variants?.count == 2)
-    #expect(variants?.first(where: { $0["variant"] as? String == "desktop" })?["running"] as? Bool == true)
-    #expect(variants?.first(where: { $0["variant"] as? String == "creator_studio" })?["installed"] as? Bool == false)
+    let desktopRunning = try #require(variants?.first(where: { $0["variant"] as? String == "desktop" })?["running"] as? Bool)
+    #expect(desktopRunning)
+    let creatorInstalled = try #require(variants?.first(where: { $0["variant"] as? String == "creator_studio" })?["installed"] as? Bool)
+    #expect(!creatorInstalled)
     #expect(json["process_metadata_resolved"] as? Bool != nil)
     #expect(json["mcu"] as? [String: Any] != nil)
     #expect(json["channels"] as? [[String: Any]] != nil)

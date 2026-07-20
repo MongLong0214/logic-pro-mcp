@@ -253,7 +253,7 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
     #expect(first["severity"] != nil)
     #expect(first["duration_ms"] != nil)
     let optional = try #require(first["optional"] as? Bool)
-    #expect(optional == false)
+    #expect(!optional)
 }
 
 private struct FrozenV1Remediation: Codable { let type: String; let value: String }

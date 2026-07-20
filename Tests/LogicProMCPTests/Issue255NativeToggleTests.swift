@@ -62,8 +62,10 @@ private func issue255Channel(
 
     #expect(result.isSuccess)
     let object = try #require(issue255Object(result.message))
-    #expect(object["verified"] as? Bool == true)
-    #expect(object["observed"] as? Bool == true)
+    let v1 = try #require(object["verified"] as? Bool)
+    #expect(v1)
+    let v2 = try #require(object["observed"] as? Bool)
+    #expect(v2)
     #expect(object["button"] as? String == "Count In")
 }
 
@@ -114,8 +116,11 @@ private func issue255Channel(
 
     #expect(result.isSuccess)
     let object = try #require(issue255Object(result.message))
-    #expect(object["verified"] as? Bool == true)
-    #expect(object["previous_open"] as? Bool == false)
-    #expect(object["observed_open"] as? Bool == true)
+    let v1 = try #require(object["verified"] as? Bool)
+    #expect(v1)
+    let v2 = try #require(object["previous_open"] as? Bool)
+    #expect(!v2)
+    let v3 = try #require(object["observed_open"] as? Bool)
+    #expect(v3)
     #expect(object["via"] as? String == "window-menu")
 }

@@ -99,7 +99,8 @@ struct QualificationRunnerTests {
 
         #expect(result.status != .passed)
         #expect(!result.verified)
-        #expect(result.readback?.verified == false)
+        let v1 = try #require(result.readback?.verified)
+        #expect(!v1)
     }
 
     /// #373 Phase A retired the protocolSmoke bucket for read-only operations.
@@ -130,7 +131,8 @@ struct QualificationRunnerTests {
         #expect(result.status.rawValue != "protocol_smoke")
         #expect(!result.verified)
         #expect(result.deferral?.code == .semanticMismatch)
-        #expect(result.readback?.verified == false)
+        let v1 = try #require(result.readback?.verified)
+        #expect(!v1)
     }
 
     /// The structural consequence, pinned: with every read-only spec oracled,
@@ -192,7 +194,8 @@ struct QualificationRunnerTests {
         #expect(result.status == .passed)
         #expect(result.verified)
         #expect(result.verificationKind == .semanticReadback)
-        #expect(result.readback?.verified == true)
+        let v1 = try #require(result.readback?.verified)
+        #expect(v1)
     }
 
     @Test func operationFailurePreventsLiveAxisPromotion() async throws {
@@ -308,7 +311,8 @@ struct QualificationRunnerTests {
 
         let decision = await fixture.verify(expectedSHA256: fixture.binarySHA256)
         #expect(decision.exitCode == 0)
-        #expect(try Self.resultObject(decision)["promotable"] as? Bool == true)
+        let v1 = try #require(try Self.resultObject(decision)["promotable"] as? Bool)
+        #expect(v1)
     }
 
     /// #373 Phase A inverted this test's premise, and the inversion is the
@@ -392,7 +396,8 @@ struct QualificationRunnerTests {
         let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
 
         #expect(result.exitCode == 0, "\(result.stdout)")
-        #expect(try Self.resultObject(result)["promotable"] as? Bool == true)
+        let v1 = try #require(try Self.resultObject(result)["promotable"] as? Bool)
+        #expect(v1)
     }
 
     @Test func standaloneSignerAndVerifierUseCandidateBytesWithoutExecutingCandidate() async throws {
@@ -793,7 +798,7 @@ struct QualificationRunnerTests {
         ))
     }
 
-    @Test func emptyTraceListFailsWithoutObservedEvents() {
+    @Test func emptyTraceListFailsWithoutObservedEvents() throws {
         let empty = Self.driveResult(
             specs: Array(OperationRegistry.specs.prefix(1)),
             tracePresent: false
@@ -812,7 +817,8 @@ struct QualificationRunnerTests {
         )
         let observed = Self.driveResult(specs: Array(OperationRegistry.specs.prefix(1)))
 
-        #expect(empty.traceList?.traces.isEmpty == true)
+        let v1 = try #require(empty.traceList?.traces.isEmpty)
+        #expect(v1)
         #expect(!empty.traceOK)
         #expect(!empty.allChecksPass)
         #expect(!zeroEvent.traceOK)
@@ -862,13 +868,20 @@ struct QualificationRunnerTests {
 
         #expect(operationCase.status == .passed)
         #expect(operationCase.verified)
-        #expect(evidence["handshake_ok"] as? Bool == true)
-        #expect(evidence["health_ok"] as? Bool == true)
-        #expect(evidence["catalog_count_match"] as? Bool == true)
-        #expect(evidence["trace_ok"] as? Bool == true)
-        #expect(evidence["negative_failclosed"] as? Bool == true)
-        #expect(evidence["registry_spec_found"] as? Bool == false)
-        #expect(evidence["handler_bound"] as? Bool == false)
+        let v1 = try #require(evidence["handshake_ok"] as? Bool)
+        #expect(v1)
+        let v2 = try #require(evidence["health_ok"] as? Bool)
+        #expect(v2)
+        let v3 = try #require(evidence["catalog_count_match"] as? Bool)
+        #expect(v3)
+        let v4 = try #require(evidence["trace_ok"] as? Bool)
+        #expect(v4)
+        let v5 = try #require(evidence["negative_failclosed"] as? Bool)
+        #expect(v5)
+        let v6 = try #require(evidence["registry_spec_found"] as? Bool)
+        #expect(!v6)
+        let v7 = try #require(evidence["handler_bound"] as? Bool)
+        #expect(!v7)
     }
 
     @Test func handshakeTimeoutStopsBeforeAttestation() async throws {
@@ -936,7 +949,8 @@ struct QualificationRunnerTests {
 
         #expect(operationCase.status == .notQualified)
         #expect(!operationCase.verified)
-        #expect(evidence["catalog_count_match"] as? Bool == false)
+        let v1 = try #require(evidence["catalog_count_match"] as? Bool)
+        #expect(!v1)
         let observedAxis = try #require(attestation.cases.first {
             $0.id == QualificationAxis.defaultAxis.key
         })
@@ -981,7 +995,8 @@ struct QualificationRunnerTests {
     @Test func observedAxisReadbackStaysVerifiedWhenHealthWarms() async throws {
         let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
         let driveResult = Self.driveResult(specs: specs, healthChangesAfterNegativeProbe: true)
-        #expect(driveResult.negative?.healthReadStable == false)
+        let v1 = try #require(driveResult.negative?.healthReadStable)
+        #expect(!v1)
         let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
         defer { fixture.remove() }
         try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
@@ -1028,11 +1043,15 @@ struct QualificationRunnerTests {
 
         #expect(operationCase.status == .notQualified)
         #expect(!operationCase.verified)
-        #expect(evidence["negative_failclosed"] as? Bool == true)
+        let v1 = try #require(evidence["negative_failclosed"] as? Bool)
+        #expect(v1)
         #expect(evidence["negative_state"] as? String == "C")
-        #expect(evidence["negative_write_attempted"] as? Bool == false)
-        #expect(evidence["health_read_stable"] as? Bool == true)
-        #expect(evidence["catalog_read_stable"] as? Bool == true)
+        let v2 = try #require(evidence["negative_write_attempted"] as? Bool)
+        #expect(!v2)
+        let v3 = try #require(evidence["health_read_stable"] as? Bool)
+        #expect(v3)
+        let v4 = try #require(evidence["catalog_read_stable"] as? Bool)
+        #expect(v4)
     }
 
     @Test func absentAxesRequireLocaleEvidenceOrWaiver() async throws {
@@ -1440,7 +1459,8 @@ struct QualificationRunnerTests {
         let json = try Self.resultObject(result)
 
         #expect(result.exitCode == 0)
-        #expect(json["promotable"] as? Bool == true)
+        let v1 = try #require(json["promotable"] as? Bool)
+        #expect(v1)
         #expect(Self.rejectionReasons(json).isEmpty)
     }
 
@@ -1471,7 +1491,8 @@ struct QualificationRunnerTests {
             let values = try #require(object[expected.1] as? [[String: Any]])
             if filename == "raw-transcript.json" {
                 let firstFrame = try #require(values.first)
-                #expect((firstFrame["operation_id"] as? String)?.isEmpty == false)
+                let v1 = try #require((firstFrame["operation_id"] as? String)?.isEmpty)
+                #expect(!v1)
             }
             let entry = try #require(entries.first { $0["path"] as? String == filename })
             #expect(entry["sha256"] as? String == SupportBundleBuilder.sha256(data))
@@ -1688,7 +1709,8 @@ struct QualificationRunnerTests {
                 #expect(!qualificationCase.verified)
                 #expect(qualificationCase.verificationKind == .typedDeferral)
                 #expect(qualificationCase.deferral?.code == .liveMutationNotRun)
-                #expect(qualificationCase.deferral?.detail.contains("ADR-001-c") == true)
+                let v1 = try #require(qualificationCase.deferral?.detail.contains("ADR-001-c"))
+                #expect(v1)
             }
             #expect(qualificationCase.readback != nil)
             if spec.id == .systemSagaExecute {
@@ -1701,9 +1723,11 @@ struct QualificationRunnerTests {
             let evidence = try #require(
                 JSONSerialization.jsonObject(with: Data(contentsOf: evidenceURL)) as? [String: Any]
             )
-            #expect(evidence["registry_spec_found"] as? Bool ?? false)
-            #expect(evidence["handler_bound"] as? Bool ?? false)
-            #expect((evidence["trace_started"] as? Bool ?? false) == (spec.id == .systemSagaExecute))
+            let v2 = try #require(evidence["registry_spec_found"] as? Bool)
+            #expect(v2)
+            let v3 = try #require(evidence["handler_bound"] as? Bool)
+            #expect(v3)
+            #expect((evidence["trace_started"] as? Bool ?? false) == (spec.id == .systemSagaExecute)) // test-integrity:live: top-level == compares two non-literal Bools; the "?? false" is a sub-expression, not the asserted comparison
         }
 
         #expect(FileManager.default.fileExists(atPath: fixture.manifestURL.path))

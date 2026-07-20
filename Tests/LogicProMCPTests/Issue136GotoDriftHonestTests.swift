@@ -112,7 +112,7 @@ struct Issue136GotoDriftHonestTests {
         // The MCP-level error bit must also be set so non-JSON-parsing callers
         // still see the failure.
         let resultIsError = result.isError ?? false
-        #expect(resultIsError, "a drifted goto_position must surface isError == true")
+        #expect(resultIsError, "a drifted goto_position must surface isError == true") // test-integrity:live: assertion is bare Bool resultIsError; the "== true" is inside the message string
 
         // Belt-and-suspenders: a bare verified-success payload would never carry
         // this combination. If success is reported, verified must NOT be.

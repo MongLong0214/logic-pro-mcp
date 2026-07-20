@@ -59,6 +59,7 @@ struct PromptsTests {
         let prompts = try #require(capabilities["prompts"] as? [String: Any])
 
         #expect(try #require(resources["subscribe"] as? Bool))
-        #expect(try #require(prompts["listChanged"] as? Bool) == false)
+        let v1 = try #require(prompts["listChanged"] as? Bool)
+        #expect(!v1)
     }
 }

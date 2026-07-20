@@ -3,7 +3,7 @@ import MCP
 import Testing
 @testable import LogicProMCP
 
-@Test func issue253AudioAndPluginsHelpReturnCategoryDocs() async {
+@Test func issue253AudioAndPluginsHelpReturnCategoryDocs() async throws {
     for category in ["audio", "plugins"] {
         let result = await SystemDispatcher.handle(
             command: "help",
@@ -12,7 +12,8 @@ import Testing
             cache: StateCache()
         )
 
-        #expect(result.isError == false)
+        let v1 = try #require(result.isError)
+        #expect(!v1)
         #expect(sharedToolText(result).contains("logic_\(category) commands"))
     }
 }

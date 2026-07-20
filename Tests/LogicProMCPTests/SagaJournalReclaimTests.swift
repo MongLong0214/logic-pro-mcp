@@ -426,9 +426,12 @@ struct SagaJournalReclaimTests {
             #expect(second["state"] as? String == "A")
             #expect(retry["state"] as? String == "C")
             #expect(retry["error"] as? String == "saga_outcome_unavailable")
-            #expect(retry["safe_to_retry"] as? Bool == false)
-            #expect(retry["write_attempted"] as? Bool == false)
-            #expect(retry["outcome_retained"] as? Bool == false)
+            let v1 = try #require(retry["safe_to_retry"] as? Bool)
+            #expect(!v1)
+            let v2 = try #require(retry["write_attempted"] as? Bool)
+            #expect(!v2)
+            let v3 = try #require(retry["outcome_retained"] as? Bool)
+            #expect(!v3)
             #expect(await fixture.channel.writeCount() == writesBeforeRetry)
         }
     }
@@ -455,7 +458,8 @@ struct SagaJournalReclaimTests {
             let record = try #require(status["record"] as? [String: Any])
 
             #expect(record["status"] as? String == "completed")
-            #expect(record["outcome_retained"] as? Bool == false)
+            let v1 = try #require(record["outcome_retained"] as? Bool)
+            #expect(!v1)
             #expect(record["outcome"] == nil)
         }
     }
@@ -526,7 +530,8 @@ struct SagaJournalReclaimTests {
             #expect(await fixture.channel.writeCount() == 2)
             // A shared MutationSaga would have replayed the cached outcome and
             // reported `duplicate` from its own scratch instead.
-            #expect(replay["duplicate"] as? Bool == false)
+            let v1 = try #require(replay["duplicate"] as? Bool)
+            #expect(!v1)
         }
     }
 

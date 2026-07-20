@@ -50,7 +50,8 @@ struct ADR002BProjectTargetTests {
     }
 
     private func requireStateC(_ result: CallTool.Result) throws -> [String: Any] {
-        try #require(result.isError == true)
+        let isError = try #require(result.isError)
+        #expect(isError)
         let object = try toolObject(result)
         let state = try #require(object["state"] as? String)
         #expect(state == "C")
@@ -138,7 +139,8 @@ struct ADR002BProjectTargetTests {
                 cache: cache
             )
 
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(await cache.getTracks().map(\.name) == ["Existing"])
         }
     }
@@ -321,7 +323,7 @@ struct ADR002BProjectTargetTests {
         command: String,
         params: [String: Value]
     ) async throws {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let registry = TargetRegistry()
             let (router, _) = await router(id: .appleScript)
             let result = await ProjectDispatcher.handle(
@@ -331,7 +333,8 @@ struct ADR002BProjectTargetTests {
                 cache: StateCache(),
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(await registry.currentProjectEpoch == 1)
         }
     }

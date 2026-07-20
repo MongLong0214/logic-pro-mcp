@@ -34,14 +34,16 @@ private func e2eExpectUnregistered(
     _ result: CallTool.Result,
     tool: String,
     command: String
-) {
+) throws {
     let body = e2eJSON(e2eText(result))
-    #expect(result.isError == true)
+    let v1 = try #require(result.isError)
+    #expect(v1)
     #expect(body?["state"] as? String == "C")
     #expect(body?["error"] as? String == "invalid_params")
     #expect(body?["tool"] as? String == tool)
     #expect(body?["command"] as? String == command)
-    #expect(body?["write_attempted"] as? Bool == false)
+    let v2 = try #require(body?["write_attempted"] as? Bool)
+    #expect(!v2)
 }
 
 typealias ServerStartRecorder = SharedServerStartRecorder
@@ -53,10 +55,10 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 // P1-1 (D1): `get_state` is NOT a tool command — transport reads are served by
 // the logic://transport/state resource (see ResourceSchemaTests). The tool must
 // REJECT it as unknown, not appear alive via a non-empty error string.
-@Test func testE2ETransportGetStateRejectedAsUnknownCommand() async {
+@Test func testE2ETransportGetStateRejectedAsUnknownCommand() async throws {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_transport", command: "get_state")
-    e2eExpectUnregistered(r, tool: "logic_transport", command: "get_state")
+    try e2eExpectUnregistered(r, tool: "logic_transport", command: "get_state")
 }
 
 @Test func testE2ETransportPlayDispatchesWithoutCrash() async {
@@ -110,10 +112,10 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     #expect(!e2eText(r).isEmpty)
 }
 
-@Test func testE2ETransportUnknownCommandFails() async {
+@Test func testE2ETransportUnknownCommandFails() async throws {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_transport", command: "nonexistent")
-    e2eExpectUnregistered(r, tool: "logic_transport", command: "nonexistent")
+    try e2eExpectUnregistered(r, tool: "logic_transport", command: "nonexistent")
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -122,16 +124,16 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 
 // P1-1 (D1): track reads are served by logic://tracks. get_tracks/get_selected
 // are not tool commands and must be rejected as unknown (false-green guard).
-@Test func testE2ETracksGetTracksRejectedAsUnknownCommand() async {
+@Test func testE2ETracksGetTracksRejectedAsUnknownCommand() async throws {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_tracks", command: "get_tracks")
-    e2eExpectUnregistered(r, tool: "logic_tracks", command: "get_tracks")
+    try e2eExpectUnregistered(r, tool: "logic_tracks", command: "get_tracks")
 }
 
-@Test func testE2ETracksGetSelectedRejectedAsUnknownCommand() async {
+@Test func testE2ETracksGetSelectedRejectedAsUnknownCommand() async throws {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_tracks", command: "get_selected")
-    e2eExpectUnregistered(r, tool: "logic_tracks", command: "get_selected")
+    try e2eExpectUnregistered(r, tool: "logic_tracks", command: "get_selected")
 }
 
 @Test func testE2ETracksSelectRequiresIndex() async {
@@ -225,10 +227,10 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 
 // P1-1 (D1): mixer reads are served by logic://mixer. get_state is not a tool
 // command and must be rejected as unknown (false-green guard).
-@Test func testE2EMixerGetStateRejectedAsUnknownCommand() async {
+@Test func testE2EMixerGetStateRejectedAsUnknownCommand() async throws {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_mixer", command: "get_state")
-    e2eExpectUnregistered(r, tool: "logic_mixer", command: "get_state")
+    try e2eExpectUnregistered(r, tool: "logic_mixer", command: "get_state")
 }
 
 @Test func testE2EMixerSetVolumeDispatches() async {
@@ -361,10 +363,10 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 
 // P1-1 (D1): single-strip reads are served by logic://mixer/{strip}.
 // get_channel_strip is not a tool command and must be rejected as unknown.
-@Test func testE2EMixerGetChannelStripRejectedAsUnknownCommand() async {
+@Test func testE2EMixerGetChannelStripRejectedAsUnknownCommand() async throws {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_mixer", command: "get_channel_strip", params: ["index": .string("0")])
-    e2eExpectUnregistered(r, tool: "logic_mixer", command: "get_channel_strip")
+    try e2eExpectUnregistered(r, tool: "logic_mixer", command: "get_channel_strip")
 }
 
 @Test func testE2EMixerSetVolumeRequiresParams() async {
@@ -504,10 +506,10 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 
 // P1-1 (D1): markers are served by logic://markers. get_markers is not a tool
 // command and must be rejected as unknown (false-green guard).
-@Test func testE2ENavigateGetMarkersRejectedAsUnknownCommand() async {
+@Test func testE2ENavigateGetMarkersRejectedAsUnknownCommand() async throws {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_navigate", command: "get_markers")
-    e2eExpectUnregistered(r, tool: "logic_navigate", command: "get_markers")
+    try e2eExpectUnregistered(r, tool: "logic_navigate", command: "get_markers")
 }
 
 @Test func testE2ENavigateCreateMarkerDispatches() async {
@@ -534,10 +536,10 @@ typealias ServerStartRecorder = SharedServerStartRecorder
 
 // P1-1 (D1): project info is served by logic://project/info. get_info is not a
 // tool command and must be rejected as unknown (false-green guard).
-@Test func testE2EProjectGetInfoRejectedAsUnknownCommand() async {
+@Test func testE2EProjectGetInfoRejectedAsUnknownCommand() async throws {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_project", command: "get_info")
-    e2eExpectUnregistered(r, tool: "logic_project", command: "get_info")
+    try e2eExpectUnregistered(r, tool: "logic_project", command: "get_info")
 }
 
 @Test func testE2EProjectOpenInvalidPathFails() async {
@@ -689,10 +691,10 @@ func testE2ESystemPermissionsDispatches() async {
     #expect(e2eText(r).contains("State refresh"))
 }
 
-@Test func testE2ESystemCacheStateIsNotAPublicCommand() async {
+@Test func testE2ESystemCacheStateIsNotAPublicCommand() async throws {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_system", command: "cache_state")
-    e2eExpectUnregistered(r, tool: "logic_system", command: "cache_state")
+    try e2eExpectUnregistered(r, tool: "logic_system", command: "cache_state")
 }
 
 @Test func testE2ESystemUnknownCommandFails() async {

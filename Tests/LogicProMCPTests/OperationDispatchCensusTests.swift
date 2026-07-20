@@ -113,7 +113,8 @@ struct OperationDispatchCensusTests {
             (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
         )
         #expect(body["error"] as? String == "unhandled_registered_command")
-        #expect(result.isError == true)
+        let v1 = try #require(result.isError)
+        #expect(v1)
         let hint = try #require(body["hint"] as? String)
         #expect(hint.contains("Unknown transport command: no_such_command"))
         #expect(hint.contains("play"))

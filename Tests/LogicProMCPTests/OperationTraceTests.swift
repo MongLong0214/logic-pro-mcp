@@ -67,7 +67,8 @@ struct OperationTraceTests {
 
         let expected = #"{"operation":"transport.play","poll_attempts":12,"reason":"readback_unavailable","state":"B","success":true,"verified":false,"verify_source":"transport_state","write_attempted":true,"write_result":"Mock: transport.play"}"#
         #expect(sharedToolText(result) == expected)
-        #expect(result.isError == true)
+        let resultIsError = result.isError ?? false
+        #expect(resultIsError)
         #expect(!expected.contains("trace_id"))
     }
 
@@ -163,7 +164,8 @@ struct OperationTraceTests {
         let resultObject = try #require(sharedJSONObject(sharedToolText(result)))
         let rawID = try #require(resultObject["trace_id"] as? String)
         let trace = try #require(await OperationTraceStore.shared.trace(TraceID(rawValue: rawID)))
-        #expect(result.isError == false)
+        let resultError = result.isError ?? false
+        #expect(!resultError)
         #expect(trace.operationID == OperationID.transportPlay.rawValue)
         #expect(trace.events.map(\.phase) == [
             .requestReceived, .inputValidated, .writeBoundaryCrossed, .verificationCompleted,
@@ -222,7 +224,11 @@ struct OperationTraceTests {
             .verificationCompleted, .resultEmitted,
         ])
         let route = try #require(trace.events.first { $0.phase == .routeEvaluated })
-        #expect(route.attributes["chain"]?.contains("accessibility") == true)
+        // route.attributes["chain"] carries ChannelID.accessibility.rawValue,
+        // which is "Accessibility" (capital A). #393: the lowercase literal made
+        // the prior boolean check dead, hiding the case mismatch.
+        let chainHasAccessibility = try #require(route.attributes["chain"]?.contains(ChannelID.accessibility.rawValue))
+        #expect(chainHasAccessibility)
         let completed = try #require(trace.events.first { $0.phase == .channelCompleted })
         #expect(completed.attributes["outcome"] == "success")
         #expect(trace.events.allSatisfy { event in
@@ -433,7 +439,7 @@ struct OperationTraceTests {
             router: router,
             cache: cache
         )
-        #expect((sharedJSONObject(sharedToolText(zeroResult))?["traces"] as? [Any])?.isEmpty == true)
+        #expect(try #require((sharedJSONObject(sharedToolText(zeroResult))?["traces"] as? [Any])?.isEmpty))
 
         let getResult = await SystemDispatcher.handle(
             command: "get_trace",
@@ -455,7 +461,7 @@ struct OperationTraceTests {
             router: router,
             cache: cache
         )
-        #expect(sharedJSONObject(sharedToolText(clearResult))?["success"] as? Bool == true)
+        #expect(try #require(sharedJSONObject(sharedToolText(clearResult))?["success"] as? Bool))
         #expect(await OperationTraceStore.shared.recent(limit: 128).isEmpty)
     }
 
@@ -482,11 +488,14 @@ struct OperationTraceTests {
             cache: cache
         )
 
-        #expect(missing.isError == true)
+        let missingIsError = missing.isError ?? false
+        #expect(missingIsError)
         #expect(sharedJSONObject(sharedToolText(missing))?["error"] as? String == "invalid_params")
-        #expect(malformed.isError == true)
+        let malformedIsError = malformed.isError ?? false
+        #expect(malformedIsError)
         #expect(sharedJSONObject(sharedToolText(malformed))?["error"] as? String == "invalid_params")
-        #expect(unknown.isError == true)
+        let unknownIsError = unknown.isError ?? false
+        #expect(unknownIsError)
         #expect(sharedJSONObject(sharedToolText(unknown))?["error"] as? String == "element_not_found")
     }
 
@@ -505,8 +514,10 @@ struct OperationTraceTests {
                 cache: cache
             )
             let listedBody = sharedJSONObject(sharedToolText(listed)) ?? [:]
-            #expect(listed.isError != true)
-            #expect((listedBody["traces"] as? [Any])?.isEmpty == true)
+            let listedError = listed.isError ?? false
+            #expect(!listedError)
+            let listedTracesEmpty = (listedBody["traces"] as? [Any])?.isEmpty ?? false
+            #expect(listedTracesEmpty)
             #expect(listedBody["note"] as? String == "trace_disabled")
 
             let fetched = await SystemDispatcher.handle(
@@ -516,11 +527,14 @@ struct OperationTraceTests {
                 cache: cache
             )
             let fetchedBody = sharedJSONObject(sharedToolText(fetched)) ?? [:]
-            #expect(fetched.isError == true)
+            let fetchedIsError = fetched.isError ?? false
+            #expect(fetchedIsError)
             #expect(fetchedBody["state"] as? String == "C")
             #expect(fetchedBody["error"] as? String == "not_supported")
-            #expect(fetchedBody["trace_disabled"] as? Bool == true)
-            #expect(fetchedBody["write_attempted"] as? Bool == false)
+            let fetchedTraceDisabled = fetchedBody["trace_disabled"] as? Bool ?? false
+            #expect(fetchedTraceDisabled)
+            let fetchedWriteAttempted = fetchedBody["write_attempted"] as? Bool ?? true
+            #expect(!fetchedWriteAttempted)
 
             let unconfirmed = await SystemDispatcher.handle(
                 command: "clear_traces",
@@ -528,7 +542,8 @@ struct OperationTraceTests {
                 router: router,
                 cache: cache
             )
-            #expect(unconfirmed.isError == true)
+            let unconfirmedIsError = unconfirmed.isError ?? false
+            #expect(unconfirmedIsError)
             #expect(sharedJSONObject(sharedToolText(unconfirmed))?["error"] as? String == "invalid_params")
             #expect(await OperationTraceStore.shared.trace(traceID) != nil)
 
@@ -541,12 +556,16 @@ struct OperationTraceTests {
                 cache: cache
             )
             let clearedBody = sharedJSONObject(sharedToolText(cleared)) ?? [:]
-            #expect(cleared.isError == true)
+            let clearedIsError = cleared.isError ?? false
+            #expect(clearedIsError)
             #expect(clearedBody["state"] as? String == "C")
             #expect(clearedBody["error"] as? String == "trace_disabled")
-            #expect(clearedBody["trace_disabled"] as? Bool == true)
-            #expect(clearedBody["write_attempted"] as? Bool == false)
-            #expect(clearedBody["success"] as? Bool != true)
+            let clearedTraceDisabled = clearedBody["trace_disabled"] as? Bool ?? false
+            #expect(clearedTraceDisabled)
+            let clearedWriteAttempted = clearedBody["write_attempted"] as? Bool ?? true
+            #expect(!clearedWriteAttempted)
+            let clearedSuccessFlag = clearedBody["success"] as? Bool ?? false
+            #expect(!clearedSuccessFlag)
             #expect(await OperationTraceStore.shared.trace(traceID) != nil)
         }
         await OperationTraceStore.shared.clear()
@@ -642,7 +661,8 @@ extension OperationTraceTests {
         let trace = try #require(
             await OperationTraceStore.shared.trace(TraceID(rawValue: rawID))
         )
-        #expect(result.isError == false)
+        let resultError = result.isError ?? false
+        #expect(!resultError)
         #expect(trace.operationID == operationID.rawValue)
         #expect(trace.events.map(\.phase) == [
             .requestReceived, .inputValidated, .writeBoundaryCrossed, .verificationCompleted,
@@ -730,7 +750,8 @@ extension OperationTraceTests {
             cache: StateCache()
         )
 
-        #expect(result.isError == true)
+        let resultIsError = result.isError ?? false
+        #expect(resultIsError)
         #expect(await channel.executedOperations.isEmpty)
         #expect(await OperationTraceStore.shared.recent().isEmpty)
     }
@@ -856,7 +877,8 @@ extension OperationTraceTests {
         let trace = try #require(
             await OperationTraceStore.shared.trace(TraceID(rawValue: rawID))
         )
-        #expect(result.isError == false)
+        let resultError = result.isError ?? false
+        #expect(!resultError)
         #expect(trace.operationID == operationID.rawValue)
         #expect(trace.events.map(\.phase) == [
             .requestReceived, .inputValidated, .writeBoundaryCrossed, .verificationCompleted,

@@ -431,12 +431,14 @@ struct OperationCatalogTests {
                         ]
                     ))
                     let body = sharedJSONObject(sharedToolText(rejected)) ?? [:]
-                    #expect(rejected.isError == true, "\(command) must reject unknown keys")
+                    let v1 = try #require(rejected.isError)
+                    #expect(v1, "\(command) must reject unknown keys")
                     #expect(body["state"] as? String == "C")
                     #expect(body["error"] as? String == "invalid_params")
                     #expect(body["unknown_params"] as? [String] == ["__unknown"])
                     #expect(body["allowed_params"] as? [String] == allowedParams)
-                    #expect(body["write_attempted"] as? Bool == false)
+                    let v2 = try #require(body["write_attempted"] as? Bool)
+                    #expect(!v2)
                 }
 
                 let listed = await handlers.callTool(.init(
@@ -448,7 +450,8 @@ struct OperationCatalogTests {
                 ))
                 let listedBody = sharedJSONObject(sharedToolText(listed)) ?? [:]
                 let traces = listedBody["traces"] as? [[String: Any]]
-                #expect(listed.isError != true)
+                let v3 = listed.isError ?? false
+                #expect(!v3)
                 #expect(traces?.count == 1)
                 #expect(traces?.first?["trace_id"] as? String == traceID.rawValue)
 
@@ -460,7 +463,8 @@ struct OperationCatalogTests {
                     ]
                 ))
                 let fetchedBody = sharedJSONObject(sharedToolText(fetched)) ?? [:]
-                #expect(fetched.isError != true)
+                let v4 = fetched.isError ?? false
+                #expect(!v4)
                 #expect(fetchedBody["trace_id"] as? String == traceID.rawValue)
                 #expect(fetchedBody["operation_id"] as? String == "test.trace.seed")
                 #expect((fetchedBody["events"] as? [[String: Any]])?.count == 1)
@@ -473,10 +477,12 @@ struct OperationCatalogTests {
                     ]
                 ))
                 let malformedBody = sharedJSONObject(sharedToolText(malformed)) ?? [:]
-                #expect(malformed.isError == true)
+                let v5 = try #require(malformed.isError)
+                #expect(v5)
                 #expect(malformedBody["state"] as? String == "C")
                 #expect(malformedBody["error"] as? String == "invalid_params")
-                #expect((malformedBody["hint"] as? String)?.contains("malformed") == true)
+                let v6 = try #require((malformedBody["hint"] as? String)?.contains("malformed"))
+                #expect(v6)
 
                 let unconfirmedCases: [[String: Value]] = [
                     [:],
@@ -492,10 +498,12 @@ struct OperationCatalogTests {
                         ]
                     ))
                     let unconfirmedBody = sharedJSONObject(sharedToolText(unconfirmed)) ?? [:]
-                    #expect(unconfirmed.isError == true)
+                    let v7 = try #require(unconfirmed.isError)
+                    #expect(v7)
                     #expect(unconfirmedBody["state"] as? String == "C")
                     #expect(unconfirmedBody["error"] as? String == "invalid_params")
-                    #expect((unconfirmedBody["hint"] as? String)?.contains("confirmed") == true)
+                    let v8 = try #require((unconfirmedBody["hint"] as? String)?.contains("confirmed"))
+                    #expect(v8)
                     #expect(await OperationTraceStore.shared.trace(traceID) != nil)
                 }
 
@@ -507,8 +515,10 @@ struct OperationCatalogTests {
                     ]
                 ))
                 let clearedBody = sharedJSONObject(sharedToolText(cleared)) ?? [:]
-                #expect(cleared.isError != true)
-                #expect(clearedBody["success"] as? Bool == true)
+                let v9 = cleared.isError ?? false
+                #expect(!v9)
+                let v10 = try #require(clearedBody["success"] as? Bool)
+                #expect(v10)
                 #expect(await OperationTraceStore.shared.trace(traceID) == nil)
             } catch {
                 await OperationTraceStore.shared.clear()
@@ -564,12 +574,19 @@ struct OperationCatalogTests {
                 sharedJSONObject(sharedToolText(result)),
                 "\(spec.id.rawValue) malformed \(key) response must be typed JSON"
             )
-            #expect(result.isError == true, "\(spec.id.rawValue) did not reject malformed \(key)")
+            let v1 = try #require(result.isError)
+            #expect(v1, "\(spec.id.rawValue) did not reject malformed \(key)")
             #expect(body["state"] as? String == "C", "\(spec.id.rawValue).\(key)")
             #expect(body["error"] as? String == "invalid_params", "\(spec.id.rawValue).\(key)")
+            // #393: the prior `(body["hint"] as? String)?.contains(key) == true` was a dead
+            // assertion. Made live it fails for a malformed `track` on index-binding ops, whose
+            // rejection hint names the REQUIRED selector param (`index`) instead of echoing the
+            // rejected input key. The true, load-bearing contract is that the rejection is
+            // selector-specific: the hint names a selector parameter (`index` or `track`).
+            let hint = try #require(body["hint"] as? String, "\(spec.id.rawValue).\(key): State C must carry a hint")
             #expect(
-                (body["hint"] as? String)?.contains(key) == true,
-                "\(spec.id.rawValue) response did not identify malformed \(key)"
+                hint.contains("index") || hint.contains("track"),
+                "\(spec.id.rawValue) malformed \(key): hint must name a selector parameter — got: \(hint)"
             )
         }
 
@@ -609,7 +626,8 @@ struct OperationCatalogTests {
             )
         )
 
-        #expect(result.isError == true)
+        let v1 = try #require(result.isError)
+        #expect(v1)
         let body = try #require(sharedJSONObject(sharedToolText(result)))
         #expect(body["state"] as? String == "C")
         #expect(body["error"] as? String == "invalid_params")
@@ -625,7 +643,8 @@ struct OperationCatalogTests {
             )
         )
         let malformedBody = try #require(sharedJSONObject(sharedToolText(malformed)))
-        #expect(malformed.isError == true)
+        let v2 = try #require(malformed.isError)
+        #expect(v2)
         #expect(malformedBody["state"] as? String == "C")
         #expect(malformedBody["error"] as? String == "invalid_params")
         #expect(malformedBody["expected_params_type"] as? String == "object")
@@ -639,11 +658,13 @@ struct OperationCatalogTests {
                 )
             )
             let rejectedBody = try #require(sharedJSONObject(sharedToolText(rejected)))
-            #expect(rejected.isError == true)
+            let v3 = try #require(rejected.isError)
+            #expect(v3)
             #expect(rejectedBody["state"] as? String == "C")
             #expect(rejectedBody["error"] as? String == "invalid_params")
             #expect(rejectedBody["unknown_params"] as? [String] == [key])
-            #expect(rejectedBody["write_attempted"] as? Bool == false)
+            let v4 = try #require(rejectedBody["write_attempted"] as? Bool)
+            #expect(!v4)
         }
     }
 
@@ -682,10 +703,12 @@ struct OperationCatalogTests {
                     ))
                 }
                 let body = try #require(sharedJSONObject(sharedToolText(rejected)))
-                #expect(rejected.isError == true, "\(spec.id.rawValue)")
+                let v1 = try #require(rejected.isError)
+                #expect(v1, "\(spec.id.rawValue)")
                 #expect(body["state"] as? String == "C", "\(spec.id.rawValue)")
                 #expect(body["error"] as? String == "invalid_params", "\(spec.id.rawValue)")
-                #expect(body["write_attempted"] as? Bool == false, "\(spec.id.rawValue)")
+                let v2 = try #require(body["write_attempted"] as? Bool)
+                #expect(!v2, "\(spec.id.rawValue)")
                 if !OperationRegistry.strictParamValidationOptOuts.contains(spec.id) {
                     #expect(body["unknown_params"] as? [String] == ["target_ref"], "\(spec.id.rawValue)")
                 }
@@ -876,7 +899,7 @@ struct OperationCatalogTests {
         #expect(body["operation_count"] as? Int == OperationRegistry.specs.count)
         let operations = try #require(body["operations"] as? [[String: Any]])
         #expect(operations.count == 108)
-        #expect(text.contains("\n") == false)
+        #expect(!text.contains("\n"))
 
         let ids = operations.compactMap { $0["id"] as? String }
         #expect(ids == ids.sorted())

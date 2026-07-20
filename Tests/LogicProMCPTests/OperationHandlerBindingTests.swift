@@ -257,11 +257,14 @@ struct OperationHandlerBindingTests {
             let body = try #require(sharedJSONObject(sharedToolText(result)))
             #expect(OperationHandlerRegistry.handler(tool: tool, command: command) == nil)
             #expect(OperationHandlerRegistry.fallbackHandler(tool: tool, command: command) != nil)
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(body["state"] as? String == "C")
             #expect(body["error"] as? String == "command_not_exposed")
-            #expect(body["not_exposed"] as? Bool == true)
-            #expect(body["supported"] as? Bool == false)
+            let v2 = try #require(body["not_exposed"] as? Bool)
+            #expect(v2)
+            let v3 = try #require(body["supported"] as? Bool)
+            #expect(!v3)
         }
 
         for command in ["library", "__nope__"] {
@@ -274,12 +277,14 @@ struct OperationHandlerBindingTests {
                 tool: ToolID.logicTracks.rawValue,
                 command: command
             ) == nil)
-            #expect(result.isError == true)
+            let v4 = try #require(result.isError)
+            #expect(v4)
             #expect(body["state"] as? String == "C")
             #expect(body["error"] as? String == "invalid_params")
             #expect(body["tool"] as? String == ToolID.logicTracks.rawValue)
             #expect(body["command"] as? String == command)
-            #expect(body["write_attempted"] as? Bool == false)
+            let v5 = try #require(body["write_attempted"] as? Bool)
+            #expect(!v5)
         }
 
         let unknownTool = await handlers.callTool(.init(
