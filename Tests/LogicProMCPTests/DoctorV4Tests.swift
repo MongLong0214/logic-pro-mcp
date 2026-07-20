@@ -370,7 +370,7 @@ private func doctorV4Report(
     let desktop = try #require(report.checks.first { $0.id == "mcp.claude_desktop_registration" })
     let isOptional = desktop.optional
     #expect(desktop.status == .warn || desktop.status == .manual)
-    #expect(isOptional == false)
+    #expect(!isOptional)
     #expect(desktop.skipReason != .clientNotSelected)
     #expect(report.status != .ok)
 }
@@ -431,12 +431,13 @@ private func doctorV4Report(
     #expect(SetupDoctor.staticVersion(fromStringsOutput: "3.40.1\n3.9.0\n") == .indeterminate(["3.40.1", "3.9.0"]))
 }
 
-@Test func doctorV4CheckRegistryIDsAreUniqueAndAnchored() {
+@Test func doctorV4CheckRegistryIDsAreUniqueAndAnchored() throws {
     let ids = SetupDoctor.checkDefinitions.map(\.id.rawValue)
     #expect(Set(ids).count == ids.count)
     #expect(Set(ids) == Set(SetupDoctor.DoctorCheckID.allCases.map(\.rawValue)))
     #expect(Set(SetupDoctor.remediationAnchorsByCheckID.keys).isSubset(of: Set(ids)))
-    #expect(SetupDoctor.checkDefinitionByID["updates.latest_release"]?.optionalByDefault == true)
+    let v1 = try #require(SetupDoctor.checkDefinitionByID["updates.latest_release"]?.optionalByDefault)
+    #expect(v1)
     #expect(
         SetupDoctor.checkDefinitionByID["updates.latest_release"]?.inclusionRule
             == .latestReleaseLookupAvailable
@@ -490,7 +491,7 @@ private func doctorV4Report(
     let synthesized = try #require(closed.first { $0.id == "binary.executable" })
     let isOptional = synthesized.optional
     #expect(synthesized.status == .fail)
-    #expect(isOptional == false)
+    #expect(!isOptional)
     #expect(synthesized.evidence["reason"] == "required_check_missing")
 
     let requiredIDs = SetupDoctor.requiredCheckIDs(

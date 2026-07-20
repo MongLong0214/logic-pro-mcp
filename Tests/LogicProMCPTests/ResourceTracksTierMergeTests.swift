@@ -115,7 +115,8 @@ func placeholderRowsDoNotEmitTargetRefs() async throws {
         let tracks = try #require(
             (sharedJSONObject(sharedResourceText(tracksResult))?["data"] as? [[String: Any]])?.first
         )
-        #expect(tracks["placeholder"] as? Bool == true)
+        let v1 = try #require(tracks["placeholder"] as? Bool)
+        #expect(v1)
         #expect(tracks["track_ref"] == nil)
 
         await cache.updateChannelStrips([ChannelStripState(trackIndex: 0)])
@@ -149,7 +150,7 @@ func trackStateJSONDecodeFailsClosedAndTypedRowsKeepTargetRefs() async throws {
     #expect(encodedObject["liveIdentityBacked"] == nil)
 
     let decoded = try decoder.decode(TrackState.self, from: encoded)
-    #expect(decoded.liveIdentityBacked == false)
+    #expect(!decoded.liveIdentityBacked)
 
     let legacyCache = StateCache()
     await legacyCache.updateTracks([decoded])

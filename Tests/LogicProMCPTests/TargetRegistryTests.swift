@@ -142,8 +142,8 @@ struct TargetRegistryTests {
     }
 
     @Test
-    func testRenameRejectsStaleReferenceAfterTopologyGenerationBump() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testRenameRejectsStaleReferenceAfterTopologyGenerationBump() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let registry = TargetRegistry()
             let descriptor = descriptor()
             let reference = await registry.bind(
@@ -170,15 +170,16 @@ struct TargetRegistryTests {
                 targetRegistry: registry
             )
 
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(sharedJSONObject(sharedToolText(result))?["error"] as? String == "stale_target_reference")
             #expect(await channel.executedOps.isEmpty)
         }
     }
 
     @Test
-    func testRenameRejectsStaleReferenceAfterProjectEpochBump() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testRenameRejectsStaleReferenceAfterProjectEpochBump() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let registry = TargetRegistry()
             let descriptor = descriptor()
             let reference = await registry.bind(
@@ -205,15 +206,16 @@ struct TargetRegistryTests {
                 targetRegistry: registry
             )
 
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(sharedJSONObject(sharedToolText(result))?["error"] as? String == "stale_target_reference")
             #expect(await channel.executedOps.isEmpty)
         }
     }
 
     @Test
-    func testRenameRejectsMismatchedTargetReferenceWithoutWrite() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testRenameRejectsMismatchedTargetReferenceWithoutWrite() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let registry = TargetRegistry()
             let descriptor = descriptor(index: 0, name: "Kick")
             let reference = await registry.bind(
@@ -243,15 +245,16 @@ struct TargetRegistryTests {
                 targetRegistry: registry
             )
 
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(sharedJSONObject(sharedToolText(result))?["error"] as? String == "stale_target_reference")
             #expect(await channel.executedOps.isEmpty)
         }
     }
 
     @Test
-    func testRenameAcceptsResolvedTargetReference() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testRenameAcceptsResolvedTargetReference() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let registry = TargetRegistry()
             let descriptor = descriptor(index: 0, name: "Kick")
             let reference = await registry.bind(
@@ -277,7 +280,8 @@ struct TargetRegistryTests {
                 targetRegistry: registry
             )
 
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             // rename keeps its pre-uniform `track_ref` echo (G8 backward compat)
             // AND carries the uniform `target_ref` evidence key.
             let payload = sharedJSONObject(sharedToolText(result))!
@@ -429,9 +433,9 @@ struct TargetRegistryTests {
     }
 
     @Test
-    func testRenameTargetReferenceFailsClosedWhenFeatureDisabled() async {
-        await FeatureFlags.withAdr002TargetRefForTests(false) {
-            #expect(FeatureFlags.adr002TargetRef == false)
+    func testRenameTargetReferenceFailsClosedWhenFeatureDisabled() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
+            #expect(!FeatureFlags.adr002TargetRef)
 
             let router = ChannelRouter()
             let channel = MockChannel(id: .accessibility)
@@ -449,9 +453,11 @@ struct TargetRegistryTests {
             )
 
             let body = sharedJSONObject(sharedToolText(result)) ?? [:]
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(body["error"] as? String == "target_ref_unavailable")
-            #expect(body["write_attempted"] as? Bool == false)
+            let v2 = try #require(body["write_attempted"] as? Bool)
+            #expect(!v2)
             #expect(await channel.executedOps.isEmpty)
         }
     }

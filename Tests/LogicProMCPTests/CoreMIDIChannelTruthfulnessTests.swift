@@ -323,13 +323,15 @@ private func expectCoreMIDIStateB(
 
     #expect(!result.isSuccess)
     let object = try coreMIDIHCObject(result)
-    #expect(object["success"] as? Bool == false)
+    let v1 = try #require(object["success"] as? Bool)
+    #expect(!v1)
     #expect(object["state"] as? String == "C")
     #expect(object["error"] as? String == "port_unavailable")
     #expect(object["port_name"] as? String == "Session-Port")
     #expect(object["existing_mode"] as? String == "bidirectional")
     #expect(object["requested_mode"] as? String == "send_only")
-    #expect((object["hint"] as? String)?.contains("collides with an existing port of a different mode") == true)
+    let v2 = try #require((object["hint"] as? String)?.contains("collides with an existing port of a different mode"))
+    #expect(v2)
 }
 
 @Test func testCoreMIDIChannelCreateVirtualPortErrorsWithoutManager() async {

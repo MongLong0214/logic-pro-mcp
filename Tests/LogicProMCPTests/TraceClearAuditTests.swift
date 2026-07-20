@@ -69,7 +69,8 @@ struct TraceClearAuditTests {
 
             let result = await clearTraces()
             let body = try #require(sharedJSONObject(sharedToolText(result)))
-            #expect(result.isError != true)
+            let v1 = result.isError ?? false
+            #expect(!v1)
             let success = try #require(body["success"] as? Bool)
             #expect(success)
             #expect(try #require(body["cleared_trace_count"] as? Int) == 3)
@@ -102,11 +103,13 @@ struct TraceClearAuditTests {
             await OperationTraceStore.shared.clear()
             await seedTraces(2)
             let first = await clearTraces()
-            #expect(first.isError != true)
+            let v1 = first.isError ?? false
+            #expect(!v1)
 
             await seedTraces(1)
             let second = await clearTraces()
-            #expect(second.isError != true)
+            let v2 = second.isError ?? false
+            #expect(!v2)
 
             let receiptPath = try #require(
                 sharedJSONObject(sharedToolText(second))?["receipt_path"] as? String
@@ -218,7 +221,8 @@ struct TraceClearAuditTests {
             await OperationTraceStore.shared.clear()
             await seedTraces(2)
             let result = await clearTraces()
-            #expect(result.isError != true)
+            let v1 = result.isError ?? false
+            #expect(!v1)
             let receiptPath = try #require(
                 sharedJSONObject(sharedToolText(result))?["receipt_path"] as? String
             )

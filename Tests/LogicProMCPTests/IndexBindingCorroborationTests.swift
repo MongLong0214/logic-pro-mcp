@@ -43,7 +43,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
 
 // MARK: - tracks.delete (seed set)
 
-@Test func testDeleteWithoutExpectedNameRequiresCorroboration() async {
+@Test func testDeleteWithoutExpectedNameRequiresCorroboration() async throws {
     let router = ChannelRouter()
     let mcu = VerifiedSelectMockChannel(id: .mcu)
     let keyCmd = MockChannel(id: .midiKeyCommands)
@@ -60,7 +60,8 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
 
     #expect(result.isError!, "bare-index delete must fail closed")
     #expect(corroborationErrorCode(result) == "index_binding_corroboration_required")
-    #expect(writeAttempted(result) == false)
+    let v1 = try #require(writeAttempted(result))
+    #expect(!v1)
 
     // Proof of no side effect: nothing was routed at all — not even the
     // `track.select` that precedes the delete.
@@ -70,7 +71,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     #expect(keyCmdOps.isEmpty, "track.delete must never be routed")
 }
 
-@Test func testDeleteCorroborationRequiredHintNamesBothRoutes() async {
+@Test func testDeleteCorroborationRequiredHintNamesBothRoutes() async throws {
     let router = ChannelRouter()
     await router.register(VerifiedSelectMockChannel(id: .mcu))
     await router.register(MockChannel(id: .midiKeyCommands))
@@ -87,10 +88,11 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     let hint = (object?["hint"] as? String) ?? ""
     #expect(hint.contains("expected_name"), "hint must name the corroboration route, got: \(hint)")
     #expect(hint.contains("target_ref"), "hint must name the stable-ref route, got: \(hint)")
-    #expect(object?["safe_to_retry"] as? Bool == true, "supplying the missing param is a safe retry")
+    let v1 = try #require(object?["safe_to_retry"] as? Bool)
+    #expect(v1, "supplying the missing param is a safe retry")
 }
 
-@Test func testDeleteWithMismatchedExpectedNameFailsClosed() async {
+@Test func testDeleteWithMismatchedExpectedNameFailsClosed() async throws {
     let router = ChannelRouter()
     let mcu = VerifiedSelectMockChannel(id: .mcu)
     let keyCmd = MockChannel(id: .midiKeyCommands)
@@ -110,7 +112,8 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
 
     #expect(result.isError!)
     #expect(corroborationErrorCode(result) == "target_identity_mismatch")
-    #expect(writeAttempted(result) == false)
+    let v1 = try #require(writeAttempted(result))
+    #expect(!v1)
 
     let object = sharedJSONObject(sharedToolText(result))
     #expect(object?["expected_track_name"] as? String == "Drums")
@@ -122,7 +125,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     #expect(keyCmdOps.isEmpty, "the wrong track must NOT be deleted")
 }
 
-@Test func testDeleteWithUnreadableLiveHeaderFailsClosed() async {
+@Test func testDeleteWithUnreadableLiveHeaderFailsClosed() async throws {
     let router = ChannelRouter()
     let mcu = VerifiedSelectMockChannel(id: .mcu)
     let keyCmd = MockChannel(id: .midiKeyCommands)
@@ -139,7 +142,8 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
 
     #expect(result.isError!, "an unreadable live surface must not be read as agreement")
     #expect(corroborationErrorCode(result) == "target_identity_mismatch")
-    #expect(writeAttempted(result) == false)
+    let v1 = try #require(writeAttempted(result))
+    #expect(!v1)
 
     let object = sharedJSONObject(sharedToolText(result))
     #expect(object?["reason"] as? String == "header_unreadable")
@@ -150,7 +154,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     #expect(keyCmdOps.isEmpty)
 }
 
-@Test func testDeleteWithAmbiguousLiveNameFailsClosed() async {
+@Test func testDeleteWithAmbiguousLiveNameFailsClosed() async throws {
     // THE load-bearing case. Two tracks share a name, so (index, name) stays
     // self-consistent even after they swap positions: corroboration would PASS
     // while pointing at the wrong track. Uniqueness is therefore required, and
@@ -171,7 +175,8 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
 
     #expect(result.isError!, "a matching name that is not unique proves nothing")
     #expect(corroborationErrorCode(result) == "target_name_ambiguous")
-    #expect(writeAttempted(result) == false)
+    let v1 = try #require(writeAttempted(result))
+    #expect(!v1)
 
     let object = sharedJSONObject(sharedToolText(result))
     #expect(object?["ambiguous_track_indices"] as? [Int] == [2, 5])
@@ -304,7 +309,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     #expect(keyCmdOps[0].0 == "track.duplicate")
 }
 
-@Test func testDuplicateWithMismatchedExpectedNameFailsClosed() async {
+@Test func testDuplicateWithMismatchedExpectedNameFailsClosed() async throws {
     let router = ChannelRouter()
     let keyCmd = MockChannel(id: .midiKeyCommands)
     await router.register(VerifiedSelectMockChannel(id: .mcu))
@@ -320,7 +325,8 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
 
     #expect(result.isError!)
     #expect(corroborationErrorCode(result) == "target_identity_mismatch")
-    #expect(writeAttempted(result) == false)
+    let v1 = try #require(writeAttempted(result))
+    #expect(!v1)
     let keyCmdOps = await keyCmd.executedOps
     #expect(keyCmdOps.isEmpty)
 }
@@ -344,7 +350,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     #expect(axOps.isEmpty, "the patch load must never reach the router")
 }
 
-@Test func testSetInstrumentWithMismatchedExpectedNameFailsClosed() async {
+@Test func testSetInstrumentWithMismatchedExpectedNameFailsClosed() async throws {
     let router = ChannelRouter()
     let ax = MockChannel(id: .accessibility)
     await router.register(ax)
@@ -363,7 +369,8 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
 
     #expect(result.isError!)
     #expect(corroborationErrorCode(result) == "target_identity_mismatch")
-    #expect(writeAttempted(result) == false)
+    let v1 = try #require(writeAttempted(result))
+    #expect(!v1)
     let axOps = await ax.executedOps
     #expect(axOps.isEmpty, "the wrong track's instrument must NOT be replaced")
 }
@@ -402,7 +409,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
 // suite. `plugin.insert_verified` routes to `.accessibility`; a MockChannel
 // there records whether any AX write was attempted.
 
-@Test func testInsertVerifiedWithoutExpectedNameRequiresCorroboration() async {
+@Test func testInsertVerifiedWithoutExpectedNameRequiresCorroboration() async throws {
     let router = ChannelRouter()
     let ax = MockChannel(id: .accessibility)
     await router.register(ax)
@@ -423,13 +430,14 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
 
     #expect(result.isError!)
     #expect(corroborationErrorCode(result) == "index_binding_corroboration_required")
-    #expect(writeAttempted(result) == false)
+    let v1 = try #require(writeAttempted(result))
+    #expect(!v1)
     // The guard precedes the verified-op gate AND the router — nothing routed.
     let axOps = await ax.executedOps
     #expect(axOps.isEmpty, "corroboration must fail before the AX insert is attempted")
 }
 
-@Test func testInsertVerifiedWithMismatchedExpectedNameFailsClosed() async {
+@Test func testInsertVerifiedWithMismatchedExpectedNameFailsClosed() async throws {
     let router = ChannelRouter()
     let ax = MockChannel(id: .accessibility)
     await router.register(ax)
@@ -452,7 +460,8 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
 
     #expect(result.isError!)
     #expect(corroborationErrorCode(result) == "target_identity_mismatch")
-    #expect(writeAttempted(result) == false)
+    let v1 = try #require(writeAttempted(result))
+    #expect(!v1)
 
     let object = sharedJSONObject(sharedToolText(result))
     #expect(object?["expected_track_name"] as? String == "Bass")
@@ -462,7 +471,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     #expect(axOps.isEmpty, "the wrong track's insert chain must NOT be mutated")
 }
 
-@Test func testInsertVerifiedWithAmbiguousLiveNameFailsClosed() async {
+@Test func testInsertVerifiedWithAmbiguousLiveNameFailsClosed() async throws {
     let router = ChannelRouter()
     let ax = MockChannel(id: .accessibility)
     await router.register(ax)
@@ -484,7 +493,8 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
 
     #expect(result.isError!)
     #expect(corroborationErrorCode(result) == "target_name_ambiguous")
-    #expect(writeAttempted(result) == false)
+    let v1 = try #require(writeAttempted(result))
+    #expect(!v1)
     let object = sharedJSONObject(sharedToolText(result))
     #expect(object?["ambiguous_track_indices"] as? [Int] == [2, 6])
 
@@ -492,7 +502,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     #expect(axOps.isEmpty)
 }
 
-@Test func testInsertVerifiedRejectsExpectedNameCombinedWithTargetRef() async {
+@Test func testInsertVerifiedRejectsExpectedNameCombinedWithTargetRef() async throws {
     let router = ChannelRouter()
     let ax = MockChannel(id: .accessibility)
     await router.register(ax)
@@ -515,7 +525,8 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
 
     #expect(result.isError!)
     #expect(corroborationErrorCode(result) == "invalid_params")
-    #expect(writeAttempted(result) == false)
+    let v1 = try #require(writeAttempted(result))
+    #expect(!v1)
     let axOps = await ax.executedOps
     #expect(axOps.isEmpty)
 }
@@ -562,7 +573,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     #expect(!axOps.isEmpty, "rename's legacy index path must stay open")
 }
 
-@Test func testSeedOpRejectsExpectedNameCombinedWithTargetRef() async {
+@Test func testSeedOpRejectsExpectedNameCombinedWithTargetRef() async throws {
     // Documented choice: `expected_name` + `target_ref` is rejected outright
     // rather than cross-checked. The ref path already carries its own live
     // identity + ambiguity guards (F5); accepting both would stack two binding
@@ -587,7 +598,8 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
 
     #expect(result.isError!)
     #expect(corroborationErrorCode(result) == "invalid_params")
-    #expect(writeAttempted(result) == false)
+    let v1 = try #require(writeAttempted(result))
+    #expect(!v1)
     let keyCmdOps = await keyCmd.executedOps
     #expect(keyCmdOps.isEmpty)
 }

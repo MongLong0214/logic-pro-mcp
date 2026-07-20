@@ -212,7 +212,8 @@ struct SupportBundleTests {
         // canonical prefix form is the resolver's own realpath output).
         let relative = SystemDispatcher.resolvedSupportBundleDirectory(requested: "session-a/bundle-1")
         #expect(relative != nil)
-        #expect(relative?.path.hasSuffix("/session-a/bundle-1") == true)
+        let v1 = try #require(relative?.path.hasSuffix("/session-a/bundle-1"))
+        #expect(v1)
         // Absolute path already under the root is accepted.
         #expect(SystemDispatcher.resolvedSupportBundleDirectory(
             requested: root.appendingPathComponent("abs-child").path
@@ -351,10 +352,8 @@ struct SupportBundleTests {
         )
         let successObject = try #require(sharedJSONObject(sharedToolText(success)))
         #expect(successObject["state"] as? String == "A")
-        #expect(
-            (successObject["bundle_path"] as? String)?
-                .hasSuffix("/" + output.lastPathComponent) == true
-        )
+        let successBundlePath = try #require(successObject["bundle_path"] as? String)
+        #expect(successBundlePath.hasSuffix("/" + output.lastPathComponent))
         let files = try #require(successObject["files"] as? [[String: String]])
         #expect(files == [["name": "manifest.json", "sha256": String(repeating: "a", count: 64)]])
         let traceID = try #require(successObject["trace_id"] as? String)
@@ -372,7 +371,8 @@ struct SupportBundleTests {
             supportBundleExporter: { _, _ in throw CocoaError(.fileWriteNoPermission) }
         )
         let failureObject = try #require(sharedJSONObject(sharedToolText(failure)))
-        #expect(failure.isError == true)
+        let v1 = try #require(failure.isError)
+        #expect(v1)
         #expect(failureObject["state"] as? String == "C")
         #expect(failureObject["error"] as? String == "support_bundle_export_failed")
 
@@ -387,9 +387,13 @@ struct SupportBundleTests {
             }
         )
         let defaultObject = try #require(sharedJSONObject(sharedToolText(defaultPath)))
-        #expect((defaultObject["bundle_path"] as? String)?.contains(
-            "/Library/Logs/LogicProMCP/support-bundles/"
-        ) == true)
+        let defaultBundlePath = try #require(defaultObject["bundle_path"] as? String)
+        // #393: the prior `contains("/Library/Logs/LogicProMCP/support-bundles/")` was a dead
+        // assertion; made live it fails because the DEBUG-only root override (used across this
+        // suite) repoints the containment root to a temp dir. The real invariant is that the
+        // default (empty-params) export lands UNDER the containment root, which respects the
+        // override — assert that instead of the release-only absolute path.
+        #expect(defaultBundlePath.hasPrefix(SystemDispatcher.supportBundleRoot.path))
     }
 
     @Test("public MCP handler exports locally without starting Logic")
@@ -437,7 +441,8 @@ struct SupportBundleTests {
                 "params": .object(["dir": .string("/pr011-outside-root-\(UUID().uuidString)")]),
             ]
         ))
-        #expect(invalid.isError == true)
+        let v1 = try #require(invalid.isError)
+        #expect(v1)
         #expect(sharedJSONObject(sharedToolText(invalid))?["error"] as? String == "invalid_params")
     }
 

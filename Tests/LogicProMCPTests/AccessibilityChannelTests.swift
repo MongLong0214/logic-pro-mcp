@@ -1764,7 +1764,8 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(try #require(object["state"] as? String) == "A")
     #expect(try #require(object["button"] as? String) == "Autopunch")
     #expect(try #require(object["observed"] as? Bool))
-    #expect(try #require(object["previous"] as? Bool) == false)
+    let v1 = try #require(object["previous"] as? Bool)
+    #expect(!v1)
     #expect(try #require(object["action"] as? String) == "axpress")
 }
 
@@ -1790,7 +1791,8 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
 
     #expect(result.isSuccess)
     #expect(try #require(object["success"] as? Bool))
-    #expect(try #require(object["verified"] as? Bool) == false)
+    let v1 = try #require(object["verified"] as? Bool)
+    #expect(!v1)
     #expect(try #require(object["state"] as? String) == "B")
     #expect(try #require(object["reason"] as? String) == "readback_unavailable")
     #expect(try #require(object["button"] as? String) == "Autopunch")
@@ -1818,7 +1820,8 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     let object = decodeAccessibilityJSON(result.message)
 
     #expect(!result.isSuccess)
-    #expect(try #require(object["success"] as? Bool) == false)
+    let v1 = try #require(object["success"] as? Bool)
+    #expect(!v1)
     #expect(try #require(object["state"] as? String) == "C")
     #expect(try #require(object["error"] as? String) == "element_not_found")
     let hint = try #require(object["hint"] as? String)
@@ -2713,7 +2716,8 @@ private func makeTempoSliderFixture(
     // ADR-001: zero mouse/coordinate events — the actuator is keyboard-only.
     #expect(muteKeyRecorder.mouseEvents.isEmpty)
     #expect(builder.actionCalls.contains { $0.elementID == builder.elementID(muteButton) && $0.action == kAXPressAction as String })
-    #expect((builder.attributeValue(muteButton, kAXValueAttribute as String) as? NSNumber)?.boolValue == false)
+    let v1 = try #require((builder.attributeValue(muteButton, kAXValueAttribute as String) as? NSNumber)?.boolValue)
+    #expect(!v1)
 
     let renameResult = await channel.execute(operation: "track.rename", params: ["index": "0", "name": "Lead"])
     #expect(renameResult.isSuccess)

@@ -284,7 +284,8 @@ struct IndexBindingRefRequiredTests {
         let object = try #require(sharedJSONObject(sharedToolText(refusal)))
         #expect(object["error"] as? String == "stable_target_required")
         #expect(object["state"] as? String == "C")
-        #expect(object["write_attempted"] as? Bool == false)
+        let v1 = try #require(object["write_attempted"] as? Bool)
+        #expect(!v1)
         #expect(object["requested_index"] as? Int == 3)
     }
 
@@ -303,7 +304,8 @@ struct IndexBindingRefRequiredTests {
         let refusal = try #require(result)
         let object = try #require(sharedJSONObject(sharedToolText(refusal)))
         #expect(object["error"] as? String == "stable_target_required")
-        #expect(object["write_attempted"] as? Bool == false)
+        let v1 = try #require(object["write_attempted"] as? Bool)
+        #expect(!v1)
     }
 
     @Test("refRequired: a supplied target_ref passes the guard to the ref machinery")

@@ -23,6 +23,11 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Forbid dead boolean #expect (#393 test-integrity)
+        # `#expect(<Bool> == true/false)` and kin pass unconditionally on this toolchain — they
+        # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
+        run: bash Scripts/ci-forbid-dead-expect.sh
+
       - name: Select Xcode
         # Xcode 16.4 ships Swift 6.2 — required by swift-sdk 0.11.0+ which
         # adopts the short-form `withThrowingTaskGroup { ... }` syntax. The

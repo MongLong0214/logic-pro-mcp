@@ -441,7 +441,7 @@ private func liveTransportJSON(
             #expect(try #require(result.isError as Bool?), "Expected \(testCase.command) State B to be surfaced as an error")
             #expect(dispatcherText(result).contains(#""verified":false"#))
         } else {
-            #expect(try #require(result.isError as Bool?) == false, "Expected \(testCase.command) to succeed")
+            #expect(!(try #require(result.isError as Bool?)), "Expected \(testCase.command) to succeed")
         }
         let ops = await channel.executedOps
         let op = try #require(ops.first, "\(testCase.command) should execute exactly one route")
@@ -467,7 +467,7 @@ private func liveTransportJSON(
         sleep: { _ in }
     )
 
-    #expect(try #require(result.isError as Bool?) == false)
+    #expect(!(try #require(result.isError as Bool?)))
     let executed = await channel.executedOps
     #expect(try #require(executed.first?.0) == "transport.toggle_autopunch")
 
@@ -2200,8 +2200,8 @@ private actor SelectiveFailChannel: Channel {
     #expect(armedSuccess)
     #expect(object["state"] as? String == "A")
     #expect(object["armed"] as? Int == 1)
-    #expect(object["requested_enabled"] as? Bool == true)
-    #expect(object["observed_enabled"] as? Bool == true)
+    #expect(try #require(object["requested_enabled"] as? Bool))
+    #expect(try #require(object["observed_enabled"] as? Bool))
     #expect(object["verification_source"] as? String == "mock_ax_readback")
 }
 
@@ -2253,7 +2253,7 @@ private actor SelectiveFailChannel: Channel {
     #expect(object["state"] as? String == "B")
     #expect(object["reason"] as? String == "readback_unavailable")
     #expect(object["unverifiedDisarm"] as? [Int] == [])
-    #expect(object["requested_enabled"] as? Bool == true)
+    #expect(try #require(object["requested_enabled"] as? Bool))
     #expect(object["observed_enabled"] is NSNull)
     #expect(object["verification_source"] as? String == "mock_ax_readback")
 }
@@ -2286,8 +2286,8 @@ private actor SelectiveFailChannel: Channel {
     #expect(object["reason"] as? String == "readback_unavailable")
     #expect(object["armed"] as? Int == 1)
     #expect(object["unverifiedDisarm"] as? [Int] == [0])
-    #expect(object["requested_enabled"] as? Bool == true)
-    #expect(object["observed_enabled"] as? Bool == true)
+    #expect(try #require(object["requested_enabled"] as? Bool))
+    #expect(try #require(object["observed_enabled"] as? Bool))
     #expect(object["verification_source"] as? String == "mock_ax_readback")
 }
 

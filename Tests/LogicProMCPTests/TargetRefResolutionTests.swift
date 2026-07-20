@@ -484,8 +484,8 @@ struct TargetRefResolutionTests {
     }
 
     @Test
-    func testTrackSelectFlagOnResolvesTargetRef() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testTrackSelectFlagOnResolvesTargetRef() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -495,15 +495,16 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.select") == ["index": "2"])
         }
     }
 
     @Test
-    func testTrackSelectFlagOffTargetRefFailsClosed() async {
-        await FeatureFlags.withAdr002TargetRefForTests(false) {
+    func testTrackSelectFlagOffTargetRefFailsClosed() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -513,7 +514,8 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(errorCode(result) == "target_ref_unavailable")
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await allOps(channels).isEmpty)
@@ -521,8 +523,8 @@ struct TargetRefResolutionTests {
     }
 
     @Test
-    func testTrackSelectFlagOnStaleReferenceFailsClosedNoWrite() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testTrackSelectFlagOnStaleReferenceFailsClosedNoWrite() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             await registry.bumpTopologyGeneration()
             let (router, channels) = await makeRouter()
@@ -533,15 +535,16 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(errorCode(result) == "stale_target_reference")
             #expect(await allOps(channels).isEmpty)
         }
     }
 
     @Test
-    func testTrackDeleteFlagOnStaleReferenceFailsClosedBeforeSelectSideEffect() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testTrackDeleteFlagOnStaleReferenceFailsClosedBeforeSelectSideEffect() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             await registry.bumpProjectEpoch()
             let (router, channels) = await makeRouter()
@@ -552,7 +555,8 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(errorCode(result) == "stale_target_reference")
             // The pre-delete track.select side effect must NOT have fired.
             #expect(await allOps(channels).isEmpty)
@@ -560,8 +564,8 @@ struct TargetRefResolutionTests {
     }
 
     @Test
-    func testTrackDeleteFlagOnResolvesTargetRefToSelectIndex() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testTrackDeleteFlagOnResolvesTargetRefToSelectIndex() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -571,7 +575,8 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.select") == ["index": "2"])
             #expect(await allOps(channels).contains(where: { $0.0 == "track.delete" }))
@@ -579,8 +584,8 @@ struct TargetRefResolutionTests {
     }
 
     @Test
-    func testTrackDuplicateFlagOnResolvesTargetRef() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testTrackDuplicateFlagOnResolvesTargetRef() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -590,7 +595,8 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.select") == ["index": "2"])
             #expect(await allOps(channels).contains(where: { $0.0 == "track.duplicate" }))
@@ -598,8 +604,8 @@ struct TargetRefResolutionTests {
     }
 
     @Test
-    func testTrackMuteFlagOnResolvesTargetRef() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testTrackMuteFlagOnResolvesTargetRef() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -609,15 +615,16 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.set_mute") == ["index": "2", "enabled": "true"])
         }
     }
 
     @Test
-    func testTrackMuteFlagOffRejectsTargetRefBeforeIndexValidation() async {
-        await FeatureFlags.withAdr002TargetRefForTests(false) {
+    func testTrackMuteFlagOffRejectsTargetRefBeforeIndexValidation() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -627,15 +634,16 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(errorCode(result) == "target_ref_unavailable")
             #expect(await allOps(channels).isEmpty)
         }
     }
 
     @Test
-    func testTrackArmOnlyFlagOnResolvesTargetRef() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testTrackArmOnlyFlagOnResolvesTargetRef() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -645,15 +653,16 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.set_arm") == ["index": "2", "enabled": "true"])
         }
     }
 
     @Test
-    func testTrackSetAutomationFlagOnResolvesTargetRef() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testTrackSetAutomationFlagOnResolvesTargetRef() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -663,15 +672,16 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.set_automation") == ["index": "2", "mode": "read"])
         }
     }
 
     @Test
-    func testTrackSetInstrumentFlagOnResolvesTargetRef() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testTrackSetInstrumentFlagOnResolvesTargetRef() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -681,15 +691,16 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.set_instrument") == ["index": "2", "path": "/x.patch"])
         }
     }
 
     @Test
-    func testTrackRenameFlagOnResolvesTargetRefAndEchoesTargetRef() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testTrackRenameFlagOnResolvesTargetRefAndEchoesTargetRef() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
             let (router, channels) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -699,7 +710,8 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == reference.rawValue)
             // rename keeps its pre-uniform `track_ref` alias (G8 backward compat);
             // the other 12 mutations emit only the uniform `target_ref` key.
@@ -711,8 +723,8 @@ struct TargetRefResolutionTests {
     // MARK: - Mixer dispatcher wiring
 
     @Test
-    func testMixerSetVolumeFlagOnResolvesTargetRef() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testMixerSetVolumeFlagOnResolvesTargetRef() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
             let result = await MixerDispatcher.handle(
@@ -722,15 +734,16 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "mixer.set_volume") == ["index": "2", "volume": "0.5"])
         }
     }
 
     @Test
-    func testMixerSetVolumeFlagOffTargetRefFailsClosedWithoutWrongTargetWrite() async {
-        await FeatureFlags.withAdr002TargetRefForTests(false) {
+    func testMixerSetVolumeFlagOffTargetRefFailsClosedWithoutWrongTargetWrite() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
             let before = await cache.getTracks().map {
@@ -747,9 +760,11 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(errorCode(result) == "target_ref_unavailable")
-            #expect(sharedJSONObject(sharedToolText(result))?["write_attempted"] as? Bool == false)
+            let v2 = try #require(sharedJSONObject(sharedToolText(result))?["write_attempted"] as? Bool)
+            #expect(!v2)
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await allOps(channels).isEmpty, "neither conflicting track may be written")
             let after = await cache.getTracks().map {
@@ -760,8 +775,8 @@ struct TargetRefResolutionTests {
     }
 
     @Test
-    func testMixerSetPanFlagOnResolvesTargetRef() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testMixerSetPanFlagOnResolvesTargetRef() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
             let result = await MixerDispatcher.handle(
@@ -771,15 +786,16 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "mixer.set_pan") == ["index": "2", "pan": "-0.25"])
         }
     }
 
     @Test
-    func testMixerSetVolumeFlagOnStaleReferenceFailsClosedNoWrite() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testMixerSetVolumeFlagOnStaleReferenceFailsClosedNoWrite() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             await registry.bumpTopologyGeneration()
             let (router, channels) = await makeRouter()
@@ -790,7 +806,8 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(errorCode(result) == "stale_target_reference")
             #expect(await allOps(channels).isEmpty)
         }
@@ -814,8 +831,8 @@ struct TargetRefResolutionTests {
     }
 
     @Test
-    func testPluginSetParamVerifiedFlagOnResolvesTargetRef() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testPluginSetParamVerifiedFlagOnResolvesTargetRef() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
             let result = await PluginsDispatcher.handle(
@@ -825,15 +842,16 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "plugin.set_param_verified")?["track"] == "2")
         }
     }
 
     @Test
-    func testPluginSetParamVerifiedFlagOffTargetRefFailsClosed() async {
-        await FeatureFlags.withAdr002TargetRefForTests(false) {
+    func testPluginSetParamVerifiedFlagOffTargetRefFailsClosed() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let (router, channels) = await makeRouter()
             let result = await PluginsDispatcher.handle(
@@ -843,7 +861,8 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(errorCode(result) == "target_ref_unavailable")
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await allOps(channels).isEmpty)
@@ -851,8 +870,8 @@ struct TargetRefResolutionTests {
     }
 
     @Test
-    func testPluginSetParamVerifiedFlagOnStaleReferenceFailsClosedNoWrite() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testPluginSetParamVerifiedFlagOnStaleReferenceFailsClosedNoWrite() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             await registry.bumpProjectEpoch()
             let (router, channels) = await makeRouter()
@@ -863,7 +882,8 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(errorCode(result) == "stale_target_reference")
             #expect(await allOps(channels).isEmpty)
         }
@@ -875,8 +895,8 @@ struct TargetRefResolutionTests {
     /// invalidate that ref. Pre-#353 the drift check saw the new live name and
     /// failed the next same-ref op closed; the verified-success rebind keeps it.
     @Test
-    func testRenameViaRefThenSecondOpViaSameRefResolves() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testRenameViaRefThenSecondOpViaSameRefResolves() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
             let (renameRouter, _) = await makeRouter()
             let renameResult = await TrackDispatcher.handle(
@@ -886,7 +906,8 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(renameResult.isError == false)
+            let v1 = try #require(renameResult.isError)
+            #expect(!v1)
             #expect((await registry.resolve(reference))!.descriptor.trackName == "Sub Bass")
             #expect((await cache.getTracks())[2].name == "Sub Bass")
 
@@ -898,14 +919,15 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(secondOp.isError == false)
+            let v2 = try #require(secondOp.isError)
+            #expect(!v2)
             #expect(await opParams(selectChannels, "track.select") == ["index": "2"])
         }
     }
 
     @Test
-    func testRenameViaIndexDoesNotUpdateCache() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testRenameViaIndexDoesNotUpdateCache() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (_, cache, _) = await boundTrack(index: 2, name: "Bass")
             let (router, _) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -914,7 +936,8 @@ struct TargetRefResolutionTests {
                 router: router,
                 cache: cache
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == nil)
             #expect((await cache.getTracks())[2].name == "Bass")
         }
@@ -924,8 +947,8 @@ struct TargetRefResolutionTests {
     /// DIRECTLY in Logic's UI (no server op, no rebind) still invalidates the
     /// ref — the server cannot prove it caused the change.
     @Test
-    func testExternalRenameWithoutServerOpStillFailsClosed() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testExternalRenameWithoutServerOpStillFailsClosed() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
             // User renamed the track in Logic; the cache caught up but no server
             // op / rebind ever ran.
@@ -942,7 +965,8 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(errorCode(result) == "stale_target_reference")
             #expect(await allOps(channels).isEmpty)
         }
@@ -951,8 +975,8 @@ struct TargetRefResolutionTests {
     /// A State B (unverified) rename must NOT rebind — identity is not proven.
     /// Once the cache reflects the (unverified) new name, the ref fails closed.
     @Test
-    func testRenameStateBUnverifiedDoesNotRebind() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testRenameStateBUnverifiedDoesNotRebind() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
             let router = ChannelRouter()
             await router.register(RecordingChannel(id: .accessibility, envelope: .stateB))
@@ -964,7 +988,8 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry
             )
             // State B (verified:false) rename surfaces as an error.
-            #expect(renameResult.isError == true)
+            let v1 = try #require(renameResult.isError)
+            #expect(v1)
 
             await cache.updateTracks([
                 TrackState(id: 0, name: "Kick", type: .audio),
@@ -979,7 +1004,8 @@ struct TargetRefResolutionTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(secondOp.isError == true)
+            let v2 = try #require(secondOp.isError)
+            #expect(v2)
             #expect(errorCode(secondOp) == "stale_target_reference")
             #expect(await allOps(selectChannels).isEmpty)
         }
@@ -1006,8 +1032,8 @@ struct TargetRefResolutionTests {
     /// index (drift check passes), but a live out-of-band reorder put a
     /// different-named track there. The live cross-check must fail closed.
     @Test
-    func testTrackTargetRefLiveNameMismatchFailsClosedStaleAndDoesNotWrite() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testTrackTargetRefLiveNameMismatchFailsClosedStaleAndDoesNotWrite() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
             let (router, channels) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -1018,9 +1044,11 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry,
                 liveTrackName: { $0 == 2 ? "Drums" : "Other" }
             )
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(errorCode(result) == "stale_target_reference")
-            #expect(body(result)["write_attempted"] as? Bool == false)
+            let v2 = try #require(body(result)["write_attempted"] as? Bool)
+            #expect(!v2)
             #expect(body(result)["expected_track_name"] as? String == "Bass")
             #expect(body(result)["observed_track_name"] as? String == "Drums")
             #expect(await allOps(channels).isEmpty, "no wrong-target write")
@@ -1028,8 +1056,8 @@ struct TargetRefResolutionTests {
     }
 
     @Test
-    func testTrackTargetRefDuplicateNameReorderFailsClosedAndDoesNotWrite() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testTrackTargetRefDuplicateNameReorderFailsClosedAndDoesNotWrite() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let registry = TargetRegistry()
             let descriptor = TargetDescriptor(trackIndex: 1, trackName: "Bass")
             let reference = await registry.bind(
@@ -1054,9 +1082,11 @@ struct TargetRefResolutionTests {
                 liveTrackNames: { [0: "Drums", 1: "Bass", 2: "Bass"] }
             )
             #expect(errorCode(result) == "stale_target_reference")
-            #expect(body(result)["write_attempted"] as? Bool == false)
+            let v1 = try #require(body(result)["write_attempted"] as? Bool)
+            #expect(!v1)
             #expect(body(result)["expected_track_name"] as? String == "Bass")
-            #expect(body(result)["ambiguous_live_track_name"] as? Bool == true)
+            let v2 = try #require(body(result)["ambiguous_live_track_name"] as? Bool)
+            #expect(v2)
             #expect(body(result)["ambiguous_track_indices"] as? [Int] == [2])
             #expect(await allOps(channels).isEmpty, "no wrong-target write")
         }
@@ -1064,8 +1094,8 @@ struct TargetRefResolutionTests {
 
     /// Mixer `set_volume` is the F5 sibling of the track path.
     @Test
-    func testMixerTargetRefLiveNameMismatchFailsClosedStaleAndDoesNotWrite() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testMixerTargetRefLiveNameMismatchFailsClosedStaleAndDoesNotWrite() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
             let (router, channels) = await makeRouter()
             let result = await MixerDispatcher.handle(
@@ -1077,7 +1107,8 @@ struct TargetRefResolutionTests {
                 liveTrackName: { _ in "Lead Synth" }
             )
             #expect(errorCode(result) == "stale_target_reference")
-            #expect(body(result)["write_attempted"] as? Bool == false)
+            let v1 = try #require(body(result)["write_attempted"] as? Bool)
+            #expect(!v1)
             #expect(await allOps(channels).isEmpty, "no wrong-target write")
         }
     }
@@ -1085,8 +1116,8 @@ struct TargetRefResolutionTests {
     /// F1 parity: an unreadable (nil) live name fails closed, never silently
     /// falling back to the possibly-stale cache.
     @Test
-    func testTrackTargetRefUnreadableLiveNameFailsClosedAndDoesNotWrite() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testTrackTargetRefUnreadableLiveNameFailsClosedAndDoesNotWrite() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
             let (router, channels) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -1099,8 +1130,10 @@ struct TargetRefResolutionTests {
                 liveTrackNames: { nil }
             )
             #expect(errorCode(result) == "stale_target_reference")
-            #expect(body(result)["write_attempted"] as? Bool == false)
-            #expect((body(result)["what_was_observed"] as? String)?.contains("unreadable") == true)
+            let v1 = try #require(body(result)["write_attempted"] as? Bool)
+            #expect(!v1)
+            let v2 = try #require((body(result)["what_was_observed"] as? String)?.contains("unreadable"))
+            #expect(v2)
             #expect(await allOps(channels).isEmpty, "no wrong-target write, no pre-delete select side effect")
         }
     }
@@ -1108,8 +1141,8 @@ struct TargetRefResolutionTests {
     /// GREEN passthrough: the live header still matches the bound name → resolve
     /// and write proceed exactly as before.
     @Test
-    func testTrackTargetRefLiveNameMatchStillResolvesAndWrites() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testTrackTargetRefLiveNameMatchStillResolvesAndWrites() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
             let (router, channels) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -1121,15 +1154,16 @@ struct TargetRefResolutionTests {
                 liveTrackName: { _ in "Bass" },
                 liveTrackNames: { [2: "Bass"] }
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "track.select") == ["index": "2"])
         }
     }
 
     @Test
-    func testMixerTargetRefLiveNameMatchStillResolvesAndWrites() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testMixerTargetRefLiveNameMatchStillResolvesAndWrites() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, reference) = await boundTrack(index: 2, name: "Bass")
             let (router, channels) = await makeRouter()
             let result = await MixerDispatcher.handle(
@@ -1141,7 +1175,8 @@ struct TargetRefResolutionTests {
                 liveTrackName: { _ in "Bass" },
                 liveTrackNames: { [2: "Bass"] }
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == reference.rawValue)
             #expect(await opParams(channels, "mixer.set_volume") == ["index": "2", "volume": "0.5"])
         }
@@ -1150,8 +1185,8 @@ struct TargetRefResolutionTests {
     /// Byte-invariance of the explicit-index path: no `target_ref` → no binding
     /// → the live guard is NEVER invoked, even with a mismatching probe.
     @Test
-    func testExplicitIndexPathIsByteInvariantEvenWithMismatchingLiveProbe() async {
-        await FeatureFlags.withAdr002TargetRefForTests(true) {
+    func testExplicitIndexPathIsByteInvariantEvenWithMismatchingLiveProbe() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let (registry, cache, _) = await boundTrack(index: 2, name: "Bass")
             let (router, channels) = await makeRouter()
             let result = await TrackDispatcher.handle(
@@ -1162,7 +1197,8 @@ struct TargetRefResolutionTests {
                 targetRegistry: registry,
                 liveTrackName: { _ in "Totally Different" }
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(echoedTargetRef(result) == nil)
             #expect(await opParams(channels, "track.select") == ["index": "2"])
         }

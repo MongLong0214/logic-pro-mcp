@@ -203,8 +203,10 @@ struct ADR002ATargetKindTests {
                 TargetReference(rawValue: firstPlugins[0]["plugin_insert_ref"] as! String)
             )
             #expect(binding?.kind == .pluginInsert)
-            #expect(binding?.observedFingerprint.contains("insert=0") == true)
-            #expect(binding?.observedFingerprint.contains("logic.stock.effect.gain") == true)
+            let v1 = try #require(binding?.observedFingerprint.contains("insert=0"))
+            #expect(v1)
+            let v2 = try #require(binding?.observedFingerprint.contains("logic.stock.effect.gain"))
+            #expect(v2)
             #expect((await channels[0].operations()).count == 2)
         }
     }
@@ -273,7 +275,8 @@ struct ADR002ATargetKindTests {
                 targetRegistry: registry
             )
             let volumeBody = object(volume)
-            #expect(volume.isError == false)
+            let v1 = try #require(volume.isError)
+            #expect(!v1)
             #expect(volumeBody["target_ref"] as? String == mixerReference.rawValue)
             #expect(volumeBody["target_fingerprint"] as? String == descriptor.fingerprint)
             let mixerOperationsAfterVolume = await mixerChannels[0].operations()
@@ -286,7 +289,8 @@ struct ADR002ATargetKindTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(pan.isError == false)
+            let v2 = try #require(pan.isError)
+            #expect(!v2)
             #expect(object(pan)["target_fingerprint"] as? String == descriptor.fingerprint)
 
             let pluginParams: [String: Value] = [
@@ -307,7 +311,8 @@ struct ADR002ATargetKindTests {
                 targetRegistry: registry
             )
             let setParamBody = object(setParam)
-            #expect(setParam.isError == false)
+            let v3 = try #require(setParam.isError)
+            #expect(!v3)
             #expect(setParamBody["target_ref"] as? String == pluginReference.rawValue)
             #expect(setParamBody["target_fingerprint"] as? String == pluginFingerprint)
             let pluginOperationsAfterSetParam = await pluginChannels[0].operations()
@@ -327,7 +332,8 @@ struct ADR002ATargetKindTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(insert.isError == false)
+            let v4 = try #require(insert.isError)
+            #expect(!v4)
             #expect(object(insert)["target_fingerprint"] as? String == emptyInsertFingerprint)
             let insertOperations = await insertChannels[0].operations()
             #expect(insertOperations.first?.1["track"] == "2")
@@ -373,7 +379,8 @@ struct ADR002ATargetKindTests {
                 targetRegistry: registry
             )
 
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect((await channels[0].operations()).first?.1["insert"] == "0")
         }
     }
@@ -413,7 +420,8 @@ struct ADR002ATargetKindTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(mixerResult.isError == true)
+            let v1 = try #require(mixerResult.isError)
+            #expect(v1)
             #expect(object(mixerResult)["error"] as? String == "stale_target_reference")
 
             let pluginResult = await PluginsDispatcher.handle(
@@ -431,7 +439,8 @@ struct ADR002ATargetKindTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(pluginResult.isError == true)
+            let v2 = try #require(pluginResult.isError)
+            #expect(v2)
             #expect(object(pluginResult)["error"] as? String == "stale_target_reference")
 
             let insertResult = await PluginsDispatcher.handle(
@@ -446,7 +455,8 @@ struct ADR002ATargetKindTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(insertResult.isError == true)
+            let v3 = try #require(insertResult.isError)
+            #expect(v3)
             #expect(object(insertResult)["error"] as? String == "stale_target_reference")
 
             let trackResult = await TrackDispatcher.handle(
@@ -456,7 +466,8 @@ struct ADR002ATargetKindTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(trackResult.isError == true)
+            let v4 = try #require(trackResult.isError)
+            #expect(v4)
             #expect(object(trackResult)["error"] as? String == "stale_target_reference")
             #expect((await channels[0].operations()).isEmpty)
         }
@@ -483,7 +494,8 @@ struct ADR002ATargetKindTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(object(result)["error"] as? String == "stale_target_reference")
             #expect((await channels[0].operations()).isEmpty)
             #expect(await cache.getTracks().map { "\($0.id)|\($0.name)|\($0.volume)" } == before)
@@ -508,7 +520,8 @@ struct ADR002ATargetKindTests {
                 cache: cache,
                 targetRegistry: pluginRegistry
             )
-            #expect(insert.isError == true)
+            let v2 = try #require(insert.isError)
+            #expect(v2)
             #expect(object(insert)["error"] as? String == "stale_target_reference")
             #expect((await pluginChannels[0].operations()).isEmpty)
         }
@@ -538,14 +551,15 @@ struct ADR002ATargetKindTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == true)
+            let v1 = try #require(result.isError)
+            #expect(v1)
             #expect(object(result)["error"] as? String == "target_ref_unavailable")
             #expect((await channels[0].operations()).isEmpty)
         }
     }
 
     @Test
-    func testTrackDuplicateBumpsTopologyExactlyOnce() async {
+    func testTrackDuplicateBumpsTopologyExactlyOnce() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let registry = TargetRegistry()
             let cache = await cacheWithTracks()
@@ -564,7 +578,8 @@ struct ADR002ATargetKindTests {
                 targetRegistry: registry,
                 liveTrackNames: liveTrackHeaders
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(await registry.currentTopologyGeneration == 1)
 
             let (staleRouter, staleChannels) = await router()
@@ -575,14 +590,15 @@ struct ADR002ATargetKindTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(stale.isError == true)
+            let v2 = try #require(stale.isError)
+            #expect(v2)
             #expect(object(stale)["error"] as? String == "stale_target_reference")
             #expect((await staleChannels[0].operations()).isEmpty)
         }
     }
 
     @Test
-    func testTrackSetInstrumentBumpsTopologyExactlyOnceAfterStateA() async {
+    func testTrackSetInstrumentBumpsTopologyExactlyOnceAfterStateA() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let registry = TargetRegistry()
             let cache = await cacheWithTracks()
@@ -599,13 +615,14 @@ struct ADR002ATargetKindTests {
                 targetRegistry: registry,
                 liveTrackNames: liveTrackHeaders
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(await registry.currentTopologyGeneration == 1)
         }
     }
 
     @Test
-    func testStateASetInstrumentInvalidatesPriorMixerStripReference() async {
+    func testStateASetInstrumentInvalidatesPriorMixerStripReference() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let registry = TargetRegistry()
             let cache = await cacheWithTracks()
@@ -628,7 +645,8 @@ struct ADR002ATargetKindTests {
                 targetRegistry: registry,
                 liveTrackNames: liveTrackHeaders
             )
-            #expect(mutation.isError == false)
+            let v1 = try #require(mutation.isError)
+            #expect(!v1)
             #expect(await registry.currentTopologyGeneration == 1)
 
             let (staleRouter, staleChannels) = await router()
@@ -639,14 +657,15 @@ struct ADR002ATargetKindTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(stale.isError == true)
+            let v2 = try #require(stale.isError)
+            #expect(v2)
             #expect(object(stale)["error"] as? String == "stale_target_reference")
             #expect((await staleChannels[0].operations()).isEmpty)
         }
     }
 
     @Test
-    func testLegacyPluginInsertBumpsTopologyExactlyOnceAfterStateA() async {
+    func testLegacyPluginInsertBumpsTopologyExactlyOnceAfterStateA() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let registry = TargetRegistry()
             let cache = await cacheWithTracks()
@@ -663,13 +682,14 @@ struct ADR002ATargetKindTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(result.isError == false)
+            let v1 = try #require(result.isError)
+            #expect(!v1)
             #expect(await registry.currentTopologyGeneration == 1)
         }
     }
 
     @Test
-    func testStateALegacyPluginInsertInvalidatesPriorPluginInsertReference() async {
+    func testStateALegacyPluginInsertInvalidatesPriorPluginInsertReference() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let registry = TargetRegistry()
             let cache = await cacheWithTracks()
@@ -692,7 +712,8 @@ struct ADR002ATargetKindTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(mutation.isError == false)
+            let v1 = try #require(mutation.isError)
+            #expect(!v1)
             #expect(await registry.currentTopologyGeneration == 1)
 
             let (staleRouter, staleChannels) = await router()
@@ -708,7 +729,8 @@ struct ADR002ATargetKindTests {
                 cache: cache,
                 targetRegistry: registry
             )
-            #expect(stale.isError == true)
+            let v2 = try #require(stale.isError)
+            #expect(v2)
             #expect(object(stale)["error"] as? String == "stale_target_reference")
             #expect((await staleChannels[0].operations()).isEmpty)
         }

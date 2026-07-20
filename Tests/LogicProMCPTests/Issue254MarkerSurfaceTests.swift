@@ -16,7 +16,7 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     #expect(route?.first == .accessibility)
 }
 
-@Test func issue254CreateMarkerRejectsUnsafeNamesBeforeRouting() async {
+@Test func issue254CreateMarkerRejectsUnsafeNamesBeforeRouting() async throws {
     for name in [String(repeating: "x", count: 251), "unsafe\nname"] {
         let result = await NavigateDispatcher.handle(
             command: "create_marker",
@@ -24,7 +24,8 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
             router: ChannelRouter(),
             cache: StateCache()
         )
-        #expect(result.isError == true)
+        let v1 = try #require(result.isError)
+        #expect(v1)
     }
 }
 
@@ -78,8 +79,10 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     let data = try #require(envelope["data"] as? [[String: Any]])
 
     #expect(envelope["source"] as? String == "ax_live")
-    #expect(envelope["readable"] as? Bool == true)
-    #expect(envelope["verified_empty"] as? Bool == false)
+    let v1 = try #require(envelope["readable"] as? Bool)
+    #expect(v1)
+    let v2 = try #require(envelope["verified_empty"] as? Bool)
+    #expect(!v2)
     #expect((data.first?["name"] as? String) == "Marker 1")
     #expect(await cache.getMarkers().first?.name == "Marker 1")
 }
@@ -99,7 +102,8 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     let data = try #require(envelope["data"] as? [[String: Any]])
 
     #expect(envelope["source"] as? String == "cache")
-    #expect(envelope["readable"] as? Bool == false)
+    let v1 = try #require(envelope["readable"] as? Bool)
+    #expect(!v1)
     #expect(envelope["reason"] as? String == "marker_list_not_open")
     #expect((data.first?["name"] as? String) == "Cached Marker")
     #expect(await cache.getMarkers().first?.name == "Cached Marker")

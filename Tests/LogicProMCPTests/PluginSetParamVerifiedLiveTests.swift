@@ -415,7 +415,7 @@ private func runChannelEQFixture(
 // must fail closed with stale_target_reference BEFORE any AXValue write —
 // otherwise a same-index/same-plugin collision would land a wrong-target write.
 
-@Test func testExpectedTrackNameMismatchFailsClosedStaleAndDoesNotWrite() async {
+@Test func testExpectedTrackNameMismatchFailsClosedStaleAndDoesNotWrite() async throws {
     // Live header at index 0 is "Acid Wash Bass"; the ref was bound to a track
     // whose name has since changed (its live index now holds a different track).
     let fixture = LiveFixture(beforeValue: 51)
@@ -425,7 +425,8 @@ private func runChannelEQFixture(
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "stale_target_reference")
-    #expect((obj["write_attempted"] as? Bool) == false)
+    let v1 = try #require(obj["write_attempted"] as? Bool)
+    #expect(!v1)
     #expect(obj["expected_track_name"] as? String == "Kick Bus")
     #expect(obj["observed_track_name"] as? String == "Acid Wash Bass")
     // The live slider was NEVER written — zero wrong-target write.
@@ -444,7 +445,7 @@ private func runChannelEQFixture(
     #expect(fixture.currentSliderValue == 60)
 }
 
-@Test func testDuplicateLiveTrackNameFailsClosedBeforeWrite() async {
+@Test func testDuplicateLiveTrackNameFailsClosedBeforeWrite() async throws {
     let fixture = LiveFixture(beforeValue: 51, otherTracks: 1, duplicateTrackNameAt: 1)
     var params = thresholdParams(value: "60")
     params["expected_track_name"] = trackName
@@ -452,8 +453,10 @@ private func runChannelEQFixture(
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "stale_target_reference")
-    #expect((obj["write_attempted"] as? Bool) == false)
-    #expect(obj["ambiguous_live_track_name"] as? Bool == true)
+    let v1 = try #require(obj["write_attempted"] as? Bool)
+    #expect(!v1)
+    let v2 = try #require(obj["ambiguous_live_track_name"] as? Bool)
+    #expect(v2)
     #expect(obj["ambiguous_track_indices"] as? [Int] == [1])
     #expect(fixture.currentSliderValue == 51)
 }
@@ -494,7 +497,8 @@ private func runChannelEQFixture(
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "readback_mismatch")
-    #expect(try #require(obj["verified"] as? Bool) == false)
+    let v1 = try #require(obj["verified"] as? Bool)
+    #expect(!v1)
     #expect(try #require(obj["write_attempted"] as? Bool))
     #expect(obj["requested_normalized"] as? Double == 3.0)
     #expect(obj["observed_normalized"] as? Double == 1.0)
@@ -505,7 +509,8 @@ private func runChannelEQFixture(
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "unsupported_param_readback")
-    #expect(try #require(obj["write_attempted"] as? Bool) == false)
+    let v1 = try #require(obj["write_attempted"] as? Bool)
+    #expect(!v1)
 }
 
 // MARK: - State C: tolerance exceeded → readback_mismatch + rollback
@@ -552,13 +557,14 @@ private func runChannelEQFixture(
 
 // MARK: - State C: window not found → window_open_failed
 
-@Test func testNoOpenPluginWindowIsWindowOpenFailed() async {
+@Test func testNoOpenPluginWindowIsWindowOpenFailed() async throws {
     let fixture = LiveFixture(beforeValue: 51, pluginWindowPresent: false)
     let obj = await runLive(fixture: fixture, params: thresholdParams())
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "window_open_failed")
     #expect(!((obj["write_attempted"] as? Bool)!))
-    #expect(obj["opener_action_attempted"] as? Bool == true)
+    let v1 = try #require(obj["opener_action_attempted"] as? Bool)
+    #expect(v1)
     #expect(obj["requested_window_title"] as? String == trackName)
     #expect(obj["requested_slider_description"] as? String == "Threshold")
     let windowCandidates = obj["window_candidates"] as? [[String: Any]]
@@ -625,7 +631,7 @@ private func runChannelEQFixture(
     #expect(fixture.currentSliderValue == 60)
 }
 
-@Test func testProductionOpenerRejectsOpenedWindowWithoutRequestedSlider() async {
+@Test func testProductionOpenerRejectsOpenedWindowWithoutRequestedSlider() async throws {
     let fixture = LiveFixture(
         thresholdDescription: "Output Gain",
         beforeValue: 51,
@@ -636,15 +642,18 @@ private func runChannelEQFixture(
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "window_open_failed")
-    #expect(obj["write_attempted"] as? Bool == false)
-    #expect(obj["opener_action_attempted"] as? Bool == true)
+    let v1 = try #require(obj["write_attempted"] as? Bool)
+    #expect(!v1)
+    let v2 = try #require(obj["opener_action_attempted"] as? Bool)
+    #expect(v2)
     let windowCandidates = obj["window_candidates"] as? [[String: Any]]
     let sliders = windowCandidates?.last?["slider_descriptions"] as? [String]
-    #expect(sliders?.contains("Output Gain") == true)
+    let v3 = try #require(sliders?.contains("Output Gain"))
+    #expect(v3)
     #expect(fixture.currentSliderValue == 51)
 }
 
-@Test func testWrongObservedPluginFailsClosedBeforeWindowAcquisition() async {
+@Test func testWrongObservedPluginFailsClosedBeforeWindowAcquisition() async throws {
     let fixture = LiveFixture(
         pluginSlotName: "Gain",
         beforeValue: 51,
@@ -655,11 +664,12 @@ private func runChannelEQFixture(
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "target_plugin_mismatch")
-    #expect(obj["write_attempted"] as? Bool == false)
+    let v1 = try #require(obj["write_attempted"] as? Bool)
+    #expect(!v1)
     #expect(fixture.currentSliderValue == 51)
 }
 
-@Test func testAmbiguousSameTrackParameterWindowsFailClosed() async {
+@Test func testAmbiguousSameTrackParameterWindowsFailClosed() async throws {
     let fixture = LiveFixture(beforeValue: 51)
     let b = fixture.builder
     let duplicateWindow = b.element(3000)
@@ -688,11 +698,12 @@ private func runChannelEQFixture(
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "window_identity_unresolved")
-    #expect(obj["write_attempted"] as? Bool == false)
+    let v1 = try #require(obj["write_attempted"] as? Bool)
+    #expect(!v1)
     #expect(fixture.currentSliderValue == 51)
 }
 
-@Test func testWrongWindowIdentityFailsClosed() async {
+@Test func testWrongWindowIdentityFailsClosed() async throws {
     let fixture = LiveFixture(beforeValue: 51, pluginWindowPresent: false)
     let b = fixture.builder
     let wrongWindow = b.element(3100)
@@ -721,12 +732,13 @@ private func runChannelEQFixture(
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "window_open_failed")
-    #expect(obj["write_attempted"] as? Bool == false)
+    let v1 = try #require(obj["write_attempted"] as? Bool)
+    #expect(!v1)
     #expect(fixture.currentSliderValue == 51)
     #expect(b.attributeValue(wrongSlider, kAXValueAttribute as String) as? Double == 51)
 }
 
-@Test func testAmbiguousWindowAppearingAfterSlotPressFailsClosed() async {
+@Test func testAmbiguousWindowAppearingAfterSlotPressFailsClosed() async throws {
     let fixture = LiveFixture(beforeValue: 51, openWindowOnSlotPress: true)
     let b = fixture.builder
     let duplicateWindow = b.element(3300)
@@ -755,12 +767,13 @@ private func runChannelEQFixture(
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "window_identity_unresolved")
-    #expect(obj["write_attempted"] as? Bool == false)
+    let v1 = try #require(obj["write_attempted"] as? Bool)
+    #expect(!v1)
     #expect(fixture.currentSliderValue == 51)
     #expect(b.attributeValue(duplicateSlider, kAXValueAttribute as String) as? Double == 51)
 }
 
-@Test func testAmbiguousRequestedSlidersFailClosed() async {
+@Test func testAmbiguousRequestedSlidersFailClosed() async throws {
     let fixture = LiveFixture(beforeValue: 51)
     let b = fixture.builder
     let duplicateSlider = b.element(3200)
@@ -773,7 +786,8 @@ private func runChannelEQFixture(
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "window_identity_unresolved")
-    #expect(obj["write_attempted"] as? Bool == false)
+    let v1 = try #require(obj["write_attempted"] as? Bool)
+    #expect(!v1)
     #expect(fixture.currentSliderValue == 51)
 }
 

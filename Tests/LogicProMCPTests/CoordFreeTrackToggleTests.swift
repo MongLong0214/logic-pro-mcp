@@ -222,10 +222,12 @@ struct CoordFreeTrackToggleTests {
         #expect(result.isSuccess)
         let obj = object(result.message)
         #expect(obj?["state"] as? String == "A")
-        #expect(obj?["verified"] as? Bool == true)
+        let v1 = try #require(obj?["verified"] as? Bool)
+        #expect(v1)
         #expect(obj?["action"] as? String == "press")
         #expect(obj?["button"] as? String == "Solo")
-        #expect(boolValue(f, solo) == true)
+        let v2 = try #require(boolValue(f, solo))
+        #expect(v2)
         #expect(key.keyEvents.isEmpty)
         #expect(key.mouseEvents.isEmpty)
     }
@@ -252,7 +254,8 @@ struct CoordFreeTrackToggleTests {
         let obj = object(result.message)
         #expect(obj?["state"] as? String == "A")
         #expect(obj?["action"] as? String == "press")
-        #expect(boolValue(f, solo) == true)
+        let v1 = try #require(boolValue(f, solo))
+        #expect(v1)
     }
 
     @Test("solo: AXPress no-ops, exclusive-select + key 's' flips → State A keyboard-solo")
@@ -341,7 +344,8 @@ struct CoordFreeTrackToggleTests {
         let obj = object(result.message)
         #expect(obj?["state"] as? String == "A")
         #expect(obj?["action"] as? String == "keyboard-mute")
-        #expect(boolValue(f, mute) == true)
+        let v1 = try #require(boolValue(f, mute))
+        #expect(v1)
         // The natural-primary AXPress was still tried first (its return ignored)…
         #expect(f.builder.actionCalls.contains {
             $0.elementID == f.builder.elementID(mute) && $0.action == kAXPressAction as String
@@ -363,7 +367,8 @@ struct CoordFreeTrackToggleTests {
         let obj = object(result.message)
         #expect(obj?["state"] as? String == "C")
         #expect(obj?["error"] as? String == "ax_write_failed")
-        #expect(boolValue(f, f.mute[0]) == false)
+        let v1 = try #require(boolValue(f, f.mute[0]))
+        #expect(!v1)
         // The key WAS attempted (selection was exclusive) but nothing flipped —
         // and CRUCIALLY no coordinate rung ran to "rescue" it.
         #expect(key.keyEvents.contains(AccessibilityChannel.trackMuteKeyCode))
@@ -395,14 +400,16 @@ struct CoordFreeTrackToggleTests {
         #expect(obj?["state"] as? String == "A")
         #expect(obj?["action"] as? String == "keyboard-arm")
         #expect(obj?["button"] as? String == "Record")
-        #expect(boolValue(f, arm) == true)
+        let v1 = try #require(boolValue(f, arm))
+        #expect(v1)
         // The RESOLVED chord (code + modifier flags) was posted, ZERO mouse, and
         // no bare-key path was used.
         #expect(key.flaggedKeyEvents.contains { $0.code == armCode && $0.flags == armFlags })
         #expect(key.keyEvents.isEmpty)
         #expect(key.mouseEvents.isEmpty)
         // Honesty: transport did not start recording.
-        #expect(boolValue(f, f.recordCheckbox) == false)
+        let v2 = try #require(boolValue(f, f.recordCheckbox))
+        #expect(!v2)
     }
 
     @Test("arm fails closed (State C) with the exact 'Toggle Track Record Enable' key-command hint")
@@ -445,12 +452,14 @@ struct CoordFreeTrackToggleTests {
         let obj = object(result.message)
         #expect(obj?["state"] as? String == "C")
         #expect(obj?["error"] as? String == "ax_write_failed")
-        #expect(obj?["recording_started"] as? Bool == true)
+        let v1 = try #require(obj?["recording_started"] as? Bool)
+        #expect(v1)
         let hint = obj?["hint"] as? String ?? ""
         #expect(hint.contains("transport recording"))
         #expect(hint.contains("Toggle Track Record Enable"))
         // The arm checkbox was never (falsely) claimed armed.
-        #expect(boolValue(f, f.arm[0]) == false)
+        let v2 = try #require(boolValue(f, f.arm[0]))
+        #expect(!v2)
         #expect(key.mouseEvents.isEmpty)
     }
 
@@ -765,7 +774,8 @@ struct CoordFreeTrackToggleTests {
         // selection could not be proven exclusive, so no track was toggled.
         #expect(key.keyEvents.isEmpty)
         #expect(key.mouseEvents.isEmpty)
-        #expect(boolValue(f, f.mute[0]) == false)
+        let v1 = try #require(boolValue(f, f.mute[0]))
+        #expect(!v1)
     }
 
     @Test("frontmost guard: mute, solo, and arm refuse when Logic never becomes frontmost")
@@ -1019,7 +1029,7 @@ struct CoordFreeTrackToggleTests {
     }
 
     @Test("retry halt barrier: late first post lands → no second synthetic key")
-    func syntheticKeyRetryFreshReadPreventsDoubleToggle() {
+    func syntheticKeyRetryFreshReadPreventsDoubleToggle() throws {
         let f = makeToggleFixture()
         let key = KeyMouseRecorder()
         let activation = ActivationProbe()
@@ -1052,7 +1062,8 @@ struct CoordFreeTrackToggleTests {
         }())
         #expect(key.keyEvents.count == 1)
         #expect(activation.calls == 1)
-        #expect(readValue() == true)
+        let v1 = try #require(readValue())
+        #expect(v1)
     }
 
     @Test("synthetic key retry is bounded at three attempts when value never flips")
@@ -1575,7 +1586,8 @@ struct CoordFreeTrackToggleTests {
         let obj = object(result.message)
         #expect(obj?["state"] as? String == "C")
         #expect(obj?["error"] as? String == "readback_mismatch")
-        #expect(obj?["recording_stopped"] as? Bool == true)
+        let v1 = try #require(obj?["recording_stopped"] as? Bool)
+        #expect(v1)
         #expect(boolValue(f, f.arm[0])!)
         #expect(!boolValue(f, f.recordCheckbox)!)
         #expect(key.keyEvents.count == 0)
