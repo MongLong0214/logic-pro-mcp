@@ -89,6 +89,21 @@ private final class AXMouseHelperRecorder: @unchecked Sendable {
     #expect(recorder.sleeps == [12_000, 12_000])
 }
 
+/// #413 no-late-key-post: typeText checks cancellation before EACH code unit, so a
+/// deadline firing mid-string stops posting further units and reports incomplete.
+@Test func axMouseHelperTypeTextStopsPostingOnMidStringCancellation() {
+    let recorder = AXMouseHelperRecorder()
+    // isCancelled flips true once two units have been posted, so the third is never
+    // posted.
+    let completed = AXMouseHelper.typeText(
+        "ABCD", runtime: recorder.runtime(),
+        isCancelled: { recorder.unicodeEvents.count >= 2 }
+    )
+
+    #expect(!completed)
+    #expect(recorder.unicodeEvents == [65, 66])
+}
+
 @Test func axMouseHelperKeyboardEventsCarryExplicitFlagsAndClearChordState() throws {
     let source = try #require(CGEventSource(stateID: .combinedSessionState))
     let chordFlags: CGEventFlags = [.maskControl, .maskShift]

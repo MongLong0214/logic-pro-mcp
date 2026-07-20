@@ -191,7 +191,10 @@ struct QualificationOperationResult: Equatable, Sendable {
         return QualificationReadbackEvidence(
             source: readbackSource,
             requestID: readbackRequestID,
-            verified: mutability == .mutating || semanticReadbackValidated == true,
+            // A mutating deferral (e.g. a consent-gated zero-write refusal, #413)
+            // must NOT claim its nested readback verified — only a passed
+            // qualification does.
+            verified: status == .passed,
             sha256: SupportBundleBuilder.sha256(readbackArtifactData)
         )
     }
@@ -266,7 +269,10 @@ struct QualificationOperationResult: Equatable, Sendable {
     private var isTypedZeroWriteRefusal: Bool {
         isError == true
             && state == "C"
-            && error == "invalid_params"
+            // setup_arm_key's no-write probe refuses consent-first with
+            // `consent_required` (before param validation); every other mutating
+            // op's no-write probe is an `invalid_params` typed refusal (#413).
+            && ["consent_required", "invalid_params"].contains(error)
             && writeAttempted == false
     }
 

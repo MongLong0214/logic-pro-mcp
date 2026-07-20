@@ -249,6 +249,18 @@ final class LogicMutationGate: @unchecked Sendable {
         defer { lock.unlock() }
         return activeOperation
     }
+
+    /// Whether `claim` STILL owns the gate: its epoch matches and a holder is
+    /// active. A successor that reclaimed the gate bumps `epoch` in `tryAcquire`,
+    /// so the predecessor's claim then reads false and must stop mutating.
+    /// `markTimedOut` does NOT bump `epoch` (it only starts the reclaim grace), so
+    /// a timed-out holder still owns the gate during its own grace window —
+    /// ownership transfers only when a successor actually acquires (epoch++).
+    func stillOwns(_ claim: Claim) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return epoch == claim.epoch && activeOperation != nil
+    }
 }
 
 /// Main MCP server for Logic Pro integration.
@@ -437,6 +449,38 @@ actor LogicProServer {
                 let name = params.name
                 let command = params.arguments?["command"]?.stringValue ?? ""
                 let rawCmdParams = params.arguments?["params"]
+                // Consent-first (#413): setup_arm_key must refuse before strict-param
+                // validation, the mutation gate, the trace, and any activation when
+                // consent is absent, so the one-time Key Commands config is never
+                // touched — not even probed — without explicit consent.
+                if name == ToolID.logicSystem.rawValue, command == "setup_arm_key",
+                   let refusal = SystemDispatcher.setupArmConsentRequiredResult(
+                    rawCmdParams?.objectValue ?? [:]
+                   ) {
+                    return refusal
+                }
+                // #413: an optional operator override of setup_arm_key's deadline
+                // (LOGIC_PRO_MCP_SETUP_DEADLINE_MS). Read ONCE here at dispatch
+                // entry, AFTER consent and BEFORE the gate/trace/activation. A
+                // malformed value fails closed as State C with zero side effects; a
+                // valid one becomes a REAL shorter deadline on the actual path below.
+                var setupDeadlineOverride: Double?
+                if name == ToolID.logicSystem.rawValue, command == "setup_arm_key" {
+                    switch SystemDispatcher.parseSetupDeadlineOverride(
+                        ProcessInfo.processInfo.environment[SystemDispatcher.setupDeadlineEnvVar]
+                    ) {
+                    case .unset:
+                        setupDeadlineOverride = nil
+                    case .seconds(let seconds):
+                        setupDeadlineOverride = seconds
+                        Log.info(
+                            "setup_arm_key deadline overridden to \(seconds)s via \(SystemDispatcher.setupDeadlineEnvVar)",
+                            subsystem: "server"
+                        )
+                    case .invalid(let raw):
+                        return SystemDispatcher.setupArmDeadlineConfigInvalidResult(raw: raw)
+                    }
+                }
                 if let invalidParams = Self.strictParamContainerValidationResult(
                     tool: name,
                     command: command,
@@ -545,6 +589,9 @@ actor LogicProServer {
                 return await Self.runWithDeadline(
                     tool: name,
                     command: command,
+                    // #413: nil for every command except a setup_arm_key run that
+                    // set a valid LOGIC_PRO_MCP_SETUP_DEADLINE_MS override.
+                    deadlineOverride: setupDeadlineOverride,
                     outerAbsoluteDeadline: sagaLifecycleDeadline
                         .map { Self.sagaOuterAbsoluteDeadline(lifecycleDeadline: $0) },
                     mutationGate: sagaControlPath ? nil : mutationGate,
@@ -746,7 +793,16 @@ actor LogicProServer {
             // opened in the caller would be invisible to the dispatcher and
             // every seam below it.
             let traceContext = OperationTraceContext(
-                mutationGateAcquired: heldClaim != nil
+                mutationGateAcquired: heldClaim != nil,
+                // #413: expose live gate ownership to deep mutating seams. Task
+                // cancellation already flips at the deadline instant — ≥ the reclaim
+                // grace before any successor can acquire — so this is the explicit
+                // ownership invariant and an independently testable seam, not a
+                // behavior change. Returns true when no gate is held.
+                ownsGate: { [heldMutationGate, heldClaim] in
+                    guard let heldMutationGate, let heldClaim else { return true }
+                    return heldMutationGate.stillOwns(heldClaim)
+                }
             )
             let workTask = Task.detached(priority: .userInitiated) {
                 let result = await OperationTraceContext.$current.withValue(traceContext) {

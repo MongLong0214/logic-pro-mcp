@@ -89,9 +89,21 @@ final class OperationTraceContext: @unchecked Sendable {
     /// phases with honest zero-wait semantics.
     let mutationGateAcquired: Bool
 
-    init(parentTraceID: TraceID? = nil, mutationGateAcquired: Bool = false) {
+    /// Whether THIS operation still owns the mutation gate. Flows to deep mutating
+    /// seams (e.g. the record-arm key-command setup, #413) so they can re-check
+    /// ownership immediately before each forward mutation and stop if a successor
+    /// reclaimed the gate. Defaults to `{ true }` when no gate is held (read-only
+    /// ops, tests) so those paths are unaffected.
+    let ownsGate: @Sendable () -> Bool
+
+    init(
+        parentTraceID: TraceID? = nil,
+        mutationGateAcquired: Bool = false,
+        ownsGate: @escaping @Sendable () -> Bool = { true }
+    ) {
         self.parentTraceID = parentTraceID
         self.mutationGateAcquired = mutationGateAcquired
+        self.ownsGate = ownsGate
     }
 
     var traceID: TraceID? {

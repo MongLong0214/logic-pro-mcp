@@ -57,6 +57,9 @@ enum HonestContract {
         case systemEventsAutomationDenied = "system_events_automation_denied"
         case logicNotRunning = "logic_not_running"
         case invalidParams = "invalid_params"
+        /// A consent-gated configuration write was requested without explicit
+        /// consent, so nothing was touched (setup_arm_key, #413).
+        case consentRequired = "consent_required"
         case readbackUnavailable = "readback_unavailable"
         case readbackMismatch = "readback_mismatch"
         /// Operation explicitly not implemented via this channel / build of

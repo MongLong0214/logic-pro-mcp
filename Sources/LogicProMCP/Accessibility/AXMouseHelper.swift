@@ -156,11 +156,23 @@ enum AXMouseHelper {
         }
     }
 
-    static func typeText(_ s: String, runtime: Runtime = .production) {
+    /// Post `s` as real keystrokes, ONE UTF-16 code unit at a time. `isCancelled`
+    /// is checked immediately BEFORE each unit, so a command deadline firing mid-
+    /// string stops posting further units (no new key after the deadline, #413).
+    /// Returns true when the whole string was posted, false when cancellation
+    /// stopped it part-way so the caller can fail closed.
+    @discardableResult
+    static func typeText(
+        _ s: String,
+        runtime: Runtime = .production,
+        isCancelled: () -> Bool = { false }
+    ) -> Bool {
         for codeUnit in s.utf16 {
+            if isCancelled() { return false }
             _ = runtime.postUnicodeScalar(codeUnit)
             runtime.sleepMicros(12_000)
         }
+        return true
     }
 
     /// Post a Return key tap.

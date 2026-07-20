@@ -23,6 +23,9 @@ struct CoordFreeTrackToggleTests {
         var mouseEvents: [(type: CGEventType, point: CGPoint, clickCount: Int64)] = []
         var onKeyEvent: ((CGKeyCode) -> Void)?
         var onFlaggedKey: ((CGKeyCode, CGEventFlags) -> Void)?
+        // When false, `postFlaggedKeyEvent` reports a FAILED post (still records the
+        // attempt and runs onFlaggedKey) — models a chord post that Logic rejected.
+        var flaggedKeyPostSucceeds = true
 
         func runtime() -> AXMouseHelper.Runtime {
             AXMouseHelper.Runtime(
@@ -40,7 +43,7 @@ struct CoordFreeTrackToggleTests {
                 postFlaggedKeyEvent: { code, flags in
                     self.flaggedKeyEvents.append((code, flags))
                     self.onFlaggedKey?(code, flags)
-                    return true
+                    return self.flaggedKeyPostSucceeds
                 }
             )
         }
@@ -449,6 +452,249 @@ struct CoordFreeTrackToggleTests {
         // The arm checkbox was never (falsely) claimed armed.
         #expect(boolValue(f, f.arm[0]) == false)
         #expect(key.mouseEvents.isEmpty)
+    }
+
+    // MARK: - #413 arm-key auto-setup verifier is CHORD-ONLY
+
+    private func armVerifyRuntimes(
+        _ f: ToggleFixture,
+        key: KeyMouseRecorder,
+        performAction: (@Sendable (AXUIElement, String) -> Bool)? = nil
+    ) -> (AXLogicProElements.Runtime, AXMouseHelper.Runtime, ProcessUtils.Runtime) {
+        let logic = f.builder.makeLogicRuntime(
+            appElement: f.app, setAttributeHandler: nil, performActionHandler: performAction
+        )
+        return (logic, key.runtime(), noopProcessRuntime())
+    }
+
+    @Test("#413 arm-setup verify: a chord-driven arm flip (and restore) is proven → .verified")
+    func armSetupVerifyReturnsVerifiedOnChordDrivenFlip() throws {
+        let f = makeToggleFixture()
+        let arm = f.arm[0]
+        let key = KeyMouseRecorder()
+        // The chord TOGGLES record-enable (Logic's "Toggle Track Record Enable").
+        key.onFlaggedKey = { code, _ in
+            guard code == 14 else { return }
+            let armedNow = (f.builder.attributeValue(arm, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
+            f.builder.setAttribute(arm, kAXValueAttribute as String, armedNow ? 0 : 1)
+        }
+        let (logic, keyRuntime, proc) = armVerifyRuntimes(f, key: key)
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: 14, modifiers: [.maskControl, .maskShift],
+            runtime: logic, keyRuntime: keyRuntime, processRuntime: proc
+        )
+        #expect(result == .verified)
+        // Flip + restore = two chord posts; arm ends back at its prior value; no
+        // bare key and no mouse ever.
+        #expect(key.flaggedKeyEvents.allSatisfy { $0.code == 14 && $0.flags == [.maskControl, .maskShift] })
+        let armedAfter = try #require(boolValue(f, arm))
+        #expect(!armedAfter)
+        #expect(key.keyEvents.isEmpty)
+        #expect(key.mouseEvents.isEmpty)
+    }
+
+    @Test("#413 arm-setup verify is CHORD-ONLY: a non-chord path that would flip arm is IGNORED → .unmapped")
+    func armSetupVerifyIgnoresNonChordArmFlip() throws {
+        let f = makeToggleFixture()
+        let arm = f.arm[0]
+        let key = KeyMouseRecorder()   // the chord does nothing (mapping absent)
+        // AXPress on the arm checkbox WOULD flip it — but the chord-only verify
+        // must never press it, so arm stays put and no existing mapping is
+        // (falsely) claimed. Regression guard: driving the full toggle ladder here
+        // would let a non-chord rung fabricate the flip and report a false State A.
+        let (logic, keyRuntime, proc) = armVerifyRuntimes(f, key: key) { element, action in
+            if element == arm, action == kAXPressAction as String {
+                f.builder.setAttribute(arm, kAXValueAttribute as String, 1)
+            }
+            return true
+        }
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: 14, modifiers: [.maskControl, .maskShift],
+            runtime: logic, keyRuntime: keyRuntime, processRuntime: proc
+        )
+        #expect(result == .unmapped)
+        // Never flipped — AXPress was never invoked on the arm checkbox.
+        let armedAfter = try #require(boolValue(f, arm))
+        #expect(!armedAfter)
+        #expect(!f.builder.actionCalls.contains {
+            $0.elementID == f.builder.elementID(arm) && $0.action == kAXPressAction as String
+        })
+    }
+
+    @Test("#413 arm-setup verify: an unmapped chord (no flip) → .unmapped, never a false State A")
+    func armSetupVerifyReturnsUnmappedWhenChordDoesNotFlip() throws {
+        let f = makeToggleFixture()
+        let key = KeyMouseRecorder()   // records the chord but never flips arm
+        let (logic, keyRuntime, proc) = armVerifyRuntimes(f, key: key)
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: 14, modifiers: [.maskControl, .maskShift],
+            runtime: logic, keyRuntime: keyRuntime, processRuntime: proc
+        )
+        #expect(result == .unmapped)
+        // The chord WAS posted (chord-only actuation) — it simply did not flip arm.
+        #expect(!key.flaggedKeyEvents.isEmpty)
+        let armedAfter = try #require(boolValue(f, f.arm[0]))
+        #expect(!armedAfter)
+    }
+
+    /// Causality guard (#413): if the arm read is ALREADY at the target before any
+    /// post (an external flip between the setup read and the chord) and the chord
+    /// itself is a no-op, the verifier must NOT fabricate success — it requires a
+    /// chord-caused transition, so it never credits the pre-existing state.
+    @Test("#413 arm-setup verify: arm already at target with a no-op chord is NOT credited → not .verified")
+    func armSetupVerifyDoesNotCreditPreExistingArmState() throws {
+        let f = makeToggleFixture()
+        let arm = f.arm[0]
+        let key = KeyMouseRecorder()   // the chord is a no-op (mapping absent)
+        // Publish the arm value as 0 on the FIRST read (setup captures current=0,
+        // so expected=1) then flip it to 1 for every read after — modelling an
+        // EXTERNAL flip to the target that arrives before the chord could cause it.
+        final class ArmReadFlip: @unchecked Sendable {
+            let arm: AXUIElement
+            var reads = 0
+            init(arm: AXUIElement) { self.arm = arm }
+            func value(_ element: AXUIElement, _ attribute: String) -> AnyObject?? {
+                guard element == arm, attribute == kAXValueAttribute as String else { return nil }
+                reads += 1
+                return .some(NSNumber(value: reads > 1))
+            }
+        }
+        let reader = ArmReadFlip(arm: arm)
+        let logic = f.builder.makeLogicRuntime(
+            appElement: f.app,
+            attributeValueHandler: { reader.value($0, $1) },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: 14, modifiers: [.maskControl, .maskShift],
+            runtime: logic, keyRuntime: key.runtime(), processRuntime: noopProcessRuntime()
+        )
+        // Arm was already at `expected` before any post + the chord did nothing, so
+        // NO chord-caused transition occurred → not credited (never .verified).
+        #expect(result != .verified)
+        #expect(result == .couldNotPost)
+    }
+
+    /// Causality guard (#413): a FAILED chord post (postFlaggedKeyEvent returns
+    /// false) must NOT be credited even if arm transitions to the target right
+    /// after — only a successful post enables the late-publish credit.
+    @Test("#413 arm-setup verify: a failed post + external arm flip is NOT credited → not .verified")
+    func armSetupVerifyDoesNotCreditFailedPostWithExternalFlip() throws {
+        let f = makeToggleFixture()
+        let arm = f.arm[0]
+        let key = KeyMouseRecorder()
+        key.flaggedKeyPostSucceeds = false   // every chord post FAILS
+        // An external agent flips arm to the target coincident with the (failed)
+        // post — the failed post must not be credited as chord causality.
+        key.onFlaggedKey = { code, _ in
+            guard code == 14 else { return }
+            f.builder.setAttribute(arm, kAXValueAttribute as String, 1)
+        }
+        let (logic, keyRuntime, proc) = armVerifyRuntimes(f, key: key)
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: 14, modifiers: [.maskControl, .maskShift],
+            runtime: logic, keyRuntime: keyRuntime, processRuntime: proc
+        )
+        // A failed post that couldn't establish a causal transition is could-not-post.
+        #expect(result == .couldNotPost)
+    }
+
+    /// Deadline safety (#413): if the flip post happened and the command deadline
+    /// then fires, the restore chord is NOT posted (no new key after the deadline);
+    /// the verifier reports honestly (partial restore), never a clean State A.
+    @Test("#413 arm-setup verify: cancelled after the flip skips the restore post → .partialRestore")
+    func cancellationBeforeRestorePostLeavesHonestNotRestored() throws {
+        let f = makeToggleFixture()
+        let arm = f.arm[0]
+        let key = KeyMouseRecorder()
+        final class Deadline: @unchecked Sendable { var fired = false }
+        let deadline = Deadline()
+        // The chord flips arm — and the command deadline fires coincident with the
+        // flip, so the restore post must be skipped.
+        key.onFlaggedKey = { code, _ in
+            guard code == 14 else { return }
+            let armedNow = (f.builder.attributeValue(arm, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
+            f.builder.setAttribute(arm, kAXValueAttribute as String, armedNow ? 0 : 1)
+            deadline.fired = true
+        }
+        let (logic, keyRuntime, proc) = armVerifyRuntimes(f, key: key)
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: 14, modifiers: [.maskControl, .maskShift],
+            runtime: logic, keyRuntime: keyRuntime, processRuntime: proc,
+            isCancelled: { deadline.fired }
+        )
+        #expect(result == .partialRestore(detail: "record-enable was flipped to test the chord but could not be restored"))
+        // Only the flip chord was posted — the restore post was skipped after the deadline.
+        #expect(key.flaggedKeyEvents.count == 1)
+    }
+
+    /// Verifier partial-restore (#413): the chord flips arm AND (as a
+    /// mis-mapped side effect) turns transport Record on, and the Record checkbox
+    /// cannot be pressed back off — so the transport state cannot be restored and
+    /// the verifier reports `.partialRestore`, never a clean flip.
+    @Test("#413 arm-setup verify: transport recording state cannot be restored → .partialRestore")
+    func armSetupVerifyTransportRestoreFailureIsPartialRestore() throws {
+        let f = makeToggleFixture()
+        let arm = f.arm[0]
+        let key = KeyMouseRecorder()
+        key.onFlaggedKey = { code, _ in
+            guard code == 14 else { return }
+            let armedNow = (f.builder.attributeValue(arm, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
+            f.builder.setAttribute(arm, kAXValueAttribute as String, armedNow ? 0 : 1)
+            // The mis-mapped chord also turns transport Record ON.
+            f.builder.setAttribute(f.recordCheckbox, kAXValueAttribute as String, 1)
+        }
+        // performAction is nil → the Record-checkbox press is a no-op, so transport
+        // cannot be restored to its captured prior (off).
+        let (logic, keyRuntime, proc) = armVerifyRuntimes(f, key: key)
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: 14, modifiers: [.maskControl, .maskShift],
+            runtime: logic, keyRuntime: keyRuntime, processRuntime: proc
+        )
+        #expect(result == .partialRestore(detail: "the transport recording state could not be restored"))
+    }
+
+    /// Verifier partial-restore (#413): the chord flips arm cleanly, but
+    /// the prior track selection cannot be reinstated (the drive exclusive-selected
+    /// track 0, and re-selecting track 1 is refused) — so the verifier reports
+    /// `.partialRestore`, never a clean flip.
+    @Test("#413 arm-setup verify: prior track selection cannot be restored → .partialRestore")
+    func armSetupVerifySelectionRestoreFailureIsPartialRestore() throws {
+        // Track 0 is the sole selection, so the drive confirms exclusivity trivially
+        // and the arm flip + arm restore both succeed. The ONLY per-header
+        // AXSelected write in the whole flow is `restoreTrackSelection` (the drive's
+        // selection path uses the group's AXSelectedChildren) — corrupt that write
+        // so the prior selection reads back wrong and cannot be confirmed restored.
+        let f = makeToggleFixture()
+        let arm = f.arm[0]
+        let header0 = f.headers[0]
+        let key = KeyMouseRecorder()
+        key.onFlaggedKey = { code, _ in
+            guard code == 14 else { return }
+            let armedNow = (f.builder.attributeValue(arm, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
+            f.builder.setAttribute(arm, kAXValueAttribute as String, armedNow ? 0 : 1)
+        }
+        let logic = f.builder.makeLogicRuntime(
+            appElement: f.app,
+            attributeValueHandler: nil,
+            setAttributeHandler: { element, attribute, value in
+                if element == header0, attribute == kAXSelectedAttribute as String {
+                    // The restore tries to re-select track 0 (true); store the
+                    // opposite so its read-back never matches the captured prior.
+                    f.builder.setAttribute(header0, kAXSelectedAttribute as String, false)
+                    return true
+                }
+                f.builder.setAttribute(element, attribute, value)
+                return true
+            },
+            performActionHandler: nil
+        )
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: 14, modifiers: [.maskControl, .maskShift],
+            runtime: logic, keyRuntime: key.runtime(), processRuntime: noopProcessRuntime()
+        )
+        #expect(result == .partialRestore(detail: "the prior track selection could not be restored"))
     }
 
     // MARK: - Toggle-from-read + selection guard

@@ -186,8 +186,14 @@ extension OperationTraceTests {
         let mutatingSpecs = OperationRegistry.specs.filter {
             $0.mutability == Mutability.`mutating`
         }
-        #expect(OperationRegistry.specs.count == 107)
-        #expect(mutatingSpecs.count == 86)
+        #expect(OperationRegistry.specs.count == 108)
+        #expect(mutatingSpecs.count == 87)
+
+        // A mutating op that refuses BEFORE dispatch starts its trace (the
+        // consent-first setup_arm_key, #413) starts no trace with the coverage
+        // params (which carry no consent), so it is asserted to claim NO trace
+        // coverage rather than to have a trace.
+        let notOracledDeferrals: Set<OperationID> = [.systemSetupArmKey]
 
         for spec in mutatingSpecs {
             await OperationTraceStore.shared.clear()
@@ -200,6 +206,10 @@ extension OperationTraceTests {
 
             let matchingTrace = await OperationTraceStore.shared.recent(limit: 128)
                 .first { $0.operationID == spec.id.rawValue }
+            if notOracledDeferrals.contains(spec.id) {
+                #expect(matchingTrace == nil, "NOT-oracled deferral unexpectedly claimed trace coverage: \(spec.id.rawValue)")
+                continue
+            }
             #expect(matchingTrace != nil, "Missing trace for \(spec.tool.rawValue).\(spec.command)")
             if let matchingTrace {
                 #expect(
@@ -287,9 +297,9 @@ extension OperationTraceTests {
 
         let readOnlySpecs = OperationRegistry.specs.filter { $0.mutability == .readOnly }
         let mutatingSpecs = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
-        #expect(OperationRegistry.specs.count == 107)
+        #expect(OperationRegistry.specs.count == 108)
         #expect(readOnlySpecs.count == 21)
-        // Mutability is total: the mutating census (86) and this inverse gate
+        // Mutability is total: the mutating census (87) and this inverse gate
         // (21) together account for every registered spec, so a new operation
         // cannot land outside both gates.
         #expect(readOnlySpecs.count + mutatingSpecs.count == OperationRegistry.specs.count)

@@ -427,6 +427,14 @@ extension AccessibilityChannel {
         return .resolved(code: code, flags: flags)
     }
 
+    /// Single source of truth for arm-chord modifier validity: a bare key (no
+    /// modifiers) is unsafe as an arm chord — bare 'r' IS transport Record and any
+    /// bare key triggers a global command. Both the runtime arm actuator and the
+    /// consent-based key-command auto-setup (#413) refuse such a chord.
+    static func armChordModifiersAreUnsafe(_ flags: CGEventFlags) -> Bool {
+        flags.isEmpty
+    }
+
     /// Read whether Logic's transport is currently RECORDING (control-bar Record
     /// checkbox), returning nil when it is UNREADABLE. The arm honesty guard MUST
     /// keep nil DISTINCT from a readable `false`: coercing nil→false would let an
@@ -436,6 +444,236 @@ extension AccessibilityChannel {
         AXLogicProElements.readControlBarCheckboxValue(
             named: "녹음", englishName: "Record", runtime: runtime
         )
+    }
+
+    /// Ground-truth verification for the arm-key auto-setup (#413): drive a real
+    /// record-arm on track 0 through ONLY the given key chord and report whether
+    /// record-enable actually flipped — then restore the arm state, the prior
+    /// track selection, and the transport recording state, verifying each restore
+    /// by read-back.
+    ///
+    /// The actuation is pinned to the CGEvent key chord alone — never AXPress and
+    /// never the fallback toggle ladder. This is load-bearing: the ladder's other
+    /// rungs (and a live control surface such as a virtual MCU port) can move
+    /// record-enable WITHOUT the key command, which would let the verify pass on a
+    /// host where the chord is unmapped and report a false "already configured".
+    /// A flip observed here therefore proves the key command specifically is bound
+    /// to the record-arm command. The typed result separates a cleanly UNMAPPED
+    /// chord (no flip, nothing left mutated — safe to proceed to GUI assignment)
+    /// from a PARTIAL restore (a flip or restore failed, host left dirty — must
+    /// fail closed), a POST failure, and an unavailable environment, so a partially
+    /// mutated host never receives further mutations.
+    static func armSetupVerify(
+        keyCode: CGKeyCode,
+        modifiers: CGEventFlags,
+        runtime: AXLogicProElements.Runtime = .production,
+        keyRuntime: AXMouseHelper.Runtime = .production,
+        processRuntime: ProcessUtils.Runtime = .production,
+        // Once the command deadline fires this returns true; no verification chord
+        // (flip or restore) is posted after it (#413).
+        isCancelled: @Sendable () -> Bool = { false }
+    ) -> ArmKeyCommandSetup.VerifyResult {
+        // No verification chord after the deadline — post ZERO keys.
+        if isCancelled() { return .couldNotPost }
+        guard let priorTransport = transportRecordingState(runtime: runtime) else { return .environmentUnavailable }
+        let headers = AXLogicProElements.allTrackHeaders(runtime: runtime)
+        let priorSelection = headers.map {
+            AXValueExtractors.extractSelectedState($0, runtime: runtime.ax)
+        }
+        guard !headers.isEmpty, priorSelection.allSatisfy({ $0 != nil }),
+              let trackHeaders = AXLogicProElements.getTrackHeaders(runtime: runtime) else {
+            return .environmentUnavailable
+        }
+        let selectedHeaders = priorSelection.enumerated().compactMap { offset, selected in
+            selected == true ? headers[offset] : nil
+        }
+        guard let armButton = AXLogicProElements.findTrackArmButton(trackIndex: 0, runtime: runtime),
+              let curNum = AXHelpers.getValue(armButton, runtime: runtime.ax) as? NSNumber else {
+            return .environmentUnavailable
+        }
+        let current = curNum.intValue != 0
+
+        // Chord-ONLY flip to the opposite arm state.
+        let flip = postArmChordAndObserveFlip(
+            armButton: armButton, expected: !current,
+            keyCode: keyCode, modifiers: modifiers,
+            runtime: runtime, keyRuntime: keyRuntime, processRuntime: processRuntime,
+            isCancelled: isCancelled
+        )
+
+        // If the chord flipped arm, restore it via the SAME chord and confirm.
+        var armRestoreFailed = false
+        if flip == .flipped {
+            if isCancelled() {
+                // The deadline fired after the flip — do NOT post a restore chord
+                // (no new key after the deadline). Arm is left flipped; report it
+                // honestly as a partial restore rather than claiming success.
+                armRestoreFailed = true
+            } else {
+                armRestoreFailed = postArmChordAndObserveFlip(
+                    armButton: armButton, expected: current,
+                    keyCode: keyCode, modifiers: modifiers,
+                    runtime: runtime, keyRuntime: keyRuntime, processRuntime: processRuntime,
+                    isCancelled: isCancelled
+                ) != .flipped
+            }
+        }
+
+        // Restore the user's prior track selection (the drive exclusive-selected
+        // track 0) and the transport recording state — AX-only, posts no key.
+        let selectionRestored = restoreTrackSelection(
+            headers: headers, priorSelection: priorSelection,
+            selectedHeaders: selectedHeaders, trackHeaders: trackHeaders, runtime: runtime
+        )
+        let transportRestored = restoreTransportRecordingState(priorTransport, runtime: runtime)
+
+        switch flip {
+        case .flipped:
+            if armRestoreFailed {
+                return .partialRestore(detail: "record-enable was flipped to test the chord but could not be restored")
+            }
+            if !selectionRestored { return .partialRestore(detail: "the prior track selection could not be restored") }
+            if !transportRestored { return .partialRestore(detail: "the transport recording state could not be restored") }
+            return .verified
+        case .postedNoFlip:
+            // Nothing on the arm moved (unmapped), but the selection/transport the
+            // drive touched must restore — otherwise the host is left dirty.
+            if !selectionRestored { return .partialRestore(detail: "the prior track selection could not be restored") }
+            if !transportRestored { return .partialRestore(detail: "the transport recording state could not be restored") }
+            return .unmapped
+        case .couldNotPost:
+            if !selectionRestored { return .partialRestore(detail: "the prior track selection could not be restored") }
+            if !transportRestored { return .partialRestore(detail: "the transport recording state could not be restored") }
+            return .couldNotPost
+        }
+    }
+
+    /// Restore the exact prior track selection captured before an exclusive-select
+    /// side effect. AX-only (AXSelectedChildren + per-header AXSelected), posts no
+    /// key. Returns whether the observed selection matches the captured prior.
+    private static func restoreTrackSelection(
+        headers: [AXUIElement],
+        priorSelection: [Bool?],
+        selectedHeaders: [AXUIElement],
+        trackHeaders: AXUIElement,
+        runtime: AXLogicProElements.Runtime
+    ) -> Bool {
+        _ = AXHelpers.setAttribute(
+            trackHeaders, kAXSelectedChildrenAttribute, selectedHeaders as CFArray, runtime: runtime.ax
+        )
+        for (offset, header) in headers.enumerated() {
+            _ = AXHelpers.setAttribute(
+                header, kAXSelectedAttribute,
+                priorSelection[offset] == true ? kCFBooleanTrue : kCFBooleanFalse,
+                runtime: runtime.ax
+            )
+        }
+        for attempt in 0..<4 {
+            let observed = headers.map { AXValueExtractors.extractSelectedState($0, runtime: runtime.ax) }
+            if observed == priorSelection { return true }
+            if attempt < 3 { usleep(80_000) }
+        }
+        return false
+    }
+
+    /// Exclusive-select track 0, confirm a safe keyboard focus, then post ONLY the
+    /// CGEvent key chord (no AXPress, no other rung) and observe the arm read-back
+    /// reach `expected`. The selection/focus gates are AX-only and observational,
+    /// so they post no key and cannot themselves move arm — the only actuation is
+    /// the chord, which is what makes an observed flip prove the key command.
+    ///
+    /// Success requires a CHORD-CAUSED transition: arm must read NOT-yet-`expected`
+    /// immediately before a SUCCESSFUL post, then reach `expected` after it. An arm
+    /// already at `expected` before any post is never credited — otherwise an
+    /// external flip (a live control surface, another agent) could fabricate a pass
+    /// for an unmapped chord. Only a post whose `postFlaggedKeyEvent` returned true
+    /// enables the late-published double-toggle credit, so a FAILED post plus an
+    /// external transition is never mistaken for chord causality. The result
+    /// distinguishes a flip, a posted-but-no-flip (unmapped), and a could-not-post.
+    private enum ChordFlipResult { case flipped, postedNoFlip, couldNotPost }
+
+    private static func postArmChordAndObserveFlip(
+        armButton: AXUIElement,
+        expected: Bool,
+        keyCode: CGKeyCode,
+        modifiers: CGEventFlags,
+        runtime: AXLogicProElements.Runtime,
+        keyRuntime: AXMouseHelper.Runtime,
+        processRuntime: ProcessUtils.Runtime,
+        isCancelled: @Sendable () -> Bool = { false }
+    ) -> ChordFlipResult {
+        func armValue() -> Bool? {
+            (AXHelpers.getValue(armButton, runtime: runtime.ax) as? NSNumber)?.boolValue
+        }
+        // No chord after the command deadline — post ZERO keys.
+        if isCancelled() { return .couldNotPost }
+        // The arm key command acts on the SELECTED track: exclusively select track
+        // 0 and prove Logic is stably frontmost before any post.
+        if confirmExclusiveSelectionRefusal(
+            index: 0, runtime: runtime, processRuntime: processRuntime,
+            sleepMicros: keyRuntime.sleepMicros
+        ) != nil { return .couldNotPost }
+
+        var anyPosted = false
+        for attempt in 0..<syntheticKeyRetryAttempts {
+            // Double-toggle guard: a SUCCESSFUL post THIS call already happened and
+            // its flip published late — credit it without re-posting.
+            if anyPosted, armValue() == expected { return .flipped }
+            guard processRuntime.logicIsFrontmost(),
+                  selectionIsExclusive(index: 0, runtime: runtime) else {
+                return anyPosted ? .postedNoFlip : .couldNotPost
+            }
+            if syntheticKeyFocusRefusal(runtime: runtime) != nil {
+                return anyPosted ? .postedNoFlip : .couldNotPost
+            }
+            // Causality: arm must be NOT-yet-`expected` right before the post, so an
+            // arm already at `expected` (an external flip) is never chord-credited.
+            guard armValue() != expected else {
+                return anyPosted ? .postedNoFlip : .couldNotPost
+            }
+            // No new key after the deadline (checkpoint immediately before the post).
+            if isCancelled() { return anyPosted ? .postedNoFlip : .couldNotPost }
+            // Only a SUCCESSFUL post can be credited for a subsequent transition.
+            let posted = keyRuntime.postFlaggedKeyEvent(keyCode, modifiers)
+            anyPosted = anyPosted || posted
+            guard posted else {
+                if attempt < syntheticKeyRetryAttempts - 1 {
+                    keyRuntime.sleepMicros(syntheticKeyRetrySettleMicros)
+                    continue
+                }
+                return anyPosted ? .postedNoFlip : .couldNotPost
+            }
+            let deadline = Date().addingTimeInterval(Double(syntheticKeyRetryPollMs) / 1000.0)
+            repeat {
+                if armValue() == expected { return .flipped }   // transition observed after the post
+                usleep(40_000)
+            } while Date() < deadline
+            if attempt < syntheticKeyRetryAttempts - 1 {
+                keyRuntime.sleepMicros(syntheticKeyRetrySettleMicros)
+            }
+        }
+        return anyPosted ? .postedNoFlip : .couldNotPost
+    }
+
+    /// Restore Logic's transport recording state to `prior`, verifying by
+    /// read-back. Used by `armSetupVerify` so a mis-assigned arm chord that instead
+    /// toggled transport Record can never be left recording.
+    private static func restoreTransportRecordingState(
+        _ prior: Bool,
+        runtime: AXLogicProElements.Runtime
+    ) -> Bool {
+        guard let current = transportRecordingState(runtime: runtime) else { return false }
+        if current != prior {
+            guard let record = AXLogicProElements.findControlBarCheckbox(
+                named: "녹음", englishName: "Record", runtime: runtime
+            ) else { return false }
+            _ = AXHelpers.performAction(record, kAXPressAction, runtime: runtime.ax)
+        }
+        for attempt in 0..<4 {
+            if transportRecordingState(runtime: runtime) == prior { return true }
+            if attempt < 3 { usleep(80_000) }
+        }
+        return false
     }
 
     typealias TrackToggleRung = (
@@ -543,7 +781,7 @@ extension AccessibilityChannel {
                 // Record, and any bare key is a global single-key command. Refuse
                 // it — the default chord (Ctrl+Shift+E) carries modifiers, so only
                 // an explicit empty-modifier override reaches here.
-                if flags.isEmpty {
+                if armChordModifiersAreUnsafe(flags) {
                     return .refused(armConfigInvalidRefusal(
                         reason: "a bare arm key with no modifiers is unsafe (bare 'r' starts transport "
                             + "recording; any bare key triggers a global command) — configure a modifier chord"
