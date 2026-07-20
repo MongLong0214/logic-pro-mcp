@@ -36,6 +36,21 @@ struct SecureFDTests {
         var st = stat(); return fstat(fd, &st) == 0
     }
 
+    /// Number of open descriptors in this process (F_GETFD sweep). Parallel
+    /// suites can hold transient fds, so callers take the minimum of a few
+    /// samples: a real leak persists across samples, noise fluctuates away.
+    private func openFDCount() -> Int {
+        var count = 0
+        for fd in 0..<Int32(getdtablesize()) where fcntl(fd, F_GETFD) != -1 { count += 1 }
+        return count
+    }
+
+    private func minOpenFDCount(samples: Int = 5) -> Int {
+        var best = Int.max
+        for _ in 0..<samples { best = min(best, openFDCount()) }
+        return best
+    }
+
     // MARK: component validation
 
     @Test("validateComponent rejects empty, dot, dotdot, slash, NUL")
@@ -179,7 +194,9 @@ struct SecureFDTests {
             defer { close(parent) }
             let (dirFD, _) = try SecureFD.makeEmptyDir(parentFD: parent, name: "stage", mode: 0o700)
             #expect(fdIsOpen(dirFD)); close(dirFD)
-            let popFD = try SecureFD.walkVerified(baseFD: try openBaseFD(base), ["pop"]).fd
+            let popBase = try openBaseFD(base)
+            defer { close(popBase) }
+            let popFD = try SecureFD.walkVerified(baseFD: popBase, ["pop"]).fd
             defer { close(popFD) }
             #expect(throws: (any Error).self) { try SecureFD.assertEmpty(dirFD: popFD, label: "pop") }
         }
@@ -207,6 +224,52 @@ struct SecureFDTests {
             #expect(!FileManager.default.fileExists(atPath: tree.path))          // tree gone
             #expect(FileManager.default.fileExists(atPath: precious.path))       // symlink target NOT followed/deleted
             #expect(try String(contentsOf: precious, encoding: .utf8) == "KEEP")
+        }
+    }
+
+    // MARK: fd-lifecycle under repeated failure
+
+    @Test("repeated error paths do not leak file descriptors")
+    func errorPathsAreFDBounded() throws {
+        let base = try tempBase("fdbound")
+        defer { try? FileManager.default.removeItem(at: base) }
+        try withBase(base) {
+            let baseFD = try openBaseFD(base)
+            defer { close(baseFD) }
+            let before = minOpenFDCount()
+
+            // (a) verification-pass failure: the walk target vanishes between
+            // pass A and pass B, so pass B throws after pass A opened its fd.
+            let mid = base.appendingPathComponent("mid", isDirectory: true)
+            for _ in 0..<64 {
+                try FileManager.default.createDirectory(at: mid, withIntermediateDirectories: true)
+                SecureFD._testAfterPassAHook = { try? FileManager.default.removeItem(at: mid) }
+                #expect(throws: (any Error).self) {
+                    close(try SecureFD.walkVerified(baseFD: baseFD, ["mid"]).fd)
+                }
+            }
+            SecureFD._testAfterPassAHook = nil
+
+            // (b) mid-recursion teardown failure: a read-only subdirectory makes
+            // the child unlink fail AFTER the recursion has opened directory fds
+            // at two levels, so the propagating throw must release both.
+            let tree = base.appendingPathComponent("tree", isDirectory: true)
+            let sub = tree.appendingPathComponent("sub", isDirectory: true)
+            for _ in 0..<64 {
+                try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+                try Data("x".utf8).write(to: sub.appendingPathComponent("f"))
+                _ = sub.path.withCString { chmod($0, 0o500) }
+                #expect(throws: (any Error).self) {
+                    try SecureFD.teardownTree(parentFD: baseFD, name: "tree")
+                }
+                _ = sub.path.withCString { chmod($0, 0o700) }
+                try FileManager.default.removeItem(at: tree)
+            }
+
+            // 128 failed calls: a leak of one fd per failure adds >= 64 to the
+            // table; unrelated suite activity moves the count by a few at most.
+            let after = minOpenFDCount()
+            #expect(after - before < 32)
         }
     }
 

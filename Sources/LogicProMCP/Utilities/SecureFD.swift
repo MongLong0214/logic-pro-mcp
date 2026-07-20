@@ -120,12 +120,14 @@ enum SecureFD {
                              expected: [Identity]? = nil) throws -> (fd: Int32, ids: [Identity]) {
         for c in relative { try validateComponent(c) }
         let (fdA, idsA) = try walkOnce(baseFD: baseFD, relative)
+        // Pass A exists only to produce its identity vector; its fd is closed
+        // immediately so no failure in the verification pass can leak it. The
+        // verification pass is authoritative and supplies the returned fd.
+        close(fdA)
         #if DEBUG
         if let hook = _testAfterPassAHook { _testAfterPassAHook = nil; hook() }
         #endif
         let (fdB, idsB) = try walkOnce(baseFD: baseFD, relative)
-        // The verification pass is authoritative; the first walk's fd is discarded.
-        close(fdA)
         guard idsA.count == idsB.count else {
             close(fdB); throw FDError.verificationMismatch(component: relative.last ?? "")
         }
@@ -265,10 +267,13 @@ enum SecureFD {
     }
 
     private static func removeChildrenThenSelf(dirFD: Int32, parentFD: Int32, name: String) throws {
+        // This function owns dirFD; the defer is its single close, so every
+        // error path — including a throw out of the recursive call — releases it.
+        defer { close(dirFD) }
         let dupFD = dup(dirFD)
-        guard dupFD >= 0 else { close(dirFD); throw FDError.teardownFailed(errno: errno) }
+        guard dupFD >= 0 else { throw FDError.teardownFailed(errno: errno) }
         guard let dir = fdopendir(dupFD) else {
-            close(dupFD); close(dirFD); throw FDError.teardownFailed(errno: errno)
+            close(dupFD); throw FDError.teardownFailed(errno: errno)
         }
         var children: [(name: String, isDir: Bool)] = []
         while let ent = readdir(dir) {
@@ -278,22 +283,23 @@ enum SecureFD {
             if n == "." || n == ".." { continue }
             var st = stat()
             let rc = n.withCString { fstatat(dirFD, $0, &st, AT_SYMLINK_NOFOLLOW) }
-            guard rc == 0 else { closedir(dir); close(dirFD); throw FDError.teardownFailed(errno: errno) }
+            guard rc == 0 else { closedir(dir); throw FDError.teardownFailed(errno: errno) }
             children.append((n, (st.st_mode & S_IFMT) == S_IFDIR))   // symlinks classified as non-dir → unlinked as links
         }
         closedir(dir)   // closes dupFD
         for child in children {
             if child.isDir {
                 let sub = child.name.withCString { openat(dirFD, $0, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC) }
-                guard sub >= 0 else { close(dirFD); throw FDError.teardownFailed(errno: errno) }
+                guard sub >= 0 else { throw FDError.teardownFailed(errno: errno) }
                 try removeChildrenThenSelf(dirFD: sub, parentFD: dirFD, name: child.name)
             } else {
                 guard child.name.withCString({ unlinkat(dirFD, $0, 0) }) == 0 else {
-                    close(dirFD); throw FDError.teardownFailed(errno: errno)
+                    throw FDError.teardownFailed(errno: errno)
                 }
             }
         }
-        close(dirFD)
+        // An open descriptor does not pin a directory in the namespace, so the
+        // remove can precede the deferred close.
         guard name.withCString({ unlinkat(parentFD, $0, AT_REMOVEDIR) }) == 0 else {
             throw FDError.teardownFailed(errno: errno)
         }
