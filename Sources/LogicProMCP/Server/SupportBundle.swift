@@ -148,23 +148,63 @@ struct SupportBundleBuilder: Sendable {
             // directory, the per-file writes, the publish, or the readback outside
             // the trusted base. Replaces the path-based createDirectory + Data.write
             // + Data(contentsOf:) and the post-create realpath containment recheck.
-            // Trusted anchor = the deepest EXISTING ancestor of the target
-            // (confined under the support-bundle root by the caller's
-            // resolvedSupportBundleDirectory in production; a temp root under test),
-            // opened by path like the home base. The not-yet-existing tail is then
-            // created + walked strictly no-follow below. Deriving the base per call
-            // (no global seam) keeps concurrent publishers independent.
-            var anchor = directory.standardizedFileURL
-            var tail: [String] = []
-            while !FileManager.default.fileExists(atPath: anchor.path), anchor.pathComponents.count > 1 {
-                tail.insert(anchor.lastPathComponent, at: 0)
-                anchor = anchor.deletingLastPathComponent()
+            // Trusted base = the user's home directory (production) or, under DEBUG
+            // tests, the temporary directory — a FIXED, unswappable trust root, NOT a
+            // caller-derived existing ancestor. The ENTIRE path from the base down to
+            // the bundle is then walked strictly no-follow (ensureDirectory), so a
+            // symlink planted for ANY component — an existing intermediate like
+            // `Library` or a caller-supplied subdir — fails closed instead of
+            // diverting the write, exactly as the trace-clear wiring does. write() is
+            // thus self-confining; it does not depend on the caller's realpath
+            // containment for symlink safety. The base is a per-call local, so
+            // concurrent publishers stay independent (no global seam).
+            // Canonicalize by realpath'ing the deepest EXISTING prefix (the bundle
+            // tail does not exist yet) and re-appending the tail literally, so the
+            // target and the candidate bases share ONE canonical form. `realpath`
+            // resolves /var → /private/var; `resolvingSymlinksInPath` does not do so
+            // for `temporaryDirectory`, which is why a plain URL comparison diverged.
+            func canonicalComponents(_ url: URL) -> [String]? {
+                var existing = url.standardizedFileURL
+                var suffix: [String] = []
+                while !FileManager.default.fileExists(atPath: existing.path), existing.pathComponents.count > 1 {
+                    suffix.insert(existing.lastPathComponent, at: 0)
+                    existing = existing.deletingLastPathComponent()
+                }
+                guard let raw = realpath(existing.path, nil) else { return nil }
+                defer { free(raw) }
+                return URL(fileURLWithPath: String(cString: raw)).pathComponents + suffix
             }
-            let baseFD = anchor.path.withCString { open($0, O_RDONLY | O_DIRECTORY | O_CLOEXEC) }
+            guard let dirComps = canonicalComponents(directory) else {
+                throw CocoaError(.fileWriteNoPermission)
+            }
+            // Trusted base = home (production) or, under DEBUG tests, the temporary
+            // directory — a FIXED, unswappable trust root. The ENTIRE path from the
+            // base to the bundle is walked no-follow below (ensureDirectory), so a
+            // symlink planted for ANY component fails closed rather than diverting
+            // the write, exactly like the trace-clear wiring. Per-call locals keep
+            // concurrent publishers independent (no global seam).
+            #if DEBUG
+            let candidates = [
+                FileManager.default.homeDirectoryForCurrentUser,
+                FileManager.default.temporaryDirectory,
+            ]
+            #else
+            let candidates = [FileManager.default.homeDirectoryForCurrentUser]
+            #endif
+            var chosenCount: Int? = nil
+            for candidate in candidates {
+                guard let cc = canonicalComponents(candidate),
+                      dirComps.count > cc.count, Array(dirComps.prefix(cc.count)) == cc else { continue }
+                chosenCount = cc.count; break
+            }
+            guard let baseCount = chosenCount else { throw CocoaError(.fileWriteNoPermission) }
+            let tail = Array(dirComps.dropFirst(baseCount))
+            let basePath = "/" + dirComps[1..<baseCount].joined(separator: "/")
+            let baseFD = basePath.withCString { open($0, O_RDONLY | O_DIRECTORY | O_CLOEXEC) }
             guard baseFD >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
             defer { close(baseFD) }
-            // `requireAbsent` proved the target does not exist, so the tail is
-            // non-empty (its last element is the bundle directory name).
+            // isUnder guarantees dirComps.count > base count, so the tail is non-empty
+            // (its last element is the bundle directory name).
             guard let bundleName = tail.last else { throw CocoaError(.fileWriteFileExists) }
             let parentFD = try SecureFD.ensureDirectory(
                 baseFD: baseFD, components: Array(tail.dropLast()), mode: 0o755
@@ -189,7 +229,11 @@ struct SupportBundleBuilder: Sendable {
                         var off = 0
                         while off < raw.count {
                             let n = Darwin.write(fd, raw.baseAddress!.advanced(by: off), raw.count - off)
-                            guard n > 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+                            if n < 0 {
+                                if errno == EINTR { continue }   // retry an interrupted write
+                                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                            }
+                            guard n > 0 else { throw POSIXError(.EIO) }
                             off += n
                         }
                     }
@@ -197,6 +241,10 @@ struct SupportBundleBuilder: Sendable {
                 } catch { close(fd); throw error }
                 close(fd)
             }
+            // Flush the staging directory so its new file entries are durable before
+            // the rename makes them the published bundle (F_FULLFSYNC on each file
+            // covers file data + inode, but not the containing directory's entries).
+            guard fsync(stagingFD) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
 
             // Publish atomically + exclusively RELATIVE to the parent dir fd, so no
             // path re-resolution can divert it; RENAME_EXCL refuses an existing target.
@@ -211,6 +259,12 @@ struct SupportBundleBuilder: Sendable {
             // Read back the PUBLISHED bundle fd-relative (no-follow, regular-file,
             // st_nlink==1) and verify every digest; tear it down on any mismatch.
             do {
+                // The publish rename is a parent-directory metadata change; flush the
+                // parent so the bundle's directory entry is durable, not just its file
+                // data. The bundle is the sole on-disk artifact (no in-memory backstop),
+                // so a lost entry after a reported success would be reported-but-absent.
+                // A failure here rethrows into the catch below, which tears the bundle down.
+                guard fsync(parentFD) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
                 let bundleFD = try SecureFD.walkVerified(baseFD: parentFD, [bundleName]).fd
                 defer { close(bundleFD) }
                 var digests: [FileDigest] = []
