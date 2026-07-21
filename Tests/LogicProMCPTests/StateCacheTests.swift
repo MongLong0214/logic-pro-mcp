@@ -138,3 +138,19 @@ import Testing
     #expect(!(tracks[2].isSelected))
     #expect(await cache.getSelectedTrack()?.id == 1)
 }
+
+@Test func testStateCacheBlockingDialogButtonsRoundTrip() async throws {
+    // #432 — the blocking-dialog signal the poller caches must round-trip
+    // through the actor-isolated accessors so both the resource audit read and
+    // the poller pin can rely on it. Defaults to nil (no dialog).
+    let cache = StateCache()
+    #expect(await cache.getBlockingDialogButtons() == nil)
+
+    await cache.updateBlockingDialogButtons(["Show Conflicts", "Ignore"])
+    let stored = try #require(await cache.getBlockingDialogButtons())
+    #expect(stored == ["Show Conflicts", "Ignore"])
+
+    // Dismissal clears it back to nil (poller writes nil when no dialog is present).
+    await cache.updateBlockingDialogButtons(nil)
+    #expect(await cache.getBlockingDialogButtons() == nil)
+}

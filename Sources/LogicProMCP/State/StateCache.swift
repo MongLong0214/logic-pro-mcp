@@ -29,6 +29,19 @@ actor StateCache {
     /// than silently returning prior values.
     private(set) var axOccluded: Bool = false
 
+    /// #432 — button titles of a blocking modal dialog/sheet that owns the Logic
+    /// window at the last poll, sampled from the SAME authoritative signal the
+    /// transport preflight and the #431 tool audit fail closed on
+    /// (`AXLogicProElements.blockingDialogInfo()`; post-classifier, so plugin
+    /// editors / Smart Controls / keyboard-layout overlays are excluded). `nil`
+    /// when no blocking dialog is present. Written every poll by
+    /// `StatePoller.pollOnce`, exactly like `axOccluded`. The `logic://project/audit`
+    /// resource — a cache-only projection that must not make live AX calls at read
+    /// time — reads this via `getBlockingDialogButtons()` so it surfaces the
+    /// `export_blocked_by_modal_dialog` blocker instead of a false green, matching
+    /// the live tool path (#431).
+    private(set) var blockingDialogButtons: [String]? = nil
+
     /// Timestamp of last tool call — drives adaptive poll intervals.
     private(set) var lastToolAccess: Date = .distantPast
 
@@ -105,6 +118,11 @@ actor StateCache {
     /// poll or when the document is genuinely closed.
     func getAXOccluded() -> Bool { axOccluded }
 
+    /// #432 — current blocking-dialog button titles (`nil` when none). See the
+    /// field comment for provenance; written every poll by `StatePoller.pollOnce`
+    /// via `updateBlockingDialogButtons`, mirroring `getAXOccluded`/`updateAXOccluded`.
+    func getBlockingDialogButtons() -> [String]? { blockingDialogButtons }
+
     /// Atomic, single-hop read of every field the project audit consumes.
     /// `buildAudit` previously assembled its snapshot from ~13 separate `await`
     /// calls; each was individually actor-serialized but the sequence was not a
@@ -159,6 +177,14 @@ actor StateCache {
     /// poll cycle by `StatePoller.pollOnce`.
     func updateAXOccluded(_ occluded: Bool) {
         axOccluded = occluded
+    }
+
+    /// #432 — set the cached blocking-dialog signal (button titles, or `nil`
+    /// when no blocking dialog owns the Logic window). Idempotent; called every
+    /// poll cycle by `StatePoller.pollOnce` from
+    /// `AXLogicProElements.blockingDialogInfo()`, mirroring `updateAXOccluded`.
+    func updateBlockingDialogButtons(_ buttons: [String]?) {
+        blockingDialogButtons = buttons
     }
 
     func clearProjectState() {
