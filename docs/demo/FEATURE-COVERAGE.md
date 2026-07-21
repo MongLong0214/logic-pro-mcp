@@ -37,3 +37,7 @@ Root theme for #254/#255/#256 was that several commands routed only through an u
 
 ## Demo composition (what's on screen)
 82 BPM, D minor lofi. `record_sequence` × 3 → **Chords** (Dm7–B♭maj7–Gm7–A7), **Bass** (D–B♭–G–A roots), **Lead** (D-pentatonic motif), all Studio Grand piano; **Drummer** (SoCal). Piano roll opened on Chords; real-time playback. Audio bed = Logic's own bounce of this loop (11.7 s, 48 kHz/24-bit, −0.1 dBFS peak).
+
+## v3.12.0 note
+
+The Homebrew bounce/export regression reported after this QA round (missing `logic_variants.py`, [#427](https://github.com/MongLong0214/logic-pro-mcp/issues/427)) is fixed in v3.12.0 with an import-closure release gate; coordinate-free actuation and the locale-neutral modal classifier shipped in the same release.

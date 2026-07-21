@@ -18,8 +18,8 @@ A local Model Context Protocol (MCP) server that lets Claude Code, Claude Deskto
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-0.10-blue.svg?style=flat-square" /></a>
   <a href="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml"><img src="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
-  <img src="https://img.shields.io/badge/tests-2271_passing-brightgreen.svg?style=flat-square" />
-  <img src="https://img.shields.io/badge/stable-v3.11.0-blue.svg?style=flat-square" />
+  <img src="https://img.shields.io/badge/tests-3176_passing-brightgreen.svg?style=flat-square" />
+  <img src="https://img.shields.io/badge/stable-v3.12.0-blue.svg?style=flat-square" />
 </p>
 
 <p align="center">
@@ -62,8 +62,8 @@ Logic Pro MCP: region imported, instrument routed, readback exposed through reso
 | Resource templates | 12 templates for the generated operation catalog, track, region, mixer-strip, stock plugin detail/search, stock instrument detail/search, Session Player detail, session-plan dry run, and workflow detail/search lookup |
 | Control channels | MCU, Accessibility, AppleScript, CoreMIDI, CGEvent, Scripter, MIDI Key Commands |
 | Supported Logic Pro | **Latest Logic Pro first** — desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`) and Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`). Same MCP server controls both; bundle ID and process name differ. Set `LOGIC_PRO_BUNDLE_ID` to force a variant when both are installed. Logic Pro 12.3 is the first-class, actively-validated target (macOS 15.6+); older versions down to 12.0.1 are best-effort |
-| Verification line | Current source tree (v3.11.0): `2271` Swift tests + release build. The last full strict live Logic E2E ran on the v3.8.0 line (`372/373`); v3.9.0's two live-only surfaces (MIDI export read-back, Channel EQ verified params) were spike-tested against live Logic 12.3 and **honestly deferred** — see the CHANGELOG **Deferred** section. v3.11.0 keeps the v3.10.0 Creator Studio support, v3.9.2 plugin-window proof, and adds targeted live Logic 12.3 QA for tempo fallback, native Bounce, partial region metadata, marker creation/readability, Count In, Step Input, and help categories |
-| Release state | Published stable [v3.11.0](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.11.0); previous stable `v3.10.0` remains available for pinned installs |
+| Verification line | Current source tree (v3.12.0): `3176` Swift tests + release build; the repo-wide live qualification E2E (every registered operation against real Logic 12.3 with independent readback) ran green on the v3.12.0 release tree (2026-07-21, clean session). The last full strict live E2E ran on the v3.8.0 line (`372/373`); v3.9.0's two live-only surfaces (MIDI export read-back, Channel EQ verified params) were spike-tested against live Logic 12.3 and **honestly deferred** — see the CHANGELOG **Deferred** section. v3.12.0 adds live-verified coordinate-free actuation (menu AXPress toggle proof), consent-gated record-arm auto-setup with functional flip/restore verification, and the locale-neutral modal classifier |
+| Release state | Published stable [v3.12.0](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.12.0); previous stable `v3.11.0` remains available for pinned installs (note: v3.11.0 Homebrew bounce/export is broken by a packaging omission fixed in v3.12.0 — #427) |
 
 If this project helps you make music with Claude, Cursor, or any MCP client, star the repo. It helps the project reach more Logic Pro users and maintainers.
 
@@ -107,7 +107,7 @@ Logic Pro MCP uses a different model. It routes each operation to the strongest 
 - **Confirmation levels**: destructive/project and plugin insertion flows require explicit confirmation metadata before execution.
 - **Provenance labels**: read surfaces expose source, freshness, and evidence labels instead of forcing clients to guess.
 - **Installer hardening**: Homebrew pins SHA256; the shell installer refuses to run without explicit hash/team pins unless same-origin provenance is explicitly allowed.
-- **Release honesty**: published `v3.11.0` is the current stable install line, and README claims stay tied to shipped artifacts, release-tree tests, or explicitly linked live evidence.
+- **Release honesty**: published `v3.12.0` is the current stable install line, and README claims stay tied to shipped artifacts, release-tree tests, or explicitly linked live evidence.
 
 ## Quick Start
 
@@ -117,7 +117,7 @@ Logic Pro MCP uses a different model. It routes each operation to the strongest 
 
 The package manifest uses Swift tools 6.0 for compatibility. Current source verification uses Xcode 16.4 / Swift 6.2 in CI.
 
-The current published stable release is `v3.11.0` (2026-07-10 UTC). It ships ADHOC-signed universal artifacts when Apple Developer ID credentials are absent, plus `SHA256SUMS.txt` and `RELEASE-METADATA.json` for pinned installs. It keeps the 10-tool / 18-resource / 11-template runtime surface, carries the v3.9.0 MCP capability additions (`transport.toggle_autopunch`, resource subscriptions, workflow prompts, per-tool `outputSchema` / `structuredContent`), keeps the v3.9.2 verified-plugin closed-window fix, keeps v3.10.0 desktop/Creator Studio targeting, and fixes the v3.9.1 demo-QA backlog plus the Doctor readiness/remediation batch. The two v3.9.0 live-only surfaces (MIDI export read-back, Channel EQ verified params) remain honestly deferred with spike evidence.
+The current published stable release is `v3.12.0` (2026-07-21 UTC). It ships ADHOC-signed universal artifacts when Apple Developer ID credentials are absent, plus `SHA256SUMS.txt` and `RELEASE-METADATA.json` for pinned installs. The runtime surface becomes 10 tools / 18 resources / 12 resource templates — the generated read-only operation catalog `logic://system/operations` ships as the 12th template. Headlines: the coordinate-free actuation campaign (mute/solo/arm, app-menu items, region selection use AX actions and key commands with observed-effect verification; the external click-tool fallback is retired), consent-gated record-arm key-command auto-setup (`system.setup_arm_key`), a locale-neutral modal classifier (localized plugin editors and the Drummer Smart Controls pane no longer block unrelated operations, while genuine modals keep blocking), ADR kernel behavior on by default (session-stable `target_ref`, operation-contract registry with strict params, verified-mutation saga preflight, operation trace), SecureFD-hardened trace-clear/support-bundle paths with a bounded saga lifecycle deadline, and the Homebrew packaging fix restoring bounce/export (`logic_variants.py` now ships — #427). It keeps the v3.9.0 MCP capability additions (`transport.toggle_autopunch`, resource subscriptions, workflow prompts, per-tool `outputSchema` / `structuredContent`), the v3.9.2 verified-plugin closed-window fix, and v3.10.0 desktop/Creator Studio targeting. The two v3.9.0 live-only surfaces (MIDI export read-back, Channel EQ verified params) remain honestly deferred with spike evidence.
 
 ### 1. Install
 
@@ -187,7 +187,7 @@ Expected: all 7 channels `ready` after full setup, or 5 if you intentionally ski
 The installer is **fail-closed**: it refuses to run without explicit `LOGIC_PRO_MCP_SHA256` + `LOGIC_PRO_MCP_TEAM_ID` env pins. It verifies the downloaded `LogicProMCP-macOS-universal.tar.gz` archive, so copy the SHA from that archive entry in the release's `SHA256SUMS.txt`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.11.0/Scripts/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.12.0/Scripts/install.sh -o install.sh
 # inspect install.sh, then:
 LOGIC_PRO_MCP_SHA256=<paste LogicProMCP-macOS-universal.tar.gz SHA256SUMS entry> \
 LOGIC_PRO_MCP_TEAM_ID=<paste team_id from RELEASE-METADATA.json> \
@@ -198,7 +198,7 @@ If you knowingly accept same-origin provenance (hash + Team ID fetched from the 
 
 ```bash
 LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1 \
-bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.11.0/Scripts/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.12.0/Scripts/install.sh)
 ```
 
 See [SECURITY.md §Installer trust model](SECURITY.md#installer-trust-model) for the trust tiers and threat model.
@@ -262,7 +262,7 @@ The public docs tree is intentionally scoped: setup, API, troubleshooting, READM
 
 ## Status
 
-**Published stable**: `v3.11.0` is available as a GitHub Release and Homebrew install. It carries the accumulated v3.6.0 -> v3.10.0 set, fixes the full-surface demo-QA backlog (#253, #254, #255, #256), adds exact tempo fallback convergence (#278), exposes partial region inventory honestly (#279), and tightens Doctor readiness/remediation behavior (#260-#267). Published metadata remains `team_id:"ADHOC"` / `signing:"adhoc"` when Developer ID credentials are absent, with universal `x86_64` + `arm64` artifacts produced by GitHub Actions.
+**Published stable**: `v3.12.0` is available as a GitHub Release and Homebrew install. It carries the accumulated v3.6.0 -> v3.11.0 set, restores Homebrew bounce/export by packaging `logic_variants.py` with an import-closure release gate (#427), ships the coordinate-free actuation campaign and consent-gated arm auto-setup (#413), fixes localized-editor/Smart-Controls modal misclassification (#381, #405), and turns the ADR-002/003/004/005 kernel behavior on by default with SecureFD/saga hardening (#417, #412). Published metadata remains `team_id:"ADHOC"` / `signing:"adhoc"` when Developer ID credentials are absent, with universal `x86_64` + `arm64` artifacts produced by GitHub Actions.
 
 **Previous stable**: `v3.10.0` remains available as the Creator Studio support release; `v3.9.2` remains available as the verified plugin parameter write fix release; v3.9.1 and earlier remain available for pinned installs.
 
@@ -275,9 +275,9 @@ The public docs tree is intentionally scoped: setup, API, troubleshooting, READM
 | Python E2E syntax | PR #24 verification: `python3 -m py_compile Scripts/live-e2e-test.py` passed |
 | Targeted live plugin proof | Logic Pro 12.2: `logic_plugins.insert_verified track=6 insert=6 plugin=Gain` returned State A with `observed_slot:6`, `write_source:"ax_exact_slot_popup"`, and independent `get_inventory` readback |
 | Track/transport readback proof | Logic Pro 12.2: `logic://tracks` returned `source:"ax_live"`, real names, `placeholder_count:0`, `unknown_type_count:0`; cycle toggle/resource roundtrip reflected live UI state |
-| Strict live Logic Pro 12.3 | Last full strict live E2E on the v3.8.0 line: `372` passed / `1` skipped / `0` failed (`373` total). The v3.9.0 live-only surfaces were spike-tested and honestly deferred (see CHANGELOG **Deferred**; evidence under `docs/spikes/`). v3.11.0 keeps the v3.9.2 same-scenario A/B live proof for Compressor `threshold`, keeps v3.10.0 Creator Studio target-resolution coverage, and adds targeted live QA for tempo fallback, native Bounce, partial regions, markers, Count In, Step Input, and help categories |
+| Strict live Logic Pro 12.3 | Last full strict live E2E on the v3.8.0 line: `372` passed / `1` skipped / `0` failed (`373` total). The v3.9.0 live-only surfaces were spike-tested and honestly deferred (see CHANGELOG **Deferred**; evidence under `docs/spikes/`). v3.12.0 keeps the v3.9.2 same-scenario A/B live proof for Compressor `threshold` and the v3.11.0 targeted live QA set, and adds the v3.12.0 release-tree whole-suite live qualification run (registered-operation independent-readback E2E on a clean Logic 12.3 session, 2026-07-21), a live-verified AXPress menu-item toggle, and the live arm auto-setup A–J matrix from #413 |
 | README media | Actual Logic Pro 12.2 capture derivatives are published under `docs/media/` |
-| v3.11.0 release evidence | GitHub Release, Actions logs, [CHANGELOG.md](CHANGELOG.md), issues #253-#267/#278/#279, and PRs #280-#312 |
+| v3.12.0 release evidence | GitHub Release, Actions logs, [CHANGELOG.md](CHANGELOG.md), issues #381/#393/#399/#401/#405/#412/#413/#415/#417/#427, and PRs #407-#428 |
 
 Live E2E defaults to the release binary. Protocol/security assertions run on any host; Logic/CoreMIDI-dependent checks skip unless a real Logic Pro session is visible. Strict mode converts live-gated skips to failures, treats missing project state as a failed cycle roundtrip precondition, and launches the MCP server under a trusted shell/tmux parent so macOS TCC evaluates the same parent context used by live client flows.
 
@@ -304,7 +304,7 @@ Per-release detail lives in [CHANGELOG.md](CHANGELOG.md). Security and installer
 
 ## Registry Metadata
 
-The repository ships `server.json` for the official MCP Registry metadata path. It is pinned to the current stable release (`v3.11.0`) and carries discovery tags for Logic Pro, DAW automation, MIDI, Claude/Cursor MCP clients, and music-production agents. The record is metadata-only because the registry package schema does not yet model Homebrew formulas or GitHub release tarballs as first-class package types. The install authority remains the pinned GitHub Release/Homebrew path above.
+The repository ships `server.json` for the official MCP Registry metadata path. It is pinned to the current stable release (`v3.12.0`) and carries discovery tags for Logic Pro, DAW automation, MIDI, Claude/Cursor MCP clients, and music-production agents. The record is metadata-only because the registry package schema does not yet model Homebrew formulas or GitHub release tarballs as first-class package types. The install authority remains the pinned GitHub Release/Homebrew path above.
 
 ## Known Limitations
 
