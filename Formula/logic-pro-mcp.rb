@@ -45,6 +45,12 @@ class LogicProMcp < Formula
     pkgshare.install "Scripts/logic_bounce_ui.py" if (buildpath/"Scripts/logic_bounce_ui.py").exist?
     pkgshare.install "Scripts/logic_ui_jxa.py" if (buildpath/"Scripts/logic_ui_jxa.py").exist?
     pkgshare.install "Scripts/logic_input_source.py" if (buildpath/"Scripts/logic_input_source.py").exist?
+    # #427: shared dependency imported by logic_bounce.py / logic_bounce_ui.py /
+    # logic_ui_jxa.py. Omitting it shipped a package that failed at runtime with
+    # ModuleNotFoundError on the bounce/export path. The import-closure gate in
+    # release-verify-formula-install-paths.sh now fails the release if this (or any
+    # other transitively-imported logic_* helper) is not installed.
+    pkgshare.install "Scripts/logic_variants.py" if (buildpath/"Scripts/logic_variants.py").exist?
   end
 
   def caveats

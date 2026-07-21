@@ -87,7 +87,8 @@ tar czf LogicProMCP-macOS-universal.tar.gz \
   Scripts/logic_bounce.py \
   Scripts/logic_bounce_ui.py \
   Scripts/logic_ui_jxa.py \
-  Scripts/logic_input_source.py
+  Scripts/logic_input_source.py \
+  Scripts/logic_variants.py
 
 cp LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz
 shasum -a 256 LogicProMCP-macOS-universal.tar.gz > SHA256SUMS.txt

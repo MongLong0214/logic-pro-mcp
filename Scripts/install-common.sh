@@ -200,4 +200,6 @@ install_extracted_assets() {
     install_optional_release_asset "$use_sudo" 0755 "$EXTRACTED_BOUNCE_UI" "$SHARE_DIR/logic_bounce_ui.py"
     install_optional_release_asset "$use_sudo" 0755 "$EXTRACTED_UI_JXA" "$SHARE_DIR/logic_ui_jxa.py"
     install_optional_release_asset "$use_sudo" 0755 "$EXTRACTED_INPUT_SOURCE" "$SHARE_DIR/logic_input_source.py"
+    # #427: shared dependency of logic_bounce.py / logic_bounce_ui.py / logic_ui_jxa.py.
+    install_optional_release_asset "$use_sudo" 0755 "$EXTRACTED_VARIANTS" "$SHARE_DIR/logic_variants.py"
 }
