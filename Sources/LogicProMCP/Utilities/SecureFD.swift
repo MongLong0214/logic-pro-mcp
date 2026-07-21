@@ -248,6 +248,47 @@ enum SecureFD {
         return fd
     }
 
+    // MARK: - Directory path materialization — walk existing, create missing
+
+    /// Open the directory at `components` under `baseFD`, creating any missing
+    /// component with `mkdirat` then a no-follow open. Every level is opened
+    /// `O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC`, so a symlink planted for any
+    /// component fails closed (ELOOP) rather than redirecting the path outside the
+    /// base; a concurrent creator (`mkdirat` EEXIST) is tolerated by re-opening the
+    /// now-existing directory (still no-follow). Returns the leaf directory fd
+    /// (caller owns it). Used to materialize a staging/log directory chain such as
+    /// `Library/Logs/…/audit` beneath the trusted base without ever following a
+    /// planted symlink. Unlike `makeEmptyDir` this does not require the leaf empty
+    /// (the audit directory persists across runs).
+    static func ensureDirectory(baseFD: Int32, components: [String], mode: mode_t) throws -> Int32 {
+        for c in components { try validateComponent(c) }
+        var currentFD = dupCloexec(baseFD)
+        guard currentFD >= 0 else { throw FDError.componentOpenFailed(component: "<base-dup>", errno: errno) }
+        for comp in components {
+            let opened = comp.withCString { openat(currentFD, $0, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC) }
+            if opened >= 0 {
+                close(currentFD); currentFD = opened; continue
+            }
+            let openErrno = errno   // capture before any close/mkdirat overwrites it
+            guard openErrno == ENOENT else {
+                close(currentFD); throw FDError.componentOpenFailed(component: comp, errno: openErrno)
+            }
+            let mk = comp.withCString { mkdirat(currentFD, $0, mode) }
+            if mk != 0 {
+                let mkErrno = errno
+                guard mkErrno == EEXIST else {   // EEXIST = concurrent creator won; re-open below
+                    close(currentFD); throw FDError.componentOpenFailed(component: comp, errno: mkErrno)
+                }
+            }
+            let created = comp.withCString { openat(currentFD, $0, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC) }
+            let createdErrno = errno
+            close(currentFD)
+            guard created >= 0 else { throw FDError.componentOpenFailed(component: comp, errno: createdErrno) }
+            currentFD = created
+        }
+        return currentFD
+    }
+
     // MARK: - Directory create — mkdirat + no-follow open + empty check
 
     /// Create + open a directory relative to a verified parent fd, then require it

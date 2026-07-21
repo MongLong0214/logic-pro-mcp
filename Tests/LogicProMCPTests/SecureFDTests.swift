@@ -231,6 +231,39 @@ struct SecureFDTests {
         }
     }
 
+    // MARK: ensureDirectory (walk existing / create missing, no-follow)
+
+    @Test("ensureDirectory creates a missing chain, is idempotent, refuses a symlink component")
+    func ensureDirectoryGuards() throws {
+        let base = try tempBase("ensuredir")
+        defer { try? FileManager.default.removeItem(at: base) }
+        // Library exists; Logs/app/audit do not (mixed walk + create).
+        try FileManager.default.createDirectory(
+            at: base.appendingPathComponent("Library", isDirectory: true), withIntermediateDirectories: true)
+        try withBase(base) {
+            let baseFD = try openBaseFD(base)
+            defer { close(baseFD) }
+            let comps = ["Library", "Logs", "app", "audit"]
+            let leaf = try SecureFD.ensureDirectory(baseFD: baseFD, components: comps, mode: 0o700)
+            #expect(fcntl(leaf, F_GETFD) & FD_CLOEXEC != 0)   // returned fd is close-on-exec
+            // It is a real directory relative to which we can create a file.
+            let f = try SecureFD.createFile(parentFD: leaf, name: "x", mode: 0o600)
+            close(f); close(leaf)
+            #expect(FileManager.default.fileExists(
+                atPath: base.appendingPathComponent("Library/Logs/app/audit/x").path))
+            // Idempotent: a second call walks the now-existing chain (base fd is dup'd, reusable).
+            let leaf2 = try SecureFD.ensureDirectory(baseFD: baseFD, components: comps, mode: 0o700)
+            #expect(fcntl(leaf2, F_GETFD) & FD_CLOEXEC != 0); close(leaf2)
+            // A symlink planted for a component is refused (O_NOFOLLOW), never followed.
+            try FileManager.default.createSymbolicLink(
+                at: base.appendingPathComponent("evil"),
+                withDestinationURL: base.appendingPathComponent("Library"))
+            #expect(throws: SecureFD.FDError.self) {
+                close(try SecureFD.ensureDirectory(baseFD: baseFD, components: ["evil", "Logs"], mode: 0o700))
+            }
+        }
+    }
+
     // MARK: teardown
 
     @Test("teardownTree removes a nested tree and unlinks a symlink child as a link (target survives)")
