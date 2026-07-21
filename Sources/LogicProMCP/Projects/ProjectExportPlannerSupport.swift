@@ -85,6 +85,44 @@ extension ProjectExportPlanner {
         ]
     }
 
+    /// #369: the bounce/export step's real execution dependencies, so the manifest
+    /// is honest about what the run needs instead of only reporting
+    /// `validation_status: valid`. The default export path drives Logic's Bounce
+    /// dialog out-of-process (the bundled `logic_bounce.py` helper) — it is NOT
+    /// gated on the MIDIKeyCommands MIDI-Learn binding, which the correction in
+    /// the `automation_permission` detail spells out.
+    static func executionPreconditions() -> [ProjectExportPrecondition] {
+        [
+            ProjectExportPrecondition(
+                requirement: "automation_permission",
+                appliesToCommands: ["bounce"],
+                detail: "The bounce/export step drives Logic Pro's Bounce dialog out-of-process: it issues "
+                    + "Logic's default Bounce command (Cmd+B, or File > Bounce > Project or Section) and confirms "
+                    + "the settings and save panel through System Events, so Automation approval for BOTH System "
+                    + "Events and Logic Pro is required or the run fails at the bounce step. This does NOT require "
+                    + "the MIDIKeyCommands manual MIDI-Learn binding: that channel is only a fallback route for the "
+                    + "standalone project.bounce operation reported by logic_system health (whose primary route is "
+                    + "also System Events), not this dialog-driven export path.",
+                verifyWith: "LogicProMCP --check-permissions"
+            ),
+            ProjectExportPrecondition(
+                requirement: "post_event_access",
+                appliesToCommands: ["bounce"],
+                detail: "The Bounce settings and save panel (filename entry, destination navigation, and the "
+                    + "confirm button) is driven with native CGEvent, which requires trusted PostEvent access "
+                    + "(granted through the launcher app's Accessibility entry).",
+                verifyWith: "LogicProMCP doctor (permissions.post_event_access)"
+            ),
+            ProjectExportPrecondition(
+                requirement: "bounce_helper_available",
+                appliesToCommands: ["bounce"],
+                detail: "The export step runs the bundled logic_bounce.py helper; it must resolve on the install "
+                    + "share path, pass the ownership-trust check, and have a python3 interpreter available.",
+                verifyWith: "LogicProMCP doctor"
+            ),
+        ]
+    }
+
     static func projectPaths(from params: [String: Value]) throws -> [String] {
         if let array = params["projects"]?.arrayValue {
             let paths = array.compactMap { $0.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) }

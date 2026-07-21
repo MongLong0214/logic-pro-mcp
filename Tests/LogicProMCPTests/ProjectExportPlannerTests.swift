@@ -63,6 +63,62 @@ struct ProjectExportPlannerTests {
         #expect(steps.map(\.command) == ["open", "bounce"])
     }
 
+    @Test("#369: surfaces the bounce step's execution preconditions in the manifest")
+    func surfacesBounceExecutionPreconditions() throws {
+        let project = try makeExportPlannerProject(named: "Precondition Song")
+        let outputRoot = try makeExportPlannerDirectory()
+
+        let plan = try ProjectExportPlanner.plan(params: [
+            "projects": .array([.string(project.path)]),
+            "output_root": .string(outputRoot.path),
+            "artifacts": .array([.string("stem")]),
+        ])
+
+        // The plan must no longer be silent about what the run needs: every
+        // precondition names the bounce command it gates.
+        #expect(plan.executionPreconditions.map(\.requirement)
+            == ["automation_permission", "post_event_access", "bounce_helper_available"])
+        #expect(plan.executionPreconditions.allSatisfy { $0.appliesToCommands == ["bounce"] })
+        #expect(plan.executionPreconditions.allSatisfy { !$0.verifyWith.isEmpty })
+
+        // The MIDI-Learn misconception is corrected in-context (the issue's
+        // "Related question"): the dialog-driven export path does NOT need the
+        // MIDIKeyCommands manual binding.
+        let automation = try #require(
+            plan.executionPreconditions.first { $0.requirement == "automation_permission" }
+        )
+        #expect(automation.detail.contains("System Events"))
+        #expect(automation.detail.contains("does NOT require"))
+        #expect(automation.detail.contains("MIDIKeyCommands"))
+    }
+
+    @Test("#369: execution preconditions encode with snake_case keys and survive round-trip")
+    func executionPreconditionsEncodeWithSnakeCaseKeys() throws {
+        let project = try makeExportPlannerProject(named: "Encode Song")
+        let outputRoot = try makeExportPlannerDirectory()
+        let plan = try ProjectExportPlanner.plan(params: [
+            "projects": .array([.string(project.path)]),
+            "output_root": .string(outputRoot.path),
+            "artifacts": .array([.string("bounce")]),
+        ])
+
+        let data = try JSONEncoder().encode(plan)
+        let object = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let preconditions = try #require(object["execution_preconditions"] as? [[String: Any]])
+        #expect(preconditions.count == 3)
+        let first = try #require(preconditions.first)
+        #expect(first["requirement"] as? String == "automation_permission")
+        #expect(first["applies_to_commands"] as? [String] == ["bounce"])
+        let verifyWith = try #require(first["verify_with"] as? String)
+        #expect(!verifyWith.isEmpty)
+
+        // Round-trips back into the model unchanged.
+        let decoded = try JSONDecoder().decode(ProjectExportPlan.self, from: data)
+        #expect(decoded.executionPreconditions == plan.executionPreconditions)
+    }
+
     @Test("reports collision and zero-byte artifact risks without mutating files")
     func collisionAndZeroByteRisks() throws {
         let project = try makeExportPlannerProject(named: "Collision Song")
