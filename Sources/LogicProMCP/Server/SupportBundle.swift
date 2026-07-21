@@ -142,40 +142,93 @@ struct SupportBundleBuilder: Sendable {
         await onFirstWrite()
         return try await Self.runBlocking {
             try Self.requireAbsent(directory)
-            let fileManager = FileManager.default
-            let parent = directory.deletingLastPathComponent()
-            try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
-            let staging = parent.appendingPathComponent(
-                ".\(directory.lastPathComponent).tmp-\(UUID().uuidString)",
-                isDirectory: true
-            )
-            try Self.createExclusiveDirectory(staging)
-            var moved = false
-            defer {
-                if !moved { try? fileManager.removeItem(at: staging) }
+            // Materialize, publish, and read back strictly through SecureFD
+            // (fd-relative, no-follow): a symlink planted for any component of the
+            // caller-derived bundle path can no longer divert the staging
+            // directory, the per-file writes, the publish, or the readback outside
+            // the trusted base. Replaces the path-based createDirectory + Data.write
+            // + Data(contentsOf:) and the post-create realpath containment recheck.
+            // Trusted anchor = the deepest EXISTING ancestor of the target
+            // (confined under the support-bundle root by the caller's
+            // resolvedSupportBundleDirectory in production; a temp root under test),
+            // opened by path like the home base. The not-yet-existing tail is then
+            // created + walked strictly no-follow below. Deriving the base per call
+            // (no global seam) keeps concurrent publishers independent.
+            var anchor = directory.standardizedFileURL
+            var tail: [String] = []
+            while !FileManager.default.fileExists(atPath: anchor.path), anchor.pathComponents.count > 1 {
+                tail.insert(anchor.lastPathComponent, at: 0)
+                anchor = anchor.deletingLastPathComponent()
             }
+            let baseFD = anchor.path.withCString { open($0, O_RDONLY | O_DIRECTORY | O_CLOEXEC) }
+            guard baseFD >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            defer { close(baseFD) }
+            // `requireAbsent` proved the target does not exist, so the tail is
+            // non-empty (its last element is the bundle directory name).
+            guard let bundleName = tail.last else { throw CocoaError(.fileWriteFileExists) }
+            let parentFD = try SecureFD.ensureDirectory(
+                baseFD: baseFD, components: Array(tail.dropLast()), mode: 0o755
+            )
+            defer { close(parentFD) }
+
+            let stagingName = ".\(bundleName).tmp-\(UUID().uuidString)"
+            let (stagingFD, _) = try SecureFD.makeEmptyDir(
+                parentFD: parentFD, name: stagingName, mode: 0o700
+            )
+            var published = false
+            defer {
+                close(stagingFD)
+                if !published { try? SecureFD.teardownTree(parentFD: parentFD, name: stagingName) }
+            }
+
             for name in Self.fileNames.sorted() {
                 guard let data = assembly.files[name] else { throw CocoaError(.fileNoSuchFile) }
-                let url = staging.appendingPathComponent(name)
-                try data.write(to: url, options: .atomic)
-                try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+                let fd = try SecureFD.createFile(parentFD: stagingFD, name: name, mode: 0o600)
+                do {
+                    try data.withUnsafeBytes { raw in
+                        var off = 0
+                        while off < raw.count {
+                            let n = Darwin.write(fd, raw.baseAddress!.advanced(by: off), raw.count - off)
+                            guard n > 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+                            off += n
+                        }
+                    }
+                    try SecureFD.fullfsync(fd)
+                } catch { close(fd); throw error }
+                close(fd)
             }
-            try Self.verify(assembly, at: staging)
-            try Self.publishExclusively(staging, to: directory)
-            moved = true
-            do {
-                let readback = try Self.readback(at: directory)
-                for file in readback {
-                    guard let source = assembly.files[file.name] else {
-                        throw CocoaError(.fileNoSuchFile)
-                    }
-                    guard file.sha256 == Self.sha256(source) else {
-                        throw CocoaError(.fileReadCorruptFile)
-                    }
+
+            // Publish atomically + exclusively RELATIVE to the parent dir fd, so no
+            // path re-resolution can divert it; RENAME_EXCL refuses an existing target.
+            let renamed = stagingName.withCString { s in
+                bundleName.withCString { d in
+                    renameatx_np(parentFD, s, parentFD, d, UInt32(RENAME_EXCL))
                 }
-                return Result(directory: directory, files: readback)
+            }
+            guard renamed == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            published = true
+
+            // Read back the PUBLISHED bundle fd-relative (no-follow, regular-file,
+            // st_nlink==1) and verify every digest; tear it down on any mismatch.
+            do {
+                let bundleFD = try SecureFD.walkVerified(baseFD: parentFD, [bundleName]).fd
+                defer { close(bundleFD) }
+                var digests: [FileDigest] = []
+                for name in Self.fileNames.sorted() {
+                    guard let source = assembly.files[name] else { throw CocoaError(.fileNoSuchFile) }
+                    let rfd = try SecureFD.openRead(parentFD: bundleFD, name: name)
+                    let data: Data
+                    do {
+                        data = try FileHandle(fileDescriptor: rfd, closeOnDealloc: false).readToEnd() ?? Data()
+                    } catch { close(rfd); throw error }
+                    close(rfd)
+                    let digest = Self.sha256(data)
+                    guard digest == Self.sha256(source) else { throw CocoaError(.fileReadCorruptFile) }
+                    digests.append(FileDigest(name: name, sha256: digest))
+                }
+                return Result(directory: directory, files: digests)
             } catch {
-                try? fileManager.removeItem(at: directory)
+                try? SecureFD.teardownTree(parentFD: parentFD, name: bundleName)
                 throw error
             }
         }
@@ -356,49 +409,6 @@ struct SupportBundleBuilder: Sendable {
         }
     }
 
-    private static func createExclusiveDirectory(_ directory: URL) throws {
-        let result = directory.path.withCString { mkdir($0, S_IRWXU) }
-        guard result == 0 else {
-            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
-        }
-    }
-
-    private static func publishExclusively(_ source: URL, to destination: URL) throws {
-        let result = source.path.withCString { sourcePath in
-            destination.path.withCString { destinationPath in
-                renameatx_np(
-                    AT_FDCWD,
-                    sourcePath,
-                    AT_FDCWD,
-                    destinationPath,
-                    UInt32(RENAME_EXCL)
-                )
-            }
-        }
-        guard result == 0 else {
-            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
-        }
-    }
-
-    private static func verify(_ assembly: Assembly, at directory: URL) throws {
-        for file in try readback(at: directory) {
-            guard let source = assembly.files[file.name] else {
-                throw CocoaError(.fileNoSuchFile)
-            }
-            guard file.sha256 == sha256(source) else {
-                throw CocoaError(.fileReadCorruptFile)
-            }
-        }
-    }
-
-    private static func readback(at directory: URL) throws -> [FileDigest] {
-        try fileNames.sorted().map { name in
-            FileDigest(
-                name: name,
-                sha256: sha256(try Data(contentsOf: directory.appendingPathComponent(name)))
-            )
-        }
-    }
 }
 
 private extension SupportBundleBuilder {
