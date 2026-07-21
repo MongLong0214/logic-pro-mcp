@@ -11,6 +11,10 @@ extension SetupDoctor {
         "logic_bounce_ui.py",
         "logic_ui_jxa.py",
         "logic_input_source.py",
+        // #427: shared dependency of the bounce/export helpers. Listed here so the
+        // runtime share-dir completeness probe DETECTS an install that dropped it
+        // (the exact v3.11.0 regression) instead of reporting `.complete`.
+        "logic_variants.py",
     ]
 
 

@@ -33,7 +33,7 @@ require_command(){ local name="$1" install_hint="$2"; if command -v "$name" >/de
 run_with_optional_sudo(){ local use_sudo="$1"; shift; if [ "$use_sudo" = "1" ]; then sudo "$@"; else "$@"; fi; }
 install_release_asset(){ local use_sudo="$1" mode="$2" source="$3" destination="$4"; run_with_optional_sudo "$use_sudo" install -m "$mode" "$source" "$destination"; }
 install_optional_release_asset(){ local use_sudo="$1" mode="$2" source="$3" destination="$4"; if [ -e "$source" ]; then install_release_asset "$use_sudo" "$mode" "$source" "$destination"; fi; }
-install_extracted_assets(){ local use_sudo="$1"; run_with_optional_sudo "$use_sudo" mkdir -p "$INSTALL_DIR" "$SHARE_DIR"; run_with_optional_sudo "$use_sudo" mv "$EXTRACTED_BINARY" "$INSTALL_DIR/$BINARY"; install_release_asset "$use_sudo" 0644 "$EXTRACTED_SETUP" "$SHARE_DIR/SETUP.md"; install_release_asset "$use_sudo" 0755 "$EXTRACTED_INSTALL_KEYCMDS" "$SHARE_DIR/install-keycmds.sh"; install_release_asset "$use_sudo" 0755 "$EXTRACTED_UNINSTALL_KEYCMDS" "$SHARE_DIR/uninstall-keycmds.sh"; install_release_asset "$use_sudo" 0644 "$EXTRACTED_KEYCMD_PRESET" "$SHARE_DIR/keycmd-preset.plist"; install_release_asset "$use_sudo" 0644 "$EXTRACTED_SCRIPTER" "$SHARE_DIR/LogicProMCP-Scripter.js"; install_optional_release_asset "$use_sudo" 0755 "$EXTRACTED_BOUNCE" "$SHARE_DIR/logic_bounce.py"; install_optional_release_asset "$use_sudo" 0755 "$EXTRACTED_BOUNCE_UI" "$SHARE_DIR/logic_bounce_ui.py"; install_optional_release_asset "$use_sudo" 0755 "$EXTRACTED_UI_JXA" "$SHARE_DIR/logic_ui_jxa.py"; install_optional_release_asset "$use_sudo" 0755 "$EXTRACTED_INPUT_SOURCE" "$SHARE_DIR/logic_input_source.py"; }
+install_extracted_assets(){ local use_sudo="$1"; run_with_optional_sudo "$use_sudo" mkdir -p "$INSTALL_DIR" "$SHARE_DIR"; run_with_optional_sudo "$use_sudo" mv "$EXTRACTED_BINARY" "$INSTALL_DIR/$BINARY"; install_release_asset "$use_sudo" 0644 "$EXTRACTED_SETUP" "$SHARE_DIR/SETUP.md"; install_release_asset "$use_sudo" 0755 "$EXTRACTED_INSTALL_KEYCMDS" "$SHARE_DIR/install-keycmds.sh"; install_release_asset "$use_sudo" 0755 "$EXTRACTED_UNINSTALL_KEYCMDS" "$SHARE_DIR/uninstall-keycmds.sh"; install_release_asset "$use_sudo" 0644 "$EXTRACTED_KEYCMD_PRESET" "$SHARE_DIR/keycmd-preset.plist"; install_release_asset "$use_sudo" 0644 "$EXTRACTED_SCRIPTER" "$SHARE_DIR/LogicProMCP-Scripter.js"; install_optional_release_asset "$use_sudo" 0755 "$EXTRACTED_BOUNCE" "$SHARE_DIR/logic_bounce.py"; install_optional_release_asset "$use_sudo" 0755 "$EXTRACTED_BOUNCE_UI" "$SHARE_DIR/logic_bounce_ui.py"; install_optional_release_asset "$use_sudo" 0755 "$EXTRACTED_UI_JXA" "$SHARE_DIR/logic_ui_jxa.py"; install_optional_release_asset "$use_sudo" 0755 "$EXTRACTED_INPUT_SOURCE" "$SHARE_DIR/logic_input_source.py"; install_optional_release_asset "$use_sudo" 0755 "$EXTRACTED_VARIANTS" "$SHARE_DIR/logic_variants.py"; }
 '
 fi
 
@@ -64,7 +64,7 @@ validate_release_archive_manifest() {
             /*|../*|*/../*|*/..|..)
                 fail_install "release archive contains unsafe path: $path"
                 ;;
-            LogicProMCP|docs|docs/|docs/SETUP.md|Scripts|Scripts/|Scripts/install-keycmds.sh|Scripts/uninstall-keycmds.sh|Scripts/keycmd-preset.plist|Scripts/LogicProMCP-Scripter.js|Scripts/logic_bounce.py|Scripts/logic_bounce_ui.py|Scripts/logic_ui_jxa.py|Scripts/logic_input_source.py)
+            LogicProMCP|docs|docs/|docs/SETUP.md|Scripts|Scripts/|Scripts/install-keycmds.sh|Scripts/uninstall-keycmds.sh|Scripts/keycmd-preset.plist|Scripts/LogicProMCP-Scripter.js|Scripts/logic_bounce.py|Scripts/logic_bounce_ui.py|Scripts/logic_ui_jxa.py|Scripts/logic_input_source.py|Scripts/logic_variants.py)
                 ;;
             *)
                 fail_install "release archive contains unexpected path: $path"
@@ -264,11 +264,13 @@ if curl -fsSL "$DOWNLOAD_URL" -o "$TMP_ARCHIVE" 2>/dev/null; then
     EXTRACTED_BOUNCE_UI="$TMP_DIR/Scripts/logic_bounce_ui.py"
     EXTRACTED_UI_JXA="$TMP_DIR/Scripts/logic_ui_jxa.py"
     EXTRACTED_INPUT_SOURCE="$TMP_DIR/Scripts/logic_input_source.py"
+    EXTRACTED_VARIANTS="$TMP_DIR/Scripts/logic_variants.py"
     for required in "$EXTRACTED_BINARY" "$EXTRACTED_SETUP" "$EXTRACTED_INSTALL_KEYCMDS" "$EXTRACTED_UNINSTALL_KEYCMDS" "$EXTRACTED_KEYCMD_PRESET" "$EXTRACTED_SCRIPTER"; do validate_extracted_asset_file "$required"; done
     validate_optional_extracted_asset_file "$EXTRACTED_BOUNCE"
     validate_optional_extracted_asset_file "$EXTRACTED_BOUNCE_UI"
     validate_optional_extracted_asset_file "$EXTRACTED_UI_JXA"
     validate_optional_extracted_asset_file "$EXTRACTED_INPUT_SOURCE"
+    validate_optional_extracted_asset_file "$EXTRACTED_VARIANTS"
 
     verify_signature "$EXTRACTED_BINARY"
     verify_gatekeeper "$EXTRACTED_BINARY"

@@ -141,12 +141,17 @@ func makeInstallerFixture(
     try writeFile(scripts.appendingPathComponent("keycmd-preset.plist"), contents: "plist")
     try writeFile(scripts.appendingPathComponent("LogicProMCP-Scripter.js"), contents: "// scripter\n")
     if includeProjectHelperScripts {
-        try writeExecutable(scripts.appendingPathComponent("logic_bounce.py"), contents: "#!/usr/bin/env python3\nprint('{}')\n")
+        // #427: logic_bounce imports the shared logic_variants module; the fixture
+        // must mirror the real package (which now ships logic_variants.py) so the
+        // Formula-path check AND the import-closure check in
+        // release-verify-formula-install-paths.sh are exercised truthfully.
+        try writeExecutable(scripts.appendingPathComponent("logic_bounce.py"), contents: "#!/usr/bin/env python3\nfrom logic_variants import logic_process_osa\nprint('{}')\n")
         try writeExecutable(scripts.appendingPathComponent("logic_bounce_ui.py"), contents: "#!/usr/bin/env python3\n")
         if includeSharedJXAHelper {
             try writeExecutable(scripts.appendingPathComponent("logic_ui_jxa.py"), contents: "#!/usr/bin/env python3\n")
         }
         try writeExecutable(scripts.appendingPathComponent("logic_input_source.py"), contents: "#!/usr/bin/env python3\n")
+        try writeExecutable(scripts.appendingPathComponent("logic_variants.py"), contents: "#!/usr/bin/env python3\ndef logic_process_osa():\n    pass\n")
         if symlinkedBounceHelper {
             let target = sandbox.appendingPathComponent("outside-bounce-helper.py")
             try writeFile(target, contents: "# outside\n")
