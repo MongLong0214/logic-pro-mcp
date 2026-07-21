@@ -248,12 +248,11 @@ enum AXHelpers {
     /// value (e.g. from `AXUIElementCopyAttributeValue`). Verifies BOTH that it
     /// is an AXValue AND that the `.cgPoint` extraction succeeds, returning nil
     /// (fail-closed) on a non-AXValue or a wrong-subtype AXValue (e.g. a
-    /// `.cgRect` AXValue). Hoists the `AXValueGetValue` Bool check out of four
-    /// coord-click call sites (`AccessibilityChannel.postMouseClickAt` /
-    /// `.trackViewport`, `AXLogicProElements` track-header click,
-    /// `LibraryAccessor` header click) that previously ignored it and would
-    /// fall back to a (0,0) misclick / bogus viewport on drift or a malformed
-    /// test double.
+    /// `.cgRect` AXValue). Originally hoisted the `AXValueGetValue` Bool check
+    /// out of coordinate-click call sites that ignored it and would fall back
+    /// to a (0,0) misclick on drift; those callers have since been removed by
+    /// the coordinate-free campaign, and the remaining consumers use this for
+    /// fail-closed position READS.
     static func point(fromRawAttribute raw: AnyObject?) -> CGPoint? {
         guard let raw, CFGetTypeID(raw) == AXValueGetTypeID() else { return nil }
         // swiftlint:disable:next force_cast — guarded by CFGetTypeID above.

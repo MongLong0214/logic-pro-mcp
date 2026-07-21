@@ -298,6 +298,37 @@ private func makeRegionFixture(
     #expect(obj["selected_start_bar"] as? Int == 5)
 }
 
+@Test func testSelectLastFailsClosedWhenAXSelectedWriteFails() async {
+    // Order-7 coordinate-free campaign: the former `click at {center}` fallback
+    // after a failed AXSelected write was REMOVED. A SELECT_FAILED marker from
+    // the script must fail closed (State C ax_write_failed) with no fallback —
+    // never a fabricated success.
+    let regionAHelp = "리전은 1 마디 에서 시작하여 3 마디 에서 끝납니다., MIDI 리전."
+
+    let fixture = makeRegionFixture(
+        headers: [(axPoint(0, 100), axSize(200, 40))],
+        regions: [
+            (name: "RegionA", help: regionAHelp,
+             pos: axPoint(100, 108), size: axSize(160, 24), selected: false)
+        ],
+        playheadPosition: "1.1.1.1"
+    )
+
+    let result = await AccessibilityChannel.defaultSelectLastRegion(
+        runtime: fixture.runtime,
+        executeScript: { _ in .success("SELECT_FAILED") },
+        settle: { }
+    )
+
+    #expect(!result.isSuccess)
+    let obj = decodeJSON(result.message)
+    let success = (obj["success"] as? Bool)!
+    #expect(!success)
+    #expect(obj["error"] as? String == "ax_write_failed")
+    let hint = obj["hint"] as? String ?? ""
+    #expect(hint.contains("no fallback"))
+}
+
 @Test func testSelectLastReturnsStateBOnMismatch() async {
     // AppleScript flips selection on the WRONG region (RegionA / bar 1)
     // even though "last" is RegionB / bar 5 → State B readback_mismatch.
