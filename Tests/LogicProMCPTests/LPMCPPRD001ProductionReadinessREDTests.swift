@@ -776,16 +776,25 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         }
     }
 
-    /// Aggregate production-readiness bar. Two debts remain OPEN and honestly
-    /// tracked until reality changes — R-PUB (release assets are owner-replaceable;
-    /// no immutable/transparency publication exists — the asset list used to
-    /// self-attest this closed) and R-SEM (semantic coverage is 1/108 until the
-    /// coverage program lands). R-MATRIX is CLOSED: the managed desktop x {en-US,
-    /// ko-KR} fixtures now exist as SHA-bound content under `Fixtures/qualification`
-    /// (see `managedFixtureManifestSHAsBindActualContent` and
-    /// `managedFixtureMatrixCoversRequiredShipAxes`). Every other contract must
-    /// stay closed. This assertion fails if any other debt opens (regression) and
-    /// when either remaining debt closes (forcing the honest flip).
+    /// Aggregate production-readiness bar — the honest debt set on the current tree.
+    /// R-PUB (release assets are owner-replaceable; no immutable/transparency
+    /// publication exists) and R-SEM (semantic coverage is 1/108 until the coverage
+    /// program lands) remain open as before. In addition, ADR-001 release-time
+    /// enforcement is DEFERRED behind the `ADR001_QUALIFICATION_ENFORCED` repository
+    /// variable (owner decision, 2026-07-21) until the qualification pipeline lands at
+    /// #284 / roadmap T5: `release.yml` no longer *unconditionally* runs the
+    /// pinned-verifier qualification/provenance steps, so the release-enforced
+    /// contracts R-REL, R-MATRIX, R-MUT, and R-PROV are honestly open too. The
+    /// fixtures themselves still exist as SHA-bound content on disk —
+    /// `managedFixtureManifestSHAsBindActualContent` stays green; what is deferred is
+    /// their *enforcement at release*, not their presence. Flipping the variable to
+    /// `true` makes the gate run again at release time, but does NOT re-close these
+    /// static contracts on its own: the evaluator matches the workflow text and the
+    /// deferral `if:` conditions remain, so `blockingStep` still treats the steps as
+    /// conditional. Re-closing all four happens at #284 / T5, which removes the
+    /// deferral (restoring the unconditional pinned-verifier gate) and provisions the
+    /// QUALIFICATION_* evidence/secrets. This assertion is the tripwire: it fails if
+    /// the debt set drifts from this honestly-tracked state in either direction.
     @Test func productionReadinessContractsAreSatisfiedOnCurrentTree() throws {
         let report = try ProductionReadinessContractEvaluator.evaluateRepositoryRoot(
             repositoryRoot,
@@ -793,18 +802,26 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         )
         #expect(
             report.openDebts == [
+                .managedFixtureMatrixUnbound,
+                .mutationRestoreCompensationMissing,
+                .independentProvenanceNotEnforced,
                 .publishedImmutableEvidenceMissing,
+                .releaseWorkflowMissingIndependentQualification,
                 .semanticCoverageIncomplete,
             ],
             "LPMCP-PRD-001 open debts: \(report.openDebts.map(\.rawValue).joined(separator: ",")) — \(report.findings.map(\.detail).joined(separator: " | "))"
         )
     }
 
-    // MARK: - R-MATRIX managed fixtures (closed on the current tree)
+    // MARK: - R-MATRIX managed fixtures (present on disk; release enforcement deferred)
 
-    /// The managed-fixture manifest is recognized by the contract, so R-MATRIX
-    /// is closed on the current tree. Removing the manifest or fixtures reopens it.
-    @Test func managedFixturesAreBoundAndRMatrixIsClosedOnCurrentTree() throws {
+    /// The managed-fixture manifest and fixture bodies exist as SHA-bound content on
+    /// disk — the substance of R-MATRIX — and `managedFixturesPresent` still recognizes
+    /// them. While ADR-001 release enforcement is deferred behind
+    /// `ADR001_QUALIFICATION_ENFORCED` (until #284 / T5), `release.yml` does not wire
+    /// that matrix into publication, so R-MATRIX is an honestly-open, release-enforced
+    /// debt even though the fixtures are present. Re-enabling the gate re-closes it.
+    @Test func managedFixturesPresentOnDiskWhileRMatrixReleaseEnforcementDeferred() throws {
         #expect(ProductionReadinessContractEvaluator.managedFixturesPresent(
             atRepositoryRoot: repositoryRoot
         ))
@@ -812,7 +829,7 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             repositoryRoot,
             expectedAuthorityBaseSHA: expectedBaseSHA
         )
-        #expect(!report.openDebts.contains(.managedFixtureMatrixUnbound))
+        #expect(report.openDebts.contains(.managedFixtureMatrixUnbound))
     }
 
     /// Every manifest SHA-256 binds the actual fixture bytes on disk. Tampering
