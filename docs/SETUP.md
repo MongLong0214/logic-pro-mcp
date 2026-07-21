@@ -293,7 +293,7 @@ Wire the LogicProMCP MCU port in Logic Pro Control Surfaces if you use MCU-only 
 
 <a id="doctor-dependenciesclick-fallback"></a>
 ### `dependencies.click_fallback`
-Install `cliclick` only if PostEvent is denied and you still need fallback click paths.
+The server's only synthetic-click path is the native CGEvent post, which requires PostEvent access — grant it in System Settings ▸ Privacy & Security ▸ Accessibility. The external `cliclick` fallback was retired (a present tool is no longer used by the server and is reported as informational evidence only).
 
 ## Lifecycle Anchors
 

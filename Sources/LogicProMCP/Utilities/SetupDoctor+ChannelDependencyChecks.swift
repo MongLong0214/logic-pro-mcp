@@ -138,23 +138,29 @@ extension SetupDoctor {
 
 
     static func clickFallbackCheck(runtime: Runtime, permissionStatus: PermissionChecker.PermissionStatus) -> Check {
+        // The external click-tool fallback was RETIRED by the coordinate-free
+        // campaign: the server's only synthetic-click path is the native CGEvent
+        // post, which requires PostEvent access. The check id is kept for schema
+        // stability, but a present external tool no longer counts as a server
+        // click path (that would be a false-green about server capability); its
+        // presence is still reported as informational evidence for operators.
         let fallbackTool = "cli" + "click"
         let fallbackToolPresent = ["/opt/homebrew/bin/" + fallbackTool, "/usr/local/bin/" + fallbackTool]
             .contains(where: runtime.isExecutableFile)
         let nativeAvailable = permissionStatus.postEventAccess
-        let warn = !nativeAvailable && !fallbackToolPresent
         return check(
             id: "dependencies.click_fallback",
             domain: "dependencies",
-            status: warn ? .warn : .pass,
-            summary: warn
-                ? "No working click path was found because PostEvent is denied and \(fallbackTool) is absent."
-                : "At least one click path is available or the fallback is not needed.",
+            status: nativeAvailable ? .pass : .warn,
+            summary: nativeAvailable
+                ? "The native synthetic-click path is available (PostEvent granted); no fallback is used."
+                : "No working click path: PostEvent is denied, and the external click-tool fallback "
+                    + "was retired (a present tool is not a server click path).",
             evidence: [
-                fallbackTool: fallbackToolPresent ? "present" : "absent",
+                fallbackTool: (fallbackToolPresent ? "present" : "absent") + " (informational; retired as a server path)",
                 "native_click": nativeAvailable ? "available" : "denied",
             ],
-            remediationType: warn ? .docs : .none
+            remediationType: nativeAvailable ? .none : .docs
         )
     }
 

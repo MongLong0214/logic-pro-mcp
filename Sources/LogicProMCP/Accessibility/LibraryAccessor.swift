@@ -234,13 +234,9 @@ enum LibraryAccessor {
                 usleep(120_000)
                 CGWarpMouseCursorPosition(point)
                 usleep(30_000)
-                // Prefer the native CGEvent double-click (audit #16): spawning
-                // cliclick per click is FD-leak-class. Fall back to cliclick only
-                // if the native post fails.
-                if AXMouseHelper.doubleClick(at: point) {
-                    return true
-                }
-                return LibraryAccessor.postCliclick(command: "dc", at: point)
+                // Native CGEvent only — the external click-tool fallback was
+                // retired (see `productionMouseClick`).
+                return AXMouseHelper.doubleClick(at: point)
             }
         )
     }
@@ -1353,36 +1349,13 @@ enum LibraryAccessor {
         usleep(120_000)
         CGWarpMouseCursorPosition(point)
         usleep(30_000)
-        // Prefer the native CGEvent click (audit #16): spawning cliclick per
-        // click is FD-leak-class. Fall back to cliclick only if the native
-        // post fails.
-        if AXMouseHelper.click(at: point) {
-            return true
-        }
-        return postCliclick(command: "c", at: point)
-    }
-
-    private static func postCliclick(command: String, at point: CGPoint) -> Bool {
-        let candidates = ["/opt/homebrew/bin/cliclick", "/usr/local/bin/cliclick"]
-        guard let executable = candidates.first(where: {
-            FileManager.default.isExecutableFile(atPath: $0)
-        }) else {
-            return false
-        }
-        let x = Int(point.x.rounded())
-        let y = Int(point.y.rounded())
-        debugLibraryClick("cliclick \(command):\(x),\(y) executable=\(executable)")
-        guard case let .completed(output) = BoundedProcessRunner.run(
-            executable: executable,
-            arguments: ["\(command):\(x),\(y)"],
-            timeout: 1.0,
-            outputLimitBytes: 4_096
-        ) else {
-            debugLibraryClick("cliclick \(command):\(x),\(y) result=spawn_or_timeout")
-            return false
-        }
-        debugLibraryClick("cliclick \(command):\(x),\(y) exit=\(output.exitCode)")
-        return output.exitCode == 0
+        // Native CGEvent only. The external click-tool fallback was retired by
+        // the coordinate-free campaign: it was reachable only when the native
+        // post failed (which does not happen for an Accessibility-permitted
+        // process), spawned an external binary per click (audit #16
+        // FD-leak-class), and widened the supply-chain surface. A failed post
+        // surfaces through the caller's existing AX-write/readback logic.
+        return AXMouseHelper.click(at: point)
     }
 
     /// Session-private debug-log file, created inside a `mkdtemp` directory

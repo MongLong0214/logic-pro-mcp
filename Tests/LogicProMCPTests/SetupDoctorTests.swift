@@ -912,3 +912,28 @@ private func registrationFromTemporaryConfig(_ json: String) -> SetupDoctor.Clau
     defer { try? FileManager.default.removeItem(at: dir) }
     return SetupDoctor.readClaudeRegistrationForTesting(configURL: configURL)
 }
+
+// MARK: - dependencies.click_fallback — native-only semantics (coordinate-free campaign)
+
+/// The external click-tool fallback was retired: a PRESENT external tool must
+/// no longer mask a PostEvent denial as a passing click path (that was a
+/// false-green about server capability). Warn is driven by PostEvent alone.
+@Test func clickFallbackWarnsOnPostEventDenialEvenWithExternalToolPresent() {
+    let runtime = doctorRuntime(executable: true)   // every path "is executable" → tool present
+    let status = PermissionChecker.PermissionStatus(
+        accessibility: true, automationLogicPro: true, postEventAccess: false
+    )
+    let check = SetupDoctor.clickFallbackCheck(runtime: runtime, permissionStatus: status)
+    #expect(check.status == .warn)
+    #expect(check.evidence["native_click"] == "denied")
+}
+
+@Test func clickFallbackPassesOnPostEventGrantWithoutExternalTool() {
+    let runtime = doctorRuntime(executable: false)  // tool absent everywhere
+    let status = PermissionChecker.PermissionStatus(
+        accessibility: true, automationLogicPro: true, postEventAccess: true
+    )
+    let check = SetupDoctor.clickFallbackCheck(runtime: runtime, permissionStatus: status)
+    #expect(check.status == .pass)
+    #expect(check.evidence["native_click"] == "available")
+}
