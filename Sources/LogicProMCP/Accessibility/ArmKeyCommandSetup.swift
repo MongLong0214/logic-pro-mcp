@@ -176,9 +176,10 @@ enum ArmKeyCommandSetup {
 
     /// Typed outcome of the functional arm-flip verification, so a partially
     /// mutated host is never treated the same as a cleanly unmapped one. From
-    /// verify-first, only `.unmapped` and `.environmentUnavailable` fall through to
-    /// the GUI assignment; `.partialRestore` and `.couldNotPost` fail closed (never
-    /// pile GUI mutations onto a dirty/undrivable host).
+    /// verify-first, only a clean `.unmapped` falls through to the GUI
+    /// assignment; `.partialRestore`, `.couldNotPost`, AND `.environmentUnavailable`
+    /// all fail closed (never pile GUI mutations onto a dirty/undrivable host, and
+    /// never run a GUI assignment that could not be functionally verified). (#415)
     enum VerifyResult: Equatable {
         /// The chord flipped record-enable AND every mutation was restored.
         case verified
@@ -192,8 +193,10 @@ enum ArmKeyCommandSetup {
         /// The verification chord could not be posted at all (e.g. focus/selection
         /// gates never let a key land) — distinct from "posted, no flip".
         case couldNotPost
-        /// The environment could not be captured/tested (e.g. no selectable track);
-        /// nothing was mutated, so verify-first may still try the GUI assignment.
+        /// The environment could not be captured/tested (e.g. no selectable track).
+        /// Nothing was mutated, but a GUI assignment could not be functionally
+        /// verified either — verify-first fails closed WITHOUT opening the Key
+        /// Commands GUI (`verify_environment_unavailable`). (#415)
         case environmentUnavailable
     }
 
@@ -322,9 +325,10 @@ enum ArmKeyCommandSetup {
 
         // Verify-first idempotent fast path: before touching the Key Commands GUI,
         // drive a real arm with the captured chord. Only a clean `.verified` short-
-        // circuits to State A; `.unmapped`/`.environmentUnavailable` fall through to
-        // the GUI path; a partial restore or a post failure fails closed (never
-        // pile GUI mutations onto a host we already left dirty or could not drive).
+        // circuits to State A and only a clean `.unmapped` falls through to the GUI
+        // path; every other outcome — `.environmentUnavailable` included — fails
+        // closed (never pile GUI mutations onto a host we already left dirty,
+        // could not drive, or could not functionally verify against). (#415)
         evidence.verificationMutationAttempted = true
         switch runtime.verifyArmFlip(keyCode, modifiers) {
         case .verified:

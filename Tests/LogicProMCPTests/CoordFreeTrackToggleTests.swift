@@ -609,6 +609,85 @@ struct CoordFreeTrackToggleTests {
         #expect(result == .couldNotPost)
     }
 
+    /// #415 verify-causality: an external record-enable change landing INSIDE the
+    /// post-observation window of a genuine (successful) post can be credited as
+    /// the chord's late flip by the FLIP leg alone — but end-to-end `.verified`
+    /// additionally requires the RESTORE leg to observe a second, opposite,
+    /// chord-correlated transition. With an unmapped chord the restore leg posts
+    /// and observes nothing, so a SINGLE external interference degrades to
+    /// `.partialRestore` (fail-closed; never proceeds to GUI assignment), never a
+    /// false `.verified`. This pins the two-transition requirement: it FAILS if
+    /// `.verified` is ever weakened to credit the flip leg alone.
+    @Test("#415 arm-setup verify: external flip inside the observe window of an unmapped chord → .partialRestore, never .verified")
+    func armSetupVerifySingleExternalFlipInObserveWindowIsNeverVerified() throws {
+        let f = makeToggleFixture()
+        let arm = f.arm[0]
+        let key = KeyMouseRecorder()
+        // The chord is UNMAPPED. An external agent flips arm to the target right
+        // after the FIRST successful post (indistinguishable, to observation, from
+        // a late chord flip). It never flips back, so the restore leg — the second
+        // confirming transition — cannot be satisfied by the unmapped chord.
+        final class OneShot: @unchecked Sendable { var fired = false }
+        let external = OneShot()
+        key.onFlaggedKey = { code, _ in
+            guard code == 14, !external.fired else { return }
+            external.fired = true
+            f.builder.setAttribute(arm, kAXValueAttribute as String, 1)
+        }
+        let (logic, keyRuntime, proc) = armVerifyRuntimes(f, key: key)
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: 14, modifiers: [.maskControl, .maskShift],
+            runtime: logic, keyRuntime: keyRuntime, processRuntime: proc
+        )
+        #expect(result != .verified)
+        guard case .partialRestore = result else {
+            Issue.record("expected .partialRestore, got \(result)")
+            return
+        }
+    }
+
+    /// #415 verify-causality: the settle-gap variant. The first successful post of
+    /// an unmapped chord observes no flip; the external change lands in the SETTLE
+    /// gap between attempts, so the next attempt's late-publish (double-toggle)
+    /// guard credits the flip leg. The restore leg still observes no chord-caused
+    /// transition → `.partialRestore`, never `.verified`.
+    @Test("#415 arm-setup verify: external flip in the settle gap (late-publish credit) → .partialRestore, never .verified")
+    func armSetupVerifySettleGapExternalFlipIsNeverVerified() throws {
+        let f = makeToggleFixture()
+        let arm = f.arm[0]
+        let key = KeyMouseRecorder()   // unmapped: posts succeed, chord moves nothing
+        // Fire the external flip on the SETTLE sleep (200_000µs) — after the first
+        // observation window expired, before the next attempt's loop-top guard.
+        final class OneShot: @unchecked Sendable { var fired = false }
+        let external = OneShot()
+        let keyRuntime = AXMouseHelper.Runtime(
+            postMouseEvent: { _, _, _ in true },
+            postKeyEvent: { _ in true },
+            postUnicodeScalar: { _ in false },
+            sleepMicros: { us in
+                guard us == AccessibilityChannel.syntheticKeyRetrySettleMicros, !external.fired else { return }
+                external.fired = true
+                f.builder.setAttribute(arm, kAXValueAttribute as String, 1)
+            },
+            postFlaggedKeyEvent: { code, _ in
+                key.flaggedKeyEvents.append((code, [.maskControl, .maskShift]))
+                return true
+            }
+        )
+        let logic = f.builder.makeLogicRuntime(
+            appElement: f.app, setAttributeHandler: nil, performActionHandler: nil
+        )
+        let result = AccessibilityChannel.armSetupVerify(
+            keyCode: 14, modifiers: [.maskControl, .maskShift],
+            runtime: logic, keyRuntime: keyRuntime, processRuntime: noopProcessRuntime()
+        )
+        #expect(result != .verified)
+        guard case .partialRestore = result else {
+            Issue.record("expected .partialRestore, got \(result)")
+            return
+        }
+    }
+
     /// Deadline safety (#413): if the flip post happened and the command deadline
     /// then fires, the restore chord is NOT posted (no new key after the deadline);
     /// the verifier reports honestly (partial restore), never a clean State A.

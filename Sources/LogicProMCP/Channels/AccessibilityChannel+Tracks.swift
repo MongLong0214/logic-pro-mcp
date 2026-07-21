@@ -463,6 +463,24 @@ extension AccessibilityChannel {
     /// from a PARTIAL restore (a flip or restore failed, host left dirty — must
     /// fail closed), a POST failure, and an unavailable environment, so a partially
     /// mutated host never receives further mutations.
+    /// Functional arm-chord verification: flip record-enable with ONLY the chord,
+    /// then restore it with the SAME chord, observing both transitions by AX
+    /// read-back.
+    ///
+    /// #415 verify-causality: `.verified` requires TWO opposite chord-correlated
+    /// transitions — the flip leg AND the restore leg — each gated by an
+    /// arm-not-yet-at-target read immediately before a SUCCESSFUL post (see
+    /// `postArmChordAndObserveFlip`). The restore leg IS the "second confirming
+    /// flip" #415 asked to consider: a SINGLE external record-enable change
+    /// landing inside one observation window (or a settle gap) can at most
+    /// satisfy one leg, so with an unmapped chord it degrades to
+    /// `.partialRestore` (fail-closed — never GUI assignment, never a false
+    /// `.verified`); before any post it is never credited at all. The residual
+    /// is DOUBLE external interference — two opposite flips, each landing inside
+    /// its own ≤3×600ms window, mimicking both legs — which is observationally
+    /// indistinguishable from the chord by AX read-back and is accepted as
+    /// irreducible for this surface (a stricter single-attempt window would not
+    /// remove it and costs live reliability against slow CGEvent delivery).
     static func armSetupVerify(
         keyCode: CGKeyCode,
         modifiers: CGEventFlags,
