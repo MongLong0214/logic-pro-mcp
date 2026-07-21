@@ -430,13 +430,19 @@ enum OperationRegistry {
     /// Excluded: reversible param writes and state toggles (mixer.set_volume /
     /// set_pan, plugins.set_param_verified, tracks.select / rename / mute / solo
     /// / arm / arm_only / set_automation) — a wrong-target write there is
-    /// recoverable, so the ratchet's cost is not yet earned.
+    /// recoverable, so the ratchet's cost is not yet earned. This deliberate
+    /// `.legacyIndexAllowed` residual is the ADR-002 done-bar's recorded,
+    /// issue-linked waiver: it is tracked by #401 (not a silent gap), and each
+    /// member fails closed on a stale ref and echoes fingerprints. Promoting these
+    /// reversible ops to `.corroborated` would contradict this earned-cost rule;
+    /// the waiver, not promotion, is the honest classification.
     ///
     /// KNOWN RESIDUAL (next batch): `mixer.insert_plugin` is an index-keyed
     /// plugin insert that this tier CANNOT cover, because its `TargetPolicy` is
     /// `.none` — it accepts no `target_ref`, so `.corroborated`'s "or supply a
     /// target_ref" escape hatch would be unofferable. Ratcheting it requires
-    /// first making it target-bearing.
+    /// first making it target-bearing. Tracked as the recorded, issue-linked
+    /// waiver in #401 (ADR-002 done-bar) so the residual is a visible fact.
     static let corroboratedOperationIDs: Set<OperationID> = [
         .tracksDelete, .tracksDuplicate, .tracksSetInstrument, .pluginsInsertVerified,
     ]

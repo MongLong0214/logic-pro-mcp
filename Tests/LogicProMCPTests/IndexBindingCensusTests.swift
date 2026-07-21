@@ -90,7 +90,9 @@ struct IndexBindingCensusTests {
         // DEPRECATED TIER. Every member still writes to a bare, unproven
         // ordinal. Shrinking this list is the ratchet turning; it must never
         // grow. Each entry earns its place only by being reversible — a
-        // wrong-target write here is recoverable by the user.
+        // wrong-target write here is recoverable by the user. This pinned set is
+        // the ADR-002 done-bar's recorded, issue-linked waiver (#401): the
+        // residual is visible and enforced here, not a silent gap.
         let expectedLegacy: Set<OperationID> = [
             .mixerSetVolume,           // reversible level write
             .mixerSetPan,              // reversible pan write
@@ -111,8 +113,9 @@ struct IndexBindingCensusTests {
         // — it accepts no target_ref, so `.corroborated`'s "or supply target_ref"
         // escape hatch would be unofferable. Ratcheting it requires first making
         // it target-bearing. Asserted here so the gap is a tracked fact, not an
-        // oversight that reads as coverage. The FULL hazard class (this op plus
-        // its reversible sibling) is pinned by `unratchetedTrackKeyedHazardsArePinned`.
+        // oversight that reads as coverage — the recorded, issue-linked waiver is
+        // #401. The FULL hazard class (this op plus its reversible sibling) is
+        // pinned by `unratchetedTrackKeyedHazardsArePinned`.
         let insertPlugin = try #require(
             OperationRegistry.specs.first { $0.id == .mixerInsertPlugin }
         )
