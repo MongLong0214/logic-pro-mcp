@@ -686,6 +686,65 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         #expect(report.semanticValidatorOperationCount == 1)
     }
 
+    /// #409: a semantic-readback validator merely *existing* is not coverage.
+    /// An operation that HAS a validator but no governed release-visible waiver
+    /// (and no live `.passed` — the static repo-tree reality) must count as
+    /// missing and keep R-SEM open with an honest count. A qualifying governed
+    /// waiver, by contrast, credits the operation and closes the debt. Before the
+    /// fix, validator existence alone suppressed the finding — the false-green seam.
+    @Test func r_sem_validatorExistenceAloneDoesNotCreditCoverage() throws {
+        // Everything else green so R-SEM is the only debt that can open. The one
+        // registered op HAS a semantic validator but no governed waiver.
+        let withoutWaiver = ProductionReadinessContractEvaluator.evaluate(
+            releaseWorkflowYAML: fullGreenWorkflowYAML(),
+            registeredOperationIDs: ["system.health"],
+            semanticValidatorOperationIDs: ["system.health"],
+            requiredMatrixAxisCount: QualificationAxis.requiredCombinations.count,
+            debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
+            expectedAuthorityBaseSHA: expectedBaseSHA,
+            publishedReleaseEvidencePresent: true,
+            mutationRestoreCompensationEvidencePresent: true,
+            independentProvenanceEnforced: true,
+            managedFixturesPresent: true
+        )
+        // Fails before the fix (validator existence wrongly credited the op, so
+        // openDebts was empty); passes after (op is missing, only R-SEM opens).
+        #expect(withoutWaiver.openDebts == [.semanticCoverageIncomplete])
+        let detail = try #require(
+            withoutWaiver.findings.first { $0.id == .semanticCoverageIncomplete }?.detail
+        )
+        #expect(detail.contains("1/1 operations"))
+        #expect(detail.contains("system.health"))
+
+        // A qualifying governed release-visible waiver DOES credit the operation,
+        // proving the fix did not hardcode "always missing": the waiver path still
+        // closes R-SEM (and, with everything else green, the whole contract).
+        let waiver = QualificationWaiver(
+            caseID: "in-process/system.health",
+            reasonCode: "known-limitation",
+            owningIssue: "#409",
+            userImpact: "static-tree coverage credited via governed waiver",
+            affectedCapability: QualificationWaiver.operationCapability("system.health"),
+            affectsDefaultProfile: true,
+            expiryVersion: "99.0.0",
+            releaseNoteVisible: true
+        )
+        let withWaiver = ProductionReadinessContractEvaluator.evaluate(
+            releaseWorkflowYAML: fullGreenWorkflowYAML(),
+            registeredOperationIDs: ["system.health"],
+            semanticValidatorOperationIDs: ["system.health"],
+            requiredMatrixAxisCount: QualificationAxis.requiredCombinations.count,
+            debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
+            expectedAuthorityBaseSHA: expectedBaseSHA,
+            publishedReleaseEvidencePresent: true,
+            mutationRestoreCompensationEvidencePresent: true,
+            independentProvenanceEnforced: true,
+            governedWaivers: [waiver],
+            managedFixturesPresent: true
+        )
+        #expect(withWaiver.openDebts.isEmpty)
+    }
+
     @Test func r_matrix_rejectsWhenManagedFixtureMatrixUnbound() {
         let report = ProductionReadinessContractEvaluator.evaluate(
             releaseWorkflowYAML: """
@@ -778,8 +837,9 @@ struct LPMCPPRD001ProductionReadinessREDTests {
 
     /// Aggregate production-readiness bar — the honest debt set on the current tree.
     /// R-PUB (release assets are owner-replaceable; no immutable/transparency
-    /// publication exists) and R-SEM (semantic coverage is 1/108 until the coverage
-    /// program lands) remain open as before. In addition, ADR-001 release-time
+    /// publication exists) and R-SEM (semantic coverage is 0/108 — no operation has
+    /// live qualification or a governed waiver; a registered validator is inventory,
+    /// not coverage, per #409) remain open as before. In addition, ADR-001 release-time
     /// enforcement is DEFERRED behind the `ADR001_QUALIFICATION_ENFORCED` repository
     /// variable (owner decision, 2026-07-21) until the qualification pipeline lands at
     /// #284 / roadmap T5: `release.yml` no longer *unconditionally* runs the
