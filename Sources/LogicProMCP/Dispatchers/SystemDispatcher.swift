@@ -1189,12 +1189,9 @@ struct SystemDispatcher: OperationTraceDispatching {
 
     private enum TraceClearReceiptError: Error {
         case encodingFailed
-        case openFailed(errno: Int32)
         case writeFailed
-        /// The audit directory resolved OUTSIDE its intended parent (symlink
-        /// planted for the final component) — the receipt must never be
-        /// diverted out of the containment root, so the clear is refused.
-        case auditDirectoryEscaped
+        // Open/create/directory/durability failures propagate as SecureFD.FDError
+        // and are caught by the clear_traces handler's fail-closed catch.
     }
 
     /// PRD-015 receipt fields — counts + timestamps ONLY, never trace contents,
@@ -1230,10 +1227,11 @@ struct SystemDispatcher: OperationTraceDispatching {
     }
 
     /// PRD-015: append ONE JSON line to the durable audit log. The line survives
-    /// the store clear (it lives outside it). Opened `O_APPEND` (never
-    /// truncated); the directory is created and containment-checked fail-closed
-    /// (any error propagates so the caller refuses the clear). Returns the
-    /// receipt file path for the response body.
+    /// the store clear (it lives outside it). The audit directory chain is
+    /// materialized and the log opened + appended strictly through SecureFD
+    /// (fd-relative, no-follow, identity-checked); the write is never a truncate,
+    /// and any failure propagates so the caller refuses the clear (fail-closed).
+    /// Returns the receipt file path for the response body.
     ///
     /// Unbounded append is ACCEPTED, not an oversight. Each line is a fixed,
     /// receipt-sized record and `clear_traces` is an l2-confirmed operator
@@ -1242,26 +1240,87 @@ struct SystemDispatcher: OperationTraceDispatching {
     /// can delete receipt lines is itself an evidence-destruction surface —
     /// precisely the failure mode this receipt exists to close.
     private static func appendTraceClearAuditLine(_ receipt: [String: Any]) throws -> String {
-        let root = auditLogRoot
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        // The directory now EXISTS, so re-resolve it through realpath BEFORE
-        // any write: a symlink planted for the audit dir would otherwise divert
-        // the receipt — and with it the whole evidence trail — outside the
-        // intended root, which is indistinguishable from having no receipt.
-        guard auditDirectoryIsContained(root) else {
-            throw TraceClearReceiptError.auditDirectoryEscaped
-        }
         let receiptURL = traceClearReceiptURL
         let data = try JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys])
         guard let line = String(data: data, encoding: .utf8) else {
             throw TraceClearReceiptError.encodingFailed
         }
         let bytes = Array((line + "\n").utf8)
-        let fd = open(receiptURL.path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
-        guard fd >= 0 else { throw TraceClearReceiptError.openFailed(errno: errno) }
-        defer { close(fd) }
-        let written = bytes.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
+
+        // Materialize + open + append strictly through SecureFD (fd-relative,
+        // no-follow). The audit directory chain is created with no-follow opens
+        // so a symlink planted for any component fails closed instead of
+        // diverting the receipt outside the intended root; the log is bound with
+        // O_NOFOLLOW + regular-file + st_nlink==1 so a symlink or hardlink at the
+        // final component is refused; and the line is flushed to stable storage
+        // before returning (the receipt is written one actor hop before the store
+        // is drained, so it must be durable first). This replaces the earlier
+        // create-then-realpath-check-then-open-by-path path, whose containment
+        // check ran AFTER the directory was created — a check-after-use that the
+        // fd-relative walk removes.
+        #if DEBUG
+        // TEST-ONLY: the audit-root override relocates the receipt under a temp
+        // base; bridge it to SecureFD's trusted-base seam (tests root the override
+        // under temporaryDirectory). Release honors neither the override nor the
+        // seam (production base is home). Save + restore the prior value rather
+        // than force-nil so a concurrent test's override is not clobbered.
+        let priorTestBaseOverride = SecureFD._testBaseOverride
+        let auditOverride = ProcessInfo.processInfo
+            .environment["LOGIC_MCP_AUDIT_LOG_ROOT_OVERRIDE"]
+        if let auditOverride, !auditOverride.isEmpty {
+            SecureFD._testBaseOverride = FileManager.default.temporaryDirectory
+        }
+        defer { SecureFD._testBaseOverride = priorTestBaseOverride }
+        #endif
+
+        let (baseFD, relative) = try SecureFD.openTrustedBase(for: receiptURL)
+        defer { close(baseFD) }
+        // openTrustedBase guarantees the target is strictly under the base, so
+        // `relative` is non-empty; this guard is defensive (unreachable in practice).
+        guard let logName = relative.last else { throw TraceClearReceiptError.encodingFailed }
+        let dirFD = try SecureFD.ensureDirectory(
+            baseFD: baseFD, components: Array(relative.dropLast()), mode: 0o700
+        )
+        defer { close(dirFD) }
+
+        // Dual first-bind: create the log exclusively the first time; if a
+        // concurrent creator won the race (EEXIST) fall back to a no-follow
+        // append. Both paths refuse a symlink or hardlink at the name.
+        let fileFD: Int32
+        let isFreshCreate: Bool
+        do {
+            let fd = try SecureFD.createFile(parentFD: dirFD, name: logName, mode: 0o600)
+            // The exclusive-create fd opens at offset 0 WITHOUT O_APPEND; switch
+            // it to append before writing so this write lands at EOF atomically,
+            // exactly like the fallback path. Otherwise a concurrent clear that
+            // created-then-appended in the window before this write would be
+            // clobbered by a write at offset 0 — silently losing an audit line
+            // (the pre-SecureFD open used O_APPEND on both create and existing).
+            // Set append on the caller fd, not in the shared createFile primitive,
+            // whose create-at-0 semantics other callers (support-bundle) rely on.
+            let flags = fcntl(fd, F_GETFL)
+            guard flags != -1, fcntl(fd, F_SETFL, flags | O_APPEND) != -1 else {
+                close(fd); throw TraceClearReceiptError.writeFailed
+            }
+            (fileFD, isFreshCreate) = (fd, true)
+        } catch SecureFD.FDError.componentOpenFailed(_, let e) where e == EEXIST {
+            (fileFD, isFreshCreate) = (try SecureFD.openAppend(parentFD: dirFD, name: logName), false)
+        }
+        defer { close(fileFD) }
+
+        let written = bytes.withUnsafeBytes { Darwin.write(fileFD, $0.baseAddress, $0.count) }
         guard written == bytes.count else { throw TraceClearReceiptError.writeFailed }
+        try SecureFD.fullfsync(fileFD)   // receipt CONTENT durable before the drain
+        // On the first-ever create, also flush the parent directory so the new
+        // receipt's DIRECTORY ENTRY is durable, not just its data (a later append
+        // reuses an existing entry and needs none). Intermediate components created
+        // by ensureDirectory on a first-ever run rely on the filesystem's metadata
+        // commit (transactional on APFS); the protected trace store is in-memory,
+        // so a crash that loses an un-synced entry also loses the store — no
+        // durable "cleared-but-unreceipted" state can result.
+        if isFreshCreate {
+            guard fsync(dirFD) == 0 else { throw TraceClearReceiptError.writeFailed }
+        }
         return receiptURL.path
     }
 
@@ -1290,22 +1349,6 @@ struct SystemDispatcher: OperationTraceDispatching {
                 actualClearedCount: actualClearedCount
             )
         )
-    }
-
-    /// PRD-015 symlink hardening: the audit directory must resolve INSIDE its
-    /// intended parent — production `~/Library/Logs/LogicProMCP`, or the
-    /// DEBUG override root's parent when the test hook is set. Mirrors the
-    /// support-bundle containment check (`createdBundleDirectoryIsContained`):
-    /// realpath BOTH sides, then require the directory to resolve strictly
-    /// under the parent. Because `realpath` follows the final component while
-    /// the parent is resolved independently, a symlink planted for the audit
-    /// dir resolves outside the parent and is caught. Fail-closed when either
-    /// side cannot be canonicalized — an unresolved path is never contained.
-    static func auditDirectoryIsContained(_ directory: URL) -> Bool {
-        guard let parentPath = realpathResolvedPath(directory.deletingLastPathComponent()),
-              let resolved = realpathResolvedPath(directory) else { return false }
-        return resolved.hasPrefix(parentPath + "/")
-            && !resolved.split(separator: "/").contains("..")
     }
 
     /// Resolves a caller-requested bundle directory strictly inside the

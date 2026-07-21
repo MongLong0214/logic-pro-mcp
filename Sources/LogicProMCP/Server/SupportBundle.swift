@@ -142,40 +142,147 @@ struct SupportBundleBuilder: Sendable {
         await onFirstWrite()
         return try await Self.runBlocking {
             try Self.requireAbsent(directory)
-            let fileManager = FileManager.default
-            let parent = directory.deletingLastPathComponent()
-            try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
-            let staging = parent.appendingPathComponent(
-                ".\(directory.lastPathComponent).tmp-\(UUID().uuidString)",
-                isDirectory: true
-            )
-            try Self.createExclusiveDirectory(staging)
-            var moved = false
-            defer {
-                if !moved { try? fileManager.removeItem(at: staging) }
+            // Materialize, publish, and read back strictly through SecureFD
+            // (fd-relative, no-follow): a symlink planted for any component of the
+            // caller-derived bundle path can no longer divert the staging
+            // directory, the per-file writes, the publish, or the readback outside
+            // the trusted base. Replaces the path-based createDirectory + Data.write
+            // + Data(contentsOf:) and the post-create realpath containment recheck.
+            // Trusted base = the user's home directory (production) or, under DEBUG
+            // tests, the temporary directory — a FIXED, unswappable trust root, NOT a
+            // caller-derived existing ancestor. The ENTIRE path from the base down to
+            // the bundle is then walked strictly no-follow (ensureDirectory), so a
+            // symlink planted for ANY component — an existing intermediate like
+            // `Library` or a caller-supplied subdir — fails closed instead of
+            // diverting the write, exactly as the trace-clear wiring does. write() is
+            // thus self-confining; it does not depend on the caller's realpath
+            // containment for symlink safety. The base is a per-call local, so
+            // concurrent publishers stay independent (no global seam).
+            // Canonicalize by realpath'ing the deepest EXISTING prefix (the bundle
+            // tail does not exist yet) and re-appending the tail literally, so the
+            // target and the candidate bases share ONE canonical form. `realpath`
+            // resolves /var → /private/var; `resolvingSymlinksInPath` does not do so
+            // for `temporaryDirectory`, which is why a plain URL comparison diverged.
+            func canonicalComponents(_ url: URL) -> [String]? {
+                var existing = url.standardizedFileURL
+                var suffix: [String] = []
+                while !FileManager.default.fileExists(atPath: existing.path), existing.pathComponents.count > 1 {
+                    suffix.insert(existing.lastPathComponent, at: 0)
+                    existing = existing.deletingLastPathComponent()
+                }
+                guard let raw = realpath(existing.path, nil) else { return nil }
+                defer { free(raw) }
+                return URL(fileURLWithPath: String(cString: raw)).pathComponents + suffix
             }
+            guard let dirComps = canonicalComponents(directory) else {
+                throw CocoaError(.fileWriteNoPermission)
+            }
+            // Trusted base = home (production) or, under DEBUG tests, the temporary
+            // directory — a FIXED, unswappable trust root. The ENTIRE path from the
+            // base to the bundle is walked no-follow below (ensureDirectory), so a
+            // symlink planted for ANY component fails closed rather than diverting
+            // the write, exactly like the trace-clear wiring. Per-call locals keep
+            // concurrent publishers independent (no global seam).
+            #if DEBUG
+            let candidates = [
+                FileManager.default.homeDirectoryForCurrentUser,
+                FileManager.default.temporaryDirectory,
+            ]
+            #else
+            let candidates = [FileManager.default.homeDirectoryForCurrentUser]
+            #endif
+            var chosenCount: Int? = nil
+            for candidate in candidates {
+                guard let cc = canonicalComponents(candidate),
+                      dirComps.count > cc.count, Array(dirComps.prefix(cc.count)) == cc else { continue }
+                chosenCount = cc.count; break
+            }
+            guard let baseCount = chosenCount else { throw CocoaError(.fileWriteNoPermission) }
+            let tail = Array(dirComps.dropFirst(baseCount))
+            let basePath = "/" + dirComps[1..<baseCount].joined(separator: "/")
+            let baseFD = basePath.withCString { open($0, O_RDONLY | O_DIRECTORY | O_CLOEXEC) }
+            guard baseFD >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            defer { close(baseFD) }
+            // isUnder guarantees dirComps.count > base count, so the tail is non-empty
+            // (its last element is the bundle directory name).
+            guard let bundleName = tail.last else { throw CocoaError(.fileWriteFileExists) }
+            let parentFD = try SecureFD.ensureDirectory(
+                baseFD: baseFD, components: Array(tail.dropLast()), mode: 0o755
+            )
+            defer { close(parentFD) }
+
+            let stagingName = ".\(bundleName).tmp-\(UUID().uuidString)"
+            let (stagingFD, _) = try SecureFD.makeEmptyDir(
+                parentFD: parentFD, name: stagingName, mode: 0o700
+            )
+            var published = false
+            defer {
+                close(stagingFD)
+                if !published { try? SecureFD.teardownTree(parentFD: parentFD, name: stagingName) }
+            }
+
             for name in Self.fileNames.sorted() {
                 guard let data = assembly.files[name] else { throw CocoaError(.fileNoSuchFile) }
-                let url = staging.appendingPathComponent(name)
-                try data.write(to: url, options: .atomic)
-                try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+                let fd = try SecureFD.createFile(parentFD: stagingFD, name: name, mode: 0o600)
+                do {
+                    try data.withUnsafeBytes { raw in
+                        var off = 0
+                        while off < raw.count {
+                            let n = Darwin.write(fd, raw.baseAddress!.advanced(by: off), raw.count - off)
+                            if n < 0 {
+                                if errno == EINTR { continue }   // retry an interrupted write
+                                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                            }
+                            guard n > 0 else { throw POSIXError(.EIO) }
+                            off += n
+                        }
+                    }
+                    try SecureFD.fullfsync(fd)
+                } catch { close(fd); throw error }
+                close(fd)
             }
-            try Self.verify(assembly, at: staging)
-            try Self.publishExclusively(staging, to: directory)
-            moved = true
-            do {
-                let readback = try Self.readback(at: directory)
-                for file in readback {
-                    guard let source = assembly.files[file.name] else {
-                        throw CocoaError(.fileNoSuchFile)
-                    }
-                    guard file.sha256 == Self.sha256(source) else {
-                        throw CocoaError(.fileReadCorruptFile)
-                    }
+            // Flush the staging directory so its new file entries are durable before
+            // the rename makes them the published bundle (F_FULLFSYNC on each file
+            // covers file data + inode, but not the containing directory's entries).
+            guard fsync(stagingFD) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+
+            // Publish atomically + exclusively RELATIVE to the parent dir fd, so no
+            // path re-resolution can divert it; RENAME_EXCL refuses an existing target.
+            let renamed = stagingName.withCString { s in
+                bundleName.withCString { d in
+                    renameatx_np(parentFD, s, parentFD, d, UInt32(RENAME_EXCL))
                 }
-                return Result(directory: directory, files: readback)
+            }
+            guard renamed == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            published = true
+
+            // Read back the PUBLISHED bundle fd-relative (no-follow, regular-file,
+            // st_nlink==1) and verify every digest; tear it down on any mismatch.
+            do {
+                // The publish rename is a parent-directory metadata change; flush the
+                // parent so the bundle's directory entry is durable, not just its file
+                // data. The bundle is the sole on-disk artifact (no in-memory backstop),
+                // so a lost entry after a reported success would be reported-but-absent.
+                // A failure here rethrows into the catch below, which tears the bundle down.
+                guard fsync(parentFD) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+                let bundleFD = try SecureFD.walkVerified(baseFD: parentFD, [bundleName]).fd
+                defer { close(bundleFD) }
+                var digests: [FileDigest] = []
+                for name in Self.fileNames.sorted() {
+                    guard let source = assembly.files[name] else { throw CocoaError(.fileNoSuchFile) }
+                    let rfd = try SecureFD.openRead(parentFD: bundleFD, name: name)
+                    let data: Data
+                    do {
+                        data = try FileHandle(fileDescriptor: rfd, closeOnDealloc: false).readToEnd() ?? Data()
+                    } catch { close(rfd); throw error }
+                    close(rfd)
+                    let digest = Self.sha256(data)
+                    guard digest == Self.sha256(source) else { throw CocoaError(.fileReadCorruptFile) }
+                    digests.append(FileDigest(name: name, sha256: digest))
+                }
+                return Result(directory: directory, files: digests)
             } catch {
-                try? fileManager.removeItem(at: directory)
+                try? SecureFD.teardownTree(parentFD: parentFD, name: bundleName)
                 throw error
             }
         }
@@ -356,49 +463,6 @@ struct SupportBundleBuilder: Sendable {
         }
     }
 
-    private static func createExclusiveDirectory(_ directory: URL) throws {
-        let result = directory.path.withCString { mkdir($0, S_IRWXU) }
-        guard result == 0 else {
-            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
-        }
-    }
-
-    private static func publishExclusively(_ source: URL, to destination: URL) throws {
-        let result = source.path.withCString { sourcePath in
-            destination.path.withCString { destinationPath in
-                renameatx_np(
-                    AT_FDCWD,
-                    sourcePath,
-                    AT_FDCWD,
-                    destinationPath,
-                    UInt32(RENAME_EXCL)
-                )
-            }
-        }
-        guard result == 0 else {
-            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
-        }
-    }
-
-    private static func verify(_ assembly: Assembly, at directory: URL) throws {
-        for file in try readback(at: directory) {
-            guard let source = assembly.files[file.name] else {
-                throw CocoaError(.fileNoSuchFile)
-            }
-            guard file.sha256 == sha256(source) else {
-                throw CocoaError(.fileReadCorruptFile)
-            }
-        }
-    }
-
-    private static func readback(at directory: URL) throws -> [FileDigest] {
-        try fileNames.sorted().map { name in
-            FileDigest(
-                name: name,
-                sha256: sha256(try Data(contentsOf: directory.appendingPathComponent(name)))
-            )
-        }
-    }
 }
 
 private extension SupportBundleBuilder {
