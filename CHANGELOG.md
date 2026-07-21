@@ -8,6 +8,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+(No unreleased changes yet.)
+
+---
+
+## [3.12.0] — 2026-07-21
+
+Large release consolidating the coordinate-free actuation campaign, the ADR
+kernel promotions (ADR-002/003/004/005 default-on), consent-based record-arm
+auto-setup, security-hardened trace/support-bundle/saga paths, and the Homebrew
+packaging fix — over 140 changes since v3.11.0. The public MCP surface becomes
+**10 tools / 18 resources / 12 resource templates** — the generated read-only
+operation catalog `logic://system/operations` (ADR-003) ships as the 12th
+template.
+
+### Fixed — release-blocking
+
+- **Homebrew (and the pinned shell installer) now ship `logic_variants.py`.** v3.11.0
+  packaged `logic_bounce.py` / `logic_bounce_ui.py` / `logic_ui_jxa.py` without their
+  shared dependency, so bounce/export failed at runtime with `ModuleNotFoundError`
+  once a project was opened. The module is now in the release tarball, the Formula,
+  and both installers; a new import-closure release gate asserts that every packaged
+  Python helper's transitive `logic_*` imports are also packaged, so this class of
+  omission fails the release at tag time. ([#427](https://github.com/MongLong0214/logic-pro-mcp/issues/427))
+
+### Added
+
+- **Consent-based record-arm key-command auto-setup** (`system.setup_arm_key`): a
+  fail-closed, consent-gated flow that assigns Logic's "Toggle Track Record Enable"
+  key command and functionally verifies it by a real arm flip + restore, so
+  coordinate-free arm actuation works out of the box. ([#413](https://github.com/MongLong0214/logic-pro-mcp/issues/413))
+- **`export_plan` surfaces the bounce step's execution preconditions** (Automation for
+  System Events + Logic Pro, PostEvent, resolvable bounce helper) so a caller can tell
+  from the manifest what a run needs instead of failing at the bounce step. Part 1 of
+  per-track stems ([#369](https://github.com/MongLong0214/logic-pro-mcp/issues/369)).
+- Operation-trace phases record at live seams with saga child-trace correlation; ADR
+  kernels (target references, operation-contract registry, verified-mutation saga
+  preflight, operation trace) promoted to default-on behind their feature policy.
+
+### Changed — coordinate-free actuation
+
+- **mute/solo/arm, app-menu items (Show Mixer / Hide Plug-in Windows / Undo), and the
+  region select-last path no longer use synthetic coordinate clicks** — they use
+  AX actions / key commands with observed-effect verification, failing closed to a
+  typed State C rather than clicking blind. The external click-tool fallback is retired
+  (native CGEvent only). ([#407], coord-removal campaign)
+- **Modal classifier is locale-neutral and recognizes the Drummer Smart Controls pane.**
+  A localized (ko-KR) plugin editor is no longer misclassified as a blocking modal, and
+  the docked Smart Controls pane no longer blocks unrelated ops — without weakening
+  destructive-modal refusal (exact-label matching keeps genuine modals blocking).
+  ([#381](https://github.com/MongLong0214/logic-pro-mcp/issues/381), [#405](https://github.com/MongLong0214/logic-pro-mcp/issues/405))
+
 ### Changed — BREAKING (honesty contract)
 
 - **Release qualification is desktop-only by product scope.** The required same-artifact matrix is Desktop Logic Pro × {en-US, ko-KR} (2 axes). Logic Pro Creator Studio is permanently out of scope (never installed/supported); it is excluded from the qualification matrix rather than perpetually waived. Health still reports the Creator variant as not installed. (Owner decision 2026-07-17.)
@@ -18,12 +69,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **Saga preflight rejects three more plan classes before step 1**: unavailable routes, confirmation-requiring steps (the saga wire carries no confirmation flow), and plans whose modeled duration cannot fit the saga-execute deadline budget.
 - **`saga_cancel` is a real two-phase cancellation**: State B `saga_cancellation_pending` until the unwind is journaled; terminal State A only after compensation readback verifies restoration; compensation failure surfaces as State B `saga_reconciliation_required` with the stored outcome.
 
-### Added
+### Added — operation trace
 
 - All 13 declared operation-trace phases now record at live seams (input validation, mutation-gate pair, route evaluation, channel bracket, target resolution, verification polls, compensation start), with saga child traces correlated to their parent via `parent_trace_id`.
 - A registered command that reaches a dispatcher without a matching switch case now produces a typed `unhandled_registered_command` State C envelope (previously prose); genuinely unknown commands are still rejected at the server layer before dispatch.
 
----
+### Security / hardening
+
+- Trace-clear receipt and support-bundle publish rewritten on a descriptor-relative,
+  no-follow, identity-checked, crash-durable primitive (SecureFD). ([#417](https://github.com/MongLong0214/logic-pro-mcp/issues/417))
+- Single bounded saga lifecycle deadline (abandon-race, gate ownership, fail-closed
+  timeout). ([#412](https://github.com/MongLong0214/logic-pro-mcp/issues/412))
+- Wrong-target write guards for session-stable target references (live-identity
+  cross-check, ambiguity fail-closed, TOCTOU recheck). ([#285])
+- Fault-injection seam excluded from release binaries; test-integrity dead-`#expect`
+  sweep + CI lint. ([#399], [#393](https://github.com/MongLong0214/logic-pro-mcp/issues/393))
 
 ## [3.11.0] — 2026-07-10
 

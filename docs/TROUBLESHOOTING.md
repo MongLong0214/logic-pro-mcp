@@ -226,3 +226,13 @@ If permissions look wrong after reinstalling, remove stale TCC entries in System
 Join the official Logic Pro MCP Discord for real-time setup help and triage: [https://discord.gg/4M3s79DBzz](https://discord.gg/4M3s79DBzz).
 
 For a reproducible bug, open a [GitHub Issue](https://github.com/MongLong0214/logic-pro-mcp/issues) with `LogicProMCP doctor` output and `LOG_LEVEL=debug` logs — that stays searchable and is the canonical tracker.
+
+## bounce/export fails with `ModuleNotFoundError: No module named 'logic_variants'`
+
+Your install is v3.11.0 from Homebrew or the pinned shell installer: that release packaged the bounce helpers without their shared `logic_variants.py` module ([#427](https://github.com/MongLong0214/logic-pro-mcp/issues/427)). Upgrade to v3.12.0 or later (`brew update && brew upgrade logic-pro-mcp`, or re-run the pinned installer with the v3.12.0 pins). (The v3.12.0 binary's `doctor` detects this state — it reports the share directory as incomplete when `logic_variants.py` is missing; the v3.11.0 binary predates that check.) The failure is fail-closed — no partial artifact is written and the project is untouched.
+
+## `setup_arm_key` returns `consent_required`, `verify_environment_unavailable`, or `chord_conflict`
+
+- `consent_required`: pass `consent: true`. The operation mutates Logic's global key commands and never runs implicitly.
+- `verify_environment_unavailable`: no selectable track was available to functionally test the chord; open a project with at least one track and retry. Nothing was changed.
+- `chord_conflict`: the chord is already assigned to another command. The setup never steals an existing binding — choose a different chord via `LOGIC_PRO_MCP_ARM_KEYCODE` / `LOGIC_PRO_MCP_ARM_MODIFIERS`, or free the chord in Logic ▸ Key Commands and retry.

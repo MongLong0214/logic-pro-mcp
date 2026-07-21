@@ -1,6 +1,6 @@
 # API Reference
 
-Current surface: Logic Pro MCP exposes 10 tools, 18 static resources, and 12 resource templates. The published stable release is v3.11.0. That release keeps the 10-tool / 18-resource / 11-template surface; the current source tree adds the read-only generated operation catalog. It includes the v3.9.0 MCP capability additions (resource subscriptions, workflow prompts, and per-tool `outputSchema` / `structuredContent`), keeps the v3.9.2 verified plugin closed-window fix, keeps v3.10.0 desktop/Creator Studio targeting, and adds the v3.11.0 Doctor, tempo, Bounce, region, marker, native toggle, and help-category fixes. `logic_midi` send-only successes and `logic_tracks.arm_only` return Honest Contract JSON envelopes (BREAKING response shape — see CHANGELOG).
+Current surface: Logic Pro MCP exposes 10 tools, 18 static resources, and 12 resource templates. The published stable release is v3.12.0, which ships the generated read-only operation catalog (`logic://system/operations`) as the 12th template, the coordinate-free actuation campaign, consent-gated record-arm auto-setup (`system.setup_arm_key`), ADR-002/003/004/005 kernel behavior on by default, and the Homebrew bounce/export packaging fix (#427). It keeps the v3.9.0 MCP capability additions (resource subscriptions, workflow prompts, and per-tool `outputSchema` / `structuredContent`), the v3.9.2 verified plugin closed-window fix, v3.10.0 desktop/Creator Studio targeting, and the v3.11.0 Doctor, tempo, Bounce, region, marker, native toggle, and help-category fixes. `logic_midi` send-only successes and `logic_tracks.arm_only` return Honest Contract JSON envelopes (BREAKING response shape — see CHANGELOG).
 
 Use tools for actions. Use resources for state. Treat every mutating result as one of:
 
@@ -31,7 +31,7 @@ Every tool in `tools/list` advertises an `outputSchema`. Mixed command tools adv
 | `logic_navigate` | bars, markers, zoom, view toggles |
 | `logic_project` | new, open, save, save_as, close, bounce, launch/quit, is_running, regions, export plan/run/resume, audit, cleanup |
 | `logic_audio` | read-only audio artifact analysis |
-| `logic_system` | health, permissions, command help, trace list/read/clear, saga preflight/execute/status/cancel |
+| `logic_system` | health, permissions, command help, arm key-command auto-setup, trace list/read/clear, saga preflight/execute/status/cancel |
 
 ## Resources
 
@@ -216,7 +216,7 @@ Send-only success responses return an Honest Contract State B JSON envelope beca
 
 `create_virtual_port` reuses same-name/same-mode ports. Reusing a name across modes fails closed with State C `port_unavailable` and includes `port_name`, `existing_mode`, and `requested_mode`.
 
-No MIDI read-back command is shipped in v3.11.0: `read_selection_notes` and `record_sequence verify_notes` are deferred.
+No MIDI read-back command is shipped in v3.12.0: `read_selection_notes` and `record_sequence verify_notes` remain deferred.
 
 ### `logic_edit`
 
@@ -244,9 +244,13 @@ Destructive or file-writing paths require confirmation. `save_as` verifies the r
 
 ### `logic_system`
 
-Common commands: `health`, `permissions`, `refresh_cache`, `export_support_bundle`, `list_recent_traces`, `get_trace`, `clear_traces`, `saga_preflight`, `saga_execute`, `saga_status`, `saga_cancel`, `help`.
+Common commands: `health`, `permissions`, `refresh_cache`, `export_support_bundle`, `setup_arm_key`, `list_recent_traces`, `get_trace`, `clear_traces`, `saga_preflight`, `saga_execute`, `saga_status`, `saga_cancel`, `help`.
 
 Use `health` for channel readiness and `help` for command summaries. `help` accepts category `all`, `transport`, `tracks`, `mixer`, `midi`, `edit`, `navigate`, `project`, `audio`, `plugins`, or `system`.
+
+#### `setup_arm_key` (v3.12.0)
+
+Consent-gated auto-setup for Logic's "Toggle Track Record Enable" key command — the coordinate-free arm actuator's prerequisite. Without `consent: true` it returns State C `consent_required` before any parameter validation or mutation (consent-first). With consent it runs verify-first: it drives a real record-arm flip **and restore** using only the configured chord, so an already-working mapping short-circuits to State A (`write_source: "existing_mapping_verify"`) with zero GUI mutation; otherwise it performs the assignment in Logic's Key Commands window and functionally re-verifies the new mapping the same way. Every outcome is an Honest Contract envelope: State A only after an observed flip AND restore; a chord already owned by another command fails closed as `chord_conflict` and is never stolen; an environment with no selectable track fails closed as `verify_environment_unavailable` with no GUI mutation attempted. Evidence fields include `configuration_write_attempted`, `verification_mutation_attempted`, `restored`, `safe_to_retry`, and (GUI path) window/search/selection/learn readbacks. Set `LOGIC_PRO_MCP_ARM_KEYCODE` / `LOGIC_PRO_MCP_ARM_MODIFIERS` to choose a non-default chord.
 
 Operation tracing is on by default (set `LOGIC_MCP_ADR005_OPERATION_TRACE=0` to disable), so every **successful** mutating result (State A/B) carries a `trace_id`; State C failures do not (nothing was traced to completion). `list_recent_traces` returns bounded summaries from the in-process trace store and accepts optional `limit`.
 `get_trace` returns one stored trace by required `trace_id`.
