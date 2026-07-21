@@ -13,6 +13,7 @@ struct ProjectExportPlan: Codable, Sendable, Equatable {
     let projects: [ProjectExportPlanProject]
     let requiredConfirmations: [ProjectExportConfirmation]
     let unsupportedOrBlockedSteps: [ProjectExportBlockedStep]
+    let executionPreconditions: [ProjectExportPrecondition]
     let baselineVerification: [String]
     let enhancementPath: [String]
     let nextSafeAction: String
@@ -30,6 +31,7 @@ struct ProjectExportPlan: Codable, Sendable, Equatable {
         case projects
         case requiredConfirmations = "required_confirmations"
         case unsupportedOrBlockedSteps = "unsupported_or_blocked_steps"
+        case executionPreconditions = "execution_preconditions"
         case baselineVerification = "baseline_verification"
         case enhancementPath = "enhancement_path"
         case nextSafeAction = "next_safe_action"
@@ -135,5 +137,25 @@ struct ProjectExportBlockedStep: Codable, Sendable, Equatable {
         case operation
         case reason
         case safeAlternative = "safe_alternative"
+    }
+}
+
+/// A machine-readable execution dependency of a workflow step, surfaced in the
+/// dry-run plan so a caller can tell from the manifest what the run needs BEFORE
+/// it fails at that step (#369): the plan otherwise validates as `valid` with no
+/// mention of the bounce step's live requirements. These are invariant facts
+/// about what execution needs, not a live probe — verify satisfaction with the
+/// `verify_with` command.
+struct ProjectExportPrecondition: Codable, Sendable, Equatable {
+    let requirement: String
+    let appliesToCommands: [String]
+    let detail: String
+    let verifyWith: String
+
+    enum CodingKeys: String, CodingKey {
+        case requirement
+        case appliesToCommands = "applies_to_commands"
+        case detail
+        case verifyWith = "verify_with"
     }
 }

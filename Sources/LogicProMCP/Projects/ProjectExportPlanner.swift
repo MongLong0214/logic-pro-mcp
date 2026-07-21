@@ -65,6 +65,7 @@ enum ProjectExportPlanner {
                 ),
             ],
             unsupportedOrBlockedSteps: surfacedConstraints,
+            executionPreconditions: executionPreconditions(),
             baselineVerification: [
                 "artifact_exists",
                 "file_size_non_zero",
