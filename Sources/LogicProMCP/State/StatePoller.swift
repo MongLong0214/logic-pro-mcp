@@ -23,6 +23,16 @@ actor StatePoller {
         /// the arrange-window AX subtree can return empty, so `pollOnce`
         /// also flags the corresponding cache state via `axOccluded`.
         let dialogPresent: @Sendable () -> Bool
+        /// #432 — authoritative blocking-dialog signal: the post-classifier
+        /// `AXLogicProElements.blockingDialogInfo()` (excludes plugin-editor /
+        /// Smart-Controls / keyboard-layout overlay windows) that the transport
+        /// preflight and the #431 tool audit fail closed on. Sampled once per
+        /// visible-window poll and written to `StateCache.blockingDialogButtons`
+        /// so the cache-only `logic://project/audit` resource surfaces the export
+        /// blocker (`export_blocked_by_modal_dialog`) from the same source the
+        /// tool uses — instead of a false green. Distinct from `dialogPresent`,
+        /// which drives the coarser occlusion (`axOccluded`) lifecycle.
+        let blockingDialogInfo: @Sendable () -> AXLogicProElements.BlockingDialogInfo?
         /// Inter-poll sleep. Injectable so tests can drive the loop at
         /// microsecond cadence instead of waiting out the production 3s
         /// interval — the original reason both lifecycle tests took
@@ -34,21 +44,27 @@ actor StatePoller {
         /// only override `hasVisibleWindow`) keep compiling without change.
         /// `dialogPresent` defaults to `{ false }` so existing tests behave
         /// identically to pre-v3.1.4 — they exercise the non-occluded path.
+        /// `blockingDialogInfo` defaults to `{ nil }` so existing tests (which
+        /// only override `hasVisibleWindow` / `dialogPresent`) behave exactly as
+        /// before — they exercise the no-blocking-dialog path.
         init(
             hasVisibleWindow: @Sendable @escaping () -> Bool,
             dialogPresent: @Sendable @escaping () -> Bool = { false },
             sleep: @Sendable @escaping (UInt64) async throws -> Void = { ns in
                 try await Task.sleep(nanoseconds: ns)
-            }
+            },
+            blockingDialogInfo: @Sendable @escaping () -> AXLogicProElements.BlockingDialogInfo? = { nil }
         ) {
             self.hasVisibleWindow = hasVisibleWindow
             self.dialogPresent = dialogPresent
             self.sleep = sleep
+            self.blockingDialogInfo = blockingDialogInfo
         }
 
         static let production = Runtime(
             hasVisibleWindow: { ProcessUtils.hasVisibleWindow() },
-            dialogPresent: { AXLogicProElements.dialogPresent() }
+            dialogPresent: { AXLogicProElements.dialogPresent() },
+            blockingDialogInfo: { AXLogicProElements.blockingDialogInfo() }
         )
 
         /// Test-friendly runtime for lifecycle-only coverage. Short-circuits
@@ -155,12 +171,23 @@ actor StatePoller {
             if consecutiveWindowMisses >= Self.failureThreshold {
                 await cache.updateDocumentState(false)
                 await cache.updateAXOccluded(false)
+                // #432: no Logic window ⇒ no blocking dialog can own it. This
+                // branch returns before the per-cycle sample above runs, so clear
+                // explicitly to avoid a stale positive after the window vanishes.
+                await cache.updateBlockingDialogButtons(nil)
                 cacheKeys.append(.document)
             }
             if !cacheKeys.isEmpty { await postPoll(cacheKeys) }
             return
         }
         consecutiveWindowMisses = 0
+        // #432: sample the authoritative blocking-dialog signal once per
+        // visible-window cycle and cache it, so the cache-only audit resource can
+        // surface `export_blocked_by_modal_dialog`. A blocking modal is exactly
+        // what makes the project/track polls below fail (they occlude the arrange
+        // subtree), so we capture it here — before those polls — regardless of
+        // their outcome. `nil` when no blocking dialog owns the Logic window.
+        await cache.updateBlockingDialogButtons(runtime.blockingDialogInfo()?.buttonTitles)
 
         let projectReady = await poll(
             operation: "project.get_info", label: "ProjectInfo",
@@ -210,6 +237,8 @@ actor StatePoller {
             if consecutivePollMisses >= Self.failureThreshold {
                 await cache.updateDocumentState(false)
                 await cache.updateAXOccluded(false)
+                // #432: document confirmed closed ⇒ no blocking dialog owns it.
+                await cache.updateBlockingDialogButtons(nil)
                 cacheKeys.append(.document)
             }
         }
