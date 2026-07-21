@@ -35,6 +35,12 @@ struct ProjectDispatcher: OperationTraceDispatching {
         },
         sleep: (UInt64) async -> Void = { try? await Task.sleep(nanoseconds: $0) },
         dialogPresent: @escaping @Sendable () -> Bool = { false },
+        // #427 follow-up: the authoritative blocking-dialog signal the transport
+        // preflight fails closed on (`preflight_blocking_dialog`). Threaded into
+        // the read-only `audit` so a modal present at audit time surfaces as an
+        // export-readiness blocker instead of a false green. Defaults to the same
+        // live source the transport path uses; tests inject a fixture.
+        blockingDialogInfo: @escaping @Sendable () -> AXLogicProElements.BlockingDialogInfo? = { AXLogicProElements.blockingDialogInfo() },
         cleanupAuditFileReader: LogicProjectFileReader.Runtime = .production,
         // #27 Phase 2 — injectable export-execution seams (identity readback,
         // audio analysis, file polling). Defaults to the live wiring; tests
@@ -398,7 +404,10 @@ struct ProjectDispatcher: OperationTraceDispatching {
             return toolTextResult(result)
 
         case "audit":
-            let report = await ProjectSessionAudit.buildAudit(cache: cache)
+            let report = await ProjectSessionAudit.buildAudit(
+                cache: cache,
+                blockingDialogButtons: blockingDialogInfo().map(\.buttonTitles)
+            )
             do {
                 return toolTextResult(try encodeJSONStrict(report, compact: true))
             } catch {

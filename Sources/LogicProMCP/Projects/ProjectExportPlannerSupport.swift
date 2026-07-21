@@ -120,6 +120,18 @@ extension ProjectExportPlanner {
                     + "share path, pass the ownership-trust check, and have a python3 interpreter available.",
                 verifyWith: "LogicProMCP doctor"
             ),
+            ProjectExportPrecondition(
+                requirement: "input_source_available",
+                appliesToCommands: ["bounce"],
+                detail: "The export step types the destination filename into Logic's Bounce/save panel with "
+                    + "synthetic keystrokes, so the helper first switches the active keyboard input source to an "
+                    + "ABC or US layout (com.apple.keylayout.ABC or com.apple.keylayout.US); one of those must be "
+                    + "enabled in System Settings > Keyboard > Input Sources. If neither is enabled the helper FAILS "
+                    + "CLOSED with input_source_switch_failed instead of continuing (a Mac with only a French/AZERTY "
+                    + "source enabled hits this once the project has opened). Failing closed is correct because "
+                    + "keystroke automation on a non-ABC/US layout would type the wrong characters into the filename.",
+                verifyWith: "LogicProMCP doctor (bundled logic_input_source.py helper)"
+            ),
         ]
     }
 
