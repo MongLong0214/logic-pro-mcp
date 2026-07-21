@@ -11,6 +11,12 @@ import Foundation
 /// rebind, ancestor/leaf rename-out, hardlink, mkdir→open swap-in) and never
 /// claims zero-race confinement.
 ///
+/// Identity is `(dev,ino)` equality throughout, which assumes the filesystem does
+/// not reuse an inode number within an operation window — macOS APFS assigns file
+/// IDs monotonically, so this holds there. `teardownTree` recurses one frame per
+/// directory level, so its stack depth follows the tree it is given (this
+/// primitive's own staging trees are shallow).
+///
 /// The primitive is intentionally independent of its callers: audit-receipt and
 /// support-bundle publication wire onto it separately.
 enum SecureFD {
@@ -398,8 +404,14 @@ enum SecureFD {
         // open descriptor does not pin a directory in the namespace, so the
         // remove can precede the deferred close.
         var fin = stat()
-        guard name.withCString({ fstatat(parentFD, $0, &fin, AT_SYMLINK_NOFOLLOW) }) == 0,
-              sameIdentity((fin.st_dev, fin.st_ino), expected) else {
+        // Two guards (mirror of the file branch): a vanished name is an honest
+        // teardownFailed(ENOENT), only a rebound-to-different-inode name is a
+        // verificationMismatch. Folding both into one case would misreport a
+        // concurrently-removed staging dir as a mismatch.
+        guard name.withCString({ fstatat(parentFD, $0, &fin, AT_SYMLINK_NOFOLLOW) }) == 0 else {
+            throw FDError.teardownFailed(errno: errno)
+        }
+        guard sameIdentity((fin.st_dev, fin.st_ino), expected) else {
             throw FDError.verificationMismatch(component: name)
         }
         guard name.withCString({ unlinkat(parentFD, $0, AT_REMOVEDIR) }) == 0 else {
