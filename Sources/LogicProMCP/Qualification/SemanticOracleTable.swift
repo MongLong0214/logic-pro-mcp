@@ -174,15 +174,58 @@ enum SemanticOracleTable {
         .midiImportFile, .midiMMCLocate,
     ]
 
-    /// Every mutating operation the table covers so far: the B1 verified-write
-    /// increment UNION the B2 transport/navigate increment UNION the B3
-    /// project/tracks/system/midi increment. Coverage is still INCREMENTAL (the
-    /// edit surface, mixer/plugin inserts, and export/cleanup executors remain);
-    /// this is the covered subset the census pins.
+    /// The mutating operations B4 covers with a verified-execution oracle: the
+    /// FINAL uncovered mutating surface — the two plugin-insert paths, the export
+    /// executors, the cleanup-apply executor, and the one edit op that reaches a
+    /// genuine State A. Each was DERIVED BY READING its dispatcher/channel handler
+    /// and pinning what the verified path actually emits (cited per oracle below).
+    /// With this increment EVERY supported (non-`.unsupported`) mutating op is
+    /// either covered here or carries an audited structural exclusion — the
+    /// pure-code mutating oracle inventory is CLOSED (asserted by
+    /// `everyMutatingSpecIsCoveredOrAuditedExcluded`).
+    ///
+    /// COVERAGE CREDIT (#409): defining an oracle here is INVENTORY, not coverage.
+    /// R-SEM (`semanticCoverageIncomplete`) is credited to an operation ONLY when it
+    /// is live-exercised to a `.passed` semanticReadback verdict (the #284 live
+    /// matrix) or covered by a governed release-visible waiver — never by an oracle's
+    /// mere existence. So this B4 increment PINS the State-A contract these verified
+    /// executions must satisfy in the future live run; it does NOT itself reduce the
+    /// R-SEM static debt, and it does not change `ProductionReadinessContracts`.
+    ///
+    /// DELIBERATELY ABSENT (audited, no State-A envelope — see
+    /// `structurallyUnverifiedMutatingOperationIDs`): the 13 send-only edit ops
+    /// (undo/redo/cut/copy/paste/delete/select_all/split/join/quantize/
+    /// bounce_in_place/normalize/duplicate). Every one routes ONLY to
+    /// [.midiKeyCommands, .cgEvent] (RoutingTable) — a blind CC key command or a
+    /// CGEvent keystroke — and BOTH channels emit State B (send_only_no_readback /
+    /// readback_unavailable) with no edit read-back, so no State A exists.
+    /// edit.toggle_step_input is the one edit op that DOES reach State A (its
+    /// [.accessibility, …] chain verifies the Step Input Keyboard window open-state
+    /// flipped via an AX window-list read-back), so it is covered, not excluded.
+    static let phaseB4MutatingOperationIDs: Set<OperationID> = [
+        // mixer (1 — the AX slot-popup insert that reads back the slot name)
+        .mixerInsertPlugin,
+        // plugins (1 — the verified apply-back insert, HC v2 State A)
+        .pluginsInsertVerified,
+        // project (3 — the two export executors + the cleanup-apply rename executor)
+        .projectExportRun, .projectExportResume, .projectCleanupApply,
+        // edit (1 — the sole edit op with an AX State-A path; the other 13 are send-only)
+        .editToggleStepInput,
+    ]
+
+    /// Every mutating operation the table covers: the B1 verified-write increment
+    /// UNION the B2 transport/navigate increment UNION the B3
+    /// project/tracks/system/midi increment UNION the B4 plugin-insert / export /
+    /// cleanup / edit increment. B4 is the FINAL increment: with it, the covered set
+    /// plus `structurallyUnverifiedMutatingOperationIDs` account for the ENTIRE
+    /// mutating surface (`everyMutatingSpecIsCoveredOrAuditedExcluded`), so the
+    /// pure-code mutating oracle inventory is closed — no mutating spec is left
+    /// implicitly uncovered.
     static var coveredMutatingOperationIDs: Set<OperationID> {
         phaseB1MutatingOperationIDs
             .union(phaseB2MutatingOperationIDs)
             .union(phaseB3MutatingOperationIDs)
+            .union(phaseB4MutatingOperationIDs)
     }
 
     /// The mutating surface (non-`.unsupported`), from the registry. Coverage is
@@ -308,6 +351,62 @@ enum SemanticOracleTable {
         .midiMMCRecord:
             "send-only VerificationPolicy.none — routes mmc.record_strobe to [.coreMIDI]; the MMC "
             + "record SysEx is echo-less (State B send_only_no_readback), so no State A exists",
+        // B4 audit: the 13 send-only edit ops. Every one routes ONLY to
+        // [.midiKeyCommands, .cgEvent] (RoutingTable) — a blind CC key command
+        // (MIDIKeyCommandsChannel) or a CGEvent keystroke (CGEventChannel) — and
+        // BOTH channels emit State B (send_only_no_readback / readback_unavailable)
+        // with no edit read-back, so no State A exists. Kept explicit so their
+        // absence from the B4 increment is a reviewed decision, not a gap.
+        // (edit.toggle_step_input is NOT here: its [.accessibility, …] chain reaches
+        // a genuine State A — it is B4-covered, not excluded.)
+        .editUndo:
+            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / Cmd+Z "
+            + "keystroke); both channels emit State B send_only_no_readback with no undo "
+            + "read-back, so there is no State A to verify",
+        .editRedo:
+            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / Cmd+Shift+Z "
+            + "keystroke); the keystroke is echo-less (State B send_only_no_readback), so no State A",
+        .editCut:
+            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / Cmd+X "
+            + "keystroke); the clipboard cut has no arrange read-back and emits State B "
+            + "send_only_no_readback, so no State A exists",
+        .editCopy:
+            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / Cmd+C "
+            + "keystroke); a copy is echo-less (State B send_only_no_readback), so no State A",
+        .editPaste:
+            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / Cmd+V "
+            + "keystroke); the paste has no arrange read-back and emits State B "
+            + "send_only_no_readback, so no State A exists",
+        .editDelete:
+            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / Delete "
+            + "keystroke); the delete has no arrange read-back and emits State B "
+            + "send_only_no_readback, so no State A exists",
+        .editSelectAll:
+            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / Cmd+A "
+            + "keystroke); the dispatcher maps its unverified State B to isError, and neither "
+            + "channel reads the selection back, so no State A exists",
+        .editSplit:
+            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / Cmd+T "
+            + "keystroke); the split is echo-less (State B send_only_no_readback), so no State A",
+        .editJoin:
+            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / Cmd+J "
+            + "keystroke); the join is echo-less (State B send_only_no_readback), so no State A",
+        .editQuantize:
+            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / Q "
+            + "keystroke); the dispatcher maps its unverified State B to isError, and neither "
+            + "channel reads the quantized grid back, so no State A exists",
+        .editBounceInPlace:
+            "send-only — routes [.midiKeyCommands, .cgEvent] (blind CC key command / CGEvent "
+            + "keystroke); bounce-in-place has no region read-back and emits State B "
+            + "send_only_no_readback, so no State A exists",
+        .editNormalize:
+            "send-only VerificationPolicy.none — routes [.midiKeyCommands, .cgEvent] (blind CC "
+            + "key command / keystroke; availability .requiresKeyBinding is a SETUP axis, not the "
+            + "reason it lacks State A); the normalize is echo-less (State B), so no State A exists",
+        .editDuplicate:
+            "send-only VerificationPolicy.none — routes [.midiKeyCommands, .cgEvent] (blind CC "
+            + "key command / keystroke; availability .requiresKeyBinding is a SETUP axis, not the "
+            + "reason it lacks State A); the duplicate is echo-less (State B), so no State A exists",
     ]
 
     /// Mutating ops that never enter the oracle surface at all because the
@@ -389,6 +488,13 @@ enum SemanticOracleTable {
         systemExportSupportBundle,
         midiImportFile,
         midiMMCLocate,
+        // #373 Phase B4 — plugin-insert / export / cleanup / edit verified-execution oracles.
+        mixerInsertPlugin,
+        pluginsInsertVerified,
+        projectExportRun,
+        projectExportResume,
+        projectCleanupApply,
+        editToggleStepInput,
     ]
 
     static let byOperationID: [OperationID: OperationOracle] = Dictionary(
@@ -1788,6 +1894,179 @@ enum SemanticOracleTable {
             .valueEquals(key: "verification_source", expected: .string("transport_state")),
             .fieldsEqual(keyA: "requested", keyB: "observed"),
             .typedField(key: "observed_time_position", type: .string),
+        ]
+    )
+
+    // MARK: - #373 Phase B4 — plugin-insert / edit safe-mutation oracles
+
+    // Each composes `SafeMutationOracle.verifiedEnvelope` (State A + verified +
+    // success) with the op's own invariant, derived by READING its dispatcher/
+    // channel handler. The envelope is always FIRST, so no oracle asserts what
+    // changed before proving it was verified. (The export executors are the
+    // exception — they emit a run RECORD, not an HC State-A envelope — see
+    // projectExportRun.)
+    //
+    // mixer
+
+    // AccessibilityChannel+Plugins `defaultInsertPlugin` → encodeStateA (chain
+    // [.accessibility] for plugin.insert; MixerDispatcher.insert_plugin routes it
+    // after a confirmation gate). State A is reached ONLY when the polled slot name
+    // is non-nil AND `spec.matches(observed)` (the read-back plugin name normalizes
+    // to the requested canonical name), so the "the plugin landed" proof is
+    // STRUCTURAL — the envelope carries it. The pinnable content is the hardcoded
+    // `verify_source:"ax_plugin_slot"` (the readback provenance), the requested
+    // `plugin_name` domain (the allowlisted stock inserts — a claim of any other
+    // plugin is caught), and the shape of the readback (`observed_plugin_name` is a
+    // string on every State A, `track`/`slot` the addressed target). NOT
+    // `.fieldsEqual(plugin_name, observed_plugin_name)`: `spec.matches` is a
+    // case/whitespace-normalized compare, so a legitimate State A may carry a
+    // differently-cased `observed_plugin_name` that an exact equality would
+    // false-reject — the match itself is the structural State-A gate.
+    static let mixerInsertPlugin = SafeMutationOracle.oracle(
+        .mixerInsertPlugin,
+        semantics: [
+            .valueEquals(key: "verify_source", expected: .string("ax_plugin_slot")),
+            .enumMember(key: "plugin_name", allowed: ["Gain", "Compressor", "Channel EQ"]),
+            .typedField(key: "observed_plugin_name", type: .string),
+            .typedField(key: "track", type: .number),
+            .typedField(key: "slot", type: .number),
+        ]
+    )
+
+    // plugins
+
+    // AccessibilityChannel+VerifiedPlugins `defaultInsertVerified` →
+    // encodeV2StateA (HC v2, chain [.accessibility]). The verified-insert path:
+    // State A is reachable ONLY through the post-insert `get_inventory` readback
+    // diff, and the handler gates it on `observedID == pluginID` (the requested
+    // canonical id) AND `observedSlot == insert` (the requested slot) — every other
+    // outcome (mismatch, landed-at-different-slot, readback-unavailable) fails closed
+    // to State C/B. The envelope's `target_identity` carries the REQUESTED
+    // {track_index, insert, plugin_id}, while `observed_plugin_id`/`observed_slot`
+    // are the INDEPENDENT post-insert readback — so
+    // `.fieldsEqual(target_identity.plugin_id, observed_plugin_id)` and
+    // `.fieldsEqual(target_identity.insert, observed_slot)` are GENUINE
+    // request↔readback pins (the RIGHT plugin landed in the RIGHT slot), not
+    // same-source echoes. Plus `hc_schema:2`, the `operation` identity, and the
+    // hardcoded `verify_source:"ax_plugin_inventory"` (the sole State-A provenance).
+    // `write_source` is driver-supplied (trace-derived, defaulting to
+    // ax_exact_slot_popup), so it is shape-typed, not value-pinned.
+    static let pluginsInsertVerified = SafeMutationOracle.oracle(
+        .pluginsInsertVerified,
+        semantics: [
+            .valueEquals(key: "hc_schema", expected: .number(2)),
+            .valueEquals(key: "operation", expected: .string("logic_plugins.insert_verified")),
+            .valueEquals(key: "verify_source", expected: .string("ax_plugin_inventory")),
+            .fieldsEqual(keyA: "target_identity.plugin_id", keyB: "observed_plugin_id"),
+            .fieldsEqual(keyA: "target_identity.insert", keyB: "observed_slot"),
+            .typedField(key: "write_source", type: .string),
+        ]
+    )
+
+    // project
+
+    // ProjectExportExecutor.aggregate → `logic_pro_mcp_export_run.v1` RunResult
+    // (ProjectDispatcher `export_run`). NOTE — this op is DELIBERATELY NOT built
+    // through `SafeMutationOracle.oracle`: the executor emits a run RECORD keyed on
+    // `status`, NOT an `HonestContract.encodeStateA` envelope (there is no
+    // state/verified/success field). Pinning `state:"A"` would encode a shape the
+    // handler never emits. The verified-execution proof is `status:"completed"`,
+    // which the aggregator emits ONLY when `artifacts_failed == 0 &&
+    // artifacts_uncertain == 0` — so `.valueEquals(artifacts_uncertain, 0)` +
+    // `.valueEquals(artifacts_failed, 0)` are pinned ALONGSIDE the status as
+    // independent guards (a handler that mislabels a partial run "completed" is
+    // caught, mirroring the State-A triple-guard). `confirmed:true` (a completed run
+    // is always a confirmed execution), the `run` mode (per-op discriminator — the
+    // executor emits `mode: resume ? "resume" : "run"`), and the schema tag are the
+    // hardcoded provenance. `artifacts_total >= 1` + a non-empty `projects` array are
+    // the anti-vacuity gate (a "completed" export that produced nothing is not a
+    // verified execution). Per-artifact HC state is not pinned at
+    // `projects.0.artifacts.0` because the first project need not carry the first
+    // artifact — the aggregate `artifacts_failed/uncertain == 0` captures the
+    // per-artifact "every artifact reached State A" invariant.
+    static let projectExportRun = OperationOracle(
+        .projectExportRun,
+        strength: .shapeAndDomain,
+        constraints: [
+            .valueEquals(key: "schema", expected: .string("logic_pro_mcp_export_run.v1")),
+            .valueEquals(key: "mode", expected: .string("run")),
+            .valueEquals(key: "confirmed", expected: .bool(true)),
+            .valueEquals(key: "status", expected: .string("completed")),
+            .valueEquals(key: "artifacts_uncertain", expected: .number(0)),
+            .valueEquals(key: "artifacts_failed", expected: .number(0)),
+            .numericRange(key: "artifacts_total", min: 1, max: 100_000),
+            .nonEmptyArray(key: "projects"),
+            .typedField(key: "projects.0.artifacts", type: .array),
+        ]
+    )
+
+    // ProjectExportExecutor.aggregate → same `logic_pro_mcp_export_run.v1` RunResult
+    // as export_run, reached through ProjectDispatcher `export_resume` (idempotent
+    // resume). The ONLY wire difference is `mode:"resume"` (the per-op discriminator),
+    // so this oracle is export_run's twin with the mode flipped. A completed resume
+    // may legitimately be all-SKIPPED (`artifacts_verified:0`, `artifacts_skipped:N`
+    // — already-present-and-verified artifacts), so `artifacts_verified` is NOT
+    // pinned to a minimum; the "nothing went wrong" gate (uncertain/failed == 0) plus
+    // the non-vacuity gate (artifacts_total >= 1) are the shared verified-run pins.
+    static let projectExportResume = OperationOracle(
+        .projectExportResume,
+        strength: .shapeAndDomain,
+        constraints: [
+            .valueEquals(key: "schema", expected: .string("logic_pro_mcp_export_run.v1")),
+            .valueEquals(key: "mode", expected: .string("resume")),
+            .valueEquals(key: "confirmed", expected: .bool(true)),
+            .valueEquals(key: "status", expected: .string("completed")),
+            .valueEquals(key: "artifacts_uncertain", expected: .number(0)),
+            .valueEquals(key: "artifacts_failed", expected: .number(0)),
+            .numericRange(key: "artifacts_total", min: 1, max: 100_000),
+            .nonEmptyArray(key: "projects"),
+            .typedField(key: "projects.0.artifacts", type: .array),
+        ]
+    )
+
+    // ProjectDispatcher `handleCleanupApply` → encodeStateA. cleanup_apply executes
+    // ONE cleanup-plan rename step by delegating each target to the existing
+    // TrackDispatcher.rename path, and reaches State A ONLY after EVERY target's
+    // nested rename returned a verified State A (the loop fails closed to State C the
+    // moment any target comes back isError/unverified) — so the "every rename
+    // landed" proof is STRUCTURAL, carried by the envelope. The pinnable content is
+    // the hardcoded provenance: `op:"project.cleanup_apply"` (NOTE the key is `op`,
+    // not `operation`), the fixed `tool:"logic_tracks"` + `command:"rename"` (only
+    // rename_* steps are executable), and `verify_source:"track.rename ax_readback"`
+    // (the inherited readback provenance). `target_track_indices` + `applied` are
+    // pinned NON-EMPTY (at least one track was actually renamed — an empty batch is
+    // not a verified apply), and `step_id` is the applied plan step.
+    static let projectCleanupApply = SafeMutationOracle.oracle(
+        .projectCleanupApply,
+        semantics: [
+            .valueEquals(key: "op", expected: .string("project.cleanup_apply")),
+            .valueEquals(key: "tool", expected: .string("logic_tracks")),
+            .valueEquals(key: "command", expected: .string("rename")),
+            .valueEquals(key: "verify_source", expected: .string("track.rename ax_readback")),
+            .nonEmptyArray(key: "target_track_indices"),
+            .nonEmptyArray(key: "applied"),
+            .typedField(key: "step_id", type: .string),
+        ]
+    )
+
+    // edit
+
+    // AccessibilityChannel+Editing `defaultToggleStepInputKeyboard` → encodeStateA
+    // (EditDispatcher routes edit.toggle_step_input [.accessibility, …]; the
+    // midiKeyCommands/cgEvent fallbacks are send-only State B, so the AX path is the
+    // ONLY State-A shape). State A is reached ONLY when the Step Input Keyboard
+    // window open-state CHANGED after the menu press (`observedOpen != previousOpen`,
+    // polled from the live AX window list), and the envelope carries both reads
+    // (`previous_open`/`observed_open`) — so `observed_open == !previous_open`
+    // (`.booleanFlipped`) is the GENUINE "the window toggled" invariant, relating two
+    // independent AX reads, not a same-source echo. Plus the hardcoded
+    // `operation:"edit.toggle_step_input"` and `via:"window-menu"` provenance.
+    static let editToggleStepInput = SafeMutationOracle.oracle(
+        .editToggleStepInput,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("edit.toggle_step_input")),
+            .valueEquals(key: "via", expected: .string("window-menu")),
+            .booleanFlipped(keyA: "observed_open", keyB: "previous_open"),
         ]
     )
 }
