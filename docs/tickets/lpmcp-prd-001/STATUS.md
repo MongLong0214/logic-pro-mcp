@@ -121,3 +121,24 @@ No merge or successor work is allowed until the committed exact-head gate is com
 - NOT claimed: a live/consumed matrix load. These files are canonical, reproducible fixture **descriptors** (a consumer that drives them through a live Logic Pro session does not exist yet). Driving them end-to-end belongs to the ADR-001 live-matrix program, not to this repository-content debt; nothing here implies it is done.
 - Aggregate contract bar now pins **two** open debts exactly: `R-PUB`, `R-SEM`. `productionReadinessContractsAreSatisfiedOnCurrentTree` flips accordingly; closing either remaining debt forces the next honest flip.
 - Base SHA pin unchanged: cc5922e5c5c2786c401713fd80b1bd40d1e15f14.
+
+---
+
+## ADR-001 release enforcement deferred to #284 (2026-07-21)
+
+Owner-approved decision (roadmap T0a). The `release.yml` independent-qualification
+gate was wired in ahead of the qualification pipeline that satisfies it (the
+same-artifact live matrix + per-operation semantic coverage, #373), so every
+release tag failed closed at the gate with no producible evidence. To ship v3.12.0
+(carrying the #427 packaging fix), the pinned-verifier qualification and provenance
+steps in both the build and publish jobs are now gated behind the repository
+variable `ADR001_QUALIFICATION_ENFORCED` (default off). While off, the release
+publishes as it did through v3.11.0 and the release-enforced contracts R-REL,
+R-MATRIX, R-MUT, and R-PROV are honestly OPEN (tracked here and by
+`productionReadinessContractsAreSatisfiedOnCurrentTree`). The managed fixtures
+remain present and SHA-bound on disk — only their enforcement at release is
+deferred. Flipping the variable to `true` makes the gate run again at release time,
+but the static production-readiness contract still reads the `if:` deferral in the
+workflow text, so re-closing all four happens at #284 / T5 — which removes the
+deferral conditions (restoring the unconditional gate) and provisions the
+QUALIFICATION_* evidence/secrets.
