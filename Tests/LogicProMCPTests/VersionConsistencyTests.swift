@@ -210,8 +210,8 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
     let pkgsharePaths = installPaths("pkgshare")
     let binPaths = installPaths("bin")
     #expect(
-        pkgsharePaths.count == 9,
-        "expected the 9 helper assets in Formula pkgshare.install; parser or Formula drifted: \(pkgsharePaths)"
+        pkgsharePaths.count == 10,
+        "expected the 10 helper assets in Formula pkgshare.install; parser or Formula drifted: \(pkgsharePaths)"
     )
     #expect(binPaths == ["LogicProMCP"], "Formula bin.install drifted: \(binPaths)")
     #expect(
@@ -229,6 +229,13 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
     #expect(
         formula.contains("pkgshare.install \"Scripts/logic_input_source.py\" if (buildpath/\"Scripts/logic_input_source.py\").exist?"),
         "Formula must keep logic_input_source.py optional so brew install stays compatible with published tarballs that predate project-helper scripts"
+    )
+    // #427: logic_variants.py is the shared dependency of the bounce/export helpers;
+    // it must be packaged (its omission shipped a ModuleNotFoundError in v3.11.0) and
+    // kept optional for compatibility with pre-existing tarballs.
+    #expect(
+        formula.contains("pkgshare.install \"Scripts/logic_variants.py\" if (buildpath/\"Scripts/logic_variants.py\").exist?"),
+        "Formula must package logic_variants.py (shared bounce/export dependency, #427) and keep it optional"
     )
 
     let root = repositoryRootURL()

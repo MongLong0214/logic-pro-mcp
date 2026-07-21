@@ -50,11 +50,16 @@ while IFS= read -r mod; do
     closure_fail=1
     continue
   fi
-  # local logic_* modules this helper imports (both `import X` and `from X import`).
+  # local logic_* modules this helper imports. `grep -oE` captures only
+  # `<keyword> <module>` (the regex stops after the module token, so a
+  # `from logic_x import some_symbol` line yields logic_x, never the symbol);
+  # `[[:space:]]*`/`[[:space:]]+` also matches indented/lazy imports inside
+  # functions or try-blocks. (Known limitation: the rare `import a, b` multi-module
+  # form captures only the first — no shipped helper uses it; all use `from X import`.)
   # `|| true`: a helper with no logic_* imports makes grep exit 1, which would
   # trip `set -euo pipefail` and abort the gate before it finished checking.
-  deps=$(grep -hoE '^(from|import) logic_[a-z0-9_]+' "$src" 2>/dev/null \
-    | sed -E 's/^(from|import) //' | sort -u || true)
+  deps=$(grep -hoE '^[[:space:]]*(from|import)[[:space:]]+logic_[a-z0-9_]+' "$src" 2>/dev/null \
+    | sed -E 's/^[[:space:]]*(from|import)[[:space:]]+//' | sort -u || true)
   while IFS= read -r dep; do
     [ -z "$dep" ] && continue
     if printf '%s\n' "$installed_pys" | grep -Fxq "$dep"; then
