@@ -102,6 +102,18 @@ enum OracleConstraint: Sendable {
     /// e.g. a multi-step op that reaches State A only when its failure/uncertainty
     /// lists are empty. Fails closed on a missing key or a non-array.
     case emptyArray(key: String)
+    /// Two boolean key paths WITHIN THE SAME payload are logical negations:
+    /// `value(keyA) == !value(keyB)`. The load-bearing invariant of a verified
+    /// TOGGLE — a control-bar checkbox flip reaches State A only when the AX
+    /// read-back `observed` is the negation of the `previous` value, so
+    /// `observed == !previous` proves the toggle CHANGED state rather than a no-op
+    /// that still reported success. This is genuinely value-bearing: it relates
+    /// two INDEPENDENTLY-READ observations (the before-read and the after-read),
+    /// not one value to itself, so it is never a same-source echo. BOOLS ONLY,
+    /// with the same CFBoolean discipline as the rest of the model — a numeric
+    /// `0`/`1` must NOT satisfy it (`1` is not the negation of `false`) — and a
+    /// missing key, a non-bool, or two EQUAL bools all fail closed.
+    case booleanFlipped(keyA: String, keyB: String)
 
     /// The primary RESPONSE-side key path — the one the generic mutator drops
     /// and error messages cite. For the relational cases it is the response side
@@ -116,7 +128,8 @@ enum OracleConstraint: Sendable {
              .fieldsEqual(let key, _),
              .crossCheck(let key, _),
              .numericNear(let key, _, _),
-             .emptyArray(let key):
+             .emptyArray(let key),
+             .booleanFlipped(let key, _):
             return key
         }
     }
@@ -128,7 +141,8 @@ enum OracleConstraint: Sendable {
     /// oracle carrying one is never a checkbox oracle.
     var isValueConstraint: Bool {
         switch self {
-        case .valueEquals, .numericRange, .enumMember, .fieldsEqual, .crossCheck, .numericNear:
+        case .valueEquals, .numericRange, .enumMember, .fieldsEqual, .crossCheck, .numericNear,
+             .booleanFlipped:
             return true
         case .nonEmptyArray, .typedField, .emptyArray:
             return false
@@ -190,6 +204,16 @@ enum OracleConstraint: Sendable {
         case .emptyArray(let key):
             guard let array = JSONPath.resolve(root, keyPath: key) as? [Any] else { return false }
             return array.isEmpty
+        case .booleanFlipped(let keyA, let keyB):
+            // BOOLS ONLY: both sides must be genuine CFBooleans — a numeric 0/1
+            // fails closed (`isBoolean` gates it) — and they must be logical
+            // negations. A missing key, a non-bool, or two EQUAL bools all fail.
+            guard let aValue = JSONPath.resolve(root, keyPath: keyA),
+                  let bValue = JSONPath.resolve(root, keyPath: keyB),
+                  JSONInspector.isBoolean(aValue), JSONInspector.isBoolean(bValue),
+                  let a = (aValue as? NSNumber)?.boolValue,
+                  let b = (bValue as? NSNumber)?.boolValue else { return false }
+            return a != b
         }
     }
 }

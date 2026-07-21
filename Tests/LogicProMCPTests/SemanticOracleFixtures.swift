@@ -599,5 +599,171 @@ enum SemanticOracleFixtures {
                 """,
             readback: "{}"
         ),
+
+        // ── #373 Phase B2 — transport + navigate verified State-A fixtures ────
+        // Each is a faithful State-A payload from the op's dispatcher/channel
+        // `encodeStateA` path. Readback is unused (no B2 oracle cross-checks), so
+        // it is a bare `{}`.
+
+        // TransportDispatcher.handleVerifiedTransportCommand(.play) write path:
+        // observed_after summary shows isPlaying:true (the State-A gate).
+        .transportPlay: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "operation":"transport.play","verify_source":"transport_state",\
+                "write_attempted":true,"poll_attempts":1,\
+                "observed_before":{"isPlaying":false,"isRecording":false,\
+                "position":"1.1.1.1","tempo":120},\
+                "observed_after":{"isPlaying":true,"isRecording":false,\
+                "position":"1.3.1.1","tempo":120},"write_result":{"state":"B"}}
+                """,
+            readback: "{}"
+        ),
+        // .record gate: observed_after shows isPlaying && isRecording.
+        .transportRecord: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "operation":"transport.record","verify_source":"transport_state",\
+                "write_attempted":true,"poll_attempts":1,\
+                "observed_before":{"isPlaying":false,"isRecording":false,\
+                "position":"1.1.1.1","tempo":120},\
+                "observed_after":{"isPlaying":true,"isRecording":true,\
+                "position":"1.2.1.1","tempo":120},"write_result":{"state":"B"}}
+                """,
+            readback: "{}"
+        ),
+        // verifiedStopResult post-write path (stopObservedExtras): FLAT observed_*
+        // keys, verify_source ax_transport_state.
+        .transportStop: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "operation":"transport.stop","requested_state":"stopped",\
+                "verify_source":"ax_transport_state","write_attempted":true,\
+                "poll_attempts":2,"observed_isPlaying":false,"observed_isRecording":false,\
+                "observed_position":"5.1.1.1","observed_time_position":"00:00:08:12",\
+                "write_result":{"state":"B"}}
+                """,
+            readback: "{}"
+        ),
+        // verifiedPauseResult post-write path: verify_source transport_state.
+        .transportPause: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "operation":"transport.pause","requested_state":"paused",\
+                "verify_source":"transport_state","write_attempted":true,\
+                "poll_attempts":1,"observed_isPlaying":false,"observed_isRecording":false,\
+                "observed_position":"5.1.1.1","observed_time_position":"00:00:08:12",\
+                "write_result":{"state":"B"}}
+                """,
+            readback: "{}"
+        ),
+        // clickControlBarCheckbox(Cycle): observed:true == !previous:false.
+        .transportToggleCycle: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","button":"Cycle",\
+                "control":"사이클","observed":true,"previous":false,\
+                "action":"axpress","attempts":["axpress"]}
+                """,
+            readback: "{}"
+        ),
+        // clickControlBarCheckbox(Count In).
+        .transportToggleCountIn: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","button":"Count In",\
+                "control":"카운트 인","observed":true,"previous":false,\
+                "action":"axpress","attempts":["axpress"]}
+                """,
+            readback: "{}"
+        ),
+        // defaultToggleAutopunch: observed:true == !previous:false, action axpress.
+        .transportToggleAutopunch: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","button":"Autopunch",\
+                "control":"Autopunch","operation":"transport.toggle_autopunch",\
+                "action":"axpress","previous":false,"observed":true,"requested":true}
+                """,
+            readback: "{}"
+        ),
+        // toggle_metronome — AX-verified shape (clickControlBarCheckbox). The
+        // oracle pins only the channel-independent envelope (the two channel shapes
+        // share no non-envelope key); the dispatcher-verified keycmd shape and the
+        // no-op/failure rejection are covered by a dedicated engine test.
+        .transportToggleMetronome: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","button":"Metronome",\
+                "control":"메트로놈 클릭","observed":true,"previous":false,\
+                "action":"axpress","attempts":["axpress"]}
+                """,
+            readback: "{}"
+        ),
+        // defaultSetTempo (via slider): observed 119.7 within 1.0 BPM of requested 120.
+        .transportSetTempo: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "requested":120.0,"observed":119.7,"via":"slider"}
+                """,
+            readback: "{}"
+        ),
+        // finalizeGotoPositionResult: observed position == requested (exact landing).
+        .transportGotoPosition: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "verification_source":"transport_state","requested":"5.1.1.1",\
+                "observed":"5.1.1.1","observed_time_position":"00:00:08:12","via":"dialog"}
+                """,
+            readback: "{}"
+        ),
+        // navigate.goto_bar → same finalizeGotoPositionResult shape.
+        .navigateGotoBar: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "verification_source":"transport_state","requested":"9.1.1.1",\
+                "observed":"9.1.1.1","observed_time_position":"00:00:14:03","via":"dialog"}
+                """,
+            readback: "{}"
+        ),
+        // navigate.goto_marker → canonical marker, same finalize shape.
+        .navigateGotoMarker: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "verification_source":"transport_state","requested":"12.1.1.1",\
+                "observed":"12.1.1.1","observed_time_position":"00:00:22:00","via":"dialog"}
+                """,
+            readback: "{}"
+        ),
+        // finalizeCreateMarkerResult (named create): observed_marker_name == requested_name,
+        // count delta +1.
+        .navigateCreateMarker: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "operation":"nav.create_marker","method":"accessibility_menu",\
+                "menu_path":"Navigate > Create Marker","sent":true,\
+                "marker_count_before_channel":2,"marker_count_after_channel":3,\
+                "verification_source":"logic://markers","marker_count_before":2,\
+                "marker_count_after":3,"requested_name":"Chorus",\
+                "observed_marker_id":2,"observed_marker_name":"Chorus",\
+                "observed_marker_position":"12.1.1.1","observed_marker_position_source":"parser"}
+                """,
+            readback: "{}"
+        ),
+        // defaultRenameMarker post-write path: observed_name == requested_name.
+        .navigateRenameMarker: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "operation":"nav.rename_marker","index":1,"previous_name":"Verse",\
+                "requested_name":"Bridge","observed_name":"Bridge","write_attempted":true}
+                """,
+            readback: "{}"
+        ),
+        // defaultSetZoomLevel (level 8 → target 7/9 ≈ 0.7778): observed within 0.02.
+        .navigateSetZoom: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","operation":"nav.set_zoom",\
+                "axis":"horizontal","level":8,"requested":0.7777777777777778,\
+                "observed_before":0.3333333333333333,"observed":0.7777777777777778,\
+                "observed_after":0.7777777777777778,"verify_source":"ax_zoom_slider"}
+                """,
+            readback: "{}"
+        ),
     ]
 }

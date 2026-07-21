@@ -189,6 +189,72 @@ struct SemanticOracleEngineTests {
         #expect(!OracleConstraint.emptyArray(key: "a").isValueConstraint)
     }
 
+    // MARK: - booleanFlipped (Phase B2 — verified toggles)
+
+    /// The verified-toggle invariant: `observed == !previous`. A genuine flip
+    /// (true/false or false/true) passes; two equal bools fail; a missing side
+    /// fails closed. This is what proves a toggle CHANGED state, not a no-op that
+    /// still reported success.
+    @Test func booleanFlippedHoldsForNegationAndFailsForEqualOrMissing() {
+        let flip = OracleConstraint.booleanFlipped(keyA: "observed", keyB: "previous")
+        #expect(flip.isSatisfied(by: root(#"{"observed":true,"previous":false}"#)))
+        #expect(flip.isSatisfied(by: root(#"{"observed":false,"previous":true}"#)))
+        // Two equal bools are not a flip — a no-op reporting success is caught.
+        #expect(!flip.isSatisfied(by: root(#"{"observed":true,"previous":true}"#)))
+        #expect(!flip.isSatisfied(by: root(#"{"observed":false,"previous":false}"#)))
+        // A missing side can never be a negation — corrupt inputs fail closed.
+        #expect(!flip.isSatisfied(by: root(#"{"observed":true}"#)))
+        #expect(!flip.isSatisfied(by: root(#"{"previous":false}"#)))
+    }
+
+    /// Same CFBoolean discipline as the rest of the model: a numeric `0`/`1` is
+    /// NOT the negation of a bool, so `observed:1` never satisfies the flip even
+    /// though NSNumber bridges `1` and `true`. Otherwise every toggle's
+    /// "it changed" proof would be forgeable with an integer.
+    @Test func booleanFlippedRejectsNumericOneAsABoolean() {
+        let flip = OracleConstraint.booleanFlipped(keyA: "observed", keyB: "previous")
+        #expect(!flip.isSatisfied(by: root(#"{"observed":1,"previous":false}"#)))
+        #expect(!flip.isSatisfied(by: root(#"{"observed":true,"previous":0}"#)))
+        #expect(!flip.isSatisfied(by: root(#"{"observed":1,"previous":0}"#)))
+    }
+
+    /// booleanFlipped is VALUE-bearing (it asserts a concrete cross-field
+    /// relation between two observed bools), so an oracle carrying only a
+    /// booleanFlipped survives the anti-checkbox strength gate.
+    @Test func booleanFlippedIsValueBearing() {
+        #expect(OracleConstraint.booleanFlipped(keyA: "a", keyB: "b").isValueConstraint)
+        let flipOnly = OperationOracle(
+            .transportPlay,
+            strength: .shapeAndDomain,
+            constraints: [.booleanFlipped(keyA: "observed", keyB: "previous")]
+        )
+        #expect(flipOnly.isSemanticallyLoadBearing)
+    }
+
+    /// Every mutant the generic harness derives for a booleanFlipped (flip-same
+    /// on either side, numeric-1 in place of a bool, and the generic key drop)
+    /// MUST sink the oracle — the same proof the table-driven B2 toggle oracles
+    /// rely on.
+    @Test func booleanFlippedMutantsAreAllRejected() throws {
+        let response = #"{"observed":true,"previous":false}"#
+        let rootValue = try #require(JSONInspector.parse(Data(response.utf8)))
+        let constraint = OracleConstraint.booleanFlipped(keyA: "observed", keyB: "previous")
+        let oracle = OperationOracle(.transportPlay, strength: .shapeAndDomain, constraints: [constraint])
+
+        let baseline = try #require(oracle.evaluate(
+            responseData: Data(response.utf8), readbackData: Data("{}".utf8)))
+        #expect(baseline)
+
+        let mutants = JSONMutator.mutants(for: constraint, in: rootValue)
+        #expect(mutants.count >= 3, "expected drop + flip-same + non-bool mutants, got \(mutants.count)")
+        for mutant in mutants {
+            let data = try #require(JSONMutator.encode(mutant.json))
+            let survived: Bool = oracle.evaluate(
+                responseData: data, readbackData: Data("{}".utf8)) == true
+            #expect(!survived, "booleanFlipped survived mutant [\(mutant.label)]")
+        }
+    }
+
     @Test func crossCheckAgreesAcrossPayloadsAndFailsOnDivergenceOrMissingReadback() {
         let response = root(#"{"value":-6.0,"name":"Bass"}"#)
         let constraint = OracleConstraint.crossCheck(responseKey: "value", readbackKey: "observed_value")
@@ -326,25 +392,33 @@ struct SemanticOracleCensusTests {
 
     // MARK: - #373 Phase B1 — mutating-surface increment (dual census)
 
-    /// The mutating oracles present are EXACTLY the declared Phase-B1 increment —
-    /// no accidental add or drop. Pinning the set (not just a count) is what makes
-    /// the increment a deliberate, reviewable diff.
-    @Test func mutatingOraclesAreExactlyThePhaseB1Increment() {
+    /// The mutating oracles present are EXACTLY the declared increment (B1 UNION
+    /// B2) — no accidental add or drop. Pinning the set (not just a count) is what
+    /// makes the increment a deliberate, reviewable diff. B1 and B2 are each
+    /// pinned by count so a premature or miscounted oracle in either fails here.
+    @Test func mutatingOraclesAreExactlyTheDeclaredIncrement() {
         let mutatingOracles = Set(SemanticOracleTable.byOperationID.keys)
             .intersection(SemanticOracleTable.mutatingSpecIDs)
-        #expect(mutatingOracles == SemanticOracleTable.phaseB1MutatingOperationIDs)
+        #expect(mutatingOracles == SemanticOracleTable.coveredMutatingOperationIDs)
         #expect(SemanticOracleTable.phaseB1MutatingOperationIDs.count == 12)
-    }
-
-    /// Soundness of the increment: every id it names is a REAL `.mutating`,
-    /// non-`.unsupported` registry spec — a read-only id or a typo cannot
-    /// masquerade as mutating coverage.
-    @Test func everyPhaseB1IDIsARealMutatingSpec() {
+        #expect(SemanticOracleTable.phaseB2MutatingOperationIDs.count == 15)
+        // B1 and B2 are DISJOINT increments — no op is claimed by both phases.
         #expect(
             SemanticOracleTable.phaseB1MutatingOperationIDs
+                .isDisjoint(with: SemanticOracleTable.phaseB2MutatingOperationIDs)
+        )
+        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 27)
+    }
+
+    /// Soundness of the increment: every id in B1 AND B2 is a REAL `.mutating`,
+    /// non-`.unsupported` registry spec — a read-only id or a typo cannot
+    /// masquerade as mutating coverage.
+    @Test func everyCoveredMutatingIDIsARealMutatingSpec() {
+        #expect(
+            SemanticOracleTable.coveredMutatingOperationIDs
                 .isSubset(of: SemanticOracleTable.mutatingSpecIDs)
         )
-        for id in SemanticOracleTable.phaseB1MutatingOperationIDs {
+        for id in SemanticOracleTable.coveredMutatingOperationIDs {
             let spec = OperationRegistry.specs.first { $0.id == id }
             #expect(spec?.mutability == .mutating, "\(id.rawValue) is not mutating")
             #expect(spec?.availability != .unsupported, "\(id.rawValue) is unsupported")
@@ -366,18 +440,45 @@ struct SemanticOracleCensusTests {
     }
 
     /// FIX 5 — the structural-exclusion allowlist is EXPLICIT: every entry is a
-    /// real mutating spec, is DISJOINT from the covered increment, and carries a
-    /// reason, so the uncovered surface is a reviewed decision, not implicit.
+    /// real mutating spec, is DISJOINT from the covered increment (B1 ∪ B2), and
+    /// carries a reason, so the uncovered surface is a reviewed decision, not
+    /// implicit. B2 adds the send-only transport/navigate ops with no State A.
     @Test func structuralExclusionsAreExplicitDisjointAndReasoned() {
         let exclusions = SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs
         #expect(!exclusions.isEmpty)
         #expect(exclusions[.mixerSetPluginParam] != nil)
+        // The five B2 send-only ops that structurally cannot reach State A.
+        for id in [
+            OperationID.transportRewind, .transportFastForward,
+            .navigateZoomToFit, .navigateDeleteMarker, .navigateToggleView,
+        ] {
+            #expect(exclusions[id] != nil, "\(id.rawValue) missing its send-only exclusion reason")
+        }
         for (id, reason) in exclusions {
             #expect(SemanticOracleTable.mutatingSpecIDs.contains(id), "\(id.rawValue) is not a mutating spec")
             #expect(
-                !SemanticOracleTable.phaseB1MutatingOperationIDs.contains(id),
+                !SemanticOracleTable.coveredMutatingOperationIDs.contains(id),
                 "\(id.rawValue) is both covered and excluded"
             )
+            #expect(reason.count > 20, "\(id.rawValue) exclusion reason is too thin")
+        }
+    }
+
+    /// set_cycle_range is excluded a level EARLIER than the structural list: it is
+    /// registry `.unsupported`, so `mutatingSpecIDs` (which filters `.unsupported`)
+    /// never surfaces it, and it can carry no oracle. Its exclusion is documented
+    /// explicitly + reasoned, NOT left implicit in the availability filter.
+    @Test func unsupportedExclusionsAreDocumentedAndFilteredOut() {
+        let unsupported = SemanticOracleTable.unsupportedExcludedMutatingOperationIDs
+        #expect(unsupported[.transportSetCycleRange] != nil)
+        for (id, reason) in unsupported {
+            let spec = OperationRegistry.specs.first { $0.id == id }
+            // Registered mutating, but `.unsupported` — so filtered from the surface.
+            #expect(spec?.mutability == .mutating, "\(id.rawValue) is not a mutating spec")
+            #expect(spec?.availability == .unsupported, "\(id.rawValue) is not .unsupported")
+            #expect(!SemanticOracleTable.mutatingSpecIDs.contains(id), "\(id.rawValue) leaked into the surface")
+            #expect(!SemanticOracleTable.supportedOracleSurface.contains(id))
+            #expect(SemanticOracleTable.byOperationID[id] == nil, "\(id.rawValue) must carry no oracle")
             #expect(reason.count > 20, "\(id.rawValue) exclusion reason is too thin")
         }
     }
@@ -490,6 +591,48 @@ struct SemanticOracleMutationTests {
             responseData: fixture.responseData,
             readbackData: fixture.readbackData
         )!)
+    }
+
+    /// #373 B2 — toggle_metronome is uniquely channel-INDEPENDENT: its verified
+    /// State A arrives in two shapes with DISJOINT keys — AX-verified (flip on
+    /// observed/previous, plus button/control/action) and dispatcher-verified via
+    /// the keycmd/cgEvent fallback (flip on observed_enabled/previous_enabled +
+    /// verification_source, and NO button/control/action). The relaxed oracle must
+    /// accept BOTH — pinning button/control/action would FALSE-RED the keycmd-bound,
+    /// AX-control-absent setup in the #284 matrix — while still rejecting a no-op
+    /// (honest State B) and a failure (State C). This is what keeps the relaxed
+    /// oracle non-vacuous: the toggle-changed proof is structural (neither shape
+    /// reaches State A without a confirmed flip), and the envelope rejects every
+    /// non-State-A result.
+    @Test func metronomeOracleAcceptsBothChannelShapesYetRejectsNoOpOrFailure() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.transportToggleMetronome])
+
+        // AX-verified State A: control-bar checkbox flipped (observed != previous).
+        let axVerified = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","button":"Metronome","control":"메트로놈 클릭","observed":true,"previous":false,"action":"axpress","attempts":["axpress"]}"#.utf8),
+            readbackData: Data("{}".utf8)))
+        #expect(axVerified, "metronome oracle rejected the AX-verified State A shape")
+
+        // Dispatcher-verified State A via the keycmd fallback (AX control absent):
+        // NO button/control/action; the flip is on observed_enabled/previous_enabled.
+        // This is the shape the former button/control/action pins false-RED'd.
+        let keycmdVerified = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"transport.toggle_metronome","method":"midi_key_command","cc":98,"channel":16,"verification_source":"transport_state","previous_enabled":false,"requested_enabled":true,"observed_enabled":true}"#.utf8),
+            readbackData: Data("{}".utf8)))
+        #expect(keycmdVerified, "metronome oracle false-RED the dispatcher-verified keycmd State A")
+
+        // No-op: finalize could not confirm a flip (observed_enabled == previous_enabled),
+        // so it is honest State B — the envelope must reject it.
+        let noOp: Bool = oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":false,"state":"B","reason":"readback_mismatch","operation":"transport.toggle_metronome","verification_source":"transport_state","previous_enabled":true,"requested_enabled":false,"observed_enabled":true}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!noOp, "metronome oracle accepted a no-op State B result")
+
+        // Failure: State C must never launder into a semantic pass.
+        let failure: Bool = oracle.evaluate(
+            responseData: Data(#"{"success":false,"verified":false,"state":"C","error":"element_not_found"}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!failure, "metronome oracle accepted a State C failure")
     }
 
     /// The anti-checkbox tool. For every constraint of every declarative oracle,
@@ -607,9 +750,13 @@ struct SemanticOracleMutationTests {
     }
 
     @Test func validatorStillReturnsNilForOperationsWithNoOracle() {
-        // A mutating op has no oracle; it must stay honestly unvalidated here.
+        // A mutating op with no oracle stays honestly unvalidated here.
+        // transport.rewind is the canonical B2 case: send-only (no State A), so it
+        // is structurally excluded and carries no oracle — the validator must
+        // return nil, not a verdict, so the runner records it as protocolSmoke.
+        #expect(SemanticOracleTable.byOperationID[.transportRewind] == nil)
         let mutating: Bool = QualificationSemanticReadbackValidator.validate(
-            operationID: OperationID.transportPlay.rawValue,
+            operationID: OperationID.transportRewind.rawValue,
             responseData: Data("{}".utf8),
             readbackData: Data("{}".utf8)
         ) == nil
@@ -772,18 +919,20 @@ struct SemanticOracleRelationalMutationTests {
 @Suite("#373 read-only census non-regression")
 struct SemanticOracleB0CensusTests {
     /// The read-only census is a STANDING invariant across phases. B0 added
-    /// framework only; B1 adds the mutating increment WITHOUT perturbing the
+    /// framework only; B1/B2 add mutating increments WITHOUT perturbing the
     /// fully-covered read-only surface. So the read-only census stays exactly 20,
-    /// and the table's total is the read-only 20 plus the pinned B1 increment — a
-    /// premature or miscounted mutating oracle fails here.
-    @Test func readOnlyCensusStaysTwentyAndB1AddsTheMutatingIncrement() {
+    /// and the table's total is the read-only 20 plus the pinned B1 + B2 increments
+    /// — a premature or miscounted mutating oracle fails here.
+    @Test func readOnlyCensusStaysTwentyAndMutatingIncrementsAreAdditive() {
         #expect(SemanticOracleTable.coveredSpecIDs.count == 20)
         let readOnlyOracles = Set(SemanticOracleTable.byOperationID.keys)
             .intersection(SemanticOracleTable.coveredSpecIDs)
         #expect(readOnlyOracles.count == 20)
         #expect(
             SemanticOracleTable.all.count
-                == 20 + SemanticOracleTable.phaseB1MutatingOperationIDs.count
+                == 20
+                + SemanticOracleTable.phaseB1MutatingOperationIDs.count
+                + SemanticOracleTable.phaseB2MutatingOperationIDs.count
         )
     }
 }
@@ -864,6 +1013,22 @@ enum JSONMutator {
             }
         case .emptyArray(let key):
             mutants.append(contentsOf: replacements(root, key, [("non-empty", [1] as [Any])]))
+        case .booleanFlipped(let keyA, let keyB):
+            // Break the negation three ways, each of which MUST sink the oracle:
+            //   * same-value on EITHER side ⇒ not a flip (`a == b`);
+            //   * a numeric 1 in place of a bool ⇒ CFBoolean discipline rejects it.
+            // (`drop keyA` is already added generically via `key`.)
+            if let aValue = JSONPath.resolve(root, keyPath: keyA),
+               JSONInspector.isBoolean(aValue),
+               let a = (aValue as? NSNumber)?.boolValue {
+                mutants.append(contentsOf: replacements(root, keyB, [("flip-same", a)]))
+                mutants.append(contentsOf: replacements(root, keyA, [("non-bool", 1)]))
+            }
+            if let bValue = JSONPath.resolve(root, keyPath: keyB),
+               JSONInspector.isBoolean(bValue),
+               let b = (bValue as? NSNumber)?.boolValue {
+                mutants.append(contentsOf: replacements(root, keyA, [("flip-same", b)]))
+            }
         }
         return mutants
     }
