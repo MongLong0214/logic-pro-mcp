@@ -131,11 +131,58 @@ enum SemanticOracleTable {
         .navigateRenameMarker, .navigateSetZoom,
     ]
 
+    /// The mutating operations B3 covers with a verified-write (State A) oracle:
+    /// the project-lifecycle / tracks-topology / system-saga / midi-import
+    /// surface — the remaining verified-write mutating ops in the project, tracks,
+    /// system, and midi tools that reach a genuine State A. Each was DERIVED BY
+    /// READING its dispatcher/channel handler and pinning what the verified path
+    /// actually emits (cited per oracle below). Like B1/B2 this is an EXPLICIT
+    /// increment, not the whole mutating surface — the edit surface, the
+    /// mixer/plugin inserts, and the export/cleanup executors remain future work.
+    ///
+    /// COVERAGE CREDIT (#409): defining an oracle here is INVENTORY, not coverage.
+    /// R-SEM (`semanticCoverageIncomplete`) is credited to an operation ONLY when it
+    /// is live-exercised to a `.passed` semanticReadback verdict (the #284 live
+    /// matrix) or covered by a governed release-visible waiver — never by an oracle's
+    /// mere existence. So this B3 increment PINS the State-A contract these
+    /// verified writes must satisfy in the future live run; it does NOT itself
+    /// reduce the R-SEM static debt, and it does not change
+    /// `ProductionReadinessContracts` coverage-credit logic.
+    ///
+    /// DELIBERATELY ABSENT (audited, no verifiable State A — see
+    /// `structurallyUnverifiedMutatingOperationIDs`): project.new / project.open
+    /// (AppleScript lifecycle → honest State B readback_unavailable, never A),
+    /// project.close (VerificationPolicy.none, same State-B ceiling), project.launch
+    /// / project.quit (a prose success string gated on a running-state poll, not an
+    /// HC envelope), tracks.duplicate (VerificationPolicy.none, send-only), and the
+    /// send-only midi surface (send_*/mmc_play/mmc_stop/mmc_record/play_sequence/
+    /// step_input/create_virtual_port — every one routes to a send-only channel that
+    /// emits State B send_only_no_readback with no read-back).
+    static let phaseB3MutatingOperationIDs: Set<OperationID> = [
+        // project (3 of the 8 lifecycle ops audited — new/open/close/launch/quit
+        // reach no State A; save_as is envelope-only, see its oracle)
+        .projectSave, .projectSaveAs, .projectBounce,
+        // tracks (6 — the 4 create_* + delete + record_sequence topology writes)
+        .tracksCreateAudio, .tracksCreateInstrument, .tracksCreateDrummer,
+        .tracksCreateExternalMIDI, .tracksDelete, .tracksRecordSequence,
+        // system (4 — the saga executors + the consent-gated arm-key setup + the
+        // support-bundle write)
+        .systemSagaExecute, .systemSagaCancel, .systemSetupArmKey,
+        .systemExportSupportBundle,
+        // midi (2 — the AX-menu import + the bar-path MMC locate; the rest of the
+        // midi surface is send-only, see the exclusions)
+        .midiImportFile, .midiMMCLocate,
+    ]
+
     /// Every mutating operation the table covers so far: the B1 verified-write
-    /// increment UNION the B2 transport/navigate increment. Coverage is still
-    /// INCREMENTAL (B3 remains); this is the covered subset the census pins.
+    /// increment UNION the B2 transport/navigate increment UNION the B3
+    /// project/tracks/system/midi increment. Coverage is still INCREMENTAL (the
+    /// edit surface, mixer/plugin inserts, and export/cleanup executors remain);
+    /// this is the covered subset the census pins.
     static var coveredMutatingOperationIDs: Set<OperationID> {
-        phaseB1MutatingOperationIDs.union(phaseB2MutatingOperationIDs)
+        phaseB1MutatingOperationIDs
+            .union(phaseB2MutatingOperationIDs)
+            .union(phaseB3MutatingOperationIDs)
     }
 
     /// The mutating surface (non-`.unsupported`), from the registry. Coverage is
@@ -189,6 +236,78 @@ enum SemanticOracleTable {
         .navigateToggleView:
             "send-only — routes each view to [.midiKeyCommands, .cgEvent] (view.toggle_*); "
             + "the key command fires blind with no view-state read-back, so no State A exists",
+        // B3 audit: project-lifecycle / tracks-topology / midi-send ops that
+        // structurally cannot reach State A. Kept explicit so their absence from
+        // the B3 increment is a reviewed decision, not a gap.
+        .projectNew:
+            "AppleScript lifecycle write — chain [.appleScript, .cgEvent]; the successful "
+            + "new-document path wraps through AppleScriptChannel.wrapMutatingResult, which "
+            + "always emits honest State B readback_unavailable. The front-document-identity "
+            + "change only gates State C-vs-B (didFrontDocumentChange), never State A, so no "
+            + "verified-write envelope is emitted",
+        .projectOpen:
+            "AppleScript lifecycle write — chain [.appleScript]; openProjectViaWorkspace returns "
+            + "a plain 'Opened: <path>' success that wrapMutatingResult wraps as State B "
+            + "readback_unavailable. No State A envelope exists",
+        .projectClose:
+            "VerificationPolicy.none — chain [.appleScript, .cgEvent]; the close script success "
+            + "is wrapped by wrapMutatingResult as State B readback_unavailable, so there is no "
+            + "State A to verify",
+        .projectLaunch:
+            "ProjectDispatcher.runLifecycleScript returns a prose success string "
+            + "('Logic Pro launched') gated on a running-state poll, NOT an HonestContract "
+            + "State-A envelope — there is no state/verified/success envelope to compose a "
+            + "verified-write oracle from",
+        .projectQuit:
+            "ProjectDispatcher.runLifecycleScript returns a prose success string "
+            + "('Logic Pro quit') gated on a running-state poll, NOT an HonestContract State-A "
+            + "envelope; the running-state check is the verification but the response body is "
+            + "prose, not a verified-write envelope",
+        .tracksDuplicate:
+            "VerificationPolicy.none — routes [.midiKeyCommands, .cgEvent] (no accessibility "
+            + "channel handles track.duplicate), and both emit send-only State B "
+            + "send_only_no_readback; there is no topology read-back and no State A",
+        .midiSendNote:
+            "send-only VerificationPolicy.none — routes [.coreMIDI], whose handler emits State B "
+            + "send_only_no_readback; a raw MIDI note send has no read-back and no State A",
+        .midiSendChord:
+            "send-only VerificationPolicy.none — routes [.coreMIDI] → State B "
+            + "send_only_no_readback; a chord send is echo-less, so no State A exists",
+        .midiSendCC:
+            "send-only VerificationPolicy.none — routes [.coreMIDI] → State B "
+            + "send_only_no_readback; a control-change send has no read-back and no State A",
+        .midiSendProgramChange:
+            "send-only VerificationPolicy.none — routes [.coreMIDI] → State B "
+            + "send_only_no_readback; a program-change send is echo-less, so no State A",
+        .midiSendPitchBend:
+            "send-only VerificationPolicy.none — routes [.coreMIDI] → State B "
+            + "send_only_no_readback; a pitch-bend send has no read-back and no State A",
+        .midiSendAftertouch:
+            "send-only VerificationPolicy.none — routes [.coreMIDI] → State B "
+            + "send_only_no_readback; an aftertouch send is echo-less, so no State A",
+        .midiSendSysEx:
+            "send-only VerificationPolicy.none — routes [.coreMIDI] → State B "
+            + "send_only_no_readback; a SysEx send has no read-back and no State A",
+        .midiPlaySequence:
+            "send-only VerificationPolicy.none — routes [.coreMIDI], which streams the note "
+            + "sequence and returns State B send_only_no_readback; there is no arrangement "
+            + "read-back and no State A",
+        .midiStepInput:
+            "send-only VerificationPolicy.none — routes [.coreMIDI] step-input send → State B "
+            + "send_only_no_readback; the stepped note has no read-back and no State A",
+        .midiCreateVirtualPort:
+            "VerificationPolicy.none — CoreMIDIChannel.createSendOnlyPort creates a send-only "
+            + "virtual port and returns State B send_only_no_readback; port creation exposes no "
+            + "verified read-back and no State A",
+        .midiMMCPlay:
+            "send-only VerificationPolicy.none — routes mmc.play to [.coreMIDI]; the MMC "
+            + "transport SysEx is echo-less (State B send_only_no_readback), so no State A exists",
+        .midiMMCStop:
+            "send-only VerificationPolicy.none — routes mmc.stop to [.coreMIDI]; the MMC "
+            + "transport SysEx is echo-less (State B send_only_no_readback), so no State A exists",
+        .midiMMCRecord:
+            "send-only VerificationPolicy.none — routes mmc.record_strobe to [.coreMIDI]; the MMC "
+            + "record SysEx is echo-less (State B send_only_no_readback), so no State A exists",
     ]
 
     /// Mutating ops that never enter the oracle surface at all because the
@@ -254,6 +373,22 @@ enum SemanticOracleTable {
         navigateCreateMarker,
         navigateRenameMarker,
         navigateSetZoom,
+        // #373 Phase B3 — project/tracks/system/midi verified-write oracles.
+        projectSave,
+        projectSaveAs,
+        projectBounce,
+        tracksCreateAudio,
+        tracksCreateInstrument,
+        tracksCreateDrummer,
+        tracksCreateExternalMIDI,
+        tracksDelete,
+        tracksRecordSequence,
+        systemSagaExecute,
+        systemSagaCancel,
+        systemSetupArmKey,
+        systemExportSupportBundle,
+        midiImportFile,
+        midiMMCLocate,
     ]
 
     static let byOperationID: [OperationID: OperationOracle] = Dictionary(
@@ -1342,6 +1477,317 @@ enum SemanticOracleTable {
             .valueEquals(key: "verify_source", expected: .string("ax_zoom_slider")),
             .numericNear(keyA: "observed", keyB: "requested", within: .absolute(0.02)),
             .numericRange(key: "level", min: 1, max: 10),
+        ]
+    )
+
+    // MARK: - #373 Phase B3 — project safe-mutation oracles
+
+    // Each composes `SafeMutationOracle.verifiedEnvelope` (State A + verified +
+    // success) with the op's own invariant, derived by READING its dispatcher/
+    // channel handler. The envelope is always FIRST, so no oracle asserts what
+    // changed before proving it was verified.
+    //
+    // project
+
+    // AppleScriptChannel `verifiedSaveResult` (chain [.appleScript, …]; the
+    // midiKeyCommands/cgEvent fallbacks are send-only State B, so this is the
+    // ONLY State-A shape). State A is reached ONLY when the `.logicx` package mtime
+    // advanced past the save start (`wroteThisSave`), which requires a non-empty
+    // `document_path` and a readable `observed_mtime` — so those are present in
+    // every State A. `verify_source:"file_mtime"` is the hardcoded honest-read
+    // marker (the mtime advance IS the verification), and `operation`/`method` are
+    // the fixed provenance. The "it actually saved" proof is STRUCTURAL — the
+    // handler only reaches State A on a real mtime advance — so, like
+    // transport.stop, the envelope + the provenance constants are the pin.
+    static let projectSave = SafeMutationOracle.oracle(
+        .projectSave,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("project.save")),
+            .valueEquals(key: "method", expected: .string("applescript")),
+            .valueEquals(key: "verify_source", expected: .string("file_mtime")),
+            .typedField(key: "document_path", type: .string),
+            .typedField(key: "observed_mtime", type: .string),
+        ]
+    )
+
+    // save_as is the one B3 project op whose verified State A is NOT a single
+    // shape. Its chain is [.accessibility, .appleScript] and BOTH channels reach a
+    // genuine State A with DISJOINT non-envelope keys:
+    //   * AX-dialog (`AccessibilityChannel.saveAsViaAXDialog`): `requested`,
+    //     `observed` (the on-disk path confirmed by FileManager.fileExists), and
+    //     `via` ∈ {"save-dialog","save-dialog-with-ext"} — and NO `operation`/
+    //     `method`/`path`.
+    //   * AppleScript (`wrapSaveAsResult`): `operation:"project.save_as"`,
+    //     `method:"applescript"`, `path`, `observed` (the confirmed package path),
+    //     `observed_mtime` — and NO `requested`/`via`.
+    // The requested-side key differs (`requested` vs `path`) and the only shared
+    // non-envelope key is `observed` (an environment-dependent path string with no
+    // constant), so pinning either shape's keys would FALSE-RED the other genuine
+    // State A. The oracle therefore pins only the channel-independent verified
+    // envelope (State A + verified + success), exactly as toggle_metronome /
+    // transport.stop do when their branches share no key. The "the file was
+    // actually written" proof is STRUCTURAL: EVERY path reaches State A only after
+    // confirming the package on disk (AX: FileManager.fileExists; AppleScript: mtime
+    // advance), so a save that did not write is honest State B/C and the envelope
+    // rejects it. The dedicated engine test proves the oracle accepts BOTH channel
+    // shapes yet still rejects a State B / State C, so it is not vacuous.
+    static let projectSaveAs = SafeMutationOracle.oracle(
+        .projectSaveAs,
+        semantics: []
+    )
+
+    // AccessibilityChannel `openBounceDialogViaMenu` (chain [.accessibility, …];
+    // the midiKeyCommands/cgEvent fallbacks are send-only State B, so this is the
+    // ONLY State-A shape). CRITICAL semantic: State A here means the Bounce DIALOG
+    // OPENED — NOT that a bounce artifact was produced (`bounce_fired:false` is
+    // hardcoded and load-bearing: the op deliberately stops at the dialog for the
+    // human to choose settings/destination). `requested`/`observed` are both the
+    // literal "bounce_dialog_open" (pinned exactly, so a handler that reported the
+    // wrong milestone is caught), `dialog_opened:true` is the confirmed effect, and
+    // `via:"file-menu"` is the fixed provenance.
+    static let projectBounce = SafeMutationOracle.oracle(
+        .projectBounce,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("project.bounce")),
+            .valueEquals(key: "requested", expected: .string("bounce_dialog_open")),
+            .valueEquals(key: "observed", expected: .string("bounce_dialog_open")),
+            .valueEquals(key: "dialog_opened", expected: .bool(true)),
+            .valueEquals(key: "bounce_fired", expected: .bool(false)),
+            .valueEquals(key: "via", expected: .string("file-menu")),
+        ]
+    )
+
+    // MARK: - #373 Phase B3 — tracks safe-mutation oracles
+
+    // AccessibilityChannel+Tracks `verifyTrackCreation` → encodeStateA (chain
+    // [.accessibility, …]; the fallbacks are send-only State B, so this is the ONLY
+    // State-A shape). State A is reached ONLY when the live AX track-header count
+    // INCREASED (`currentCount > beforeCount`), so `observed_delta` (= after −
+    // before) is ≥ 1 — the genuine "a new track is present" invariant, pinned as a
+    // `.numericRange(min: 1)`. `requested_delta:1` is the create intent,
+    // `verification_source:"track_count_delta"` is how it was verified, and
+    // `track_type_verification_source:"menu_clicked"` records that the type is
+    // inferred from the clicked menu item. `observed_track_type` is the PER-OP
+    // discriminator — the four create_* handlers pass distinct `expectedTrackType`
+    // values (audio / softwareInstrument / drummer / externalMIDI), so pinning it
+    // is what makes each oracle REJECT a create that produced the wrong track type.
+    private static func createTrackSemantics(observedType: String) -> [OracleConstraint] {
+        [
+            .valueEquals(key: "requested_delta", expected: .number(1)),
+            .valueEquals(key: "verification_source", expected: .string("track_count_delta")),
+            .valueEquals(key: "track_type_verification_source", expected: .string("menu_clicked")),
+            .valueEquals(key: "observed_track_type", expected: .string(observedType)),
+            .numericRange(key: "observed_delta", min: 1, max: 10_000),
+            .typedField(key: "track_count_before", type: .number),
+            .typedField(key: "track_count_after", type: .number),
+            .typedField(key: "observed_track_index", type: .number),
+        ]
+    }
+
+    // TrackDispatcher `create_audio` → AccessibilityChannel.createTrackViaMenu with
+    // expectedTrackType `.audio` (TrackType.audio.rawValue == "audio").
+    static let tracksCreateAudio = SafeMutationOracle.oracle(
+        .tracksCreateAudio,
+        semantics: createTrackSemantics(observedType: "audio")
+    )
+
+    // create_instrument → expectedTrackType `.softwareInstrument`
+    // (TrackType.softwareInstrument.rawValue == "software_instrument").
+    static let tracksCreateInstrument = SafeMutationOracle.oracle(
+        .tracksCreateInstrument,
+        semantics: createTrackSemantics(observedType: "software_instrument")
+    )
+
+    // create_drummer → expectedTrackType `.drummer` (rawValue == "drummer").
+    static let tracksCreateDrummer = SafeMutationOracle.oracle(
+        .tracksCreateDrummer,
+        semantics: createTrackSemantics(observedType: "drummer")
+    )
+
+    // create_external_midi → expectedTrackType `.externalMIDI`
+    // (TrackType.externalMIDI.rawValue == "external_midi").
+    static let tracksCreateExternalMIDI = SafeMutationOracle.oracle(
+        .tracksCreateExternalMIDI,
+        semantics: createTrackSemantics(observedType: "external_midi")
+    )
+
+    // AccessibilityChannel+Tracks `defaultDeleteTrack` → encodeStateA (chain
+    // [.accessibility, …]; fallbacks are send-only State B). State A is reached ONLY
+    // when the live AX header count DECREASED (`currentCount < beforeCount`), so
+    // `observed_delta` (= after − before) is ≤ −1 — the genuine "the track count
+    // was reduced" invariant, pinned as a `.numericRange(max: -1)` so a delete that
+    // did not reduce the count cannot pass. `requested_delta:-1` is the delete
+    // intent; `menu_clicked` records the menu item that fired. (There is no
+    // `verification_source` constant on this path — the count-delta IS the
+    // verification, carried by the envelope + the delta range.)
+    static let tracksDelete = SafeMutationOracle.oracle(
+        .tracksDelete,
+        semantics: [
+            .valueEquals(key: "requested_delta", expected: .number(-1)),
+            .numericRange(key: "observed_delta", min: -10_000, max: -1),
+            .typedField(key: "track_count_before", type: .number),
+            .typedField(key: "track_count_after", type: .number),
+            .typedField(key: "menu_clicked", type: .string),
+        ]
+    )
+
+    // TrackDispatcher+RecordSequence `verifyRecordSequenceImport` verified payload.
+    // NOTE — this op is DELIBERATELY NOT built through `SafeMutationOracle.oracle`:
+    // its verified success is hand-assembled via `jsonToolTextResult` and carries
+    // `success:true` + `verified:true` but NO `state:"A"` field (it does not call
+    // `HonestContract.encodeStateA`). Pinning `state:"A"` would encode a shape the
+    // handler never emits, so this oracle pins `success` + `verified` directly as
+    // the verified-write proof. The load-bearing semantic is the REGION READBACK
+    // match: State A (`.verified`) is reached only when the AX region read back on
+    // the created track has `startBar == expected_start_bar` (hardcoded 1) AND
+    // `endBar == expected_end_bar`, so `.fieldsEqual(start_bar, expected_start_bar)`
+    // + `.fieldsEqual(end_bar, expected_end_bar)` are the genuine "the notes landed
+    // in the right region envelope" invariants (start/end are read back, the
+    // expected_* are computed). `.fieldsEqual(target_track_index, created_track)`
+    // pins that the verified region is on the just-created track, `method:"smf_import"`
+    // is the fixed provenance, and `verify_source` is one of the two legal region
+    // readback provenances.
+    static let tracksRecordSequence = OperationOracle(
+        .tracksRecordSequence,
+        strength: .shapeAndDomain,
+        constraints: [
+            .valueEquals(key: "success", expected: .bool(true)),
+            .valueEquals(key: "verified", expected: .bool(true)),
+            .valueEquals(key: "method", expected: .string("smf_import")),
+            .valueEquals(key: "expected_start_bar", expected: .number(1)),
+            .fieldsEqual(keyA: "start_bar", keyB: "expected_start_bar"),
+            .fieldsEqual(keyA: "end_bar", keyB: "expected_end_bar"),
+            .fieldsEqual(keyA: "target_track_index", keyB: "created_track"),
+            .enumMember(key: "verify_source", allowed: ["ax_region_delta", "ax_region_readback"]),
+            .typedField(key: "note_count", type: .number),
+            .typedField(key: "region_name", type: .string),
+        ]
+    )
+
+    // MARK: - #373 Phase B3 — system safe-mutation oracles
+
+    // SagaWire `storedOutcome(plan:outcome:)` → encodeStateA ONLY when
+    // `outcome.state == .completed` (every other saga state maps to State B or C),
+    // so `saga_state:"completed"` is exactly correlated with the State-A envelope
+    // and is the load-bearing "the saga actually completed" invariant. `duplicate`
+    // is NOT pinned: a replayed completion (`duplicateOutcome`) is still a genuine
+    // State A with `duplicate:true`. `journal_scope`/`journal_survives_process_restart`
+    // are the hardcoded session-journal honesty markers (SagaWire.sessionFields —
+    // the same constants system.saga_preflight/saga_status pin). `steps` /
+    // `state_history` carry the executed plan.
+    static let systemSagaExecute = SafeMutationOracle.oracle(
+        .systemSagaExecute,
+        semantics: [
+            .valueEquals(key: "journal_scope", expected: .string("session")),
+            .valueEquals(key: "journal_survives_process_restart", expected: .bool(false)),
+            .valueEquals(key: "saga_state", expected: .string("completed")),
+            .typedField(key: "idempotency_key", type: .string),
+            .typedField(key: "steps", type: .array),
+            .typedField(key: "state_history", type: .array),
+        ]
+    )
+
+    // SystemDispatcher `saga_cancel` reaches encodeStateA ONLY on the
+    // `.cancelled(outcome, verified)` journal result WITH `verified == true` (an
+    // unverified cancellation is State B sagaReconciliationRequired; pending is
+    // State B sagaCancellationPending), so the State-A envelope proves the
+    // compensation was CONFIRMED. `status:"cancelled"` is the terminal state,
+    // `journal_scope`/`journal_survives_process_restart` are the session-journal
+    // markers, and `outcome` carries the compensated result body.
+    static let systemSagaCancel = SafeMutationOracle.oracle(
+        .systemSagaCancel,
+        semantics: [
+            .valueEquals(key: "journal_scope", expected: .string("session")),
+            .valueEquals(key: "journal_survives_process_restart", expected: .bool(false)),
+            .valueEquals(key: "status", expected: .string("cancelled")),
+            .typedField(key: "idempotency_key", type: .string),
+            .typedField(key: "outcome", type: .object),
+        ]
+    )
+
+    // SystemDispatcher `setup_arm_key` reaches encodeStateA on TWO outcomes —
+    // `.alreadyConfigured` (verify-first fast path: the mapping already worked) and
+    // `.configuredAndVerified` (GUI assignment confirmed by a live record-arm flip).
+    // Both are gated on a FUNCTIONAL arm-flip verification (#413), which is what the
+    // State-A envelope structurally proves. Their `evidence.extras` differ (the GUI
+    // path emits the window/search/chord fields), so the only pinnable shared
+    // content is the dispatcher-added constant `command:"Toggle Track Record Enable"`
+    // (the exact Key Command the setup assigns) plus `chord` (the resolved chord
+    // label) and `write_source` (always emitted by Evidence.extras). `write_source`
+    // is shape-only (its value differs between the two State-A branches), so it is
+    // typed, not value-pinned.
+    static let systemSetupArmKey = SafeMutationOracle.oracle(
+        .systemSetupArmKey,
+        semantics: [
+            .valueEquals(key: "command", expected: .string("Toggle Track Record Enable")),
+            .typedField(key: "chord", type: .string),
+            .typedField(key: "write_source", type: .string),
+        ]
+    )
+
+    // SystemDispatcher `export_support_bundle` → encodeStateA({bundle_path, files})
+    // ONLY after the bundle is written AND the created directory re-passes the
+    // containment re-check (`createdBundleDirectoryIsContained`) — an escaped or
+    // failed write is State C supportBundleExportFailed. The envelope carries the
+    // value constraints (satisfying the anti-checkbox gate); the semantic content is
+    // all environment-dependent (an absolute path and per-file sha256s, no
+    // constant), so the honest pin is STRUCTURAL: a NON-EMPTY `files` manifest whose
+    // entries carry `name`+`sha256`, plus a `bundle_path`. `.nonEmptyArray(files)`
+    // is the "something was actually bundled" invariant — an empty manifest is not a
+    // successful export.
+    static let systemExportSupportBundle = SafeMutationOracle.oracle(
+        .systemExportSupportBundle,
+        semantics: [
+            .nonEmptyArray(key: "files"),
+            .typedField(key: "bundle_path", type: .string),
+            .typedField(key: "files.0.name", type: .string),
+            .typedField(key: "files.0.sha256", type: .string),
+        ]
+    )
+
+    // MARK: - #373 Phase B3 — midi safe-mutation oracles
+
+    // AccessibilityChannel+MIDIImport `defaultImportMIDIFile` → encodeStateA (chain
+    // [.accessibility]). State A is reached ONLY when a new track appeared
+    // (`afterCount > beforeCount` → `observed_delta` ≥ 1), no imported lane is a GM
+    // Device / external-MIDI synth lane (else honest State B importedAsGMDevice),
+    // and at least one imported MIDI region was read back (`importedRegions`
+    // non-empty). So `.numericRange(imported_region_count, min: 1)` +
+    // `.nonEmptyArray(imported_regions)` are the genuine "the imported content is
+    // present" invariants, and `.numericRange(observed_delta, min: 1)` is the
+    // "a track was created" invariant. `via:"ax_menu_import"` is the fixed
+    // provenance and `file_open_dialog_seen:true` is hardcoded on the State-A path
+    // (the import sheet was observed).
+    static let midiImportFile = SafeMutationOracle.oracle(
+        .midiImportFile,
+        semantics: [
+            .valueEquals(key: "via", expected: .string("ax_menu_import")),
+            .valueEquals(key: "file_open_dialog_seen", expected: .bool(true)),
+            .numericRange(key: "observed_delta", min: 1, max: 10_000),
+            .numericRange(key: "imported_region_count", min: 1, max: 100_000),
+            .nonEmptyArray(key: "imported_regions"),
+            .typedField(key: "requested", type: .string),
+            .typedField(key: "track_count_before", type: .number),
+            .typedField(key: "track_count_after", type: .number),
+        ]
+    )
+
+    // MIDIDispatcher `mmc_locate` is DUAL-path: a `bar` param routes
+    // `transport.goto_position` and runs the SAME `finalizeGotoPositionResult` as
+    // transport.goto_position/navigate.goto_bar, so its verified State A is that
+    // identical shape — `requested == observed` playhead position (an independent
+    // transport-state read, so a genuine request↔readback pin) plus
+    // `verification_source:"transport_state"`. The `time` (SMPTE) sub-path routes
+    // mmc.locate to [.coreMIDI] and is honest send-only State B, which the envelope
+    // correctly rejects (it is not a verified write). This oracle pins the verified
+    // bar-path State A; it is NOT a send-only op, so — unlike mmc_play/stop/record —
+    // it is covered rather than excluded.
+    static let midiMMCLocate = SafeMutationOracle.oracle(
+        .midiMMCLocate,
+        semantics: [
+            .valueEquals(key: "verification_source", expected: .string("transport_state")),
+            .fieldsEqual(keyA: "requested", keyB: "observed"),
+            .typedField(key: "observed_time_position", type: .string),
         ]
     )
 }

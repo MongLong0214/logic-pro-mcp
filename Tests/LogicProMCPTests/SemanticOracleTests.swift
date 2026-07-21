@@ -393,21 +393,30 @@ struct SemanticOracleCensusTests {
     // MARK: - #373 Phase B1 — mutating-surface increment (dual census)
 
     /// The mutating oracles present are EXACTLY the declared increment (B1 UNION
-    /// B2) — no accidental add or drop. Pinning the set (not just a count) is what
-    /// makes the increment a deliberate, reviewable diff. B1 and B2 are each
-    /// pinned by count so a premature or miscounted oracle in either fails here.
+    /// B2 UNION B3) — no accidental add or drop. Pinning the set (not just a count)
+    /// is what makes the increment a deliberate, reviewable diff. B1, B2 and B3 are
+    /// each pinned by count so a premature or miscounted oracle in any fails here.
     @Test func mutatingOraclesAreExactlyTheDeclaredIncrement() {
         let mutatingOracles = Set(SemanticOracleTable.byOperationID.keys)
             .intersection(SemanticOracleTable.mutatingSpecIDs)
         #expect(mutatingOracles == SemanticOracleTable.coveredMutatingOperationIDs)
         #expect(SemanticOracleTable.phaseB1MutatingOperationIDs.count == 12)
         #expect(SemanticOracleTable.phaseB2MutatingOperationIDs.count == 15)
-        // B1 and B2 are DISJOINT increments — no op is claimed by both phases.
+        #expect(SemanticOracleTable.phaseB3MutatingOperationIDs.count == 15)
+        // B1, B2 and B3 are PAIRWISE-DISJOINT increments — no op is claimed twice.
         #expect(
             SemanticOracleTable.phaseB1MutatingOperationIDs
                 .isDisjoint(with: SemanticOracleTable.phaseB2MutatingOperationIDs)
         )
-        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 27)
+        #expect(
+            SemanticOracleTable.phaseB1MutatingOperationIDs
+                .isDisjoint(with: SemanticOracleTable.phaseB3MutatingOperationIDs)
+        )
+        #expect(
+            SemanticOracleTable.phaseB2MutatingOperationIDs
+                .isDisjoint(with: SemanticOracleTable.phaseB3MutatingOperationIDs)
+        )
+        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 42)
     }
 
     /// Soundness of the increment: every id in B1 AND B2 is a REAL `.mutating`,
@@ -453,6 +462,20 @@ struct SemanticOracleCensusTests {
             .navigateZoomToFit, .navigateDeleteMarker, .navigateToggleView,
         ] {
             #expect(exclusions[id] != nil, "\(id.rawValue) missing its send-only exclusion reason")
+        }
+        // The B3 audited exclusions: project lifecycle ops with no State A
+        // (new/open/close State-B ceiling, launch/quit prose), the send-only
+        // tracks.duplicate, and the send-only midi surface (a representative
+        // subset — the generic loop below validates all 25 entries).
+        for id in [
+            OperationID.projectNew, .projectOpen, .projectClose,
+            .projectLaunch, .projectQuit, .tracksDuplicate,
+            .midiSendNote, .midiSendChord, .midiSendCC, .midiSendProgramChange,
+            .midiSendPitchBend, .midiSendAftertouch, .midiSendSysEx,
+            .midiPlaySequence, .midiStepInput, .midiCreateVirtualPort,
+            .midiMMCPlay, .midiMMCStop, .midiMMCRecord,
+        ] {
+            #expect(exclusions[id] != nil, "\(id.rawValue) missing its B3 exclusion reason")
         }
         for (id, reason) in exclusions {
             #expect(SemanticOracleTable.mutatingSpecIDs.contains(id), "\(id.rawValue) is not a mutating spec")
@@ -633,6 +656,97 @@ struct SemanticOracleMutationTests {
             responseData: Data(#"{"success":false,"verified":false,"state":"C","error":"element_not_found"}"#.utf8),
             readbackData: Data("{}".utf8)) == true
         #expect(!failure, "metronome oracle accepted a State C failure")
+    }
+
+    /// #373 B3 — project.save_as is envelope-only because its
+    /// [.accessibility, .appleScript] chain reaches State A in two shapes with
+    /// DISJOINT non-envelope keys (AX-dialog: requested/observed/via; AppleScript:
+    /// operation/method/path/observed). The oracle must accept BOTH yet reject a
+    /// State B (write unconfirmed) and a State C (write failed) — the
+    /// transport.stop / toggle_metronome precedent, proving the envelope-only
+    /// oracle is not vacuous (its "the file was written" proof is the structural
+    /// State-A gate, which both channels reach only after confirming the package
+    /// on disk).
+    @Test func saveAsOracleAcceptsBothChannelShapesYetRejectsUnverified() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.projectSaveAs])
+        // AX-dialog State A (requested/observed/via; no operation/method).
+        let axDialog = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","requested":"/x/Demo.logicx","observed":"/x/Demo.logicx","via":"save-dialog-with-ext"}"#.utf8),
+            readbackData: Data("{}".utf8)))
+        #expect(axDialog, "save_as oracle rejected the AX-dialog State A shape")
+        // AppleScript State A (operation/method/path/observed; no requested/via).
+        let appleScript = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"project.save_as","method":"applescript","path":"/x/Demo.logicx","observed":"/x/Demo.logicx","observed_mtime":"1970-01-01T00:00:02Z"}"#.utf8),
+            readbackData: Data("{}".utf8)))
+        #expect(appleScript, "save_as oracle false-RED the AppleScript State A shape")
+        // State B: the write landed but the package could not be confirmed.
+        let stateB: Bool = oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":false,"state":"B","reason":"readback_mismatch","operation":"project.save_as"}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!stateB, "save_as oracle accepted a State B result")
+        // State C: the write failed outright.
+        let stateC: Bool = oracle.evaluate(
+            responseData: Data(#"{"success":false,"verified":false,"state":"C","error":"ax_write_failed"}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!stateC, "save_as oracle accepted a State C failure")
+    }
+
+    /// #373 B3 — record_sequence is the one covered op that does NOT emit an
+    /// `encodeStateA` envelope: its verified payload carries `success`+`verified`
+    /// but no `state` field (hand-assembled via jsonToolTextResult). The oracle
+    /// pins success+verified as the verified-write proof and the REGION-READBACK
+    /// match (start/end bars == the expected envelope). A region that landed at
+    /// the wrong bar envelope, or an unverified/failed import, must be rejected.
+    @Test func recordSequenceOracleRejectsWrongRegionAndUnverifiedImport() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.tracksRecordSequence])
+        let fixture = try #require(SemanticOracleFixtures.byOperationID[.tracksRecordSequence])
+        let good = try #require(oracle.evaluate(
+            responseData: fixture.responseData, readbackData: fixture.readbackData))
+        #expect(good, "record_sequence oracle rejected its own verified fixture")
+        // Region read back at the wrong end bar (end_bar 9 != expected_end_bar 3).
+        let wrongEnd: Bool = oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"method":"smf_import","expected_start_bar":1,"expected_end_bar":3,"start_bar":1,"end_bar":9,"target_track_index":3,"created_track":3,"verify_source":"ax_region_delta","note_count":4,"region_name":"MIDI Region"}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!wrongEnd, "record_sequence accepted a region at the wrong end bar")
+        // A timing_mismatch failure payload (verified:false) must be rejected.
+        let unverified: Bool = oracle.evaluate(
+            responseData: Data(#"{"success":false,"verified":false,"error":"timing_mismatch","method":"smf_import","expected_start_bar":1,"expected_end_bar":3,"start_bar":1,"end_bar":9,"target_track_index":3,"created_track":3,"verify_source":"ax_region_delta","note_count":4,"region_name":"MIDI Region"}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!unverified, "record_sequence accepted an unverified import")
+    }
+
+    /// #373 B3 — RED evidence for representative oracles: each REJECTS the
+    /// semantically-wrong result it exists to catch. A VALUE-BEARING one
+    /// (saga_execute rejects a saga that did NOT complete), COUNT ones
+    /// (tracks.delete rejects a delete that did not reduce the count; create_audio
+    /// rejects the wrong track type), and a STRUCTURAL one (export_support_bundle
+    /// rejects an empty file manifest). The good-leg (each fixture passes) is the
+    /// parameterized `oraclePassesItsRealisticFixture`; these are the bad-legs.
+    @Test func phaseB3RepresentativeOraclesRejectSemanticMutations() throws {
+        // VALUE-BEARING: saga_execute rejects a non-completed saga_state.
+        let saga = try #require(SemanticOracleTable.byOperationID[.systemSagaExecute])
+        let notCompleted: Bool = saga.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","journal_scope":"session","journal_survives_process_restart":false,"saga_state":"partiallyApplied","idempotency_key":"k","steps":[],"state_history":[]}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!notCompleted, "saga_execute accepted a non-completed saga_state")
+        // COUNT: tracks.delete rejects a zero count-delta (nothing was deleted).
+        let delete = try #require(SemanticOracleTable.byOperationID[.tracksDelete])
+        let noDecrement: Bool = delete.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","menu_clicked":"트랙 삭제","track_count_before":3,"requested_delta":-1,"track_count_after":3,"observed_delta":0}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!noDecrement, "tracks.delete accepted a zero count-delta")
+        // COUNT/TYPE: create_audio rejects a create that produced a drummer track.
+        let createAudio = try #require(SemanticOracleTable.byOperationID[.tracksCreateAudio])
+        let wrongType: Bool = createAudio.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","requested_delta":1,"verification_source":"track_count_delta","track_type_verification_source":"menu_clicked","observed_track_type":"drummer","observed_delta":1,"track_count_before":2,"track_count_after":3,"observed_track_index":2}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!wrongType, "create_audio accepted a drummer track type")
+        // STRUCTURAL: export_support_bundle rejects an empty file manifest.
+        let bundle = try #require(SemanticOracleTable.byOperationID[.systemExportSupportBundle])
+        let emptyManifest: Bool = bundle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","bundle_path":"/x/b","files":[]}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!emptyManifest, "export_support_bundle accepted an empty file manifest")
     }
 
     /// The anti-checkbox tool. For every constraint of every declarative oracle,
@@ -919,10 +1033,10 @@ struct SemanticOracleRelationalMutationTests {
 @Suite("#373 read-only census non-regression")
 struct SemanticOracleB0CensusTests {
     /// The read-only census is a STANDING invariant across phases. B0 added
-    /// framework only; B1/B2 add mutating increments WITHOUT perturbing the
+    /// framework only; B1/B2/B3 add mutating increments WITHOUT perturbing the
     /// fully-covered read-only surface. So the read-only census stays exactly 20,
-    /// and the table's total is the read-only 20 plus the pinned B1 + B2 increments
-    /// — a premature or miscounted mutating oracle fails here.
+    /// and the table's total is the read-only 20 plus the pinned B1 + B2 + B3
+    /// increments — a premature or miscounted mutating oracle fails here.
     @Test func readOnlyCensusStaysTwentyAndMutatingIncrementsAreAdditive() {
         #expect(SemanticOracleTable.coveredSpecIDs.count == 20)
         let readOnlyOracles = Set(SemanticOracleTable.byOperationID.keys)
@@ -933,6 +1047,7 @@ struct SemanticOracleB0CensusTests {
                 == 20
                 + SemanticOracleTable.phaseB1MutatingOperationIDs.count
                 + SemanticOracleTable.phaseB2MutatingOperationIDs.count
+                + SemanticOracleTable.phaseB3MutatingOperationIDs.count
         )
     }
 }
