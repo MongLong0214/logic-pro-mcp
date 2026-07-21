@@ -1889,6 +1889,11 @@ extension AccessibilityChannel {
         }
         trace["target_slot_found"] = true
 
+        // #425 note: the empty-slot picker is opened by a coordinate click. Coord-free
+        // alternatives were live-probed and rejected: AXPress on the slot element is a
+        // no-op (picker never opens), and AXShowMenu opens the picker into an NSMenu
+        // tracking loop that WEDGES Logic (AX blocks). The slot-open therefore stays a
+        // coordinate click (governed waiver); only the leaf SELECTION is coord-free.
         guard clickElementCenter(targetSlot.element, runtime: runtime.ax) else {
             return (.transientSetupFailure(stage: "target_slot_click_failed"), trace)
         }
@@ -1923,6 +1928,9 @@ extension AccessibilityChannel {
         trace["winning_strategy"] = pluginClick.strategy
         trace["winning_menu_path"] = pluginClick.path.joined(separator: " > ")
         trace["plugin_selection_id"] = pluginID
+        // #425: record which leaf-selection path executed so the receipt self-attests
+        // coordinate-free (AXPress) vs the legacy coordinate click.
+        trace["leaf_select_coord_free"] = FeatureFlags.insertCoordFree
 
         let poll = await pollStripInventoryUntil(
             track: track, runtime: runtime, timeoutMs: 2_000
@@ -2404,6 +2412,9 @@ extension AccessibilityChannel {
         _ item: AXUIElement,
         runtime: AXHelpers.Runtime
     ) async -> Bool {
+        if FeatureFlags.insertCoordFree {
+            return await pressPopupPluginLeaf(item, runtime: runtime)
+        }
         guard moveElementCenter(item, runtime: runtime) else { return false }
         try? await Task.sleep(for: .milliseconds(120))
         if let submenu = visibleSubmenu(of: item, runtime: runtime),
@@ -2411,6 +2422,53 @@ extension AccessibilityChannel {
             return clickElementCenter(leaf, runtime: runtime)
         }
         return clickElementCenter(item, runtime: runtime)
+    }
+
+    /// #425: coordinate-free leaf selection. Reads the plugin's format submenu (if
+    /// any) as an AX child — populated without a hover, per `popupExactLeafPaths` —
+    /// and AXPresses the preferred-format leaf; otherwise AXPresses the item itself.
+    /// If a format submenu exists but AXPress on its leaf did not take, fall through
+    /// to pressing the item (which on many builds opens the submenu / selects the
+    /// default format). Fail-closed: no coordinate fallback.
+    private static func pressPopupPluginLeaf(
+        _ item: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) async -> Bool {
+        if let submenu = axChildMenu(of: item, runtime: runtime),
+           let leaf = preferredFormatLeafByLabel(in: submenu, runtime: runtime),
+           pressElement(leaf, runtime: runtime) {
+            return true
+        }
+        return pressElement(item, runtime: runtime)
+    }
+
+    /// A submenu exposed as an AX child of `item`, regardless of visual visibility.
+    private static func axChildMenu(
+        of item: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        AXHelpers.getChildren(item, runtime: runtime).first {
+            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
+        }
+    }
+
+    /// `preferredFormatLeaf` without the on-screen-position requirement, so it works
+    /// on a submenu that has not been visually revealed (AX children only).
+    private static func preferredFormatLeafByLabel(
+        in submenu: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        let items = AXHelpers.getChildren(submenu, runtime: runtime).filter {
+            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuItemRole as String)
+        }
+        for labels in AXLocalePolicy.pluginFormatLeafPriority {
+            if let match = items.first(where: {
+                AXLocalePolicy.elementMatches($0, labels, runtime: runtime)
+            }) {
+                return match
+            }
+        }
+        return items.first
     }
 
     private static func popupExactLeafPaths(

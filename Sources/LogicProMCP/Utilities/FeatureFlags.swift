@@ -87,6 +87,14 @@ enum FeatureFlags: Sendable {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR006_VERSIONED_CACHE"] == "1"
     }
 
+    /// #425 experiment: coordinate-free plugin-insert leaf selection (AXPress +
+    /// AX-children submenu traversal) in place of moveElementCenter/clickElementCenter.
+    /// Opt-in during the live spike so the shipped coordinate path stays the default;
+    /// promoted to the default (coordinates removed) once live-verified.
+    static var insertCoordFree: Bool {
+        ProcessInfo.processInfo.environment["LOGIC_MCP_INSERT_COORD_FREE"] == "1"
+    }
+
     static var adr007SelectorAtlas: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR007_SELECTOR_ATLAS"] == "1"
     }
