@@ -51,12 +51,40 @@ struct SecureFDTests {
         return best
     }
 
+    /// The FDError case name, so a negative can assert the SPECIFIC failure mode
+    /// (not merely "some error"): a regression that throws the wrong case is a
+    /// real hole, and pinning the case closes it.
+    /// Run `body`; return the `FDError` it throws, or nil if it does not throw
+    /// or throws a non-FDError. Callers `try #require(...)` the result so a
+    /// missing/foreign error fails the test, then assert the specific case.
+    private func fdError<T>(_ body: () throws -> T) -> SecureFD.FDError? {
+        do { _ = try body(); return nil }
+        catch let e as SecureFD.FDError { return e }
+        catch { return nil }
+    }
+
+    private func caseName(_ e: SecureFD.FDError) -> String {
+        switch e {
+        case .badComponent: return "badComponent"
+        case .baseNotUnderHome: return "baseNotUnderHome"
+        case .componentOpenFailed: return "componentOpenFailed"
+        case .verificationMismatch: return "verificationMismatch"
+        case .notDirectory: return "notDirectory"
+        case .notRegularFile: return "notRegularFile"
+        case .notExclusive: return "notExclusive"
+        case .stagingNotEmpty: return "stagingNotEmpty"
+        case .fullfsyncFailed: return "fullfsyncFailed"
+        case .teardownFailed: return "teardownFailed"
+        case .identityReadFailed: return "identityReadFailed"
+        }
+    }
+
     // MARK: component validation
 
     @Test("validateComponent rejects empty, dot, dotdot, slash, NUL")
     func componentValidation() throws {
         for bad in ["", ".", "..", "a/b", "x\u{0}y"] {
-            #expect(throws: (any Error).self) { try SecureFD.validateComponent(bad) }
+            #expect(throws: SecureFD.FDError.self) { try SecureFD.validateComponent(bad) }
         }
         try SecureFD.validateComponent("Library")   // a good one does not throw
     }
@@ -94,7 +122,7 @@ struct SecureFDTests {
         try withBase(base) {
             let baseFD = try openBaseFD(base)
             defer { close(baseFD) }
-            #expect(throws: (any Error).self) {
+            #expect(throws: SecureFD.FDError.self) {
                 close(try SecureFD.walkVerified(baseFD: baseFD, ["link", "leaf"]).fd)
             }
         }
@@ -120,9 +148,10 @@ struct SecureFDTests {
                 try? FileManager.default.moveItem(at: other, to: mid)
             }
             defer { SecureFD._testAfterPassAHook = nil }
-            #expect(throws: (any Error).self) {
+            let e = try #require(fdError {
                 close(try SecureFD.walkVerified(baseFD: baseFD, ["mid", "leaf"]).fd)
-            }
+            })
+            #expect(caseName(e) == "verificationMismatch")
         }
     }
 
@@ -139,14 +168,14 @@ struct SecureFDTests {
             let fd = try SecureFD.createFile(parentFD: parent, name: "fresh.json", mode: 0o600)
             #expect(fdIsOpen(fd)); close(fd)
             // pre-existing regular file → EEXIST refuse
-            #expect(throws: (any Error).self) {
+            #expect(throws: SecureFD.FDError.self) {
                 close(try SecureFD.createFile(parentFD: parent, name: "fresh.json", mode: 0o600))
             }
             // symlink at a NEW name → O_NOFOLLOW/O_EXCL refuse
             try FileManager.default.createSymbolicLink(
                 at: base.appendingPathComponent("sym.json"),
                 withDestinationURL: base.appendingPathComponent("fresh.json"))
-            #expect(throws: (any Error).self) {
+            #expect(throws: SecureFD.FDError.self) {
                 close(try SecureFD.createFile(parentFD: parent, name: "sym.json", mode: 0o600))
             }
         }
@@ -173,9 +202,9 @@ struct SecureFDTests {
             defer { close(parent) }
             let ok = try SecureFD.openAppend(parentFD: parent, name: "real.log")
             #expect(fdIsOpen(ok)); close(ok)
-            #expect(throws: (any Error).self) { close(try SecureFD.openAppend(parentFD: parent, name: "sym.log")) }
-            #expect(throws: (any Error).self) { close(try SecureFD.openAppend(parentFD: parent, name: "fifo.log")) }
-            #expect(throws: (any Error).self) { close(try SecureFD.openAppend(parentFD: parent, name: "hard.log")) }
+            #expect(throws: SecureFD.FDError.self) { close(try SecureFD.openAppend(parentFD: parent, name: "sym.log")) }
+            #expect(throws: SecureFD.FDError.self) { close(try SecureFD.openAppend(parentFD: parent, name: "fifo.log")) }
+            #expect(throws: SecureFD.FDError.self) { close(try SecureFD.openAppend(parentFD: parent, name: "hard.log")) }
         }
     }
 
@@ -198,7 +227,7 @@ struct SecureFDTests {
             defer { close(popBase) }
             let popFD = try SecureFD.walkVerified(baseFD: popBase, ["pop"]).fd
             defer { close(popFD) }
-            #expect(throws: (any Error).self) { try SecureFD.assertEmpty(dirFD: popFD, label: "pop") }
+            #expect(throws: SecureFD.FDError.self) { try SecureFD.assertEmpty(dirFD: popFD, label: "pop") }
         }
     }
 
@@ -245,7 +274,7 @@ struct SecureFDTests {
             for _ in 0..<64 {
                 try FileManager.default.createDirectory(at: mid, withIntermediateDirectories: true)
                 SecureFD._testAfterPassAHook = { try? FileManager.default.removeItem(at: mid) }
-                #expect(throws: (any Error).self) {
+                #expect(throws: SecureFD.FDError.self) {
                     close(try SecureFD.walkVerified(baseFD: baseFD, ["mid"]).fd)
                 }
             }
@@ -264,7 +293,7 @@ struct SecureFDTests {
                 try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
                 try Data("x".utf8).write(to: sub.appendingPathComponent("f"))
                 _ = sub.path.withCString { chmod($0, 0o500) }
-                #expect(throws: (any Error).self) {
+                #expect(throws: SecureFD.FDError.self) {
                     try SecureFD.teardownTree(parentFD: baseFD, name: "tree")
                 }
                 _ = sub.path.withCString { chmod($0, 0o700) }
@@ -295,8 +324,8 @@ struct SecureFDTests {
             defer { close(parent) }
             let ok = try SecureFD.openRead(parentFD: parent, name: "plain.json")
             #expect(fdIsOpen(ok)); close(ok)
-            #expect(throws: (any Error).self) { close(try SecureFD.openRead(parentFD: parent, name: "sym.json")) }
-            #expect(throws: (any Error).self) { close(try SecureFD.openRead(parentFD: parent, name: "hard.json")) }
+            #expect(throws: SecureFD.FDError.self) { close(try SecureFD.openRead(parentFD: parent, name: "sym.json")) }
+            #expect(throws: SecureFD.FDError.self) { close(try SecureFD.openRead(parentFD: parent, name: "hard.json")) }
         }
     }
 
@@ -381,7 +410,7 @@ struct SecureFDTests {
                     }
                     try? FileManager.default.removeItem(at: mid)          // make pass B fail
                 }
-                #expect(throws: (any Error).self) {
+                #expect(throws: SecureFD.FDError.self) {
                     close(try SecureFD.walkVerified(baseFD: baseFD, ["mid"]).fd)
                 }
                 SecureFD._testPassAClosedFDObserver = nil
@@ -401,7 +430,7 @@ struct SecureFDTests {
             // checks and is caught only by the flag generation marker.
             try FileManager.default.createDirectory(at: mid, withIntermediateDirectories: true)
             close(try SecureFD.walkVerified(baseFD: baseFD, ["mid"]).fd)          // success path
-            #expect(throws: (any Error).self) {
+            #expect(throws: SecureFD.FDError.self) {
                 close(try SecureFD.walkVerified(baseFD: baseFD, ["missing"]).fd)  // failure path
             }
             let after = try #require(fdIdentity(baseFD))
@@ -456,9 +485,10 @@ struct SecureFDTests {
             // negative pins.
             SecureFD._testForceIdentityFailureCount = 2
             defer { SecureFD._testForceIdentityFailureCount = 0 }
-            #expect(throws: (any Error).self) {
+            let e = try #require(fdError {
                 close(try SecureFD.walkVerified(baseFD: baseFD, ["a"]).fd)
-            }
+            })
+            #expect(caseName(e) == "identityReadFailed")   // not a fabricated (0,0) match
             let after = minOpenFDCount()
             #expect(after - before < 4)   // the refusing path leaks nothing
         }
@@ -486,13 +516,46 @@ struct SecureFDTests {
                 try? FileManager.default.moveItem(at: victim, to: sub)
             }
             defer { SecureFD._testAfterClassificationHook = nil }
-            #expect(throws: (any Error).self) {
+            let e = try #require(fdError {
                 try SecureFD.teardownTree(parentFD: parent, name: "tree")
-            }
+            })
+            #expect(caseName(e) == "verificationMismatch")
             // Wrong-object zero-delete: the replacement's contents are intact.
             let preciousNow = sub.appendingPathComponent("precious.txt")
             #expect(FileManager.default.fileExists(atPath: preciousNow.path))
             #expect(try String(contentsOf: preciousNow, encoding: .utf8) == "KEEP")
+        }
+    }
+
+    @Test("teardown refuses a victim file swapped onto a classified name with zero deletion")
+    func teardownRefusesReplacedFile() throws {
+        let base = try tempBase("fileswap")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let tree = base.appendingPathComponent("tree", isDirectory: true)
+        try FileManager.default.createDirectory(at: tree, withIntermediateDirectories: true)
+        try Data("staged".utf8).write(to: tree.appendingPathComponent("f"))
+        let victim = base.appendingPathComponent("precious.txt")
+        try Data("KEEP".utf8).write(to: victim)
+        try withBase(base) {
+            let parent = try openBaseFD(base)
+            defer { close(parent) }
+            // After `f` is classified as a regular file, rename the victim file
+            // onto that name. O_NOFOLLOW cannot catch a real regular-file swap;
+            // only the file identity re-bind before unlink can — mirror of the
+            // directory swap defense.
+            SecureFD._testAfterClassificationHook = {
+                try? FileManager.default.removeItem(at: tree.appendingPathComponent("f"))
+                try? FileManager.default.moveItem(at: victim, to: tree.appendingPathComponent("f"))
+            }
+            defer { SecureFD._testAfterClassificationHook = nil }
+            let e = try #require(fdError {
+                try SecureFD.teardownTree(parentFD: parent, name: "tree")
+            })
+            #expect(caseName(e) == "verificationMismatch")
+            // Zero-delete: the victim's content survives at its new name.
+            let moved = tree.appendingPathComponent("f")
+            #expect(FileManager.default.fileExists(atPath: moved.path))
+            #expect(try String(contentsOf: moved, encoding: .utf8) == "KEEP")
         }
     }
 
@@ -505,7 +568,7 @@ struct SecureFDTests {
         try withBase(base) {
             let outside = FileManager.default.temporaryDirectory
                 .appendingPathComponent("lpmcp-outside-\(UUID().uuidString)")
-            #expect(throws: (any Error).self) { _ = try SecureFD.openTrustedBase(for: outside) }
+            #expect(throws: SecureFD.FDError.self) { _ = try SecureFD.openTrustedBase(for: outside) }
         }
     }
 }

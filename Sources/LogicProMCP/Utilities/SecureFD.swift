@@ -180,8 +180,9 @@ enum SecureFD {
         var ids: [Identity] = []
         for comp in relative {
             let next = comp.withCString { openat(dirFD, $0, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC) }
+            let openErrno = errno   // capture before close(2) can overwrite errno
             close(dirFD)
-            guard next >= 0 else { throw FDError.componentOpenFailed(component: comp, errno: errno) }
+            guard next >= 0 else { throw FDError.componentOpenFailed(component: comp, errno: openErrno) }
             dirFD = next
             do { ids.append(try identity(ofFD: dirFD, label: comp)) }
             catch { close(dirFD); throw error }
@@ -271,15 +272,21 @@ enum SecureFD {
         _testEnumerationFDObserver?(dupFD)
         #endif
         guard let dir = fdopendir(dupFD) else {
-            close(dupFD); throw FDError.componentOpenFailed(component: label, errno: errno)
+            let e = errno; close(dupFD); throw FDError.componentOpenFailed(component: label, errno: e)
         }
         defer { closedir(dir) }   // closes the underlying dup fd
+        // readdir returns NULL on BOTH end-of-directory and error; distinguish
+        // them via errno so a readdir failure is never mistaken for an empty
+        // directory (which would defeat the mkdir→open populated-swap defense).
+        errno = 0
         while let ent = readdir(dir) {
             let n = withUnsafePointer(to: ent.pointee.d_name) {
                 $0.withMemoryRebound(to: CChar.self, capacity: Int(NAME_MAX) + 1) { String(cString: $0) }
             }
             if n != "." && n != ".." { throw FDError.stagingNotEmpty(label) }
+            errno = 0
         }
+        guard errno == 0 else { throw FDError.componentOpenFailed(component: label, errno: errno) }
     }
 
     // MARK: - Durability — F_FULLFSYNC, fail-closed
@@ -294,10 +301,13 @@ enum SecureFD {
     /// through descriptors: classify with `fstatat(AT_SYMLINK_NOFOLLOW)`, open each
     /// directory `O_NOFOLLOW` and REQUIRE the opened object to match its classified
     /// `(dev,ino)` — a rename-swapped REAL directory (which `O_NOFOLLOW` cannot
-    /// catch) is refused before anything inside it is touched. Files are unlinked
-    /// by name (symlink children unlinked as links, never followed) and the final
-    /// `unlinkat(AT_REMOVEDIR)` re-binds the name to the directory that was
-    /// actually emptied.
+    /// catch) is refused before anything inside it is touched. Files are likewise
+    /// re-bound to their classified `(dev,ino)` immediately before `unlinkat`
+    /// (symlink children unlinked as links, never followed), so a regular file
+    /// renamed onto the name after classification is refused with zero deletion.
+    /// The final `unlinkat(AT_REMOVEDIR)` re-binds the name to the directory that
+    /// was actually emptied. Each identity-bind→syscall pair carries the same
+    /// irreducible 1-syscall residual (macOS has no `openat2(RESOLVE_BENEATH)`).
     static func teardownTree(parentFD: Int32, name: String) throws {
         try validateComponent(name)
         var st = stat()
@@ -326,21 +336,29 @@ enum SecureFD {
         _testEnumerationFDObserver?(dupFD)
         #endif
         guard let dir = fdopendir(dupFD) else {
-            close(dupFD); throw FDError.teardownFailed(errno: errno)
+            let e = errno; close(dupFD); throw FDError.teardownFailed(errno: e)
         }
         var children: [(name: String, isDir: Bool, id: Identity)] = []
+        // readdir returns NULL on end-of-directory AND on error; reset errno
+        // around each call so a mid-enumeration failure is not mistaken for a
+        // complete listing (which could leave children behind).
+        errno = 0
         while let ent = readdir(dir) {
             let n = withUnsafePointer(to: ent.pointee.d_name) {
                 $0.withMemoryRebound(to: CChar.self, capacity: Int(NAME_MAX) + 1) { String(cString: $0) }
             }
-            if n == "." || n == ".." { continue }
-            var st = stat()
-            let rc = n.withCString { fstatat(dirFD, $0, &st, AT_SYMLINK_NOFOLLOW) }
-            guard rc == 0 else { closedir(dir); throw FDError.teardownFailed(errno: errno) }
-            // symlinks classified as non-dir → unlinked as links
-            children.append((n, (st.st_mode & S_IFMT) == S_IFDIR, (st.st_dev, st.st_ino)))
+            if n != "." && n != ".." {
+                var st = stat()
+                let rc = n.withCString { fstatat(dirFD, $0, &st, AT_SYMLINK_NOFOLLOW) }
+                guard rc == 0 else { let e = errno; closedir(dir); throw FDError.teardownFailed(errno: e) }
+                // symlinks classified as non-dir → unlinked as links
+                children.append((n, (st.st_mode & S_IFMT) == S_IFDIR, (st.st_dev, st.st_ino)))
+            }
+            errno = 0
         }
+        let enumErrno = errno
         closedir(dir)   // closes dupFD
+        guard enumErrno == 0 else { throw FDError.teardownFailed(errno: enumErrno) }
         #if DEBUG
         if let hook = _testAfterClassificationHook { _testAfterClassificationHook = nil; hook() }
         #endif
@@ -356,6 +374,19 @@ enum SecureFD {
                 } catch { close(sub); throw error }
                 try removeChildrenThenSelf(dirFD: sub, parentFD: dirFD, name: child.name, expected: child.id)
             } else {
+                // Re-bind the name to the classified inode immediately before the
+                // unlink: a regular file renamed onto this name after classification
+                // (a victim file moved in) has a different (dev,ino) and is refused
+                // with ZERO deletion — the symmetric defense to the subdirectory
+                // identity bind above. The fstatat→unlinkat window is the same
+                // irreducible 1-syscall residual documented for the final rmdir.
+                var st = stat()
+                guard child.name.withCString({ fstatat(dirFD, $0, &st, AT_SYMLINK_NOFOLLOW) }) == 0 else {
+                    throw FDError.teardownFailed(errno: errno)
+                }
+                guard sameIdentity((st.st_dev, st.st_ino), child.id) else {
+                    throw FDError.verificationMismatch(component: child.name)
+                }
                 guard child.name.withCString({ unlinkat(dirFD, $0, 0) }) == 0 else {
                     throw FDError.teardownFailed(errno: errno)
                 }
