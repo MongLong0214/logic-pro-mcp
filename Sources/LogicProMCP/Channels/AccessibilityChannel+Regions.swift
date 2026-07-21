@@ -439,18 +439,15 @@ extension AccessibilityChannel {
                 if target is missing value then
                     return "NO_REGION"
                 end if
-                -- Use AXPress / AXShowMenu may open contextual menu; instead set AXSelected
+                -- Use AXPress / AXShowMenu may open contextual menu; instead set AXSelected.
+                -- No coordinate fallback: a failed AXSelected write returns a typed
+                -- marker and the handler fails closed (coordinate-free policy — the
+                -- former `click at {center}` fallback was removed with the campaign).
                 try
                     set selected of target to true
                     return "SELECTED"
                 on error
-                    -- Fallback: click at center
-                    set p to position of target
-                    set s to size of target
-                    set cx to (item 1 of p) + ((item 1 of s) / 2)
-                    set cy to (item 2 of p) + ((item 2 of s) / 2)
-                    click at {cx, cy}
-                    return "CLICKED"
+                    return "SELECT_FAILED"
                 end try
             end tell
         end tell
@@ -462,6 +459,15 @@ extension AccessibilityChannel {
                 return .error(HonestContract.encodeStateC(
                     error: .elementNotFound,
                     hint: "region.select_last: no region found in arrange area"
+                ))
+            }
+            if output.contains("SELECT_FAILED") {
+                // The target region was found but its AXSelected write failed.
+                // Fail closed — no coordinate fallback is attempted.
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: "region.select_last: the target region's AXSelected attribute could not be "
+                        + "written; no fallback was attempted"
                 ))
             }
             // Settle window so Logic's AX tree reflects the new selection
