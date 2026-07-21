@@ -393,9 +393,10 @@ struct SemanticOracleCensusTests {
     // MARK: - #373 Phase B1 — mutating-surface increment (dual census)
 
     /// The mutating oracles present are EXACTLY the declared increment (B1 UNION
-    /// B2 UNION B3) — no accidental add or drop. Pinning the set (not just a count)
-    /// is what makes the increment a deliberate, reviewable diff. B1, B2 and B3 are
-    /// each pinned by count so a premature or miscounted oracle in any fails here.
+    /// B2 UNION B3 UNION B4) — no accidental add or drop. Pinning the set (not just
+    /// a count) is what makes the increment a deliberate, reviewable diff. B1, B2,
+    /// B3 and B4 are each pinned by count so a premature or miscounted oracle in any
+    /// fails here.
     @Test func mutatingOraclesAreExactlyTheDeclaredIncrement() {
         let mutatingOracles = Set(SemanticOracleTable.byOperationID.keys)
             .intersection(SemanticOracleTable.mutatingSpecIDs)
@@ -403,23 +404,47 @@ struct SemanticOracleCensusTests {
         #expect(SemanticOracleTable.phaseB1MutatingOperationIDs.count == 12)
         #expect(SemanticOracleTable.phaseB2MutatingOperationIDs.count == 15)
         #expect(SemanticOracleTable.phaseB3MutatingOperationIDs.count == 15)
-        // B1, B2 and B3 are PAIRWISE-DISJOINT increments — no op is claimed twice.
-        #expect(
-            SemanticOracleTable.phaseB1MutatingOperationIDs
-                .isDisjoint(with: SemanticOracleTable.phaseB2MutatingOperationIDs)
-        )
-        #expect(
-            SemanticOracleTable.phaseB1MutatingOperationIDs
-                .isDisjoint(with: SemanticOracleTable.phaseB3MutatingOperationIDs)
-        )
-        #expect(
-            SemanticOracleTable.phaseB2MutatingOperationIDs
-                .isDisjoint(with: SemanticOracleTable.phaseB3MutatingOperationIDs)
-        )
-        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 42)
+        #expect(SemanticOracleTable.phaseB4MutatingOperationIDs.count == 6)
+        // B1, B2, B3 and B4 are PAIRWISE-DISJOINT increments — no op claimed twice.
+        let increments = [
+            SemanticOracleTable.phaseB1MutatingOperationIDs,
+            SemanticOracleTable.phaseB2MutatingOperationIDs,
+            SemanticOracleTable.phaseB3MutatingOperationIDs,
+            SemanticOracleTable.phaseB4MutatingOperationIDs,
+        ]
+        for i in increments.indices {
+            for j in increments.indices where j > i {
+                #expect(
+                    increments[i].isDisjoint(with: increments[j]),
+                    "increments \(i + 1) and \(j + 1) overlap"
+                )
+            }
+        }
+        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 48)
     }
 
-    /// Soundness of the increment: every id in B1 AND B2 is a REAL `.mutating`,
+    /// #373 B4 — the mutating oracle inventory is CLOSED. Every supported
+    /// (non-`.unsupported`) mutating spec is EITHER covered by an oracle OR carries
+    /// an audited structural exclusion — the two partition the entire mutating
+    /// surface, with no implicit residual. This is the ticket's terminal invariant:
+    /// after B4 there is no mutating op left silently uncovered. (The two sets are
+    /// proven disjoint here too, so an op can never be both covered and excluded.)
+    @Test func everyMutatingSpecIsCoveredOrAuditedExcluded() {
+        let covered = SemanticOracleTable.coveredMutatingOperationIDs
+        let excluded = Set(SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs.keys)
+        #expect(covered.isDisjoint(with: excluded))
+        #expect(covered.union(excluded) == SemanticOracleTable.mutatingSpecIDs)
+        // The complement is empty: nothing supported-mutating is unaccounted for.
+        let unaccounted = SemanticOracleTable.mutatingSpecIDs
+            .subtracting(covered)
+            .subtracting(excluded)
+        #expect(
+            unaccounted.isEmpty,
+            "mutating specs neither covered nor excluded: \(unaccounted.map(\.rawValue).sorted())"
+        )
+    }
+
+    /// Soundness of the increment: every id in B1..B4 is a REAL `.mutating`,
     /// non-`.unsupported` registry spec — a read-only id or a typo cannot
     /// masquerade as mutating coverage.
     @Test func everyCoveredMutatingIDIsARealMutatingSpec() {
@@ -434,24 +459,31 @@ struct SemanticOracleCensusTests {
         }
     }
 
-    /// The census DELIBERATELY does not yet require full mutating coverage: B1 is
-    /// an increment, and B2/B3 add the rest. If this ever reaches parity, the
-    /// mutating census contract must flip from "incremental" to "complete".
+    /// The COVERED set stays below parity with the mutating surface — and after B4
+    /// that gap is PERMANENT, not future work: the complement is entirely audited
+    /// structural exclusions (send-only / no-State-A ops), NOT ops awaiting an
+    /// oracle. `everyMutatingSpecIsCoveredOrAuditedExcluded` proves covered ∪
+    /// excluded == the whole surface, so this "covered < total" is the honest
+    /// statement that some mutating ops are structurally unverifiable, never a TODO.
+    /// If a currently-excluded op ever gains a State-A path (so covered could grow),
+    /// that is a deliberate move of an id from the exclusion map into an increment.
     @Test func mutatingCoverageIsIncrementalNotYetComplete() {
         let covered = Set(SemanticOracleTable.byOperationID.keys)
             .intersection(SemanticOracleTable.mutatingSpecIDs)
         #expect(covered.count < SemanticOracleTable.mutatingSpecIDs.count)
-        // mixer.set_plugin_param is the canonical NOT-yet-covered case: it is a
-        // send-only State-B write (Scripter), so it has no State A to verify and
-        // deliberately carries no B1 verified-write oracle.
+        // mixer.set_plugin_param is the canonical structurally-excluded case: it is
+        // a send-only State-B write (Scripter), so it has no State A to verify and
+        // deliberately carries no verified-write oracle.
         #expect(!covered.contains(.mixerSetPluginParam))
         #expect(SemanticOracleTable.mutatingSpecIDs.contains(.mixerSetPluginParam))
+        // And it is honestly accounted for in the exclusion map, not left implicit.
+        #expect(SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs[.mixerSetPluginParam] != nil)
     }
 
     /// FIX 5 — the structural-exclusion allowlist is EXPLICIT: every entry is a
-    /// real mutating spec, is DISJOINT from the covered increment (B1 ∪ B2), and
-    /// carries a reason, so the uncovered surface is a reviewed decision, not
-    /// implicit. B2 adds the send-only transport/navigate ops with no State A.
+    /// real mutating spec, is DISJOINT from the covered increment (B1 ∪ B2 ∪ B3 ∪
+    /// B4), and carries a reason, so the uncovered surface is a reviewed decision,
+    /// not implicit. B4 adds the 13 send-only edit ops with no State A.
     @Test func structuralExclusionsAreExplicitDisjointAndReasoned() {
         let exclusions = SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs
         #expect(!exclusions.isEmpty)
@@ -466,7 +498,7 @@ struct SemanticOracleCensusTests {
         // The B3 audited exclusions: project lifecycle ops with no State A
         // (new/open/close State-B ceiling, launch/quit prose), the send-only
         // tracks.duplicate, and the send-only midi surface (a representative
-        // subset — the generic loop below validates all 25 entries).
+        // subset — the generic loop below validates all 38 entries).
         for id in [
             OperationID.projectNew, .projectOpen, .projectClose,
             .projectLaunch, .projectQuit, .tracksDuplicate,
@@ -477,6 +509,19 @@ struct SemanticOracleCensusTests {
         ] {
             #expect(exclusions[id] != nil, "\(id.rawValue) missing its B3 exclusion reason")
         }
+        // The 13 B4 send-only edit exclusions. edit.toggle_step_input is COVERED
+        // (its AX chain reaches State A), so it must NOT appear in the exclusion map.
+        for id in [
+            OperationID.editUndo, .editRedo, .editCut, .editCopy, .editPaste,
+            .editDelete, .editSelectAll, .editSplit, .editJoin, .editQuantize,
+            .editBounceInPlace, .editNormalize, .editDuplicate,
+        ] {
+            #expect(exclusions[id] != nil, "\(id.rawValue) missing its B4 edit exclusion reason")
+        }
+        #expect(
+            exclusions[.editToggleStepInput] == nil,
+            "edit.toggle_step_input is covered, not excluded"
+        )
         for (id, reason) in exclusions {
             #expect(SemanticOracleTable.mutatingSpecIDs.contains(id), "\(id.rawValue) is not a mutating spec")
             #expect(
@@ -747,6 +792,72 @@ struct SemanticOracleMutationTests {
             responseData: Data(#"{"success":true,"verified":true,"state":"A","bundle_path":"/x/b","files":[]}"#.utf8),
             readbackData: Data("{}".utf8)) == true
         #expect(!emptyManifest, "export_support_bundle accepted an empty file manifest")
+    }
+
+    /// #373 B4 — RED evidence for representative oracles: each REJECTS the
+    /// semantically-wrong result it exists to catch. The good-leg (each fixture
+    /// passes) is the parameterized `oraclePassesItsRealisticFixture`; the two
+    /// explicit good-legs below make the RED→GREEN contrast self-contained for the
+    /// value-bearing (insert_verified) and bespoke (export_run) representatives.
+    @Test func phaseB4RepresentativeOraclesRejectSemanticMutations() throws {
+        // VALUE-BEARING representative: plugins.insert_verified pins the
+        // request↔readback identity. First the GREEN leg (its own fixture passes),
+        // then the RED legs — the insert landed the WRONG plugin, and the WRONG slot.
+        let insert = try #require(SemanticOracleTable.byOperationID[.pluginsInsertVerified])
+        let insertFixture = try #require(SemanticOracleFixtures.byOperationID[.pluginsInsertVerified])
+        let insertGreen = try #require(insert.evaluate(
+            responseData: insertFixture.responseData, readbackData: insertFixture.readbackData))
+        #expect(insertGreen, "insert_verified rejected its own verified fixture")
+        // Requested Gain, but the readback observed Compressor at the slot — a false
+        // verified insert. target_identity.plugin_id != observed_plugin_id.
+        let wrongPlugin: Bool = insert.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","hc_schema":2,"operation":"logic_plugins.insert_verified","target_identity":{"track_index":0,"insert":1,"plugin_id":"logic.stock.effect.gain"},"observed_plugin_id":"logic.stock.effect.compressor","observed_plugin_name":"Compressor","observed_slot":1,"select_trace":{},"write_source":"ax_exact_slot_popup","verify_source":"ax_plugin_inventory"}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!wrongPlugin, "insert_verified accepted a plugin that differs from the requested one")
+        // Requested slot 1, but the readback saw the plugin at slot 2.
+        let wrongSlot: Bool = insert.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","hc_schema":2,"operation":"logic_plugins.insert_verified","target_identity":{"track_index":0,"insert":1,"plugin_id":"logic.stock.effect.gain"},"observed_plugin_id":"logic.stock.effect.gain","observed_plugin_name":"Gain","observed_slot":2,"select_trace":{},"write_source":"ax_exact_slot_popup","verify_source":"ax_plugin_inventory"}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!wrongSlot, "insert_verified accepted a slot that differs from the requested one")
+
+        // BESPOKE representative: project.export_run pins the completed-run contract
+        // (no HC state:"A" envelope — a run RECORD keyed on `status`). GREEN leg
+        // first, then RED — a partial run (some artifact failed) is not a verified
+        // execution, and a run that mislabels itself completed while carrying a
+        // failed artifact is caught by the independent artifacts_failed guard.
+        let run = try #require(SemanticOracleTable.byOperationID[.projectExportRun])
+        let runFixture = try #require(SemanticOracleFixtures.byOperationID[.projectExportRun])
+        let runGreen = try #require(run.evaluate(
+            responseData: runFixture.responseData, readbackData: runFixture.readbackData))
+        #expect(runGreen, "export_run rejected its own completed-run fixture")
+        // status:"partial" — an honest partial run must not read as a verified pass.
+        let partialRun: Bool = run.evaluate(
+            responseData: Data(#"{"schema":"logic_pro_mcp_export_run.v1","run_id":"r","mode":"run","confirmed":true,"status":"partial","output_root":"/x","collision_policy":"fail_if_exists","project_count":1,"artifacts_total":2,"artifacts_verified":1,"artifacts_skipped":0,"artifacts_uncertain":0,"artifacts_failed":1,"projects":[{"index":0,"project_path":"/x/a.logicx","display_name":"a","observed_project_path":"/x/a.logicx","identity_verified":true,"opened":true,"artifacts":[]}],"next_safe_action":"review_then_export_resume"}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!partialRun, "export_run accepted a partial run")
+        // status forged "completed" while a failed artifact remains — the
+        // artifacts_failed:0 guard is independent of status, so this is caught.
+        let mislabelledCompleted: Bool = run.evaluate(
+            responseData: Data(#"{"schema":"logic_pro_mcp_export_run.v1","run_id":"r","mode":"run","confirmed":true,"status":"completed","output_root":"/x","collision_policy":"fail_if_exists","project_count":1,"artifacts_total":2,"artifacts_verified":1,"artifacts_skipped":0,"artifacts_uncertain":0,"artifacts_failed":1,"projects":[{"index":0,"project_path":"/x/a.logicx","display_name":"a","observed_project_path":"/x/a.logicx","identity_verified":true,"opened":true,"artifacts":[]}],"next_safe_action":"verify_artifacts_with_logic_audio"}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!mislabelledCompleted, "export_run accepted a completed status with a failed artifact")
+
+        // TOGGLE representative: edit.toggle_step_input rejects a no-op — the window
+        // open-state did not change (observed_open == previous_open), so it is not a
+        // verified toggle even though the envelope claims State A.
+        let toggle = try #require(SemanticOracleTable.byOperationID[.editToggleStepInput])
+        let noOpToggle: Bool = toggle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"edit.toggle_step_input","previous_open":true,"observed_open":true,"via":"window-menu"}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!noOpToggle, "edit.toggle_step_input accepted a no-op (window state unchanged)")
+
+        // DOMAIN representative: mixer.insert_plugin rejects a plugin outside the
+        // insertable stock allowlist.
+        let mixerInsert = try #require(SemanticOracleTable.byOperationID[.mixerInsertPlugin])
+        let unknownPlugin: Bool = mixerInsert.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","track":0,"slot":1,"plugin_name":"Space Designer","observed_plugin_name":"Space Designer","verify_source":"ax_plugin_slot"}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!unknownPlugin, "mixer.insert_plugin accepted a plugin outside the stock allowlist")
     }
 
     /// The anti-checkbox tool. For every constraint of every declarative oracle,
@@ -1033,9 +1144,9 @@ struct SemanticOracleRelationalMutationTests {
 @Suite("#373 read-only census non-regression")
 struct SemanticOracleB0CensusTests {
     /// The read-only census is a STANDING invariant across phases. B0 added
-    /// framework only; B1/B2/B3 add mutating increments WITHOUT perturbing the
+    /// framework only; B1/B2/B3/B4 add mutating increments WITHOUT perturbing the
     /// fully-covered read-only surface. So the read-only census stays exactly 20,
-    /// and the table's total is the read-only 20 plus the pinned B1 + B2 + B3
+    /// and the table's total is the read-only 20 plus the pinned B1 + B2 + B3 + B4
     /// increments — a premature or miscounted mutating oracle fails here.
     @Test func readOnlyCensusStaysTwentyAndMutatingIncrementsAreAdditive() {
         #expect(SemanticOracleTable.coveredSpecIDs.count == 20)
@@ -1048,6 +1159,7 @@ struct SemanticOracleB0CensusTests {
                 + SemanticOracleTable.phaseB1MutatingOperationIDs.count
                 + SemanticOracleTable.phaseB2MutatingOperationIDs.count
                 + SemanticOracleTable.phaseB3MutatingOperationIDs.count
+                + SemanticOracleTable.phaseB4MutatingOperationIDs.count
         )
     }
 }

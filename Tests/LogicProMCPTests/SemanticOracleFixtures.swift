@@ -944,5 +944,110 @@ enum SemanticOracleFixtures {
                 """,
             readback: "{}"
         ),
+
+        // ── #373 Phase B4 — plugin-insert / export / cleanup / edit fixtures ──
+        // Each is a faithful payload from the op's verified path (traced to the
+        // dispatcher/channel handler). Readback is unused (no B4 oracle
+        // cross-checks a separate readback payload), so it is a bare `{}`.
+
+        // AccessibilityChannel+Plugins.defaultInsertPlugin State A: observed slot
+        // name matched the requested spec (spec.matches), so verify_source
+        // ax_plugin_slot + the readback name are present.
+        .mixerInsertPlugin: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","track":0,"slot":1,\
+                "plugin_name":"Gain","observed_plugin_name":"Gain",\
+                "verify_source":"ax_plugin_slot"}
+                """,
+            readback: "{}"
+        ),
+        // AccessibilityChannel+VerifiedPlugins.defaultInsertVerified HC v2 State A:
+        // target_identity carries the REQUESTED {track_index,insert,plugin_id};
+        // observed_plugin_id/observed_slot are the post-insert readback, gated equal
+        // to the request (the RIGHT plugin at the RIGHT slot). plugin_id is the
+        // canonical VerifiedPluginCatalog id (logic.stock.effect.gain).
+        .pluginsInsertVerified: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","hc_schema":2,\
+                "operation":"logic_plugins.insert_verified",\
+                "target_identity":{"track_index":0,"insert":1,"plugin_id":"logic.stock.effect.gain"},\
+                "observed_plugin_id":"logic.stock.effect.gain","observed_plugin_name":"Gain",\
+                "observed_slot":1,"select_trace":{"write_source":"ax_exact_slot_popup"},\
+                "write_source":"ax_exact_slot_popup","verify_source":"ax_plugin_inventory"}
+                """,
+            readback: "{}"
+        ),
+        // ProjectExportExecutor.aggregate → logic_pro_mcp_export_run.v1, completed
+        // fresh run: one project, one bounced+verified artifact (state A,
+        // bounce_fired true, on-disk logic_audio evidence). uncertain/failed 0.
+        .projectExportRun: SemanticOracleFixture(
+            response: """
+                {"schema":"logic_pro_mcp_export_run.v1","run_id":"run-1","mode":"run",\
+                "confirmed":true,"status":"completed",\
+                "output_root":"/Users/qualification/exports","collision_policy":"fail_if_exists",\
+                "project_count":1,"artifacts_total":1,"artifacts_verified":1,\
+                "artifacts_skipped":0,"artifacts_uncertain":0,"artifacts_failed":0,\
+                "projects":[{"index":0,"project_path":"/Users/qualification/a.logicx",\
+                "display_name":"a","observed_project_path":"/Users/qualification/a.logicx",\
+                "identity_verified":true,"opened":true,\
+                "artifacts":[{"kind":"bounce","path":"/Users/qualification/exports/a.wav",\
+                "state":"A","verified":true,"bounce_fired":true,"error":null,"reason":null,\
+                "evidence":{"exists":true,"file_size_bytes":2400044,"duration_seconds":12.5,\
+                "sample_rate":48000,"channel_count":2,"silence_ratio":0.02,"peak_dbfs":-1.0,\
+                "verification_status":"pass","verification_reasons":[],"source":"logic_audio"}}]}],\
+                "next_safe_action":"verify_artifacts_with_logic_audio"}
+                """,
+            readback: "{}"
+        ),
+        // ProjectExportExecutor.aggregate via export_resume → same schema, mode
+        // "resume". A completed resume where the artifact was already present and
+        // verified: state A, bounce_fired FALSE (skipped, not re-bounced),
+        // artifacts_skipped 1 / artifacts_verified 0 — a legitimate completed run
+        // with zero verified (the resume idempotency path).
+        .projectExportResume: SemanticOracleFixture(
+            response: """
+                {"schema":"logic_pro_mcp_export_run.v1","run_id":"run-2","mode":"resume",\
+                "confirmed":true,"status":"completed",\
+                "output_root":"/Users/qualification/exports","collision_policy":"skip_existing",\
+                "project_count":1,"artifacts_total":1,"artifacts_verified":0,\
+                "artifacts_skipped":1,"artifacts_uncertain":0,"artifacts_failed":0,\
+                "projects":[{"index":0,"project_path":"/Users/qualification/a.logicx",\
+                "display_name":"a","observed_project_path":"/Users/qualification/a.logicx",\
+                "identity_verified":true,"opened":true,\
+                "artifacts":[{"kind":"bounce","path":"/Users/qualification/exports/a.wav",\
+                "state":"A","verified":true,"bounce_fired":false,"error":null,\
+                "reason":"already_present_verified",\
+                "evidence":{"exists":true,"file_size_bytes":2400044,"duration_seconds":12.5,\
+                "sample_rate":48000,"channel_count":2,"silence_ratio":0.02,"peak_dbfs":-1.0,\
+                "verification_status":"pass","verification_reasons":[],"source":"logic_audio"}}]}],\
+                "next_safe_action":"verify_artifacts_with_logic_audio"}
+                """,
+            readback: "{}"
+        ),
+        // ProjectDispatcher.handleCleanupApply State A: one rename target reached
+        // verified State A through the delegated track.rename path (key is `op`, not
+        // `operation`). applied/target_track_indices are non-empty.
+        .projectCleanupApply: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","op":"project.cleanup_apply",\
+                "step_id":"rename_track_0","tool":"logic_tracks","command":"rename",\
+                "target_track_indices":[0],\
+                "applied":[{"track_index":0,"new_name":"Lead Synth",\
+                "result":"{\\"success\\":true,\\"verified\\":true,\\"state\\":\\"A\\"}"}],\
+                "verify_source":"track.rename ax_readback"}
+                """,
+            readback: "{}"
+        ),
+        // AccessibilityChannel+Editing.defaultToggleStepInputKeyboard State A: the
+        // Step Input Keyboard window open-state flipped (observed_open:true ==
+        // !previous_open:false), verified via the live AX window list.
+        .editToggleStepInput: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "operation":"edit.toggle_step_input","previous_open":false,\
+                "observed_open":true,"via":"window-menu"}
+                """,
+            readback: "{}"
+        ),
     ]
 }
