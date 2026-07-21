@@ -431,6 +431,107 @@ private func messySnapshot(
     #expect(blockers.contains("export_blocked_by_modal_dialog"))
 }
 
+@Test func testProjectAuditResourceSurfacesBlockingModalBlockerFromCache() async throws {
+    // #432 (load-bearing): the `logic://project/audit` RESOURCE is a cache-only
+    // projection (it must not make live AX calls at read time). Before the fix it
+    // built the audit without the blocking-dialog signal, so it reported
+    // export_readiness.blockers:[] even while a blocking modal owned the Logic
+    // window — the exact false-green class #431 removed on the tool path, still
+    // live on the resource. With the poller-cached signal read at the resource
+    // boundary, the resource must now surface the SAME
+    // `export_blocked_by_modal_dialog` blocker the tool does.
+    let cache = StateCache()
+    var project = ProjectInfo()
+    project.name = "Modal Repro"
+    project.filePath = "/tmp/Modal Repro.logicx"
+    project.source = "ax_live"
+    await cache.updateProject(project)
+    await cache.updateTracks([TrackState(id: 0, name: "Lead", type: .audio)])
+    // Stands in for the poller having observed a blocking modal via
+    // AXLogicProElements.blockingDialogInfo() and cached its button titles.
+    await cache.updateBlockingDialogButtons(["Show Conflicts", "Ignore"])
+
+    let router = ChannelRouter()
+    let auditResource = try await ResourceHandlers.read(uri: "logic://project/audit", cache: cache, router: router)
+    let json = try #require(sharedJSONObject(sharedResourceText(auditResource)))
+
+    #expect(json["status"] as? String == "failed")
+    let evidence = try #require(json["evidence"] as? [String: Any])
+    let exportReadiness = try #require(evidence["export_readiness"] as? [String: Any])
+    #expect(exportReadiness["status"] as? String == "blocked")
+    let blockers = try #require(exportReadiness["blockers"] as? [String])
+    #expect(blockers.contains("export_blocked_by_modal_dialog"))
+}
+
+@Test func testProjectAuditResourceOmitsBlockingModalBlockerWhenCacheClear() async throws {
+    // #432 control: with no blocking dialog cached (the poller writes nil when
+    // AXLogicProElements.blockingDialogInfo() returns nil), the resource must NOT
+    // report the modal blocker — proving the finding is driven by the cached
+    // signal, not emitted unconditionally.
+    let cache = StateCache()
+    var project = ProjectInfo()
+    project.name = "Clean Session"
+    project.filePath = "/tmp/Clean Session.logicx"
+    project.source = "ax_live"
+    await cache.updateProject(project)
+    await cache.updateTracks([TrackState(id: 0, name: "Lead", type: .audio)])
+
+    let router = ChannelRouter()
+    let auditResource = try await ResourceHandlers.read(uri: "logic://project/audit", cache: cache, router: router)
+    let json = try #require(sharedJSONObject(sharedResourceText(auditResource)))
+    let evidence = try #require(json["evidence"] as? [String: Any])
+    let exportReadiness = try #require(evidence["export_readiness"] as? [String: Any])
+    let blockers = try #require(exportReadiness["blockers"] as? [String])
+    #expect(!blockers.contains("export_blocked_by_modal_dialog"))
+}
+
+@Test func testProjectAuditToolAndResourceAgreeOnCachedBlockingModal() async throws {
+    // #432 core assertion: the tool (live signal) and the resource (cached
+    // signal) must agree for the same blocking-modal state. Here the modal is
+    // present through BOTH the poller-cached signal (drives the resource) and the
+    // dispatcher's live blockingDialogInfo() seam (drives the tool); both read
+    // surfaces must report the export blocker.
+    let cache = StateCache()
+    var project = ProjectInfo()
+    project.name = "Agreement"
+    project.filePath = "/tmp/Agreement.logicx"
+    project.source = "ax_live"
+    await cache.updateProject(project)
+    await cache.updateTracks([TrackState(id: 0, name: "Lead", type: .audio)])
+    await cache.updateBlockingDialogButtons(["Show Conflicts", "Ignore"])
+
+    let router = ChannelRouter()
+
+    let resource = try await ResourceHandlers.read(uri: "logic://project/audit", cache: cache, router: router)
+    let resourceJSON = try #require(sharedJSONObject(sharedResourceText(resource)))
+    let resourceEvidence = try #require(resourceJSON["evidence"] as? [String: Any])
+    let resourceReadiness = try #require(resourceEvidence["export_readiness"] as? [String: Any])
+    let resourceBlockers = try #require(resourceReadiness["blockers"] as? [String])
+
+    let tool = await ProjectDispatcher.handle(
+        command: "audit",
+        params: [:],
+        router: router,
+        cache: cache,
+        blockingDialogInfo: {
+            AXLogicProElements.BlockingDialogInfo(
+                title: "",
+                role: "AXDialog",
+                owningWindow: "Agreement",
+                buttonTitles: ["Show Conflicts", "Ignore"],
+                recoveryAction: "Dismiss the blocking dialog (press Escape), then retry."
+            )
+        }
+    )
+    let toolJSON = try #require(sharedJSONObject(sharedToolText(tool)))
+    let toolEvidence = try #require(toolJSON["evidence"] as? [String: Any])
+    let toolReadiness = try #require(toolEvidence["export_readiness"] as? [String: Any])
+    let toolBlockers = try #require(toolReadiness["blockers"] as? [String])
+
+    #expect(resourceBlockers.contains("export_blocked_by_modal_dialog"))
+    #expect(toolBlockers.contains("export_blocked_by_modal_dialog"))
+}
+
 @Test func testProjectAuditAndCleanupPlanResourcesAndCommandsReturnJSON() async throws {
     let cache = StateCache()
     var project = ProjectInfo()

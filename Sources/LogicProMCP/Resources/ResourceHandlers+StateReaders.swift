@@ -574,7 +574,16 @@ extension ResourceHandlers {
     }
 
     static func readProjectAudit(cache: StateCache, uri: String) async throws -> ReadResource.Result {
-        let report = await ProjectSessionAudit.buildAudit(cache: cache)
+        // #432: source the blocking-dialog signal from the cache (populated every
+        // poll by StatePoller from AXLogicProElements.blockingDialogInfo()) rather
+        // than making a live AX call here — resources are cache-only projections.
+        // This is the SAME authoritative signal the #431 tool audit passes live, so
+        // the resource now surfaces `export_blocked_by_modal_dialog` instead of a
+        // false green and agrees with the tool for the same blocking-modal state.
+        let report = await ProjectSessionAudit.buildAudit(
+            cache: cache,
+            blockingDialogButtons: await cache.getBlockingDialogButtons()
+        )
         // Honest Contract: never emit a success-shaped body that is missing the
         // schema/read_only contract fields. On encode failure, fail loud.
         do {

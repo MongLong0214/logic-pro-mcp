@@ -132,6 +132,64 @@ private func makeStatePollerAccessibilityRuntime(
     #expect(!(await poller.isRunning))
 }
 
+@Test func testStatePollerCachesBlockingDialogSignalFromRuntime() async throws {
+    // #432 — every visible-window poll the poller samples the authoritative
+    // AXLogicProElements.blockingDialogInfo() signal and caches its button titles,
+    // so the cache-only logic://project/audit resource can surface the
+    // export_blocked_by_modal_dialog blocker from the same source the tool uses.
+    let cache = StateCache()
+    let channel = AccessibilityChannel(
+        runtime: makeStatePollerAccessibilityRuntime(
+            projectInfoResult: .success(#"{"name":"Modal","sampleRate":48000,"bitDepth":24,"tempo":120,"timeSignature":"4/4","trackCount":1,"filePath":null,"lastUpdated":"2026-07-16T00:00:00Z"}"#)
+        )
+    )
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(
+            hasVisibleWindow: { true },
+            blockingDialogInfo: {
+                AXLogicProElements.BlockingDialogInfo(
+                    title: "Alert",
+                    role: "AXDialog",
+                    owningWindow: "Modal",
+                    buttonTitles: ["Show Conflicts", "Ignore"],
+                    recoveryAction: "Dismiss the blocking dialog (press Escape), then retry."
+                )
+            }
+        )
+    )
+
+    await poller.refreshNow()
+
+    let cached = try #require(await cache.getBlockingDialogButtons())
+    #expect(cached == ["Show Conflicts", "Ignore"])
+}
+
+@Test func testStatePollerClearsCachedBlockingDialogSignalWhenAbsent() async {
+    // #432 — when blockingDialogInfo() returns nil (no blocking modal) the poller
+    // actively clears any prior cached signal, so the resource never reports a
+    // phantom blocker after a dialog is dismissed.
+    let cache = StateCache()
+    // Seed a stale positive to prove the poll clears it rather than merely
+    // leaving it untouched.
+    await cache.updateBlockingDialogButtons(["Stale"])
+    let channel = AccessibilityChannel(
+        runtime: makeStatePollerAccessibilityRuntime(
+            projectInfoResult: .success(#"{"name":"Clean","sampleRate":48000,"bitDepth":24,"tempo":120,"timeSignature":"4/4","trackCount":1,"filePath":null,"lastUpdated":"2026-07-16T00:00:00Z"}"#)
+        )
+    )
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(hasVisibleWindow: { true }, blockingDialogInfo: { nil })
+    )
+
+    await poller.refreshNow()
+
+    #expect(await cache.getBlockingDialogButtons() == nil)
+}
+
 @Test func testStatePollerIgnoresInvalidProjectPayloadsAndChannelErrors() async throws {
     let invalidCache = StateCache()
     let invalidChannel = AccessibilityChannel(
