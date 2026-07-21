@@ -2045,7 +2045,14 @@ extension AccessibilityChannel {
                     continue
                 }
 
-                if clickElementCenter(item, runtime: runtime.ax) {
+                // ADR-001 coordinate ban: activate the menu ITEM via AXPress, like
+                // the menu-bar OPEN above — the former element-derived
+                // clickElementCenter rung is removed. AXPress reports success
+                // synchronously; on failure the Escape + retry hygiene below still
+                // runs, the mixer-reveal consumer falls back to the non-coordinate
+                // cgevent key-7 channel, and the hide-plugin-windows consumer is
+                // explicitly best-effort — so no feature is degraded.
+                if AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax) {
                     return (true, true, attempt)
                 }
                 AXMouseHelper.pressEscape()
@@ -2122,7 +2129,10 @@ extension AccessibilityChannel {
                 AXMouseHelper.pressEscape()
                 return .disabled
             }
-            if clickElementCenter(item, runtime: runtime.ax) {
+            // ADR-001 coordinate ban: AXPress the Undo menu item (same conversion
+            // as the menu-bar open above); the coordinate-free Cmd+Z fallback in
+            // the caller still covers an AXPress failure, so no feature is degraded.
+            if AXHelpers.performAction(item, kAXPressAction as String, runtime: runtime.ax) {
                 return .ok
             }
             AXMouseHelper.pressEscape()
