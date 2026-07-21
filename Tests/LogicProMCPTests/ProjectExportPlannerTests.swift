@@ -77,7 +77,7 @@ struct ProjectExportPlannerTests {
         // The plan must no longer be silent about what the run needs: every
         // precondition names the bounce command it gates.
         #expect(plan.executionPreconditions.map(\.requirement)
-            == ["automation_permission", "post_event_access", "bounce_helper_available"])
+            == ["automation_permission", "post_event_access", "bounce_helper_available", "input_source_available"])
         #expect(plan.executionPreconditions.allSatisfy { $0.appliesToCommands == ["bounce"] })
         #expect(plan.executionPreconditions.allSatisfy { !$0.verifyWith.isEmpty })
 
@@ -90,6 +90,20 @@ struct ProjectExportPlannerTests {
         #expect(automation.detail.contains("System Events"))
         #expect(automation.detail.contains("does NOT require"))
         #expect(automation.detail.contains("MIDIKeyCommands"))
+
+        // #427 follow-up: the keyboard-driven bounce/save panel needs an ABC or
+        // US input source. The bundled helper fails closed with
+        // `input_source_switch_failed` on a non-ABC/US layout (a real French/AZERTY
+        // user report), so the manifest must surface it as a bounce precondition.
+        let inputSource = try #require(
+            plan.executionPreconditions.first { $0.requirement == "input_source_available" }
+        )
+        #expect(inputSource.appliesToCommands == ["bounce"])
+        #expect(inputSource.detail.contains("com.apple.keylayout.ABC"))
+        #expect(inputSource.detail.contains("com.apple.keylayout.US"))
+        #expect(inputSource.detail.contains("input_source_switch_failed"))
+        #expect(inputSource.detail.contains("Input Sources"))
+        #expect(!inputSource.verifyWith.isEmpty)
     }
 
     @Test("#369: execution preconditions encode with snake_case keys and survive round-trip")
@@ -107,7 +121,7 @@ struct ProjectExportPlannerTests {
             try JSONSerialization.jsonObject(with: data) as? [String: Any]
         )
         let preconditions = try #require(object["execution_preconditions"] as? [[String: Any]])
-        #expect(preconditions.count == 3)
+        #expect(preconditions.count == 4)
         let first = try #require(preconditions.first)
         #expect(first["requirement"] as? String == "automation_permission")
         #expect(first["applies_to_commands"] as? [String] == ["bounce"])
