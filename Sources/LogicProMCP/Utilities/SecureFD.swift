@@ -25,6 +25,7 @@ enum SecureFD {
         case stagingNotEmpty(String)
         case fullfsyncFailed(errno: Int32)
         case teardownFailed(errno: Int32)
+        case identityReadFailed(component: String, errno: Int32)
     }
 
     /// Publish/append durability outcome — a value, never inferred. `durableSuccess`
@@ -56,9 +57,17 @@ enum SecureFD {
         }
     }
 
-    private static func identity(ofFD fd: Int32) -> Identity {
+    /// The (device, inode) identity of an open descriptor, fail-closed: a
+    /// failed read REFUSES the operation instead of returning the zeroed
+    /// `stat` fields — a fabricated (0,0) identity from two failed reads
+    /// would otherwise compare equal and pass verification.
+    private static func identity(ofFD fd: Int32, label: String) throws -> Identity {
         var st = stat()
-        _ = fstat(fd, &st)
+        var rc = fstat(fd, &st)
+        #if DEBUG
+        if _testForceIdentityFailureCount > 0 { _testForceIdentityFailureCount -= 1; rc = -1 }
+        #endif
+        guard rc == 0 else { throw FDError.identityReadFailed(component: label, errno: errno) }
         return (st.st_dev, st.st_ino)
     }
 
@@ -83,12 +92,21 @@ enum SecureFD {
     }
 
     #if DEBUG
-    /// TEST-ONLY (compiled out of release): supplies a trusted base directory for
-    /// tests operating under a temp root, and a one-shot post-walk-passA hook so an
-    /// intermediate/final rebind can be injected deterministically between the two
-    /// verification walks. Neither symbol exists in a release binary.
+    /// TEST-ONLY (compiled out of release): narrow observation/injection seams
+    /// so the lifecycle contract is provable deterministically. `_testBaseOverride`
+    /// supplies a trusted base under a temp root; `_testAfterPassAHook` runs once
+    /// between the two verification walks; `_testPassAClosedFDObserver` reports the
+    /// exact descriptor number pass A released; `_testEnumerationFDObserver` sees
+    /// every enumeration duplicate before `fdopendir` consumes it;
+    /// `_testAfterClassificationHook` runs once after teardown classifies children;
+    /// `_testForceIdentityFailureCount` fails that many identity reads. None of
+    /// these symbols exists in a release binary.
     nonisolated(unsafe) static var _testBaseOverride: URL?
     nonisolated(unsafe) static var _testAfterPassAHook: (() -> Void)?
+    nonisolated(unsafe) static var _testPassAClosedFDObserver: ((Int32) -> Void)?
+    nonisolated(unsafe) static var _testEnumerationFDObserver: ((Int32) -> Void)?
+    nonisolated(unsafe) static var _testAfterClassificationHook: (() -> Void)?
+    nonisolated(unsafe) static var _testForceIdentityFailureCount = 0
     #endif
 
     /// Open the trusted base for `target`: production = home (target MUST be under
@@ -133,6 +151,7 @@ enum SecureFD {
         // verification pass is authoritative and supplies the returned fd.
         close(fdA)
         #if DEBUG
+        _testPassAClosedFDObserver?(fdA)
         if let hook = _testAfterPassAHook { _testAfterPassAHook = nil; hook() }
         #endif
         let (fdB, idsB) = try walkOnce(baseFD: baseFD, relative)
@@ -164,7 +183,8 @@ enum SecureFD {
             close(dirFD)
             guard next >= 0 else { throw FDError.componentOpenFailed(component: comp, errno: errno) }
             dirFD = next
-            ids.append(identity(ofFD: dirFD))
+            do { ids.append(try identity(ofFD: dirFD, label: comp)) }
+            catch { close(dirFD); throw error }
         }
         return (dirFD, ids)
     }
@@ -235,10 +255,11 @@ enum SecureFD {
         guard fd >= 0 else { throw FDError.componentOpenFailed(component: name, errno: errno) }
         do {
             try assertEmpty(dirFD: fd, label: name)
+            let id = try identity(ofFD: fd, label: name)
+            return (fd, id)
         } catch {
             close(fd); throw error
         }
-        return (fd, identity(ofFD: fd))
     }
 
     /// True/throw: the directory fd contains only `.`/`..`. Enumerates through a
@@ -246,6 +267,9 @@ enum SecureFD {
     static func assertEmpty(dirFD: Int32, label: String) throws {
         let dupFD = dupCloexec(dirFD)
         guard dupFD >= 0 else { throw FDError.componentOpenFailed(component: label, errno: errno) }
+        #if DEBUG
+        _testEnumerationFDObserver?(dupFD)
+        #endif
         guard let dir = fdopendir(dupFD) else {
             close(dupFD); throw FDError.componentOpenFailed(component: label, errno: errno)
         }
@@ -267,27 +291,44 @@ enum SecureFD {
     // MARK: - Rollback teardown — fd-relative, no path rebuild
 
     /// Recursively remove a directory relative to its verified parent fd, entirely
-    /// through descriptors: `fdopendir` on a DUP, classify children with
-    /// `fstatat(AT_SYMLINK_NOFOLLOW)`, recurse into subdirs via
-    /// `openat(O_DIRECTORY|O_NOFOLLOW)`, `unlinkat` files (symlink children unlinked
-    /// as links, never followed), then `unlinkat(AT_REMOVEDIR)` the now-empty dir.
+    /// through descriptors: classify with `fstatat(AT_SYMLINK_NOFOLLOW)`, open each
+    /// directory `O_NOFOLLOW` and REQUIRE the opened object to match its classified
+    /// `(dev,ino)` — a rename-swapped REAL directory (which `O_NOFOLLOW` cannot
+    /// catch) is refused before anything inside it is touched. Files are unlinked
+    /// by name (symlink children unlinked as links, never followed) and the final
+    /// `unlinkat(AT_REMOVEDIR)` re-binds the name to the directory that was
+    /// actually emptied.
     static func teardownTree(parentFD: Int32, name: String) throws {
         try validateComponent(name)
+        var st = stat()
+        guard name.withCString({ fstatat(parentFD, $0, &st, AT_SYMLINK_NOFOLLOW) }) == 0 else {
+            throw FDError.teardownFailed(errno: errno)
+        }
+        guard (st.st_mode & S_IFMT) == S_IFDIR else { throw FDError.notDirectory(name) }
+        let expected: Identity = (st.st_dev, st.st_ino)
         let dirFD = name.withCString { openat(parentFD, $0, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC) }
         guard dirFD >= 0 else { throw FDError.teardownFailed(errno: errno) }
-        try removeChildrenThenSelf(dirFD: dirFD, parentFD: parentFD, name: name)
+        do {
+            let got = try identity(ofFD: dirFD, label: name)
+            guard sameIdentity(got, expected) else { throw FDError.verificationMismatch(component: name) }
+        } catch { close(dirFD); throw error }
+        try removeChildrenThenSelf(dirFD: dirFD, parentFD: parentFD, name: name, expected: expected)
     }
 
-    private static func removeChildrenThenSelf(dirFD: Int32, parentFD: Int32, name: String) throws {
+    private static func removeChildrenThenSelf(dirFD: Int32, parentFD: Int32, name: String,
+                                               expected: Identity) throws {
         // This function owns dirFD; the defer is its single close, so every
         // error path — including a throw out of the recursive call — releases it.
         defer { close(dirFD) }
         let dupFD = dupCloexec(dirFD)
         guard dupFD >= 0 else { throw FDError.teardownFailed(errno: errno) }
+        #if DEBUG
+        _testEnumerationFDObserver?(dupFD)
+        #endif
         guard let dir = fdopendir(dupFD) else {
             close(dupFD); throw FDError.teardownFailed(errno: errno)
         }
-        var children: [(name: String, isDir: Bool)] = []
+        var children: [(name: String, isDir: Bool, id: Identity)] = []
         while let ent = readdir(dir) {
             let n = withUnsafePointer(to: ent.pointee.d_name) {
                 $0.withMemoryRebound(to: CChar.self, capacity: Int(NAME_MAX) + 1) { String(cString: $0) }
@@ -296,22 +337,40 @@ enum SecureFD {
             var st = stat()
             let rc = n.withCString { fstatat(dirFD, $0, &st, AT_SYMLINK_NOFOLLOW) }
             guard rc == 0 else { closedir(dir); throw FDError.teardownFailed(errno: errno) }
-            children.append((n, (st.st_mode & S_IFMT) == S_IFDIR))   // symlinks classified as non-dir → unlinked as links
+            // symlinks classified as non-dir → unlinked as links
+            children.append((n, (st.st_mode & S_IFMT) == S_IFDIR, (st.st_dev, st.st_ino)))
         }
         closedir(dir)   // closes dupFD
+        #if DEBUG
+        if let hook = _testAfterClassificationHook { _testAfterClassificationHook = nil; hook() }
+        #endif
         for child in children {
             if child.isDir {
                 let sub = child.name.withCString { openat(dirFD, $0, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC) }
                 guard sub >= 0 else { throw FDError.teardownFailed(errno: errno) }
-                try removeChildrenThenSelf(dirFD: sub, parentFD: dirFD, name: child.name)
+                // The opened object must BE the directory that was classified;
+                // a swapped-in real directory is refused with zero deletion.
+                do {
+                    let got = try identity(ofFD: sub, label: child.name)
+                    guard sameIdentity(got, child.id) else { throw FDError.verificationMismatch(component: child.name) }
+                } catch { close(sub); throw error }
+                try removeChildrenThenSelf(dirFD: sub, parentFD: dirFD, name: child.name, expected: child.id)
             } else {
                 guard child.name.withCString({ unlinkat(dirFD, $0, 0) }) == 0 else {
                     throw FDError.teardownFailed(errno: errno)
                 }
             }
         }
-        // An open descriptor does not pin a directory in the namespace, so the
+        // Final removal re-binds the NAME to the directory that was actually
+        // emptied. The fstatat→unlinkat window is the irreducible final-syscall
+        // residual documented in the type comment; it is not claimed away. An
+        // open descriptor does not pin a directory in the namespace, so the
         // remove can precede the deferred close.
+        var fin = stat()
+        guard name.withCString({ fstatat(parentFD, $0, &fin, AT_SYMLINK_NOFOLLOW) }) == 0,
+              sameIdentity((fin.st_dev, fin.st_ino), expected) else {
+            throw FDError.verificationMismatch(component: name)
+        }
         guard name.withCString({ unlinkat(parentFD, $0, AT_REMOVEDIR) }) == 0 else {
             throw FDError.teardownFailed(errno: errno)
         }

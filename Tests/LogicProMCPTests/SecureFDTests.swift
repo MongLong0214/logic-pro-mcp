@@ -325,7 +325,15 @@ struct SecureFDTests {
             #expect(isCloexec(read)); close(read)
             let (dirFD, _) = try SecureFD.makeEmptyDir(parentFD: parent, name: "stage", mode: 0o700)
             #expect(isCloexec(dirFD)); close(dirFD)
+            // the trusted-base descriptor itself (override branch)
+            let (tb, _) = try SecureFD.openTrustedBase(for: base.appendingPathComponent("probe"))
+            #expect(isCloexec(tb)); close(tb)
         }
+        // the trusted-base descriptor (production home branch, read-only open)
+        let homeProbe = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("lpmcp-cloexec-probe")
+        let (hb, _) = try SecureFD.openTrustedBase(for: homeProbe)
+        #expect(isCloexec(hb)); close(hb)
     }
 
     @Test("failing calls never close or replace descriptors they do not own")
@@ -333,7 +341,6 @@ struct SecureFDTests {
         let base = try tempBase("canary")
         defer { try? FileManager.default.removeItem(at: base) }
         let mid = base.appendingPathComponent("mid", isDirectory: true)
-        try FileManager.default.createDirectory(at: mid, withIntermediateDirectories: true)
         func fdIdentity(_ fd: Int32) -> (dev: dev_t, ino: ino_t)? {
             var st = stat(); return fstat(fd, &st) == 0 ? (st.st_dev, st.st_ino) : nil
         }
@@ -341,32 +348,57 @@ struct SecureFDTests {
             let baseFD = try openBaseFD(base)
             defer { close(baseFD) }
             let baseIdentity = try #require(fdIdentity(baseFD))
+            // Generation marker: OUR descriptor deliberately carries FD_CLOEXEC
+            // CLEARED. A close-and-reopen of this slot inside SecureFD (which
+            // always opens with O_CLOEXEC) preserves (dev,ino) but flips the
+            // flag back on — identity alone cannot see descriptor replacement.
+            #expect(fcntl(baseFD, F_SETFD, 0) == 0)
 
-            // Deterministic double-close probe: the moment pass A's fd is
-            // released, the hook claims the lowest free descriptor numbers with
-            // canaries. A residual close of pass A's number on the error path
-            // would kill a canary; POSIX guarantees open() reuses lowest-free.
-            var canaries: [Int32] = []
-            SecureFD._testAfterPassAHook = {
-                for _ in 0..<4 { canaries.append(open("/dev/null", O_RDONLY | O_CLOEXEC)) }
-                try? FileManager.default.removeItem(at: mid)
+            // Slot-bound double-close probe: the observer reports the EXACT
+            // number pass A released; the hook then claims that very slot with
+            // a /dev/null canary (retrying if concurrent churn stole it). A
+            // residual close of the released number on the error path now
+            // deterministically kills the canary.
+            var released: Int32 = -1
+            var claimed = false
+            for _ in 0..<3 where !claimed {
+                released = -1
+                try FileManager.default.createDirectory(at: mid, withIntermediateDirectories: true)
+                SecureFD._testPassAClosedFDObserver = { released = $0 }
+                SecureFD._testAfterPassAHook = {
+                    let dn = open("/dev/null", O_RDONLY | O_CLOEXEC)
+                    if dn >= 0, released >= 0 {
+                        if dn == released {
+                            claimed = true                                // canary landed on the slot
+                        } else if fcntl(released, F_GETFD) == -1,          // slot still free
+                                  dup2(dn, released) == released {
+                            claimed = true; close(dn)
+                        } else {
+                            close(dn)
+                        }
+                    } else if dn >= 0 {
+                        close(dn)
+                    }
+                    try? FileManager.default.removeItem(at: mid)          // make pass B fail
+                }
+                #expect(throws: (any Error).self) {
+                    close(try SecureFD.walkVerified(baseFD: baseFD, ["mid"]).fd)
+                }
+                SecureFD._testPassAClosedFDObserver = nil
+                SecureFD._testAfterPassAHook = nil
             }
-            #expect(throws: (any Error).self) {
-                close(try SecureFD.walkVerified(baseFD: baseFD, ["mid"]).fd)
-            }
-            SecureFD._testAfterPassAHook = nil
-            #expect(canaries.count == 4)
-            for canary in canaries {
-                #expect(canary >= 0)
-                #expect(fdIsOpen(canary))   // a double-close would have killed it
-                close(canary)
-            }
+            #expect(claimed)
+            #expect(released >= 0)
+            var st = stat()
+            #expect(fstat(released, &st) == 0)                 // residual close would have killed it
+            #expect((st.st_mode & S_IFMT) == S_IFCHR)          // and it is still OUR /dev/null canary
+            close(released)
 
-            // Stale-fd probe: after success and failure paths, the caller's
-            // base descriptor is still open AND still the same object — a
-            // close-and-reuse inside SecureFD would change its identity. The
-            // failure trigger is a nonexistent component, so this probe does
-            // not depend on any single guard.
+            // Stale-fd probe across success + guard-independent (ENOENT)
+            // failure: the caller's descriptor must stay open, keep its
+            // (dev,ino), AND keep the cleared close-on-exec marker — a
+            // close-and-reopen of the same directory passes the first two
+            // checks and is caught only by the flag generation marker.
             try FileManager.default.createDirectory(at: mid, withIntermediateDirectories: true)
             close(try SecureFD.walkVerified(baseFD: baseFD, ["mid"]).fd)          // success path
             #expect(throws: (any Error).self) {
@@ -374,6 +406,93 @@ struct SecureFDTests {
             }
             let after = try #require(fdIdentity(baseFD))
             #expect(SecureFD.sameIdentity(baseIdentity, after))
+            let flags = fcntl(baseFD, F_GETFD)
+            #expect(flags >= 0)
+            #expect(flags & FD_CLOEXEC == 0)                   // reopen would have set it
+            _ = fcntl(baseFD, F_SETFD, FD_CLOEXEC)
+        }
+    }
+
+    @Test("enumeration duplicates carry close-on-exec before fdopendir consumes them")
+    func enumerationDescriptorsAreCloexec() throws {
+        let base = try tempBase("enumfd")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let tree = base.appendingPathComponent("tree", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: tree.appendingPathComponent("sub", isDirectory: true), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: tree.appendingPathComponent("f"))
+        try withBase(base) {
+            let parent = try openBaseFD(base)
+            defer { close(parent) }
+            var observedFlags: [Int32] = []
+            SecureFD._testEnumerationFDObserver = { fd in observedFlags.append(fcntl(fd, F_GETFD)) }
+            defer { SecureFD._testEnumerationFDObserver = nil }
+            // empty-check enumeration (via makeEmptyDir) + teardown enumeration
+            // at two nesting levels.
+            let (dirFD, _) = try SecureFD.makeEmptyDir(parentFD: parent, name: "stage", mode: 0o700)
+            close(dirFD)
+            try SecureFD.teardownTree(parentFD: parent, name: "tree")
+            #expect(observedFlags.count >= 3)
+            for flags in observedFlags {
+                #expect(flags >= 0)
+                #expect(flags & FD_CLOEXEC != 0)
+            }
+        }
+    }
+
+    @Test("a failed identity read refuses the walk instead of fabricating (0,0)")
+    func identityReadFailureIsFailClosed() throws {
+        let base = try tempBase("idfail")
+        defer { try? FileManager.default.removeItem(at: base) }
+        try FileManager.default.createDirectory(
+            at: base.appendingPathComponent("a", isDirectory: true), withIntermediateDirectories: true)
+        try withBase(base) {
+            let baseFD = try openBaseFD(base)
+            defer { close(baseFD) }
+            let before = minOpenFDCount()
+            // TWO failed reads: without the fail-closed guard both passes
+            // fabricate a (0,0) identity, the vectors compare EQUAL, and the
+            // walk SUCCEEDS on a fabricated identity — the exact defect this
+            // negative pins.
+            SecureFD._testForceIdentityFailureCount = 2
+            defer { SecureFD._testForceIdentityFailureCount = 0 }
+            #expect(throws: (any Error).self) {
+                close(try SecureFD.walkVerified(baseFD: baseFD, ["a"]).fd)
+            }
+            let after = minOpenFDCount()
+            #expect(after - before < 4)   // the refusing path leaks nothing
+        }
+    }
+
+    @Test("teardown refuses a swapped-in real directory with zero deletion")
+    func teardownRefusesReplacedRealDirectory() throws {
+        let base = try tempBase("swap")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let tree = base.appendingPathComponent("tree", isDirectory: true)
+        let sub = tree.appendingPathComponent("sub", isDirectory: true)
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: sub.appendingPathComponent("f"))
+        let victim = base.appendingPathComponent("victim", isDirectory: true)
+        try FileManager.default.createDirectory(at: victim, withIntermediateDirectories: true)
+        try Data("KEEP".utf8).write(to: victim.appendingPathComponent("precious.txt"))
+        try withBase(base) {
+            let parent = try openBaseFD(base)
+            defer { close(parent) }
+            // After tree's children are classified, swap the classified `sub`
+            // for a DIFFERENT real directory. O_NOFOLLOW cannot catch a real
+            // directory; only the classified-identity binding can.
+            SecureFD._testAfterClassificationHook = {
+                try? FileManager.default.moveItem(at: sub, to: base.appendingPathComponent("aside"))
+                try? FileManager.default.moveItem(at: victim, to: sub)
+            }
+            defer { SecureFD._testAfterClassificationHook = nil }
+            #expect(throws: (any Error).self) {
+                try SecureFD.teardownTree(parentFD: parent, name: "tree")
+            }
+            // Wrong-object zero-delete: the replacement's contents are intact.
+            let preciousNow = sub.appendingPathComponent("precious.txt")
+            #expect(FileManager.default.fileExists(atPath: preciousNow.path))
+            #expect(try String(contentsOf: preciousNow, encoding: .utf8) == "KEEP")
         }
     }
 
