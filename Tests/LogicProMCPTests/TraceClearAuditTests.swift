@@ -339,7 +339,8 @@ struct TraceClearAuditTests {
             #expect(try #require(result.isError))
             #expect(try #require(body["state"] as? String) == "C")
             #expect(try #require(body["error"] as? String) == "trace_clear_receipt_failed")
-            #expect(try #require(body["store_cleared"] as? Bool) == false)
+            let storeCleared = try #require(body["store_cleared"] as? Bool)
+            #expect(!storeCleared)
             // The symlink was never followed: the victim keeps its content and
             // the store is intact (fail-closed, no evidence destroyed).
             #expect(try String(contentsOf: victim, encoding: .utf8) == "KEEP")
@@ -365,7 +366,8 @@ struct TraceClearAuditTests {
             let body = try #require(sharedJSONObject(sharedToolText(result)))
             #expect(try #require(result.isError))
             #expect(try #require(body["state"] as? String) == "C")
-            #expect(try #require(body["store_cleared"] as? Bool) == false)
+            let storeCleared = try #require(body["store_cleared"] as? Bool)
+            #expect(!storeCleared)
             // The hardlink alias is refused, so the victim is never appended to.
             #expect(try String(contentsOf: victim, encoding: .utf8) == "KEEP")
             #expect(await OperationTraceStore.shared.recent(limit: 128).count == 2)

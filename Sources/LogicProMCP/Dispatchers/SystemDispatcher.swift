@@ -1227,10 +1227,11 @@ struct SystemDispatcher: OperationTraceDispatching {
     }
 
     /// PRD-015: append ONE JSON line to the durable audit log. The line survives
-    /// the store clear (it lives outside it). Opened `O_APPEND` (never
-    /// truncated); the directory is created and containment-checked fail-closed
-    /// (any error propagates so the caller refuses the clear). Returns the
-    /// receipt file path for the response body.
+    /// the store clear (it lives outside it). The audit directory chain is
+    /// materialized and the log opened + appended strictly through SecureFD
+    /// (fd-relative, no-follow, identity-checked); the write is never a truncate,
+    /// and any failure propagates so the caller refuses the clear (fail-closed).
+    /// Returns the receipt file path for the response body.
     ///
     /// Unbounded append is ACCEPTED, not an oversight. Each line is a fixed,
     /// receipt-sized record and `clear_traces` is an l2-confirmed operator
@@ -1259,18 +1260,23 @@ struct SystemDispatcher: OperationTraceDispatching {
         // fd-relative walk removes.
         #if DEBUG
         // TEST-ONLY: the audit-root override relocates the receipt under a temp
-        // base; bridge it to SecureFD's trusted-base seam. Release has neither
-        // the override nor the seam (production base is home).
+        // base; bridge it to SecureFD's trusted-base seam (tests root the override
+        // under temporaryDirectory). Release honors neither the override nor the
+        // seam (production base is home). Save + restore the prior value rather
+        // than force-nil so a concurrent test's override is not clobbered.
+        let priorTestBaseOverride = SecureFD._testBaseOverride
         let auditOverride = ProcessInfo.processInfo
             .environment["LOGIC_MCP_AUDIT_LOG_ROOT_OVERRIDE"]
         if let auditOverride, !auditOverride.isEmpty {
             SecureFD._testBaseOverride = FileManager.default.temporaryDirectory
         }
-        defer { SecureFD._testBaseOverride = nil }
+        defer { SecureFD._testBaseOverride = priorTestBaseOverride }
         #endif
 
         let (baseFD, relative) = try SecureFD.openTrustedBase(for: receiptURL)
         defer { close(baseFD) }
+        // openTrustedBase guarantees the target is strictly under the base, so
+        // `relative` is non-empty; this guard is defensive (unreachable in practice).
         guard let logName = relative.last else { throw TraceClearReceiptError.encodingFailed }
         let dirFD = try SecureFD.ensureDirectory(
             baseFD: baseFD, components: Array(relative.dropLast()), mode: 0o700
@@ -1281,16 +1287,40 @@ struct SystemDispatcher: OperationTraceDispatching {
         // concurrent creator won the race (EEXIST) fall back to a no-follow
         // append. Both paths refuse a symlink or hardlink at the name.
         let fileFD: Int32
+        let isFreshCreate: Bool
         do {
-            fileFD = try SecureFD.createFile(parentFD: dirFD, name: logName, mode: 0o600)
+            let fd = try SecureFD.createFile(parentFD: dirFD, name: logName, mode: 0o600)
+            // The exclusive-create fd opens at offset 0 WITHOUT O_APPEND; switch
+            // it to append before writing so this write lands at EOF atomically,
+            // exactly like the fallback path. Otherwise a concurrent clear that
+            // created-then-appended in the window before this write would be
+            // clobbered by a write at offset 0 — silently losing an audit line
+            // (the pre-SecureFD open used O_APPEND on both create and existing).
+            // Set append on the caller fd, not in the shared createFile primitive,
+            // whose create-at-0 semantics other callers (support-bundle) rely on.
+            let flags = fcntl(fd, F_GETFL)
+            guard flags != -1, fcntl(fd, F_SETFL, flags | O_APPEND) != -1 else {
+                close(fd); throw TraceClearReceiptError.writeFailed
+            }
+            (fileFD, isFreshCreate) = (fd, true)
         } catch SecureFD.FDError.componentOpenFailed(_, let e) where e == EEXIST {
-            fileFD = try SecureFD.openAppend(parentFD: dirFD, name: logName)
+            (fileFD, isFreshCreate) = (try SecureFD.openAppend(parentFD: dirFD, name: logName), false)
         }
         defer { close(fileFD) }
 
         let written = bytes.withUnsafeBytes { Darwin.write(fileFD, $0.baseAddress, $0.count) }
         guard written == bytes.count else { throw TraceClearReceiptError.writeFailed }
-        try SecureFD.fullfsync(fileFD)   // durable before the store is drained
+        try SecureFD.fullfsync(fileFD)   // receipt CONTENT durable before the drain
+        // On the first-ever create, also flush the parent directory so the new
+        // receipt's DIRECTORY ENTRY is durable, not just its data (a later append
+        // reuses an existing entry and needs none). Intermediate components created
+        // by ensureDirectory on a first-ever run rely on the filesystem's metadata
+        // commit (transactional on APFS); the protected trace store is in-memory,
+        // so a crash that loses an un-synced entry also loses the store — no
+        // durable "cleared-but-unreceipted" state can result.
+        if isFreshCreate {
+            guard fsync(dirFD) == 0 else { throw TraceClearReceiptError.writeFailed }
+        }
         return receiptURL.path
     }
 
