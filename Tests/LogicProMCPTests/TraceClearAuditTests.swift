@@ -268,10 +268,10 @@ struct TraceClearAuditTests {
         try FileManager.default.createSymbolicLink(at: auditRoot, withDestinationURL: outside)
         defer { try? FileManager.default.removeItem(at: base) }
 
-        // The containment check itself refuses, independent of whatever
-        // `createDirectory` chooses to do with a symlink-to-existing-dir.
-        #expect(!SystemDispatcher.auditDirectoryIsContained(auditRoot))
-
+        // The fd-relative materialization opens every audit-path component
+        // O_NOFOLLOW, so the symlinked `audit` component is refused (ELOOP) and
+        // the clear fails closed — the receipt can never be diverted outside the
+        // intended root, and the store is left intact.
         try await withEnv(flagOn: true, auditRoot: auditRoot) {
             await OperationTraceStore.shared.clear()
             await seedTraces(2)
@@ -317,6 +317,58 @@ struct TraceClearAuditTests {
             // A no-op never writes a receipt.
             let receiptPath = root.appendingPathComponent("trace-clear.log").path
             #expect(!FileManager.default.fileExists(atPath: receiptPath))
+        }
+    }
+
+    @Test("a symlink planted at the receipt file fails closed and is never followed")
+    func receiptFileSymlinkFailsClosed() async throws {
+        let root = tempRoot("logsymlink")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let victim = root.appendingPathComponent("victim.txt")
+        try Data("KEEP".utf8).write(to: victim)
+        // Plant a symlink AT the receipt name pointing at the victim file.
+        try FileManager.default.createSymbolicLink(
+            at: root.appendingPathComponent("trace-clear.log"), withDestinationURL: victim)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try await withEnv(flagOn: true, auditRoot: root) {
+            await OperationTraceStore.shared.clear()
+            await seedTraces(2)
+
+            let result = await clearTraces()
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(try #require(result.isError))
+            #expect(try #require(body["state"] as? String) == "C")
+            #expect(try #require(body["error"] as? String) == "trace_clear_receipt_failed")
+            #expect(try #require(body["store_cleared"] as? Bool) == false)
+            // The symlink was never followed: the victim keeps its content and
+            // the store is intact (fail-closed, no evidence destroyed).
+            #expect(try String(contentsOf: victim, encoding: .utf8) == "KEEP")
+            #expect(await OperationTraceStore.shared.recent(limit: 128).count == 2)
+        }
+    }
+
+    @Test("a hardlink planted at the receipt file fails closed (st_nlink>1)")
+    func receiptFileHardlinkFailsClosed() async throws {
+        let root = tempRoot("loghardlink")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let victim = root.appendingPathComponent("victim.txt")
+        try Data("KEEP".utf8).write(to: victim)
+        // Plant a hardlink alias of the victim AT the receipt name (nlink==2).
+        try FileManager.default.linkItem(
+            at: victim, to: root.appendingPathComponent("trace-clear.log"))
+        defer { try? FileManager.default.removeItem(at: root) }
+        try await withEnv(flagOn: true, auditRoot: root) {
+            await OperationTraceStore.shared.clear()
+            await seedTraces(2)
+
+            let result = await clearTraces()
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(try #require(result.isError))
+            #expect(try #require(body["state"] as? String) == "C")
+            #expect(try #require(body["store_cleared"] as? Bool) == false)
+            // The hardlink alias is refused, so the victim is never appended to.
+            #expect(try String(contentsOf: victim, encoding: .utf8) == "KEEP")
+            #expect(await OperationTraceStore.shared.recent(limit: 128).count == 2)
         }
     }
 }

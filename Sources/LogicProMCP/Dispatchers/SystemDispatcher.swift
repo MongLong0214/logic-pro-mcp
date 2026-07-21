@@ -1189,12 +1189,9 @@ struct SystemDispatcher: OperationTraceDispatching {
 
     private enum TraceClearReceiptError: Error {
         case encodingFailed
-        case openFailed(errno: Int32)
         case writeFailed
-        /// The audit directory resolved OUTSIDE its intended parent (symlink
-        /// planted for the final component) — the receipt must never be
-        /// diverted out of the containment root, so the clear is refused.
-        case auditDirectoryEscaped
+        // Open/create/directory/durability failures propagate as SecureFD.FDError
+        // and are caught by the clear_traces handler's fail-closed catch.
     }
 
     /// PRD-015 receipt fields — counts + timestamps ONLY, never trace contents,
@@ -1242,26 +1239,58 @@ struct SystemDispatcher: OperationTraceDispatching {
     /// can delete receipt lines is itself an evidence-destruction surface —
     /// precisely the failure mode this receipt exists to close.
     private static func appendTraceClearAuditLine(_ receipt: [String: Any]) throws -> String {
-        let root = auditLogRoot
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        // The directory now EXISTS, so re-resolve it through realpath BEFORE
-        // any write: a symlink planted for the audit dir would otherwise divert
-        // the receipt — and with it the whole evidence trail — outside the
-        // intended root, which is indistinguishable from having no receipt.
-        guard auditDirectoryIsContained(root) else {
-            throw TraceClearReceiptError.auditDirectoryEscaped
-        }
         let receiptURL = traceClearReceiptURL
         let data = try JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys])
         guard let line = String(data: data, encoding: .utf8) else {
             throw TraceClearReceiptError.encodingFailed
         }
         let bytes = Array((line + "\n").utf8)
-        let fd = open(receiptURL.path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
-        guard fd >= 0 else { throw TraceClearReceiptError.openFailed(errno: errno) }
-        defer { close(fd) }
-        let written = bytes.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
+
+        // Materialize + open + append strictly through SecureFD (fd-relative,
+        // no-follow). The audit directory chain is created with no-follow opens
+        // so a symlink planted for any component fails closed instead of
+        // diverting the receipt outside the intended root; the log is bound with
+        // O_NOFOLLOW + regular-file + st_nlink==1 so a symlink or hardlink at the
+        // final component is refused; and the line is flushed to stable storage
+        // before returning (the receipt is written one actor hop before the store
+        // is drained, so it must be durable first). This replaces the earlier
+        // create-then-realpath-check-then-open-by-path path, whose containment
+        // check ran AFTER the directory was created — a check-after-use that the
+        // fd-relative walk removes.
+        #if DEBUG
+        // TEST-ONLY: the audit-root override relocates the receipt under a temp
+        // base; bridge it to SecureFD's trusted-base seam. Release has neither
+        // the override nor the seam (production base is home).
+        let auditOverride = ProcessInfo.processInfo
+            .environment["LOGIC_MCP_AUDIT_LOG_ROOT_OVERRIDE"]
+        if let auditOverride, !auditOverride.isEmpty {
+            SecureFD._testBaseOverride = FileManager.default.temporaryDirectory
+        }
+        defer { SecureFD._testBaseOverride = nil }
+        #endif
+
+        let (baseFD, relative) = try SecureFD.openTrustedBase(for: receiptURL)
+        defer { close(baseFD) }
+        guard let logName = relative.last else { throw TraceClearReceiptError.encodingFailed }
+        let dirFD = try SecureFD.ensureDirectory(
+            baseFD: baseFD, components: Array(relative.dropLast()), mode: 0o700
+        )
+        defer { close(dirFD) }
+
+        // Dual first-bind: create the log exclusively the first time; if a
+        // concurrent creator won the race (EEXIST) fall back to a no-follow
+        // append. Both paths refuse a symlink or hardlink at the name.
+        let fileFD: Int32
+        do {
+            fileFD = try SecureFD.createFile(parentFD: dirFD, name: logName, mode: 0o600)
+        } catch SecureFD.FDError.componentOpenFailed(_, let e) where e == EEXIST {
+            fileFD = try SecureFD.openAppend(parentFD: dirFD, name: logName)
+        }
+        defer { close(fileFD) }
+
+        let written = bytes.withUnsafeBytes { Darwin.write(fileFD, $0.baseAddress, $0.count) }
         guard written == bytes.count else { throw TraceClearReceiptError.writeFailed }
+        try SecureFD.fullfsync(fileFD)   // durable before the store is drained
         return receiptURL.path
     }
 
@@ -1290,22 +1319,6 @@ struct SystemDispatcher: OperationTraceDispatching {
                 actualClearedCount: actualClearedCount
             )
         )
-    }
-
-    /// PRD-015 symlink hardening: the audit directory must resolve INSIDE its
-    /// intended parent — production `~/Library/Logs/LogicProMCP`, or the
-    /// DEBUG override root's parent when the test hook is set. Mirrors the
-    /// support-bundle containment check (`createdBundleDirectoryIsContained`):
-    /// realpath BOTH sides, then require the directory to resolve strictly
-    /// under the parent. Because `realpath` follows the final component while
-    /// the parent is resolved independently, a symlink planted for the audit
-    /// dir resolves outside the parent and is caught. Fail-closed when either
-    /// side cannot be canonicalized — an unresolved path is never contained.
-    static func auditDirectoryIsContained(_ directory: URL) -> Bool {
-        guard let parentPath = realpathResolvedPath(directory.deletingLastPathComponent()),
-              let resolved = realpathResolvedPath(directory) else { return false }
-        return resolved.hasPrefix(parentPath + "/")
-            && !resolved.split(separator: "/").contains("..")
     }
 
     /// Resolves a caller-requested bundle directory strictly inside the
