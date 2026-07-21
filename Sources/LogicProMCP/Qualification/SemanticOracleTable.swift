@@ -97,6 +97,47 @@ enum SemanticOracleTable {
         .pluginsSetParamVerified,
     ]
 
+    /// The mutating operations B2 covers with a verified-write (State A) oracle:
+    /// the transport + navigate safe-mutation surface. Each was derived by READING
+    /// its dispatcher/channel handler and pinning what its `encodeStateA` envelope
+    /// actually emits (cited per oracle below). Like B1 this is an EXPLICIT
+    /// increment, not the whole mutating surface — B3 adds the rest.
+    ///
+    /// COVERAGE CREDIT (#409): defining an oracle here is INVENTORY, not coverage.
+    /// R-SEM (`semanticCoverageIncomplete`) is credited to an operation ONLY when it
+    /// is live-exercised to a `.passed` semanticReadback verdict (the #284 live
+    /// matrix) or covered by a governed release-visible waiver — never by an oracle's
+    /// mere existence. So this B2 increment PINS the State-A contract these
+    /// transport/navigate writes must satisfy in the future live run; it does NOT
+    /// itself reduce the R-SEM static debt.
+    ///
+    /// DELIBERATELY ABSENT (audited, no State-A envelope to verify — see
+    /// `structurallyUnverifiedMutatingOperationIDs`): transport.rewind,
+    /// transport.fast_forward, navigate.zoom_to_fit, navigate.delete_marker,
+    /// navigate.toggle_view. Every one routes ONLY to send-only channels
+    /// (MCU / MIDIKeyCommands / CGEvent) whose handlers emit State B
+    /// `readback_unavailable` with no read-back — there is no State A to pin, so a
+    /// verified-write oracle would have to invent a contract the handler can never
+    /// produce. transport.set_cycle_range is excluded a level earlier: it is
+    /// registry `.unsupported`, so `mutatingSpecIDs` already filters it out (see
+    /// `unsupportedExcludedMutatingOperationIDs`).
+    static let phaseB2MutatingOperationIDs: Set<OperationID> = [
+        // transport (10 of the 12 audited — rewind/fast_forward are send-only)
+        .transportPlay, .transportStop, .transportRecord, .transportPause,
+        .transportToggleCycle, .transportToggleMetronome, .transportToggleCountIn,
+        .transportToggleAutopunch, .transportSetTempo, .transportGotoPosition,
+        // navigate (5 of the 8 audited — zoom_to_fit/delete_marker/toggle_view are send-only)
+        .navigateGotoBar, .navigateGotoMarker, .navigateCreateMarker,
+        .navigateRenameMarker, .navigateSetZoom,
+    ]
+
+    /// Every mutating operation the table covers so far: the B1 verified-write
+    /// increment UNION the B2 transport/navigate increment. Coverage is still
+    /// INCREMENTAL (B3 remains); this is the covered subset the census pins.
+    static var coveredMutatingOperationIDs: Set<OperationID> {
+        phaseB1MutatingOperationIDs.union(phaseB2MutatingOperationIDs)
+    }
+
     /// The mutating surface (non-`.unsupported`), from the registry. Coverage is
     /// INCREMENTAL — unlike `coveredSpecIDs`, the table need not cover all of this
     /// yet; `phaseB1MutatingOperationIDs` is the covered subset.
@@ -126,6 +167,41 @@ enum SemanticOracleTable {
         .mixerSetPluginParam:
             "send-only State B — routes to [.scripter], whose handler emits only "
             + "readback_unavailable / scripter_send_only; there is no State A to verify",
+        // B2 audit: these four transport/navigate ops route ONLY to send-only
+        // channels and their handlers can never reach State A. Kept explicit so
+        // their absence from the B2 increment is a reviewed decision, not a gap.
+        .transportRewind:
+            "send-only — routes to [.mcu, .coreMIDI, .cgEvent]; MCUChannel.sendTransport "
+            + "and the keystroke channels emit only State B readback_unavailable, so a "
+            + "rewind press has no read-back and no State A to verify",
+        .transportFastForward:
+            "send-only — routes to [.mcu, .coreMIDI, .cgEvent] exactly like rewind; the "
+            + "MCU/CoreMIDI/CGEvent transport presses are echo-less, so no State A exists",
+        .navigateZoomToFit:
+            "send-only — routes to [.midiKeyCommands, .cgEvent]; both fire a blind key "
+            + "command (CC 46 / key Z) with no arrange-zoom read-back, so the op is honestly "
+            + "State B and never reaches a verified State A",
+        .navigateDeleteMarker:
+            "send-only — routes to [.midiKeyCommands, .cgEvent] (CC 45 / keystroke); the "
+            + "keycmd channel gives no marker-list read-back, so a delete is State B only. "
+            + "(Availability is .requiresKeyBinding, but that is a SETUP axis — the reason "
+            + "it has no State A is the echo-less channel, not the keybinding requirement.)",
+        .navigateToggleView:
+            "send-only — routes each view to [.midiKeyCommands, .cgEvent] (view.toggle_*); "
+            + "the key command fires blind with no view-state read-back, so no State A exists",
+    ]
+
+    /// Mutating ops that never enter the oracle surface at all because the
+    /// registry marks them `.unsupported` — `mutatingSpecIDs` filters
+    /// `availability != .unsupported`, so they are excluded a level BEFORE the
+    /// structural-exclusion list above (which is for SUPPORTED mutating specs that
+    /// still lack a State-A envelope). Kept explicit + reasoned so the
+    /// `.unsupported` exclusion is documented, not merely implied by the filter.
+    static let unsupportedExcludedMutatingOperationIDs: [OperationID: String] = [
+        .transportSetCycleRange:
+            "registry .unsupported — Logic 12.x exposes no numeric cycle-locator AX fields, "
+            + "so AccessibilityChannel.defaultSetCycleRange fails closed with State C "
+            + "not_implemented and can never verify a write; excluded from mutatingSpecIDs",
     ]
 
     static let all: [OperationOracle] = [
@@ -162,6 +238,22 @@ enum SemanticOracleTable {
         tracksSetAutomation,
         tracksSetInstrument,
         pluginsSetParamVerified,
+        // #373 Phase B2 — transport + navigate safe-mutation oracles (State A).
+        transportPlay,
+        transportStop,
+        transportRecord,
+        transportPause,
+        transportToggleCycle,
+        transportToggleMetronome,
+        transportToggleCountIn,
+        transportToggleAutopunch,
+        transportSetTempo,
+        transportGotoPosition,
+        navigateGotoBar,
+        navigateGotoMarker,
+        navigateCreateMarker,
+        navigateRenameMarker,
+        navigateSetZoom,
     ]
 
     static let byOperationID: [OperationID: OperationOracle] = Dictionary(
@@ -950,6 +1042,306 @@ enum SemanticOracleTable {
             ),
             .typedField(key: "target_identity", type: .object),
             .typedField(key: "param", type: .string),
+        ]
+    )
+
+    // MARK: - #373 Phase B2 — transport safe-mutation oracles
+
+    // Each composes `SafeMutationOracle.verifiedEnvelope` (State A + verified +
+    // success) with the op's own invariant, derived by READING its dispatcher/
+    // channel handler. The envelope is always FIRST, so no oracle asserts what
+    // changed before proving it was verified.
+    //
+    // transport
+
+    /// The control-bar click strategies a transport checkbox toggle records as the
+    /// `action` that landed the write, from
+    /// `AccessibilityChannel+Transport.controlBarClickStrategies`. The ADR-001
+    /// coordinate ban reduced that ladder to AXPress/AXConfirm only — the former
+    /// HID `mouse-click` rung was removed and no handler can emit it — so the domain
+    /// is exactly `axpress`/`axconfirm`. Pinned as a closed set so a toggle claiming
+    /// an unknown strategy (including a regression that re-introduces the banned
+    /// mouse-click) is caught.
+    static let controlBarClickActions = ["axpress", "axconfirm"]
+
+    // TransportDispatcher `handleVerifiedTransportCommand(.play)` → encodeStateA.
+    // BOTH State-A branches (already-playing fast path, and the post-write poll)
+    // emit `operation:"transport.play"`, `verify_source:"transport_state"`, and an
+    // `observed_after` transportStateSummary whose `isPlaying == true` (State A is
+    // reached ONLY when `action.matches(observed)`, i.e. the readback showed
+    // playback). `observed_after.isPlaying == true` is the GENUINE invariant — it
+    // relates the AX transport readback to the operation's target semantics, NOT a
+    // same-source echo. `write_attempted`/`poll_attempts` differ per branch and
+    // are not pinned.
+    static let transportPlay = SafeMutationOracle.oracle(
+        .transportPlay,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("transport.play")),
+            .valueEquals(key: "verify_source", expected: .string("transport_state")),
+            .valueEquals(key: "observed_after.isPlaying", expected: .bool(true)),
+        ]
+    )
+
+    // TransportDispatcher `handleVerifiedTransportCommand(.record)` — same paths as
+    // play, but the State-A gate is `action.matches` = `isPlaying && isRecording`,
+    // so the `observed_after` summary shows BOTH true. Both readback flags are
+    // pinned (the genuine "recording confirmed" invariant); `observed_after` is an
+    // independent AX read, so these are readback semantics, not echoes.
+    static let transportRecord = SafeMutationOracle.oracle(
+        .transportRecord,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("transport.record")),
+            .valueEquals(key: "verify_source", expected: .string("transport_state")),
+            .valueEquals(key: "observed_after.isPlaying", expected: .bool(true)),
+            .valueEquals(key: "observed_after.isRecording", expected: .bool(true)),
+        ]
+    )
+
+    // TransportDispatcher `verifiedStopResult` → encodeStateA. Its TWO State-A
+    // branches diverge in shape: the already-stopped fast path emits
+    // `verify_source:"transport_state"` + a nested `observed_after`/`observed_before`
+    // transportStateSummary, while the post-write path (`stopObservedExtras`) emits
+    // `verify_source:"ax_transport_state"` + FLAT `observed_isPlaying`/… keys. The
+    // only universally-present values are the two hardcoded constants
+    // `operation:"transport.stop"` and `requested_state:"stopped"`, plus
+    // `verify_source` (one of two legal verified-stop provenances — pinned as an
+    // enum so an unknown source is caught). The load-bearing "it actually stopped"
+    // proof is STRUCTURAL: State A is reached only when the readback showed
+    // not-playing/not-recording; the envelope carries that. (Like tracks.select /
+    // tracks.set_automation, only the common keys are declaratively pinnable
+    // because the two branches emit different readback keys.)
+    static let transportStop = SafeMutationOracle.oracle(
+        .transportStop,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("transport.stop")),
+            .valueEquals(key: "requested_state", expected: .string("stopped")),
+            .enumMember(key: "verify_source", allowed: ["transport_state", "ax_transport_state"]),
+        ]
+    )
+
+    // TransportDispatcher `verifiedPauseResult` → encodeStateA. Both State-A
+    // branches (already-paused fast path, post-write path) emit the SAME three
+    // constants: `operation:"transport.pause"`, `requested_state:"paused"`,
+    // `verify_source:"transport_state"` (pause never uses the ax_transport_state
+    // tag stop's write path does). Their readback keys differ (nested
+    // `observed_after` vs flat `observed_isPlaying`), so — as with stop — the
+    // stopped-confirmation is structural (envelope), and only the shared constants
+    // are declaratively pinned.
+    static let transportPause = SafeMutationOracle.oracle(
+        .transportPause,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("transport.pause")),
+            .valueEquals(key: "requested_state", expected: .string("paused")),
+            .valueEquals(key: "verify_source", expected: .string("transport_state")),
+        ]
+    )
+
+    // AccessibilityChannel+Transport `clickControlBarCheckbox` (Cycle) →
+    // encodeStateA. State A is reached ONLY when the AX read-back value flipped
+    // (`waitForControlBarCheckboxValue { $0 != before }`), and the envelope carries
+    // `previous:before` + `observed:after` from TWO independent AX reads — so
+    // `observed == !previous` (`.booleanFlipped`) is the GENUINE "the toggle
+    // changed state" invariant, not a same-source echo. Plus the hardcoded
+    // `button:"Cycle"` / `control:"사이클"` identity and the click-strategy `action`.
+    // Single State-A branch (the dispatcher does a bare `toolTextResult`, no
+    // finalize), so the flip pair is universal here.
+    static let transportToggleCycle = SafeMutationOracle.oracle(
+        .transportToggleCycle,
+        semantics: [
+            .valueEquals(key: "button", expected: .string("Cycle")),
+            .valueEquals(key: "control", expected: .string("사이클")),
+            .booleanFlipped(keyA: "observed", keyB: "previous"),
+            .enumMember(key: "action", allowed: controlBarClickActions),
+        ]
+    )
+
+    // AccessibilityChannel+Transport `clickControlBarCheckbox` (Count In) — same
+    // single-branch flip shape as toggle_cycle; `button:"Count In"`,
+    // `control:"카운트 인"`.
+    static let transportToggleCountIn = SafeMutationOracle.oracle(
+        .transportToggleCountIn,
+        semantics: [
+            .valueEquals(key: "button", expected: .string("Count In")),
+            .valueEquals(key: "control", expected: .string("카운트 인")),
+            .booleanFlipped(keyA: "observed", keyB: "previous"),
+            .enumMember(key: "action", allowed: controlBarClickActions),
+        ]
+    )
+
+    // AccessibilityChannel+Transport `defaultToggleAutopunch` → encodeStateA. Its
+    // single State-A branch fires only when `after == requested == !before`, and
+    // the envelope carries `previous:before` + `observed:after` — so
+    // `observed == !previous` (`.booleanFlipped`) is the genuine flip. Plus the
+    // hardcoded `operation:"transport.toggle_autopunch"`, `button:"Autopunch"`, and
+    // `action:"axpress"` (autopunch uses AXPress exclusively, not the click-strategy
+    // ladder). `control` is a locale LabelSet (`transportAutopunchControl.canonical`)
+    // so it is not pinned.
+    static let transportToggleAutopunch = SafeMutationOracle.oracle(
+        .transportToggleAutopunch,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("transport.toggle_autopunch")),
+            .valueEquals(key: "button", expected: .string("Autopunch")),
+            .valueEquals(key: "action", expected: .string("axpress")),
+            .booleanFlipped(keyA: "observed", keyB: "previous"),
+        ]
+    )
+
+    // toggle_metronome is the one B2 toggle whose verified State A is NOT a single
+    // shape. It routes `[.accessibility, .midiKeyCommands, .cgEvent]` and the
+    // dispatcher RE-VERIFIES a send-only channel via `finalizeToggleMetronomeResult`
+    // (an independent transport-state read). The reachable State-A shapes share NO
+    // non-envelope key:
+    //   * AX-verified (`clickControlBarCheckbox`): flip on `observed`/`previous`,
+    //     plus `button:"Metronome"`/`control:"메트로놈 클릭"`/`action` — and NO
+    //     `operation`/`verification_source`/`*_enabled`.
+    //   * dispatcher-verified (the keycmd/cgEvent State B confirmed by finalize when
+    //     the transport-state metronome flag flipped): flip on
+    //     `observed_enabled`/`previous_enabled` + `verification_source:"transport_state"`
+    //     — and the keycmd/cgEvent State B carries NO `button`/`control`/`action`
+    //     (keycmd emits `operation`/`method`/`cc`; cgEvent emits `operation`/`method`).
+    // So pinning `button`/`control`/`action` (or either flip pair) would FALSE-RED
+    // the other genuine State A — e.g. an AX-control-absent, keycmd-bound setup in
+    // the #284 matrix emits the dispatcher-verified shape, which has none of those
+    // keys. The oracle therefore pins only the channel-independent verified envelope
+    // (State A + verified + success). The "metronome actually toggled" proof is
+    // STRUCTURAL, exactly as for transport.stop / transport.pause: EVERY path
+    // reaches State A only on a CONFIRMED flip — AX via
+    // `waitForControlBarCheckboxValue { $0 != before }`, dispatcher via
+    // `beforeTransport.isMetronomeEnabled != afterTransport.isMetronomeEnabled` — so
+    // a no-op is honest State B (or C) and the envelope rejects it. The dedicated
+    // engine test proves the relaxed oracle accepts BOTH channel shapes yet still
+    // rejects a no-op / failure, so it is not vacuous.
+    static let transportToggleMetronome = SafeMutationOracle.oracle(
+        .transportToggleMetronome,
+        semantics: []
+    )
+
+    // AccessibilityChannel+Transport `defaultSetTempo` → encodeStateA. All three
+    // State-A branches (`via` = slider / slider-increment / slider-value-nudge)
+    // gate on `abs(observed − requested) < 1.0` (the hardcoded 1-BPM convergence
+    // tolerance) and emit `requested` (the input BPM) + `observed` (the slider AX
+    // read). Pinned as `.numericNear(observed, requested, 1.0)` — a genuine
+    // request↔readback bound (the oracle's `<=` is a hair looser than the handler's
+    // strict `<`, which cannot false-pass a realistic verified write). `requested`
+    // is domain-pinned to Logic's 5..990 tempo range (handler guard), and `via` is
+    // the write-path enum (which slider strategy landed).
+    static let transportSetTempo = SafeMutationOracle.oracle(
+        .transportSetTempo,
+        semantics: [
+            .numericNear(keyA: "observed", keyB: "requested", within: .absolute(1.0)),
+            .numericRange(key: "requested", min: 5, max: 990),
+            .enumMember(key: "via", allowed: ["slider", "slider-increment", "slider-value-nudge"]),
+        ]
+    )
+
+    // TransportDispatcher `finalizeGotoPositionResult` → encodeStateA. State A is
+    // reached ONLY when `!requested.contains(":") && observedTransport.position ==
+    // requested`, where `requested` is the requested bar-position string and
+    // `observed` is read from an INDEPENDENT `transport.get_state` AX read — so
+    // `.fieldsEqual(requested, observed)` is a genuine request↔readback pin (the
+    // playhead landed exactly where asked). Plus the hardcoded
+    // `verification_source:"transport_state"` and the shape of the SMPTE echo.
+    static let transportGotoPosition = SafeMutationOracle.oracle(
+        .transportGotoPosition,
+        semantics: [
+            .valueEquals(key: "verification_source", expected: .string("transport_state")),
+            .fieldsEqual(keyA: "requested", keyB: "observed"),
+            .typedField(key: "observed_time_position", type: .string),
+        ]
+    )
+
+    // MARK: - #373 Phase B2 — navigate safe-mutation oracles
+
+    // NavigateDispatcher `goto_bar` routes `transport.goto_position` and runs the
+    // SAME `finalizeGotoPositionResult` as transport.goto_position, so its State A
+    // is identical: `requested == observed` playhead position (request↔readback)
+    // plus `verification_source:"transport_state"`.
+    static let navigateGotoBar = SafeMutationOracle.oracle(
+        .navigateGotoBar,
+        semantics: [
+            .valueEquals(key: "verification_source", expected: .string("transport_state")),
+            .fieldsEqual(keyA: "requested", keyB: "observed"),
+            .typedField(key: "observed_time_position", type: .string),
+        ]
+    )
+
+    // NavigateDispatcher `goto_marker` resolves the target marker from cache and
+    // routes `transport.goto_position` with its `position`, then runs
+    // `finalizeGotoPositionResult` — so the verified State A is the same
+    // `requested == observed` (the marker's position landed on the playhead) plus
+    // `verification_source:"transport_state"`. A non-canonical marker additionally
+    // carries `marker_position_uncertain`/`marker_position_source` (merged by
+    // `mergeMarkerUncertainty`); those are branch-dependent and NOT pinned so a
+    // canonical-marker State A is not false-failed.
+    static let navigateGotoMarker = SafeMutationOracle.oracle(
+        .navigateGotoMarker,
+        semantics: [
+            .valueEquals(key: "verification_source", expected: .string("transport_state")),
+            .fieldsEqual(keyA: "requested", keyB: "observed"),
+            .typedField(key: "observed_time_position", type: .string),
+        ]
+    )
+
+    // NavigateDispatcher `finalizeCreateMarkerResult` → encodeStateA. State A is
+    // reached only when `afterMarkers.count > beforeMarkers.count` AND (for a named
+    // create) `createdMarker.name == requestedName`. The load-bearing invariant is
+    // `.fieldsEqual(requested_name, observed_marker_name)` — a genuine
+    // request↔readback identity echo: `requested_name` is the input, and
+    // `observed_marker_name` is read back from the INDEPENDENT `logic://markers`
+    // enumeration after the create. Plus the hardcoded
+    // `verification_source:"logic://markers"` (dispatcher) and
+    // `operation:"nav.create_marker"` (channel) constants, and the shape of the
+    // count-delta / new marker id. This models the NAMED create (the qualification
+    // and primary path); an unnamed auto-create is a distinct name-less State-A
+    // shape whose `requested_name` is absent, and the count-delta remains the
+    // structural creation proof carried by the envelope.
+    static let navigateCreateMarker = SafeMutationOracle.oracle(
+        .navigateCreateMarker,
+        semantics: [
+            .valueEquals(key: "verification_source", expected: .string("logic://markers")),
+            .valueEquals(key: "operation", expected: .string("nav.create_marker")),
+            .fieldsEqual(keyA: "requested_name", keyB: "observed_marker_name"),
+            .typedField(key: "observed_marker_id", type: .number),
+            .typedField(key: "marker_count_after", type: .number),
+            .typedField(key: "marker_count_before", type: .number),
+        ]
+    )
+
+    // AccessibilityChannel+Markers `defaultRenameMarker` → encodeStateA. Both
+    // State-A branches (the already-named no-op path and the post-write path) emit
+    // `operation:"nav.rename_marker"`, `requested_name` (input), and `observed_name`
+    // read back from the marker-list enumeration; State A is reached only when
+    // `observed_name == requested_name`, so `.fieldsEqual(requested_name,
+    // observed_name)` is the genuine request↔readback rename proof. `previous_name`
+    // (the pre-rename label) and `index` are shape-pinned. `write_attempted` differs
+    // per branch and is not pinned.
+    static let navigateRenameMarker = SafeMutationOracle.oracle(
+        .navigateRenameMarker,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("nav.rename_marker")),
+            .fieldsEqual(keyA: "requested_name", keyB: "observed_name"),
+            .typedField(key: "index", type: .number),
+            .typedField(key: "previous_name", type: .string),
+        ]
+    )
+
+    // AccessibilityChannel+Transport `defaultSetZoomLevel` (the AX arrange
+    // Horizontal-Zoom slider) → encodeStateA, reached via NavigateDispatcher
+    // `set_zoom` for in/out/numeric levels (fit routes to the send-only
+    // zoom_to_fit). State A gates on `abs(after − target) < 0.02` where `target =
+    // (level−1)/9` and `observed:after` is the slider AX read — pinned as
+    // `.numericNear(observed, requested, 0.02)`, a genuine request↔readback bound
+    // (`requested` carries the computed target). Plus the hardcoded
+    // `operation:"nav.set_zoom"`, `axis:"horizontal"`, `verify_source:"ax_zoom_slider"`
+    // constants and the 1..10 `level` domain.
+    static let navigateSetZoom = SafeMutationOracle.oracle(
+        .navigateSetZoom,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("nav.set_zoom")),
+            .valueEquals(key: "axis", expected: .string("horizontal")),
+            .valueEquals(key: "verify_source", expected: .string("ax_zoom_slider")),
+            .numericNear(keyA: "observed", keyB: "requested", within: .absolute(0.02)),
+            .numericRange(key: "level", min: 1, max: 10),
         ]
     )
 }
