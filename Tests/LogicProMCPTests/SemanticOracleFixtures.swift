@@ -765,5 +765,184 @@ enum SemanticOracleFixtures {
                 """,
             readback: "{}"
         ),
+
+        // ── #373 Phase B3 — project/tracks/system/midi verified State-A fixtures ──
+        // Each is a faithful payload from the op's verified path (traced to the
+        // dispatcher/channel handler). Readback is unused (no B3 oracle
+        // cross-checks), so it is a bare `{}`.
+
+        // AppleScriptChannel.verifiedSaveResult State A: mtime advanced past the
+        // save start, so document_path + observed_mtime are present.
+        .projectSave: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","operation":"project.save",\
+                "method":"applescript","verify_source":"file_mtime","raw":"saved",\
+                "document_path":"/Users/qualification/Demo.logicx",\
+                "observed_mtime":"1970-01-01T00:00:02Z","previous_mtime":"1970-01-01T00:00:01Z"}
+                """,
+            readback: "{}"
+        ),
+        // save_as: the AX-dialog State-A shape (requested/observed/via). The oracle
+        // is envelope-only, so it also accepts the AppleScript shape — proven by
+        // `saveAsOracleAcceptsBothChannelShapesYetRejectsUnverified`.
+        .projectSaveAs: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "requested":"/Users/qualification/Demo.logicx",\
+                "observed":"/Users/qualification/Demo.logicx","via":"save-dialog"}
+                """,
+            readback: "{}"
+        ),
+        // AccessibilityChannel.openBounceDialogViaMenu BOUNCE_DIALOG_OPENED branch:
+        // dialog opened, bounce NOT fired.
+        .projectBounce: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","operation":"project.bounce",\
+                "requested":"bounce_dialog_open","observed":"bounce_dialog_open",\
+                "dialog_opened":true,"bounce_fired":false,"via":"file-menu",\
+                "next_action":"Review the Bounce settings in Logic, then confirm and choose the destination."}
+                """,
+            readback: "{}"
+        ),
+        // verifyTrackCreation State A: count increased by 1, type "audio".
+        .tracksCreateAudio: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","menu_clicked":"새로운 오디오 트랙",\
+                "track_count_before":2,"requested_delta":1,"dialog_confirmation_attempted":false,\
+                "observed_track_type":"audio","track_type_verification_source":"menu_clicked",\
+                "verification_source":"track_count_delta","track_count_after":3,"observed_delta":1,\
+                "observed_track_index":2,"observed_track_name":"Audio 1",\
+                "observed_track_type_inferred":"audio"}
+                """,
+            readback: "{}"
+        ),
+        // type "software_instrument".
+        .tracksCreateInstrument: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "menu_clicked":"새로운 소프트웨어 악기 트랙","track_count_before":2,"requested_delta":1,\
+                "dialog_confirmation_attempted":true,"observed_track_type":"software_instrument",\
+                "track_type_verification_source":"menu_clicked",\
+                "verification_source":"track_count_delta","track_count_after":3,"observed_delta":1,\
+                "observed_track_index":2,"observed_track_name":"Inst 1",\
+                "observed_track_type_inferred":"software_instrument"}
+                """,
+            readback: "{}"
+        ),
+        // type "drummer".
+        .tracksCreateDrummer: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "menu_clicked":"새로운 Session Player SI 트랙…","track_count_before":2,\
+                "requested_delta":1,"dialog_confirmation_attempted":true,\
+                "observed_track_type":"drummer","track_type_verification_source":"menu_clicked",\
+                "verification_source":"track_count_delta","track_count_after":3,"observed_delta":1,\
+                "observed_track_index":2,"observed_track_name":"Drummer","observed_track_type_inferred":"drummer"}
+                """,
+            readback: "{}"
+        ),
+        // type "external_midi".
+        .tracksCreateExternalMIDI: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","menu_clicked":"새로운 외부 MIDI 트랙",\
+                "track_count_before":2,"requested_delta":1,"dialog_confirmation_attempted":false,\
+                "observed_track_type":"external_midi","track_type_verification_source":"menu_clicked",\
+                "verification_source":"track_count_delta","track_count_after":3,"observed_delta":1,\
+                "observed_track_index":2,"observed_track_name":"External MIDI","observed_track_type_inferred":"external_midi"}
+                """,
+            readback: "{}"
+        ),
+        // defaultDeleteTrack State A: count decreased by 1 (observed_delta -1).
+        .tracksDelete: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","menu_clicked":"트랙 삭제",\
+                "track_count_before":3,"requested_delta":-1,"track_count_after":2,"observed_delta":-1}
+                """,
+            readback: "{}"
+        ),
+        // record_sequence verified payload — success+verified WITHOUT state:"A"
+        // (hand-assembled via jsonToolTextResult): the region read back on the
+        // created track matches the expected bar envelope (start 1, end 3).
+        .tracksRecordSequence: SemanticOracleFixture(
+            response: """
+                {"bar":1,"created_track":3,"recorded_to_track":3,"target_track_index":3,\
+                "target_track_name":"Inst 1","note_count":4,"method":"smf_import",\
+                "instrument":"not-attempted","expected_start_bar":1,"expected_end_bar":3,\
+                "verify_source":"ax_region_delta","region_name":"MIDI Region","start_bar":1,\
+                "end_bar":3,"region_kind":"midi","success":true,"verified":true}
+                """,
+            readback: "{}"
+        ),
+        // SagaWire.storedOutcome .completed → encodeStateA. saga_state completed.
+        .systemSagaExecute: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","journal_scope":"session",\
+                "journal_persistence":"cleared_on_server_session_end",\
+                "journal_survives_process_restart":false,"idempotency_key":"qual-saga-1",\
+                "duplicate":false,"saga_state":"completed",\
+                "state_history":["draft","validated","running","completed"],\
+                "steps":[{"operation_id":"mixer.set_volume","state":"applied"}]}
+                """,
+            readback: "{}"
+        ),
+        // saga_cancel .cancelled + verified → encodeStateA. status cancelled.
+        .systemSagaCancel: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","journal_scope":"session",\
+                "journal_persistence":"cleared_on_server_session_end",\
+                "journal_survives_process_restart":false,"idempotency_key":"qual-saga-2",\
+                "status":"cancelled","outcome":{"saga_state":"fullyCompensated","verified":true}}
+                """,
+            readback: "{}"
+        ),
+        // setup_arm_key .configuredAndVerified → encodeStateA(evidence.extras +
+        // chord/command/verified/detail). write_source "gui_assignment".
+        .systemSetupArmKey: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","command":"Toggle Track Record Enable",\
+                "chord":"⌥⌘R","write_source":"gui_assignment","configuration_write_attempted":true,\
+                "verification_mutation_attempted":true,"restored":true,"safe_to_retry":true,\
+                "window_opened":true,"search_typed":true,"chord_posted":true,"learn_restored":true,\
+                "window_closed":true,"close_confirmed":true,"arm_flip_observed":true,\
+                "detail":"Key command assigned via the Key Commands GUI and confirmed by a live record-arm flip."}
+                """,
+            readback: "{}"
+        ),
+        // export_support_bundle → encodeStateA({bundle_path, files:[{name,sha256}]}).
+        .systemExportSupportBundle: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "bundle_path":"/Users/qualification/Library/Logs/LogicProMCP/support-bundles/20260101-000000-demo",\
+                "files":[{"name":"doctor.json",\
+                "sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},\
+                {"name":"health.json",\
+                "sha256":"5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"}]}
+                """,
+            readback: "{}"
+        ),
+        // defaultImportMIDIFile State A: track created (delta 1), imported region
+        // read back (imported_region_count 1, imported_regions non-empty).
+        .midiImportFile: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A","requested":"/tmp/logic-pro-mcp/seq.mid",\
+                "track_count_before":2,"track_count_after":3,"observed_delta":1,\
+                "via":"ax_menu_import","file_open_dialog_seen":true,"tempo_dialog_seen":false,\
+                "region_count_before":0,"region_count_after":1,"new_midi_region_count":1,\
+                "new_midi_regions":[{"region_name":"seq","track_index":2,"start_bar":1,"end_bar":3,\
+                "region_kind":"midi"}],"imported_region_count":1,\
+                "imported_regions":[{"region_name":"seq","track_index":2,"start_bar":1,"end_bar":3,\
+                "region_kind":"midi"}]}
+                """,
+            readback: "{}"
+        ),
+        // mmc_locate bar-path → finalizeGotoPositionResult State A (goto shape).
+        .midiMMCLocate: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "verification_source":"transport_state","requested":"5.1.1.1",\
+                "observed":"5.1.1.1","observed_time_position":"00:00:08:12","via":"dialog"}
+                """,
+            readback: "{}"
+        ),
     ]
 }
