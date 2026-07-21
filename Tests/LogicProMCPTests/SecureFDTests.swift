@@ -236,10 +236,11 @@ struct SecureFDTests {
         try withBase(base) {
             let baseFD = try openBaseFD(base)
             defer { close(baseFD) }
-            let before = minOpenFDCount()
 
             // (a) verification-pass failure: the walk target vanishes between
             // pass A and pass B, so pass B throws after pass A opened its fd.
+            // Independently bounded: a one-fd-per-failure leak adds 64.
+            let beforeWalk = minOpenFDCount()
             let mid = base.appendingPathComponent("mid", isDirectory: true)
             for _ in 0..<64 {
                 try FileManager.default.createDirectory(at: mid, withIntermediateDirectories: true)
@@ -249,10 +250,14 @@ struct SecureFDTests {
                 }
             }
             SecureFD._testAfterPassAHook = nil
+            let afterWalk = minOpenFDCount()
+            #expect(afterWalk - beforeWalk < 8)
 
             // (b) mid-recursion teardown failure: a read-only subdirectory makes
             // the child unlink fail AFTER the recursion has opened directory fds
             // at two levels, so the propagating throw must release both.
+            // Independently bounded: a per-level leak adds 128.
+            let beforeTeardown = minOpenFDCount()
             let tree = base.appendingPathComponent("tree", isDirectory: true)
             let sub = tree.appendingPathComponent("sub", isDirectory: true)
             for _ in 0..<64 {
@@ -265,11 +270,110 @@ struct SecureFDTests {
                 _ = sub.path.withCString { chmod($0, 0o700) }
                 try FileManager.default.removeItem(at: tree)
             }
+            let afterTeardown = minOpenFDCount()
+            #expect(afterTeardown - beforeTeardown < 8)
+        }
+    }
 
-            // 128 failed calls: a leak of one fd per failure adds >= 64 to the
-            // table; unrelated suite activity moves the count by a few at most.
-            let after = minOpenFDCount()
-            #expect(after - before < 32)
+    // MARK: descriptor flags + ownership
+
+    @Test("openRead refuses a symlink and a hardlink; accepts a plain file")
+    func openReadGuards() throws {
+        let base = try tempBase("read")
+        defer { try? FileManager.default.removeItem(at: base) }
+        try Data("data".utf8).write(to: base.appendingPathComponent("plain.json"))
+        try FileManager.default.createSymbolicLink(
+            at: base.appendingPathComponent("sym.json"),
+            withDestinationURL: base.appendingPathComponent("plain.json"))
+        try Data("t".utf8).write(to: base.appendingPathComponent("hltarget"))
+        let linkRC = base.appendingPathComponent("hltarget").path.withCString { t in
+            base.appendingPathComponent("hard.json").path.withCString { l in link(t, l) }
+        }
+        #expect(linkRC == 0)
+        try withBase(base) {
+            let parent = try openBaseFD(base)
+            defer { close(parent) }
+            let ok = try SecureFD.openRead(parentFD: parent, name: "plain.json")
+            #expect(fdIsOpen(ok)); close(ok)
+            #expect(throws: (any Error).self) { close(try SecureFD.openRead(parentFD: parent, name: "sym.json")) }
+            #expect(throws: (any Error).self) { close(try SecureFD.openRead(parentFD: parent, name: "hard.json")) }
+        }
+    }
+
+    @Test("every returned descriptor carries close-on-exec")
+    func returnedDescriptorsAreCloexec() throws {
+        let base = try tempBase("cloexec")
+        defer { try? FileManager.default.removeItem(at: base) }
+        try FileManager.default.createDirectory(
+            at: base.appendingPathComponent("a", isDirectory: true), withIntermediateDirectories: true)
+        try Data("data".utf8).write(to: base.appendingPathComponent("f.json"))
+        func isCloexec(_ fd: Int32) -> Bool { fcntl(fd, F_GETFD) & FD_CLOEXEC != 0 }
+        try withBase(base) {
+            let parent = try openBaseFD(base)
+            defer { close(parent) }
+            // Empty-relative walk returns the internal DUPLICATE of the base —
+            // the one descriptor a non-CLOEXEC dup would expose directly.
+            let dupLeaf = try SecureFD.walkVerified(baseFD: parent, []).fd
+            #expect(isCloexec(dupLeaf)); close(dupLeaf)
+            let walkLeaf = try SecureFD.walkVerified(baseFD: parent, ["a"]).fd
+            #expect(isCloexec(walkLeaf)); close(walkLeaf)
+            let created = try SecureFD.createFile(parentFD: parent, name: "new.json", mode: 0o600)
+            #expect(isCloexec(created)); close(created)
+            let appended = try SecureFD.openAppend(parentFD: parent, name: "f.json")
+            #expect(isCloexec(appended)); close(appended)
+            let read = try SecureFD.openRead(parentFD: parent, name: "f.json")
+            #expect(isCloexec(read)); close(read)
+            let (dirFD, _) = try SecureFD.makeEmptyDir(parentFD: parent, name: "stage", mode: 0o700)
+            #expect(isCloexec(dirFD)); close(dirFD)
+        }
+    }
+
+    @Test("failing calls never close or replace descriptors they do not own")
+    func errorPathsDoNotDisturbForeignDescriptors() throws {
+        let base = try tempBase("canary")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let mid = base.appendingPathComponent("mid", isDirectory: true)
+        try FileManager.default.createDirectory(at: mid, withIntermediateDirectories: true)
+        func fdIdentity(_ fd: Int32) -> (dev: dev_t, ino: ino_t)? {
+            var st = stat(); return fstat(fd, &st) == 0 ? (st.st_dev, st.st_ino) : nil
+        }
+        try withBase(base) {
+            let baseFD = try openBaseFD(base)
+            defer { close(baseFD) }
+            let baseIdentity = try #require(fdIdentity(baseFD))
+
+            // Deterministic double-close probe: the moment pass A's fd is
+            // released, the hook claims the lowest free descriptor numbers with
+            // canaries. A residual close of pass A's number on the error path
+            // would kill a canary; POSIX guarantees open() reuses lowest-free.
+            var canaries: [Int32] = []
+            SecureFD._testAfterPassAHook = {
+                for _ in 0..<4 { canaries.append(open("/dev/null", O_RDONLY | O_CLOEXEC)) }
+                try? FileManager.default.removeItem(at: mid)
+            }
+            #expect(throws: (any Error).self) {
+                close(try SecureFD.walkVerified(baseFD: baseFD, ["mid"]).fd)
+            }
+            SecureFD._testAfterPassAHook = nil
+            #expect(canaries.count == 4)
+            for canary in canaries {
+                #expect(canary >= 0)
+                #expect(fdIsOpen(canary))   // a double-close would have killed it
+                close(canary)
+            }
+
+            // Stale-fd probe: after success and failure paths, the caller's
+            // base descriptor is still open AND still the same object — a
+            // close-and-reuse inside SecureFD would change its identity. The
+            // failure trigger is a nonexistent component, so this probe does
+            // not depend on any single guard.
+            try FileManager.default.createDirectory(at: mid, withIntermediateDirectories: true)
+            close(try SecureFD.walkVerified(baseFD: baseFD, ["mid"]).fd)          // success path
+            #expect(throws: (any Error).self) {
+                close(try SecureFD.walkVerified(baseFD: baseFD, ["missing"]).fd)  // failure path
+            }
+            let after = try #require(fdIdentity(baseFD))
+            #expect(SecureFD.sameIdentity(baseIdentity, after))
         }
     }
 

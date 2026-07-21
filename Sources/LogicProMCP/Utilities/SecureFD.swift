@@ -62,6 +62,14 @@ enum SecureFD {
         return (st.st_dev, st.st_ino)
     }
 
+    /// Atomic close-on-exec duplication. Plain `dup()` CLEARS `FD_CLOEXEC` on
+    /// the duplicate, which would make trusted directory descriptors heritable
+    /// across a concurrent `exec` — every internal duplication flows through
+    /// this single primitive instead.
+    private static func dupCloexec(_ fd: Int32) -> Int32 {
+        fcntl(fd, F_DUPFD_CLOEXEC, 0)
+    }
+
     // MARK: - Trusted base (base-path-injection guarded)
 
     /// The production trusted base is the current user's home directory, opened
@@ -148,7 +156,7 @@ enum SecureFD {
     private static func walkOnce(baseFD: Int32, _ relative: [String]) throws -> (fd: Int32, ids: [Identity]) {
         // Start from a dup of the base so ownership of the returned chain is ours
         // and the caller's base fd is never closed by us.
-        var dirFD = dup(baseFD)
+        var dirFD = dupCloexec(baseFD)
         guard dirFD >= 0 else { throw FDError.componentOpenFailed(component: "<base-dup>", errno: errno) }
         var ids: [Identity] = []
         for comp in relative {
@@ -195,7 +203,10 @@ enum SecureFD {
         return fd
     }
 
-    /// Open an existing regular file for read relative to a verified parent fd.
+    /// Open an existing regular file for read relative to a verified parent fd:
+    /// no-follow, non-blocking, regular-file, `st_nlink == 1` — the same
+    /// existing-file identity policy as `openAppend`, so a hardlink alias of a
+    /// foreign inode cannot serve readback.
     static func openRead(parentFD: Int32, name: String) throws -> Int32 {
         try validateComponent(name)
         let fd = name.withCString {
@@ -206,6 +217,7 @@ enum SecureFD {
         guard fstat(fd, &st) == 0, (st.st_mode & S_IFMT) == S_IFREG else {
             close(fd); throw FDError.notRegularFile(name)
         }
+        guard st.st_nlink == 1 else { close(fd); throw FDError.notExclusive(name) }
         return fd
     }
 
@@ -232,7 +244,7 @@ enum SecureFD {
     /// True/throw: the directory fd contains only `.`/`..`. Enumerates through a
     /// DUP (fdopendir consumes the fd it is given on Darwin).
     static func assertEmpty(dirFD: Int32, label: String) throws {
-        let dupFD = dup(dirFD)
+        let dupFD = dupCloexec(dirFD)
         guard dupFD >= 0 else { throw FDError.componentOpenFailed(component: label, errno: errno) }
         guard let dir = fdopendir(dupFD) else {
             close(dupFD); throw FDError.componentOpenFailed(component: label, errno: errno)
@@ -270,7 +282,7 @@ enum SecureFD {
         // This function owns dirFD; the defer is its single close, so every
         // error path — including a throw out of the recursive call — releases it.
         defer { close(dirFD) }
-        let dupFD = dup(dirFD)
+        let dupFD = dupCloexec(dirFD)
         guard dupFD >= 0 else { throw FDError.teardownFailed(errno: errno) }
         guard let dir = fdopendir(dupFD) else {
             close(dupFD); throw FDError.teardownFailed(errno: errno)
