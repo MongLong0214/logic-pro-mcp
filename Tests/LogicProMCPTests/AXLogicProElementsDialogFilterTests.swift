@@ -230,14 +230,25 @@ import Testing
 /// track name), which tripped the v3.7.2 modal guard on unrelated ops. A plugin
 /// editor is distinguished from a true modal by Logic's own chrome — the window
 /// exposes `kAXCloseButtonAttribute` plus, among its direct children, a
-/// bypass-labeled `AXCheckBox` AND a compare-OR-link-labeled `AXCheckBox`. This
-/// "Deluxe" shape (bypass + compare) transcribes the live 12.3 dump
+/// bypass-labeled toggle (`AXCheckBox` OR `AXButton`).
+///
+/// #381 narrowed the signature: a former conjunct additionally required a
+/// compare- OR link-labeled toggle, but those labels were English-only, so a
+/// localized (ko-KR) editor — bypass + close-button present — was misclassified
+/// as blocking. The compare/link conjunct was dropped and the bypass conjunct
+/// simultaneously TIGHTENED from substring to exact-field matching, because a
+/// substring match is NOT modal-exclusive: the Bounce-in-Place dialog carries a
+/// "Bypass Effect Plug-ins" checkbox whose text contains "bypass" (adversarial
+/// review B1; pinned below by the bounce-dialog tests). These builders still
+/// BUILD compare/link children (now ignored by the classifier) to keep
+/// transcribing the live 12.3 dumps.
+///
+/// `buildPluginEditorWindow` transcribes the "Deluxe" live 12.3 dump
 /// (`axdialog234.out` / PRD Appendix A); `buildFreshGainEditorWindow` models the
-/// freshly-inserted shape (bypass + link, no compare — `axwhy234.out`). The
-/// `include*` / `chromeRole` knobs let the fail-closed partial-chrome cases strip
-/// one conjunct at a time. The close-button is set as the ATTRIBUTE (locale-
-/// neutral, the exact handle the live probe closed the editor through), never as
-/// a `desc='close'` child.
+/// freshly-inserted shape (`axwhy234.out`). The `include*` / `chromeRole` knobs
+/// let the fail-closed partial-chrome cases strip one conjunct at a time. The
+/// close-button is set as the ATTRIBUTE (locale-neutral, the exact handle the
+/// live probe closed the editor through), never as a `desc='close'` child.
 private func buildPluginEditorWindow(
     _ builder: FakeAXRuntimeBuilder,
     base: Int,
@@ -419,16 +430,6 @@ struct PartialChromeVariant: Sendable {
 }
 
 @Test(arguments: [
-    // bypass present (checkbox) but NEITHER compare NOR link → chrome branch unmet.
-    PartialChromeVariant(
-        includeBypass: true, includeCompare: false, includeLink: false, includeClose: true,
-        chromeRole: kAXCheckBoxRole as String, name: "bypass checkbox without companion"
-    ),
-    // same, bypass as a BUTTON — the pin must hold in either toggle role form.
-    PartialChromeVariant(
-        includeBypass: true, includeCompare: false, includeLink: false, includeClose: true,
-        chromeRole: kAXButtonRole as String, name: "bypass button without companion"
-    ),
     // link (button) but no bypass → bypass conjunct unmet.
     PartialChromeVariant(
         includeBypass: false, includeCompare: false, includeLink: true, includeClose: true,
@@ -546,4 +547,261 @@ func testPartialChromeStaysBlocking(_ variant: PartialChromeVariant) {
     #expect(resolved.title == "Save")
     #expect(resolved.buttonTitles.contains("Cancel"))
     #expect(resolved.buttonTitles.contains("Save"))
+}
+
+// MARK: - #381 localized plugin editor (compare/link conjunct dropped)
+
+/// #381: a ko-KR plugin editor carries a localized bypass toggle (`바이패스`) and a
+/// close-button attribute but NO English compare/link toggle. Pre-fix the
+/// compare-OR-link conjunct was unmet → the editor was misclassified as a
+/// blocking modal and unrelated ops (project.save, track.select) were refused
+/// while it was open. Post-fix the bypass + close-button signature recognizes it
+/// as an editor → non-blocking on BOTH public surfaces. FAILS pre-fix.
+@Test func testKoLocalizedPluginEditorIsNonBlocking() {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let window = builder.element(100)
+    let closeButton = builder.element(101)
+    let bypass = builder.element(102)
+    let bodySlider = builder.element(103)
+
+    builder.setAttribute(window, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(window, kAXTitleAttribute as String, "오디오 1")
+    builder.setAttribute(closeButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(window, kAXCloseButtonAttribute as String, closeButton)
+    // Localized bypass toggle — the only chrome label present in a ko editor.
+    builder.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(bypass, kAXTitleAttribute as String, "바이패스")
+    builder.setAttribute(bodySlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setChildren(window, [bypass, bodySlider])
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(!AXLogicProElements.dialogPresent(runtime: runtime))
+    #expect(AXLogicProElements.blockingDialogInfo(runtime: runtime) == nil)
+}
+
+/// #381 safety: an AXDialog exposing a close-button attribute but NO bypass toggle
+/// (a real sheet that happens to carry a close box) still fails the editor
+/// signature → stays blocking. The bypass toggle, not the close-button alone,
+/// carries the editor identity. Passes pre- and post-fix.
+@Test func testCloseButtonWithoutBypassStaysBlocking() {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let window = builder.element(100)
+    let closeButton = builder.element(101)
+    let okButton = builder.element(102)
+
+    builder.setAttribute(window, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(window, kAXTitleAttribute as String, "Confirm")
+    builder.setAttribute(closeButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(window, kAXCloseButtonAttribute as String, closeButton)
+    builder.setAttribute(okButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(okButton, kAXTitleAttribute as String, "OK")
+    builder.setChildren(window, [okButton])
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(AXLogicProElements.dialogPresent(runtime: runtime))
+}
+
+/// #381 adversarial-review B1 pin: Logic's Bounce-in-Place dialog (reachable via
+/// `edit.bounce_in_place`) is a GENUINE mutating modal that carries a "Bypass
+/// Effect Plug-ins" checkbox — its text CONTAINS "bypass", so a SUBSTRING bypass
+/// conjunct would classify it as a plugin editor whenever it also exposes a
+/// close-button attribute (modeled here as the adversarial worst case; the
+/// attribute's absence on real modals is live-unverified). The exact-field
+/// matcher rejects the longer phrase → the dialog stays BLOCKING. FAILS on a
+/// substring implementation.
+@Test func testBounceInPlaceDialogWithBypassOptionStaysBlocking() {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let dialog = builder.element(100)
+    let closeButton = builder.element(101)
+    let bypassOption = builder.element(102)
+    let okButton = builder.element(103)
+    let cancelButton = builder.element(104)
+
+    builder.setAttribute(dialog, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(dialog, kAXTitleAttribute as String, "Bounce Regions in Place")
+    builder.setAttribute(closeButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(dialog, kAXCloseButtonAttribute as String, closeButton)
+    builder.setAttribute(bypassOption, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(bypassOption, kAXTitleAttribute as String, "Bypass Effect Plug-ins")
+    builder.setAttribute(okButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(okButton, kAXTitleAttribute as String, "OK")
+    builder.setAttribute(cancelButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(cancelButton, kAXTitleAttribute as String, "Cancel")
+    builder.setChildren(dialog, [bypassOption, okButton, cancelButton])
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [dialog, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(AXLogicProElements.dialogPresent(runtime: runtime))
+}
+
+/// #381 B1 pin, ko locale: the localized bounce dialog's checkbox is a longer
+/// phrase CONTAINING `바이패스` — a substring match on the ko variant would
+/// misclassify it exactly like the EN case. Exact-field matching keeps it
+/// BLOCKING. FAILS on a substring implementation.
+@Test func testKoBounceInPlaceDialogStaysBlocking() {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let dialog = builder.element(100)
+    let closeButton = builder.element(101)
+    let bypassOption = builder.element(102)
+    let confirmButton = builder.element(103)
+
+    builder.setAttribute(dialog, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(dialog, kAXTitleAttribute as String, "리전을 제자리에 바운스")
+    builder.setAttribute(closeButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(dialog, kAXCloseButtonAttribute as String, closeButton)
+    builder.setAttribute(bypassOption, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(bypassOption, kAXTitleAttribute as String, "이펙트 플러그인 바이패스")
+    builder.setAttribute(confirmButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(confirmButton, kAXTitleAttribute as String, "바운스")
+    builder.setChildren(dialog, [bypassOption, confirmButton])
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [dialog, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(AXLogicProElements.dialogPresent(runtime: runtime))
+}
+
+// MARK: - #381 T5 verified-parameter-write gate (pluginWindowMatch)
+
+/// #381 M2: `pluginWindowMatch` (the T5 verified param-write gate) is the second
+/// consumer of `isPluginEditorWindow`. The narrowed signature must let a
+/// localized bypass-only editor through that gate too — a ko editor with the
+/// right track-name title and a unique slider must resolve `.unique`, so the
+/// localized verified-write path works. FAILS pre-fix (the editor fails the old
+/// compare/link conjunct → never considered).
+@Test func testPluginWindowMatchRecognizesLocalizedBypassOnlyEditor() {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let editor = builder.element(100)
+    let closeButton = builder.element(101)
+    let bypass = builder.element(102)
+    let gainSlider = builder.element(103)
+
+    builder.setAttribute(editor, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(editor, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(editor, kAXTitleAttribute as String, "오디오 1")
+    builder.setAttribute(closeButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(editor, kAXCloseButtonAttribute as String, closeButton)
+    builder.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(bypass, kAXTitleAttribute as String, "바이패스")
+    builder.setAttribute(gainSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setAttribute(gainSlider, kAXDescriptionAttribute as String, "Gain")
+    builder.setChildren(editor, [bypass, gainSlider])
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [editor, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    let match = AXLogicProElements.pluginWindowMatch(
+        forTrackName: "오디오 1",
+        matchingSliderDescription: "Gain",
+        runtime: runtime
+    )
+    guard case .unique(let window) = match else {
+        Issue.record("expected .unique, got \(match)")
+        return
+    }
+    #expect(window == editor)
+}
+
+// MARK: - #405 Drummer Smart Controls docked pane
+
+/// #405: a Drummer track's docked Smart Controls pane is tagged `AXDialog` with an
+/// EMPTY title and NO close-button attribute (it is docked, not a floating
+/// editor), so `isPluginEditorWindow` never recognized it and it fell through to
+/// BLOCKING — refusing unrelated ops while the pane was open. The dedicated
+/// Smart-Controls signature (AXDialog + empty title + a `Smart Controls` toggle)
+/// classifies it as non-blocking on BOTH public surfaces. FAILS pre-fix.
+private func buildSmartControlsPane(_ builder: FakeAXRuntimeBuilder, base: Int) -> AXUIElement {
+    let window = builder.element(base)
+    let padControls = builder.element(base + 1)
+    let kitControls = builder.element(base + 2)
+    let smartControls = builder.element(base + 3)
+    let bodyGroup = builder.element(base + 4)
+
+    builder.setAttribute(window, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(window, kAXTitleAttribute as String, "")
+    builder.setAttribute(padControls, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(padControls, kAXTitleAttribute as String, "Pad Controls")
+    builder.setAttribute(kitControls, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(kitControls, kAXTitleAttribute as String, "Kit Controls")
+    builder.setAttribute(smartControls, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(smartControls, kAXTitleAttribute as String, "Smart Controls")
+    builder.setAttribute(bodyGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setChildren(window, [padControls, kitControls, smartControls, bodyGroup])
+    return window
+}
+
+@Test func testDmdSmartControlsPaneIsNonBlocking() {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let pane = buildSmartControlsPane(builder, base: 100)
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [pane, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(!AXLogicProElements.dialogPresent(runtime: runtime))
+    #expect(AXLogicProElements.blockingDialogInfo(runtime: runtime) == nil)
+}
+
+/// #405 safety: the Smart-Controls exclusion requires an EMPTY title. A titled
+/// AXDialog that happens to contain a `Smart Controls`-labeled toggle (a
+/// hypothetical modal) still fails the empty-title conjunct → stays blocking, so
+/// the recognizer cannot be tricked into excluding a titled modal.
+@Test func testTitledDialogWithSmartControlsLabelStaysBlocking() {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let window = builder.element(100)
+    let smartControls = builder.element(101)
+
+    builder.setAttribute(window, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(window, kAXTitleAttribute as String, "Delete Track?")
+    builder.setAttribute(smartControls, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(smartControls, kAXTitleAttribute as String, "Smart Controls")
+    builder.setChildren(window, [smartControls])
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(AXLogicProElements.dialogPresent(runtime: runtime))
+}
+
+/// #405 safety: an empty-title AXDialog WITHOUT a Smart-Controls toggle (a
+/// title-less alert) is not a Smart Controls pane → stays blocking. The
+/// Smart-Controls label, not the empty title alone, carries the exclusion.
+@Test func testTitlelessDialogWithoutSmartControlsStaysBlocking() {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let window = builder.element(100)
+    let okButton = builder.element(101)
+    let cancelButton = builder.element(102)
+
+    builder.setAttribute(window, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(window, kAXTitleAttribute as String, "")
+    builder.setAttribute(okButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(okButton, kAXTitleAttribute as String, "OK")
+    builder.setAttribute(cancelButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(cancelButton, kAXTitleAttribute as String, "Cancel")
+    builder.setChildren(window, [okButton, cancelButton])
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window, arrange])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(AXLogicProElements.dialogPresent(runtime: runtime))
 }

@@ -176,6 +176,7 @@ enum AXLogicProElements {
         guard isDialogWindow(window, runtime: runtime) else { return false }
         return !isKeyboardLayoutOverlayWindow(window, runtime: runtime)
             && !isPluginEditorWindow(window, runtime: runtime)
+            && !isSmartControlsWindow(window, runtime: runtime)
     }
 
     /// #234: Logic 12.3 tags plugin-EDITOR windows with subrole `AXDialog` and a
@@ -193,19 +194,32 @@ enum AXLogicProElements {
     ///      handle the live 2026-07-04 probe closed the editor through; true
     ///      modal sheets do not carry one. This is the ATTRIBUTE, never the
     ///      child button's localized `desc='close'` text (PRD D4);
-    ///   3. a bypass-labeled toggle among the DIRECT children;
-    ///   4. a compare-labeled OR link-labeled toggle among the DIRECT children.
+    ///   3. a bypass-labeled toggle among the DIRECT children.
     /// A "toggle" is an `AXCheckBox` OR an `AXButton` (any subrole): the editor's
     /// toggle chrome ROLE-FLAPS with window focus on 12.3 — checkbox when the
     /// editor is key, button when it is not (live evidence `axwhy234b.out`,
     /// 2026-07-05: same 'Audio 1' window dumped minutes apart; Logic exposes the
-    /// same toggle species as AXButton elsewhere, e.g. strip mute/solo). Compare
-    /// chrome is preset-state-dependent — absent on a freshly-inserted plugin —
-    /// while the channel-strip Link toggle is present from first open
-    /// (`axwhy234.out`); either satisfies conjunct 4, and a true modal carries
-    /// none of bypass/compare/link nor a close-button attribute. Follows the
-    /// `isKeyboardLayoutOverlayWindow` exclusion precedent; compare/link labels
-    /// are English-only (OQ-1) so non-EN locales stay blocking.
+    /// same toggle species as AXButton elsewhere, e.g. strip mute/solo).
+    ///
+    /// #381: a former conjunct 4 additionally required a compare- OR link-labeled
+    /// toggle whose labels were English-only (empty locale `variants`, OQ-1), so a
+    /// ko-KR (or any localized) plugin editor — which DOES carry a localized
+    /// bypass toggle (`바이패스`) and a close-button
+    /// attribute — failed conjunct 4 and was misclassified as BLOCKING, refusing
+    /// unrelated ops while the editor was open. Conjunct 4 is dropped; conjunct 3
+    /// is simultaneously TIGHTENED from substring to EXACT-field matching, because
+    /// a substring bypass match is NOT modal-exclusive: Logic's own Bounce-in-Place
+    /// dialog (reachable via `edit.bounce_in_place`) carries a "Bypass Effect
+    /// Plug-ins" checkbox whose text CONTAINS "bypass" (adversarial review, #381
+    /// B1). The editor's bypass toggle is labeled exactly `bypass`/`바이패스`
+    /// (live `axwhy234.out`/`axwhy234b.out`), while the bounce checkbox is a
+    /// longer phrase in every locale, so exact matching separates them without
+    /// relying on conjunct 2. Honesty note: the premise that genuine modals carry
+    /// no `kAXCloseButtonAttribute` is live-verified only for the #234 editor
+    /// dumps, NOT for every modal class — conjunct 2 is treated as a narrowing
+    /// guard, and the exact bypass label carries the discrimination. Unverified
+    /// locales still fail conjunct 3 → stay blocking (fail-closed). Follows the
+    /// `isKeyboardLayoutOverlayWindow` exclusion precedent.
     static func isPluginEditorWindow(
         _ window: AXUIElement,
         runtime: AXHelpers.Runtime
@@ -219,22 +233,85 @@ enum AXLogicProElements {
         guard closeButton != nil else { return false }
 
         // Scan AXCheckBox AND AXButton toggles — the labeled chrome role-flaps
-        // with window focus (see doc comment). The close-button attribute conjunct
-        // already gates out true modal sheets (they carry no close button), so
-        // widening the toggle role cannot promote a real modal to an editor.
+        // with window focus (see doc comment).
         let directToggles = AXHelpers.getChildren(window, runtime: runtime).filter {
             let role = AXHelpers.getRole($0, runtime: runtime) ?? ""
             return role == (kAXCheckBoxRole as String) || role == (kAXButtonRole as String)
         }
-        let hasBypass = directToggles.contains { child in
-            AXLocalePolicy.pluginBypassControl.containsAny(in: elementSearchText(child, runtime: runtime))
+        return directToggles.contains { child in
+            hasExactLabel(child, matching: AXLocalePolicy.pluginBypassControl, runtime: runtime)
         }
-        let hasCompareOrLink = directToggles.contains { child in
-            let text = elementSearchText(child, runtime: runtime)
-            return AXLocalePolicy.pluginWindowCompareControl.containsAny(in: text)
-                || AXLocalePolicy.pluginWindowLinkControl.containsAny(in: text)
+    }
+
+    /// True when ANY single label field (identifier, description, title, help) of
+    /// `element` EXACTLY equals one of `labelSet`'s labels (trimmed,
+    /// case-insensitive). Deliberately NOT a substring test over the joined
+    /// `elementSearchText` aggregate: the non-blocking classifiers use this to
+    /// tell chrome toggles labeled exactly `bypass`/`Smart Controls` apart from
+    /// modal options that merely CONTAIN those words (e.g. the Bounce-in-Place
+    /// dialog's "Bypass Effect Plug-ins" checkbox — #381 adversarial review B1).
+    private static func hasExactLabel(
+        _ element: AXUIElement,
+        matching labelSet: AXLocalePolicy.LabelSet,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        [
+            AXHelpers.getIdentifier(element, runtime: runtime),
+            AXHelpers.getDescription(element, runtime: runtime),
+            AXHelpers.getTitle(element, runtime: runtime),
+            AXHelpers.getHelp(element, runtime: runtime)
+        ]
+        .contains { labelSet.matches($0, mode: .exact) }
+    }
+
+    /// #405: Logic 12 tags a Drummer track's "Smart Controls" pane with subrole
+    /// `AXDialog` but — UNLIKE a plugin editor — WITHOUT a `kAXCloseButtonAttribute`
+    /// (it is docked, not a floating editor), so `isPluginEditorWindow` (which
+    /// requires the close-button, conjunct 2) never recognized it and it fell
+    /// through to BLOCKING, refusing unrelated ops while the pane was open
+    /// (live en-US evidence 2026-07: title `""`, subrole `AXDialog`, direct
+    /// children include `Pad Controls`/`Kit Controls` buttons and a `Smart
+    /// Controls` toggle, no close button).
+    ///
+    /// Recognized CONJUNCTIVELY, fail-closed on any missing conjunct:
+    ///   1. subrole `AXDialog`;
+    ///   2. an EMPTY window title — a NARROWING guard only, NOT the modal
+    ///      discriminator: NSAlert-style confirmation dialogs (unsaved-changes,
+    ///      delete, overwrite) commonly have an empty `AXTitle` too (their
+    ///      headline is an `AXStaticText` child), so an empty title does NOT
+    ///      separate a real alert from this pane. It only keeps TITLED windows
+    ///      out of this branch;
+    ///   3. a toggle among the DIRECT children (checkbox OR button, matching the
+    ///      editor role-flap precedent) whose SINGLE label field EXACTLY equals
+    ///      `Smart Controls` — this is the SOLE discriminator. Exact-field
+    ///      matching (never substring over the joined search text) keeps a
+    ///      button that merely mentions the phrase in a longer label or tooltip
+    ///      from matching.
+    /// The label is English-only (`pluginWindowSmartControlsControl` has empty
+    /// `variants`, OQ-1 — the localized string is unverified), so a non-EN DMD
+    /// pane fails conjunct 3 and conservatively STAYS blocking (fail-closed),
+    /// mirroring the bypass-label OQ-1 posture. No known modal carries a control
+    /// labeled exactly `Smart Controls`, and a titled one is excluded by
+    /// conjunct 2 regardless.
+    static func isSmartControlsWindow(
+        _ window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        let subrole: String? = AXHelpers.getAttribute(window, kAXSubroleAttribute, runtime: runtime)
+        guard subrole == (kAXDialogSubrole as String) else { return false }
+
+        let title: String = AXHelpers.getAttribute(window, kAXTitleAttribute, runtime: runtime) ?? ""
+        guard title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+
+        let directToggles = AXHelpers.getChildren(window, runtime: runtime).filter {
+            let role = AXHelpers.getRole($0, runtime: runtime) ?? ""
+            return role == (kAXCheckBoxRole as String) || role == (kAXButtonRole as String)
         }
-        return hasBypass && hasCompareOrLink
+        return directToggles.contains { child in
+            hasExactLabel(
+                child, matching: AXLocalePolicy.pluginWindowSmartControlsControl, runtime: runtime
+            )
+        }
     }
 
     private static func isKeyboardLayoutOverlayWindow(
