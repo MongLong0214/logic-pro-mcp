@@ -17,7 +17,8 @@ private func makeAuditSnapshot(
     regionsComplete: Bool = true,
     markers: [MarkerState] = [],
     channelStrips: [ChannelStripState] = [],
-    fileTrackCount: Int? = nil
+    fileTrackCount: Int? = nil,
+    blockingDialogButtons: [String]? = nil
 ) -> ProjectSessionAudit.Snapshot {
     var proj = project ?? ProjectInfo()
     if project == nil {
@@ -47,7 +48,8 @@ private func makeAuditSnapshot(
         markersFetchedAt: now,
         channelStrips: channelStrips,
         mixerFetchedAt: now,
-        fileTrackCount: fileTrackCount
+        fileTrackCount: fileTrackCount,
+        blockingDialogButtons: blockingDialogButtons
     )
 }
 
@@ -353,6 +355,80 @@ private func messySnapshot(
         $0.id == "software_instrument_regions_without_audible_plugin"
     })
     #expect(!report.evidence.exportReadiness.blockers.contains("software_instrument_regions_without_audible_plugin"))
+}
+
+@Test func testProjectAuditSurfacesBlockingModalAsExportBlocker() throws {
+    // #427 follow-up: a blocking modal dialog owning the Logic window at audit
+    // time must flow into export_readiness.blockers (a bounce cannot run while
+    // it is up), matching the transport preflight's `preflight_blocking_dialog`
+    // refusal — NOT be silently downgraded to the `ax_occluded` warning.
+    let snap = makeAuditSnapshot(
+        tracks: [TrackState(id: 0, name: "Lead", type: .audio)],
+        blockingDialogButtons: ["Show Conflicts", "Ignore"]
+    )
+    let report = ProjectSessionAudit.buildAudit(snapshot: snap)
+
+    let blocker = try #require(report.findings.first { $0.id == "export_blocked_by_modal_dialog" })
+    #expect(blocker.severity == .blocker)
+    #expect(blocker.category == "system")
+    #expect(blocker.evidence.resource == "logic://system/health")
+    #expect(blocker.evidence.values.contains("dialog_buttons=Show Conflicts,Ignore"))
+    #expect(report.status == .failed)
+    #expect(report.evidence.exportReadiness.status == "blocked")
+    #expect(report.evidence.exportReadiness.blockers.contains("export_blocked_by_modal_dialog"))
+}
+
+@Test func testProjectAuditWithoutBlockingModalOmitsExportBlocker() throws {
+    // Control: no blocking dialog ⇒ the modal blocker is absent and export
+    // readiness is not blocked on account of it.
+    let snap = makeAuditSnapshot(
+        tracks: [TrackState(id: 0, name: "Lead", type: .audio)],
+        blockingDialogButtons: nil
+    )
+    let report = ProjectSessionAudit.buildAudit(snapshot: snap)
+
+    #expect(!report.findings.contains { $0.id == "export_blocked_by_modal_dialog" })
+    #expect(!report.evidence.exportReadiness.blockers.contains("export_blocked_by_modal_dialog"))
+}
+
+@Test func testProjectAuditDispatcherSurfacesBlockingModalBlocker() async throws {
+    // Mirrors the live repro: `logic_project audit` while a blocking modal
+    // (AXDialog owned by the project window, buttons "Show Conflicts"/"Ignore")
+    // is present must report the modal blocker in export_readiness instead of a
+    // false green, using the SAME blockingDialogInfo() signal the transport
+    // preflight fails closed on. A fixture is injected so the path is headless.
+    let cache = StateCache()
+    var project = ProjectInfo()
+    project.name = "Modal Repro"
+    project.filePath = "/tmp/Modal Repro.logicx"
+    project.source = "ax_live"
+    await cache.updateProject(project)
+    await cache.updateTracks([TrackState(id: 0, name: "Lead", type: .audio)])
+
+    let result = await ProjectDispatcher.handle(
+        command: "audit",
+        params: [:],
+        router: ChannelRouter(),
+        cache: cache,
+        blockingDialogInfo: {
+            AXLogicProElements.BlockingDialogInfo(
+                title: "",
+                role: "AXDialog",
+                owningWindow: "Modal Repro",
+                buttonTitles: ["Show Conflicts", "Ignore"],
+                recoveryAction: "Dismiss the blocking dialog (press Escape), then retry."
+            )
+        }
+    )
+
+    #expect(!result.isError!)
+    let json = try #require(sharedJSONObject(sharedToolText(result)))
+    #expect(json["status"] as? String == "failed")
+    let evidence = try #require(json["evidence"] as? [String: Any])
+    let exportReadiness = try #require(evidence["export_readiness"] as? [String: Any])
+    #expect(exportReadiness["status"] as? String == "blocked")
+    let blockers = try #require(exportReadiness["blockers"] as? [String])
+    #expect(blockers.contains("export_blocked_by_modal_dialog"))
 }
 
 @Test func testProjectAuditAndCleanupPlanResourcesAndCommandsReturnJSON() async throws {

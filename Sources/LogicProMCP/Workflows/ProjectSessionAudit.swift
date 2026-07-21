@@ -273,12 +273,21 @@ enum ProjectSessionAudit {
         /// `track_readback_gap` when the file says there are more tracks than AX
         /// surfaced — keeping the audit honest against `logic://tracks`.
         let fileTrackCount: Int?
+        /// #427 follow-up: button labels of a blocking modal dialog/sheet owning
+        /// the Logic window at audit time — the same authoritative signal
+        /// (`AXLogicProElements.blockingDialogInfo()`) the transport preflight fails
+        /// closed on (`preflight_blocking_dialog`). `nil` when no blocking dialog is
+        /// present; a non-nil value means a bounce/export cannot run until it is
+        /// dismissed, so the audit surfaces it as an export blocker rather than the
+        /// weaker `ax_occluded` warning. Threaded as a plain value like `axOccluded`.
+        let blockingDialogButtons: [String]?
     }
 
     static func buildAudit(
         cache: StateCache,
         now: Date = Date(),
-        fileReader: LogicProjectFileReader.Runtime = .production
+        fileReader: LogicProjectFileReader.Runtime = .production,
+        blockingDialogButtons: [String]? = nil
     ) async -> AuditReport {
         // Read-only cross-check source: the same MetaData.plist track count the
         // `logic://tracks` resource uses to synthesise placeholder rows. This is
@@ -303,7 +312,8 @@ enum ProjectSessionAudit {
             markersFetchedAt: s.markersFetchedAt,
             channelStrips: s.channelStrips,
             mixerFetchedAt: s.mixerFetchedAt,
-            fileTrackCount: fileTrackCount
+            fileTrackCount: fileTrackCount,
+            blockingDialogButtons: blockingDialogButtons
         )
         return buildAudit(snapshot: snapshot)
     }
@@ -476,6 +486,24 @@ enum ProjectSessionAudit {
                 nil,
                 ["ax_occluded=true"],
                 "cache_stale"
+            ))
+        }
+        // #427 follow-up: a blocking modal dialog/sheet owning the Logic window is
+        // a hard export blocker, not merely occluded readback — a bounce cannot run
+        // while it is up. This mirrors the transport preflight, which fails closed
+        // on the same `blockingDialogInfo()` signal with `preflight_blocking_dialog`;
+        // the audit must not report a false green here.
+        if let buttons = snapshot.blockingDialogButtons {
+            findings.append(finding(
+                "export_blocked_by_modal_dialog",
+                .blocker,
+                "system",
+                "A blocking modal dialog/sheet owns the Logic window; a bounce/export cannot run until it "
+                    + "is dismissed. The transport preflight refuses the same dialog with preflight_blocking_dialog.",
+                "logic://system/health",
+                nil,
+                ["blocking_dialog_present=true", "dialog_buttons=\(buttons.joined(separator: ","))"],
+                "ax_live"
             ))
         }
         if project.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || project.filePath == nil {
