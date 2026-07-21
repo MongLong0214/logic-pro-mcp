@@ -166,17 +166,32 @@ jobs:
       # The independently produced bundle must cover Desktop/Creator × en-US/ko-KR,
       # every registered operation by semantic readback or a governed default-profile
       # waiver, and mutation/readback/restore/compensation. Missing evidence fails closed.
+      #
+      # ADR-001 terminal qualification is roadmap T5 / issue #284 and is not yet
+      # deliverable: the full same-artifact live matrix plus per-operation semantic
+      # coverage (#373) that would produce a passing signed evidence bundle does not
+      # exist yet (Scripts/live-qualification-runner.py can only emit a not_qualified
+      # skeleton). Until #284 lands, these enforcement steps are gated OFF by owner
+      # decision (2026-07-21) so stable releases ship exactly as they did through
+      # v3.11.0. To turn the gate back on: set repository variable
+      # ADR001_QUALIFICATION_ENFORCED=true AND provision the QUALIFICATION_EVIDENCE_URL,
+      # QUALIFICATION_EVIDENCE_SHA256, and TRUSTED_QUALIFICATION_PUBLIC_KEY secrets.
+      # When the variable is 'true' the gate enforces fail-closed exactly as before;
+      # the enforcement logic below is unchanged.
       - name: Checkout pinned trusted verifier
+        if: ${{ vars.ADR001_QUALIFICATION_ENFORCED == 'true' }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: 67fec5fccf817f9978022f0ca262b80a789e2dce
           path: trusted-verifier-src
 
       - name: Build pinned trusted verifier
+        if: ${{ vars.ADR001_QUALIFICATION_ENFORCED == 'true' }}
         working-directory: trusted-verifier-src
         run: swift build -c release --product trusted-verifier
 
       - name: Enforce independent exact-artifact qualification
+        if: ${{ vars.ADR001_QUALIFICATION_ENFORCED == 'true' }}
         env:
           QUALIFICATION_EVIDENCE_URL: ${{ secrets.QUALIFICATION_EVIDENCE_URL }}
           QUALIFICATION_EVIDENCE_SHA256: ${{ secrets.QUALIFICATION_EVIDENCE_SHA256 }}
@@ -200,6 +215,7 @@ jobs:
               --expected-commit "$GITHUB_SHA"
 
       - name: trusted-provenance-verify
+        if: ${{ vars.ADR001_QUALIFICATION_ENFORCED == 'true' }}
         env:
           TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
         run: |
@@ -208,18 +224,26 @@ jobs:
 
       - name: Create release artifact SHA256 manifest
         run: |
-          shasum -a 256 \
-            LogicProMCP \
-            LogicProMCP-macOS-universal.tar.gz \
-            LogicProMCP-macOS-arm64.tar.gz \
-            RELEASE-METADATA.json \
-            SHA256SUMS.txt \
-            qualification-evidence/release-qualification-attestation.json \
-            qualification-evidence/evidence-manifest.json \
-            qualification-evidence/case-manifest.json \
-            qualification-evidence/public-transcript.json \
-            qualification-evidence/mutation-restore-compensation.json \
-            > release-artifacts.sha256
+          files=(
+            LogicProMCP
+            LogicProMCP-macOS-universal.tar.gz
+            LogicProMCP-macOS-arm64.tar.gz
+            RELEASE-METADATA.json
+            SHA256SUMS.txt
+          )
+          # qualification-evidence/* exists only when the ADR-001 gate is enforced
+          # (repository variable ADR001_QUALIFICATION_ENFORCED == 'true'). Include it
+          # in the manifest only when present so a deferred-gate release still succeeds.
+          if [ -d qualification-evidence ]; then
+            files+=(
+              qualification-evidence/release-qualification-attestation.json
+              qualification-evidence/evidence-manifest.json
+              qualification-evidence/case-manifest.json
+              qualification-evidence/public-transcript.json
+              qualification-evidence/mutation-restore-compensation.json
+            )
+          fi
+          shasum -a 256 "${files[@]}" > release-artifacts.sha256
 
       - name: Upload verified release artifacts
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
@@ -251,16 +275,19 @@ jobs:
           name: verified-release-artifacts
 
       - name: Checkout pinned trusted verifier for publish
+        if: ${{ vars.ADR001_QUALIFICATION_ENFORCED == 'true' }}
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           ref: 67fec5fccf817f9978022f0ca262b80a789e2dce
           path: trusted-verifier-src
 
       - name: Build pinned trusted verifier for publish
+        if: ${{ vars.ADR001_QUALIFICATION_ENFORCED == 'true' }}
         working-directory: trusted-verifier-src
         run: swift build -c release --product trusted-verifier
 
       - name: Reverify downloaded release artifact
+        if: ${{ vars.ADR001_QUALIFICATION_ENFORCED == 'true' }}
         env:
           TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
         run: |
