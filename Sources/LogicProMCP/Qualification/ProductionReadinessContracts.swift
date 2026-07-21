@@ -544,7 +544,7 @@ enum ProductionReadinessContractEvaluator {
         if !missingSemantic.isEmpty {
             findings.append(.init(
                 id: .semanticCoverageIncomplete,
-                detail: "semantic validators or release-gated governed waivers missing for \(missingSemantic.count)/\(registered.count) operations (e.g. \(missingSemantic.prefix(5).joined(separator: ", ")))"
+                detail: "semantic coverage missing (no live qualification .passed and no governed release-visible waiver) for \(missingSemantic.count)/\(registered.count) operations (e.g. \(missingSemantic.prefix(5).joined(separator: ", ")))"
             ))
         }
 
