@@ -524,8 +524,13 @@ enum ProductionReadinessContractEvaluator {
                 detail: "governed waiver inventory has \(waiverIssues.count) validation issue(s)"
             ))
         }
+        // #409: a registered semantic-readback validator is inventory, not
+        // coverage. Only live qualification (a case with status .passed and
+        // verificationKind .semanticReadback, per PromotionGate) or a governed
+        // release-visible waiver credits an operation. This static repo-tree
+        // evaluator has no live .passed data (that matrix is #284), so an
+        // operation counts as missing unless a qualifying governed waiver covers it.
         let missingSemantic = registered.filter { operationID in
-            guard !semantic.contains(operationID) else { return false }
             return !governedWaivers.contains { waiver in
                 waiver.governsOperation(
                     caseID: "in-process/\(operationID)",
