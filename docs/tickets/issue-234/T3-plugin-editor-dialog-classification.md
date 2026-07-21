@@ -1,5 +1,10 @@
 # T3: Plugin-Editor Window ≠ Blocking Modal (Distinct Classification)
 
+> **Historical (superseded by #381):** the compare/link conjunct described below
+> was English-only and misclassified localized editors as blocking; #381 dropped
+> it and tightened the bypass conjunct to exact-field matching. See
+> `isPluginEditorWindow` in `AXLogicProElements.swift` for the current signature.
+
 **PRD Ref**: PRD-issue-234-mixer-strip-selection-12-3 > US-4 (AC-4.1~4.5), D4/D7
 **Priority**: P1 (High)
 **Size**: M (2-4h)

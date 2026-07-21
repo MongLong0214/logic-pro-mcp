@@ -559,32 +559,18 @@ enum AXLocalePolicy {
         rationale: "Locates a plugin-slot open/list control by label; read-only locator (structural fallback exists)."
     )
 
-    /// #234: the "Compare" checkbox in a Logic plugin-EDITOR window. Combined
-    /// with `pluginBypassControl` and the window's `kAXCloseButtonAttribute`, it
-    /// forms the conjunctive chrome signature that classifies a plugin editor as
-    /// NON-blocking (so unrelated ops proceed while it is open). English
-    /// canonical only: the Korean/localized "Compare" label is UNVERIFIED
-    /// (OQ-1 — English UI is the only live-confirmed locale), so `variants` stays
-    /// empty and unverified locales conservatively remain BLOCKING (fail-closed)
-    /// rather than risk excluding a real modal.
-    static let pluginWindowCompareControl = LabelSet(
-        canonical: "compare",
+    /// #405: the "Smart Controls" toggle in a Drummer track's docked Smart Controls
+    /// pane. Combined with an AXDialog subrole and an empty window title it forms
+    /// the `isSmartControlsWindow` signature that classifies that pane as
+    /// NON-blocking (it is tagged AXDialog but, unlike a plugin editor, carries no
+    /// close-button attribute, so the plugin-editor signature never matched it).
+    /// English canonical only: the localized "Smart Controls" label is UNVERIFIED
+    /// (OQ-1), so `variants` stays empty and non-EN panes conservatively remain
+    /// BLOCKING (fail-closed) rather than risk excluding a real modal.
+    static let pluginWindowSmartControlsControl = LabelSet(
+        canonical: "smart controls",
         variants: [],
-        rationale: "Locates a plugin-editor window's Compare checkbox for the non-blocking chrome signature; English canonical only (OQ-1: Korean/localized unverified → unverified locales stay blocking, fail-closed). Read-only classifier."
-    )
-
-    /// #234: the channel-strip "Link" checkbox in a Logic plugin-EDITOR window.
-    /// Present from the moment the editor first opens — UNLIKE the Compare
-    /// checkbox, which only appears once the plugin has preset/edit state to
-    /// compare (live 12.3 Gain evidence 2026-07-05, `axwhy234.out`). Combined with
-    /// the bypass checkbox + close-button attribute it forms the alternative
-    /// chrome branch (compare OR link) that recognizes a freshly-inserted editor.
-    /// English canonical only; Korean/localized UNVERIFIED (OQ-1) → unverified
-    /// locales conservatively stay BLOCKING (fail-closed).
-    static let pluginWindowLinkControl = LabelSet(
-        canonical: "link",
-        variants: [],
-        rationale: "Locates a plugin-editor window's channel-strip Link checkbox for the non-blocking chrome signature (present from first open, unlike Compare); English canonical only (OQ-1 fail-closed). Read-only classifier."
+        rationale: "Locates the Smart Controls toggle in a Drummer track's docked Smart Controls pane for the non-blocking classifier; English canonical only (OQ-1: localized label unverified → non-EN panes stay blocking, fail-closed). Read-only classifier."
     )
 
     /// Automation-mode labels that must NOT be read as a plugin display name.
