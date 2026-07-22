@@ -5,7 +5,7 @@ import Testing
 @Suite struct MIDINoteReadbackTests {
     @Test func incompleteSnapshotCannotReportExactMatch() {
         let note = makeNote(pitch: 60)
-        let observed = makeSnapshot(complete: false, partialReason: "virtualized rows", notes: [note])
+        let observed = makeSnapshot(complete: false, notes: [note])
 
         guard case .incompleteCannotVerify(let reason) = verifyRegion(
             observed: observed,
@@ -15,7 +15,7 @@ import Testing
             Issue.record("An incomplete scan must never report a full match")
             return
         }
-        #expect(reason == "virtualized rows")
+        #expect(reason == String(describing: PartialReason.timingUnproven))
     }
 
     @Test func missingIndependentProvenanceCannotReportExactMatch() {
@@ -127,12 +127,13 @@ import Testing
         })
     }
 
-    @Test func completeSnapshotDropsPartialReason() {
-        let complete = makeSnapshot(complete: true, partialReason: "must be discarded")
-        let incomplete = makeSnapshot(complete: false, partialReason: "last row unavailable")
+    @Test func completeSnapshotHasNoReasonIncompleteCarriesEnumReason() {
+        let complete = makeSnapshot(complete: true)
+        let incomplete = makeSnapshot(complete: false)
 
         #expect(complete.partialReason == nil)
-        #expect(incomplete.partialReason == "last row unavailable")
+        #expect(complete.noteCompleteness.partialReason == nil)
+        #expect(incomplete.noteCompleteness.partialReason == .timingUnproven)
     }
 
     @Test func featureFlagDefaultsToFalse() {
@@ -152,25 +153,21 @@ import Testing
 
     private func makeSnapshot(
         complete: Bool = true,
-        partialReason: String? = nil,
         provenance: MIDIReadbackProvenance = .eventListAX,
         ppq: Int = 480,
         notes: [MIDINoteEvent] = []
     ) -> MIDIRegionNoteSnapshot {
-        MIDIRegionNoteSnapshot(
-            regionReference: MIDIRegionReference(
-                targetRef: TargetReference(rawValue: "trk_test"),
-                regionIndex: 0
-            ),
-            projectEpoch: 1,
-            complete: complete,
-            partialReason: partialReason,
-            provenance: provenance,
-            ppq: ppq,
-            notes: notes,
-            tempoMap: [],
-            timeSignatures: []
+        let region = MIDIRegionReference(
+            targetRef: TargetReference(rawValue: "trk_test"),
+            regionIndex: 0
         )
+        return complete
+            ? .makeCompleteForTesting(
+                regionReference: region, projectEpoch: 1, ppq: ppq, notes: notes, provenance: provenance
+            )
+            : .makeIncompleteForTesting(
+                regionReference: region, projectEpoch: 1, ppq: ppq, provenance: provenance
+            )
     }
 
     private func makeNote(

@@ -45,19 +45,25 @@ struct TimeSignatureEvent: Codable, Equatable, Sendable {
 struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
     let regionReference: MIDIRegionReference
     let projectEpoch: UInt64
-    let complete: Bool
-    let partialReason: String?
+    /// Note-list completeness — the only dimension `verifyRegion` consumes. A
+    /// `.complete` verdict can be minted ONLY by `assessReadback` (see
+    /// MIDIReadbackAssessment.swift). Tempo/time-signature maps are left
+    /// unpopulated in a release build and are never treated as proven-empty; their own
+    /// dimensions gate their (future) consumers.
+    let noteCompleteness: CompletenessVerdict
     let provenance: MIDIReadbackProvenance
     let ppq: Int
     let notes: [MIDINoteEvent]
     let tempoMap: [TempoEvent]
     let timeSignatures: [TimeSignatureEvent]
 
+    var complete: Bool { noteCompleteness.isComplete }
+    var partialReason: String? { noteCompleteness.partialReason.map { String(describing: $0) } }
+
     init(
         regionReference: MIDIRegionReference,
         projectEpoch: UInt64,
-        complete: Bool,
-        partialReason: String?,
+        noteCompleteness: CompletenessVerdict,
         provenance: MIDIReadbackProvenance,
         ppq: Int,
         notes: [MIDINoteEvent],
@@ -66,8 +72,7 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
     ) {
         self.regionReference = regionReference
         self.projectEpoch = projectEpoch
-        self.complete = complete
-        self.partialReason = complete ? nil : partialReason
+        self.noteCompleteness = noteCompleteness
         self.provenance = provenance
         self.ppq = ppq
         self.notes = notes
@@ -75,13 +80,34 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
         self.timeSignatures = timeSignatures
     }
 
+    // Codable is display/wire only. A decoded snapshot is untrusted by
+    // construction: its completeness is forced to `.incomplete` so a rehydrated
+    // payload can never drive a State-A match. `CompletenessVerdict` has no
+    // Codable conformance, so completeness cannot be re-hydrated from the wire.
+    private enum CodingKeys: String, CodingKey {
+        case regionReference, projectEpoch, complete, partialReason
+        case provenance, ppq, notes, tempoMap, timeSignatures
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(regionReference, forKey: .regionReference)
+        try container.encode(projectEpoch, forKey: .projectEpoch)
+        try container.encode(complete, forKey: .complete)
+        try container.encodeIfPresent(partialReason, forKey: .partialReason)
+        try container.encode(provenance, forKey: .provenance)
+        try container.encode(ppq, forKey: .ppq)
+        try container.encode(notes, forKey: .notes)
+        try container.encode(tempoMap, forKey: .tempoMap)
+        try container.encode(timeSignatures, forKey: .timeSignatures)
+    }
+
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             regionReference: try values.decode(MIDIRegionReference.self, forKey: .regionReference),
             projectEpoch: try values.decode(UInt64.self, forKey: .projectEpoch),
-            complete: try values.decode(Bool.self, forKey: .complete),
-            partialReason: try values.decodeIfPresent(String.self, forKey: .partialReason),
+            noteCompleteness: .incomplete(.decodedNotReassessed),
             provenance: try values.decode(MIDIReadbackProvenance.self, forKey: .provenance),
             ppq: try values.decode(Int.self, forKey: .ppq),
             notes: try values.decode([MIDINoteEvent].self, forKey: .notes),
@@ -89,6 +115,51 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
             timeSignatures: try values.decode([TimeSignatureEvent].self, forKey: .timeSignatures)
         )
     }
+
+    #if QUALIFICATION_FAULT_SEAM
+    /// Test-only note-complete snapshot. Compiled solely under
+    /// `QUALIFICATION_FAULT_SEAM` (debug); a release binary has no path to a
+    /// `.complete` verdict. A test seam, not a security boundary.
+    static func makeCompleteForTesting(
+        regionReference: MIDIRegionReference,
+        projectEpoch: UInt64,
+        ppq: Int,
+        notes: [MIDINoteEvent],
+        tempoMap: [TempoEvent] = [],
+        timeSignatures: [TimeSignatureEvent] = [],
+        provenance: MIDIReadbackProvenance = .eventListAX
+    ) -> MIDIRegionNoteSnapshot {
+        MIDIRegionNoteSnapshot(
+            regionReference: regionReference,
+            projectEpoch: projectEpoch,
+            noteCompleteness: .complete(CompleteProof.makeForTesting()),
+            provenance: provenance,
+            ppq: ppq,
+            notes: notes,
+            tempoMap: tempoMap,
+            timeSignatures: timeSignatures
+        )
+    }
+
+    static func makeIncompleteForTesting(
+        regionReference: MIDIRegionReference,
+        projectEpoch: UInt64,
+        ppq: Int,
+        reason: PartialReason = .timingUnproven,
+        provenance: MIDIReadbackProvenance = .eventListAX
+    ) -> MIDIRegionNoteSnapshot {
+        MIDIRegionNoteSnapshot(
+            regionReference: regionReference,
+            projectEpoch: projectEpoch,
+            noteCompleteness: .incomplete(reason),
+            provenance: provenance,
+            ppq: ppq,
+            notes: [],
+            tempoMap: [],
+            timeSignatures: []
+        )
+    }
+    #endif
 }
 
 protocol MIDINoteReadbackProvider: Sendable {
