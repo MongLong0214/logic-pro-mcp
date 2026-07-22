@@ -454,6 +454,68 @@ struct AudioFeatureExtractionEngineTests {
         #expect(r.bands.isEmpty)
     }
 
+    @Test func deliveredDurationOverCapFailsClosedInLoop() throws {
+        let samples = streamMultiTone(frames: 200_000)
+        // Declared ~0.83 s (under the 1 s cap) but delivery is 200k frames ≈ 4.2 s — over the
+        // duration cap while well under a generous frame cap. The in-loop duration bound must
+        // stop it (models a low-sample-rate file where duration binds before frames).
+        let r = streamAnalyze([samples], declared: 40_000, chunkFrames: 64_000, deliver: 200_000, maxFrames: 10_000_000, maxDuration: 1.0)
+        #expect(!r.complete)
+        let reason = try #require(r.partialReason)
+        #expect(reason == "input_too_long")
+        #expect(r.bands.isEmpty)
+    }
+
+    @Test func passTwoOverDeliveryStopsBounded() throws {
+        let samples = streamMultiTone(frames: 300_000)
+        // Pass 1 delivers a consistent 100k; pass 2 lies and offers 300k. The pass-2 bound
+        // must stop as soon as it passes pass 1's count, not stream to EOF.
+        let feeder = ChunkFeeder(channels: [samples], deliverFrames: 100_000, pass2DeliverFrames: 300_000)
+        let r = AudioFeatureExtractionEngine.analyzeStreaming(
+            declaredFrameLength: 100_000, sampleRate: Self.fs48, channelCount: 1,
+            analysisRef: "p2", artifactFingerprint: "x", chunkFrames: 64_000,
+            reset: { feeder.reset() }, nextChunk: { try feeder.next($0) }
+        )
+        #expect(!r.complete)
+        let reason = try #require(r.partialReason)
+        #expect(reason == "decode_truncated")
+        #expect(feeder.deliveredByPass.count >= 2)
+        // Pass 2 stopped within one chunk of pass 1's count — NOT the full 300k over-delivery.
+        #expect(feeder.deliveredByPass[1] <= 100_000 + 64_000)
+    }
+
+    @Test func fileSizeCapBoundary() throws {
+        let url = try writeWAV("fsb.wav", sampleRate: Self.fs48, samples: sine(Self.toneHz))
+        let size = try #require(FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int)
+        var atCap = AudioAnalyzer.AnalysisPolicy.default
+        atCap.maximumInputFileSizeBytes = Int64(size)              // exactly at the cap → analyzes
+        let rAt = try AudioFeatureExtractionEngine.analyzeFile(path: url.path, analysisRef: "b", artifactFingerprint: "x", policy: atCap)
+        #expect(rAt.complete)
+        var over = AudioAnalyzer.AnalysisPolicy.default
+        over.maximumInputFileSizeBytes = Int64(size - 1)           // one byte under → fails closed
+        let rOver = try AudioFeatureExtractionEngine.analyzeFile(path: url.path, analysisRef: "b", artifactFingerprint: "x", policy: over)
+        #expect(!rOver.complete)
+        #expect(try #require(rOver.partialReason) == "input_too_large")
+    }
+
+    @Test func declaredFramesCapBoundary() throws {
+        let samples = streamMultiTone(frames: 100_000)
+        let rAt = streamAnalyze([samples], declared: 100_000, chunkFrames: 64_000, maxFrames: 100_000, maxDuration: 3_600)
+        #expect(rAt.complete)                                      // declared == frame cap → analyzes
+        let rOver = streamAnalyze([samples], declared: 100_001, chunkFrames: 64_000, deliver: 100_000, maxFrames: 100_000, maxDuration: 3_600)
+        #expect(!rOver.complete)                                   // one frame over → fails closed
+        #expect(try #require(rOver.partialReason) == "input_too_long")
+    }
+
+    @Test func declaredDurationCapBoundary() throws {
+        let samples = streamMultiTone(frames: 48_001)
+        let rAt = streamAnalyze([samples], declared: 48_000, chunkFrames: 64_000, deliver: 48_000, maxFrames: 10_000_000, maxDuration: 1.0)
+        #expect(rAt.complete)                                      // 48000/48000 == 1.0 s → analyzes
+        let rOver = streamAnalyze([samples], declared: 48_001, chunkFrames: 64_000, deliver: 48_001, maxFrames: 10_000_000, maxDuration: 1.0)
+        #expect(!rOver.complete)                                   // one frame over 1 s → fails closed
+        #expect(try #require(rOver.partialReason) == "input_too_long")
+    }
+
     // MARK: - TOCTOU identity binding (blocker 2)
 
     @Test func pathIdentityMismatchFailsClosed() throws {
@@ -516,24 +578,36 @@ struct AudioFeatureExtractionEngineTests {
 private final class ChunkFeeder {
     private let channels: [[Double]]
     private let deliverFrames: Int
+    private let pass2DeliverFrames: Int?
     private let throwAfter: Int?
     private var pos = 0
+    private var passIndex = -1
+    // Frames actually delivered per streaming pass (index 0 = pass 1). Lets a test prove the
+    // pass-2 loop stops bounded instead of streaming an over-delivering source to EOF.
+    private(set) var deliveredByPass: [Int] = []
 
     struct ReadFault: Error {}
 
-    init(channels: [[Double]], deliverFrames: Int, throwAfter: Int?) {
+    init(channels: [[Double]], deliverFrames: Int, pass2DeliverFrames: Int? = nil, throwAfter: Int? = nil) {
         self.channels = channels
         self.deliverFrames = deliverFrames
+        self.pass2DeliverFrames = pass2DeliverFrames
         self.throwAfter = throwAfter
     }
 
-    func reset() { pos = 0 }
+    func reset() {
+        pos = 0
+        passIndex += 1
+        deliveredByPass.append(0)
+    }
 
     func next(_ maxFrames: Int) throws -> [[Double]] {
         if let throwAfter, pos >= throwAfter { throw ReadFault() }
-        let end = min(deliverFrames, pos + max(1, maxFrames))
+        let cap = (passIndex >= 1 ? (pass2DeliverFrames ?? deliverFrames) : deliverFrames)
+        let end = min(min(cap, channels[0].count), pos + max(1, maxFrames))
         if end <= pos { return channels.map { _ in [Double]() } }
         let block = channels.map { Array($0[pos..<end]) }
+        deliveredByPass[passIndex] += end - pos
         pos = end
         return block
     }

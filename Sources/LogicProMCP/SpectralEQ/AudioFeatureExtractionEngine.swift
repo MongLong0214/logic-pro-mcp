@@ -436,8 +436,13 @@ enum AudioFeatureExtractionEngine {
                 }
                 decoded += Int64(frames)
                 // Defense in depth: a lying header (declared under the cap) must not stream
-                // unbounded — stop the moment delivered frames exceed the cap.
+                // unbounded — stop the moment delivered frames, or their duration, exceed the
+                // cap. Duration binds first at low sample rates (frame cap is far higher).
                 if let maxFrames = maxDecodedFrames, maxFrames > 0, decoded > maxFrames {
+                    return failClosed("input_too_long", frames: decoded)
+                }
+                if let maxDuration = maxDurationSeconds, maxDuration > 0,
+                   Double(decoded) / sampleRate > maxDuration {
                     return failClosed("input_too_long", frames: decoded)
                 }
             }
@@ -480,6 +485,10 @@ enum AudioFeatureExtractionEngine {
                     welchLo[ch].ingest(col[...])
                 }
                 decoded2 += Int64(frames)
+                // Bound pass 2 by pass 1's authoritative count so a source that lies
+                // differently on the second read cannot stream unbounded before the
+                // post-loop consistency check.
+                if decoded2 > decoded { return failClosed("decode_truncated", frames: decoded2) }
             }
         } catch {
             return failClosed("decode_truncated", frames: decoded2)
