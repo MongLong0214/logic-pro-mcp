@@ -124,4 +124,42 @@ struct FeatureFlagEnvironmentTests {
             }
         }
     }
+
+    // #425 (Option B): `LOGIC_MCP_INSERT_COORD_FREE` is DEFAULT ON — coordinate-free
+    // plugin-insert LEAF selection is the shipped default, the variable now a
+    // kill-switch read with `!= "0"`. Same kill-switch shape as ADR-002/005 above;
+    // bare / negated `#expect` only (`== true/false` is DEAD under this toolchain
+    // and would pass against the pre-promotion `== "1"` source these guard against).
+    @Test("(a) #425 no env and no override reads as ON — the shipped default")
+    func insertCoordFreeDefaultsToOn() {
+        Self.withEnv("LOGIC_MCP_INSERT_COORD_FREE", nil) {
+            #expect(FeatureFlags.insertCoordFree)
+        }
+    }
+
+    @Test("(b) #425 the =0 kill-switch restores the legacy coordinate leaf click")
+    func insertCoordFreeKillSwitchZeroDisables() {
+        Self.withEnv("LOGIC_MCP_INSERT_COORD_FREE", "0") {
+            #expect(!FeatureFlags.insertCoordFree)
+        }
+    }
+
+    @Test("(c) #425 the pre-promotion =1 opt-in spelling still reads as ON")
+    func insertCoordFreeExplicitOneStaysOn() {
+        Self.withEnv("LOGIC_MCP_INSERT_COORD_FREE", "1") {
+            #expect(FeatureFlags.insertCoordFree)
+        }
+    }
+
+    @Test("#425 kill-switch matches \"0\" exactly — =false does NOT disable")
+    func insertCoordFreeKillSwitchMatchesZeroExactly() {
+        for notDisabled in ["false", "off", "no", "", " 0", "00"] {
+            Self.withEnv("LOGIC_MCP_INSERT_COORD_FREE", notDisabled) {
+                #expect(
+                    FeatureFlags.insertCoordFree,
+                    "LOGIC_MCP_INSERT_COORD_FREE=\(notDisabled) must NOT read as disabled — only \"0\" is the kill-switch"
+                )
+            }
+        }
+    }
 }

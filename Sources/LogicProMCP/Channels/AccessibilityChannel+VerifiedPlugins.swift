@@ -1889,6 +1889,11 @@ extension AccessibilityChannel {
         }
         trace["target_slot_found"] = true
 
+        // #425 note: the empty-slot picker is opened by a coordinate click. Coord-free
+        // alternatives were live-probed and rejected: AXPress on the slot element is a
+        // no-op (picker never opens), and AXShowMenu opens the picker into an NSMenu
+        // tracking loop that WEDGES Logic (AX blocks). The slot-open therefore stays a
+        // coordinate click (governed waiver); only the leaf SELECTION is coord-free.
         guard clickElementCenter(targetSlot.element, runtime: runtime.ax) else {
             return (.transientSetupFailure(stage: "target_slot_click_failed"), trace)
         }
@@ -1923,6 +1928,29 @@ extension AccessibilityChannel {
         trace["winning_strategy"] = pluginClick.strategy
         trace["winning_menu_path"] = pluginClick.path.joined(separator: " > ")
         trace["plugin_selection_id"] = pluginID
+        // #425: record which leaf-selection path ACTUALLY executed so the receipt
+        // self-attests coordinate-free (AXPress) vs the legacy coordinate click.
+        // Sourced from the winning strategy via `leafSelectCoordFree(for:)`, not the
+        // raw flag, so a recursive (coordinate-only) win reports false even when the
+        // flag is on — the discriminator can never be falsely pinned to the flag.
+        trace["leaf_select_coord_free"] = leafSelectCoordFree(for: pluginClick)
+
+        #if DEBUG
+        // QA/test-only seam (#425): after a winning leaf select, deterministically
+        // take the postCommitTimeout branch — set via the env var
+        // LOGIC_MCP_FORCE_POSTCOMMIT_TIMEOUT=1 (live server over stdio) or the
+        // @TaskLocal (unit tests). It short-circuits the mount readback so a
+        // controlled coord-free/coordinate win exercises the honest
+        // `commit_strategy` end to end. It ONLY forces the fail-closed State-C
+        // timeout envelope — it NEVER fabricates a State-A success. Stripped in
+        // release (`#if DEBUG`).
+        if forcePostCommitTimeoutForTestsActive {
+            return (
+                .postCommitTimeout(strategy: postCommitTimeoutStrategy(coordFree: pluginClick.coordFree)),
+                trace
+            )
+        }
+        #endif
 
         let poll = await pollStripInventoryUntil(
             track: track, runtime: runtime, timeoutMs: 2_000
@@ -1965,12 +1993,49 @@ extension AccessibilityChannel {
         }
 
         if poll.satisfied == nil {
-            return (.postCommitTimeout(strategy: "slot_popup_physical_menu_click"), trace)
+            // #425: report the actuation that ACTUALLY selected the leaf, derived
+            // from the winning strategy — a coord-free (AXPress) win must not
+            // misreport a physical/coordinate menu commit.
+            return (
+                .postCommitTimeout(strategy: postCommitTimeoutStrategy(coordFree: pluginClick.coordFree)),
+                trace
+            )
         }
         return (.mountMismatch(observedName: postInventory[insert]?.name), trace)
     }
 
     // MARK: - insert_verified live driver helpers
+
+    /// The honest commit-strategy label for a post-commit timeout, derived from
+    /// the winning actuation (coord-free AXPress vs the legacy coordinate menu
+    /// click). Single source of truth so the live timeout path and the DEBUG
+    /// force-timeout QA seam can never report different strategies.
+    static func postCommitTimeoutStrategy(coordFree: Bool) -> String {
+        coordFree ? "slot_popup_axpress_menu_select" : "slot_popup_physical_menu_click"
+    }
+
+    #if DEBUG
+    /// QA/test seam (#425): when set, `liveExactSlotPopupInsert` short-circuits to
+    /// the postCommitTimeout branch after a winning leaf select, so a controlled
+    /// insert deterministically exercises the honest `commit_strategy` without a
+    /// real mount. It only forces the fail-closed State-C timeout envelope — it
+    /// never fabricates a State-A success. Read from the @TaskLocal (unit tests)
+    /// or the LOGIC_MCP_FORCE_POSTCOMMIT_TIMEOUT env var (live server driven over
+    /// stdio). Stripped entirely in release.
+    @TaskLocal static var forcePostCommitTimeoutForTests: Bool?
+
+    static var forcePostCommitTimeoutForTestsActive: Bool {
+        if let forcePostCommitTimeoutForTests { return forcePostCommitTimeoutForTests }
+        return ProcessInfo.processInfo.environment["LOGIC_MCP_FORCE_POSTCOMMIT_TIMEOUT"] == "1"
+    }
+
+    static func withForcePostCommitTimeoutForTests<Result>(
+        _ value: Bool,
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        try await $forcePostCommitTimeoutForTests.withValue(value, operation: operation)
+    }
+    #endif
 
     /// Raise the window that contains the visible mixer (the R12 key step — the
     /// Mix menu item is disabled until the mixer window is frontmost). Falls back
@@ -2277,28 +2342,54 @@ extension AccessibilityChannel {
         return popupExactLeafPaths(displayName: displayName, rootMenu: rootMenu, runtime: runtime).first
     }
 
-    private struct SlotPopupPluginClick: Sendable {
+    /// `internal` (was `private`) so the coord-free discriminator is unit-testable
+    /// without driving the CGEvent-bound live insert flow.
+    struct SlotPopupPluginClick: Sendable {
         let strategy: String
         let path: [String]
         let strategies: [String]
+        /// The coord-free value the WINNING strategy actually used. Direct/search
+        /// carry `FeatureFlags.insertCoordFree`; the recursive category-hover
+        /// fallback is coordinate-only and always carries `false`. The caller
+        /// records THIS (not the raw flag) as `trace["leaf_select_coord_free"]`, so
+        /// a recursive win truthfully reports `false` even when the flag is on.
+        let coordFree: Bool
     }
 
-    private static func clickPluginInAnchoredSlotPopup(
+    /// The single source of truth for the `leaf_select_coord_free` discriminator:
+    /// the coord-free value the WINNING strategy actually used, read off the result
+    /// — NOT the raw `FeatureFlags.insertCoordFree` flag. A recursive
+    /// (coordinate-only) win carries `false` here even when the flag is on, so the
+    /// receipt can never be falsely pinned to the flag. Extracted (and `internal`)
+    /// so the flag-vs-path divergence is unit-testable without the CGEvent-bound
+    /// live insert flow.
+    static func leafSelectCoordFree(for click: SlotPopupPluginClick) -> Bool {
+        click.coordFree
+    }
+
+    /// `internal` (was `private`) so the coord-free discriminator is unit-testable
+    /// without driving the CGEvent-bound live insert flow.
+    static func clickPluginInAnchoredSlotPopup(
         pluginID: String,
         displayName: String,
         rootMenu: AXUIElement,
         runtime: AXHelpers.Runtime
     ) async -> SlotPopupPluginClick? {
         var strategies: [String] = []
+        // Direct/search honor the #425 flag; the recursive fallback below is
+        // coordinate-only. Captured once so the value passed to the leaf click and
+        // the value recorded on the winning result cannot diverge.
+        let coordFree = FeatureFlags.insertCoordFree
 
         strategies.append("slot_popup_direct_exact_leaf")
         if let item = directExactPopupMenuItem(displayName: displayName, in: rootMenu, runtime: runtime),
            let label = popupMenuItemLabel(item, runtime: runtime),
-           await clickPopupPluginLeaf(item, runtime: runtime) {
+           await clickPopupPluginLeaf(item, runtime: runtime, coordFree: coordFree) {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_direct_exact_leaf",
                 path: [label],
-                strategies: strategies
+                strategies: strategies,
+                coordFree: coordFree
             )
         }
 
@@ -2306,11 +2397,12 @@ extension AccessibilityChannel {
         if await filterSlotPopupSearchField(displayName: displayName, rootMenu: rootMenu, runtime: runtime),
            let item = directExactPopupMenuItem(displayName: displayName, in: rootMenu, runtime: runtime),
            let label = popupMenuItemLabel(item, runtime: runtime),
-           await clickPopupPluginLeaf(item, runtime: runtime) {
+           await clickPopupPluginLeaf(item, runtime: runtime, coordFree: coordFree) {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_search_exact_leaf",
                 path: [label],
-                strategies: strategies
+                strategies: strategies,
+                coordFree: coordFree
             )
         }
 
@@ -2325,7 +2417,8 @@ extension AccessibilityChannel {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_recursive_exact_leaf",
                 path: result,
-                strategies: strategies
+                strategies: strategies,
+                coordFree: false
             )
         }
 
@@ -2371,7 +2464,7 @@ extension AccessibilityChannel {
 
         if let direct = directExactPopupMenuItem(displayName: displayName, in: menu, runtime: runtime),
            let label = popupMenuItemLabel(direct, runtime: runtime),
-           await clickPopupPluginLeaf(direct, runtime: runtime) {
+           await clickPopupPluginLeaf(direct, runtime: runtime, coordFree: false) {
             return path + [label]
         }
 
@@ -2400,10 +2493,23 @@ extension AccessibilityChannel {
         return nil
     }
 
-    private static func clickPopupPluginLeaf(
+    /// Select the matched plugin leaf. `coordFree == true` (the #425 default) uses
+    /// AXPress over the AX-children format submenu (`pressPopupPluginLeaf`, no
+    /// coordinates); `coordFree == false` uses the legacy coordinate path
+    /// (moveElementCenter/clickElementCenter). The mode is a PARAMETER rather than a
+    /// direct `FeatureFlags.insertCoordFree` read so the recursive category-hover
+    /// fallback can force the coordinate path (it always passes `coordFree: false`),
+    /// while direct/search honor the flag. `internal` (was `private`) so the
+    /// coord-free-vs-coordinate contract is unit-testable without the CGEvent-bound
+    /// live insert flow.
+    static func clickPopupPluginLeaf(
         _ item: AXUIElement,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        coordFree: Bool
     ) async -> Bool {
+        if coordFree {
+            return await pressPopupPluginLeaf(item, runtime: runtime)
+        }
         guard moveElementCenter(item, runtime: runtime) else { return false }
         try? await Task.sleep(for: .milliseconds(120))
         if let submenu = visibleSubmenu(of: item, runtime: runtime),
@@ -2411,6 +2517,53 @@ extension AccessibilityChannel {
             return clickElementCenter(leaf, runtime: runtime)
         }
         return clickElementCenter(item, runtime: runtime)
+    }
+
+    /// #425: coordinate-free leaf selection. Reads the plugin's format submenu (if
+    /// any) as an AX child — populated without a hover, per `popupExactLeafPaths` —
+    /// and AXPresses the preferred-format leaf; otherwise AXPresses the item itself.
+    /// If a format submenu exists but AXPress on its leaf did not take, fall through
+    /// to pressing the item (which on many builds opens the submenu / selects the
+    /// default format). Fail-closed: no coordinate fallback.
+    private static func pressPopupPluginLeaf(
+        _ item: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) async -> Bool {
+        if let submenu = axChildMenu(of: item, runtime: runtime),
+           let leaf = preferredFormatLeafByLabel(in: submenu, runtime: runtime),
+           pressElement(leaf, runtime: runtime) {
+            return true
+        }
+        return pressElement(item, runtime: runtime)
+    }
+
+    /// A submenu exposed as an AX child of `item`, regardless of visual visibility.
+    private static func axChildMenu(
+        of item: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        AXHelpers.getChildren(item, runtime: runtime).first {
+            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
+        }
+    }
+
+    /// `preferredFormatLeaf` without the on-screen-position requirement, so it works
+    /// on a submenu that has not been visually revealed (AX children only).
+    private static func preferredFormatLeafByLabel(
+        in submenu: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        let items = AXHelpers.getChildren(submenu, runtime: runtime).filter {
+            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuItemRole as String)
+        }
+        for labels in AXLocalePolicy.pluginFormatLeafPriority {
+            if let match = items.first(where: {
+                AXLocalePolicy.elementMatches($0, labels, runtime: runtime)
+            }) {
+                return match
+            }
+        }
+        return items.first
     }
 
     private static func popupExactLeafPaths(
@@ -2523,8 +2676,28 @@ extension AccessibilityChannel {
         return items.first
     }
 
+    #if DEBUG
+    /// Test seam (coord-free #425 durability): when set, the coordinate hover/click
+    /// primitives below return this value INSTEAD of computing an element centre and
+    /// posting a real CGEvent. It lets a hermetic test drive the coordinate-only
+    /// recursive-win path — proving the discriminator reports `coordFree == false`
+    /// even with the flag on — without moving the physical mouse. Never compiled
+    /// into release; production always posts the real CGEvent.
+    @TaskLocal static var forceCoordinateActuationForTests: Bool?
+
+    static func withForceCoordinateActuationForTests<Result>(
+        _ value: Bool,
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        try await $forceCoordinateActuationForTests.withValue(value, operation: operation)
+    }
+    #endif
+
     @discardableResult
     private static func moveElementCenter(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
+        #if DEBUG
+        if let forceCoordinateActuationForTests { return forceCoordinateActuationForTests }
+        #endif
         guard let center = elementCenter(element, runtime: runtime) else { return false }
         let source = CGEventSource(stateID: .combinedSessionState)
         guard let move = CGEvent(
@@ -2539,6 +2712,9 @@ extension AccessibilityChannel {
 
     @discardableResult
     private static func clickElementCenter(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
+        #if DEBUG
+        if let forceCoordinateActuationForTests { return forceCoordinateActuationForTests }
+        #endif
         guard let center = elementCenter(element, runtime: runtime) else { return false }
         let source = CGEventSource(stateID: .combinedSessionState)
         if let down = CGEvent(mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: center, mouseButton: .left),
