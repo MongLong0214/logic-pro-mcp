@@ -1935,6 +1935,23 @@ extension AccessibilityChannel {
         // flag is on — the discriminator can never be falsely pinned to the flag.
         trace["leaf_select_coord_free"] = leafSelectCoordFree(for: pluginClick)
 
+        #if DEBUG
+        // QA/test-only seam (#425): after a winning leaf select, deterministically
+        // take the postCommitTimeout branch — set via the env var
+        // LOGIC_MCP_FORCE_POSTCOMMIT_TIMEOUT=1 (live server over stdio) or the
+        // @TaskLocal (unit tests). It short-circuits the mount readback so a
+        // controlled coord-free/coordinate win exercises the honest
+        // `commit_strategy` end to end. It ONLY forces the fail-closed State-C
+        // timeout envelope — it NEVER fabricates a State-A success. Stripped in
+        // release (`#if DEBUG`).
+        if forcePostCommitTimeoutForTestsActive {
+            return (
+                .postCommitTimeout(strategy: postCommitTimeoutStrategy(coordFree: pluginClick.coordFree)),
+                trace
+            )
+        }
+        #endif
+
         let poll = await pollStripInventoryUntil(
             track: track, runtime: runtime, timeoutMs: 2_000
         ) { inv in
@@ -1979,15 +1996,46 @@ extension AccessibilityChannel {
             // #425: report the actuation that ACTUALLY selected the leaf, derived
             // from the winning strategy — a coord-free (AXPress) win must not
             // misreport a physical/coordinate menu commit.
-            let commitStrategy = pluginClick.coordFree
-                ? "slot_popup_axpress_menu_select"
-                : "slot_popup_physical_menu_click"
-            return (.postCommitTimeout(strategy: commitStrategy), trace)
+            return (
+                .postCommitTimeout(strategy: postCommitTimeoutStrategy(coordFree: pluginClick.coordFree)),
+                trace
+            )
         }
         return (.mountMismatch(observedName: postInventory[insert]?.name), trace)
     }
 
     // MARK: - insert_verified live driver helpers
+
+    /// The honest commit-strategy label for a post-commit timeout, derived from
+    /// the winning actuation (coord-free AXPress vs the legacy coordinate menu
+    /// click). Single source of truth so the live timeout path and the DEBUG
+    /// force-timeout QA seam can never report different strategies.
+    static func postCommitTimeoutStrategy(coordFree: Bool) -> String {
+        coordFree ? "slot_popup_axpress_menu_select" : "slot_popup_physical_menu_click"
+    }
+
+    #if DEBUG
+    /// QA/test seam (#425): when set, `liveExactSlotPopupInsert` short-circuits to
+    /// the postCommitTimeout branch after a winning leaf select, so a controlled
+    /// insert deterministically exercises the honest `commit_strategy` without a
+    /// real mount. It only forces the fail-closed State-C timeout envelope — it
+    /// never fabricates a State-A success. Read from the @TaskLocal (unit tests)
+    /// or the LOGIC_MCP_FORCE_POSTCOMMIT_TIMEOUT env var (live server driven over
+    /// stdio). Stripped entirely in release.
+    @TaskLocal static var forcePostCommitTimeoutForTests: Bool?
+
+    static var forcePostCommitTimeoutForTestsActive: Bool {
+        if let forcePostCommitTimeoutForTests { return forcePostCommitTimeoutForTests }
+        return ProcessInfo.processInfo.environment["LOGIC_MCP_FORCE_POSTCOMMIT_TIMEOUT"] == "1"
+    }
+
+    static func withForcePostCommitTimeoutForTests<Result>(
+        _ value: Bool,
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        try await $forcePostCommitTimeoutForTests.withValue(value, operation: operation)
+    }
+    #endif
 
     /// Raise the window that contains the visible mixer (the R12 key step — the
     /// Mix menu item is disabled until the mixer window is frontmost). Falls back

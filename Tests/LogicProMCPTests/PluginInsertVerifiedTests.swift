@@ -684,16 +684,17 @@ private func insertParams(
 // The four assertions below pin the contract for promoting the leaf SELECTION
 // to coordinate-free-by-default (kill-switch: insertCoordFree).
 // They exercise the real leaf-select seam (`clickPopupPluginLeaf` /
-// `clickPluginInAnchoredSlotPopup`) directly rather than through
-// `defaultInsertVerified`, because the insert-entry tests above inject a fake
-// driver that REPLACES the entire live path (so they never reach leaf-select),
-// and the full `liveExactSlotPopupInsert` flow is CGEvent-bound (the slot-open
-// at ~L1897 requires a real coordinate click). The coordinate leaf primitives
-// (moveElementCenter/clickElementCenter) short-circuit to `false` when an
-// element has no on-screen geometry, BEFORE posting any CGEvent, so these
-// hermetic tests never move the physical mouse. `clickPopupPluginLeaf` /
-// `clickPluginInAnchoredSlotPopup` / `SlotPopupPluginClick` were relaxed from
-// `private` to `internal` solely so this contract is unit-testable.
+// `clickPluginInAnchoredSlotPopup`) directly — a focused unit — because the
+// insert-entry tests above inject a fake driver that REPLACES the entire live
+// path (so they never reach leaf-select). The full `liveExactSlotPopupInsert`
+// flow (including its governed slot-open coordinate click) is driven end to end
+// by the RESPONSE-LEVEL tests further below via the DEBUG
+// `forceCoordinateActuationForTests` seam, so no CGEvent / physical mouse is
+// issued there either. In these focused tests the coordinate leaf primitives
+// (moveElementCenter/clickElementCenter) simply short-circuit to `false` when an
+// element has no on-screen geometry, before posting any CGEvent.
+// `clickPopupPluginLeaf` / `clickPluginInAnchoredSlotPopup` / `SlotPopupPluginClick`
+// were relaxed from `private` to `internal` solely so this contract is testable.
 
 /// Records which elements received a `kAXPress` when the default action-
 /// recording is bypassed by an injected `performActionHandler` (contract C).
@@ -767,12 +768,11 @@ private func addPluginItemWithFormatLeaf(
 // Contracts B & D: coordFree:false takes the COORDINATE path — never AXPress.
 // This is the exact mode the recursive category-hover fallback forces (it always
 // passes coordFree:false), so it also covers the "recursive is coordinate-only"
-// half of contract D. Coverage gap (noted honestly): a WINNING recursive path
-// cannot be produced hermetically — the recursive win requires the coordinate
-// leaf click to succeed, which needs real on-screen geometry and would post a
-// CGEvent (physical mouse move). So the recursive-win trace value (coordFree ==
-// false while the flag is ON) is verified structurally (recursive call site +
-// SlotPopupPluginClick(coordFree: false)) rather than behaviorally.
+// half of contract D at the helper level. A WINNING recursive path is exercised
+// end to end by the response-level
+// `test425ResponseTraceCoordFreeFalseOnRecursiveWinUnderFlagOn` (via the DEBUG
+// coordinate-actuation seam), which asserts the assembled response reports
+// coordFree == false even with the flag ON.
 @Test func test425ContractBD_coordFreeFalseUsesCoordinateNeverAXPress() async {
     let b = FakeAXRuntimeBuilder()
     // Deliberately NO kAXPosition/kAXSize: the coordinate primitives return false
@@ -882,7 +882,10 @@ private struct SlotPopupInsertFixture {
 /// menu holding the exact "Gain" leaf. `refuseLeafAXPress` makes AXPress on the
 /// leaf fail (forcing direct/search to fall through to the recursive coordinate
 /// path); track-header AXPress stays allowed so track selection still verifies.
-private func makeSlotPopupInsertFixture(refuseLeafAXPress: Bool) -> SlotPopupInsertFixture {
+private func makeSlotPopupInsertFixture(
+    refuseLeafAXPress: Bool,
+    mountGainOnLeafAXPress: Bool = false
+) -> SlotPopupInsertFixture {
     let b = FakeAXRuntimeBuilder()
     let app = b.element(9000)
     let window = b.element(9001)
@@ -948,7 +951,26 @@ private func makeSlotPopupInsertFixture(refuseLeafAXPress: Bool) -> SlotPopupIns
         performActionHandler: { element, action in
             if action == pressAction {
                 presses.record(b.elementID(element))
-                if refuseLeafAXPress && b.elementID(element) == leafKey { return false }
+                if b.elementID(element) == leafKey {
+                    if refuseLeafAXPress { return false }
+                    if mountGainOnLeafAXPress {
+                        // Model Logic mounting the plugin at the empty slot on the
+                        // leaf AXPress: swap the empty-button slot to an occupied
+                        // "Gain" group so a NON-seamed run reads back State A. This
+                        // lets the force-timeout seam be mutation-proved (seam OFF →
+                        // State A, seam ON → forced State-C timeout).
+                        b.setAttribute(slot, kAXRoleAttribute as String, kAXGroupRole as String)
+                        b.setAttribute(slot, kAXDescriptionAttribute as String, "Gain")
+                        let bypass = b.element(9010)
+                        let open = b.element(9011)
+                        b.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+                        b.setAttribute(bypass, kAXDescriptionAttribute as String, "바이패스")
+                        b.setAttribute(bypass, kAXValueAttribute as String, 0)
+                        b.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
+                        b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
+                        b.setChildren(slot, [bypass, open])
+                    }
+                }
             }
             return true
         }
@@ -1035,4 +1057,46 @@ private func runRealInsert(runtime: AXLogicProElements.Runtime) async -> [String
     let trace = try #require(obj["select_trace"] as? [String: Any])
     let coordFree = try #require(trace["leaf_select_coord_free"] as? Bool)
     #expect(coordFree)
+}
+
+// The DEBUG force-postcommit-timeout QA seam (LOGIC_MCP_FORCE_POSTCOMMIT_TIMEOUT
+// / @TaskLocal) deterministically routes a WINNING insert to the honest
+// postCommitTimeout envelope, reporting the commit_strategy of the actual
+// actuation. Fail-closed: State-C timeout, NEVER a false State-A verified mount —
+// proved by mounting Gain on the leaf press (so WITHOUT the seam this fixture
+// would read back State A; disabling the seam turns the State-C assertion RED).
+@Test func test425ForcePostCommitTimeoutSeamIsHonestAndFailsClosed() async throws {
+    // Coord-free (AXPress) win under flag ON; the fixture MOUNTS Gain on the leaf
+    // press, so a non-seamed run would reach State A. The seam forces the honest
+    // AXPress-commit timeout instead.
+    let axFixture = makeSlotPopupInsertFixture(refuseLeafAXPress: false, mountGainOnLeafAXPress: true)
+    let axObj = await FeatureFlags.withInsertCoordFree(true) {
+        await AccessibilityChannel.withForceCoordinateActuationForTests(true) {
+            await AccessibilityChannel.withForcePostCommitTimeoutForTests(true) {
+                await runRealInsert(runtime: axFixture.runtime)
+            }
+        }
+    }
+    let axState = try #require(axObj["state"] as? String)
+    #expect(axState == "C")
+    let axError = try #require(axObj["error"] as? String)
+    #expect(axError == "operation_timeout")
+    let axVerified = try #require(axObj["verified"] as? Bool)
+    #expect(!axVerified)
+    let axCommit = try #require(axObj["commit_strategy"] as? String)
+    #expect(axCommit == "slot_popup_axpress_menu_select")
+
+    // Coordinate win under flag OFF + seam → the physical commit strategy.
+    let coordFixture = makeSlotPopupInsertFixture(refuseLeafAXPress: false)
+    let coordObj = await FeatureFlags.withInsertCoordFree(false) {
+        await AccessibilityChannel.withForceCoordinateActuationForTests(true) {
+            await AccessibilityChannel.withForcePostCommitTimeoutForTests(true) {
+                await runRealInsert(runtime: coordFixture.runtime)
+            }
+        }
+    }
+    let coordState = try #require(coordObj["state"] as? String)
+    #expect(coordState == "C")
+    let coordCommit = try #require(coordObj["commit_strategy"] as? String)
+    #expect(coordCommit == "slot_popup_physical_menu_click")
 }

@@ -95,8 +95,10 @@ enum FeatureFlags: Sendable {
     /// must mean ON. Only the exact string "0" rolls back to the legacy coordinate
     /// leaf click. Slot-open and the recursive category-hover fallback stay
     /// coordinate (governed waiver): AXPress on the empty slot is a no-op and
-    /// AXShowMenu wedges Logic, and the recursive path is unreachable for the
-    /// Release-1 plugins — see `clickPopupPluginLeaf` / `pressPopupPluginLeaf`.
+    /// AXShowMenu wedges Logic; the recursive path is a REACHABLE coordinate-only
+    /// fallback (tried after direct+search) that is unreachable IN PRACTICE for the
+    /// Release-1 plugins (Gain/Channel EQ/Compressor, always reached by
+    /// direct/search) — see `clickPopupPluginLeaf` / `pressPopupPluginLeaf`.
     static var insertCoordFree: Bool {
         #if DEBUG
         if let insertCoordFreeOverride { return insertCoordFreeOverride }
