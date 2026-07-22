@@ -12,6 +12,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
+## [3.13.0] — 2026-07-22
+
+Small follow-on release: the coordinate-free actuation campaign now covers plugin-insert leaf selection, the project-audit resource agrees with the audit tool on blocking modals, and the qualification-oracle program ([#373](https://github.com/MongLong0214/logic-pro-mcp/issues/373)) reaches full mutating-surface inventory alongside a coverage-crediting honesty fix. No public tool/resource/template surface change (10 tools / 18 resources / 12 templates unchanged).
+
+### Changed — coordinate-free actuation
+
+- **`logic_plugins.insert_verified` leaf selection is coordinate-free by default.** The direct/search leaf-selection path now presses the target plugin's entry in the AX-children format submenu (`AXPress`) instead of a synthetic coordinate click; `LOGIC_MCP_INSERT_COORD_FREE=0` is the kill-switch back to the coordinate path. The recursive category-hover fallback stays coordinate-only by governed waiver — reachable in principle but unexercised in practice for the three supported plugins — and the response's `select_trace.leaf_select_coord_free` is sourced from the winning strategy rather than the raw flag, so a recursive win still honestly reports `false` even with the flag on. Slot-open remains a coordinate click (AXPress was live-probed and rejected: it either no-ops or opens an `AXShowMenu` tracking loop that wedges Logic). A DEBUG-only test seam deterministically exercises the honest `commit_strategy` on a forced post-commit timeout; it is compiled out of release builds. ([#425](https://github.com/MongLong0214/logic-pro-mcp/issues/425))
+
+### Fixed
+
+- **`logic://project/audit` now agrees with the `logic_project audit` tool on blocking modals.** The resource rendered the same `AuditReport` through the shared `buildAudit(cache:)` builder but without the live blocking-dialog signal the tool already used, so it kept reporting `export_readiness: { blockers: [] }` while a blocking modal owned the Logic window. The state poller now samples the post-classifier blocking-dialog signal once per visible-window poll and caches it (`StateCache.blockingDialogButtons`); the resource reads the cached signal, preserving its cache-only (no live AX call) read boundary. ([#437](https://github.com/MongLong0214/logic-pro-mcp/pull/437), closes [#432](https://github.com/MongLong0214/logic-pro-mcp/issues/432))
+
+### Quality — qualification coverage
+
+- **Verified-execution (State-A) semantic oracles now cover the full mutating surface** ([#373](https://github.com/MongLong0214/logic-pro-mcp/issues/373)). Phase B2 adds transport/navigate (15 ops); Phase B3 adds project/tracks/system/midi (15 ops); Phase B4 adds the plugin-insert/export/cleanup executors (6 ops) and audits the remaining 13 send-only edit ops as structurally excluded (they route only to no-readback channels, so no State A exists to pin). Every supported mutating operation is now either covered by an oracle or carries a reasoned, audited exclusion — none is left implicitly uncovered. ([#436](https://github.com/MongLong0214/logic-pro-mcp/pull/436), [#438](https://github.com/MongLong0214/logic-pro-mcp/pull/438), [#439](https://github.com/MongLong0214/logic-pro-mcp/pull/439))
+- **Qualification coverage is credited only from a live-`.passed` qualification case or a governed release-visible waiver — never from a semantic validator merely existing.** The static repository-tree evaluator previously exempted any operation with a semantic-readback validator object from the "missing coverage" count, even though none of the mutating oracles above have ever been exercised by a live qualification run (that matrix is [#284](https://github.com/MongLong0214/logic-pro-mcp/issues/284)). Left uncorrected, every future oracle landing would have silently inflated credited coverage without a single live pass behind it. R-SEM (`semanticCoverageIncomplete`) stays open at an honest 108/108 missing. ([#409](https://github.com/MongLong0214/logic-pro-mcp/issues/409), [#433](https://github.com/MongLong0214/logic-pro-mcp/pull/433))
+- Reworded the R-SEM missing-coverage finding detail so it can no longer be misread as "adding a validator closes the gap" — the detail now states coverage requires a live `.passed` case or a governed waiver. No behavioral change. ([#435](https://github.com/MongLong0214/logic-pro-mcp/pull/435))
+
 ## [3.12.0] — 2026-07-21
 
 Large release consolidating the coordinate-free actuation campaign, the ADR
