@@ -50,8 +50,11 @@ struct RowKey: Hashable, Comparable, Sendable {
 
 // MARK: - Column identity binding
 
+/// Note-field column roles. There is no event-type role: note-only membership
+/// of the harvested rows is guaranteed by the filter proof (all note events
+/// visible, no scoping filter), not by a per-row type re-check.
 enum ColumnRole: Hashable, Sendable {
-    case position, channel, pitch, velocity, length, eventType
+    case position, channel, pitch, velocity, length
 }
 
 /// Column binding by stable identity. Arity-only matching is intentionally not
@@ -117,7 +120,10 @@ enum ObservedRegionIdentityProof: Sendable {
 
 /// Raw Event-List filter checkbox states. The chokepoint DERIVES whether all
 /// note events are visible with no hiding/scoping filter — it does not accept a
-/// pre-computed boolean.
+/// pre-computed boolean. The live path must supply the COMPLETE set of filter
+/// checkboxes: the derivation treats an absent scoping checkbox as "off", so
+/// filter-evidence completeness is a live qualification requirement (an
+/// incomplete checkbox list could otherwise hide an active scope filter).
 struct FilterEvidence: Sendable {
     struct Checkbox: Sendable {
         let id: String

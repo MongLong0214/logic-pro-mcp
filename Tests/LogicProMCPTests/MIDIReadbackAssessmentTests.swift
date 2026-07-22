@@ -235,6 +235,43 @@ import Testing
         }
     }
 
+    // MARK: fail-closed hardening (channel required, no column aliasing, robust count)
+
+    @Test func missingChannelColumnRejected() {
+        var r = Self.roles()
+        r[.channel] = nil
+        let snap = assessReadback(Self.evidence(binding: .headerIdentity(.proven(r))))
+        #expect(snap.noteCompleteness.partialReason == .columnUnresolved)
+    }
+
+    @Test func aliasedLengthColumnRejected() {
+        var r = Self.roles()
+        r[.length] = Self.posCol
+        let snap = assessReadback(Self.evidence(binding: .headerIdentity(.proven(r))))
+        #expect(snap.noteCompleteness.partialReason == .columnUnresolved)
+    }
+
+    @Test func missingChannelValueRejected() {
+        var row = Self.noteRow()
+        row[Self.chCol] = RawCell(sliderValue: nil)
+        let snap = assessReadback(Self.evidence(passA: [RowKey(index: 0): row]))
+        guard case .rowParseFailed = snap.noteCompleteness.partialReason else {
+            Issue.record("Expected rowParseFailed for missing channel value")
+            return
+        }
+    }
+
+    @Test func groupedThousandsCountRejected() {
+        // "1,234 Events" must parse as 1234, not truncate to 1 → mismatch with 1 row.
+        let snap = assessReadback(Self.evidence(countText: "1,234 Events"))
+        #expect(snap.noteCompleteness.partialReason == .countMismatch)
+    }
+
+    @Test func malformedCountRejected() {
+        let snap = assessReadback(Self.evidence(countText: "12abc"))
+        #expect(snap.noteCompleteness.partialReason == .countMismatch)
+    }
+
     // MARK: Codable is display-only — decode forces incomplete
 
     @Test func decodedSnapshotIsUntrustedIncomplete() throws {

@@ -220,11 +220,18 @@ private func columnsUniquelyResolve(
     calibration: CalibrationTriple,
     harvest: RowHarvest
 ) -> Bool {
+    // Every note field must be bound to a DISTINCT column: all five roles must be
+    // present, and no role may alias another (e.g. length aliased to position
+    // would yield systematically wrong durations while still "resolving").
     guard let pitchCol = roles[.pitch],
           let velCol = roles[.velocity],
-          let startFromRoles = roles[.position] else { return false }
+          let posCol = roles[.position],
+          let chCol = roles[.channel],
+          let lenCol = roles[.length] else { return false }
+    let bound = [pitchCol, velCol, posCol, chCol, lenCol]
+    guard Set(bound).count == bound.count else { return false }
     // Each calibration value must resolve to exactly one column across the rows.
-    func uniqueColumn(for value: Double, matching: (RawCell) -> Bool) -> AXColumnID? {
+    func uniqueColumn(matching: (RawCell) -> Bool) -> AXColumnID? {
         var found: Set<AXColumnID> = []
         for row in harvest.passA.values {
             for (col, cell) in row where matching(cell) {
@@ -233,14 +240,10 @@ private func columnsUniquelyResolve(
         }
         return found.count == 1 ? found.first : nil
     }
-    let pitchResolved = uniqueColumn(for: calibration.pitch) { $0.sliderValue == calibration.pitch }
-    let velResolved = uniqueColumn(for: calibration.velocity) {
-        $0.valueDescription.flatMap(Double.init) == calibration.velocity
-    }
-    let startResolved = uniqueColumn(for: calibration.startTickValue) {
-        ($0.groupSliderValues?.first).map { $0 == calibration.startTickValue } ?? false
-    }
-    return pitchResolved == pitchCol && velResolved == velCol && startResolved == startFromRoles
+    let pitchResolved = uniqueColumn { $0.sliderValue == calibration.pitch }
+    let velResolved = uniqueColumn { $0.valueDescription.flatMap(Double.init) == calibration.velocity }
+    let startResolved = uniqueColumn { ($0.groupSliderValues?.first).map { $0 == calibration.startTickValue } ?? false }
+    return pitchResolved == pitchCol && velResolved == velCol && startResolved == posCol
 }
 
 /// Parse a single row into a note. Pitch is the raw slider integer (locale
@@ -261,12 +264,12 @@ private func parseNote(
           let velString = velCell.valueDescription,
           let velInt = Int(velString), (1...127).contains(velInt) else { return nil }
 
-    let channelInt: Int
-    if let chCol = roles[.channel], let chCell = row[chCol], let chRaw = chCell.sliderValue {
-        channelInt = Int(chRaw.rounded())
-    } else {
-        channelInt = 1
+    // Channel is required, never invented: a missing channel column or value
+    // fails the row (fail-closed) rather than defaulting to a guessed channel.
+    guard let chCol = roles[.channel], let chCell = row[chCol], let chRaw = chCell.sliderValue else {
+        return nil
     }
+    let channelInt = Int(chRaw.rounded())
     guard (1...16).contains(channelInt) else { return nil }
 
     guard let posCol = roles[.position], let posCell = row[posCol],
@@ -299,7 +302,17 @@ private func bbtToTicks(_ group: [Double]?) -> Int64? {
 }
 
 private func parseCount(_ text: String) -> Int? {
-    let digits = text.prefix { $0.isNumber }
+    // Parse the leading count token, allowing thousands separators. The token
+    // must be cleanly delimited (end of string or whitespace) so a malformed or
+    // grouped value like "1,234" or "12abc" is parsed correctly or rejected —
+    // never truncated to a leading digit that could spuriously match a partial
+    // harvest count (fail-closed on ambiguity).
+    let leading = text.prefix { $0.isNumber || $0 == "," }
+    guard !leading.isEmpty else { return nil }
+    let rest = text[leading.endIndex...]
+    guard rest.isEmpty || (rest.first?.isWhitespace ?? false) else { return nil }
+    let digits = leading.filter { $0.isNumber }
+    guard !digits.isEmpty else { return nil }
     return Int(digits)
 }
 
