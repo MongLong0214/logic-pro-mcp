@@ -363,6 +363,13 @@ import Testing
         #expect(snap.noteCompleteness.partialReason == .countMismatch)
     }
 
+    @Test func spaceGroupedCountRejected() {
+        // "1 234 Events" must not be truncated to "1" and spuriously match a
+        // single harvested row.
+        let snap = assessReadback(Self.evidence(countText: "1 234 Events"))
+        #expect(snap.noteCompleteness.partialReason == .countMismatch)
+    }
+
     @Test func verifiedEmptyRejectsIncompleteColumns() {
         var r = Self.roles()
         r[.length] = nil

@@ -368,6 +368,9 @@ private func parseCount(_ text: String) -> Int? {
     let leading = text.prefix { $0.isNumber }
     let rest = text[leading.endIndex...]
     guard rest.isEmpty || (rest.first?.isWhitespace ?? false) else { return nil }
+    // Reject any further digits after the leading run: a space/NBSP-grouped value
+    // like "1 234" must not be truncated to its leading group.
+    guard !rest.contains(where: { $0.isNumber }) else { return nil }
     return Int(leading)
 }
 
