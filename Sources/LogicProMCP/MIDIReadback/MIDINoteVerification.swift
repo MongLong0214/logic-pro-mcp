@@ -31,11 +31,27 @@ extension RegionMatchVerdict: Equatable {
     }
 }
 
+/// A caller's expected note sequence, bundled with the provenance that produced
+/// it. There is NO default provenance: the caller must state where the expected
+/// notes came from, and verification requires that provenance to differ from the
+/// observed snapshot's conversion — so a sequence re-derived by the SAME
+/// conversion (which would share its bugs) can never be accepted as an
+/// independent match. An empty provenance id is rejected (unstated == unusable).
+struct ExpectedSequence {
+    let notes: [MIDINoteEvent]
+    let ppq: Int
+    let provenanceID: String
+
+    init(notes: [MIDINoteEvent], ppq: Int, provenanceID: String) {
+        self.notes = notes
+        self.ppq = ppq
+        self.provenanceID = provenanceID
+    }
+}
+
 func verifyRegion(
     observed: MIDIRegionNoteSnapshot,
-    expected: [MIDINoteEvent],
-    expectedPPQ: Int,
-    expectedConversionPipelineID: String = "external.user-provided"
+    expected: ExpectedSequence
 ) -> RegionMatchVerdict {
     guard observed.complete else {
         return .incompleteCannotVerify(
@@ -45,21 +61,25 @@ func verifyRegion(
     guard observed.provenance != .none else {
         return .incompleteCannotVerify(reason: "Independent readback provenance is required")
     }
-    // Correlated-conversion guard: the expected sequence must come from a
-    // DIFFERENT conversion than the observed snapshot, so a re-derivation sharing
-    // the observed conversion's bugs cannot produce a false match.
-    guard observed.conversionPipelineID != expectedConversionPipelineID else {
+    // Correlated-conversion guard: the expected sequence must state a provenance,
+    // and it must DIFFER from the observed snapshot's conversion, so a
+    // re-derivation sharing the observed conversion's bugs cannot produce a false
+    // match. An unstated (empty) provenance is unusable, not a pass.
+    guard !expected.provenanceID.isEmpty else {
+        return .incompleteCannotVerify(reason: "Expected sequence must state its provenance")
+    }
+    guard observed.conversionPipelineID != expected.provenanceID else {
         return .incompleteCannotVerify(
             reason: "Expected sequence must not share the observed conversion pipeline"
         )
     }
-    guard observed.ppq > 0, expectedPPQ > 0 else {
+    guard observed.ppq > 0, expected.ppq > 0 else {
         return .incompleteCannotVerify(reason: "PPQ must be positive")
     }
 
     let actual = canonicalize(observed.notes, ppq: observed.ppq)
     let wanted = canonicalize(
-        normalizePPQ(expected, from: expectedPPQ, to: observed.ppq),
+        normalizePPQ(expected.notes, from: expected.ppq, to: observed.ppq),
         ppq: observed.ppq
     )
     guard actual != wanted else { return .exactMatch }

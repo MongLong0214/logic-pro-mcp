@@ -23,13 +23,19 @@ import Testing
     static let velCol = AXColumnID(id: "c7")
     static let lenCol = AXColumnID(id: "c8")
 
-    static func noteRow(pitch: Double = 60, velocity: String = "100", channel: Double = 1) -> RawEventRow {
+    static func noteRow(
+        pitch: Double = 60,
+        velocity: String = "100",
+        channel: Double = 1,
+        position: [Double] = [1, 1, 1, 1],
+        length: [Double] = [0, 1, 0, 0]
+    ) -> RawEventRow {
         [
-            posCol: RawCell(groupSliderValues: [1, 1, 1, 1]),
+            posCol: RawCell(groupSliderValues: position),
             chCol: RawCell(sliderValue: channel),
             pitchCol: RawCell(sliderValue: pitch, valueDescription: "C3"),
             velCol: RawCell(valueDescription: velocity),
-            lenCol: RawCell(groupSliderValues: [0, 1, 0, 0]),
+            lenCol: RawCell(groupSliderValues: length),
         ]
     }
 
@@ -245,17 +251,45 @@ import Testing
 
     @Test func correlatedConversionRejected() {
         let snap = assessReadback(Self.evidence())
-        // Expected sequence claiming the SAME conversion provenance must fail-closed.
+        // Spoof: expected sequence claiming the SAME conversion provenance as the
+        // observed snapshot must fail-closed.
         let verdict = verifyRegion(
             observed: snap,
-            expected: [],
-            expectedPPQ: 480,
-            expectedConversionPipelineID: MIDIRegionNoteSnapshot.eventListConversionID
+            expected: ExpectedSequence(
+                notes: snap.notes, ppq: snap.ppq,
+                provenanceID: MIDIRegionNoteSnapshot.eventListConversionID
+            )
         )
         guard case .incompleteCannotVerify = verdict else {
             Issue.record("Expected incompleteCannotVerify for correlated conversion provenance")
             return
         }
+    }
+
+    @Test func emptyExpectedProvenanceRejected() {
+        let snap = assessReadback(Self.evidence())
+        // Omission: an unstated (empty) provenance is unusable, not a pass.
+        let verdict = verifyRegion(
+            observed: snap,
+            expected: ExpectedSequence(notes: snap.notes, ppq: snap.ppq, provenanceID: "")
+        )
+        guard case .incompleteCannotVerify = verdict else {
+            Issue.record("Expected incompleteCannotVerify for empty expected provenance")
+            return
+        }
+    }
+
+    @Test func independentProvenanceMatchAccepted() {
+        let snap = assessReadback(Self.evidence())
+        // An independently-sourced expected sequence (different provenance) that
+        // matches the observed notes verifies as an exact match.
+        let verdict = verifyRegion(
+            observed: snap,
+            expected: ExpectedSequence(
+                notes: snap.notes, ppq: snap.ppq, provenanceID: "external.user-provided"
+            )
+        )
+        #expect(verdict == .exactMatch)
     }
 
     @Test func countMismatchRejected() {
@@ -377,6 +411,64 @@ import Testing
             binding: .headerIdentity(.proven(r)), countText: "0 Events", keys: [], passA: [:]
         ))
         #expect(snap.noteCompleteness.partialReason == .emptyNotProven)
+    }
+
+    // MARK: numeric / tick boundary matrix (one RED per claimed boundary)
+
+    private func expectRowParseFail(_ bad: RawEventRow, _ label: String) {
+        guard case .rowParseFailed = rowParseOutcome(bad: bad) else {
+            Issue.record("Expected rowParseFailed for \(label)")
+            return
+        }
+    }
+
+    @Test func fractionalChannelRejected() { expectRowParseFail(Self.noteRow(channel: 1.5), "fractional channel") }
+    @Test func nonFiniteChannelRejected() { expectRowParseFail(Self.noteRow(channel: .infinity), "non-finite channel") }
+    @Test func extremeChannelRejected() { expectRowParseFail(Self.noteRow(channel: 1.0e20), "extreme channel") }
+    @Test func nonFinitePositionRejected() {
+        expectRowParseFail(Self.noteRow(position: [.infinity, 0, 0, 0]), "non-finite position")
+    }
+    @Test func extremePositionRejected() {
+        expectRowParseFail(Self.noteRow(position: [1.0e20, 0, 0, 0]), "extreme position")
+    }
+    @Test func fractionalPositionRejected() {
+        expectRowParseFail(Self.noteRow(position: [1.5, 1, 1, 1]), "fractional position segment")
+    }
+    @Test func nonFiniteLengthRejected() {
+        expectRowParseFail(Self.noteRow(length: [.nan, 1, 0, 0]), "non-finite length")
+    }
+    @Test func extremeLengthRejected() {
+        expectRowParseFail(Self.noteRow(length: [1.0e20, 0, 0, 0]), "extreme length")
+    }
+    @Test func tickSumOverflowRejected() {
+        expectRowParseFail(Self.noteRow(position: [9.0e18, 9.0e18, 0, 0]), "tick-sum overflow")
+    }
+
+    @Test func tickSubtractionOverflowRejected() {
+        // Region start at Int64.min makes every row's region-relative subtraction
+        // overflow; the row must fail rather than trap.
+        let minStart = ResolvedRegionIdentity(name: "R1", ordinal: 0, startTick: Int64.min)
+        let snap = assessReadback(Self.evidence(
+            resolved: RegionIdentityRegistrySeam.mint(boundRegion: Self.region, identity: minStart),
+            observed: .proven(minStart)
+        ))
+        guard case .rowParseFailed = snap.noteCompleteness.partialReason else {
+            Issue.record("Expected rowParseFailed for tick subtraction overflow")
+            return
+        }
+    }
+
+    @Test func doubleCommaCountRejected() {
+        #expect(assessReadback(Self.evidence(countText: "1,,0 Events")).noteCompleteness.partialReason == .countMismatch)
+    }
+    @Test func trailingCommaCountRejected() {
+        #expect(assessReadback(Self.evidence(countText: "10, Events")).noteCompleteness.partialReason == .countMismatch)
+    }
+    @Test func interiorBadGroupingCountRejected() {
+        #expect(assessReadback(Self.evidence(countText: "1,00 Events")).noteCompleteness.partialReason == .countMismatch)
+    }
+    @Test func nbspGroupedCountRejected() {
+        #expect(assessReadback(Self.evidence(countText: "1\u{00A0}234 Events")).noteCompleteness.partialReason == .countMismatch)
     }
 
     // MARK: Codable is display-only — decode forces incomplete

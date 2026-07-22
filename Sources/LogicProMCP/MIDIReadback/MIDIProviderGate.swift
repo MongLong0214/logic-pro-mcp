@@ -37,7 +37,7 @@ struct QualifiedProviderRegistry: Sendable {
                 "position and length raw-tick and SMF display-format invariance",
                 "mid-scan project stability",
                 "English and Korean locale coverage",
-                "Desktop and Creator variant coverage",
+                "Desktop variant coverage",
                 "Logic version drift detection",
             ]
         ),

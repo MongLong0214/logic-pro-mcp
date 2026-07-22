@@ -3,14 +3,17 @@ import Testing
 @testable import LogicProMCP
 
 @Suite struct MIDINoteReadbackTests {
+    private func expectSeq(_ notes: [MIDINoteEvent], ppq: Int = 480) -> ExpectedSequence {
+        ExpectedSequence(notes: notes, ppq: ppq, provenanceID: "external.user-provided")
+    }
+
     @Test func incompleteSnapshotCannotReportExactMatch() {
         let note = makeNote(pitch: 60)
         let observed = makeSnapshot(complete: false, notes: [note])
 
         guard case .incompleteCannotVerify(let reason) = verifyRegion(
             observed: observed,
-            expected: [note],
-            expectedPPQ: 480
+            expected: expectSeq([note])
         ) else {
             Issue.record("An incomplete scan must never report a full match")
             return
@@ -24,8 +27,7 @@ import Testing
 
         guard case .incompleteCannotVerify = verifyRegion(
             observed: observed,
-            expected: [note],
-            expectedPPQ: 480
+            expected: expectSeq([note])
         ) else {
             Issue.record("Server-owned input without independent provenance is not readback")
             return
@@ -58,7 +60,7 @@ import Testing
             notes: [makeNote(pitch: 60, start: 960, duration: 480)]
         )
 
-        #expect(verifyRegion(observed: observed, expected: expected, expectedPPQ: 480) == .exactMatch)
+        #expect(verifyRegion(observed: observed, expected: expectSeq(expected)) == .exactMatch)
     }
 
     @Test func verificationMatchesCanonicalNotes() {
@@ -72,7 +74,7 @@ import Testing
             makeNote(pitch: 64, start: 60, duration: 30, velocity: 80),
         ])
 
-        #expect(verifyRegion(observed: observed, expected: expected, expectedPPQ: 480) == .exactMatch)
+        #expect(verifyRegion(observed: observed, expected: expectSeq(expected)) == .exactMatch)
     }
 
     @Test func verificationReportsAddedRemovedAndChangedNotes() {
@@ -85,8 +87,7 @@ import Testing
 
         guard case .mismatch(let added, let removed, let changed) = verifyRegion(
             observed: observed,
-            expected: [changedBefore, unchanged, removedNote],
-            expectedPPQ: 480
+            expected: expectSeq([changedBefore, unchanged, removedNote])
         ) else {
             Issue.record("Expected a structured mismatch")
             return
