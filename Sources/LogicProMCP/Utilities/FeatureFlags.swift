@@ -6,6 +6,7 @@ enum FeatureFlags: Sendable {
     @TaskLocal static var adr003StrictParamsOverride: Bool?
     @TaskLocal static var adr004MutationSagaOverride: Bool?
     @TaskLocal static var adr005OperationTraceOverride: Bool?
+    @TaskLocal static var insertCoordFreeOverride: Bool?
     #endif
 
     /// PRD-007 Part 2 (ADR-002 #285): promoted from opt-in to DEFAULT ON, so the
@@ -87,13 +88,30 @@ enum FeatureFlags: Sendable {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR006_VERSIONED_CACHE"] == "1"
     }
 
-    /// #425 experiment: coordinate-free plugin-insert leaf selection (AXPress +
-    /// AX-children submenu traversal) in place of moveElementCenter/clickElementCenter.
-    /// Opt-in during the live spike so the shipped coordinate path stays the default;
-    /// promoted to the default (coordinates removed) once live-verified.
+    /// #425 (Option B): coordinate-free plugin-insert LEAF selection (AXPress over an
+    /// AX-children format submenu) in place of moveElementCenter/clickElementCenter.
+    /// Live-verified during the spike, so promoted from opt-in to DEFAULT ON: the
+    /// variable is now a kill-switch — read with `!= "0"` because an absent variable
+    /// must mean ON. Only the exact string "0" rolls back to the legacy coordinate
+    /// leaf click. Slot-open and the recursive category-hover fallback stay
+    /// coordinate (governed waiver): AXPress on the empty slot is a no-op and
+    /// AXShowMenu wedges Logic, and the recursive path is unreachable for the
+    /// Release-1 plugins — see `clickPopupPluginLeaf` / `pressPopupPluginLeaf`.
     static var insertCoordFree: Bool {
-        ProcessInfo.processInfo.environment["LOGIC_MCP_INSERT_COORD_FREE"] == "1"
+        #if DEBUG
+        if let insertCoordFreeOverride { return insertCoordFreeOverride }
+        #endif
+        return ProcessInfo.processInfo.environment["LOGIC_MCP_INSERT_COORD_FREE"] != "0"
     }
+
+    #if DEBUG
+    static func withInsertCoordFree<Result>(
+        _ value: Bool,
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        try await $insertCoordFreeOverride.withValue(value, operation: operation)
+    }
+    #endif
 
     static var adr007SelectorAtlas: Bool {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR007_SELECTOR_ATLAS"] == "1"

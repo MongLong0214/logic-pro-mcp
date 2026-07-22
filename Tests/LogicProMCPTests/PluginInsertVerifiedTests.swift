@@ -678,3 +678,136 @@ private func insertParams(
     let hint = (obj["hint"] as? String) ?? ""
     #expect(hint.contains("no enumerable insert slots"))
 }
+
+// MARK: - #425 (Option B): coordinate-free leaf selection contract
+//
+// The four assertions below pin the contract for promoting the leaf SELECTION
+// to coordinate-free-by-default (kill-switch: insertCoordFree).
+// They exercise the real leaf-select seam (`clickPopupPluginLeaf` /
+// `clickPluginInAnchoredSlotPopup`) directly rather than through
+// `defaultInsertVerified`, because the insert-entry tests above inject a fake
+// driver that REPLACES the entire live path (so they never reach leaf-select),
+// and the full `liveExactSlotPopupInsert` flow is CGEvent-bound (the slot-open
+// at ~L1897 requires a real coordinate click). The coordinate leaf primitives
+// (moveElementCenter/clickElementCenter) short-circuit to `false` when an
+// element has no on-screen geometry, BEFORE posting any CGEvent, so these
+// hermetic tests never move the physical mouse. `clickPopupPluginLeaf` /
+// `clickPluginInAnchoredSlotPopup` / `SlotPopupPluginClick` were relaxed from
+// `private` to `internal` solely so this contract is unit-testable.
+
+/// Records which elements received a `kAXPress` when the default action-
+/// recording is bypassed by an injected `performActionHandler` (contract C).
+/// Invoked sequentially within one test (awaited), so plain mutation is
+/// race-free here; `@unchecked Sendable` documents that.
+private final class AXPressRecorder: @unchecked Sendable {
+    private(set) var pressedElementIDs: [Int] = []
+    func record(_ id: Int) { pressedElementIDs.append(id) }
+}
+
+/// A plugin menu item whose format submenu is exposed as an AX child (as Logic
+/// exposes it without a hover) with a single preferred-format leaf ("Stereo").
+private func addPluginItemWithFormatLeaf(
+    _ b: FakeAXRuntimeBuilder,
+    itemID: Int,
+    title: String,
+    formatLeafTitle: String = "Stereo"
+) -> (item: AXUIElement, formatLeaf: AXUIElement) {
+    let formatLeaf = addMenuItem(b, itemID * 10 + 1, title: formatLeafTitle)
+    let submenu = addMenu(b, itemID * 10 + 2, children: [formatLeaf])
+    let item = addMenuItem(b, itemID, title: title, children: [submenu])
+    return (item, formatLeaf)
+}
+
+// Contract A (mechanism): coordFree:true selects the matched leaf via kAXPress.
+@Test func test425ContractA_coordFreeTruePressesMatchedLeafViaAXPress() async {
+    let b = FakeAXRuntimeBuilder()
+    let (gain, formatLeaf) = addPluginItemWithFormatLeaf(b, itemID: 8210, title: "Gain")
+
+    let ok = await AccessibilityChannel.clickPopupPluginLeaf(
+        gain, runtime: b.makeAXRuntime(), coordFree: true
+    )
+
+    #expect(ok)
+    let pressAction = kAXPressAction as String
+    let leafID = b.elementID(formatLeaf)
+    // The preferred-format leaf was AXPressed …
+    #expect(b.actionCalls.contains { $0.elementID == leafID && $0.action == pressAction })
+    // … and NOTHING else happened via a non-AXPress action (no coordinate path).
+    #expect(b.actionCalls.allSatisfy { $0.action == pressAction })
+}
+
+// Contract A (discriminator): a coord-free DIRECT win reports coordFree == true.
+// `SlotPopupPluginClick.coordFree` is the exact value the production flow assigns
+// to `select_trace["leaf_select_coord_free"]` (liveExactSlotPopupInsert ~L1933),
+// so asserting it here asserts the discriminator's truth value for a coord-free
+// win — and it is sourced from the winning strategy, not the raw flag.
+@Test func test425ContractA_discriminatorTrueForCoordFreeDirectWin() async throws {
+    let b = FakeAXRuntimeBuilder()
+    let (gain, formatLeaf) = addPluginItemWithFormatLeaf(b, itemID: 8220, title: "Gain")
+    let root = addMenu(b, 8229, children: [gain])
+    let runtime = b.makeAXRuntime()
+
+    let click = await FeatureFlags.withInsertCoordFree(true) {
+        await AccessibilityChannel.clickPluginInAnchoredSlotPopup(
+            pluginID: "logic.stock.effect.gain",
+            displayName: "Gain",
+            rootMenu: root,
+            runtime: runtime
+        )
+    }
+
+    let winner = try #require(click)
+    #expect(winner.strategy == "slot_popup_direct_exact_leaf")
+    #expect(winner.coordFree)
+    let pressAction = kAXPressAction as String
+    let leafID = b.elementID(formatLeaf)
+    #expect(b.actionCalls.contains { $0.elementID == leafID && $0.action == pressAction })
+}
+
+// Contracts B & D: coordFree:false takes the COORDINATE path — never AXPress.
+// This is the exact mode the recursive category-hover fallback forces (it always
+// passes coordFree:false), so it also covers the "recursive is coordinate-only"
+// half of contract D. Coverage gap (noted honestly): a WINNING recursive path
+// cannot be produced hermetically — the recursive win requires the coordinate
+// leaf click to succeed, which needs real on-screen geometry and would post a
+// CGEvent (physical mouse move). So the recursive-win trace value (coordFree ==
+// false while the flag is ON) is verified structurally (recursive call site +
+// SlotPopupPluginClick(coordFree: false)) rather than behaviorally.
+@Test func test425ContractBD_coordFreeFalseUsesCoordinateNeverAXPress() async {
+    let b = FakeAXRuntimeBuilder()
+    // Deliberately NO kAXPosition/kAXSize: the coordinate primitives return false
+    // before posting a CGEvent, so the load-bearing assertion is the ABSENCE of
+    // AXPress, proving coordFree:false does not use the coord-free press path.
+    let (gain, _) = addPluginItemWithFormatLeaf(b, itemID: 8240, title: "Gain")
+
+    let ok = await AccessibilityChannel.clickPopupPluginLeaf(
+        gain, runtime: b.makeAXRuntime(), coordFree: false
+    )
+
+    #expect(!ok)
+    let pressAction = kAXPressAction as String
+    #expect(!b.actionCalls.contains { $0.action == pressAction })
+}
+
+// Contract C: if AXPress is neutralized, coord-free leaf select FAILS CLOSED —
+// it must not silently "succeed", and it must genuinely have attempted AXPress.
+@Test func test425ContractC_failsClosedWhenAXPressNeutralized() async {
+    let b = FakeAXRuntimeBuilder()
+    let (gain, _) = addPluginItemWithFormatLeaf(b, itemID: 8250, title: "Gain")
+    let recorder = AXPressRecorder()
+    let pressAction = kAXPressAction as String
+    let runtime = b.makeAXRuntime(
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            if action == pressAction { recorder.record(b.elementID(element)) }
+            return false // AXPress refused everywhere
+        }
+    )
+
+    let ok = await AccessibilityChannel.clickPopupPluginLeaf(
+        gain, runtime: runtime, coordFree: true
+    )
+
+    #expect(!ok)
+    #expect(!recorder.pressedElementIDs.isEmpty)
+}

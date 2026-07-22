@@ -1928,9 +1928,12 @@ extension AccessibilityChannel {
         trace["winning_strategy"] = pluginClick.strategy
         trace["winning_menu_path"] = pluginClick.path.joined(separator: " > ")
         trace["plugin_selection_id"] = pluginID
-        // #425: record which leaf-selection path executed so the receipt self-attests
-        // coordinate-free (AXPress) vs the legacy coordinate click.
-        trace["leaf_select_coord_free"] = FeatureFlags.insertCoordFree
+        // #425: record which leaf-selection path ACTUALLY executed so the receipt
+        // self-attests coordinate-free (AXPress) vs the legacy coordinate click.
+        // Sourced from the winning strategy (`pluginClick.coordFree`), not the raw
+        // flag, so a recursive (coordinate-only) win reports false even when the
+        // flag is on — the discriminator can never be falsely pinned to the flag.
+        trace["leaf_select_coord_free"] = pluginClick.coordFree
 
         let poll = await pollStripInventoryUntil(
             track: track, runtime: runtime, timeoutMs: 2_000
@@ -2285,28 +2288,43 @@ extension AccessibilityChannel {
         return popupExactLeafPaths(displayName: displayName, rootMenu: rootMenu, runtime: runtime).first
     }
 
-    private struct SlotPopupPluginClick: Sendable {
+    /// `internal` (was `private`) so the coord-free discriminator is unit-testable
+    /// without driving the CGEvent-bound live insert flow.
+    struct SlotPopupPluginClick: Sendable {
         let strategy: String
         let path: [String]
         let strategies: [String]
+        /// The coord-free value the WINNING strategy actually used. Direct/search
+        /// carry `FeatureFlags.insertCoordFree`; the recursive category-hover
+        /// fallback is coordinate-only and always carries `false`. The caller
+        /// records THIS (not the raw flag) as `trace["leaf_select_coord_free"]`, so
+        /// a recursive win truthfully reports `false` even when the flag is on.
+        let coordFree: Bool
     }
 
-    private static func clickPluginInAnchoredSlotPopup(
+    /// `internal` (was `private`) so the coord-free discriminator is unit-testable
+    /// without driving the CGEvent-bound live insert flow.
+    static func clickPluginInAnchoredSlotPopup(
         pluginID: String,
         displayName: String,
         rootMenu: AXUIElement,
         runtime: AXHelpers.Runtime
     ) async -> SlotPopupPluginClick? {
         var strategies: [String] = []
+        // Direct/search honor the #425 flag; the recursive fallback below is
+        // coordinate-only. Captured once so the value passed to the leaf click and
+        // the value recorded on the winning result cannot diverge.
+        let coordFree = FeatureFlags.insertCoordFree
 
         strategies.append("slot_popup_direct_exact_leaf")
         if let item = directExactPopupMenuItem(displayName: displayName, in: rootMenu, runtime: runtime),
            let label = popupMenuItemLabel(item, runtime: runtime),
-           await clickPopupPluginLeaf(item, runtime: runtime) {
+           await clickPopupPluginLeaf(item, runtime: runtime, coordFree: coordFree) {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_direct_exact_leaf",
                 path: [label],
-                strategies: strategies
+                strategies: strategies,
+                coordFree: coordFree
             )
         }
 
@@ -2314,11 +2332,12 @@ extension AccessibilityChannel {
         if await filterSlotPopupSearchField(displayName: displayName, rootMenu: rootMenu, runtime: runtime),
            let item = directExactPopupMenuItem(displayName: displayName, in: rootMenu, runtime: runtime),
            let label = popupMenuItemLabel(item, runtime: runtime),
-           await clickPopupPluginLeaf(item, runtime: runtime) {
+           await clickPopupPluginLeaf(item, runtime: runtime, coordFree: coordFree) {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_search_exact_leaf",
                 path: [label],
-                strategies: strategies
+                strategies: strategies,
+                coordFree: coordFree
             )
         }
 
@@ -2333,7 +2352,8 @@ extension AccessibilityChannel {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_recursive_exact_leaf",
                 path: result,
-                strategies: strategies
+                strategies: strategies,
+                coordFree: false
             )
         }
 
@@ -2379,7 +2399,7 @@ extension AccessibilityChannel {
 
         if let direct = directExactPopupMenuItem(displayName: displayName, in: menu, runtime: runtime),
            let label = popupMenuItemLabel(direct, runtime: runtime),
-           await clickPopupPluginLeaf(direct, runtime: runtime) {
+           await clickPopupPluginLeaf(direct, runtime: runtime, coordFree: false) {
             return path + [label]
         }
 
@@ -2408,11 +2428,21 @@ extension AccessibilityChannel {
         return nil
     }
 
-    private static func clickPopupPluginLeaf(
+    /// Select the matched plugin leaf. `coordFree == true` (the #425 default) uses
+    /// AXPress over the AX-children format submenu (`pressPopupPluginLeaf`, no
+    /// coordinates); `coordFree == false` uses the legacy coordinate path
+    /// (moveElementCenter/clickElementCenter). The mode is a PARAMETER rather than a
+    /// direct `FeatureFlags.insertCoordFree` read so the recursive category-hover
+    /// fallback can force the coordinate path (it always passes `coordFree: false`),
+    /// while direct/search honor the flag. `internal` (was `private`) so the
+    /// coord-free-vs-coordinate contract is unit-testable without the CGEvent-bound
+    /// live insert flow.
+    static func clickPopupPluginLeaf(
         _ item: AXUIElement,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        coordFree: Bool
     ) async -> Bool {
-        if FeatureFlags.insertCoordFree {
+        if coordFree {
             return await pressPopupPluginLeaf(item, runtime: runtime)
         }
         guard moveElementCenter(item, runtime: runtime) else { return false }
