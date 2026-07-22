@@ -26,6 +26,11 @@ let package = Package(
         // dep. Pinned to 0.12.0 with the deprecation noise as a known
         // tradeoff until Apple closes the gap.
         .package(url: "https://github.com/swiftlang/swift-testing.git", from: "0.12.0"),
+        // Test-only: a Swift-syntax-aware call-site lint (MIDIReadbackCallSiteLintTests)
+        // needs correct lexing to prove the dark MIDI-readback core has no
+        // production caller. Pinned to the same 600.x already resolved transitively
+        // via swift-testing, so this adds no new resolved version.
+        .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "600.0.0"),
     ],
     targets: [
         .target(
@@ -64,6 +69,8 @@ let package = Package(
             dependencies: [
                 "LogicProMCP",
                 .product(name: "Testing", package: "swift-testing"),
+                .product(name: "SwiftParser", package: "swift-syntax"),
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
             ],
             path: "Tests/LogicProMCPTests",
             swiftSettings: [

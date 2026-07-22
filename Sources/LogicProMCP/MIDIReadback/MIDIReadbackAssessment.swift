@@ -350,12 +350,18 @@ private func exactIntInRange(_ raw: Double, _ range: ClosedRange<Int>) -> Int? {
 /// deferred until then.
 private func bbtToTicks(_ group: [Double]?) -> Int64? {
     guard let group, group.count == 4 else { return nil }
+    // 2^53 is the largest integer every Double represents exactly; beyond it a
+    // Double "integer" has lost precision, so reject per value (and bound the
+    // total well within Int64 so the conversion cannot trap).
+    let exactIntegerLimit = 9_007_199_254_740_992.0  // 2^53
     var total = 0.0
     for value in group {
-        guard value.isFinite, value == value.rounded() else { return nil }
+        guard value.isFinite, value == value.rounded(), abs(value) <= exactIntegerLimit else {
+            return nil
+        }
         total += value
     }
-    guard total.isFinite, total >= -9.0e18, total <= 9.0e18 else { return nil }
+    guard total.isFinite, abs(total) <= exactIntegerLimit else { return nil }
     return Int64(total)
 }
 

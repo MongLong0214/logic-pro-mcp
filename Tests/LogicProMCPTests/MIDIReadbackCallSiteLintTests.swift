@@ -1,140 +1,113 @@
 import Foundation
+import SwiftParser
+import SwiftSyntax
 import Testing
 @testable import LogicProMCP
 
 // Acceptance lint (runs in every configuration): the pure `assessReadback`
-// chokepoint has NO production reference, and the `CompleteProof` mint appears
-// only in its defining file — so the dark core is inert in the shipped binary.
+// chokepoint has NO production reference, and the `CompleteProof` mint has
+// exactly its known sites — all inside the assessment file. So the dark core is
+// inert in the shipped binary; when the live provider is added it becomes the
+// single allowed reference and this lint is updated to name it.
 //
-// The scan is comment-aware and matches on identifier boundaries (not a raw
-// substring), so whitespace/newline/function-reference evasions are caught;
-// file reads hard-fail (an unreadable source is an error, never silently empty).
-// When the live provider is added it becomes the single allowed reference and
-// this lint is updated to name it.
+// The scan is Swift-syntax-aware: string-literal content is `.stringSegment`
+// tokens and comments are trivia, so scanning `.identifier` tokens matches only
+// real code references — a call hidden in a comment, a plain/raw/interpolated
+// string, or after a `//`/`/*` that merely appears inside a string is neither
+// missed nor mis-stripped by fragile hand lexing.
 @Suite struct MIDIReadbackCallSiteLintTests {
     private static let assessmentFile = "MIDIReadbackAssessment.swift"
+    // The only permitted `CompleteProof()` mint sites, both in the assessment
+    // file: the production return of `assessReadback` and the debug-only seam.
+    private static let expectedProofMintSites = 2
 
-    /// Strip `//` line comments and (possibly nested) `/* */` block comments,
-    /// KEEPING string literals intact. Because no production source outside the
-    /// assessment file contains the sensitive identifiers inside a string (the
-    /// one benign occurrence — a conversion-id constant — is named to avoid the
-    /// token), keeping strings means a real call hidden anywhere (including a
-    /// string interpolation or raw string) is still matched, with no fragile
-    /// string lexing. Erring toward keeping strings can only over-report (a safe
-    /// false positive), never miss a real reference.
-    static func strippedOfComments(_ source: String) -> String {
-        var out = ""
-        let c = Array(source)
-        var i = 0
-        while i < c.count {
-            if i + 1 < c.count, c[i] == "/", c[i + 1] == "/" {
-                while i < c.count, c[i] != "\n" { i += 1 }
-            } else if i + 1 < c.count, c[i] == "/", c[i + 1] == "*" {
-                var depth = 1
-                i += 2
-                while i + 1 < c.count, depth > 0 {
-                    if c[i] == "/", c[i + 1] == "*" { depth += 1; i += 2 }
-                    else if c[i] == "*", c[i + 1] == "/" { depth -= 1; i += 2 }
-                    else { i += 1 }
-                }
-                if depth > 0 { i = c.count }
-            } else {
-                out.append(c[i])
-                i += 1
-            }
+    /// Count real `.identifier` tokens with the given name (excludes comments and
+    /// string content by construction).
+    static func identifierCount(_ source: String, _ name: String) -> Int {
+        Parser.parse(source: source)
+            .tokens(viewMode: .sourceAccurate)
+            .reduce(0) { $0 + ($1.tokenKind == .identifier(name) ? 1 : 0) }
+    }
+
+    /// Count `Name(` call sites: an identifier token `Name` immediately followed
+    /// (ignoring trivia) by `(`.
+    static func callSiteCount(_ source: String, _ name: String) -> Int {
+        let tokens = Array(Parser.parse(source: source).tokens(viewMode: .sourceAccurate))
+        var count = 0
+        for i in tokens.indices where tokens[i].tokenKind == .identifier(name) {
+            if i + 1 < tokens.count, tokens[i + 1].tokenKind == .leftParen { count += 1 }
         }
-        return out
+        return count
     }
 
-    private static func matches(_ pattern: String, in text: String) -> Bool {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
-        let range = NSRange(text.startIndex..., in: text)
-        return regex.firstMatch(in: text, range: range) != nil
-    }
-
-    /// Any non-comment reference to the `assessReadback` identifier (call or
-    /// function value) — whitespace/newline before `(` and bare references count.
-    static func referencesAssessReadback(_ source: String) -> Bool {
-        matches("(?<![A-Za-z0-9_])assessReadback(?![A-Za-z0-9_])", in: strippedOfComments(source))
-    }
-
-    /// A `CompleteProof(` mint (allowing any whitespace before the paren).
-    static func mintsCompleteProof(_ source: String) -> Bool {
-        matches("(?<![A-Za-z0-9_])CompleteProof\\s*\\(", in: strippedOfComments(source))
-    }
-
-    @Test func noProductionAssessReadbackReferenceOrProofMint() throws {
+    @Test func noProductionAssessReadbackReferenceAndProofMintIsExact() throws {
         let thisFile = URL(fileURLWithPath: #filePath)
         let repoRoot = thisFile
             .deletingLastPathComponent()  // LogicProMCPTests
             .deletingLastPathComponent()  // Tests
             .deletingLastPathComponent()  // repo root
         let sources = repoRoot.appendingPathComponent("Sources/LogicProMCP")
+        let assessmentPath = sources
+            .appendingPathComponent("MIDIReadback/\(Self.assessmentFile)")
+            .standardizedFileURL.path
 
         let fm = FileManager.default
         var isDir: ObjCBool = false
         #expect(fm.fileExists(atPath: sources.path, isDirectory: &isDir) && isDir.boolValue,
                 "source directory not found at \(sources.path)")
 
-        // Allow the assessment file ONLY at its exact path, so a second file that
-        // happens to share the basename cannot smuggle an unscanned reference.
-        let assessmentPath = sources
-            .appendingPathComponent("MIDIReadback/\(Self.assessmentFile)")
-            .standardizedFileURL.path
-        var sawAssessmentFile = false
-
         var scanned = 0
+        var sawAssessmentFile = false
         var offenders: [String] = []
+        var proofMintInAssessment = 0
         let enumerator = fm.enumerator(at: sources, includingPropertiesForKeys: nil)
         while let url = enumerator?.nextObject() as? URL {
             guard url.pathExtension == "swift" else { continue }
             scanned += 1
-            let name = url.lastPathComponent
             // Hard-fail file reads: an unreadable source is an error, not "empty".
             let text: String
             do {
                 text = try String(contentsOf: url, encoding: .utf8)
             } catch {
-                offenders.append("\(name): unreadable (\(error))")
+                offenders.append("\(url.lastPathComponent): unreadable (\(error))")
                 continue
             }
-            if url.standardizedFileURL.path == assessmentPath {
+            let isAssessment = url.standardizedFileURL.path == assessmentPath
+            let proofMints = Self.callSiteCount(text, "CompleteProof")
+            if isAssessment {
                 sawAssessmentFile = true
+                proofMintInAssessment = proofMints
                 continue
             }
-            if Self.referencesAssessReadback(text) {
+            if Self.identifierCount(text, "assessReadback") > 0 {
                 offenders.append("\(url.lastPathComponent): references assessReadback")
             }
-            if Self.mintsCompleteProof(text) {
+            if proofMints > 0 {
                 offenders.append("\(url.lastPathComponent): mints CompleteProof outside its file")
             }
         }
 
-        #expect(sawAssessmentFile, "expected to find the assessment file at \(assessmentPath)")
+        #expect(sawAssessmentFile, "expected the assessment file at \(assessmentPath)")
         #expect(scanned > 50, "expected to scan the LogicProMCP source tree; scanned \(scanned) files")
-        #expect(offenders.isEmpty,
-                "assessReadback must have no production reference and CompleteProof must be minted only in \(Self.assessmentFile): \(offenders)")
+        #expect(offenders.isEmpty, "dark-core call-site lint offenders: \(offenders)")
+        #expect(proofMintInAssessment == Self.expectedProofMintSites,
+                "CompleteProof mint sites in \(Self.assessmentFile) = \(proofMintInAssessment), expected \(Self.expectedProofMintSites)")
     }
 
-    @Test func lintCatchesEvasionFormsButIgnoresComments() {
-        // Evasion forms the old substring check would have missed:
-        #expect(Self.referencesAssessReadback("let r = assessReadback (evidence)"))   // space before paren
-        #expect(Self.referencesAssessReadback("let f = assessReadback\n    (evidence)")) // newline before paren
-        #expect(Self.referencesAssessReadback("let fn = assessReadback"))              // bare function reference
-        #expect(Self.referencesAssessReadback("return \"\\(assessReadback(e))\""))     // string interpolation
-        #expect(Self.referencesAssessReadback("#\"\\#(assessReadback(e))\"#"))          // raw-string interpolation
-        #expect(Self.referencesAssessReadback("\"\\(f(\"x)\"))\"; assessReadback(e)"))  // call after a nested-string interpolation
-        #expect(Self.referencesAssessReadback("let r = assessReadback\r(evidence)"))    // carriage-return before paren
-        #expect(Self.mintsCompleteProof("return .complete(CompleteProof ())"))         // space before paren
-        #expect(Self.mintsCompleteProof("return .complete(CompleteProof\r(x))"))        // CR before paren
-        // Not flagged: comment mentions and unrelated identifiers.
-        #expect(!Self.referencesAssessReadback("// minted only by assessReadback(evidence)"))
-        #expect(!Self.referencesAssessReadback("/* /* nested */ see assessReadback */")) // nested block comment fully stripped
-        #expect(!Self.referencesAssessReadback("let x = reassessReadbackLater(y)"))    // substring, not the identifier
-        #expect(!Self.referencesAssessReadback("let id = \"eventListAX.readback.v1\"")) // the real conversion id (no token)
-        #expect(!Self.mintsCompleteProof("CompleteProof.makeForTesting()"))            // method, not a mint call
-        // Strings are kept, so a string that literally mentions the identifier is
-        // conservatively flagged — a safe over-report, never a missed reference.
-        #expect(Self.referencesAssessReadback("let s = \"call assessReadback here\""))
+    @Test func syntaxScanIgnoresStringsAndCommentsButCatchesRealReferences() {
+        // Real references (caught) — including forms that defeat lexical stripping.
+        #expect(Self.identifierCount("let r = assessReadback (evidence)", "assessReadback") == 1)
+        #expect(Self.identifierCount("let r = assessReadback\n    (evidence)", "assessReadback") == 1)
+        #expect(Self.identifierCount("let fn = assessReadback", "assessReadback") == 1)
+        #expect(Self.identifierCount("return \"\\(assessReadback(e))\"", "assessReadback") == 1)       // string interpolation
+        #expect(Self.identifierCount("let s = #\"\\#(assessReadback(e))\"#", "assessReadback") == 1)   // raw-string interpolation
+        #expect(Self.identifierCount("let u = \"https://x\"; assessReadback(e)", "assessReadback") == 1) // // inside a string
+        #expect(Self.callSiteCount("return .complete(CompleteProof ())", "CompleteProof") == 1)         // whitespace before paren
+        // Not counted: comments, plain string content, member access, unrelated ids.
+        #expect(Self.identifierCount("// minted only by assessReadback(evidence)", "assessReadback") == 0)
+        #expect(Self.identifierCount("/* /* nested */ see assessReadback */", "assessReadback") == 0)
+        #expect(Self.identifierCount("let id = \"eventListAX.assessReadback.v1\"", "assessReadback") == 0)
+        #expect(Self.identifierCount("let u = \"/*\"; let x = 1", "assessReadback") == 0)               // /* inside a string, no ref
+        #expect(Self.callSiteCount("CompleteProof.makeForTesting()", "CompleteProof") == 0)             // member access, not a mint
     }
 }

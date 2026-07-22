@@ -257,7 +257,13 @@ import Testing
             observed: snap,
             expected: ExpectedSequence(
                 notes: snap.notes, ppq: snap.ppq,
-                provenance: .provenExternalArtifact(sourceID: MIDIRegionNoteSnapshot.eventListConversionID)
+                provenance: .provenExternalArtifact(
+                    sourceID: MIDIRegionNoteSnapshot.eventListConversionID,
+                    contentBinding: expectedContentBinding(
+                        sourceID: MIDIRegionNoteSnapshot.eventListConversionID,
+                        notes: snap.notes, ppq: snap.ppq
+                    )
+                )
             )
         )
         guard case .incompleteCannotVerify = verdict else {
@@ -288,10 +294,37 @@ import Testing
             observed: snap,
             expected: ExpectedSequence(
                 notes: snap.notes, ppq: snap.ppq,
-                provenance: .provenExternalArtifact(sourceID: "external.user-provided")
+                provenance: .provenExternalArtifact(
+                    sourceID: "external.user-provided",
+                    contentBinding: expectedContentBinding(
+                        sourceID: "external.user-provided", notes: snap.notes, ppq: snap.ppq
+                    )
+                )
             )
         )
         #expect(verdict == .exactMatch)
+    }
+
+    @Test func transferredProofRejected() {
+        let snap = assessReadback(Self.evidence())
+        // A proof minted for a DIFFERENT payload (bound to an empty note set)
+        // cannot be transferred to relabel the observed notes.
+        let verdict = verifyRegion(
+            observed: snap,
+            expected: ExpectedSequence(
+                notes: snap.notes, ppq: snap.ppq,
+                provenance: .provenExternalArtifact(
+                    sourceID: "external.user-provided",
+                    contentBinding: expectedContentBinding(
+                        sourceID: "external.user-provided", notes: [], ppq: snap.ppq
+                    )
+                )
+            )
+        )
+        guard case .incompleteCannotVerify = verdict else {
+            Issue.record("Expected incompleteCannotVerify for a transferred (mis-bound) proof")
+            return
+        }
     }
 
     @Test func countMismatchRejected() {
@@ -441,6 +474,10 @@ import Testing
     }
     @Test func extremeLengthRejected() {
         expectRowParseFail(Self.noteRow(length: [1.0e20, 0, 0, 0]), "extreme length")
+    }
+
+    @Test func fractionalLengthRejected() {
+        expectRowParseFail(Self.noteRow(length: [0, 1.5, 0, 0]), "fractional length segment")
     }
     @Test func tickSumOverflowRejected() {
         expectRowParseFail(Self.noteRow(position: [9.0e18, 9.0e18, 0, 0]), "tick-sum overflow")

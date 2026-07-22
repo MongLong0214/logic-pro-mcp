@@ -29,10 +29,14 @@ func canonicalize(_ notes: [MIDINoteEvent], ppq: Int) -> [MIDINoteEvent] {
                 previous.durationTicks
             )
             if overflow || previousEnd > note.startTicks {
+                // Overflow-safe truncation: for adversarial (e.g. Int64.min/max)
+                // expected notes the difference can overflow; keep the original
+                // duration in that case rather than trapping.
+                let (gap, subOverflow) = note.startTicks.subtractingReportingOverflow(previous.startTicks)
                 canonical[previousIndex] = MIDINoteEvent(
                     pitch: previous.pitch,
                     startTicks: previous.startTicks,
-                    durationTicks: max(0, note.startTicks - previous.startTicks),
+                    durationTicks: subOverflow ? previous.durationTicks : max(0, gap),
                     velocity: previous.velocity,
                     channel: previous.channel
                 )

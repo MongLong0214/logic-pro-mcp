@@ -41,15 +41,27 @@ extension RegionMatchVerdict: Equatable {
 enum IndependentExpectedProof: Sendable {
     case unproven
     #if QUALIFICATION_FAULT_SEAM
-    case provenExternalArtifact(sourceID: String)
+    case provenExternalArtifact(sourceID: String, contentBinding: String)
     #endif
 
-    var externalSourceID: String? {
+    var binding: (sourceID: String, contentBinding: String)? {
         #if QUALIFICATION_FAULT_SEAM
-        if case let .provenExternalArtifact(id) = self { return id }
+        if case let .provenExternalArtifact(id, digest) = self { return (id, digest) }
         #endif
         return nil
     }
+}
+
+/// Deterministic binding of an external artifact's identity to the exact note
+/// payload it certifies. The proof carries this value; verification recomputes it
+/// from the presented notes/PPQ and rejects any mismatch, so a proof minted for
+/// one artifact cannot be transferred to relabel a different (e.g. observed-
+/// derived) note payload.
+func expectedContentBinding(sourceID: String, notes: [MIDINoteEvent], ppq: Int) -> String {
+    let notesPart = notes
+        .map { "\($0.pitch),\($0.startTicks),\($0.durationTicks),\($0.velocity),\($0.channel)" }
+        .joined(separator: ";")
+    return "\(sourceID)|ppq=\(ppq)|\(notesPart)"
 }
 
 /// A caller's expected note sequence bundled with a proof of its independent
@@ -83,14 +95,22 @@ func verifyRegion(
     // provenance (not a free label), and that source must differ from the
     // observed snapshot's conversion — so a re-derivation sharing the observed
     // conversion's bugs cannot be relabeled and accepted as a match.
-    guard let expectedSourceID = expected.provenance.externalSourceID else {
+    guard let binding = expected.provenance.binding else {
         return .incompleteCannotVerify(
             reason: "Expected sequence must carry a proven independent provenance"
         )
     }
-    guard observed.conversionPipelineID != expectedSourceID else {
+    guard observed.conversionPipelineID != binding.sourceID else {
         return .incompleteCannotVerify(
             reason: "Expected sequence must not share the observed conversion pipeline"
+        )
+    }
+    // The proof must be bound to THIS payload: recompute the binding from the
+    // presented notes/PPQ and reject a transferred/relabeled proof.
+    guard binding.contentBinding
+        == expectedContentBinding(sourceID: binding.sourceID, notes: expected.notes, ppq: expected.ppq) else {
+        return .incompleteCannotVerify(
+            reason: "Expected provenance proof is not bound to this payload"
         )
     }
     guard observed.ppq > 0, expected.ppq > 0 else {

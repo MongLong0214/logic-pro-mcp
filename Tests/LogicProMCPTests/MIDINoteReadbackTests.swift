@@ -13,7 +13,14 @@ import Testing
     // A proven independently-sourced expected sequence (debug seam only): a
     // release build cannot present one, so match paths are exercised only here.
     private func provenExpectSeq(_ notes: [MIDINoteEvent], ppq: Int = 480) -> ExpectedSequence {
-        ExpectedSequence(notes: notes, ppq: ppq, provenance: .provenExternalArtifact(sourceID: "external.user-provided"))
+        let sourceID = "external.user-provided"
+        return ExpectedSequence(
+            notes: notes, ppq: ppq,
+            provenance: .provenExternalArtifact(
+                sourceID: sourceID,
+                contentBinding: expectedContentBinding(sourceID: sourceID, notes: notes, ppq: ppq)
+            )
+        )
     }
     #endif
 
