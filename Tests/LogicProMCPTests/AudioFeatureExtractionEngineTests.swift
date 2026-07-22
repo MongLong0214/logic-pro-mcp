@@ -364,6 +364,25 @@ struct AudioFeatureExtractionEngineTests {
         )
     }
 
+    // Variant that exposes the feeder so a test can compare frames INGESTED (from the
+    // fail-closed result's frame count) against frames DELIVERED (tracked by the feeder).
+    private func runStreaming(_ channels: [[Double]], declared: Int64, deliver: Int? = nil, pass2Deliver: Int? = nil, maxFrames: Int64? = nil, maxDuration: Double? = nil, chunkFrames: Int = 64_000) -> (result: SpectralAnalysisResult, feeder: ChunkFeeder) {
+        let feeder = ChunkFeeder(channels: channels, deliverFrames: deliver ?? channels[0].count, pass2DeliverFrames: pass2Deliver)
+        let r = AudioFeatureExtractionEngine.analyzeStreaming(
+            declaredFrameLength: declared, sampleRate: Self.fs48, channelCount: channels.count,
+            analysisRef: "stream", artifactFingerprint: "fixture", chunkFrames: chunkFrames,
+            maxDurationSeconds: maxDuration, maxDecodedFrames: maxFrames,
+            reset: { feeder.reset() }, nextChunk: { try feeder.next($0) }
+        )
+        return (r, feeder)
+    }
+
+    // Frames actually ingested at fail time: the fail-closed result carries the pre-rejection
+    // count as its duration, so frames == durationSeconds * sampleRate.
+    private func ingestedFrames(_ r: SpectralAnalysisResult) -> Int {
+        Int((r.durationSeconds * Self.fs48).rounded())
+    }
+
     @Test func streamingMultiChunkEqualsSingleChunkAndCore() {
         let samples = streamMultiTone(frames: 200_000)          // > 3 chunks of 64k frames
         let core = analyze([samples])                           // in-memory whole-array path
@@ -430,13 +449,16 @@ struct AudioFeatureExtractionEngineTests {
 
     @Test func lyingHeaderDeliveryOverCapFailsClosedInLoop() throws {
         let samples = streamMultiTone(frames: 300_000)
-        // Header declares 100k (under cap) but delivers 300k (over the 150k cap) — the loop
-        // guard must stop unbounded streaming rather than analyze forever.
-        let r = streamAnalyze([samples], declared: 100_000, chunkFrames: 64_000, deliver: 300_000, maxFrames: 150_000)
+        // Header declares 100k (under cap) but delivers 300k (over the 150k frame cap). The
+        // in-loop guard must fail closed WITHOUT accumulating the over-cap chunk.
+        let (r, feeder) = runStreaming([samples], declared: 100_000, deliver: 300_000, maxFrames: 150_000)
         #expect(!r.complete)
         let reason = try #require(r.partialReason)
         #expect(reason == "input_too_long")
         #expect(r.bands.isEmpty)
+        // Zero excess: fewer frames were accumulated than the seam delivered, so the chunk
+        // that would exceed the cap never entered the mean.
+        #expect(ingestedFrames(r) < feeder.deliveredByPass[0])
         guard case .noSafeRecommendation = recommendEQ(r) else {
             Issue.record("over-cap analysis must not yield a recommendation")
             return
@@ -457,31 +479,27 @@ struct AudioFeatureExtractionEngineTests {
     @Test func deliveredDurationOverCapFailsClosedInLoop() throws {
         let samples = streamMultiTone(frames: 200_000)
         // Declared ~0.83 s (under the 1 s cap) but delivery is 200k frames ≈ 4.2 s — over the
-        // duration cap while well under a generous frame cap. The in-loop duration bound must
-        // stop it (models a low-sample-rate file where duration binds before frames).
-        let r = streamAnalyze([samples], declared: 40_000, chunkFrames: 64_000, deliver: 200_000, maxFrames: 10_000_000, maxDuration: 1.0)
+        // duration cap while well under a generous frame cap (duration binds first). The chunk
+        // pushing past 1 s must not be accumulated.
+        let (r, feeder) = runStreaming([samples], declared: 40_000, deliver: 200_000, maxFrames: 10_000_000, maxDuration: 1.0)
         #expect(!r.complete)
         let reason = try #require(r.partialReason)
         #expect(reason == "input_too_long")
         #expect(r.bands.isEmpty)
+        #expect(ingestedFrames(r) < feeder.deliveredByPass[0])
     }
 
     @Test func passTwoOverDeliveryStopsBounded() throws {
         let samples = streamMultiTone(frames: 300_000)
         // Pass 1 delivers a consistent 100k; pass 2 lies and offers 300k. The pass-2 bound
-        // must stop as soon as it passes pass 1's count, not stream to EOF.
-        let feeder = ChunkFeeder(channels: [samples], deliverFrames: 100_000, pass2DeliverFrames: 300_000)
-        let r = AudioFeatureExtractionEngine.analyzeStreaming(
-            declaredFrameLength: 100_000, sampleRate: Self.fs48, channelCount: 1,
-            analysisRef: "p2", artifactFingerprint: "x", chunkFrames: 64_000,
-            reset: { feeder.reset() }, nextChunk: { try feeder.next($0) }
-        )
+        // must reject the over-count chunk BEFORE any of its frames reach the DSP.
+        let (r, feeder) = runStreaming([samples], declared: 100_000, deliver: 100_000, pass2Deliver: 300_000)
         #expect(!r.complete)
         let reason = try #require(r.partialReason)
         #expect(reason == "decode_truncated")
         #expect(feeder.deliveredByPass.count >= 2)
-        // Pass 2 stopped within one chunk of pass 1's count — NOT the full 300k over-delivery.
-        #expect(feeder.deliveredByPass[1] <= 100_000 + 64_000)
+        // Zero excess into pass 2's DSP: fewer frames ingested than pass 2 delivered.
+        #expect(ingestedFrames(r) < feeder.deliveredByPass[1])
     }
 
     @Test func fileSizeCapBoundary() throws {

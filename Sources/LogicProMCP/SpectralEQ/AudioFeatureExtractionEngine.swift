@@ -424,6 +424,18 @@ enum AudioFeatureExtractionEngine {
                 let frames = block.first?.count ?? 0
                 if frames == 0 { break }
                 guard block.count == channelCount else { return failClosed("decode_truncated", frames: decoded) }
+                // Compute caps checked BEFORE accumulating this chunk: a chunk that would push
+                // the total past the cap (frames, or duration — which binds first at low sample
+                // rates) is rejected without feeding ANY of its frames into the mean. A chunk
+                // landing exactly at the cap is still processed.
+                let projected = decoded + Int64(frames)
+                if let maxFrames = maxDecodedFrames, maxFrames > 0, projected > maxFrames {
+                    return failClosed("input_too_long", frames: decoded)
+                }
+                if let maxDuration = maxDurationSeconds, maxDuration > 0,
+                   Double(projected) / sampleRate > maxDuration {
+                    return failClosed("input_too_long", frames: decoded)
+                }
                 for ch in 0..<channelCount {
                     let col = block[ch]
                     guard col.count == frames else { return failClosed("decode_truncated", frames: decoded) }
@@ -435,16 +447,6 @@ enum AudioFeatureExtractionEngine {
                     sums[ch] += s
                 }
                 decoded += Int64(frames)
-                // Defense in depth: a lying header (declared under the cap) must not stream
-                // unbounded — stop the moment delivered frames, or their duration, exceed the
-                // cap. Duration binds first at low sample rates (frame cap is far higher).
-                if let maxFrames = maxDecodedFrames, maxFrames > 0, decoded > maxFrames {
-                    return failClosed("input_too_long", frames: decoded)
-                }
-                if let maxDuration = maxDurationSeconds, maxDuration > 0,
-                   Double(decoded) / sampleRate > maxDuration {
-                    return failClosed("input_too_long", frames: decoded)
-                }
             }
         } catch {
             return failClosed("decode_truncated", frames: decoded)
@@ -476,6 +478,11 @@ enum AudioFeatureExtractionEngine {
                 let frames = block.first?.count ?? 0
                 if frames == 0 { break }
                 guard block.count == channelCount else { return failClosed("decode_truncated", frames: decoded2) }
+                // Bound BEFORE ingest: a chunk that would push pass 2 past pass 1's
+                // authoritative count is rejected without feeding ANY of its frames into the
+                // DSP accumulators, so a source that lies differently on the second read
+                // cannot corrupt the statistics or stream unbounded.
+                if decoded2 + Int64(frames) > decoded { return failClosed("decode_truncated", frames: decoded2) }
                 for ch in 0..<channelCount {
                     var col = block[ch]
                     guard col.count == frames else { return failClosed("decode_truncated", frames: decoded2) }
@@ -485,10 +492,6 @@ enum AudioFeatureExtractionEngine {
                     welchLo[ch].ingest(col[...])
                 }
                 decoded2 += Int64(frames)
-                // Bound pass 2 by pass 1's authoritative count so a source that lies
-                // differently on the second read cannot stream unbounded before the
-                // post-loop consistency check.
-                if decoded2 > decoded { return failClosed("decode_truncated", frames: decoded2) }
             }
         } catch {
             return failClosed("decode_truncated", frames: decoded2)
