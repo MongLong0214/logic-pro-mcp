@@ -34,6 +34,22 @@ enum AudioFeatureExtractionEngine {
         case unreadable(String)
         case unsupportedFormat(String)
         case decode(String)
+        // The path stopped resolving to the descriptor's bound inode between open and use.
+        case pathIdentityChanged
+    }
+
+    /// Injectable path-identity probe so the descriptor↔path binding check is testable
+    /// without racing the real filesystem. Production reads the live inode identity.
+    struct IdentityProbe: Sendable {
+        var statIdentity: @Sendable (String) throws -> (dev: Int64, ino: UInt64)
+
+        static let production = IdentityProbe { path in
+            var info = stat()
+            guard stat(path, &info) == 0 else {
+                throw FeatureExtractionError.unreadable("stat failed: \(String(cString: strerror(errno)))")
+            }
+            return (Int64(info.st_dev), UInt64(info.st_ino))
+        }
     }
 
     /// Full-scale (0 dBFS) bin-centered sine anchor: under the one-sided ENBW-normalized
@@ -161,14 +177,47 @@ enum AudioFeatureExtractionEngine {
             }
         }
 
-        // Channel strategy: energy-average per-channel band powers (NOT sum-to-mono, which
-        // would cancel out-of-phase stereo). >2 channels averages all.
+        // Channel energy-average, floor, resonance/centroid/classification — shared with the
+        // streaming file path so both produce identical output for identical samples.
+        return finishAnalysis(
+            summedBandPower: summedBandPower,
+            channelCount: channelCount,
+            windowsAnalyzed: windowsAnalyzed,
+            sampleRate: sampleRate,
+            durationSeconds: duration,
+            analysisRef: analysisRef,
+            artifactFingerprint: artifactFingerprint,
+            config: config,
+            grid: grid
+        )
+    }
+
+    /// Shared tail: energy-average per-channel band powers (NOT sum-to-mono, which cancels
+    /// out-of-phase stereo), floor, then resonance/centroid/peaks/classification.
+    private static func finishAnalysis(
+        summedBandPower: [Double],
+        channelCount: Int,
+        windowsAnalyzed: Int,
+        sampleRate: Double,
+        durationSeconds: Double,
+        analysisRef: String,
+        artifactFingerprint: String,
+        config: Config,
+        grid: BandGrid
+    ) -> SpectralAnalysisResult {
+        let mode = ChannelMode(channelCount: channelCount)
         let denom = Double(max(channelCount, 1))
         var bandPower = summedBandPower.map { $0 / denom }
 
         // Defense-in-depth (I4b): a non-finite band power must never reach serialization.
         for i in 0..<bandPower.count where !bandPower[i].isFinite {
-            return failClosed("non_finite_input")
+            return SpectralAnalysisResult(
+                analysisRef: analysisRef, bands: [], resonances: [], classification: .unknown,
+                confidence: 0, complete: false, partialReason: "non_finite_input",
+                artifactFingerprint: artifactFingerprint, sampleRate: sampleRate,
+                channelCount: channelCount, durationSeconds: durationSeconds, windowsAnalyzed: 0,
+                channelMode: mode, spectralCentroidHz: nil, frequencyPeaks: []
+            )
         }
 
         let floorLin = pow(10.0, config.floorDbfs / 10.0)
@@ -191,7 +240,7 @@ enum AudioFeatureExtractionEngine {
             artifactFingerprint: artifactFingerprint,
             sampleRate: sampleRate,
             channelCount: channelCount,
-            durationSeconds: duration,
+            durationSeconds: durationSeconds,
             windowsAnalyzed: windowsAnalyzed,
             channelMode: mode,
             spectralCentroidHz: centroid,
@@ -199,7 +248,7 @@ enum AudioFeatureExtractionEngine {
         )
     }
 
-    // MARK: - Public file entry (safe path → native decode → core)
+    // MARK: - Public file entry (safe path → identity-bound streaming decode)
 
     static func analyzeFile(
         path: String,
@@ -207,14 +256,32 @@ enum AudioFeatureExtractionEngine {
         artifactFingerprint: String,
         policy: AudioAnalyzer.AnalysisPolicy = .default,
         runtime: AudioAnalyzer.Runtime = .production,
-        config: Config = .default
+        config: Config = .default,
+        chunkFrames: Int = 64_000,
+        identityProbe: IdentityProbe = .production
     ) throws -> SpectralAnalysisResult {
-        // A1/I4: reuse the SHIPPED path-safety model (absolute-only, traversal/iCloud
-        // rejected, symlink-resolved-then-containment). Rethrows AudioAnalyzer.AnalysisError.
+        // Reuse the SHIPPED path-safety model (absolute-only, traversal/iCloud rejected,
+        // symlink-resolved-then-containment). Rethrows AudioAnalyzer.AnalysisError.
         let url = try AudioAnalyzer.validatedURL(path, policy: policy, runtime: runtime)
-        // I4 special files: validatedURL rejects directories but not fifo/device/socket. A
-        // non-regular file must fail closed fast rather than block the decoder (O_NONBLOCK).
-        try rejectNonRegularFile(at: url.path)
+        let resolved = url.path
+
+        // Bind file identity across the check→use gap: open once, require a regular file,
+        // and hold the descriptor (O_NOFOLLOW guards a swapped final component) so the inode
+        // cannot be replaced from under the decoder.
+        let fd = open(resolved, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+        guard fd >= 0 else {
+            throw FeatureExtractionError.unreadable(String(cString: strerror(errno)))
+        }
+        defer { close(fd) }
+
+        var fdInfo = stat()
+        guard fstat(fd, &fdInfo) == 0 else {
+            throw FeatureExtractionError.unreadable("fstat failed")
+        }
+        guard (fdInfo.st_mode & S_IFMT) == S_IFREG else {
+            throw FeatureExtractionError.specialFile("non-regular file (fifo/device/socket) rejected")
+        }
+        let fdIdentity = (dev: Int64(fdInfo.st_dev), ino: UInt64(fdInfo.st_ino))
 
         let file: AVAudioFile
         do {
@@ -222,48 +289,194 @@ enum AudioFeatureExtractionEngine {
         } catch {
             throw FeatureExtractionError.decode(error.localizedDescription)
         }
-        // Native-format decode only — no implicit AVAudioConverter SRC/downmix (fixed-machine determinism scope).
+        // TOCTOU: require the path still resolves to the SAME inode the held descriptor is
+        // bound to — a mismatch means the path was swapped and we fail closed.
+        let pathIdentity = try identityProbe.statIdentity(resolved)
+        guard pathIdentity.dev == fdIdentity.dev, pathIdentity.ino == fdIdentity.ino else {
+            throw FeatureExtractionError.pathIdentityChanged
+        }
+
+        // Native-format decode only — no implicit AVAudioConverter SRC/downmix.
         let format = file.processingFormat
         let sampleRate = format.sampleRate
         let channelCount = Int(format.channelCount)
-        let frameCount = file.length
-        guard sampleRate > 0, channelCount > 0, frameCount > 0 else {
+        let declared = file.length
+        guard sampleRate > 0, channelCount > 0, declared > 0 else {
             throw FeatureExtractionError.decode("empty or unreadable audio stream")
         }
 
-        var channels = [[Double]](repeating: [], count: channelCount)
-        for i in 0..<channelCount { channels[i].reserveCapacity(Int(frameCount)) }
-
-        let capacity: AVAudioFrameCount = 8_192
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity) else {
+        let bufferFrames = AVAudioFrameCount(max(1, chunkFrames))
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: bufferFrames) else {
             throw FeatureExtractionError.decode("could not allocate PCM buffer")
         }
-        var remaining = frameCount
-        while remaining > 0 {
-            let toRead = AVAudioFrameCount(min(Int64(capacity), remaining))
-            do {
-                try file.read(into: buffer, frameCount: toRead)
-            } catch {
-                throw FeatureExtractionError.decode(error.localizedDescription)
-            }
+
+        // Bounded streaming: read chunks into the reused buffer; memory stays O(window +
+        // bands + chunk), independent of file length.
+        let reset: () throws -> Void = { file.framePosition = 0 }
+        let nextChunk: (Int) throws -> [[Double]] = { maxFrames in
+            // AVAudioFile.read throws when frameCount exceeds the frames remaining, so cap
+            // the request by (length − position) and stop cleanly at EOF.
+            let remaining = file.length - file.framePosition
+            if remaining <= 0 { return [[Double]](repeating: [], count: channelCount) }
+            let cap = min(max(1, maxFrames), Int(buffer.frameCapacity))
+            let want = AVAudioFrameCount(min(Int64(cap), remaining))
+            try file.read(into: buffer, frameCount: want)
             let read = Int(buffer.frameLength)
-            guard read > 0 else { break }
+            if read == 0 { return [[Double]](repeating: [], count: channelCount) }
             guard let data = buffer.floatChannelData else {
                 throw FeatureExtractionError.decode("decoded audio is not float PCM")
             }
+            var out = [[Double]](repeating: [], count: channelCount)
             for ch in 0..<channelCount {
                 let ptr = data[ch]
-                for frame in 0..<read { channels[ch].append(Double(ptr[frame])) }
+                var col = [Double](repeating: 0, count: read)
+                for i in 0..<read { col[i] = Double(ptr[i]) }
+                out[ch] = col
             }
-            remaining -= Int64(read)
+            return out
         }
 
-        return analyze(
-            channels: channels,
+        return analyzeStreaming(
+            declaredFrameLength: declared,
             sampleRate: sampleRate,
+            channelCount: channelCount,
             analysisRef: analysisRef,
             artifactFingerprint: artifactFingerprint,
-            config: config
+            config: config,
+            chunkFrames: chunkFrames,
+            reset: reset,
+            nextChunk: nextChunk
+        )
+    }
+
+    // MARK: - Bounded streaming core (two-pass; O(window+bands) memory)
+
+    /// Two-pass streaming analysis: pass 1 accumulates the per-channel mean (for DC removal),
+    /// counts decoded frames (truncation), and scans for non-finite samples; pass 2 runs the
+    /// mean-subtracted sliding Welch. Frames are extracted in increasing start order across
+    /// chunk boundaries, so the result is identical to the whole-file path for the same
+    /// samples. Content faults fail closed (never `complete:true`); a short read or a
+    /// decoded-vs-declared shortfall is `decode_truncated`.
+    static func analyzeStreaming(
+        declaredFrameLength: Int64,
+        sampleRate: Double,
+        channelCount: Int,
+        analysisRef: String,
+        artifactFingerprint: String,
+        config: Config = .default,
+        chunkFrames: Int = 64_000,
+        reset: () throws -> Void,
+        nextChunk: (Int) throws -> [[Double]]
+    ) -> SpectralAnalysisResult {
+        let mode = ChannelMode(channelCount: channelCount)
+        let chunk = max(1, chunkFrames)
+
+        func failClosed(_ reason: String, frames: Int64) -> SpectralAnalysisResult {
+            let dur = sampleRate > 0 ? Double(max(frames, 0)) / sampleRate : 0
+            return SpectralAnalysisResult(
+                analysisRef: analysisRef, bands: [], resonances: [], classification: .unknown,
+                confidence: 0, complete: false, partialReason: reason,
+                artifactFingerprint: artifactFingerprint, sampleRate: sampleRate,
+                channelCount: channelCount, durationSeconds: dur, windowsAnalyzed: 0,
+                channelMode: mode, spectralCentroidHz: nil, frequencyPeaks: []
+            )
+        }
+
+        guard channelCount > 0, sampleRate > 0, declaredFrameLength >= Int64(minAnalyzableFrames) else {
+            return failClosed("input_too_short", frames: max(declaredFrameLength, 0))
+        }
+
+        // Pass 1: mean + truncation + non-finite.
+        var sums = [Double](repeating: 0, count: channelCount)
+        var decoded: Int64 = 0
+        var nonFinite = false
+        do {
+            try reset()
+            while true {
+                let block = try nextChunk(chunk)
+                let frames = block.first?.count ?? 0
+                if frames == 0 { break }
+                guard block.count == channelCount else { return failClosed("decode_truncated", frames: decoded) }
+                for ch in 0..<channelCount {
+                    let col = block[ch]
+                    guard col.count == frames else { return failClosed("decode_truncated", frames: decoded) }
+                    var s = 0.0
+                    for v in col {
+                        if !v.isFinite { nonFinite = true }
+                        s += v
+                    }
+                    sums[ch] += s
+                }
+                decoded += Int64(frames)
+            }
+        } catch {
+            return failClosed("decode_truncated", frames: decoded)
+        }
+        if nonFinite { return failClosed("non_finite_input", frames: decoded) }
+        if decoded < declaredFrameLength { return failClosed("decode_truncated", frames: decoded) }
+        guard decoded >= Int64(minAnalyzableFrames) else { return failClosed("input_too_short", frames: decoded) }
+
+        let means = sums.map { $0 / Double(decoded) }
+        let grid = makeGrid(config)
+
+        // Pass 2: mean-subtracted sliding Welch at both window sizes, per channel.
+        var welchHi = [SlidingWelch]()
+        var welchLo = [SlidingWelch]()
+        for _ in 0..<channelCount {
+            guard let hi = SlidingWelch(windowSize: config.windowLarge, overlap: config.overlap),
+                  let lo = SlidingWelch(windowSize: config.windowSmall, overlap: config.overlap) else {
+                return failClosed("input_too_short", frames: decoded)
+            }
+            welchHi.append(hi)
+            welchLo.append(lo)
+        }
+
+        var decoded2: Int64 = 0
+        do {
+            try reset()
+            while true {
+                let block = try nextChunk(chunk)
+                let frames = block.first?.count ?? 0
+                if frames == 0 { break }
+                guard block.count == channelCount else { return failClosed("decode_truncated", frames: decoded2) }
+                for ch in 0..<channelCount {
+                    var col = block[ch]
+                    guard col.count == frames else { return failClosed("decode_truncated", frames: decoded2) }
+                    let m = means[ch]
+                    for i in 0..<col.count { col[i] -= m }
+                    welchHi[ch].ingest(col[...])
+                    welchLo[ch].ingest(col[...])
+                }
+                decoded2 += Int64(frames)
+            }
+        } catch {
+            return failClosed("decode_truncated", frames: decoded2)
+        }
+        if decoded2 != decoded { return failClosed("decode_truncated", frames: decoded2) }
+
+        var summedBandPower = [Double](repeating: 0, count: grid.centers.count)
+        var windowsAnalyzed = 0
+        for ch in 0..<channelCount {
+            let (psHi, framesHi) = welchHi[ch].finalize()
+            let (psLo, framesLo) = welchLo[ch].finalize()
+            windowsAnalyzed += framesHi + framesLo
+            let bandsHi = aggregateToBands(power: psHi, sampleRate: sampleRate, windowSize: config.windowLarge, grid: grid)
+            let bandsLo = aggregateToBands(power: psLo, sampleRate: sampleRate, windowSize: config.windowSmall, grid: grid)
+            for i in 0..<grid.centers.count {
+                summedBandPower[i] += (grid.edges[i] < config.crossoverHz) ? bandsHi[i] : bandsLo[i]
+            }
+        }
+
+        return finishAnalysis(
+            summedBandPower: summedBandPower,
+            channelCount: channelCount,
+            windowsAnalyzed: windowsAnalyzed,
+            sampleRate: sampleRate,
+            durationSeconds: Double(decoded) / sampleRate,
+            analysisRef: analysisRef,
+            artifactFingerprint: artifactFingerprint,
+            config: config,
+            grid: grid
         )
     }
 
@@ -296,29 +509,10 @@ enum AudioFeatureExtractionEngine {
         var start = 0
 
         while start + n <= samples.count {
-            for i in 0..<n { windowed[i] = samples[start + i] * window[i] }
-            realp.withUnsafeMutableBufferPointer { rp in
-                imagp.withUnsafeMutableBufferPointer { ip in
-                    var split = DSPDoubleSplitComplex(realp: rp.baseAddress!, imagp: ip.baseAddress!)
-                    windowed.withUnsafeBufferPointer { wp in
-                        wp.baseAddress!.withMemoryRebound(to: DSPDoubleComplex.self, capacity: half) { cp in
-                            vDSP_ctozD(cp, 2, &split, 1, vDSP_Length(half))
-                        }
-                    }
-                    vDSP_fft_zripD(setup, &split, 1, log2n, FFTDirection(kFFTDirection_Forward))
-                    // vDSP packed real FFT: rp[0]=2·DC, ip[0]=2·Nyquist, rp[k]/ip[k]=2·Re/Im.
-                    // Undo the ×2 (·0.5) to match the standard DFT, then |X|² = re²+im².
-                    let dc = rp[0] * 0.5
-                    let nyq = ip[0] * 0.5
-                    acc[0] += (dc * dc) / norm                    // DC: no one-sided doubling
-                    acc[half] += (nyq * nyq) / norm               // Nyquist: no one-sided doubling
-                    for k in 1..<half {
-                        let re = rp[k] * 0.5
-                        let im = ip[k] * 0.5
-                        acc[k] += 2.0 * (re * re + im * im) / norm // one-sided: double the mids
-                    }
-                }
-            }
+            accumulateFrame(
+                source: samples, start: start, window: window, n: n, half: half, norm: norm,
+                setup: setup, log2n: log2n, windowed: &windowed, realp: &realp, imagp: &imagp, acc: &acc
+            )
             frames += 1
             start += hop
         }
@@ -327,6 +521,109 @@ enum AudioFeatureExtractionEngine {
         let inv = 1.0 / Double(frames)
         for i in 0..<acc.count { acc[i] *= inv }
         return (acc, frames)
+    }
+
+    /// Accumulate one Hann-windowed frame's one-sided, ENBW-normalized power into `acc`
+    /// (bins 0…N/2). Shared by the whole-array and streaming paths so both perform identical
+    /// per-frame arithmetic in identical order.
+    static func accumulateFrame(
+        source: [Double], start: Int,
+        window: [Double], n: Int, half: Int, norm: Double,
+        setup: FFTSetupD, log2n: vDSP_Length,
+        windowed: inout [Double], realp: inout [Double], imagp: inout [Double],
+        acc: inout [Double]
+    ) {
+        for i in 0..<n { windowed[i] = source[start + i] * window[i] }
+        realp.withUnsafeMutableBufferPointer { rp in
+            imagp.withUnsafeMutableBufferPointer { ip in
+                var split = DSPDoubleSplitComplex(realp: rp.baseAddress!, imagp: ip.baseAddress!)
+                windowed.withUnsafeBufferPointer { wp in
+                    wp.baseAddress!.withMemoryRebound(to: DSPDoubleComplex.self, capacity: half) { cp in
+                        vDSP_ctozD(cp, 2, &split, 1, vDSP_Length(half))
+                    }
+                }
+                vDSP_fft_zripD(setup, &split, 1, log2n, FFTDirection(kFFTDirection_Forward))
+                // vDSP packed real FFT: rp[0]=2·DC, ip[0]=2·Nyquist, rp[k]/ip[k]=2·Re/Im.
+                // Undo the ×2 (·0.5) to match the standard DFT, then |X|² = re²+im².
+                let dc = rp[0] * 0.5
+                let nyq = ip[0] * 0.5
+                acc[0] += (dc * dc) / norm                    // DC: no one-sided doubling
+                acc[half] += (nyq * nyq) / norm               // Nyquist: no one-sided doubling
+                for k in 1..<half {
+                    let re = rp[k] * 0.5
+                    let im = ip[k] * 0.5
+                    acc[k] += 2.0 * (re * re + im * im) / norm // one-sided: double the mids
+                }
+            }
+        }
+    }
+
+    // MARK: - Sliding Welch accumulator (streaming; O(window+chunk) buffer)
+
+    /// Extracts Hann frames from an incrementally-fed sample stream, holding at most a
+    /// window-plus-chunk tail so windows that span chunk boundaries are handled without
+    /// buffering the whole signal. Frames are emitted in increasing start order.
+    final class SlidingWelch {
+        let n: Int
+        let hop: Int
+        private let half: Int
+        private let norm: Double
+        private let window: [Double]
+        private let setup: FFTSetupD
+        private let log2n: vDSP_Length
+        private var acc: [Double]
+        private var windowed: [Double]
+        private var realp: [Double]
+        private var imagp: [Double]
+        private var buffer: [Double] = []
+        private var consumed = 0        // absolute index of buffer[0]
+        private var nextFrameStart = 0
+        private(set) var frames = 0
+
+        init?(windowSize n: Int, overlap: Double) {
+            guard n >= 2, n & (n - 1) == 0 else { return nil }
+            let (window, _, s2) = AudioFeatureExtractionEngine.hannWindow(n)
+            let log2n = vDSP_Length((log2(Double(n))).rounded())
+            guard let setup = vDSP_create_fftsetupD(log2n, FFTRadix(kFFTRadix2)) else { return nil }
+            self.n = n
+            self.hop = max(1, Int((Double(n) * (1.0 - overlap)).rounded()))
+            self.half = n / 2
+            self.norm = Double(n) * s2
+            self.window = window
+            self.setup = setup
+            self.log2n = log2n
+            self.acc = [Double](repeating: 0, count: n / 2 + 1)
+            self.windowed = [Double](repeating: 0, count: n)
+            self.realp = [Double](repeating: 0, count: n / 2)
+            self.imagp = [Double](repeating: 0, count: n / 2)
+        }
+
+        deinit { vDSP_destroy_fftsetupD(setup) }
+
+        func ingest(_ samples: ArraySlice<Double>) {
+            buffer.append(contentsOf: samples)
+            while nextFrameStart + n <= consumed + buffer.count {
+                let localStart = nextFrameStart - consumed
+                AudioFeatureExtractionEngine.accumulateFrame(
+                    source: buffer, start: localStart, window: window, n: n, half: half, norm: norm,
+                    setup: setup, log2n: log2n, windowed: &windowed, realp: &realp, imagp: &imagp, acc: &acc
+                )
+                frames += 1
+                nextFrameStart += hop
+            }
+            // Drop samples before the next frame start — keeps the tail bounded.
+            let trim = min(nextFrameStart - consumed, buffer.count)
+            if trim > 0 {
+                buffer.removeFirst(trim)
+                consumed += trim
+            }
+        }
+
+        func finalize() -> (power: [Double], frames: Int) {
+            guard frames > 0 else { return ([], 0) }
+            let inv = 1.0 / Double(frames)
+            return (acc.map { $0 * inv }, frames)
+        }
     }
 
     private static func aggregateToBands(
@@ -502,20 +799,4 @@ enum AudioFeatureExtractionEngine {
         return (classification, confidence)
     }
 
-    // MARK: - Special-file fast-fail guard (I4)
-
-    private static func rejectNonRegularFile(at path: String) throws {
-        let fd = open(path, O_RDONLY | O_NONBLOCK)
-        guard fd >= 0 else {
-            throw FeatureExtractionError.unreadable(String(cString: strerror(errno)))
-        }
-        defer { close(fd) }
-        var info = stat()
-        guard fstat(fd, &info) == 0 else {
-            throw FeatureExtractionError.unreadable("fstat failed")
-        }
-        guard (info.st_mode & S_IFMT) == S_IFREG else {
-            throw FeatureExtractionError.specialFile("non-regular file (fifo/device/socket) rejected")
-        }
-    }
 }

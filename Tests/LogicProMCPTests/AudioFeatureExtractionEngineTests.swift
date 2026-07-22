@@ -336,4 +336,150 @@ struct AudioFeatureExtractionEngineTests {
             // expected — reuses AudioAnalyzer.validatedURL
         }
     }
+
+    // MARK: - Bounded streaming (blocker 1): multi-chunk ≡ single-chunk ≡ in-memory core
+
+    private func streamMultiTone(frames: Int) -> [Double] {
+        let low = sine(100.181_884_765_625, amplitude: 0.5, frames: frames)
+        let mid = sine(Self.toneHz, amplitude: 0.3, frames: frames)
+        let high = sine(5_001.953_125, amplitude: 0.2, frames: frames)
+        var out = [Double](repeating: 0, count: frames)
+        for i in 0..<frames { out[i] = low[i] + mid[i] + high[i] }
+        return out
+    }
+
+    private func streamAnalyze(_ channels: [[Double]], declared: Int64, chunkFrames: Int, deliver: Int? = nil, throwAfter: Int? = nil) -> SpectralAnalysisResult {
+        let feeder = ChunkFeeder(channels: channels, deliverFrames: deliver ?? channels[0].count, throwAfter: throwAfter)
+        return AudioFeatureExtractionEngine.analyzeStreaming(
+            declaredFrameLength: declared,
+            sampleRate: Self.fs48,
+            channelCount: channels.count,
+            analysisRef: "stream",
+            artifactFingerprint: "fixture",
+            chunkFrames: chunkFrames,
+            reset: { feeder.reset() },
+            nextChunk: { try feeder.next($0) }
+        )
+    }
+
+    @Test func streamingMultiChunkEqualsSingleChunkAndCore() {
+        let samples = streamMultiTone(frames: 200_000)          // > 3 chunks of 64k frames
+        let core = analyze([samples])                           // in-memory whole-array path
+        let single = streamAnalyze([samples], declared: 200_000, chunkFrames: 10_000_000)
+        let multi = streamAnalyze([samples], declared: 200_000, chunkFrames: 64_000)
+        #expect(multi.complete)
+        #expect(single.complete)
+        #expect(multi.windowsAnalyzed > 0)
+        // Chunk boundaries must not change the result: multi-chunk == single-chunk == core.
+        #expect(withinI1Gate(multi.bands, single.bands))
+        #expect(withinI1Gate(multi.bands, core.bands))
+    }
+
+    // MARK: - Early EOF / truncation (blocker 3): never complete:true
+
+    @Test func truncatedDeliveryFailsClosed() throws {
+        let samples = streamMultiTone(frames: 200_000)
+        // Declares 200k frames but only 120k are delivered → truncated, never complete.
+        let r = streamAnalyze([samples], declared: 200_000, chunkFrames: 64_000, deliver: 120_000)
+        #expect(!r.complete)
+        let reason = try #require(r.partialReason)
+        #expect(reason == "decode_truncated")
+        #expect(r.bands.isEmpty)
+        guard case .noSafeRecommendation = recommendEQ(r) else {
+            Issue.record("truncated analysis must not yield a recommendation")
+            return
+        }
+    }
+
+    @Test func readErrorMidStreamFailsClosed() throws {
+        let samples = streamMultiTone(frames: 200_000)
+        let r = streamAnalyze([samples], declared: 200_000, chunkFrames: 64_000, throwAfter: 100_000)
+        #expect(!r.complete)
+        let reason = try #require(r.partialReason)
+        #expect(reason == "decode_truncated")
+    }
+
+    // MARK: - TOCTOU identity binding (blocker 2)
+
+    @Test func pathIdentityMismatchFailsClosed() throws {
+        let url = try writeWAV("id.wav", sampleRate: Self.fs48, samples: sine(Self.toneHz))
+        // A probe reporting a different inode than the held descriptor's models a post-open
+        // path swap → analysis must fail closed rather than decode whatever the path now points at.
+        let bogus = AudioFeatureExtractionEngine.IdentityProbe { _ in (dev: -1, ino: 0) }
+        do {
+            _ = try AudioFeatureExtractionEngine.analyzeFile(path: url.path, analysisRef: "id", artifactFingerprint: "x", identityProbe: bogus)
+            Issue.record("identity mismatch must fail closed")
+        } catch let error as AudioFeatureExtractionEngine.FeatureExtractionError {
+            guard case .pathIdentityChanged = error else {
+                Issue.record("expected pathIdentityChanged, got \(error)")
+                return
+            }
+        }
+    }
+
+    // MARK: - Codable compatibility with legacy resonances (blocker 5)
+
+    @Test func legacyResonanceArrayDecodesWithDefaults() throws {
+        // Legacy stored analysis: NON-EMPTY resonances WITHOUT resolutionLimited, and none of
+        // the rollout-1 fields. Must decode with defaults rather than throwing.
+        let json = """
+        {"analysisRef":"legacy-1","bands":[{"centerHz":1000,"energyDb":-3}],\
+        "resonances":[{"hz":3200,"gainDb":5,"q":2},{"hz":800,"gainDb":4,"q":1.5}],\
+        "classification":"vocal","confidence":0.8,"complete":true,"partialReason":null}
+        """
+        let decoded = try JSONDecoder().decode(SpectralAnalysisResult.self, from: Data(json.utf8))
+        #expect(decoded.resonances.count == 2)
+        let first = try #require(decoded.resonances.first)
+        #expect(first.hz == 3200)
+        #expect(!first.resolutionLimited)            // absent field → default false
+        #expect(decoded.artifactFingerprint == "")   // absent rollout-1 field → default
+        #expect(decoded.sampleRate == 0)
+        #expect(decoded.frequencyPeaks.isEmpty)
+    }
+
+    @Test func newFormatResonanceRoundTrips() throws {
+        let original = SpectralAnalysisResult(
+            analysisRef: "rt-1",
+            bands: [SpectralBand(centerHz: 1_000, energyDb: -3)],
+            resonances: [SpectralResonance(hz: 5_120, gainDb: 9, q: 12, resolutionLimited: true)],
+            classification: .drums, confidence: 0.7, complete: true, partialReason: nil,
+            artifactFingerprint: "fp", sampleRate: 48_000, channelCount: 2, durationSeconds: 1.0,
+            windowsAnalyzed: 42, channelMode: .stereoEnergyAverage,
+            spectralCentroidHz: 1_234.5, frequencyPeaks: [AudioAnalyzer.FrequencyPeak(frequencyHz: 5_120, magnitude: 0.5)]
+        )
+        let decoded = try JSONDecoder().decode(SpectralAnalysisResult.self, from: JSONEncoder().encode(original))
+        #expect(decoded == original)
+        let res = try #require(decoded.resonances.first)
+        #expect(res.resolutionLimited)
+        #expect(res.hz == 5_120)
+    }
+}
+
+/// Deterministic chunk feeder for the streaming core: delivers `deliverFrames` frames of the
+/// backing channels in `next`-sized blocks (fewer than declared = truncation), and can throw
+/// mid-stream to model a decode error. No randomness or wall-clock — reset re-delivers.
+private final class ChunkFeeder {
+    private let channels: [[Double]]
+    private let deliverFrames: Int
+    private let throwAfter: Int?
+    private var pos = 0
+
+    struct ReadFault: Error {}
+
+    init(channels: [[Double]], deliverFrames: Int, throwAfter: Int?) {
+        self.channels = channels
+        self.deliverFrames = deliverFrames
+        self.throwAfter = throwAfter
+    }
+
+    func reset() { pos = 0 }
+
+    func next(_ maxFrames: Int) throws -> [[Double]] {
+        if let throwAfter, pos >= throwAfter { throw ReadFault() }
+        let end = min(deliverFrames, pos + max(1, maxFrames))
+        if end <= pos { return channels.map { _ in [Double]() } }
+        let block = channels.map { Array($0[pos..<end]) }
+        pos = end
+        return block
+    }
 }

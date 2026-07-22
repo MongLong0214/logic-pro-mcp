@@ -20,6 +20,18 @@ struct SpectralResonance: Codable, Equatable, Sendable {
         self.q = q
         self.resolutionLimited = resolutionLimited
     }
+
+    // Legacy resonance records predate `resolutionLimited`; decode it leniently so a
+    // stored non-empty resonance array without the field still round-trips (defaults false).
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            hz: try values.decode(Double.self, forKey: .hz),
+            gainDb: try values.decode(Double.self, forKey: .gainDb),
+            q: try values.decode(Double.self, forKey: .q),
+            resolutionLimited: try values.decodeIfPresent(Bool.self, forKey: .resolutionLimited) ?? false
+        )
+    }
 }
 
 enum SourceClassification: String, Codable, Sendable {
