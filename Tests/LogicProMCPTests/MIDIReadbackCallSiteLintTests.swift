@@ -21,21 +21,36 @@ import Testing
     // file: the production return of `assessReadback` and the debug-only seam.
     private static let expectedProofMintSites = 2
 
-    /// Count real `.identifier` tokens with the given name (excludes comments and
-    /// string content by construction).
+    /// Whether a token is a real identifier reference to `name`, comparing the
+    /// token's text with any backtick escaping removed (so `` `assessReadback` ``
+    /// matches) and excluding string-segment content by construction.
+    private static func isIdentifierRef(_ token: TokenSyntax, _ name: String) -> Bool {
+        if case .stringSegment = token.tokenKind { return false }
+        return token.text.replacingOccurrences(of: "`", with: "") == name
+    }
+
+    /// Count real identifier references to `name` (excludes comments and string
+    /// content; catches backtick-escaped identifiers).
     static func identifierCount(_ source: String, _ name: String) -> Int {
         Parser.parse(source: source)
             .tokens(viewMode: .sourceAccurate)
-            .reduce(0) { $0 + ($1.tokenKind == .identifier(name) ? 1 : 0) }
+            .reduce(0) { $0 + (isIdentifierRef($1, name) ? 1 : 0) }
     }
 
-    /// Count `Name(` call sites: an identifier token `Name` immediately followed
-    /// (ignoring trivia) by `(`.
+    /// Count `Name(` and `Name.init(` construction sites (identifier `Name`
+    /// followed by `(`, or by `.init(`), backtick-insensitive.
     static func callSiteCount(_ source: String, _ name: String) -> Int {
         let tokens = Array(Parser.parse(source: source).tokens(viewMode: .sourceAccurate))
         var count = 0
-        for i in tokens.indices where tokens[i].tokenKind == .identifier(name) {
-            if i + 1 < tokens.count, tokens[i + 1].tokenKind == .leftParen { count += 1 }
+        for i in tokens.indices where isIdentifierRef(tokens[i], name) {
+            if i + 1 < tokens.count, tokens[i + 1].tokenKind == .leftParen {
+                count += 1
+            } else if i + 3 < tokens.count,
+                      tokens[i + 1].tokenKind == .period,
+                      tokens[i + 2].text.replacingOccurrences(of: "`", with: "") == "init",
+                      tokens[i + 3].tokenKind == .leftParen {
+                count += 1
+            }
         }
         return count
     }
@@ -102,7 +117,10 @@ import Testing
         #expect(Self.identifierCount("return \"\\(assessReadback(e))\"", "assessReadback") == 1)       // string interpolation
         #expect(Self.identifierCount("let s = #\"\\#(assessReadback(e))\"#", "assessReadback") == 1)   // raw-string interpolation
         #expect(Self.identifierCount("let u = \"https://x\"; assessReadback(e)", "assessReadback") == 1) // // inside a string
+        #expect(Self.identifierCount("let r = `assessReadback`(e)", "assessReadback") == 1)             // backtick-escaped identifier
         #expect(Self.callSiteCount("return .complete(CompleteProof ())", "CompleteProof") == 1)         // whitespace before paren
+        #expect(Self.callSiteCount("return .complete(CompleteProof.init())", "CompleteProof") == 1)     // .init() construction
+        #expect(Self.callSiteCount("return .complete(`CompleteProof`())", "CompleteProof") == 1)        // backtick construction
         // Not counted: comments, plain string content, member access, unrelated ids.
         #expect(Self.identifierCount("// minted only by assessReadback(evidence)", "assessReadback") == 0)
         #expect(Self.identifierCount("/* /* nested */ see assessReadback */", "assessReadback") == 0)
