@@ -246,7 +246,12 @@ enum AudioAnalyzer {
         }
     }
 
-    private static func validatedURL(
+    // ADR-012 rollout 1: exposed module-internal (was `private`) so
+    // `AudioFeatureExtractionEngine` reuses the SHIPPED path-safety model
+    // (absolute-only, traversal/iCloud-rejected, symlink-resolved-then-containment)
+    // rather than reimplementing it. The only caller outside this type is the spectral
+    // engine; the legacy `analyzeFile` behaviour is unchanged.
+    static func validatedURL(
         _ rawPath: String,
         policy: AnalysisPolicy,
         runtime: Runtime

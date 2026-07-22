@@ -7,8 +7,14 @@ struct EQBandRecommendation: Codable, Equatable, Sendable {
     let reason: String
 }
 
+/// ADR-012 I2/A8 — recommendation-only, structural.
+/// The type has NO representable non-advisory state: there is no `advisory` flag to set
+/// false, and no `applied`/`verified`/`adjusted` case or field. A recommendation is
+/// inherently advisory by construction, so a mutation/apply claim (ADR-013 #301) cannot be
+/// expressed through this type at all — the honesty boundary is enforced by the compiler,
+/// not by a runtime check that could be flipped.
 enum EQRecommendationOutcome: Equatable, Sendable {
-    case recommendation(bands: [EQBandRecommendation], advisory: Bool)
+    case recommendation(bands: [EQBandRecommendation])
     case noSafeRecommendation(reason: String)
 }
 
@@ -34,5 +40,5 @@ func recommendEQ(
             reason: "resonance_cut"
         )
     }
-    return .recommendation(bands: bands, advisory: true)
+    return .recommendation(bands: bands)
 }

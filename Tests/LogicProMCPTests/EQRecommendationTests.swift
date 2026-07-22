@@ -22,14 +22,15 @@ struct EQRecommendationTests {
         let outcome = recommendEQ(
             analysis(resonances: [SpectralResonance(hz: 3_200, gainDb: 5, q: 2)])
         )
-        guard case .recommendation(let bands, let advisory) = outcome else {
+        // I2/A8: the recommendation type is inherently advisory — there is no `advisory`
+        // flag (nor any apply/verified field) to inspect; the honesty boundary is structural.
+        guard case .recommendation(let bands) = outcome else {
             Issue.record("Expected an advisory recommendation")
             return
         }
 
         let band = try #require(bands.first)
         #expect(!bands.isEmpty)
-        #expect(advisory)
         #expect(band.centerHz == 3_200)
         #expect(band.gainDb == -5)
         #expect(band.q == 2)
@@ -46,11 +47,13 @@ struct EQRecommendationTests {
                     classification: classification
                 )
             )
-            guard case .recommendation(_, let advisory) = outcome else {
+            // Every valid classification yields a `.recommendation`; the case carries only
+            // advisory cut bands and cannot represent an applied/verified state.
+            guard case .recommendation(let bands) = outcome else {
                 Issue.record("Expected a recommendation for \(classification.rawValue)")
                 continue
             }
-            #expect(advisory)
+            #expect(!bands.isEmpty)
         }
     }
 
