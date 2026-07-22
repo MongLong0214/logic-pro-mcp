@@ -9,6 +9,17 @@ struct SpectralResonance: Codable, Equatable, Sendable {
     let hz: Double
     let gainDb: Double
     let q: Double
+    // ADR-012 pinned rule: where a peak occupies < 1 log-band its −3 dB bandwidth cannot be
+    // resolved, so Q is clamped at the analysis-resolution ceiling and flagged rather
+    // than reported as an unbounded value. Consumers must treat a flagged Q as ">= q".
+    let resolutionLimited: Bool
+
+    init(hz: Double, gainDb: Double, q: Double, resolutionLimited: Bool = false) {
+        self.hz = hz
+        self.gainDb = gainDb
+        self.q = q
+        self.resolutionLimited = resolutionLimited
+    }
 }
 
 enum SourceClassification: String, Codable, Sendable {
@@ -19,14 +30,45 @@ enum SourceClassification: String, Codable, Sendable {
     case unknown
 }
 
+/// ADR-012 pinned channel strategy: analyze each channel independently then energy-average
+/// (never sum-to-mono — that cancels out-of-phase stereo). The mode records which
+/// averaging path produced the bands so a consumer can reason about phase handling.
+enum ChannelMode: String, Codable, Sendable {
+    case mono
+    case stereoEnergyAverage = "stereo_energy_average"
+    case multiChannelEnergyAverage = "multichannel_energy_average"
+
+    init(channelCount: Int) {
+        switch channelCount {
+        case ..<2: self = .mono
+        case 2: self = .stereoEnergyAverage
+        default: self = .multiChannelEnergyAverage
+        }
+    }
+}
+
+/// ADR-012 rollout-1 public analysis schema (pinned). `spectralCentroidHz` and
+/// `frequencyPeaks` are COMPUTED by `AudioFeatureExtractionEngine` (never placeholders);
+/// the defaults on the initializer exist only so unrelated recommendation-layer test
+/// fixtures and legacy decoders keep compiling — the engine always populates every field.
+/// Deferred fields (percentileSpectrum, spectralRolloffHz, lowMidHighEnergy,
+/// dynamicSummary) are explicitly deferred past rollout 1, each gated at its own rollout PR (each gated at its own rollout PR).
 struct SpectralAnalysisResult: Codable, Equatable, Sendable {
     let analysisRef: String
-    let bands: [SpectralBand]
-    let resonances: [SpectralResonance]
-    let classification: SourceClassification
-    let confidence: Double
+    let artifactFingerprint: String
+    let sampleRate: Double
+    let channelCount: Int
+    let durationSeconds: Double
+    let windowsAnalyzed: Int
+    let channelMode: ChannelMode
     let complete: Bool
     let partialReason: String?
+    let bands: [SpectralBand]
+    let resonances: [SpectralResonance]
+    let spectralCentroidHz: Double?
+    let frequencyPeaks: [AudioAnalyzer.FrequencyPeak]
+    let classification: SourceClassification
+    let confidence: Double
 
     init(
         analysisRef: String,
@@ -35,11 +77,27 @@ struct SpectralAnalysisResult: Codable, Equatable, Sendable {
         classification: SourceClassification,
         confidence: Double,
         complete: Bool,
-        partialReason: String?
+        partialReason: String?,
+        artifactFingerprint: String = "",
+        sampleRate: Double = 0,
+        channelCount: Int = 0,
+        durationSeconds: Double = 0,
+        windowsAnalyzed: Int = 0,
+        channelMode: ChannelMode = .mono,
+        spectralCentroidHz: Double? = nil,
+        frequencyPeaks: [AudioAnalyzer.FrequencyPeak] = []
     ) {
         self.analysisRef = analysisRef
+        self.artifactFingerprint = artifactFingerprint
+        self.sampleRate = sampleRate
+        self.channelCount = channelCount
+        self.durationSeconds = durationSeconds
+        self.windowsAnalyzed = windowsAnalyzed
+        self.channelMode = channelMode
         self.bands = bands
         self.resonances = resonances
+        self.spectralCentroidHz = spectralCentroidHz
+        self.frequencyPeaks = frequencyPeaks
         self.classification = classification
         self.confidence = confidence.isFinite ? min(max(confidence, 0), 1) : 0
         self.complete = complete
@@ -55,7 +113,17 @@ struct SpectralAnalysisResult: Codable, Equatable, Sendable {
             classification: try values.decode(SourceClassification.self, forKey: .classification),
             confidence: try values.decode(Double.self, forKey: .confidence),
             complete: try values.decode(Bool.self, forKey: .complete),
-            partialReason: try values.decodeIfPresent(String.self, forKey: .partialReason)
+            partialReason: try values.decodeIfPresent(String.self, forKey: .partialReason),
+            // New rollout-1 fields decode leniently so legacy skeleton fixtures still round-trip;
+            // the engine always emits them in full.
+            artifactFingerprint: try values.decodeIfPresent(String.self, forKey: .artifactFingerprint) ?? "",
+            sampleRate: try values.decodeIfPresent(Double.self, forKey: .sampleRate) ?? 0,
+            channelCount: try values.decodeIfPresent(Int.self, forKey: .channelCount) ?? 0,
+            durationSeconds: try values.decodeIfPresent(Double.self, forKey: .durationSeconds) ?? 0,
+            windowsAnalyzed: try values.decodeIfPresent(Int.self, forKey: .windowsAnalyzed) ?? 0,
+            channelMode: try values.decodeIfPresent(ChannelMode.self, forKey: .channelMode) ?? .mono,
+            spectralCentroidHz: try values.decodeIfPresent(Double.self, forKey: .spectralCentroidHz),
+            frequencyPeaks: try values.decodeIfPresent([AudioAnalyzer.FrequencyPeak].self, forKey: .frequencyPeaks) ?? []
         )
     }
 }
