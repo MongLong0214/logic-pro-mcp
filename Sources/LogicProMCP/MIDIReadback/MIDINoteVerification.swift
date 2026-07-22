@@ -31,21 +31,39 @@ extension RegionMatchVerdict: Equatable {
     }
 }
 
-/// A caller's expected note sequence, bundled with the provenance that produced
-/// it. There is NO default provenance: the caller must state where the expected
-/// notes came from, and verification requires that provenance to differ from the
-/// observed snapshot's conversion — so a sequence re-derived by the SAME
-/// conversion (which would share its bugs) can never be accepted as an
-/// independent match. An empty provenance id is rejected (unstated == unusable).
+/// Proof that an expected sequence came from a source INDEPENDENT of the
+/// observed readback conversion (a user-authored artifact, an imported file,
+/// etc.), carrying that source's identifier. There is no production-constructible
+/// proven case: the proven variant compiles only under the debug seam, so a
+/// release build cannot present an independently-sourced expected sequence at
+/// all — verification therefore cannot report a match in a release build (a free
+/// label can never stand in for genuine independence).
+enum IndependentExpectedProof: Sendable {
+    case unproven
+    #if QUALIFICATION_FAULT_SEAM
+    case provenExternalArtifact(sourceID: String)
+    #endif
+
+    var externalSourceID: String? {
+        #if QUALIFICATION_FAULT_SEAM
+        if case let .provenExternalArtifact(id) = self { return id }
+        #endif
+        return nil
+    }
+}
+
+/// A caller's expected note sequence bundled with a proof of its independent
+/// provenance. The provenance is a sealed proof, not a free label, so a sequence
+/// re-derived by the observed conversion cannot be relabeled as independent.
 struct ExpectedSequence {
     let notes: [MIDINoteEvent]
     let ppq: Int
-    let provenanceID: String
+    let provenance: IndependentExpectedProof
 
-    init(notes: [MIDINoteEvent], ppq: Int, provenanceID: String) {
+    init(notes: [MIDINoteEvent], ppq: Int, provenance: IndependentExpectedProof) {
         self.notes = notes
         self.ppq = ppq
-        self.provenanceID = provenanceID
+        self.provenance = provenance
     }
 }
 
@@ -61,14 +79,16 @@ func verifyRegion(
     guard observed.provenance != .none else {
         return .incompleteCannotVerify(reason: "Independent readback provenance is required")
     }
-    // Correlated-conversion guard: the expected sequence must state a provenance,
-    // and it must DIFFER from the observed snapshot's conversion, so a
-    // re-derivation sharing the observed conversion's bugs cannot produce a false
-    // match. An unstated (empty) provenance is unusable, not a pass.
-    guard !expected.provenanceID.isEmpty else {
-        return .incompleteCannotVerify(reason: "Expected sequence must state its provenance")
+    // Independence guard: the expected sequence must carry a PROVEN independent
+    // provenance (not a free label), and that source must differ from the
+    // observed snapshot's conversion — so a re-derivation sharing the observed
+    // conversion's bugs cannot be relabeled and accepted as a match.
+    guard let expectedSourceID = expected.provenance.externalSourceID else {
+        return .incompleteCannotVerify(
+            reason: "Expected sequence must carry a proven independent provenance"
+        )
     }
-    guard observed.conversionPipelineID != expected.provenanceID else {
+    guard observed.conversionPipelineID != expectedSourceID else {
         return .incompleteCannotVerify(
             reason: "Expected sequence must not share the observed conversion pipeline"
         )

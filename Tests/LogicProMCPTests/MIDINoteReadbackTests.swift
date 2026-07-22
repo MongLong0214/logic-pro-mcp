@@ -3,9 +3,19 @@ import Testing
 @testable import LogicProMCP
 
 @Suite struct MIDINoteReadbackTests {
+    // Fail-closed expected sequence (no independence proof) — usable in any
+    // configuration; verifyRegion returns incompleteCannotVerify for it.
     private func expectSeq(_ notes: [MIDINoteEvent], ppq: Int = 480) -> ExpectedSequence {
-        ExpectedSequence(notes: notes, ppq: ppq, provenanceID: "external.user-provided")
+        ExpectedSequence(notes: notes, ppq: ppq, provenance: .unproven)
     }
+
+    #if QUALIFICATION_FAULT_SEAM
+    // A proven independently-sourced expected sequence (debug seam only): a
+    // release build cannot present one, so match paths are exercised only here.
+    private func provenExpectSeq(_ notes: [MIDINoteEvent], ppq: Int = 480) -> ExpectedSequence {
+        ExpectedSequence(notes: notes, ppq: ppq, provenance: .provenExternalArtifact(sourceID: "external.user-provided"))
+    }
+    #endif
 
     @Test func incompleteSnapshotCannotReportExactMatch() {
         let note = makeNote(pitch: 60)
@@ -53,6 +63,7 @@ import Testing
         ])
     }
 
+    #if QUALIFICATION_FAULT_SEAM
     @Test func ppqNormalizationAllowsExactMatch() {
         let expected = [makeNote(pitch: 60, start: 480, duration: 240)]
         let observed = makeSnapshot(
@@ -60,7 +71,7 @@ import Testing
             notes: [makeNote(pitch: 60, start: 960, duration: 480)]
         )
 
-        #expect(verifyRegion(observed: observed, expected: expectSeq(expected)) == .exactMatch)
+        #expect(verifyRegion(observed: observed, expected: provenExpectSeq(expected)) == .exactMatch)
     }
 
     @Test func verificationMatchesCanonicalNotes() {
@@ -74,7 +85,7 @@ import Testing
             makeNote(pitch: 64, start: 60, duration: 30, velocity: 80),
         ])
 
-        #expect(verifyRegion(observed: observed, expected: expectSeq(expected)) == .exactMatch)
+        #expect(verifyRegion(observed: observed, expected: provenExpectSeq(expected)) == .exactMatch)
     }
 
     @Test func verificationReportsAddedRemovedAndChangedNotes() {
@@ -87,7 +98,7 @@ import Testing
 
         guard case .mismatch(let added, let removed, let changed) = verifyRegion(
             observed: observed,
-            expected: expectSeq([changedBefore, unchanged, removedNote])
+            expected: provenExpectSeq([changedBefore, unchanged, removedNote])
         ) else {
             Issue.record("Expected a structured mismatch")
             return
@@ -98,6 +109,7 @@ import Testing
         #expect(changed.first?.0 == changedBefore)
         #expect(changed.first?.1 == changedAfter)
     }
+    #endif
 
     @Test func regionDiffReportsAddedAndRemovedNotes() {
         let removedNote = makeNote(pitch: 60)

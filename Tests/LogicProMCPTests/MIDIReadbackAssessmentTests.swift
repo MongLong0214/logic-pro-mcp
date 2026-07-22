@@ -257,7 +257,7 @@ import Testing
             observed: snap,
             expected: ExpectedSequence(
                 notes: snap.notes, ppq: snap.ppq,
-                provenanceID: MIDIRegionNoteSnapshot.eventListConversionID
+                provenance: .provenExternalArtifact(sourceID: MIDIRegionNoteSnapshot.eventListConversionID)
             )
         )
         guard case .incompleteCannotVerify = verdict else {
@@ -266,15 +266,16 @@ import Testing
         }
     }
 
-    @Test func emptyExpectedProvenanceRejected() {
+    @Test func unprovenExpectedProvenanceRejected() {
         let snap = assessReadback(Self.evidence())
-        // Omission: an unstated (empty) provenance is unusable, not a pass.
+        // A free label cannot stand in for independence: without a proven
+        // external artifact the expected sequence is unusable, not a pass.
         let verdict = verifyRegion(
             observed: snap,
-            expected: ExpectedSequence(notes: snap.notes, ppq: snap.ppq, provenanceID: "")
+            expected: ExpectedSequence(notes: snap.notes, ppq: snap.ppq, provenance: .unproven)
         )
         guard case .incompleteCannotVerify = verdict else {
-            Issue.record("Expected incompleteCannotVerify for empty expected provenance")
+            Issue.record("Expected incompleteCannotVerify for unproven expected provenance")
             return
         }
     }
@@ -286,7 +287,8 @@ import Testing
         let verdict = verifyRegion(
             observed: snap,
             expected: ExpectedSequence(
-                notes: snap.notes, ppq: snap.ppq, provenanceID: "external.user-provided"
+                notes: snap.notes, ppq: snap.ppq,
+                provenance: .provenExternalArtifact(sourceID: "external.user-provided")
             )
         )
         #expect(verdict == .exactMatch)
