@@ -1976,7 +1976,13 @@ extension AccessibilityChannel {
         }
 
         if poll.satisfied == nil {
-            return (.postCommitTimeout(strategy: "slot_popup_physical_menu_click"), trace)
+            // #425: report the actuation that ACTUALLY selected the leaf, derived
+            // from the winning strategy — a coord-free (AXPress) win must not
+            // misreport a physical/coordinate menu commit.
+            let commitStrategy = pluginClick.coordFree
+                ? "slot_popup_axpress_menu_select"
+                : "slot_popup_physical_menu_click"
+            return (.postCommitTimeout(strategy: commitStrategy), trace)
         }
         return (.mountMismatch(observedName: postInventory[insert]?.name), trace)
     }

@@ -27,24 +27,37 @@ recursive fallback can force the coordinate path.
 2. **Recursive category-hover fallback stays coordinate.** The recursive
    discovery path (`clickPopupExactLeafRecursively`) hovers categories with
    `moveElementCenter` and always selects the matched leaf with `coordFree:
-   false`. It is **unreachable for the Release-1 supported plugins** — Gain,
-   Channel EQ, and Compressor (`insertableAllowlist`) are always found by the
-   direct or search strategy, so the recursive branch is a documented
-   coordinate-fallback only.
+   false`. It is a **reachable** coordinate-only failure fallback — tried after
+   the direct and search strategies — but is **unreachable in practice for the
+   Release-1 supported plugins**: Gain, Channel EQ, and Compressor
+   (`insertableAllowlist`) are always found by the direct or search strategy, so
+   the recursive branch is a coordinate-only safety net the supported set never
+   exercises.
 
 ## Discriminator honesty
 
 `select_trace["leaf_select_coord_free"]` is sourced from the WINNING strategy
-(`SlotPopupPluginClick.coordFree`), not the raw flag. A recursive
-(coordinate-only) win therefore reports `false` even when the flag is on, so the
-receipt can never be falsely pinned to the flag value.
+(`SlotPopupPluginClick.coordFree`) via `leafSelectCoordFree(for:)`, not the raw
+flag. A recursive (coordinate-only) win therefore reports `false` even when the
+flag is on, so the receipt can never be falsely pinned to the flag value.
 
 ## Tests
 
-`Tests/LogicProMCPTests/PluginInsertVerifiedTests.swift` (`#425 (Option B)`
-section) covers the four contract points: leaf press via `kAXPress`, the
-discriminator's true value on a coord-free direct win, `coordFree:false` taking
-the coordinate path (never `AXPress`), and fail-closed behavior when `AXPress`
-is neutralized. A winning recursive path cannot be exercised hermetically (it
-would require real on-screen geometry and post a CGEvent); that case is noted in
-the test file and verified structurally.
+`Tests/LogicProMCPTests/PluginInsertVerifiedTests.swift` covers, at the helper
+level, leaf press via `kAXPress`, the discriminator's value on a coord-free
+direct win, `coordFree:false` taking the coordinate path (never `AXPress`), and
+fail-closed behavior when `AXPress` is neutralized.
+
+Response-level tests drive the real `defaultInsertVerified` flow (fake AX runtime
+plus a DEBUG-only coordinate-actuation seam, `forceCoordinateActuationForTests`,
+so no CGEvent / physical mouse is issued) and assert the assembled response's
+`select_trace["leaf_select_coord_free"]`:
+
+- a recursive (coordinate-only) win under the flag ON reports `false` — the
+  flag-vs-path divergence is exercised hermetically end to end, not merely
+  structurally;
+- a direct win selects the leaf via `kAXPress` under the flag ON
+  (`leaf_select_coord_free == true`) and via the coordinate primitives under the
+  flag OFF (`false`, with no `kAXPress` on the leaf);
+- an AXPress win that times out post-commit reports an AXPress commit strategy
+  (`commit_strategy`), never a physical/coordinate one.

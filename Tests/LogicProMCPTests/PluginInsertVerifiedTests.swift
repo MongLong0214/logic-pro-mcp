@@ -855,3 +855,184 @@ private func addPluginItemWithFormatLeaf(
     #expect(!winner.coordFree)
     #expect(!AccessibilityChannel.leafSelectCoordFree(for: winner))
 }
+
+// MARK: - #425 (Option B) RESPONSE-LEVEL coverage (real defaultInsertVerified flow)
+//
+// These drive the REAL `liveExactSlotPopupInsert` driver end to end (no injected
+// fake driver), so they traverse the ACTUAL trace assignment at
+// VerifiedPlugins ~L1936 (`trace["leaf_select_coord_free"] = leafSelectCoordFree(
+// for: pluginClick)`) AND the response serialization — which the helper-level
+// tests above cannot. The DEBUG `forceCoordinateActuationForTests` seam makes
+// every coordinate primitive (the governed slot-OPEN click AND the coordinate
+// leaf path) succeed WITHOUT posting a CGEvent, so no physical mouse moves. The
+// fake's post-inventory never changes, so a win settles on `postCommitTimeout`
+// (State C operation_timeout) carrying the populated select_trace + commit_strategy.
+
+private let coordFreeExpectedPath = "/Users/me/Music/CoordFree425 copy.logicx"
+
+private struct SlotPopupInsertFixture {
+    let runtime: AXLogicProElements.Runtime
+    let leafItemID: Int
+    let presses: AXPressRecorder
+}
+
+/// The full AX tree the real slot-popup insert flow walks: a track header
+/// (AXSelected, so selection verifies) → mixer → strip → ONE empty target slot
+/// (with geometry for the anchor check) → an app-reachable, slot-anchored popup
+/// menu holding the exact "Gain" leaf. `refuseLeafAXPress` makes AXPress on the
+/// leaf fail (forcing direct/search to fall through to the recursive coordinate
+/// path); track-header AXPress stays allowed so track selection still verifies.
+private func makeSlotPopupInsertFixture(refuseLeafAXPress: Bool) -> SlotPopupInsertFixture {
+    let b = FakeAXRuntimeBuilder()
+    let app = b.element(9000)
+    let window = b.element(9001)
+    let headersGroup = b.element(9002)
+    let headerRow = b.element(9003)
+    let mixer = b.element(9004)
+    let strip = b.element(9005)
+    let slot = b.element(9006)
+    let popupMenu = b.element(9007)
+    let gainItem = b.element(9008)
+    let searchField = b.element(9009)
+
+    // Track header rail (getTrackHeaders matches the "트랙 헤더" group), one
+    // selected row so verifiedTrackSelected reads AXSelected == true.
+    b.setAttribute(headersGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+    b.setAttribute(headersGroup, kAXDescriptionAttribute as String, "트랙 헤더")
+    b.setChildren(headersGroup, [headerRow])
+    b.setAttribute(headerRow, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setAttribute(headerRow, kAXDescriptionAttribute as String, "1개의 ‘Track 1’ 트랙")
+    b.setAttribute(headerRow, kAXSelectedAttribute as String, true)
+
+    // Mixer → strip → one empty insert slot (with geometry for the anchor check).
+    b.setAttribute(slot, kAXRoleAttribute as String, kAXButtonRole as String)
+    b.setAttribute(slot, kAXDescriptionAttribute as String, "오디오 플러그인")
+    b.setAttribute(slot, kAXHelpAttribute as String, "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다.")
+    b.setAttribute(slot, kAXPositionAttribute as String, axPoint(400, 300))
+    b.setAttribute(slot, kAXSizeAttribute as String, axSize(70, 18))
+    b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setChildren(strip, [slot])
+    b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
+    b.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
+    b.setChildren(mixer, [strip])
+
+    b.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+    b.setAttribute(window, kAXTitleAttribute as String, "CoordFree425 — Tracks")
+    b.setChildren(window, [headersGroup, mixer])
+
+    // Slot popup: visible (geometry) + anchored to the slot + holds the exact leaf.
+    // slotPopupMenu recognizes a slot popup by a search text field AND a menu item,
+    // so the fixture carries both (as the live Logic popup does). Refusing the leaf
+    // AXPress still fails the direct+search strategies at the CLICK step, forcing
+    // the recursive coordinate fallback.
+    b.setAttribute(gainItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+    b.setAttribute(gainItem, kAXTitleAttribute as String, "Gain")
+    b.setAttribute(searchField, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    b.setAttribute(popupMenu, kAXRoleAttribute as String, kAXMenuRole as String)
+    b.setAttribute(popupMenu, kAXPositionAttribute as String, axPoint(410, 320))
+    b.setAttribute(popupMenu, kAXSizeAttribute as String, axSize(240, 420))
+    b.setChildren(popupMenu, [searchField, gainItem])
+
+    // App: AXWindows for mainWindow; children so slotPopupMenu's app-descent finds
+    // the (top-level) popup menu.
+    b.setAttribute(app, kAXWindowsAttribute as String, [window])
+    b.setAttribute(app, kAXMainWindowAttribute as String, window)
+    b.setChildren(app, [window, popupMenu])
+
+    let leafKey = b.elementID(gainItem)
+    let presses = AXPressRecorder()
+    let pressAction = kAXPressAction as String
+    let runtime = b.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            if action == pressAction {
+                presses.record(b.elementID(element))
+                if refuseLeafAXPress && b.elementID(element) == leafKey { return false }
+            }
+            return true
+        }
+    )
+    return SlotPopupInsertFixture(runtime: runtime, leafItemID: leafKey, presses: presses)
+}
+
+private func runRealInsert(runtime: AXLogicProElements.Runtime) async -> [String: Any] {
+    let result = await AccessibilityChannel.defaultInsertVerified(
+        params: [
+            "track": "0", "insert": "0", "plugin": "Gain",
+            "mode": "duplicate_applyback", "project_expected_path": coordFreeExpectedPath,
+        ],
+        runtime: runtime,
+        frontDocumentPath: { coordFreeExpectedPath }
+    )
+    return try! JSONSerialization.jsonObject(with: result.message.data(using: .utf8)!) as! [String: Any]
+}
+
+// The ASSEMBLED RESPONSE's select_trace["leaf_select_coord_free"] is false for a
+// recursive (coordinate-only) win under the flag ON — this traverses the real
+// trace assignment, so re-pinning it to the raw flag turns this RED.
+@Test func test425ResponseTraceCoordFreeFalseOnRecursiveWinUnderFlagOn() async throws {
+    let fixture = makeSlotPopupInsertFixture(refuseLeafAXPress: true)
+    let obj = await FeatureFlags.withInsertCoordFree(true) {
+        await AccessibilityChannel.withForceCoordinateActuationForTests(true) {
+            await runRealInsert(runtime: fixture.runtime)
+        }
+    }
+    let trace = try #require(obj["select_trace"] as? [String: Any])
+    let strategy = try #require(trace["winning_strategy"] as? String)
+    #expect(strategy == "slot_popup_recursive_exact_leaf")
+    // Divergence: flag ON, but the actual winning actuation is coordinate → false.
+    let coordFree = try #require(trace["leaf_select_coord_free"] as? Bool)
+    #expect(!coordFree)
+    // Coordinate win → physical commit strategy (pins the coordFree:false branch).
+    let commit = try #require(obj["commit_strategy"] as? String)
+    #expect(commit == "slot_popup_physical_menu_click")
+}
+
+// Flag ON (default): the kill-switch routes a direct/search win through the
+// AXPress path — leaf selected via kAXPress, response reports coordFree true.
+@Test func test425ResponseFlagOnSelectsLeafViaAXPress() async throws {
+    let fixture = makeSlotPopupInsertFixture(refuseLeafAXPress: false)
+    let obj = await FeatureFlags.withInsertCoordFree(true) {
+        await AccessibilityChannel.withForceCoordinateActuationForTests(true) {
+            await runRealInsert(runtime: fixture.runtime)
+        }
+    }
+    let trace = try #require(obj["select_trace"] as? [String: Any])
+    let coordFree = try #require(trace["leaf_select_coord_free"] as? Bool)
+    #expect(coordFree)
+    #expect(fixture.presses.pressedElementIDs.contains(fixture.leafItemID))
+}
+
+// Flag OFF: LOGIC_MCP_INSERT_COORD_FREE=0 routes the SAME direct win through the
+// COORDINATE path — no kAXPress on the leaf, response reports false.
+@Test func test425ResponseFlagOffUsesCoordinateNotAXPress() async throws {
+    let fixture = makeSlotPopupInsertFixture(refuseLeafAXPress: false)
+    let obj = await FeatureFlags.withInsertCoordFree(false) {
+        await AccessibilityChannel.withForceCoordinateActuationForTests(true) {
+            await runRealInsert(runtime: fixture.runtime)
+        }
+    }
+    let trace = try #require(obj["select_trace"] as? [String: Any])
+    let coordFree = try #require(trace["leaf_select_coord_free"] as? Bool)
+    #expect(!coordFree)
+    #expect(!fixture.presses.pressedElementIDs.contains(fixture.leafItemID))
+}
+
+// A coord-free (AXPress) win that times out post-commit must report an AXPress
+// commit strategy, NOT the physical/coordinate one (commit_strategy honesty).
+@Test func test425ResponseAXPressWinReportsAXPressCommitStrategy() async throws {
+    let fixture = makeSlotPopupInsertFixture(refuseLeafAXPress: false)
+    let obj = await FeatureFlags.withInsertCoordFree(true) {
+        await AccessibilityChannel.withForceCoordinateActuationForTests(true) {
+            await runRealInsert(runtime: fixture.runtime)
+        }
+    }
+    let error = try #require(obj["error"] as? String)
+    #expect(error == "operation_timeout")
+    let commit = try #require(obj["commit_strategy"] as? String)
+    #expect(commit == "slot_popup_axpress_menu_select")
+    let trace = try #require(obj["select_trace"] as? [String: Any])
+    let coordFree = try #require(trace["leaf_select_coord_free"] as? Bool)
+    #expect(coordFree)
+}
