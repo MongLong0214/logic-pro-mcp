@@ -14,50 +14,30 @@ import Testing
 @Suite struct MIDIReadbackCallSiteLintTests {
     private static let assessmentFile = "MIDIReadbackAssessment.swift"
 
-    /// Strip `//` line comments, `/* */` block comments, and string-literal
-    /// CONTENT (single-line and `"""` multi-line) so identifier matches are not
-    /// fooled by prose or string data — but KEEP the code inside `\(…)` string
-    /// interpolations, since a call hidden in an interpolation is a real
-    /// production reference. Only real code tokens remain.
+    /// Strip `//` line comments and (possibly nested) `/* */` block comments,
+    /// KEEPING string literals intact. Because no production source outside the
+    /// assessment file contains the sensitive identifiers inside a string (the
+    /// one benign occurrence — a conversion-id constant — is named to avoid the
+    /// token), keeping strings means a real call hidden anywhere (including a
+    /// string interpolation or raw string) is still matched, with no fragile
+    /// string lexing. Erring toward keeping strings can only over-report (a safe
+    /// false positive), never miss a real reference.
     static func strippedOfComments(_ source: String) -> String {
         var out = ""
         let c = Array(source)
         var i = 0
-
-        // Emit the code inside a `\(…)` interpolation (balanced parens); `i`
-        // points just past `\(`. Returns with `i` just past the closing `)`.
-        func emitInterpolation() {
-            var depth = 1
-            while i < c.count, depth > 0 {
-                if c[i] == "(" { depth += 1; out.append(c[i]); i += 1 }
-                else if c[i] == ")" { depth -= 1; if depth > 0 { out.append(c[i]) }; i += 1 }
-                else { out.append(c[i]); i += 1 }
-            }
-            out.append(" ")
-        }
-
         while i < c.count {
             if i + 1 < c.count, c[i] == "/", c[i + 1] == "/" {
                 while i < c.count, c[i] != "\n" { i += 1 }
             } else if i + 1 < c.count, c[i] == "/", c[i + 1] == "*" {
+                var depth = 1
                 i += 2
-                while i + 1 < c.count, !(c[i] == "*" && c[i + 1] == "/") { i += 1 }
-                i = min(i + 2, c.count)
-            } else if i + 2 < c.count, c[i] == "\"", c[i + 1] == "\"", c[i + 2] == "\"" {
-                i += 3
-                while i + 2 < c.count, !(c[i] == "\"" && c[i + 1] == "\"" && c[i + 2] == "\"") {
-                    if c[i] == "\\", i + 1 < c.count, c[i + 1] == "(" { i += 2; emitInterpolation() }
+                while i + 1 < c.count, depth > 0 {
+                    if c[i] == "/", c[i + 1] == "*" { depth += 1; i += 2 }
+                    else if c[i] == "*", c[i + 1] == "/" { depth -= 1; i += 2 }
                     else { i += 1 }
                 }
-                i = min(i + 3, c.count)
-            } else if c[i] == "\"" {
-                i += 1
-                while i < c.count, c[i] != "\"" {
-                    if c[i] == "\\", i + 1 < c.count, c[i + 1] == "(" { i += 2; emitInterpolation() }
-                    else if c[i] == "\\" { i += 2 }
-                    else { i += 1 }
-                }
-                i += 1
+                if depth > 0 { i = c.count }
             } else {
                 out.append(c[i])
                 i += 1
@@ -78,9 +58,9 @@ import Testing
         matches("(?<![A-Za-z0-9_])assessReadback(?![A-Za-z0-9_])", in: strippedOfComments(source))
     }
 
-    /// A `CompleteProof(` mint (allowing whitespace before the paren).
+    /// A `CompleteProof(` mint (allowing any whitespace before the paren).
     static func mintsCompleteProof(_ source: String) -> Bool {
-        matches("(?<![A-Za-z0-9_])CompleteProof[ \\t\\n]*\\(", in: strippedOfComments(source))
+        matches("(?<![A-Za-z0-9_])CompleteProof\\s*\\(", in: strippedOfComments(source))
     }
 
     @Test func noProductionAssessReadbackReferenceOrProofMint() throws {
@@ -141,14 +121,20 @@ import Testing
         #expect(Self.referencesAssessReadback("let r = assessReadback (evidence)"))   // space before paren
         #expect(Self.referencesAssessReadback("let f = assessReadback\n    (evidence)")) // newline before paren
         #expect(Self.referencesAssessReadback("let fn = assessReadback"))              // bare function reference
-        #expect(Self.referencesAssessReadback("return \"\\(assessReadback(e))\""))     // hidden in string interpolation
-        #expect(Self.referencesAssessReadback("log(\"x=\\(assessReadback)\")"))         // bare ref in interpolation
+        #expect(Self.referencesAssessReadback("return \"\\(assessReadback(e))\""))     // string interpolation
+        #expect(Self.referencesAssessReadback("#\"\\#(assessReadback(e))\"#"))          // raw-string interpolation
+        #expect(Self.referencesAssessReadback("\"\\(f(\"x)\"))\"; assessReadback(e)"))  // call after a nested-string interpolation
+        #expect(Self.referencesAssessReadback("let r = assessReadback\r(evidence)"))    // carriage-return before paren
         #expect(Self.mintsCompleteProof("return .complete(CompleteProof ())"))         // space before paren
-        // Not flagged: comment mentions, plain string content, and unrelated identifiers.
+        #expect(Self.mintsCompleteProof("return .complete(CompleteProof\r(x))"))        // CR before paren
+        // Not flagged: comment mentions and unrelated identifiers.
         #expect(!Self.referencesAssessReadback("// minted only by assessReadback(evidence)"))
-        #expect(!Self.referencesAssessReadback("/* see assessReadback for details */"))
+        #expect(!Self.referencesAssessReadback("/* /* nested */ see assessReadback */")) // nested block comment fully stripped
         #expect(!Self.referencesAssessReadback("let x = reassessReadbackLater(y)"))    // substring, not the identifier
-        #expect(!Self.referencesAssessReadback("let id = \"eventListAX.assessReadback.v1\"")) // plain string content, not code
+        #expect(!Self.referencesAssessReadback("let id = \"eventListAX.readback.v1\"")) // the real conversion id (no token)
         #expect(!Self.mintsCompleteProof("CompleteProof.makeForTesting()"))            // method, not a mint call
+        // Strings are kept, so a string that literally mentions the identifier is
+        // conservatively flagged — a safe over-report, never a missed reference.
+        #expect(Self.referencesAssessReadback("let s = \"call assessReadback here\""))
     }
 }

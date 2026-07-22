@@ -46,7 +46,7 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
     /// Identifies the conversion that produced `notes`, so a verifier can require
     /// the expected sequence to carry a DIFFERENT provenance — a re-derived
     /// expected sharing this conversion's bugs cannot yield a false match.
-    static let eventListConversionID = "eventListAX.assessReadback.v1"
+    static let eventListConversionID = "eventListAX.readback.v1"
 
     let regionReference: MIDIRegionReference
     let projectEpoch: UInt64
