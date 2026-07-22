@@ -281,6 +281,17 @@ enum AudioFeatureExtractionEngine {
         guard (fdInfo.st_mode & S_IFMT) == S_IFREG else {
             throw FeatureExtractionError.specialFile("non-regular file (fifo/device/socket) rejected")
         }
+        // Compute cap: reject an over-cap file from the descriptor's own size (no extra
+        // syscall) before opening the decoder, so an oversize input never starts work.
+        if let maxBytes = policy.maximumInputFileSizeBytes, maxBytes > 0, Int64(fdInfo.st_size) > maxBytes {
+            return SpectralAnalysisResult(
+                analysisRef: analysisRef, bands: [], resonances: [], classification: .unknown,
+                confidence: 0, complete: false, partialReason: "input_too_large",
+                artifactFingerprint: artifactFingerprint, sampleRate: 0, channelCount: 0,
+                durationSeconds: 0, windowsAnalyzed: 0, channelMode: .mono,
+                spectralCentroidHz: nil, frequencyPeaks: []
+            )
+        }
         let fdIdentity = (dev: Int64(fdInfo.st_dev), ino: UInt64(fdInfo.st_ino))
 
         let file: AVAudioFile
@@ -344,6 +355,8 @@ enum AudioFeatureExtractionEngine {
             artifactFingerprint: artifactFingerprint,
             config: config,
             chunkFrames: chunkFrames,
+            maxDurationSeconds: policy.maximumInputDurationSeconds,
+            maxDecodedFrames: policy.maximumDecodedFrames,
             reset: reset,
             nextChunk: nextChunk
         )
@@ -356,7 +369,9 @@ enum AudioFeatureExtractionEngine {
     /// mean-subtracted sliding Welch. Frames are extracted in increasing start order across
     /// chunk boundaries, so the result is identical to the whole-file path for the same
     /// samples. Content faults fail closed (never `complete:true`); a short read or a
-    /// decoded-vs-declared shortfall is `decode_truncated`.
+    /// decoded-vs-declared shortfall is `decode_truncated`; an over-cap declared length or
+    /// (defensively) an over-cap delivered length is `input_too_long`. `maxDurationSeconds`
+    /// and `maxDecodedFrames` carry the caller's compute caps (nil = uncapped).
     static func analyzeStreaming(
         declaredFrameLength: Int64,
         sampleRate: Double,
@@ -365,6 +380,8 @@ enum AudioFeatureExtractionEngine {
         artifactFingerprint: String,
         config: Config = .default,
         chunkFrames: Int = 64_000,
+        maxDurationSeconds: Double? = nil,
+        maxDecodedFrames: Int64? = nil,
         reset: () throws -> Void,
         nextChunk: (Int) throws -> [[Double]]
     ) -> SpectralAnalysisResult {
@@ -384,6 +401,16 @@ enum AudioFeatureExtractionEngine {
 
         guard channelCount > 0, sampleRate > 0, declaredFrameLength >= Int64(minAnalyzableFrames) else {
             return failClosed("input_too_short", frames: max(declaredFrameLength, 0))
+        }
+
+        // Compute caps (AnalysisPolicy limits): reject an over-cap declared length BEFORE
+        // streaming any samples, so a multi-hour file never starts analysis.
+        if let maxFrames = maxDecodedFrames, maxFrames > 0, declaredFrameLength > maxFrames {
+            return failClosed("input_too_long", frames: declaredFrameLength)
+        }
+        if let maxDuration = maxDurationSeconds, maxDuration > 0,
+           Double(declaredFrameLength) / sampleRate > maxDuration {
+            return failClosed("input_too_long", frames: declaredFrameLength)
         }
 
         // Pass 1: mean + truncation + non-finite.
@@ -408,6 +435,11 @@ enum AudioFeatureExtractionEngine {
                     sums[ch] += s
                 }
                 decoded += Int64(frames)
+                // Defense in depth: a lying header (declared under the cap) must not stream
+                // unbounded — stop the moment delivered frames exceed the cap.
+                if let maxFrames = maxDecodedFrames, maxFrames > 0, decoded > maxFrames {
+                    return failClosed("input_too_long", frames: decoded)
+                }
             }
         } catch {
             return failClosed("decode_truncated", frames: decoded)

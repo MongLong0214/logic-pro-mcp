@@ -348,7 +348,7 @@ struct AudioFeatureExtractionEngineTests {
         return out
     }
 
-    private func streamAnalyze(_ channels: [[Double]], declared: Int64, chunkFrames: Int, deliver: Int? = nil, throwAfter: Int? = nil) -> SpectralAnalysisResult {
+    private func streamAnalyze(_ channels: [[Double]], declared: Int64, chunkFrames: Int, deliver: Int? = nil, throwAfter: Int? = nil, maxFrames: Int64? = nil, maxDuration: Double? = nil) -> SpectralAnalysisResult {
         let feeder = ChunkFeeder(channels: channels, deliverFrames: deliver ?? channels[0].count, throwAfter: throwAfter)
         return AudioFeatureExtractionEngine.analyzeStreaming(
             declaredFrameLength: declared,
@@ -357,6 +357,8 @@ struct AudioFeatureExtractionEngineTests {
             analysisRef: "stream",
             artifactFingerprint: "fixture",
             chunkFrames: chunkFrames,
+            maxDurationSeconds: maxDuration,
+            maxDecodedFrames: maxFrames,
             reset: { feeder.reset() },
             nextChunk: { try feeder.next($0) }
         )
@@ -397,6 +399,44 @@ struct AudioFeatureExtractionEngineTests {
         #expect(!r.complete)
         let reason = try #require(r.partialReason)
         #expect(reason == "decode_truncated")
+    }
+
+    // MARK: - Compute caps (blocker: enforce AnalysisPolicy limits)
+
+    @Test func declaredLengthOverCapFailsClosed() throws {
+        let samples = streamMultiTone(frames: 140_000)
+        // Header declares 300k frames — above the 150k cap — so analysis must not start.
+        let r = streamAnalyze([samples], declared: 300_000, chunkFrames: 64_000, deliver: 140_000, maxFrames: 150_000)
+        #expect(!r.complete)
+        let reason = try #require(r.partialReason)
+        #expect(reason == "input_too_long")
+        #expect(r.bands.isEmpty)
+    }
+
+    @Test func lyingHeaderDeliveryOverCapFailsClosedInLoop() throws {
+        let samples = streamMultiTone(frames: 300_000)
+        // Header declares 100k (under cap) but delivers 300k (over the 150k cap) — the loop
+        // guard must stop unbounded streaming rather than analyze forever.
+        let r = streamAnalyze([samples], declared: 100_000, chunkFrames: 64_000, deliver: 300_000, maxFrames: 150_000)
+        #expect(!r.complete)
+        let reason = try #require(r.partialReason)
+        #expect(reason == "input_too_long")
+        #expect(r.bands.isEmpty)
+        guard case .noSafeRecommendation = recommendEQ(r) else {
+            Issue.record("over-cap analysis must not yield a recommendation")
+            return
+        }
+    }
+
+    @Test func fileSizeCapFailsClosed() throws {
+        let url = try writeWAV("sized.wav", sampleRate: Self.fs48, samples: sine(Self.toneHz))
+        var policy = AudioAnalyzer.AnalysisPolicy.default
+        policy.maximumInputFileSizeBytes = 1_024      // the real WAV is far larger than 1 KiB
+        let r = try AudioFeatureExtractionEngine.analyzeFile(path: url.path, analysisRef: "sz", artifactFingerprint: "x", policy: policy)
+        #expect(!r.complete)
+        let reason = try #require(r.partialReason)
+        #expect(reason == "input_too_large")
+        #expect(r.bands.isEmpty)
     }
 
     // MARK: - TOCTOU identity binding (blocker 2)
