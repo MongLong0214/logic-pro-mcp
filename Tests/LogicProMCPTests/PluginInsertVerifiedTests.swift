@@ -811,3 +811,47 @@ private func addPluginItemWithFormatLeaf(
     #expect(!ok)
     #expect(!recorder.pressedElementIDs.isEmpty)
 }
+
+// Contract #3 (discriminator honesty) — the DIVERGENCE case. A recursive
+// (coordinate-only) win under the flag ON must report `coordFree == false`, NOT
+// the flag. This is the ONLY case where the honest value diverges from the raw
+// flag, so it is what makes the discriminator sourcing mutation-provable. The 4
+// tests above all use a direct win with the flag on, where pluginClick.coordFree
+// and FeatureFlags.insertCoordFree are BOTH true — they cannot catch a re-pin to
+// the flag. This one can, driven hermetically via the DEBUG coordinate-actuation
+// seam (no CGEvent / physical mouse): direct+search fail because AXPress is
+// refused, so the recursive strategy wins ONLY via the coordinate path. It kills:
+//   (i)   trace repinned to the flag        → leafSelectCoordFree(for:) returns false, not the flag
+//   (ii)  recursive SlotPopupPluginClick(coordFree:) flipped to the flag → winner.coordFree
+//   (iii) recursive clickPopupPluginLeaf(coordFree:) flipped to the flag → it would AXPress
+//         (refused) → no recursive win → #require fails
+@Test func test425Contract3_recursiveWinReportsCoordFreeFalseUnderFlagOn() async throws {
+    let b = FakeAXRuntimeBuilder()
+    // Exact-match leaf at the ROOT, no format submenu / text field / geometry.
+    let gain = addMenuItem(b, 8260, title: "Gain")
+    let root = addMenu(b, 8269, children: [gain])
+    let pressAction = kAXPressAction as String
+    let runtime = b.makeAXRuntime(
+        setAttributeHandler: nil,
+        // Refuse AXPress everywhere so the ONLY route to a win is the coordinate
+        // path — a win therefore PROVES the recursive coordinate route executed.
+        performActionHandler: { _, action in action == pressAction ? false : true }
+    )
+
+    let click = await FeatureFlags.withInsertCoordFree(true) {
+        await AccessibilityChannel.withForceCoordinateActuationForTests(true) {
+            await AccessibilityChannel.clickPluginInAnchoredSlotPopup(
+                pluginID: "logic.stock.effect.gain",
+                displayName: "Gain",
+                rootMenu: root,
+                runtime: runtime
+            )
+        }
+    }
+
+    let winner = try #require(click)
+    #expect(winner.strategy == "slot_popup_recursive_exact_leaf")
+    // The divergence: flag override is true, honest path is coordinate → false.
+    #expect(!winner.coordFree)
+    #expect(!AccessibilityChannel.leafSelectCoordFree(for: winner))
+}

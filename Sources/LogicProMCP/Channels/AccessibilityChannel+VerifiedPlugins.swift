@@ -1930,10 +1930,10 @@ extension AccessibilityChannel {
         trace["plugin_selection_id"] = pluginID
         // #425: record which leaf-selection path ACTUALLY executed so the receipt
         // self-attests coordinate-free (AXPress) vs the legacy coordinate click.
-        // Sourced from the winning strategy (`pluginClick.coordFree`), not the raw
-        // flag, so a recursive (coordinate-only) win reports false even when the
+        // Sourced from the winning strategy via `leafSelectCoordFree(for:)`, not the
+        // raw flag, so a recursive (coordinate-only) win reports false even when the
         // flag is on — the discriminator can never be falsely pinned to the flag.
-        trace["leaf_select_coord_free"] = pluginClick.coordFree
+        trace["leaf_select_coord_free"] = leafSelectCoordFree(for: pluginClick)
 
         let poll = await pollStripInventoryUntil(
             track: track, runtime: runtime, timeoutMs: 2_000
@@ -2302,6 +2302,17 @@ extension AccessibilityChannel {
         let coordFree: Bool
     }
 
+    /// The single source of truth for the `leaf_select_coord_free` discriminator:
+    /// the coord-free value the WINNING strategy actually used, read off the result
+    /// — NOT the raw `FeatureFlags.insertCoordFree` flag. A recursive
+    /// (coordinate-only) win carries `false` here even when the flag is on, so the
+    /// receipt can never be falsely pinned to the flag. Extracted (and `internal`)
+    /// so the flag-vs-path divergence is unit-testable without the CGEvent-bound
+    /// live insert flow.
+    static func leafSelectCoordFree(for click: SlotPopupPluginClick) -> Bool {
+        click.coordFree
+    }
+
     /// `internal` (was `private`) so the coord-free discriminator is unit-testable
     /// without driving the CGEvent-bound live insert flow.
     static func clickPluginInAnchoredSlotPopup(
@@ -2611,8 +2622,28 @@ extension AccessibilityChannel {
         return items.first
     }
 
+    #if DEBUG
+    /// Test seam (coord-free #425 durability): when set, the coordinate hover/click
+    /// primitives below return this value INSTEAD of computing an element centre and
+    /// posting a real CGEvent. It lets a hermetic test drive the coordinate-only
+    /// recursive-win path — proving the discriminator reports `coordFree == false`
+    /// even with the flag on — without moving the physical mouse. Never compiled
+    /// into release; production always posts the real CGEvent.
+    @TaskLocal static var forceCoordinateActuationForTests: Bool?
+
+    static func withForceCoordinateActuationForTests<Result>(
+        _ value: Bool,
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        try await $forceCoordinateActuationForTests.withValue(value, operation: operation)
+    }
+    #endif
+
     @discardableResult
     private static func moveElementCenter(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
+        #if DEBUG
+        if let forceCoordinateActuationForTests { return forceCoordinateActuationForTests }
+        #endif
         guard let center = elementCenter(element, runtime: runtime) else { return false }
         let source = CGEventSource(stateID: .combinedSessionState)
         guard let move = CGEvent(
@@ -2627,6 +2658,9 @@ extension AccessibilityChannel {
 
     @discardableResult
     private static func clickElementCenter(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
+        #if DEBUG
+        if let forceCoordinateActuationForTests { return forceCoordinateActuationForTests }
+        #endif
         guard let center = elementCenter(element, runtime: runtime) else { return false }
         let source = CGEventSource(stateID: .combinedSessionState)
         if let down = CGEvent(mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: center, mouseButton: .left),
