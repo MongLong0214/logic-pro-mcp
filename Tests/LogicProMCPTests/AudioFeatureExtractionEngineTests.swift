@@ -413,6 +413,21 @@ struct AudioFeatureExtractionEngineTests {
         #expect(r.bands.isEmpty)
     }
 
+    @Test func declaredDurationOverCapFailsClosed() throws {
+        let samples = streamMultiTone(frames: 100_000)
+        // 100k frames @ 48 kHz ≈ 2.08 s: under a generous frames cap but over a 1 s duration
+        // cap, so the duration branch of the declared-length guard must fail it closed.
+        let r = streamAnalyze([samples], declared: 100_000, chunkFrames: 64_000, maxFrames: 10_000_000, maxDuration: 1.0)
+        #expect(!r.complete)
+        let reason = try #require(r.partialReason)
+        #expect(reason == "input_too_long")
+        #expect(r.bands.isEmpty)
+        guard case .noSafeRecommendation = recommendEQ(r) else {
+            Issue.record("over-duration analysis must not yield a recommendation")
+            return
+        }
+    }
+
     @Test func lyingHeaderDeliveryOverCapFailsClosedInLoop() throws {
         let samples = streamMultiTone(frames: 300_000)
         // Header declares 100k (under cap) but delivers 300k (over the 150k cap) — the loop
