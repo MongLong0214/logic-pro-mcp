@@ -43,14 +43,24 @@ struct TimeSignatureEvent: Codable, Equatable, Sendable {
 }
 
 struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
+    /// Identifies the conversion that produced `notes`, so a verifier can require
+    /// the expected sequence to carry a DIFFERENT provenance — a re-derived
+    /// expected sharing this conversion's bugs cannot yield a false match.
+    static let eventListConversionID = "eventListAX.assessReadback.v1"
+
     let regionReference: MIDIRegionReference
     let projectEpoch: UInt64
     /// Note-list completeness — the only dimension `verifyRegion` consumes. A
     /// `.complete` verdict can be minted ONLY by `assessReadback` (see
-    /// MIDIReadbackAssessment.swift). Tempo/time-signature maps are left
-    /// unpopulated in a release build and are never treated as proven-empty; their own
-    /// dimensions gate their (future) consumers.
+    /// MIDIReadbackAssessment.swift).
     let noteCompleteness: CompletenessVerdict
+    /// Tempo and time-signature completeness are SEPARATE dimensions. This core
+    /// leaves both maps unpopulated and marks them incomplete, so an empty map is
+    /// never mistaken for a proven-empty one; their own dimensions gate their
+    /// (future) consumers.
+    let tempoMapCompleteness: CompletenessVerdict
+    let timeSignatureCompleteness: CompletenessVerdict
+    let conversionPipelineID: String
     let provenance: MIDIReadbackProvenance
     let ppq: Int
     let notes: [MIDINoteEvent]
@@ -68,11 +78,17 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
         ppq: Int,
         notes: [MIDINoteEvent],
         tempoMap: [TempoEvent],
-        timeSignatures: [TimeSignatureEvent]
+        timeSignatures: [TimeSignatureEvent],
+        tempoMapCompleteness: CompletenessVerdict = .incomplete(.mapsUnpopulated),
+        timeSignatureCompleteness: CompletenessVerdict = .incomplete(.mapsUnpopulated),
+        conversionPipelineID: String = MIDIRegionNoteSnapshot.eventListConversionID
     ) {
         self.regionReference = regionReference
         self.projectEpoch = projectEpoch
         self.noteCompleteness = noteCompleteness
+        self.tempoMapCompleteness = tempoMapCompleteness
+        self.timeSignatureCompleteness = timeSignatureCompleteness
+        self.conversionPipelineID = conversionPipelineID
         self.provenance = provenance
         self.ppq = ppq
         self.notes = notes
@@ -81,12 +97,12 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
     }
 
     // Codable is display/wire only. A decoded snapshot is untrusted by
-    // construction: its completeness is forced to `.incomplete` so a rehydrated
-    // payload can never drive a State-A match. `CompletenessVerdict` has no
-    // Codable conformance, so completeness cannot be re-hydrated from the wire.
+    // construction: all completeness dimensions are forced to `.incomplete` so a
+    // rehydrated payload can never drive a State-A match. `CompletenessVerdict`
+    // has no Codable conformance, so completeness cannot be re-hydrated.
     private enum CodingKeys: String, CodingKey {
         case regionReference, projectEpoch, complete, partialReason
-        case provenance, ppq, notes, tempoMap, timeSignatures
+        case conversionPipelineID, provenance, ppq, notes, tempoMap, timeSignatures
     }
 
     func encode(to encoder: Encoder) throws {
@@ -95,6 +111,7 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
         try container.encode(projectEpoch, forKey: .projectEpoch)
         try container.encode(complete, forKey: .complete)
         try container.encodeIfPresent(partialReason, forKey: .partialReason)
+        try container.encode(conversionPipelineID, forKey: .conversionPipelineID)
         try container.encode(provenance, forKey: .provenance)
         try container.encode(ppq, forKey: .ppq)
         try container.encode(notes, forKey: .notes)
@@ -112,7 +129,11 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
             ppq: try values.decode(Int.self, forKey: .ppq),
             notes: try values.decode([MIDINoteEvent].self, forKey: .notes),
             tempoMap: try values.decode([TempoEvent].self, forKey: .tempoMap),
-            timeSignatures: try values.decode([TimeSignatureEvent].self, forKey: .timeSignatures)
+            timeSignatures: try values.decode([TimeSignatureEvent].self, forKey: .timeSignatures),
+            tempoMapCompleteness: .incomplete(.decodedNotReassessed),
+            timeSignatureCompleteness: .incomplete(.decodedNotReassessed),
+            conversionPipelineID: (try? values.decode(String.self, forKey: .conversionPipelineID))
+                ?? MIDIRegionNoteSnapshot.eventListConversionID
         )
     }
 

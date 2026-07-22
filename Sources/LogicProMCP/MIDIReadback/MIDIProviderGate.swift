@@ -34,6 +34,7 @@ struct QualifiedProviderRegistry: Sendable {
                 "count semantics (all events in region)",
                 "contiguous harvest with stable cell content",
                 "first and last row plus count/end completeness",
+                "position and length raw-tick and SMF display-format invariance",
                 "mid-scan project stability",
                 "English and Korean locale coverage",
                 "Desktop and Creator variant coverage",

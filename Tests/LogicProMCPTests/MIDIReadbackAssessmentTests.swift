@@ -37,6 +37,19 @@ import Testing
         [.position: posCol, .channel: chCol, .pitch: pitchCol, .velocity: velCol, .length: lenCol]
     }
 
+    /// The complete, well-formed filter control set (all note events visible, no
+    /// scoping filter). Individual tests override one control to exercise a case.
+    static func completeFilter(
+        noteEvents: Bool = true, channel: Bool = false, scope: Bool = false, takeFolder: Bool = false
+    ) -> FilterEvidence {
+        FilterEvidence(checkboxes: [
+            .init(id: "noteEvents", checked: noteEvents),
+            .init(id: "channel", checked: channel),
+            .init(id: "scope", checked: scope),
+            .init(id: "takeFolder", checked: takeFolder),
+        ])
+    }
+
     /// Fully-proven single-note evidence; every argument overridable so a test
     /// can knock out exactly one gate.
     static func evidence(
@@ -47,7 +60,7 @@ import Testing
         epochAfter: UInt64 = 1,
         ppq: Int = 480,
         binding: ColumnBinding = .headerIdentity(.proven(roles())),
-        filter: FilterEvidence = FilterEvidence(checkboxes: [.init(id: "notes", checked: true)]),
+        filter: FilterEvidence = MIDIReadbackAssessmentTests.completeFilter(),
         countText: String = "1 Events",
         countProof: CountSemanticsProof = .provenAllEventsInRegion,
         keys: [RowKey] = [RowKey(index: 0)],
@@ -156,20 +169,93 @@ import Testing
     }
 
     @Test func filterHidingNotesRejected() {
-        let snap = assessReadback(Self.evidence(
-            filter: FilterEvidence(checkboxes: [.init(id: "notes", checked: false)])
-        ))
+        let snap = assessReadback(Self.evidence(filter: Self.completeFilter(noteEvents: false)))
         #expect(snap.noteCompleteness.partialReason == .filterNotAllNotes)
     }
 
     @Test func scopeFilterActiveRejected() {
-        let snap = assessReadback(Self.evidence(
-            filter: FilterEvidence(checkboxes: [
-                .init(id: "notes", checked: true),
-                .init(id: "channelScope", checked: true),
-            ])
-        ))
+        let snap = assessReadback(Self.evidence(filter: Self.completeFilter(scope: true)))
         #expect(snap.noteCompleteness.partialReason == .filterNotAllNotes)
+    }
+
+    @Test func filterMissingControlRejected() {
+        let snap = assessReadback(Self.evidence(filter: FilterEvidence(checkboxes: [
+            .init(id: "noteEvents", checked: true),
+            .init(id: "channel", checked: false),
+            .init(id: "scope", checked: false),
+            // takeFolder omitted → incomplete
+        ])))
+        #expect(snap.noteCompleteness.partialReason == .filterEvidenceIncomplete)
+    }
+
+    @Test func filterDuplicateControlRejected() {
+        let snap = assessReadback(Self.evidence(filter: FilterEvidence(checkboxes: [
+            .init(id: "noteEvents", checked: true),
+            .init(id: "noteEvents", checked: true),
+            .init(id: "channel", checked: false),
+            .init(id: "scope", checked: false),
+            .init(id: "takeFolder", checked: false),
+        ])))
+        #expect(snap.noteCompleteness.partialReason == .filterEvidenceIncomplete)
+    }
+
+    @Test func filterUnknownControlRejected() {
+        let snap = assessReadback(Self.evidence(filter: FilterEvidence(checkboxes: [
+            .init(id: "noteEvents", checked: true),
+            .init(id: "channel", checked: false),
+            .init(id: "scope", checked: false),
+            .init(id: "takeFolder", checked: false),
+            .init(id: "mysteryControl", checked: false),
+        ])))
+        #expect(snap.noteCompleteness.partialReason == .filterEvidenceIncomplete)
+    }
+
+    @Test func invalidPPQRejected() {
+        let snap = assessReadback(Self.evidence(ppq: 0))
+        #expect(snap.noteCompleteness.partialReason == .invalidPPQ)
+    }
+
+    @Test func calibrationNotDistinctRejected() {
+        let snap = assessReadback(Self.evidence(
+            calibration: CalibrationTriple(pitch: 60, velocity: 60, startTickValue: 1)
+        ))
+        #expect(snap.noteCompleteness.partialReason == .calibrationNotDistinct)
+    }
+
+    @Test func fractionalPitchRejected() {
+        guard case .rowParseFailed = rowParseOutcome(bad: Self.noteRow(pitch: 60.5)) else {
+            Issue.record("Expected rowParseFailed for fractional pitch")
+            return
+        }
+    }
+
+    @Test func nonFinitePitchRejected() {
+        guard case .rowParseFailed = rowParseOutcome(bad: Self.noteRow(pitch: .infinity)) else {
+            Issue.record("Expected rowParseFailed for non-finite pitch")
+            return
+        }
+    }
+
+    @Test func mapDimensionsAreUnpopulated() {
+        let snap = assessReadback(Self.evidence())
+        #expect(snap.complete)
+        #expect(snap.tempoMapCompleteness == .incomplete(.mapsUnpopulated))
+        #expect(snap.timeSignatureCompleteness == .incomplete(.mapsUnpopulated))
+    }
+
+    @Test func correlatedConversionRejected() {
+        let snap = assessReadback(Self.evidence())
+        // Expected sequence claiming the SAME conversion provenance must fail-closed.
+        let verdict = verifyRegion(
+            observed: snap,
+            expected: [],
+            expectedPPQ: 480,
+            expectedConversionPipelineID: MIDIRegionNoteSnapshot.eventListConversionID
+        )
+        guard case .incompleteCannotVerify = verdict else {
+            Issue.record("Expected incompleteCannotVerify for correlated conversion provenance")
+            return
+        }
     }
 
     @Test func countMismatchRejected() {

@@ -34,7 +34,8 @@ extension RegionMatchVerdict: Equatable {
 func verifyRegion(
     observed: MIDIRegionNoteSnapshot,
     expected: [MIDINoteEvent],
-    expectedPPQ: Int
+    expectedPPQ: Int,
+    expectedConversionPipelineID: String = "external.user-provided"
 ) -> RegionMatchVerdict {
     guard observed.complete else {
         return .incompleteCannotVerify(
@@ -43,6 +44,14 @@ func verifyRegion(
     }
     guard observed.provenance != .none else {
         return .incompleteCannotVerify(reason: "Independent readback provenance is required")
+    }
+    // Correlated-conversion guard: the expected sequence must come from a
+    // DIFFERENT conversion than the observed snapshot, so a re-derivation sharing
+    // the observed conversion's bugs cannot produce a false match.
+    guard observed.conversionPipelineID != expectedConversionPipelineID else {
+        return .incompleteCannotVerify(
+            reason: "Expected sequence must not share the observed conversion pipeline"
+        )
     }
     guard observed.ppq > 0, expectedPPQ > 0 else {
         return .incompleteCannotVerify(reason: "PPQ must be positive")

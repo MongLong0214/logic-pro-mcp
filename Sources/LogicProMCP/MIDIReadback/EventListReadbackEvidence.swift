@@ -118,12 +118,22 @@ enum ObservedRegionIdentityProof: Sendable {
 
 // MARK: - Filter, count, harvest, timing
 
+/// The known, complete set of Event-List filter controls the assessment must
+/// see accounted for. Completeness is checked against this set: a missing,
+/// duplicated, or unrecognized control makes the filter evidence incomplete
+/// (fail-closed) rather than silently assuming an unseen control is "off".
+enum FilterControlID: String, CaseIterable, Sendable {
+    case noteEvents
+    case channel
+    case scope
+    case takeFolder
+}
+
 /// Raw Event-List filter checkbox states. The chokepoint DERIVES whether all
 /// note events are visible with no hiding/scoping filter — it does not accept a
-/// pre-computed boolean. The live path must supply the COMPLETE set of filter
-/// checkboxes: the derivation treats an absent scoping checkbox as "off", so
-/// filter-evidence completeness is a live qualification requirement (an
-/// incomplete checkbox list could otherwise hide an active scope filter).
+/// pre-computed boolean, and it requires the COMPLETE control set (every
+/// `FilterControlID` present exactly once, no unknown ids) so a partial
+/// observation that omitted an active filter cannot pass.
 struct FilterEvidence: Sendable {
     struct Checkbox: Sendable {
         let id: String

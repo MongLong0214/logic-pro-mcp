@@ -18,17 +18,21 @@ import Foundation
 enum PartialReason: Equatable, Sendable {
     case unboundIdentity
     case wrongRegion
-    case columnUnresolved
+    case invalidPPQ
+    case filterEvidenceIncomplete
     case filterNotAllNotes
     case countIndependenceUnproven
     case countMismatch
     case harvestNotContiguous
     case harvestContentUnstable
     case harvestNotExhaustive
+    case columnUnresolved
+    case calibrationNotDistinct
     case rowParseFailed(RowKey)
     case timingUnproven
     case epochChanged
     case emptyNotProven
+    case mapsUnpopulated
     case decodedNotReassessed
 }
 
@@ -110,8 +114,17 @@ private func evaluate(_ e: EventListReadbackEvidence) -> AssessmentOutcome {
         return .incomplete(.wrongRegion)
     }
 
-    guard deriveAllNoteEventsVisible(e.filter) else {
+    guard e.ppq > 0 else {
+        return .incomplete(.invalidPPQ)
+    }
+
+    switch filterCompleteness(e.filter) {
+    case .incomplete:
+        return .incomplete(.filterEvidenceIncomplete)
+    case .filtered:
         return .incomplete(.filterNotAllNotes)
+    case .allNotesVisible:
+        break
     }
     guard e.itemCount.semanticsProof.isAllEventsInRegion else {
         return .incomplete(.countIndependenceUnproven)
@@ -144,9 +157,17 @@ private func evaluate(_ e: EventListReadbackEvidence) -> AssessmentOutcome {
     }
 
     // Notes-bearing branch.
-    guard let roles = e.columnBinding.headerRoles,
-          let calibration = e.calibration,
-          columnsUniquelyResolve(roles: roles, calibration: calibration, harvest: e.harvest) else {
+    guard let roles = e.columnBinding.headerRoles, let calibration = e.calibration else {
+        return .incomplete(.columnUnresolved)
+    }
+    // The calibration triple must be mutually distinct so each value can pin a
+    // different column; equal values would let one column satisfy two roles.
+    guard calibration.pitch != calibration.velocity,
+          calibration.pitch != calibration.startTickValue,
+          calibration.velocity != calibration.startTickValue else {
+        return .incomplete(.calibrationNotDistinct)
+    }
+    guard columnsUniquelyResolve(roles: roles, calibration: calibration, harvest: e.harvest) else {
         return .incomplete(.columnUnresolved)
     }
     guard e.timing.isProven else {
@@ -177,23 +198,35 @@ private func evaluate(_ e: EventListReadbackEvidence) -> AssessmentOutcome {
 
 // MARK: - Pure helpers
 
-/// All note events visible AND no channel/scope/take filter active. Derived from
-/// the raw checkbox states, never a caller flag. (Exact default spec is pinned
-/// by the live probe; this conservative model requires the note-events checkbox
-/// on and every scoping checkbox off.)
-private func deriveAllNoteEventsVisible(_ filter: FilterEvidence) -> Bool {
-    var noteVisible = false
+private enum FilterAssessment {
+    /// The control set is not a complete, unambiguous observation.
+    case incomplete
+    /// A scoping filter is active (or note events are hidden).
+    case filtered
+    /// All note events visible, no scoping filter active.
+    case allNotesVisible
+}
+
+/// Assess filter state against the KNOWN complete control set. Fail-closed on an
+/// incomplete observation: every `FilterControlID` must appear exactly once and
+/// no unrecognized control ids are allowed, so an omitted (thus unseen) scope
+/// control cannot be silently treated as "off". Derived purely from the raw
+/// checkbox states — never a caller-supplied boolean.
+private func filterCompleteness(_ filter: FilterEvidence) -> FilterAssessment {
+    var seen: [FilterControlID: Bool] = [:]
     for box in filter.checkboxes {
-        let id = box.id.lowercased()
-        if id.contains("note") {
-            if !box.checked { return false }
-            noteVisible = true
-        }
-        if id.contains("scope") || id.contains("channel") || id.contains("take") {
-            if box.checked { return false }
-        }
+        guard let control = FilterControlID(rawValue: box.id) else { return .incomplete }
+        if seen[control] != nil { return .incomplete }
+        seen[control] = box.checked
     }
-    return noteVisible
+    for control in FilterControlID.allCases where seen[control] == nil {
+        return .incomplete
+    }
+    guard seen[.noteEvents] == true else { return .filtered }
+    if seen[.channel] == true || seen[.scope] == true || seen[.takeFolder] == true {
+        return .filtered
+    }
+    return .allNotesVisible
 }
 
 private func harvestKeysContiguous(_ harvest: RowHarvest) -> Bool {
@@ -264,30 +297,31 @@ private func parseNote(
     roles: [ColumnRole: AXColumnID],
     regionStartTick: Int64
 ) -> MIDINoteEvent? {
+    // Pitch is the raw slider value: it must be a finite, exact integer in range
+    // (a fractional, non-finite, or overflowing value fails rather than rounding
+    // or trapping in the Double→Int conversion).
     guard let pitchCol = roles[.pitch], let pitchCell = row[pitchCol],
-          let pitchRaw = pitchCell.sliderValue else { return nil }
-    let pitchInt = Int(pitchRaw.rounded())
-    guard (0...127).contains(pitchInt) else { return nil }
+          let pitchRaw = pitchCell.sliderValue,
+          let pitchInt = exactIntInRange(pitchRaw, 0...127) else { return nil }
 
+    // Velocity comes from the value-description string (strict integer parse).
     guard let velCol = roles[.velocity], let velCell = row[velCol],
           let velString = velCell.valueDescription,
           let velInt = Int(velString), (1...127).contains(velInt) else { return nil }
 
     // Channel is required, never invented: a missing channel column or value
     // fails the row (fail-closed) rather than defaulting to a guessed channel.
-    guard let chCol = roles[.channel], let chCell = row[chCol], let chRaw = chCell.sliderValue else {
-        return nil
-    }
-    let channelInt = Int(chRaw.rounded())
-    guard (1...16).contains(channelInt) else { return nil }
+    guard let chCol = roles[.channel], let chCell = row[chCol], let chRaw = chCell.sliderValue,
+          let channelInt = exactIntInRange(chRaw, 1...16) else { return nil }
 
     guard let posCol = roles[.position], let posCell = row[posCol],
           let start = bbtToTicks(posCell.groupSliderValues) else { return nil }
     guard let lenCol = roles[.length], let lenCell = row[lenCol],
           let duration = bbtToTicks(lenCell.groupSliderValues) else { return nil }
 
-    let relativeStart = start - regionStartTick
-    guard relativeStart >= 0, duration > 0 else { return nil }
+    // Region-relative start; overflow-safe subtraction.
+    let (relativeStart, overflow) = start.subtractingReportingOverflow(regionStartTick)
+    guard !overflow, relativeStart >= 0, duration > 0 else { return nil }
 
     return MIDINoteEvent(
         pitch: UInt8(pitchInt),
@@ -298,31 +332,43 @@ private func parseNote(
     )
 }
 
-/// Placeholder BBT→tick conversion for this pure core. Only reachable
-/// when `TimingEvidence` is proven, which cannot happen in a release build (the
-/// validated conversion body lands later). Treats the four slider values
-/// as raw tick contributions of a region-relative absolute-tick position; the
-/// real display-format-aware conversion is deferred until then.
+/// A finite, exact (non-fractional) integer within `range`. Rejects NaN/inf and
+/// values outside the range's Double bounds before any Int conversion, so the
+/// Double→Int conversion can never trap.
+private func exactIntInRange(_ raw: Double, _ range: ClosedRange<Int>) -> Int? {
+    guard raw.isFinite, raw == raw.rounded() else { return nil }
+    guard raw >= Double(range.lowerBound), raw <= Double(range.upperBound) else { return nil }
+    let value = Int(raw)
+    return range.contains(value) ? value : nil
+}
+
+/// Placeholder BBT→tick conversion for this pure core. Only reachable when
+/// `TimingEvidence` is proven, which cannot happen in a release build (the
+/// validated conversion body lands later). Treats the four slider values as raw
+/// tick contributions; each must be a finite exact integer and the total must
+/// fit Int64 (no trap/overflow) — the real display-format-aware conversion is
+/// deferred until then.
 private func bbtToTicks(_ group: [Double]?) -> Int64? {
     guard let group, group.count == 4 else { return nil }
-    let total = group.reduce(0.0, +)
-    guard total.isFinite else { return nil }
-    return Int64(total.rounded())
+    var total = 0.0
+    for value in group {
+        guard value.isFinite, value == value.rounded() else { return nil }
+        total += value
+    }
+    guard total.isFinite, total >= -9.0e18, total <= 9.0e18 else { return nil }
+    return Int64(total)
 }
 
 private func parseCount(_ text: String) -> Int? {
-    // Parse the leading count token, allowing thousands separators. The token
-    // must be cleanly delimited (end of string or whitespace) so a malformed or
-    // grouped value like "1,234" or "12abc" is parsed correctly or rejected —
-    // never truncated to a leading digit that could spuriously match a partial
-    // harvest count (fail-closed on ambiguity).
+    // The count token must be pure ASCII digits, cleanly delimited (end of string
+    // or whitespace). Grouping separators and any other non-digit content are
+    // rejected (fail-closed) so a malformed token like "1,,0", "10,", "1,00", or
+    // "12abc" can never be coerced into a value that spuriously matches a count.
     guard let first = text.first, first.isNumber else { return nil }
-    let leading = text.prefix { $0.isNumber || $0 == "," }
+    let leading = text.prefix { $0.isNumber }
     let rest = text[leading.endIndex...]
     guard rest.isEmpty || (rest.first?.isWhitespace ?? false) else { return nil }
-    let digits = leading.filter { $0.isNumber }
-    guard !digits.isEmpty else { return nil }
-    return Int(digits)
+    return Int(leading)
 }
 
 private extension ColumnBinding {
