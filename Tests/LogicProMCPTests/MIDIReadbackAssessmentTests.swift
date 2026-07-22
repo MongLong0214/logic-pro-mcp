@@ -272,6 +272,20 @@ import Testing
         #expect(snap.noteCompleteness.partialReason == .countMismatch)
     }
 
+    @Test func leadingCommaCountRejected() {
+        let snap = assessReadback(Self.evidence(countText: ",5 Events"))
+        #expect(snap.noteCompleteness.partialReason == .countMismatch)
+    }
+
+    @Test func verifiedEmptyRejectsIncompleteColumns() {
+        var r = Self.roles()
+        r[.length] = nil
+        let snap = assessReadback(Self.evidence(
+            binding: .headerIdentity(.proven(r)), countText: "0 Events", keys: [], passA: [:]
+        ))
+        #expect(snap.noteCompleteness.partialReason == .emptyNotProven)
+    }
+
     // MARK: Codable is display-only — decode forces incomplete
 
     @Test func decodedSnapshotIsUntrustedIncomplete() throws {

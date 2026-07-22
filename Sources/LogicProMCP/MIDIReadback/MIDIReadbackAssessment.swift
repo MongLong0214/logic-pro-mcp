@@ -131,8 +131,10 @@ private func evaluate(_ e: EventListReadbackEvidence) -> AssessmentOutcome {
 
     // --- Branch: notes-bearing vs verified-empty ---
     if e.harvest.passA.isEmpty {
-        // Verified-empty branch: header identity + parsed count == 0.
-        guard e.columnBinding.headerRoles != nil else {
+        // Verified-empty branch: full column identity (so the columns are proven
+        // identifiable, not a degenerate empty proof) + parsed count == 0.
+        guard let roles = e.columnBinding.headerRoles,
+              fieldColumnsPresentAndDistinct(roles) else {
             return .incomplete(.emptyNotProven)
         }
         guard let count = parseCount(e.itemCount.rawCountText), count == 0 else {
@@ -215,21 +217,28 @@ private func firstUnstableKey(_ harvest: RowHarvest) -> RowKey? {
     return nil
 }
 
-private func columnsUniquelyResolve(
-    roles: [ColumnRole: AXColumnID],
-    calibration: CalibrationTriple,
-    harvest: RowHarvest
-) -> Bool {
-    // Every note field must be bound to a DISTINCT column: all five roles must be
-    // present, and no role may alias another (e.g. length aliased to position
-    // would yield systematically wrong durations while still "resolving").
+/// All five note-field columns must be present and bound to distinct columns.
+private func fieldColumnsPresentAndDistinct(_ roles: [ColumnRole: AXColumnID]) -> Bool {
     guard let pitchCol = roles[.pitch],
           let velCol = roles[.velocity],
           let posCol = roles[.position],
           let chCol = roles[.channel],
           let lenCol = roles[.length] else { return false }
-    let bound = [pitchCol, velCol, posCol, chCol, lenCol]
-    guard Set(bound).count == bound.count else { return false }
+    return Set([pitchCol, velCol, posCol, chCol, lenCol]).count == 5
+}
+
+private func columnsUniquelyResolve(
+    roles: [ColumnRole: AXColumnID],
+    calibration: CalibrationTriple,
+    harvest: RowHarvest
+) -> Bool {
+    // Every note field must be bound to a DISTINCT column (no role may alias
+    // another — e.g. length aliased to position would yield systematically wrong
+    // durations while still "resolving").
+    guard fieldColumnsPresentAndDistinct(roles),
+          let pitchCol = roles[.pitch],
+          let velCol = roles[.velocity],
+          let posCol = roles[.position] else { return false }
     // Each calibration value must resolve to exactly one column across the rows.
     func uniqueColumn(matching: (RawCell) -> Bool) -> AXColumnID? {
         var found: Set<AXColumnID> = []
@@ -307,8 +316,8 @@ private func parseCount(_ text: String) -> Int? {
     // grouped value like "1,234" or "12abc" is parsed correctly or rejected —
     // never truncated to a leading digit that could spuriously match a partial
     // harvest count (fail-closed on ambiguity).
+    guard let first = text.first, first.isNumber else { return nil }
     let leading = text.prefix { $0.isNumber || $0 == "," }
-    guard !leading.isEmpty else { return nil }
     let rest = text[leading.endIndex...]
     guard rest.isEmpty || (rest.first?.isWhitespace ?? false) else { return nil }
     let digits = leading.filter { $0.isNumber }
