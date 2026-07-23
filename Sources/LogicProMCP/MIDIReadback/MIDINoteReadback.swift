@@ -88,9 +88,9 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
 
     let regionReference: MIDIRegionReference
     let projectEpoch: UInt64
-    /// Note-list completeness — the only dimension `verifyRegion` consumes. A
-    /// `.complete` verdict can be minted ONLY by `assessReadback` (see
-    /// MIDIReadbackAssessment.swift).
+    /// Note-list completeness. A `.complete` verdict can be minted ONLY by
+    /// `assessReadback` (see MIDIReadbackAssessment.swift); a completeness-gated
+    /// `diffRegions` is its only consumer in this rollout.
     let noteCompleteness: CompletenessVerdict
     /// Tempo and time-signature completeness are SEPARATE dimensions. This core
     /// leaves both maps unpopulated and marks them incomplete, so an empty map is

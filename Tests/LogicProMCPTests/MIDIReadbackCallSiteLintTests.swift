@@ -4,17 +4,18 @@ import SwiftSyntax
 import Testing
 @testable import LogicProMCP
 
-// Acceptance lint (runs in every configuration): the pure `assessReadback`
-// chokepoint has NO production reference, and the `CompleteProof` mint has
-// exactly its known sites — all inside the assessment file. So the dark core is
-// inert in the shipped binary; when the live provider is added it becomes the
-// single allowed reference and this lint is updated to name it.
-//
-// The scan is Swift-syntax-aware: string-literal content is `.stringSegment`
-// tokens and comments are trivia, so scanning `.identifier` tokens matches only
-// real code references — a call hidden in a comment, a plain/raw/interpolated
-// string, or after a `//`/`/*` that merely appears inside a string is neither
-// missed nor mis-stripped by fragile hand lexing.
+// Defense-in-depth acceptance lint (runs in every configuration). The LOAD-BEARING
+// control is Swift access control, not this scan: `CompleteProof`'s initializer is
+// fileprivate to the assessment file, so no other file can construct one, and there
+// is no public/internal initializer, factory, or decoder — so no production
+// `.complete` can be minted outside `assessReadback`. This scan is a SECONDARY aid:
+// it hard-fails on unreadable sources and flags an `assessReadback` production
+// reference or an unexpected count of `CompleteProof` construction sites in the
+// assessment file, over the construction forms it recognizes. It does NOT claim to
+// census every possible future Swift alias/factory form — a same-file `typealias`
+// or helper mint is caught by source review of the change, not by this heuristic. The
+// scan is syntax-aware (string content is `.stringSegment`, comments are trivia),
+// so it is not defeated by strings/comments the way a hand lexer would be.
 @Suite struct MIDIReadbackCallSiteLintTests {
     private static let assessmentFile = "MIDIReadbackAssessment.swift"
     // The only permitted `CompleteProof()` mint sites, both in the assessment

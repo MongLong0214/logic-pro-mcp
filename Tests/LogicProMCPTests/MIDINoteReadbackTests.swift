@@ -3,51 +3,6 @@ import Testing
 @testable import LogicProMCP
 
 @Suite struct MIDINoteReadbackTests {
-    // Fail-closed expected sequence (no independence proof) — usable in any
-    // configuration; verifyRegion returns incompleteCannotVerify for it.
-    private func expectSeq(_ notes: [MIDINoteEvent], ppq: Int = 480) -> ExpectedSequence {
-        ExpectedSequence(notes: notes, ppq: ppq)
-    }
-
-    #if QUALIFICATION_FAULT_SEAM
-    // A proven, independently-sourced expected sequence (debug seam only), minted
-    // ONLY by ingesting an external artifact whose bytes decode to `notes`+`ppq`.
-    // A release build cannot present one and a caller cannot fabricate one.
-    private func provenExpectSeq(_ notes: [MIDINoteEvent], ppq: Int = 480) -> ExpectedSequence {
-        ExternalArtifactIngestion.ingest(
-            artifactID: "external.user-provided",
-            rawArtifact: ExternalArtifactIngestion.encode(notes, ppq: ppq)
-        )!
-    }
-    #endif
-
-    @Test func incompleteSnapshotCannotReportExactMatch() {
-        let note = makeNote(pitch: 60)
-        let observed = makeSnapshot(complete: false, notes: [note])
-
-        guard case .incompleteCannotVerify(let reason) = verifyRegion(
-            observed: observed,
-            expected: expectSeq([note])
-        ) else {
-            Issue.record("An incomplete scan must never report a full match")
-            return
-        }
-        #expect(reason == String(describing: PartialReason.timingUnproven))
-    }
-
-    @Test func missingIndependentProvenanceCannotReportExactMatch() {
-        let note = makeNote(pitch: 60)
-        let observed = makeSnapshot(provenance: .none, notes: [note])
-
-        guard case .incompleteCannotVerify = verifyRegion(
-            observed: observed,
-            expected: expectSeq([note])
-        ) else {
-            Issue.record("Server-owned input without independent provenance is not readback")
-            return
-        }
-    }
-
     @Test func canonicalizationRemovesVelocityZeroTrimsOverlapAndSorts() {
         let canonical = canonicalize([
             makeNote(pitch: 67, start: 20, duration: 10, velocity: 70, channel: 1),
@@ -66,63 +21,6 @@ import Testing
             makeNote(pitch: 64, start: 60, duration: 30, velocity: 80),
         ])
     }
-
-    #if QUALIFICATION_FAULT_SEAM
-    @Test func ppqNormalizedWouldBeMatchIsDeferredNotExactMatch() {
-        // Expected (ppq 480) normalizes onto observed (ppq 960) to identical notes
-        // — a would-be match. In this rollout that is DEFERRED, never `.exactMatch`
-        // (the pure core cannot grant a positive independent match).
-        let expected = [makeNote(pitch: 60, start: 480, duration: 240)]
-        let observed = makeSnapshot(
-            ppq: 960,
-            notes: [makeNote(pitch: 60, start: 960, duration: 480)]
-        )
-        let verdict = verifyRegion(observed: observed, expected: provenExpectSeq(expected))
-        guard case .incompleteCannotVerify = verdict else {
-            Issue.record("A would-be match must be deferred, never exactMatch (got \(verdict))")
-            return
-        }
-    }
-
-    @Test func canonicalizedWouldBeMatchIsDeferredNotExactMatch() {
-        let expected = [
-            makeNote(pitch: 64, start: 60, duration: 30, velocity: 80),
-            makeNote(pitch: 64, start: 0, duration: 100, velocity: 90),
-            makeNote(pitch: 70, start: 5, duration: 10, velocity: 0),
-        ]
-        let observed = makeSnapshot(notes: [
-            makeNote(pitch: 64, start: 0, duration: 60, velocity: 90),
-            makeNote(pitch: 64, start: 60, duration: 30, velocity: 80),
-        ])
-        let verdict = verifyRegion(observed: observed, expected: provenExpectSeq(expected))
-        guard case .incompleteCannotVerify = verdict else {
-            Issue.record("A canonicalized would-be match must be deferred, never exactMatch (got \(verdict))")
-            return
-        }
-    }
-
-    @Test func verificationReportsAddedRemovedAndChangedNotes() {
-        let changedBefore = makeNote(pitch: 60, start: 0, duration: 100)
-        let changedAfter = makeNote(pitch: 60, start: 0, duration: 80)
-        let unchanged = makeNote(pitch: 62, start: 120, duration: 50)
-        let removedNote = makeNote(pitch: 64, start: 240, duration: 60)
-        let addedNote = makeNote(pitch: 65, start: 300, duration: 40)
-        let observed = makeSnapshot(notes: [changedAfter, unchanged, addedNote])
-
-        guard case .mismatch(let added, let removed, let changed) = verifyRegion(
-            observed: observed,
-            expected: provenExpectSeq([changedBefore, unchanged, removedNote])
-        ) else {
-            Issue.record("Expected a structured mismatch")
-            return
-        }
-        #expect(added == [addedNote])
-        #expect(removed == [removedNote])
-        #expect(changed.count == 1)
-        #expect(changed.first?.0 == changedBefore)
-        #expect(changed.first?.1 == changedAfter)
-    }
-    #endif
 
     #if QUALIFICATION_FAULT_SEAM
     @Test func regionDiffReportsAddedAndRemovedNotes() {
@@ -217,9 +115,9 @@ import Testing
     #endif
 
     @Test func nonPositivePPQNormalizationFailsClosed() {
-        // normalizePPQ must return nil (unverifiable) for a non-positive PPQ, never
-        // fall back to unscaled notes — a caller comparing unscaled ticks would
-        // accept a false match.
+        // normalizePPQ (used by diffRegions) must return nil for a non-positive PPQ,
+        // never fall back to unscaled notes — a comparison of unscaled ticks would
+        // be untrustworthy.
         let note = makeNote(pitch: 60)
         for pair in [(0, 480), (-1, 480), (480, 0), (480, -5)] {
             if normalizePPQ([note], from: pair.0, to: pair.1) != nil {
