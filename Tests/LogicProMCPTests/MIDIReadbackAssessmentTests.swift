@@ -510,6 +510,64 @@ import Testing
         #expect(assessReadback(Self.evidence(countText: "1\u{00A0}234 Events")).noteCompleteness.partialReason == .countMismatch)
     }
 
+    // MARK: gate-simulation follow-ups (payload binding, overflow, swap, span)
+
+    @Test func ppqScaleOverflowRejected() {
+        let snap = assessReadback(Self.evidence())
+        let hugeNote = MIDINoteEvent(
+            pitch: 60, startTicks: Int64.max, durationTicks: 1, velocity: 100, channel: 1
+        )
+        let sourceID = "external.user-provided"
+        // Scaling from ppq 1 to 480 multiplies startTicks by 480 → Int64 overflow
+        // → normalization must fail closed, never fall back to unscaled ticks.
+        let expected = ExpectedSequence(
+            notes: [hugeNote], ppq: 1,
+            provenance: .provenExternalArtifact(
+                sourceID: sourceID,
+                contentBinding: expectedContentBinding(sourceID: sourceID, notes: [hugeNote], ppq: 1)
+            )
+        )
+        guard case .incompleteCannotVerify = verifyRegion(observed: snap, expected: expected) else {
+            Issue.record("Expected incompleteCannotVerify for PPQ scale overflow")
+            return
+        }
+    }
+
+    @Test func tickPrecisionPreservedNear2p53() {
+        // Position group [2^53, 1, 0, 0] must sum to 2^53 + 1 (Int64), not lose the
+        // +1 (which a Double accumulator would).
+        let twoTo53 = 9_007_199_254_740_992.0
+        let snap = assessReadback(Self.evidence(
+            passA: [RowKey(index: 0): Self.noteRow(position: [twoTo53, 1, 0, 0])],
+            calibration: CalibrationTriple(pitch: 60, velocity: 100, startTickValue: twoTo53)
+        ))
+        #expect(snap.complete)
+        #expect(snap.notes.first?.startTicks == 9_007_199_254_740_993)  // 2^53 + 1
+    }
+
+    @Test func channelLengthRoleSwapRejected() {
+        var r = Self.roles()
+        let ch = r[.channel]
+        r[.channel] = r[.length]
+        r[.length] = ch
+        // channel role now points to the length (group) column → no single slider
+        // value → the row fails to parse (structural pin), never completes wrong.
+        let snap = assessReadback(Self.evidence(binding: .headerIdentity(.proven(r))))
+        guard case .rowParseFailed = snap.noteCompleteness.partialReason else {
+            Issue.record("Expected rowParseFailed for channel/length role swap")
+            return
+        }
+    }
+
+    @Test func harvestMidWindowRejected() {
+        // A contiguous window NOT anchored at row 0 is not proven to be the full table.
+        let snap = assessReadback(Self.evidence(
+            keys: [RowKey(index: 5)],
+            passA: [RowKey(index: 5): Self.noteRow()]
+        ))
+        #expect(snap.noteCompleteness.partialReason == .harvestNotContiguous)
+    }
+
     // MARK: Codable is display-only — decode forces incomplete
 
     @Test func decodedSnapshotIsUntrustedIncomplete() throws {

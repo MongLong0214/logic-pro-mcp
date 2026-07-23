@@ -54,14 +54,17 @@ enum CompletenessVerdict: Equatable, Sendable {
 }
 
 struct CompleteProof: Equatable, Sendable {
-    fileprivate init() {}
-
-    static func == (_: CompleteProof, _: CompleteProof) -> Bool { true }
+    /// Binds this completeness proof to the exact notes+PPQ it certifies, so it
+    /// cannot be re-paired with a foreign note payload.
+    let contentBinding: String
+    fileprivate init(contentBinding: String) { self.contentBinding = contentBinding }
 
     #if QUALIFICATION_FAULT_SEAM
     /// Test-only mint. Compiled solely under `QUALIFICATION_FAULT_SEAM`; a
     /// release binary has no path to this. A test seam, not a security boundary.
-    static func makeForTesting() -> CompleteProof { CompleteProof() }
+    static func makeForTesting(contentBinding: String) -> CompleteProof {
+        CompleteProof(contentBinding: contentBinding)
+    }
     #endif
 }
 
@@ -78,7 +81,9 @@ func assessReadback(_ evidence: EventListReadbackEvidence) -> MIDIRegionNoteSnap
     let notes: [MIDINoteEvent]
     switch outcome {
     case let .complete(parsedNotes):
-        verdict = .complete(CompleteProof())
+        verdict = .complete(CompleteProof(
+            contentBinding: midiRegionNoteDigest(parsedNotes, ppq: evidence.ppq)
+        ))
         notes = parsedNotes
     case let .incomplete(reason):
         verdict = .incomplete(reason)
@@ -235,6 +240,9 @@ private func harvestKeysContiguous(_ harvest: RowHarvest) -> Bool {
     guard keySet.count == keys.count else { return false }
     guard keySet == Set(harvest.passA.keys), keySet == Set(harvest.passB.keys) else { return false }
     guard keys == keys.sorted() else { return false }
+    // The span must be anchored at the table's first row (index 0), so a
+    // contiguous MID-window cannot pass as the full table.
+    if let first = keys.first, first.index != 0 { return false }
     for i in 1..<max(keys.count, 1) where keys.count > 1 {
         if keys[i].index != keys[i - 1].index + 1 { return false }
     }
@@ -354,15 +362,20 @@ private func bbtToTicks(_ group: [Double]?) -> Int64? {
     // Double "integer" has lost precision, so reject per value (and bound the
     // total well within Int64 so the conversion cannot trap).
     let exactIntegerLimit = 9_007_199_254_740_992.0  // 2^53
-    var total = 0.0
+    // Accumulate in Int64, not Double: each value is a finite exact integer within
+    // ±2^53 (so Int64(value) is exact), and the running sum uses overflow-checked
+    // Int64 addition — a Double sum would silently lose the low bits above 2^53
+    // (e.g. 2^53 + 1 == 2^53 in Double).
+    var total: Int64 = 0
     for value in group {
         guard value.isFinite, value == value.rounded(), abs(value) <= exactIntegerLimit else {
             return nil
         }
-        total += value
+        let (next, overflow) = total.addingReportingOverflow(Int64(value))
+        guard !overflow else { return nil }
+        total = next
     }
-    guard total.isFinite, abs(total) <= exactIntegerLimit else { return nil }
-    return Int64(total)
+    return total
 }
 
 private func parseCount(_ text: String) -> Int? {

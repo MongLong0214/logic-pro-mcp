@@ -118,6 +118,7 @@ import Testing
     }
     #endif
 
+    #if QUALIFICATION_FAULT_SEAM
     @Test func regionDiffReportsAddedAndRemovedNotes() {
         let removedNote = makeNote(pitch: 60)
         let unchanged = makeNote(pitch: 62, start: 120)
@@ -128,9 +129,39 @@ import Testing
             after: makeSnapshot(notes: [unchanged, addedNote])
         )
 
-        #expect(result.added == [addedNote])
-        #expect(result.removed == [removedNote])
+        #expect(result?.added == [addedNote])
+        #expect(result?.removed == [removedNote])
     }
+
+    @Test func regionDiffRejectsIncompleteSnapshot() {
+        // An incomplete side must not drive a diff (decoded/incomplete payloads
+        // keep their notes but are not trustworthy).
+        let note = makeNote(pitch: 60)
+        #expect(diffRegions(
+            before: makeSnapshot(complete: false, notes: [note]),
+            after: makeSnapshot(notes: [note])
+        ) == nil)
+    }
+
+    @Test func rePairedCompleteProofIsNotComplete() {
+        // A completeness proof minted for one payload cannot certify a different
+        // note set: `complete` recomputes the binding from the snapshot's notes.
+        let region = MIDIRegionReference(targetRef: TargetReference(rawValue: "trk_test"), regionIndex: 0)
+        let mismatched = MIDIRegionNoteSnapshot(
+            regionReference: region,
+            projectEpoch: 1,
+            noteCompleteness: .complete(CompleteProof.makeForTesting(
+                contentBinding: midiRegionNoteDigest([makeNote(pitch: 61)], ppq: 480)
+            )),
+            provenance: .eventListAX,
+            ppq: 480,
+            notes: [makeNote(pitch: 60)],  // NOT what the proof was bound to
+            tempoMap: [],
+            timeSignatures: []
+        )
+        #expect(!mismatched.complete)
+    }
+    #endif
 
     @Test func providerGateHasNoPublicProviderBeforeQualification() {
         let registry = QualifiedProviderRegistry()

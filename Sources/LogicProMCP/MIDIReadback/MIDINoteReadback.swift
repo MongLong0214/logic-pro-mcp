@@ -42,6 +42,16 @@ struct TimeSignatureEvent: Codable, Equatable, Sendable {
     let denominator: Int
 }
 
+/// Deterministic digest binding a note payload to its PPQ. Integer fields cannot
+/// contain the `;`/`,`/`|` separators, so the encoding is unambiguous. Used to
+/// seal a completeness or independence proof to the exact notes it certifies.
+func midiRegionNoteDigest(_ notes: [MIDINoteEvent], ppq: Int) -> String {
+    let body = notes
+        .map { "\($0.pitch),\($0.startTicks),\($0.durationTicks),\($0.velocity),\($0.channel)" }
+        .joined(separator: ";")
+    return "ppq=\(ppq)|\(body)"
+}
+
 struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
     /// Identifies the conversion that produced `notes`, so a verifier can require
     /// the expected sequence to carry a DIFFERENT provenance — a re-derived
@@ -67,7 +77,12 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
     let tempoMap: [TempoEvent]
     let timeSignatures: [TimeSignatureEvent]
 
-    var complete: Bool { noteCompleteness.isComplete }
+    /// Complete ONLY if the completeness proof is bound to THIS snapshot's exact
+    /// notes+PPQ — so a proof cannot be re-paired with foreign notes.
+    var complete: Bool {
+        guard case let .complete(proof) = noteCompleteness else { return false }
+        return proof.contentBinding == midiRegionNoteDigest(notes, ppq: ppq)
+    }
     var partialReason: String? { noteCompleteness.partialReason.map { String(describing: $0) } }
 
     init(
@@ -153,7 +168,9 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
         MIDIRegionNoteSnapshot(
             regionReference: regionReference,
             projectEpoch: projectEpoch,
-            noteCompleteness: .complete(CompleteProof.makeForTesting()),
+            noteCompleteness: .complete(CompleteProof.makeForTesting(
+                contentBinding: midiRegionNoteDigest(notes, ppq: ppq)
+            )),
             provenance: provenance,
             ppq: ppq,
             notes: notes,

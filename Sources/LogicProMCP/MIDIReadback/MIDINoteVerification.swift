@@ -118,10 +118,10 @@ func verifyRegion(
     }
 
     let actual = canonicalize(observed.notes, ppq: observed.ppq)
-    let wanted = canonicalize(
-        normalizePPQ(expected.notes, from: expected.ppq, to: observed.ppq),
-        ppq: observed.ppq
-    )
+    guard let normalizedExpected = normalizePPQ(expected.notes, from: expected.ppq, to: observed.ppq) else {
+        return .incompleteCannotVerify(reason: "PPQ normalization overflow")
+    }
+    let wanted = canonicalize(normalizedExpected, ppq: observed.ppq)
     guard actual != wanted else { return .exactMatch }
 
     let differences = noteDifferences(expected: wanted, observed: actual)
@@ -135,16 +135,18 @@ func verifyRegion(
 func diffRegions(
     before: MIDIRegionNoteSnapshot,
     after: MIDIRegionNoteSnapshot
-) -> (added: [MIDINoteEvent], removed: [MIDINoteEvent]) {
+) -> (added: [MIDINoteEvent], removed: [MIDINoteEvent])? {
+    // Both sides must be complete (a decoded/incomplete payload keeps its notes
+    // but must not drive added/removed claims) and must normalize without
+    // overflow — else there is no trustworthy diff.
+    guard before.complete, after.complete else { return nil }
     let comparisonPPQ = max(max(before.ppq, after.ppq), 1)
-    let previous = canonicalize(
-        normalizePPQ(before.notes, from: before.ppq, to: comparisonPPQ),
-        ppq: comparisonPPQ
-    )
-    let current = canonicalize(
-        normalizePPQ(after.notes, from: after.ppq, to: comparisonPPQ),
-        ppq: comparisonPPQ
-    )
+    guard let previousNotes = normalizePPQ(before.notes, from: before.ppq, to: comparisonPPQ),
+          let currentNotes = normalizePPQ(after.notes, from: after.ppq, to: comparisonPPQ) else {
+        return nil
+    }
+    let previous = canonicalize(previousNotes, ppq: comparisonPPQ)
+    let current = canonicalize(currentNotes, ppq: comparisonPPQ)
 
     // ponytail: O(n²) preserves duplicate-note multiset semantics; index if qualified
     // providers make very large region diffs a measured hot path.
