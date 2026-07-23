@@ -117,6 +117,9 @@ import Testing
         #expect(Self.completeProofMintCount("return .complete(`CompleteProof`())") == 1)        // backtick construction
         #expect(Self.completeProofMintCount("return .complete(.init(contentBinding: x))") == 1) // CONTEXTUAL .init mint (the bypass)
         #expect(Self.completeProofMintCount("f(a: CompleteProof(contentBinding: x), b: .init(contentBinding: y))") == 2) // both forms
+        #expect(Self.completeProofMintCount("return .complete(self.init(contentBinding: x))") == 1) // self.init delegation
+        #expect(Self.completeProofMintCount("return .complete(LogicProMCP.CompleteProof(contentBinding: x))") == 1) // module-qualified type
+        #expect(Self.completeProofMintCount("return .complete(LogicProMCP.CompleteProof.init(contentBinding: x))") == 1) // module-qualified .init
         // Not counted: comments, plain string content, member access, unrelated ids.
         #expect(Self.identifierCount("// minted only by assessReadback(evidence)", "assessReadback") == 0)
         #expect(Self.identifierCount("/* /* nested */ see assessReadback */", "assessReadback") == 0)
@@ -125,6 +128,7 @@ import Testing
         #expect(Self.completeProofMintCount("CompleteProof.makeForTesting()") == 0)             // factory, not the initializer
         #expect(Self.completeProofMintCount("let x: Foo = .init(other: 1)") == 0)              // contextual .init, not contentBinding
         #expect(Self.completeProofMintCount("bar.baz(contentBinding: 1)") == 0)                // labeled call, not an initializer
+        #expect(Self.completeProofMintCount("self.init(other: 1)") == 0)                        // self.init without contentBinding
     }
 }
 
@@ -140,20 +144,34 @@ private final class CompleteProofMintCounter: SyntaxVisitor {
     }
 
     override func visit(_ node: FunctionCallExprSyntax) -> SyntaxVisitorContinueKind {
-        let firstArgLabel = node.arguments.first?.label?.text
-        if let ref = node.calledExpression.as(DeclReferenceExprSyntax.self) {
-            // CompleteProof(...) or `CompleteProof`(...)
-            if stripped(ref.baseName.text) == "CompleteProof" { count += 1 }
-        } else if let member = node.calledExpression.as(MemberAccessExprSyntax.self) {
-            let name = stripped(member.declName.baseName.text)
-            if let base = member.base?.as(DeclReferenceExprSyntax.self) {
-                // CompleteProof.init(...) — a member init on the named type
-                if stripped(base.baseName.text) == "CompleteProof", name == "init" { count += 1 }
-            } else if name == "init", firstArgLabel == "contentBinding" {
-                // .init(contentBinding:) — contextual, type inferred as CompleteProof
-                count += 1
-            }
-        }
+        if isCompleteProofMint(node) { count += 1 }
         return .visitChildren
+    }
+
+    /// A call is a `CompleteProof` mint if it constructs the type by any Swift
+    /// form. `contentBinding` is `CompleteProof`'s only initializer label, so an
+    /// `init` call carrying it (contextual `.init`, `self.init`, `Type.init`) is
+    /// unambiguously one of its mints even when the type token is absent.
+    private func isCompleteProofMint(_ node: FunctionCallExprSyntax) -> Bool {
+        let firstArgLabel = node.arguments.first?.label?.text
+        // Bare `CompleteProof(...)` / `` `CompleteProof`(...) ``.
+        if let ref = node.calledExpression.as(DeclReferenceExprSyntax.self) {
+            return stripped(ref.baseName.text) == "CompleteProof"
+        }
+        guard let member = node.calledExpression.as(MemberAccessExprSyntax.self) else { return false }
+        let name = stripped(member.declName.baseName.text)
+        // Member type construction: `X.CompleteProof(...)` (e.g. module-qualified).
+        if name == "CompleteProof" { return true }
+        // Any initializer call that targets CompleteProof by name
+        // (`CompleteProof.init(...)`) or carries its unique `contentBinding` label
+        // (`.init(contentBinding:)`, `self.init(contentBinding:)`, `X.init(...)`).
+        if name == "init" {
+            if let base = member.base?.as(DeclReferenceExprSyntax.self),
+               stripped(base.baseName.text) == "CompleteProof" {
+                return true
+            }
+            return firstArgLabel == "contentBinding"
+        }
+        return false
     }
 }
