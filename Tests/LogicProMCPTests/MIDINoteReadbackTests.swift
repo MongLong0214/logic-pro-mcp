@@ -6,21 +6,18 @@ import Testing
     // Fail-closed expected sequence (no independence proof) — usable in any
     // configuration; verifyRegion returns incompleteCannotVerify for it.
     private func expectSeq(_ notes: [MIDINoteEvent], ppq: Int = 480) -> ExpectedSequence {
-        ExpectedSequence(notes: notes, ppq: ppq, provenance: .unproven)
+        ExpectedSequence(notes: notes, ppq: ppq)
     }
 
     #if QUALIFICATION_FAULT_SEAM
-    // A proven independently-sourced expected sequence (debug seam only): a
-    // release build cannot present one, so match paths are exercised only here.
+    // A proven, independently-sourced expected sequence (debug seam only), minted
+    // ONLY by ingesting an external artifact whose bytes decode to `notes`+`ppq`.
+    // A release build cannot present one and a caller cannot fabricate one.
     private func provenExpectSeq(_ notes: [MIDINoteEvent], ppq: Int = 480) -> ExpectedSequence {
-        let sourceID = "external.user-provided"
-        return ExpectedSequence(
-            notes: notes, ppq: ppq,
-            provenance: .provenExternalArtifact(
-                sourceID: sourceID,
-                contentBinding: expectedContentBinding(sourceID: sourceID, notes: notes, ppq: ppq)
-            )
-        )
+        ExternalArtifactIngestion.ingest(
+            artifactID: "external.user-provided",
+            rawArtifact: ExternalArtifactIngestion.encode(notes, ppq: ppq)
+        )!
     }
     #endif
 
@@ -71,17 +68,23 @@ import Testing
     }
 
     #if QUALIFICATION_FAULT_SEAM
-    @Test func ppqNormalizationAllowsExactMatch() {
+    @Test func ppqNormalizedWouldBeMatchIsDeferredNotExactMatch() {
+        // Expected (ppq 480) normalizes onto observed (ppq 960) to identical notes
+        // — a would-be match. In this rollout that is DEFERRED, never `.exactMatch`
+        // (the pure core cannot grant a positive independent match).
         let expected = [makeNote(pitch: 60, start: 480, duration: 240)]
         let observed = makeSnapshot(
             ppq: 960,
             notes: [makeNote(pitch: 60, start: 960, duration: 480)]
         )
-
-        #expect(verifyRegion(observed: observed, expected: provenExpectSeq(expected)) == .exactMatch)
+        let verdict = verifyRegion(observed: observed, expected: provenExpectSeq(expected))
+        guard case .incompleteCannotVerify = verdict else {
+            Issue.record("A would-be match must be deferred, never exactMatch (got \(verdict))")
+            return
+        }
     }
 
-    @Test func verificationMatchesCanonicalNotes() {
+    @Test func canonicalizedWouldBeMatchIsDeferredNotExactMatch() {
         let expected = [
             makeNote(pitch: 64, start: 60, duration: 30, velocity: 80),
             makeNote(pitch: 64, start: 0, duration: 100, velocity: 90),
@@ -91,8 +94,11 @@ import Testing
             makeNote(pitch: 64, start: 0, duration: 60, velocity: 90),
             makeNote(pitch: 64, start: 60, duration: 30, velocity: 80),
         ])
-
-        #expect(verifyRegion(observed: observed, expected: provenExpectSeq(expected)) == .exactMatch)
+        let verdict = verifyRegion(observed: observed, expected: provenExpectSeq(expected))
+        guard case .incompleteCannotVerify = verdict else {
+            Issue.record("A canonicalized would-be match must be deferred, never exactMatch (got \(verdict))")
+            return
+        }
     }
 
     @Test func verificationReportsAddedRemovedAndChangedNotes() {

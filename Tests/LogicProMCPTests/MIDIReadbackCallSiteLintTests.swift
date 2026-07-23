@@ -37,22 +37,16 @@ import Testing
             .reduce(0) { $0 + (isIdentifierRef($1, name) ? 1 : 0) }
     }
 
-    /// Count `Name(` and `Name.init(` construction sites (identifier `Name`
-    /// followed by `(`, or by `.init(`), backtick-insensitive.
-    static func callSiteCount(_ source: String, _ name: String) -> Int {
-        let tokens = Array(Parser.parse(source: source).tokens(viewMode: .sourceAccurate))
-        var count = 0
-        for i in tokens.indices where isIdentifierRef(tokens[i], name) {
-            if i + 1 < tokens.count, tokens[i + 1].tokenKind == .leftParen {
-                count += 1
-            } else if i + 3 < tokens.count,
-                      tokens[i + 1].tokenKind == .period,
-                      tokens[i + 2].text.replacingOccurrences(of: "`", with: "") == "init",
-                      tokens[i + 3].tokenKind == .leftParen {
-                count += 1
-            }
-        }
-        return count
+    /// Count `CompleteProof` initializer calls, structurally (not by token
+    /// adjacency), so a CONTEXTUAL initializer — `.complete(.init(contentBinding:))`,
+    /// which carries no `CompleteProof` token — is still counted. Because the mint
+    /// is fileprivate to the assessment file, a contextual `.init` there is exactly
+    /// where an extra mint could hide; `contentBinding:` is `CompleteProof`'s unique
+    /// initializer label, so an implicit-base `.init(contentBinding:)` is a mint.
+    static func completeProofMintCount(_ source: String) -> Int {
+        let counter = CompleteProofMintCounter(viewMode: .sourceAccurate)
+        counter.walk(Parser.parse(source: source))
+        return counter.count
     }
 
     @Test func noProductionAssessReadbackReferenceAndProofMintIsExact() throws {
@@ -88,7 +82,7 @@ import Testing
                 continue
             }
             let isAssessment = url.standardizedFileURL.path == assessmentPath
-            let proofMints = Self.callSiteCount(text, "CompleteProof")
+            let proofMints = Self.completeProofMintCount(text)
             if isAssessment {
                 sawAssessmentFile = true
                 proofMintInAssessment = proofMints
@@ -118,14 +112,48 @@ import Testing
         #expect(Self.identifierCount("let s = #\"\\#(assessReadback(e))\"#", "assessReadback") == 1)   // raw-string interpolation
         #expect(Self.identifierCount("let u = \"https://x\"; assessReadback(e)", "assessReadback") == 1) // // inside a string
         #expect(Self.identifierCount("let r = `assessReadback`(e)", "assessReadback") == 1)             // backtick-escaped identifier
-        #expect(Self.callSiteCount("return .complete(CompleteProof ())", "CompleteProof") == 1)         // whitespace before paren
-        #expect(Self.callSiteCount("return .complete(CompleteProof.init())", "CompleteProof") == 1)     // .init() construction
-        #expect(Self.callSiteCount("return .complete(`CompleteProof`())", "CompleteProof") == 1)        // backtick construction
+        #expect(Self.completeProofMintCount("return .complete(CompleteProof ())") == 1)         // whitespace before paren
+        #expect(Self.completeProofMintCount("return .complete(CompleteProof.init())") == 1)     // .init() construction
+        #expect(Self.completeProofMintCount("return .complete(`CompleteProof`())") == 1)        // backtick construction
+        #expect(Self.completeProofMintCount("return .complete(.init(contentBinding: x))") == 1) // CONTEXTUAL .init mint (the bypass)
+        #expect(Self.completeProofMintCount("f(a: CompleteProof(contentBinding: x), b: .init(contentBinding: y))") == 2) // both forms
         // Not counted: comments, plain string content, member access, unrelated ids.
         #expect(Self.identifierCount("// minted only by assessReadback(evidence)", "assessReadback") == 0)
         #expect(Self.identifierCount("/* /* nested */ see assessReadback */", "assessReadback") == 0)
         #expect(Self.identifierCount("let id = \"eventListAX.assessReadback.v1\"", "assessReadback") == 0)
         #expect(Self.identifierCount("let u = \"/*\"; let x = 1", "assessReadback") == 0)               // /* inside a string, no ref
-        #expect(Self.callSiteCount("CompleteProof.makeForTesting()", "CompleteProof") == 0)             // member access, not a mint
+        #expect(Self.completeProofMintCount("CompleteProof.makeForTesting()") == 0)             // factory, not the initializer
+        #expect(Self.completeProofMintCount("let x: Foo = .init(other: 1)") == 0)              // contextual .init, not contentBinding
+        #expect(Self.completeProofMintCount("bar.baz(contentBinding: 1)") == 0)                // labeled call, not an initializer
+    }
+}
+
+/// Structural counter for `CompleteProof` initializer calls, including a
+/// contextual `.init(contentBinding:)` whose type is inferred (no `CompleteProof`
+/// token). `contentBinding` is `CompleteProof`'s only initializer label, so an
+/// implicit-base `.init(contentBinding:)` is unambiguously one of its mints.
+private final class CompleteProofMintCounter: SyntaxVisitor {
+    private(set) var count = 0
+
+    private func stripped(_ text: String) -> String {
+        text.replacingOccurrences(of: "`", with: "")
+    }
+
+    override func visit(_ node: FunctionCallExprSyntax) -> SyntaxVisitorContinueKind {
+        let firstArgLabel = node.arguments.first?.label?.text
+        if let ref = node.calledExpression.as(DeclReferenceExprSyntax.self) {
+            // CompleteProof(...) or `CompleteProof`(...)
+            if stripped(ref.baseName.text) == "CompleteProof" { count += 1 }
+        } else if let member = node.calledExpression.as(MemberAccessExprSyntax.self) {
+            let name = stripped(member.declName.baseName.text)
+            if let base = member.base?.as(DeclReferenceExprSyntax.self) {
+                // CompleteProof.init(...) — a member init on the named type
+                if stripped(base.baseName.text) == "CompleteProof", name == "init" { count += 1 }
+            } else if name == "init", firstArgLabel == "contentBinding" {
+                // .init(contentBinding:) — contextual, type inferred as CompleteProof
+                count += 1
+            }
+        }
+        return .visitChildren
     }
 }

@@ -31,56 +31,164 @@ extension RegionMatchVerdict: Equatable {
     }
 }
 
-/// Proof that an expected sequence came from a source INDEPENDENT of the
-/// observed readback conversion (a user-authored artifact, an imported file,
-/// etc.), carrying that source's identifier. There is no production-constructible
-/// proven case: the proven variant compiles only under the debug seam, so a
-/// release build cannot present an independently-sourced expected sequence at
-/// all — verification therefore cannot report a match in a release build (a free
-/// label can never stand in for genuine independence).
+/// Proof that an expected sequence was produced by ingesting an external artifact
+/// INDEPENDENT of the observed readback conversion. The payload is OPAQUE — its
+/// initializer is fileprivate to this file and the sole mint is
+/// `ExternalArtifactIngestion`, which decodes the notes from the artifact's own
+/// bytes — so a caller cannot fabricate one from observed notes plus a chosen
+/// label. The proven case compiles only under the debug seam; a release build has
+/// only `.unproven`.
+///
+/// This rollout builds the ingestion STRUCTURE only. Granting a positive match is
+/// deferred (see `verifyRegion`): a pure core has no external root of trust to
+/// prove that an expected sequence is genuinely independent of the observed
+/// conversion, so no input — not even an ingested artifact — is reported as an
+/// exact match until a real independent decode pipeline ships.
 enum IndependentExpectedProof: Sendable {
     case unproven
     #if QUALIFICATION_FAULT_SEAM
-    case provenExternalArtifact(sourceID: String, contentBinding: String)
+    case provenExternalArtifact(ExternalArtifactProof)
     #endif
 
-    var binding: (sourceID: String, contentBinding: String)? {
+    /// The independent expected payload (artifact id + artifact-decoded notes +
+    /// artifact-embedded PPQ), or nil when not proven — nil in every release build.
+    var independentExpected: (artifactID: String, notes: [MIDINoteEvent], ppq: Int)? {
         #if QUALIFICATION_FAULT_SEAM
-        if case let .provenExternalArtifact(id, digest) = self { return (id, digest) }
+        if case let .provenExternalArtifact(proof) = self {
+            return (proof.artifactID, proof.boundNotes, proof.ppq)
+        }
         #endif
         return nil
     }
 }
 
-/// Deterministic binding of an external artifact's identity to the exact note
-/// payload it certifies. The proof carries this value; verification recomputes it
-/// from the presented notes/PPQ and rejects any mismatch, so a proof minted for
-/// one artifact cannot be transferred to relabel a different (e.g. observed-
-/// derived) note payload.
-func expectedContentBinding(sourceID: String, notes: [MIDINoteEvent], ppq: Int) -> String {
-    let notesPart = notes
-        .map { "\($0.pitch),\($0.startTicks),\($0.durationTicks),\($0.velocity),\($0.channel)" }
-        .joined(separator: ";")
-    // Length-prefix the free-text source id (byte count) so it cannot inject a
-    // `|`-delimited field and collide with a different (sourceID, notes, ppq)
-    // tuple under the string equality this binding is compared with — matching
-    // the completeness binding's injection-safety discipline.
-    return "src=\(sourceID.utf8.count):\(sourceID)|ppq=\(ppq)|\(notesPart)"
+#if QUALIFICATION_FAULT_SEAM
+/// Opaque, non-caller-constructible proof of an ingested external artifact. The
+/// initializer is fileprivate to this file, so no other file (including a
+/// `@testable` importer, which does not open `fileprivate`) can build one; the
+/// notes and PPQ are decoded from the artifact bytes at ingestion, never supplied
+/// directly.
+struct ExternalArtifactProof: Sendable {
+    let artifactID: String
+    fileprivate let boundNotes: [MIDINoteEvent]
+    fileprivate let ppq: Int
+    fileprivate init(artifactID: String, boundNotes: [MIDINoteEvent], ppq: Int) {
+        self.artifactID = artifactID
+        self.boundNotes = boundNotes
+        self.ppq = ppq
+    }
 }
 
-/// A caller's expected note sequence bundled with a proof of its independent
-/// provenance. The provenance is a sealed proof, not a free label, so a sequence
-/// re-derived by the observed conversion cannot be relabeled as independent.
+/// The sole mint of a proven `IndependentExpectedProof` (debug seam). Notes and
+/// PPQ are DECODED from a strict, fixed-width artifact byte stream — never taken
+/// from the caller — so observed notes cannot be laundered into an independent
+/// proof by choosing a label. Fails closed on an empty or known-pipeline artifact
+/// id and on any malformed/truncated/trailing/overflowing byte stream.
+enum ExternalArtifactIngestion {
+    private static let headerSize = 12   // 8-byte PPQ + 4-byte note count
+    private static let recordSize = 19   // pitch(1) velocity(1) channel(1) start(8) duration(8)
+
+    /// Wire form for a test artifact (models an authored/imported file's bytes).
+    static func encode(_ notes: [MIDINoteEvent], ppq: Int) -> [UInt8] {
+        var bytes: [UInt8] = []
+        appendInt64(&bytes, Int64(ppq))
+        appendUInt32(&bytes, UInt32(truncatingIfNeeded: notes.count))
+        for note in notes {
+            bytes.append(note.pitch)
+            bytes.append(note.velocity)
+            bytes.append(note.channel)
+            appendInt64(&bytes, note.startTicks)
+            appendInt64(&bytes, note.durationTicks)
+        }
+        return bytes
+    }
+
+    /// Ingest raw artifact bytes as the independent expected source. Returns nil
+    /// (fail-closed) on an empty / known-pipeline id or malformed bytes. PPQ comes
+    /// from the artifact, not the caller.
+    static func ingest(artifactID: String, rawArtifact: [UInt8]) -> ExpectedSequence? {
+        guard !artifactID.isEmpty,
+              artifactID != MIDIRegionNoteSnapshot.eventListConversionID,
+              let decoded = decode(rawArtifact),
+              decoded.ppq > 0 else { return nil }
+        return ExpectedSequence(_proof: ExternalArtifactProof(
+            artifactID: artifactID, boundNotes: decoded.notes, ppq: decoded.ppq
+        ))
+    }
+
+    /// Strict decode: exact total length (rejects BOTH trailing and truncated
+    /// bytes), overflow-safe record count, fixed-width fields (no delimiter or
+    /// injection surface). Any deviation returns nil.
+    private static func decode(_ bytes: [UInt8]) -> (notes: [MIDINoteEvent], ppq: Int)? {
+        guard bytes.count >= headerSize else { return nil }
+        let ppq64 = readInt64(bytes, 0)
+        let count = readUInt32(bytes, 8)
+        guard let body = Int(exactly: UInt64(count) * UInt64(recordSize)),
+              let total = Int(exactly: UInt64(headerSize) + UInt64(body)),
+              bytes.count == total,
+              let ppq = Int(exactly: ppq64) else { return nil }
+        var notes: [MIDINoteEvent] = []
+        notes.reserveCapacity(Int(count))
+        var offset = headerSize
+        for _ in 0 ..< count {
+            notes.append(MIDINoteEvent(
+                pitch: bytes[offset],
+                startTicks: readInt64(bytes, offset + 3),
+                durationTicks: readInt64(bytes, offset + 11),
+                velocity: bytes[offset + 1],
+                channel: bytes[offset + 2]
+            ))
+            offset += recordSize
+        }
+        return (notes, ppq)
+    }
+
+    private static func appendInt64(_ bytes: inout [UInt8], _ value: Int64) {
+        let bits = UInt64(bitPattern: value)
+        for shift in stride(from: 56, through: 0, by: -8) {
+            bytes.append(UInt8(truncatingIfNeeded: bits >> UInt64(shift)))
+        }
+    }
+    private static func appendUInt32(_ bytes: inout [UInt8], _ value: UInt32) {
+        for shift in stride(from: 24, through: 0, by: -8) {
+            bytes.append(UInt8(truncatingIfNeeded: value >> UInt32(shift)))
+        }
+    }
+    private static func readInt64(_ bytes: [UInt8], _ offset: Int) -> Int64 {
+        var bits: UInt64 = 0
+        for i in 0 ..< 8 { bits = (bits << 8) | UInt64(bytes[offset + i]) }
+        return Int64(bitPattern: bits)
+    }
+    private static func readUInt32(_ bytes: [UInt8], _ offset: Int) -> UInt32 {
+        var value: UInt32 = 0
+        for i in 0 ..< 4 { value = (value << 8) | UInt32(bytes[offset + i]) }
+        return value
+    }
+}
+#endif
+
+/// A caller's expected note sequence with its independent-provenance proof. The
+/// public initializer is UNPROVEN-only: a proven sequence can be produced solely
+/// by `ExternalArtifactIngestion`, so a caller cannot pair a proof with foreign
+/// notes (there is no dual source of truth).
 struct ExpectedSequence {
     let notes: [MIDINoteEvent]
     let ppq: Int
     let provenance: IndependentExpectedProof
 
-    init(notes: [MIDINoteEvent], ppq: Int, provenance: IndependentExpectedProof) {
+    init(notes: [MIDINoteEvent], ppq: Int) {
         self.notes = notes
         self.ppq = ppq
-        self.provenance = provenance
+        self.provenance = .unproven
     }
+
+    #if QUALIFICATION_FAULT_SEAM
+    fileprivate init(_proof proof: ExternalArtifactProof) {
+        self.notes = proof.boundNotes
+        self.ppq = proof.ppq
+        self.provenance = .provenExternalArtifact(proof)
+    }
+    #endif
 }
 
 func verifyRegion(
@@ -96,37 +204,44 @@ func verifyRegion(
         return .incompleteCannotVerify(reason: "Independent readback provenance is required")
     }
     // Independence guard: the expected sequence must carry a PROVEN independent
-    // provenance (not a free label), and that source must differ from the
-    // observed snapshot's conversion — so a re-derivation sharing the observed
-    // conversion's bugs cannot be relabeled and accepted as a match.
-    guard let binding = expected.provenance.binding else {
+    // provenance (an ingested external artifact, not a caller-fabricated label).
+    // The payload — notes, PPQ, artifact id — comes from the opaque proof, never
+    // from caller-supplied `expected.notes`, so a proof cannot be paired with
+    // foreign notes. In a release build `independentExpected` is always nil, so
+    // verification stops here.
+    guard let independent = expected.provenance.independentExpected else {
         return .incompleteCannotVerify(
             reason: "Expected sequence must carry a proven independent provenance"
         )
     }
-    guard observed.conversionPipelineID != binding.sourceID else {
+    // The artifact source must differ from the observed snapshot's conversion, so
+    // a re-derivation sharing the observed conversion cannot pass as independent.
+    guard observed.conversionPipelineID != independent.artifactID else {
         return .incompleteCannotVerify(
             reason: "Expected sequence must not share the observed conversion pipeline"
         )
     }
-    // The proof must be bound to THIS payload: recompute the binding from the
-    // presented notes/PPQ and reject a transferred/relabeled proof.
-    guard binding.contentBinding
-        == expectedContentBinding(sourceID: binding.sourceID, notes: expected.notes, ppq: expected.ppq) else {
-        return .incompleteCannotVerify(
-            reason: "Expected provenance proof is not bound to this payload"
-        )
-    }
-    guard observed.ppq > 0, expected.ppq > 0 else {
+    guard observed.ppq > 0, independent.ppq > 0 else {
         return .incompleteCannotVerify(reason: "PPQ must be positive")
     }
 
     let actual = canonicalize(observed.notes, ppq: observed.ppq)
-    guard let normalizedExpected = normalizePPQ(expected.notes, from: expected.ppq, to: observed.ppq) else {
+    guard let normalizedExpected = normalizePPQ(independent.notes, from: independent.ppq, to: observed.ppq) else {
         return .incompleteCannotVerify(reason: "PPQ normalization overflow")
     }
     let wanted = canonicalize(normalizedExpected, ppq: observed.ppq)
-    guard actual != wanted else { return .exactMatch }
+    guard actual != wanted else {
+        // DEFERRED — never `.exactMatch` in this rollout. A pure core cannot prove
+        // the expected sequence is genuinely independent of the observed conversion
+        // (no external root of trust: no real second decode pipeline yet), so it
+        // grants NO positive match — even an ingested artifact whose notes equal
+        // the observed notes. Reporting a would-be match as verified would be the
+        // caller-mintable independence the contract forbids. Activation waits for a
+        // real independent decode pipeline. Negative results (below) stay safe.
+        return .incompleteCannotVerify(
+            reason: "Independent exact-match verification is deferred to a real external decode pipeline"
+        )
+    }
 
     let differences = noteDifferences(expected: wanted, observed: actual)
     return .mismatch(

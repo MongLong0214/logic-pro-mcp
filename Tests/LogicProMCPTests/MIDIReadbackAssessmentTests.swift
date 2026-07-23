@@ -249,80 +249,136 @@ import Testing
         #expect(snap.timeSignatureCompleteness == .incomplete(.mapsUnpopulated))
     }
 
-    @Test func correlatedConversionRejected() {
-        let snap = assessReadback(Self.evidence())
-        // Spoof: expected sequence claiming the SAME conversion provenance as the
-        // observed snapshot must fail-closed.
-        let verdict = verifyRegion(
-            observed: snap,
-            expected: ExpectedSequence(
-                notes: snap.notes, ppq: snap.ppq,
-                provenance: .provenExternalArtifact(
-                    sourceID: MIDIRegionNoteSnapshot.eventListConversionID,
-                    contentBinding: expectedContentBinding(
-                        sourceID: MIDIRegionNoteSnapshot.eventListConversionID,
-                        notes: snap.notes, ppq: snap.ppq
-                    )
-                )
-            )
-        )
-        guard case .incompleteCannotVerify = verdict else {
-            Issue.record("Expected incompleteCannotVerify for correlated conversion provenance")
-            return
+    // MARK: independence contract (ingestion-minted opaque proof; match deferred)
+
+    private static let sampleNote = MIDINoteEvent(
+        pitch: 60, startTicks: 0, durationTicks: 120, velocity: 100, channel: 1
+    )
+    private func observedSnapshot() -> MIDIRegionNoteSnapshot { assessReadback(Self.evidence()) }
+
+    @Test func samePipelineArtifactRejectedAtMint() {
+        // An artifact claiming the observed conversion pipeline id is refused at
+        // the MINT (fail-closed), not merely at verify.
+        if ExternalArtifactIngestion.ingest(
+            artifactID: MIDIRegionNoteSnapshot.eventListConversionID,
+            rawArtifact: ExternalArtifactIngestion.encode([Self.sampleNote], ppq: 480)
+        ) != nil {
+            Issue.record("Ingesting under the observed pipeline id must be rejected at mint")
+        }
+    }
+
+    @Test func ingestRejectsEmptyArtifactID() {
+        if ExternalArtifactIngestion.ingest(
+            artifactID: "",
+            rawArtifact: ExternalArtifactIngestion.encode([Self.sampleNote], ppq: 480)
+        ) != nil {
+            Issue.record("Ingesting with an empty artifact id must be rejected at mint")
         }
     }
 
     @Test func unprovenExpectedProvenanceRejected() {
-        let snap = assessReadback(Self.evidence())
-        // A free label cannot stand in for independence: without a proven
-        // external artifact the expected sequence is unusable, not a pass.
-        let verdict = verifyRegion(
+        let snap = observedSnapshot()
+        // A caller-presented sequence with no proof is unusable, not a pass.
+        guard case .incompleteCannotVerify = verifyRegion(
             observed: snap,
-            expected: ExpectedSequence(notes: snap.notes, ppq: snap.ppq, provenance: .unproven)
-        )
-        guard case .incompleteCannotVerify = verdict else {
+            expected: ExpectedSequence(notes: snap.notes, ppq: snap.ppq)
+        ) else {
             Issue.record("Expected incompleteCannotVerify for unproven expected provenance")
             return
         }
     }
 
-    @Test func independentProvenanceMatchAccepted() {
-        let snap = assessReadback(Self.evidence())
-        // An independently-sourced expected sequence (different provenance) that
-        // matches the observed notes verifies as an exact match.
-        let verdict = verifyRegion(
-            observed: snap,
-            expected: ExpectedSequence(
-                notes: snap.notes, ppq: snap.ppq,
-                provenance: .provenExternalArtifact(
-                    sourceID: "external.user-provided",
-                    contentBinding: expectedContentBinding(
-                        sourceID: "external.user-provided", notes: snap.notes, ppq: snap.ppq
-                    )
-                )
-            )
-        )
-        #expect(verdict == .exactMatch)
+    @Test func publicInitCannotCarryProvenProvenance() {
+        // The public initializer is unproven-only (no provenance parameter), so a
+        // caller cannot pair a proof with foreign notes — no dual source of truth.
+        guard case .unproven = ExpectedSequence(notes: [Self.sampleNote], ppq: 480).provenance else {
+            Issue.record("Public ExpectedSequence init must yield .unproven")
+            return
+        }
     }
 
-    @Test func transferredProofRejected() {
-        let snap = assessReadback(Self.evidence())
-        // A proof minted for a DIFFERENT payload (bound to an empty note set)
-        // cannot be transferred to relabel the observed notes.
-        let verdict = verifyRegion(
-            observed: snap,
-            expected: ExpectedSequence(
-                notes: snap.notes, ppq: snap.ppq,
-                provenance: .provenExternalArtifact(
-                    sourceID: "external.user-provided",
-                    contentBinding: expectedContentBinding(
-                        sourceID: "external.user-provided", notes: [], ppq: snap.ppq
-                    )
-                )
-            )
-        )
+    @Test func observedNotesPlusArbitraryLabelNeverExactMatch() {
+        // RED-on-removal guard: serialize the observed notes and ingest them under
+        // ANY label (≠ pipeline) — still no `.exactMatch`. A would-be match is
+        // DEFERRED; re-enabling the exactMatch path turns this red.
+        let snap = observedSnapshot()
+        let forged = ExternalArtifactIngestion.ingest(
+            artifactID: "attacker.chosen.label",
+            rawArtifact: ExternalArtifactIngestion.encode(snap.notes, ppq: snap.ppq)
+        )!
+        let verdict = verifyRegion(observed: snap, expected: forged)
+        if verdict == .exactMatch {
+            Issue.record("Observed-note laundering under an arbitrary label must never exactMatch")
+        }
         guard case .incompleteCannotVerify = verdict else {
-            Issue.record("Expected incompleteCannotVerify for a transferred (mis-bound) proof")
+            Issue.record("A would-be match must be deferred (incompleteCannotVerify), got \(verdict)")
+            return
+        }
+    }
+
+    @Test func foreignArtifactNotesYieldMismatch() {
+        // The proof carries its OWN artifact-decoded notes; verify compares the
+        // observed notes against those. Foreign notes (≠ observed) → mismatch,
+        // never a false positive.
+        let snap = observedSnapshot()
+        let foreign = ExternalArtifactIngestion.ingest(
+            artifactID: "external.user-provided",
+            rawArtifact: ExternalArtifactIngestion.encode(
+                [MIDINoteEvent(pitch: 99, startTicks: 0, durationTicks: 120, velocity: 100, channel: 1)],
+                ppq: snap.ppq
+            )
+        )!
+        guard case .mismatch = verifyRegion(observed: snap, expected: foreign) else {
+            Issue.record("Foreign artifact notes must yield a structured mismatch")
+            return
+        }
+    }
+
+    @Test func ingestRejectsMalformedArtifact() {
+        if ExternalArtifactIngestion.ingest(artifactID: "a", rawArtifact: [0x01, 0x02]) != nil {
+            Issue.record("Malformed artifact bytes must be rejected")
+        }
+    }
+
+    @Test func ingestRejectsTrailingBytes() {
+        var bytes = ExternalArtifactIngestion.encode([Self.sampleNote], ppq: 480)
+        bytes.append(0x00)
+        if ExternalArtifactIngestion.ingest(artifactID: "a", rawArtifact: bytes) != nil {
+            Issue.record("Trailing bytes after the record body must be rejected")
+        }
+    }
+
+    @Test func ingestRejectsTruncatedRecord() {
+        var bytes = ExternalArtifactIngestion.encode([Self.sampleNote], ppq: 480)
+        bytes.removeLast()
+        if ExternalArtifactIngestion.ingest(artifactID: "a", rawArtifact: bytes) != nil {
+            Issue.record("A truncated record must be rejected")
+        }
+    }
+
+    @Test func ingestRejectsOverflowingCount() {
+        // Header claims 0xFFFFFFFF records but the body is empty → length mismatch.
+        var bytes = ExternalArtifactIngestion.encode([], ppq: 480)
+        bytes[8] = 0xFF; bytes[9] = 0xFF; bytes[10] = 0xFF; bytes[11] = 0xFF
+        if ExternalArtifactIngestion.ingest(artifactID: "a", rawArtifact: bytes) != nil {
+            Issue.record("An overflowing/oversized record count must be rejected")
+        }
+    }
+
+    @Test func artifactEmbeddedPPQFlowsThroughVerification() {
+        // PPQ is decoded from the artifact bytes, not caller-supplied: an artifact
+        // and observed snapshot both at ppq 960 with the same notes is a would-be
+        // match (deferred), proving the embedded ppq is what drives verification.
+        let notes = [MIDINoteEvent(pitch: 60, startTicks: 960, durationTicks: 480, velocity: 100, channel: 1)]
+        let observed = MIDIRegionNoteSnapshot.makeCompleteForTesting(
+            regionReference: Self.region, projectEpoch: 1, ppq: 960, notes: notes
+        )
+        let artifact = ExternalArtifactIngestion.ingest(
+            artifactID: "external.user-provided",
+            rawArtifact: ExternalArtifactIngestion.encode(notes, ppq: 960)
+        )!
+        guard case .incompleteCannotVerify = verifyRegion(observed: observed, expected: artifact) else {
+            Issue.record("Artifact-embedded ppq should drive a would-be match (deferred)")
             return
         }
     }
@@ -577,16 +633,12 @@ import Testing
         let hugeNote = MIDINoteEvent(
             pitch: 60, startTicks: Int64.max, durationTicks: 1, velocity: 100, channel: 1
         )
-        let sourceID = "external.user-provided"
         // Scaling from ppq 1 to 480 multiplies startTicks by 480 → Int64 overflow
         // → normalization must fail closed, never fall back to unscaled ticks.
-        let expected = ExpectedSequence(
-            notes: [hugeNote], ppq: 1,
-            provenance: .provenExternalArtifact(
-                sourceID: sourceID,
-                contentBinding: expectedContentBinding(sourceID: sourceID, notes: [hugeNote], ppq: 1)
-            )
-        )
+        let expected = ExternalArtifactIngestion.ingest(
+            artifactID: "external.user-provided",
+            rawArtifact: ExternalArtifactIngestion.encode([hugeNote], ppq: 1)
+        )!
         guard case .incompleteCannotVerify = verifyRegion(observed: snap, expected: expected) else {
             Issue.record("Expected incompleteCannotVerify for PPQ scale overflow")
             return
