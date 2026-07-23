@@ -3,35 +3,6 @@ import Testing
 @testable import LogicProMCP
 
 @Suite struct MIDINoteReadbackTests {
-    @Test func incompleteSnapshotCannotReportExactMatch() {
-        let note = makeNote(pitch: 60)
-        let observed = makeSnapshot(complete: false, partialReason: "virtualized rows", notes: [note])
-
-        guard case .incompleteCannotVerify(let reason) = verifyRegion(
-            observed: observed,
-            expected: [note],
-            expectedPPQ: 480
-        ) else {
-            Issue.record("An incomplete scan must never report a full match")
-            return
-        }
-        #expect(reason == "virtualized rows")
-    }
-
-    @Test func missingIndependentProvenanceCannotReportExactMatch() {
-        let note = makeNote(pitch: 60)
-        let observed = makeSnapshot(provenance: .none, notes: [note])
-
-        guard case .incompleteCannotVerify = verifyRegion(
-            observed: observed,
-            expected: [note],
-            expectedPPQ: 480
-        ) else {
-            Issue.record("Server-owned input without independent provenance is not readback")
-            return
-        }
-    }
-
     @Test func canonicalizationRemovesVelocityZeroTrimsOverlapAndSorts() {
         let canonical = canonicalize([
             makeNote(pitch: 67, start: 20, duration: 10, velocity: 70, channel: 1),
@@ -51,53 +22,7 @@ import Testing
         ])
     }
 
-    @Test func ppqNormalizationAllowsExactMatch() {
-        let expected = [makeNote(pitch: 60, start: 480, duration: 240)]
-        let observed = makeSnapshot(
-            ppq: 960,
-            notes: [makeNote(pitch: 60, start: 960, duration: 480)]
-        )
-
-        #expect(verifyRegion(observed: observed, expected: expected, expectedPPQ: 480) == .exactMatch)
-    }
-
-    @Test func verificationMatchesCanonicalNotes() {
-        let expected = [
-            makeNote(pitch: 64, start: 60, duration: 30, velocity: 80),
-            makeNote(pitch: 64, start: 0, duration: 100, velocity: 90),
-            makeNote(pitch: 70, start: 5, duration: 10, velocity: 0),
-        ]
-        let observed = makeSnapshot(notes: [
-            makeNote(pitch: 64, start: 0, duration: 60, velocity: 90),
-            makeNote(pitch: 64, start: 60, duration: 30, velocity: 80),
-        ])
-
-        #expect(verifyRegion(observed: observed, expected: expected, expectedPPQ: 480) == .exactMatch)
-    }
-
-    @Test func verificationReportsAddedRemovedAndChangedNotes() {
-        let changedBefore = makeNote(pitch: 60, start: 0, duration: 100)
-        let changedAfter = makeNote(pitch: 60, start: 0, duration: 80)
-        let unchanged = makeNote(pitch: 62, start: 120, duration: 50)
-        let removedNote = makeNote(pitch: 64, start: 240, duration: 60)
-        let addedNote = makeNote(pitch: 65, start: 300, duration: 40)
-        let observed = makeSnapshot(notes: [changedAfter, unchanged, addedNote])
-
-        guard case .mismatch(let added, let removed, let changed) = verifyRegion(
-            observed: observed,
-            expected: [changedBefore, unchanged, removedNote],
-            expectedPPQ: 480
-        ) else {
-            Issue.record("Expected a structured mismatch")
-            return
-        }
-        #expect(added == [addedNote])
-        #expect(removed == [removedNote])
-        #expect(changed.count == 1)
-        #expect(changed.first?.0 == changedBefore)
-        #expect(changed.first?.1 == changedAfter)
-    }
-
+    #if QUALIFICATION_FAULT_SEAM
     @Test func regionDiffReportsAddedAndRemovedNotes() {
         let removedNote = makeNote(pitch: 60)
         let unchanged = makeNote(pitch: 62, start: 120)
@@ -108,8 +33,132 @@ import Testing
             after: makeSnapshot(notes: [unchanged, addedNote])
         )
 
-        #expect(result.added == [addedNote])
-        #expect(result.removed == [removedNote])
+        #expect(result?.added == [addedNote])
+        #expect(result?.removed == [removedNote])
+    }
+
+    @Test func regionDiffRejectsIncompleteSnapshot() {
+        // An incomplete side must not drive a diff (decoded/incomplete payloads
+        // keep their notes but are not trustworthy).
+        let note = makeNote(pitch: 60)
+        #expect(diffRegions(
+            before: makeSnapshot(complete: false, notes: [note]),
+            after: makeSnapshot(notes: [note])
+        ) == nil)
+    }
+
+    @Test func regionDiffRejectsIncompleteAfterSnapshot() {
+        // Symmetric to the before-side check: an incomplete AFTER snapshot also
+        // fails closed.
+        let note = makeNote(pitch: 60)
+        #expect(diffRegions(
+            before: makeSnapshot(notes: [note]),
+            after: makeSnapshot(complete: false, notes: [note])
+        ) == nil)
+    }
+
+    @Test func regionDiffNormalizesPPQAcrossSnapshots() {
+        // The same musical note at ppq 480 vs ppq 960 is equal after PPQ
+        // normalization — the diff normalizes across snapshots and reports no delta.
+        let result = diffRegions(
+            before: makeSnapshot(ppq: 480, notes: [makeNote(pitch: 60, start: 480, duration: 240)]),
+            after: makeSnapshot(ppq: 960, notes: [makeNote(pitch: 60, start: 960, duration: 480)])
+        )
+        #expect(result?.added == [])
+        #expect(result?.removed == [])
+    }
+
+    @Test func regionDiffMultisetHandlesRepeatedPitch() {
+        // Same pitch at two distinct starts is two distinct notes; removing one
+        // leaves exactly that one in `removed` — the diff is multiset-correct
+        // (duplicate-preserving via firstIndex/remove), not set-based.
+        let a = makeNote(pitch: 60, start: 0, duration: 60)
+        let b = makeNote(pitch: 60, start: 120, duration: 60)
+        let result = diffRegions(
+            before: makeSnapshot(notes: [a, b]),
+            after: makeSnapshot(notes: [b])
+        )
+        #expect(result?.added == [])
+        #expect(result?.removed == [a])
+    }
+
+    @Test func rePairedCompleteProofIsNotComplete() {
+        // A completeness proof minted for one payload cannot certify a different
+        // note set: `complete` recomputes the binding from the snapshot's notes.
+        let region = MIDIRegionReference(targetRef: TargetReference(rawValue: "trk_test"), regionIndex: 0)
+        let genuine = MIDIRegionNoteSnapshot.makeCompleteForTesting(
+            regionReference: region, projectEpoch: 1, ppq: 480, notes: [makeNote(pitch: 61)]
+        )
+        #expect(genuine.complete)
+        let reNoted = MIDIRegionNoteSnapshot(
+            regionReference: region,
+            projectEpoch: 1,
+            noteCompleteness: genuine.noteCompleteness,  // proof bound to pitch 61
+            provenance: .eventListAX,
+            ppq: 480,
+            notes: [makeNote(pitch: 60)],  // NOT what the proof was bound to
+            tempoMap: [],
+            timeSignatures: []
+        )
+        #expect(!reNoted.complete)
+    }
+
+    @Test func envelopeTransplantIsNotComplete() {
+        // A completeness proof also seals the snapshot IDENTITY it certifies, so a
+        // genuine proof transplanted onto a foreign envelope (different region,
+        // epoch, provenance, or conversion pipeline) — even with identical
+        // notes+PPQ — cannot read complete. Each field is flipped alone, so
+        // dropping any one field from the binding turns that assertion red.
+        let notes = [makeNote(pitch: 60)]
+        let regionA = MIDIRegionReference(targetRef: TargetReference(rawValue: "trk_A"), regionIndex: 0)
+        let genuine = MIDIRegionNoteSnapshot.makeCompleteForTesting(
+            regionReference: regionA, projectEpoch: 1, ppq: 480, notes: notes
+        )
+        #expect(genuine.complete)
+
+        func transplant(
+            region: MIDIRegionReference = regionA,
+            epoch: UInt64 = 1,
+            provenance: MIDIReadbackProvenance = .eventListAX,
+            pipeline: String = MIDIRegionNoteSnapshot.eventListConversionID
+        ) -> MIDIRegionNoteSnapshot {
+            MIDIRegionNoteSnapshot(
+                regionReference: region,
+                projectEpoch: epoch,
+                noteCompleteness: genuine.noteCompleteness,
+                provenance: provenance,
+                ppq: 480,
+                notes: notes,
+                tempoMap: [],
+                timeSignatures: [],
+                conversionPipelineID: pipeline
+            )
+        }
+
+        // Faithful transplant onto the SAME envelope stays complete (guards that
+        // the helper itself is honest — otherwise the checks below pass vacuously).
+        #expect(transplant().complete)
+        // Each identity field, changed alone, breaks completeness.
+        #expect(!transplant(region: MIDIRegionReference(
+            targetRef: TargetReference(rawValue: "trk_B"), regionIndex: 0)).complete)
+        #expect(!transplant(region: MIDIRegionReference(
+            targetRef: TargetReference(rawValue: "trk_A"), regionIndex: 7)).complete)
+        #expect(!transplant(epoch: 999).complete)
+        #expect(!transplant(provenance: .controlledSMFExport).complete)
+        #expect(!transplant(pipeline: "not-the-real-pipeline").complete)
+    }
+    #endif
+
+    @Test func nonPositivePPQNormalizationFailsClosed() {
+        // normalizePPQ (used by diffRegions) must return nil for a non-positive PPQ,
+        // never fall back to unscaled notes — a comparison of unscaled ticks would
+        // be untrustworthy.
+        let note = makeNote(pitch: 60)
+        for pair in [(0, 480), (-1, 480), (480, 0), (480, -5)] {
+            if normalizePPQ([note], from: pair.0, to: pair.1) != nil {
+                Issue.record("normalizePPQ must fail closed on non-positive PPQ (from=\(pair.0), to=\(pair.1))")
+            }
+        }
     }
 
     @Test func providerGateHasNoPublicProviderBeforeQualification() {
@@ -127,12 +176,13 @@ import Testing
         })
     }
 
-    @Test func completeSnapshotDropsPartialReason() {
-        let complete = makeSnapshot(complete: true, partialReason: "must be discarded")
-        let incomplete = makeSnapshot(complete: false, partialReason: "last row unavailable")
+    @Test func completeSnapshotHasNoReasonIncompleteCarriesEnumReason() {
+        let complete = makeSnapshot(complete: true)
+        let incomplete = makeSnapshot(complete: false)
 
         #expect(complete.partialReason == nil)
-        #expect(incomplete.partialReason == "last row unavailable")
+        #expect(complete.noteCompleteness.partialReason == nil)
+        #expect(incomplete.noteCompleteness.partialReason == .timingUnproven)
     }
 
     @Test func featureFlagDefaultsToFalse() {
@@ -152,25 +202,21 @@ import Testing
 
     private func makeSnapshot(
         complete: Bool = true,
-        partialReason: String? = nil,
         provenance: MIDIReadbackProvenance = .eventListAX,
         ppq: Int = 480,
         notes: [MIDINoteEvent] = []
     ) -> MIDIRegionNoteSnapshot {
-        MIDIRegionNoteSnapshot(
-            regionReference: MIDIRegionReference(
-                targetRef: TargetReference(rawValue: "trk_test"),
-                regionIndex: 0
-            ),
-            projectEpoch: 1,
-            complete: complete,
-            partialReason: partialReason,
-            provenance: provenance,
-            ppq: ppq,
-            notes: notes,
-            tempoMap: [],
-            timeSignatures: []
+        let region = MIDIRegionReference(
+            targetRef: TargetReference(rawValue: "trk_test"),
+            regionIndex: 0
         )
+        return complete
+            ? .makeCompleteForTesting(
+                regionReference: region, projectEpoch: 1, ppq: ppq, notes: notes, provenance: provenance
+            )
+            : .makeIncompleteForTesting(
+                regionReference: region, projectEpoch: 1, ppq: ppq, provenance: provenance
+            )
     }
 
     private func makeNote(

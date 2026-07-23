@@ -267,17 +267,10 @@ struct PianoRollTransformTests {
         complete: Bool = true,
         notes: [MIDINoteEvent] = []
     ) -> MIDIRegionNoteSnapshot {
-        MIDIRegionNoteSnapshot(
-            regionReference: region ?? self.region(),
-            projectEpoch: generation,
-            complete: complete,
-            partialReason: complete ? nil : "synthetic incomplete snapshot",
-            provenance: .eventListAX,
-            ppq: 480,
-            notes: notes,
-            tempoMap: [],
-            timeSignatures: []
-        )
+        let ref = region ?? self.region()
+        return complete
+            ? .makeCompleteForTesting(regionReference: ref, projectEpoch: generation, ppq: 480, notes: notes)
+            : .makeIncompleteForTesting(regionReference: ref, projectEpoch: generation, ppq: 480)
     }
 
     private func note(

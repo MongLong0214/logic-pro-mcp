@@ -29,10 +29,14 @@ func canonicalize(_ notes: [MIDINoteEvent], ppq: Int) -> [MIDINoteEvent] {
                 previous.durationTicks
             )
             if overflow || previousEnd > note.startTicks {
+                // Overflow-safe truncation: for adversarial (e.g. Int64.min/max)
+                // expected notes the difference can overflow; keep the original
+                // duration in that case rather than trapping.
+                let (gap, subOverflow) = note.startTicks.subtractingReportingOverflow(previous.startTicks)
                 canonical[previousIndex] = MIDINoteEvent(
                     pitch: previous.pitch,
                     startTicks: previous.startTicks,
-                    durationTicks: max(0, note.startTicks - previous.startTicks),
+                    durationTicks: subOverflow ? previous.durationTicks : max(0, gap),
                     velocity: previous.velocity,
                     channel: previous.channel
                 )
@@ -43,29 +47,41 @@ func canonicalize(_ notes: [MIDINoteEvent], ppq: Int) -> [MIDINoteEvent] {
     return canonical.filter { $0.durationTicks > 0 }
 }
 
+/// Returns nil if any note cannot be scaled without Int64 overflow — a caller
+/// must treat nil as unverifiable (fail-closed), never fall back to unscaled
+/// values (which would compare wrong ticks).
 func normalizePPQ(
     _ notes: [MIDINoteEvent],
     from sourcePPQ: Int,
     to destinationPPQ: Int
-) -> [MIDINoteEvent] {
-    guard sourcePPQ > 0, destinationPPQ > 0, sourcePPQ != destinationPPQ else {
-        return notes
-    }
-    return notes.map { note in
-        MIDINoteEvent(
+) -> [MIDINoteEvent]? {
+    // Fail closed on a non-positive PPQ (nil), never fall back to unscaled notes:
+    // an invalid PPQ cannot yield a trustworthy comparison. Equal positive PPQs
+    // need no scaling, so the notes pass through unchanged.
+    guard sourcePPQ > 0, destinationPPQ > 0 else { return nil }
+    guard sourcePPQ != destinationPPQ else { return notes }
+    var scaled: [MIDINoteEvent] = []
+    scaled.reserveCapacity(notes.count)
+    for note in notes {
+        guard let start = scale(note.startTicks, from: sourcePPQ, to: destinationPPQ),
+              let duration = scale(note.durationTicks, from: sourcePPQ, to: destinationPPQ) else {
+            return nil
+        }
+        scaled.append(MIDINoteEvent(
             pitch: note.pitch,
-            startTicks: scale(note.startTicks, from: sourcePPQ, to: destinationPPQ),
-            durationTicks: scale(note.durationTicks, from: sourcePPQ, to: destinationPPQ),
+            startTicks: start,
+            durationTicks: duration,
             velocity: note.velocity,
             channel: note.channel
-        )
+        ))
     }
+    return scaled
 }
 
-private func scale(_ value: Int64, from sourcePPQ: Int, to destinationPPQ: Int) -> Int64 {
+private func scale(_ value: Int64, from sourcePPQ: Int, to destinationPPQ: Int) -> Int64? {
     let divisor = Int64(sourcePPQ)
     let (product, overflow) = value.multipliedReportingOverflow(by: Int64(destinationPPQ))
-    guard !overflow else { return value }
+    guard !overflow else { return nil }
 
     let quotient = product / divisor
     let remainder = product % divisor

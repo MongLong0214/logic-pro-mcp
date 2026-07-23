@@ -29,10 +29,15 @@ struct QualifiedProviderRegistry: Sendable {
             qualified: false,
             requiredProofs: [
                 "selected region identity",
+                "column identity binding",
+                "complete filter checkbox evidence",
+                "count semantics (all events in region)",
+                "contiguous harvest with stable cell content",
                 "first and last row plus count/end completeness",
-                "Event List filter verification",
+                "position and length raw-tick and SMF display-format invariance",
+                "mid-scan project stability",
                 "English and Korean locale coverage",
-                "Desktop and Creator variant coverage",
+                "Desktop variant coverage",
                 "Logic version drift detection",
             ]
         ),
