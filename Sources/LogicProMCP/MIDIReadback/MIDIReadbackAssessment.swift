@@ -1,8 +1,10 @@
 import Foundation
 
 // The single pure chokepoint that decides whether an Event-List readback is
-// complete enough to drive a State-A verification. It re-computes EVERY gate
-// from the raw evidence or sealed proofs; it never trusts a caller conclusion.
+// complete enough to be trusted as a completeness-proven readback. It re-computes
+// EVERY gate from the raw evidence or sealed proofs; it never trusts a caller
+// conclusion. (This rollout does not verify against an independent source or
+// report a match — see the completeness-gated `diffRegions` for the only delta.)
 //
 // Mint discipline: a `complete` verdict wraps `CompleteProof`, whose
 // initializer is fileprivate to THIS file, and `assessReadback` is its ONLY mint
@@ -11,7 +13,7 @@ import Foundation
 // Because the live-only proofs (timing, header identity, harvest exhaustion,
 // observed region, count semantics) have no production-constructible "proven"
 // case, a release build cannot satisfy the predicate at all, so it emits no
-// complete snapshot, so no false State-A can ship.
+// complete snapshot, so no false-complete readback can ship.
 
 /// Closed set of reasons a readback is not complete — one per predicate, so each
 /// fail-closed branch is individually testable.
@@ -73,7 +75,7 @@ struct CompleteProof: Equatable, Sendable {
 /// completeness is `.complete` only if every completeness predicate holds. On any failure
 /// the snapshot is incomplete with an empty note list (never notes with
 /// unproven ticks — a zero-duration note would canonicalize away and could
-/// masquerade as a verified-empty match).
+/// masquerade as a proven-empty region).
 func assessReadback(_ evidence: EventListReadbackEvidence) -> MIDIRegionNoteSnapshot {
     let outcome = evaluate(evidence)
     // Identity the proof certifies. Computed once and used for BOTH the binding
@@ -122,7 +124,7 @@ private enum AssessmentOutcome {
 }
 
 private func evaluate(_ e: EventListReadbackEvidence) -> AssessmentOutcome {
-    // --- Common predicates (both notes-bearing and verified-empty) ---
+    // --- Common predicates (both notes-bearing and proven-empty) ---
 
     // Region identity: the proof must bind the SAME query, then its resolved
     // identity must field-match the independently observed identity.
@@ -162,9 +164,9 @@ private func evaluate(_ e: EventListReadbackEvidence) -> AssessmentOutcome {
         return .incomplete(.harvestNotExhaustive)
     }
 
-    // --- Branch: notes-bearing vs verified-empty ---
+    // --- Branch: notes-bearing vs proven-empty ---
     if e.harvest.passA.isEmpty {
-        // Verified-empty branch: full column identity (so the columns are proven
+        // Proven-empty branch: full column identity (so the columns are proven
         // identifiable, not a degenerate empty proof) + parsed count == 0.
         guard let roles = e.columnBinding.headerRoles,
               fieldColumnsPresentAndDistinct(roles) else {

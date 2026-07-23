@@ -47,6 +47,41 @@ import Testing
         ) == nil)
     }
 
+    @Test func regionDiffRejectsIncompleteAfterSnapshot() {
+        // Symmetric to the before-side check: an incomplete AFTER snapshot also
+        // fails closed.
+        let note = makeNote(pitch: 60)
+        #expect(diffRegions(
+            before: makeSnapshot(notes: [note]),
+            after: makeSnapshot(complete: false, notes: [note])
+        ) == nil)
+    }
+
+    @Test func regionDiffNormalizesPPQAcrossSnapshots() {
+        // The same musical note at ppq 480 vs ppq 960 is equal after PPQ
+        // normalization — the diff normalizes across snapshots and reports no delta.
+        let result = diffRegions(
+            before: makeSnapshot(ppq: 480, notes: [makeNote(pitch: 60, start: 480, duration: 240)]),
+            after: makeSnapshot(ppq: 960, notes: [makeNote(pitch: 60, start: 960, duration: 480)])
+        )
+        #expect(result?.added == [])
+        #expect(result?.removed == [])
+    }
+
+    @Test func regionDiffMultisetHandlesRepeatedPitch() {
+        // Same pitch at two distinct starts is two distinct notes; removing one
+        // leaves exactly that one in `removed` — the diff is multiset-correct
+        // (duplicate-preserving via firstIndex/remove), not set-based.
+        let a = makeNote(pitch: 60, start: 0, duration: 60)
+        let b = makeNote(pitch: 60, start: 120, duration: 60)
+        let result = diffRegions(
+            before: makeSnapshot(notes: [a, b]),
+            after: makeSnapshot(notes: [b])
+        )
+        #expect(result?.added == [])
+        #expect(result?.removed == [a])
+    }
+
     @Test func rePairedCompleteProofIsNotComplete() {
         // A completeness proof minted for one payload cannot certify a different
         // note set: `complete` recomputes the binding from the snapshot's notes.

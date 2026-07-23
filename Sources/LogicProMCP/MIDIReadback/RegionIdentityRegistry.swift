@@ -3,7 +3,7 @@ import Foundation
 // Dedicated file for the query↔identity binding proof used by the MIDI note
 // readback assessment. `RegistryResolvedIdentityProof` binds a requested region
 // reference to the identity the registry resolved it to, so the assessment
-// chokepoint can (1) verify the proof resolves the SAME query it was handed and
+// chokepoint can (1) confirm the proof resolves the SAME query it was handed and
 // (2) field-compare the resolved identity against the independently observed
 // identity — never trusting a caller-supplied "this identity matches" claim.
 //

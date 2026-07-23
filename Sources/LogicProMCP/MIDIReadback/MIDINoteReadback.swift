@@ -81,9 +81,10 @@ func midiSnapshotCompletenessBinding(
 }
 
 struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
-    /// Identifies the conversion that produced `notes`, so a verifier can require
-    /// the expected sequence to carry a DIFFERENT provenance — a re-derived
-    /// expected sharing this conversion's bugs cannot yield a false match.
+    /// Identifies the conversion that produced `notes`. It is sealed into the
+    /// completeness identity binding (see `midiSnapshotCompletenessBinding`), so a
+    /// completeness proof cannot be transplanted onto a snapshot from a different
+    /// conversion.
     static let eventListConversionID = "eventListAX.readback.v1"
 
     let regionReference: MIDIRegionReference
@@ -149,7 +150,7 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
 
     // Codable is display/wire only. A decoded snapshot is untrusted by
     // construction: all completeness dimensions are forced to `.incomplete` so a
-    // rehydrated payload can never drive a State-A match. `CompletenessVerdict`
+    // rehydrated payload can never be accepted as complete. `CompletenessVerdict`
     // has no Codable conformance, so completeness cannot be re-hydrated.
     private enum CodingKeys: String, CodingKey {
         case regionReference, projectEpoch, complete, partialReason
