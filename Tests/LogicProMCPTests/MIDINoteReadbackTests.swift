@@ -147,21 +147,80 @@ import Testing
         // A completeness proof minted for one payload cannot certify a different
         // note set: `complete` recomputes the binding from the snapshot's notes.
         let region = MIDIRegionReference(targetRef: TargetReference(rawValue: "trk_test"), regionIndex: 0)
-        let mismatched = MIDIRegionNoteSnapshot(
+        let genuine = MIDIRegionNoteSnapshot.makeCompleteForTesting(
+            regionReference: region, projectEpoch: 1, ppq: 480, notes: [makeNote(pitch: 61)]
+        )
+        #expect(genuine.complete)
+        let reNoted = MIDIRegionNoteSnapshot(
             regionReference: region,
             projectEpoch: 1,
-            noteCompleteness: .complete(CompleteProof.makeForTesting(
-                contentBinding: midiRegionNoteDigest([makeNote(pitch: 61)], ppq: 480)
-            )),
+            noteCompleteness: genuine.noteCompleteness,  // proof bound to pitch 61
             provenance: .eventListAX,
             ppq: 480,
             notes: [makeNote(pitch: 60)],  // NOT what the proof was bound to
             tempoMap: [],
             timeSignatures: []
         )
-        #expect(!mismatched.complete)
+        #expect(!reNoted.complete)
+    }
+
+    @Test func envelopeTransplantIsNotComplete() {
+        // A completeness proof also seals the snapshot IDENTITY it certifies, so a
+        // genuine proof transplanted onto a foreign envelope (different region,
+        // epoch, provenance, or conversion pipeline) — even with identical
+        // notes+PPQ — cannot read complete. Each field is flipped alone, so
+        // dropping any one field from the binding turns that assertion red.
+        let notes = [makeNote(pitch: 60)]
+        let regionA = MIDIRegionReference(targetRef: TargetReference(rawValue: "trk_A"), regionIndex: 0)
+        let genuine = MIDIRegionNoteSnapshot.makeCompleteForTesting(
+            regionReference: regionA, projectEpoch: 1, ppq: 480, notes: notes
+        )
+        #expect(genuine.complete)
+
+        func transplant(
+            region: MIDIRegionReference = regionA,
+            epoch: UInt64 = 1,
+            provenance: MIDIReadbackProvenance = .eventListAX,
+            pipeline: String = MIDIRegionNoteSnapshot.eventListConversionID
+        ) -> MIDIRegionNoteSnapshot {
+            MIDIRegionNoteSnapshot(
+                regionReference: region,
+                projectEpoch: epoch,
+                noteCompleteness: genuine.noteCompleteness,
+                provenance: provenance,
+                ppq: 480,
+                notes: notes,
+                tempoMap: [],
+                timeSignatures: [],
+                conversionPipelineID: pipeline
+            )
+        }
+
+        // Faithful transplant onto the SAME envelope stays complete (guards that
+        // the helper itself is honest — otherwise the checks below pass vacuously).
+        #expect(transplant().complete)
+        // Each identity field, changed alone, breaks completeness.
+        #expect(!transplant(region: MIDIRegionReference(
+            targetRef: TargetReference(rawValue: "trk_B"), regionIndex: 0)).complete)
+        #expect(!transplant(region: MIDIRegionReference(
+            targetRef: TargetReference(rawValue: "trk_A"), regionIndex: 7)).complete)
+        #expect(!transplant(epoch: 999).complete)
+        #expect(!transplant(provenance: .controlledSMFExport).complete)
+        #expect(!transplant(pipeline: "not-the-real-pipeline").complete)
     }
     #endif
+
+    @Test func nonPositivePPQNormalizationFailsClosed() {
+        // normalizePPQ must return nil (unverifiable) for a non-positive PPQ, never
+        // fall back to unscaled notes — a caller comparing unscaled ticks would
+        // accept a false match.
+        let note = makeNote(pitch: 60)
+        for pair in [(0, 480), (-1, 480), (480, 0), (480, -5)] {
+            if normalizePPQ([note], from: pair.0, to: pair.1) != nil {
+                Issue.record("normalizePPQ must fail closed on non-positive PPQ (from=\(pair.0), to=\(pair.1))")
+            }
+        }
+    }
 
     @Test func providerGateHasNoPublicProviderBeforeQualification() {
         let registry = QualifiedProviderRegistry()

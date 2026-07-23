@@ -61,7 +61,11 @@ func expectedContentBinding(sourceID: String, notes: [MIDINoteEvent], ppq: Int) 
     let notesPart = notes
         .map { "\($0.pitch),\($0.startTicks),\($0.durationTicks),\($0.velocity),\($0.channel)" }
         .joined(separator: ";")
-    return "\(sourceID)|ppq=\(ppq)|\(notesPart)"
+    // Length-prefix the free-text source id (byte count) so it cannot inject a
+    // `|`-delimited field and collide with a different (sourceID, notes, ppq)
+    // tuple under the string equality this binding is compared with — matching
+    // the completeness binding's injection-safety discipline.
+    return "src=\(sourceID.utf8.count):\(sourceID)|ppq=\(ppq)|\(notesPart)"
 }
 
 /// A caller's expected note sequence bundled with a proof of its independent

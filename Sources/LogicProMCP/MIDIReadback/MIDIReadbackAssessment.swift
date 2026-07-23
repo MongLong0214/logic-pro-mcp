@@ -42,11 +42,10 @@ enum CompletenessVerdict: Equatable, Sendable {
     case complete(CompleteProof)
     case incomplete(PartialReason)
 
-    var isComplete: Bool {
-        if case .complete = self { return true }
-        return false
-    }
-
+    // No case-only `isComplete`: completeness is meaningful only against the
+    // payload it certifies, so it is checked exclusively by
+    // `MIDIRegionNoteSnapshot.complete` (which recomputes the sealed binding). A
+    // verdict-only boolean would bypass that binding and is deliberately absent.
     var partialReason: PartialReason? {
         if case let .incomplete(reason) = self { return reason }
         return nil
@@ -77,12 +76,27 @@ struct CompleteProof: Equatable, Sendable {
 /// masquerade as a verified-empty match).
 func assessReadback(_ evidence: EventListReadbackEvidence) -> MIDIRegionNoteSnapshot {
     let outcome = evaluate(evidence)
+    // Identity the proof certifies. Computed once and used for BOTH the binding
+    // and the snapshot's stored fields, so `complete`'s recomputation always
+    // matches a genuine mint but never a proof transplanted onto a foreign
+    // envelope.
+    let region = evidence.requestedRegion
+    let epoch = evidence.projectEpochAfter
+    let provenance: MIDIReadbackProvenance = .eventListAX
+    let pipelineID = MIDIRegionNoteSnapshot.eventListConversionID
     let verdict: CompletenessVerdict
     let notes: [MIDINoteEvent]
     switch outcome {
     case let .complete(parsedNotes):
         verdict = .complete(CompleteProof(
-            contentBinding: midiRegionNoteDigest(parsedNotes, ppq: evidence.ppq)
+            contentBinding: midiSnapshotCompletenessBinding(
+                regionReference: region,
+                projectEpoch: epoch,
+                provenance: provenance,
+                conversionPipelineID: pipelineID,
+                notes: parsedNotes,
+                ppq: evidence.ppq
+            )
         ))
         notes = parsedNotes
     case let .incomplete(reason):
@@ -90,14 +104,15 @@ func assessReadback(_ evidence: EventListReadbackEvidence) -> MIDIRegionNoteSnap
         notes = []
     }
     return MIDIRegionNoteSnapshot(
-        regionReference: evidence.requestedRegion,
-        projectEpoch: evidence.projectEpochAfter,
+        regionReference: region,
+        projectEpoch: epoch,
         noteCompleteness: verdict,
-        provenance: .eventListAX,
+        provenance: provenance,
         ppq: evidence.ppq,
         notes: notes,
         tempoMap: [],
-        timeSignatures: []
+        timeSignatures: [],
+        conversionPipelineID: pipelineID
     )
 }
 
@@ -305,26 +320,40 @@ private func parseNote(
     roles: [ColumnRole: AXColumnID],
     regionStartTick: Int64
 ) -> MIDINoteEvent? {
+    // Cell-shape XOR: a cell carries EXACTLY the numeric shape its role family
+    // uses — scalar roles (pitch/velocity/channel) a `sliderValue` and NO group;
+    // group roles (position/length) a `groupSliderValues` and NO scalar. A cell
+    // exposing both shapes is structurally ambiguous; rejecting it stops a
+    // dual-populated cell from satisfying a swapped role with the wrong value
+    // (channel and length are not calibration-pinned, so without this a
+    // dual-populated channel↔length swap would parse silently to wrong data).
+    // `valueDescription` is orthogonal (velocity reads it) and not constrained.
+
     // Pitch is the raw slider value: it must be a finite, exact integer in range
     // (a fractional, non-finite, or overflowing value fails rather than rounding
     // or trapping in the Double→Int conversion).
     guard let pitchCol = roles[.pitch], let pitchCell = row[pitchCol],
+          pitchCell.groupSliderValues == nil,
           let pitchRaw = pitchCell.sliderValue,
           let pitchInt = exactIntInRange(pitchRaw, 0...127) else { return nil }
 
     // Velocity comes from the value-description string (strict integer parse).
     guard let velCol = roles[.velocity], let velCell = row[velCol],
+          velCell.groupSliderValues == nil,
           let velString = velCell.valueDescription,
           let velInt = Int(velString), (1...127).contains(velInt) else { return nil }
 
     // Channel is required, never invented: a missing channel column or value
     // fails the row (fail-closed) rather than defaulting to a guessed channel.
-    guard let chCol = roles[.channel], let chCell = row[chCol], let chRaw = chCell.sliderValue,
+    guard let chCol = roles[.channel], let chCell = row[chCol],
+          chCell.groupSliderValues == nil, let chRaw = chCell.sliderValue,
           let channelInt = exactIntInRange(chRaw, 1...16) else { return nil }
 
     guard let posCol = roles[.position], let posCell = row[posCol],
+          posCell.sliderValue == nil,
           let start = bbtToTicks(posCell.groupSliderValues) else { return nil }
     guard let lenCol = roles[.length], let lenCell = row[lenCol],
+          lenCell.sliderValue == nil,
           let duration = bbtToTicks(lenCell.groupSliderValues) else { return nil }
 
     // Region-relative start; overflow-safe subtraction.

@@ -448,6 +448,66 @@ import Testing
         #expect(snap.noteCompleteness.partialReason == .emptyNotProven)
     }
 
+    // MARK: cell-shape XOR (a cell carries exactly one numeric shape for its role)
+
+    @Test func dualPopulatedChannelCellRejected() {
+        // A channel cell that ALSO carries a group shape is structurally ambiguous.
+        // The group first-value (9) differs from the calibrated start (1) so column
+        // resolution is unaffected — the failure is isolated to the parse guard.
+        var bad = Self.noteRow()
+        bad[Self.chCol] = RawCell(sliderValue: 1, groupSliderValues: [9, 9, 9, 9])
+        expectRowParseFail(bad, "dual-populated channel cell (scalar + group)")
+    }
+
+    @Test func dualPopulatedLengthCellRejected() {
+        var bad = Self.noteRow()
+        bad[Self.lenCol] = RawCell(sliderValue: 5, groupSliderValues: [0, 1, 0, 0])
+        expectRowParseFail(bad, "dual-populated length cell (group + scalar)")
+    }
+
+    @Test func dualPopulatedRoleSwapRejected() {
+        // The full attack: channel and length cells each expose BOTH shapes and
+        // their roles are swapped, so each swapped role would find a wrong-kind
+        // value. Pitch/velocity/position calibration is kept honest, so column
+        // resolution passes; the XOR invariant rejects the dual cells at parse.
+        let swapped: [ColumnRole: AXColumnID] = [
+            .position: Self.posCol, .pitch: Self.pitchCol, .velocity: Self.velCol,
+            .channel: Self.lenCol, .length: Self.chCol,
+        ]
+        var row = Self.noteRow()
+        row[Self.chCol] = RawCell(sliderValue: 1, groupSliderValues: [0, 1, 0, 0])
+        row[Self.lenCol] = RawCell(sliderValue: 1, groupSliderValues: [0, 1, 0, 0])
+        let snap = assessReadback(Self.evidence(
+            binding: .headerIdentity(.proven(swapped)),
+            passA: [RowKey(index: 0): row]
+        ))
+        guard case .incomplete = snap.noteCompleteness else {
+            Issue.record("Dual-populated swapped channel/length cells must not complete")
+            return
+        }
+    }
+
+    // The XOR guard applies to every role, not just channel/length. The injected
+    // off-shape value uses a group first-value (9) that differs from the calibrated
+    // start (1), so column resolution is unaffected and the parse guard is isolated.
+    @Test func dualPopulatedPitchCellRejected() {
+        var bad = Self.noteRow()
+        bad[Self.pitchCol] = RawCell(sliderValue: 60, valueDescription: "C3", groupSliderValues: [9, 9, 9, 9])
+        expectRowParseFail(bad, "dual-populated pitch cell (scalar + group)")
+    }
+
+    @Test func dualPopulatedVelocityCellRejected() {
+        var bad = Self.noteRow()
+        bad[Self.velCol] = RawCell(valueDescription: "100", groupSliderValues: [9, 9, 9, 9])
+        expectRowParseFail(bad, "dual-populated velocity cell (description + group)")
+    }
+
+    @Test func dualPopulatedPositionCellRejected() {
+        var bad = Self.noteRow()
+        bad[Self.posCol] = RawCell(sliderValue: 5, groupSliderValues: [1, 1, 1, 1])
+        expectRowParseFail(bad, "dual-populated position cell (group + scalar)")
+    }
+
     // MARK: numeric / tick boundary matrix (one RED per claimed boundary)
 
     private func expectRowParseFail(_ bad: RawEventRow, _ label: String) {
@@ -510,7 +570,7 @@ import Testing
         #expect(assessReadback(Self.evidence(countText: "1\u{00A0}234 Events")).noteCompleteness.partialReason == .countMismatch)
     }
 
-    // MARK: gate-simulation follow-ups (payload binding, overflow, swap, span)
+    // MARK: correctness-hardening (payload binding, overflow, swap, span)
 
     @Test func ppqScaleOverflowRejected() {
         let snap = assessReadback(Self.evidence())

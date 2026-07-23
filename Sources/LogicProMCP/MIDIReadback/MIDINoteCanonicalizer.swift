@@ -55,9 +55,11 @@ func normalizePPQ(
     from sourcePPQ: Int,
     to destinationPPQ: Int
 ) -> [MIDINoteEvent]? {
-    guard sourcePPQ > 0, destinationPPQ > 0, sourcePPQ != destinationPPQ else {
-        return notes
-    }
+    // Fail closed on a non-positive PPQ (nil), never fall back to unscaled notes:
+    // an invalid PPQ cannot yield a trustworthy comparison. Equal positive PPQs
+    // need no scaling, so the notes pass through unchanged.
+    guard sourcePPQ > 0, destinationPPQ > 0 else { return nil }
+    guard sourcePPQ != destinationPPQ else { return notes }
     var scaled: [MIDINoteEvent] = []
     scaled.reserveCapacity(notes.count)
     for note in notes {

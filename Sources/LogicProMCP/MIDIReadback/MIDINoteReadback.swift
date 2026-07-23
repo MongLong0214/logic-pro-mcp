@@ -52,6 +52,34 @@ func midiRegionNoteDigest(_ notes: [MIDINoteEvent], ppq: Int) -> String {
     return "ppq=\(ppq)|\(body)"
 }
 
+/// Deterministic digest binding a completeness proof to BOTH the note payload
+/// (PPQ + notes) AND the snapshot identity it certifies: the region, project
+/// epoch, provenance, and conversion pipeline. `MIDIRegionNoteSnapshot.complete`
+/// recomputes this from the snapshot's OWN fields, so a proof minted for one
+/// snapshot cannot be transplanted onto a foreign envelope (a different region,
+/// epoch, provenance, or pipeline id — e.g. relabeling the pipeline to defeat the
+/// verifier's independence check) and still read complete. The two free-text
+/// fields (region raw value, pipeline id) are length-prefixed with their byte
+/// count so a crafted value cannot inject a delimiter and forge a colliding
+/// digest for a different identity tuple.
+func midiSnapshotCompletenessBinding(
+    regionReference: MIDIRegionReference,
+    projectEpoch: UInt64,
+    provenance: MIDIReadbackProvenance,
+    conversionPipelineID: String,
+    notes: [MIDINoteEvent],
+    ppq: Int
+) -> String {
+    let region = regionReference.targetRef.rawValue
+    let regionIndex = regionReference.regionIndex.map(String.init) ?? "nil"
+    return "region=\(region.utf8.count):\(region)"
+        + "|idx=\(regionIndex)"
+        + "|epoch=\(projectEpoch)"
+        + "|prov=\(provenance.rawValue)"
+        + "|pipe=\(conversionPipelineID.utf8.count):\(conversionPipelineID)"
+        + "|" + midiRegionNoteDigest(notes, ppq: ppq)
+}
+
 struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
     /// Identifies the conversion that produced `notes`, so a verifier can require
     /// the expected sequence to carry a DIFFERENT provenance — a re-derived
@@ -78,10 +106,18 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
     let timeSignatures: [TimeSignatureEvent]
 
     /// Complete ONLY if the completeness proof is bound to THIS snapshot's exact
-    /// notes+PPQ — so a proof cannot be re-paired with foreign notes.
+    /// notes+PPQ AND its identity (region, epoch, provenance, pipeline) — so a
+    /// proof can be re-paired with neither foreign notes nor a foreign envelope.
     var complete: Bool {
         guard case let .complete(proof) = noteCompleteness else { return false }
-        return proof.contentBinding == midiRegionNoteDigest(notes, ppq: ppq)
+        return proof.contentBinding == midiSnapshotCompletenessBinding(
+            regionReference: regionReference,
+            projectEpoch: projectEpoch,
+            provenance: provenance,
+            conversionPipelineID: conversionPipelineID,
+            notes: notes,
+            ppq: ppq
+        )
     }
     var partialReason: String? { noteCompleteness.partialReason.map { String(describing: $0) } }
 
@@ -169,7 +205,14 @@ struct MIDIRegionNoteSnapshot: Codable, Equatable, Sendable {
             regionReference: regionReference,
             projectEpoch: projectEpoch,
             noteCompleteness: .complete(CompleteProof.makeForTesting(
-                contentBinding: midiRegionNoteDigest(notes, ppq: ppq)
+                contentBinding: midiSnapshotCompletenessBinding(
+                    regionReference: regionReference,
+                    projectEpoch: projectEpoch,
+                    provenance: provenance,
+                    conversionPipelineID: MIDIRegionNoteSnapshot.eventListConversionID,
+                    notes: notes,
+                    ppq: ppq
+                )
             )),
             provenance: provenance,
             ppq: ppq,
