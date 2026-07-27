@@ -126,11 +126,24 @@ extension AccessibilityChannel {
     /// lane the result is DOWNGRADED to State B `imported_as_gm_device` with a
     /// hint, because such lanes route to a General MIDI device and may bounce
     /// silent — a count delta alone must never be claimed audible-verified.
+    ///
+    /// #449: the default `executeScript` uses
+    /// `ServerConfig.midiImportAppleScriptTimeout` (not the global 5.0s
+    /// `appleScriptTimeout`) so BoundedProcessRunner does not SIGTERM the
+    /// osascript child before the script's own poll budgets can finish.
+    /// Note: Logic 12.3 may present a standalone Import browser rather than a
+    /// sheet-attached open panel; that UI mismatch is separate from the outer
+    /// timeout and may still require a helper path when sheet detection fails.
     static func defaultImportMIDIFile(
         systemEventsAuthorized: @Sendable () -> Bool = { PermissionChecker.checkSystemEventsAutomation() },
         path: String,
         runtime: AXLogicProElements.Runtime = .production,
-        executeScript: @escaping @Sendable (String) async -> ChannelResult = { await AppleScriptChannel.executeAppleScript($0) },
+        executeScript: @escaping @Sendable (String) async -> ChannelResult = {
+            await AppleScriptChannel.executeAppleScript(
+                $0,
+                timeout: ServerConfig.midiImportAppleScriptTimeout
+            )
+        },
         trackCount: (@Sendable () -> Int)? = nil,
         trackNames: (@Sendable () -> [String])? = nil,
         regionInfos: (@Sendable () -> MIDIImportRegionReadback)? = nil,

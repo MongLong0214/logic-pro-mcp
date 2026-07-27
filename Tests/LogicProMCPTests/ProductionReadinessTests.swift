@@ -260,6 +260,14 @@ import Testing
     #expect(ServerConfig.mmcDeviceID == 0x7F)
 }
 
+/// #449: MIDI import's outer osascript budget must exceed the script's own
+/// internal poll ceilings so BoundedProcessRunner does not false-fail mid-import.
+@Test func testServerConfigMIDIImportAppleScriptTimeoutExceedsDefault() {
+    #expect(ServerConfig.appleScriptTimeout == 5.0)
+    #expect(ServerConfig.midiImportAppleScriptTimeout > ServerConfig.appleScriptTimeout)
+    #expect(ServerConfig.midiImportAppleScriptTimeout >= 17.0)
+}
+
 // MARK: - Architecture: StatePoller Graceful Stop
 
 @Test func testStatePollerStopAwaitsTaskCompletion() async {

@@ -19,6 +19,14 @@ struct ServerConfig: Sendable {
 
     // MARK: - Timeouts
     static let appleScriptTimeout: TimeInterval = 5.0
+    /// Outer osascript budget for `midi.import_file` / `tracks.record_sequence` SMF import.
+    /// Must exceed the AppleScript's own internal poll budgets in
+    /// `AccessibilityChannel+MIDIImport.defaultImportMIDIFile` (#449): file-open
+    /// sheet (~5s) + go-to-folder field (~3s) + Import-enabled (~4s) + tempo
+    /// dialog (~3s) + fixed delays/self-heal (~2s) ≈ 17s worst case. The default
+    /// 5.0s `appleScriptTimeout` SIGTERMs the child mid-flight and reports a
+    /// false `ax_write_failed` / `timedOut` even when the import later succeeds.
+    static let midiImportAppleScriptTimeout: TimeInterval = 20.0
 
     // MARK: - Logic Pro
     /// Resolved bundle ID for the active Logic Pro variant (desktop or Creator Studio).
