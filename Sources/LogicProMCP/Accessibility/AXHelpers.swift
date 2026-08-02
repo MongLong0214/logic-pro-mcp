@@ -11,6 +11,29 @@ enum AXHelpers {
         let children: @Sendable (AXUIElement) -> [AXUIElement]
         let performAction: @Sendable (AXUIElement, String) -> Bool
         let childCount: @Sendable (AXUIElement) -> Int?
+        /// Injectable typed-children seam. `nil` means "use the production read".
+        let childrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXStatusError>)?
+
+        /// Explicit memberwise initializer, replacing the compiler-synthesized one so
+        /// `childrenResult` can default to `nil`. Every existing construction that omits
+        /// it continues to compile unchanged.
+        init(
+            axApp: @escaping @Sendable (pid_t) -> AXUIElement,
+            attributeValue: @escaping @Sendable (AXUIElement, String) -> AnyObject?,
+            setAttributeValue: @escaping @Sendable (AXUIElement, String, CFTypeRef) -> Bool,
+            children: @escaping @Sendable (AXUIElement) -> [AXUIElement],
+            performAction: @escaping @Sendable (AXUIElement, String) -> Bool,
+            childCount: @escaping @Sendable (AXUIElement) -> Int?,
+            childrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXStatusError>)? = nil
+        ) {
+            self.axApp = axApp
+            self.attributeValue = attributeValue
+            self.setAttributeValue = setAttributeValue
+            self.children = children
+            self.performAction = performAction
+            self.childCount = childCount
+            self.childrenResult = childrenResult
+        }
 
         static let production = Runtime(
             axApp: { pid in
@@ -77,6 +100,47 @@ enum AXHelpers {
     /// Get the children of an AX element.
     static func getChildren(_ element: AXUIElement, runtime: Runtime = .production) -> [AXUIElement] {
         runtime.children(element)
+    }
+
+    /// Typed AX status error carrying the raw `AXError` rawValue.
+    struct AXStatusError: Error, Sendable, Equatable {
+        let raw: Int32
+
+        init(raw: Int32) {
+            self.raw = raw
+        }
+    }
+
+    /// Pure projection of an AX read outcome into a typed result.
+    ///
+    /// Nothing is fabricated in either direction: a non-success status keeps its own raw
+    /// value rather than collapsing to a single code, and a successful read never invents
+    /// a status. Absent children (`nil`) and a malformed non-`CFArray` value are both an
+    /// empty success, because neither is an AX error — the earlier defect here was a
+    /// synthesised `noValue` for the absent case.
+    static func projectChildrenStatus(
+        _ status: AXError,
+        _ value: AnyObject?
+    ) -> Result<[AXUIElement], AXStatusError> {
+        guard status == .success else {
+            return .failure(AXStatusError(raw: status.rawValue))
+        }
+        guard let value else { return .success([]) }
+        return .success(decodeChildrenArray(value))
+    }
+
+    /// Read an element's children, preserving a non-success AX status as a typed error
+    /// instead of flattening it to an empty array the way `getChildren` does.
+    static func childrenResult(
+        _ element: AXUIElement,
+        runtime: Runtime = .production
+    ) -> Result<[AXUIElement], AXStatusError> {
+        if let injected = runtime.childrenResult {
+            return injected(element)
+        }
+        var value: AnyObject?
+        let status = AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &value)
+        return projectChildrenStatus(status, value)
     }
 
     /// Decode a raw `kAXChildrenAttribute` value into `[AXUIElement]`, guarding
