@@ -130,6 +130,21 @@ final class OperationTraceContext: @unchecked Sendable {
     }
 }
 
+/// #452: render a monotonic interval as integer milliseconds for a trace
+/// attribute. `ContinuousClock` is used rather than a `Date` difference because
+/// wall-clock can step backwards across an NTP correction, which would report a
+/// segment as negative or absurdly long — and a timing number that a clock
+/// adjustment can invent is not evidence.
+///
+/// Clamped at zero: the clock is non-decreasing, so a negative reading means the
+/// measurement is unusable, not that the work was fast, and emitting it as a
+/// duration would let a consumer average it into nonsense.
+func elapsedMilliseconds(since start: ContinuousClock.Instant) -> String {
+    let components = (ContinuousClock.now - start).components
+    let milliseconds = components.seconds * 1000 + components.attoseconds / 1_000_000_000_000_000
+    return String(max(0, milliseconds))
+}
+
 struct TraceID: RawRepresentable, Codable, Sendable, Hashable, CustomStringConvertible {
     let rawValue: String
 
@@ -171,6 +186,13 @@ enum TracePhase: String, Codable, Sendable, CaseIterable {
     /// phase's contract is "a channel began executing this write", not "this
     /// exact channel wrote".
     case writeBoundaryCrossed = "write_boundary.crossed"
+    /// #452 — a bounded AppleScript execution finished inside a channel, carrying
+    /// how long it actually took. `channel.started`/`channel.completed` bracket
+    /// the whole channel call, so the segment governed by the osascript timeout
+    /// was not separable from the surrounding Swift AX work; #449 could be
+    /// argued about but not measured. This phase is diagnostic and additive:
+    /// nothing gates on it, and it never replaces the channel bracket.
+    case scriptSegmentCompleted = "script_segment.completed"
     case channelCompleted = "channel.completed"
     case verificationPoll = "verification.poll"
     case verificationCompleted = "verification.completed"
@@ -223,6 +245,12 @@ actor OperationTraceStore {
         "outcome": .publicDiagnostic,
         "parent_trace_id": .publicDiagnostic,
         "gate_mode": .publicDiagnostic,
+        // #452 — measured elapsed time of a bounded AppleScript segment.
+        // Undeclared keys are DROPPED by `filteredAttributes`, so an emission
+        // without this row would record nothing and expose nothing. The bound it
+        // ran under is deliberately NOT emitted here: the executor is injected,
+        // so the call site cannot attest to a timeout it does not own.
+        "applescript_duration_ms": .publicDiagnostic,
     ]
 
     let maximumTraceCount: Int

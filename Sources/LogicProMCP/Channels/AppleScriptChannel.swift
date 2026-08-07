@@ -479,12 +479,15 @@ actor AppleScriptChannel: Channel {
         await runtime.runScript(source)
     }
 
-    static func executeAppleScript(_ source: String) async -> ChannelResult {
+    static func executeAppleScript(
+        _ source: String,
+        timeout: TimeInterval = ServerConfig.appleScriptTimeout
+    ) async -> ChannelResult {
         await Task.detached(priority: .userInitiated) {
             let execution = BoundedProcessRunner.run(
                 executable: "/usr/bin/osascript",
                 arguments: appleScriptArguments(for: source),
-                timeout: ServerConfig.appleScriptTimeout,
+                timeout: timeout,
                 outputLimitBytes: 128 * 1024
             )
             let result = channelResult(forAppleScriptExecution: execution)

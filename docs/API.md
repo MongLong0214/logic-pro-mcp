@@ -256,6 +256,14 @@ Operation tracing is on by default (set `LOGIC_MCP_ADR005_OPERATION_TRACE=0` to 
 `get_trace` returns one stored trace by required `trace_id`.
 `clear_traces` clears only the in-process trace store and requires `confirmed:true` because it destroys in-session diagnostic evidence.
 
+#### Measuring the AppleScript segment (v3.13+)
+
+`midi.import_file` runs under three nested time budgets: the operation deadline, the bound on its `osascript` call, and the Swift-side AX polling around it. Only the outermost one used to cross the process boundary, so the middle budget — the one that produced the `midi.import_file` timeout reported in #449 — could be reasoned about but not measured. Summing the script's own `delay` statements is not a substitute: those sums omit every AX query and file operation between the delays, so they cannot establish real headroom.
+
+Traces for that operation now carry a `script_segment.completed` event with an `applescript_duration_ms` attribute: the measured elapsed time of the `osascript` call, taken with a monotonic clock so an NTP correction cannot invent or erase it. Compare it against the bound in `ServerConfig.midiImportAppleScriptTimeout` to read actual headroom on a given machine and project.
+
+The attribute is diagnostic only. Nothing gates on it, it is never a verification signal, and it carries no user content — only an elapsed count of milliseconds.
+
 `saga_preflight` and `saga_execute` accept `{ steps: [step], idempotency_key: String }`; each step contains `operation_id`, optional `target_ref`, `params`, and `expected_inverse`. Preflight performs no Logic writes and reports per-step before-state availability. Execute reports verified per-step evidence; a failed request remains State C even when every applied step is compensated, while partial or unknown compensation is State B.
 
 The bounded journal belongs only to the current server session and is cleared on session end or process restart. A completed duplicate key returns its stored outcome with `duplicate:true`; `saga_status` reads that record. `saga_cancel` returns a typed refusal for active work because the current engine has no safe cancellation seam. Ordered work with compensation does not promise all-or-nothing completion or durable recovery.

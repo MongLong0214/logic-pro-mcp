@@ -4,7 +4,8 @@ extension SetupDoctor {
     static func manualValidationCheck(
         approvals: [ManualValidationChannel: ManualValidationApproval],
         profile: DoctorProfile,
-        storeHealth: ManualValidationStoreHealth
+        storeHealth: ManualValidationStoreHealth,
+        checks: [Check] = []
     ) -> Check {
         if case let .corrupt(reason) = storeHealth {
             return check(
@@ -28,6 +29,22 @@ extension SetupDoctor {
                 remediationType: .none,
                 optional: true,
                 skipReason: .profileNotRequired
+            )
+        }
+
+        // #457: hold the approval prompt until the setup it attests exists. The fix
+        // plan drops blocked checks, so a user is never told to assert readiness for
+        // a channel whose staging has not happened — the approval would be a durable
+        // false attestation that no later file check can repair.
+        if let cause = blockingCause(for: "channels.manual_validation", checks: checks) {
+            return check(
+                id: "channels.manual_validation",
+                domain: "channels",
+                status: .skipped,
+                summary: "Operator approval is held until Key Commands staging completes; approving first would attest setup that has not happened.",
+                evidence: ["blocked_by": cause],
+                remediationType: .docs,
+                blockedBy: cause
             )
         }
 
@@ -89,8 +106,23 @@ extension SetupDoctor {
                 : "Key Commands preset is not staged; ignore this if MIDIKeyCommands-only ops are unused.",
             evidence: ["preset_staged": String(staged)],
             remediationType: staged ? .none : .command,
-            remediationValueOverride: staged ? nil : "install-keycmds.sh"
+            remediationValueOverride: staged ? nil : keyCommandsRemediation(runtime: runtime)
         )
+    }
+
+    // #456: Homebrew installs install-keycmds.sh into the formula pkgshare, not on
+    // PATH, so printing the bare script name hands the user a command they cannot
+    // run — and fetching the script alone fails on its sibling keycmd-preset.plist.
+    // The share dir is already resolved for the install checks, so the remediation
+    // is derived from that same probe and stays runnable wherever the package put
+    // it. Only an unresolved share dir falls back to the bare name, and it says so.
+    static func keyCommandsRemediation(runtime: Runtime) -> String {
+        switch runtime.shareDirProbe() {
+        case let .complete(path, _), let .missing(path, _, _), let .invalid(path, _):
+            return "\(path)/install-keycmds.sh"
+        case .unresolved:
+            return "install-keycmds.sh (share dir unresolved; set LOGIC_PRO_MCP_SHARE_DIR or reinstall)"
+        }
     }
 
 
