@@ -154,7 +154,7 @@ struct Issue461CapabilityRouteReadinessTests {
     /// agent to try. A check-only verdict cannot see this, which is #461's class
     /// 4: an approval present while its actual prerequisite is not.
     @Test("doctor consults the route plan, not just the tagged check set")
-    func doctorCapabilityFollowsRoutePlan() {
+    func doctorCapabilityFollowsRoutePlan() throws {
         let checks = doctorChecks(accessibilityStatus: .manual)
         let capability = SetupDoctor.capabilities(for: checks, profile: .core)["core_transport"]
 
@@ -169,12 +169,16 @@ struct Issue461CapabilityRouteReadinessTests {
             capability?.status == .notReady,
             "an AX-only operation with no approved AX permission is not ready, however the checks read"
         )
+        // Unwrap once rather than comparing an Optional<Bool> to `true`: that
+        // comparison compiles and passes even when the optional is nil, so it
+        // would assert nothing about a capability the fixture failed to produce.
+        let rows = try #require(capability?.operations, "core_transport must publish operation rows")
         #expect(
-            capability?.operations.contains { $0.operation == "transport.set_tempo" && $0.readiness == "manual_setup_required" } == true,
+            rows.contains { $0.operation == "transport.set_tempo" && $0.readiness == "manual_setup_required" },
             "the blocked operation must be named, not just folded into the group verdict"
         )
         #expect(
-            capability?.operations.contains { $0.blockedBy == "permissions.accessibility" } == true,
+            rows.contains { $0.blockedBy == "permissions.accessibility" },
             "output must name the setup action that would enable the operation"
         )
     }
@@ -182,14 +186,15 @@ struct Issue461CapabilityRouteReadinessTests {
     /// A hard permission failure must still be reported, and must still name the
     /// operation — this is the plainer half of the same contract.
     @Test("doctor reports the blocked operation when a permission has failed")
-    func doctorNamesBlockedOperationOnFailure() {
+    func doctorNamesBlockedOperationOnFailure() throws {
         let capability = SetupDoctor.capabilities(
             for: doctorChecks(accessibilityStatus: .fail),
             profile: .core
         )["core_transport"]
         #expect(capability?.status == .notReady)
-        #expect(capability?.operations.contains { $0.readiness == "not_ready" } == true)
-        #expect(capability?.operations.contains { $0.blockedBy == "permissions.accessibility" } == true)
+        let rows = try #require(capability?.operations, "core_transport must publish operation rows")
+        #expect(rows.contains { $0.readiness == "not_ready" })
+        #expect(rows.contains { $0.blockedBy == "permissions.accessibility" })
     }
 
     // MARK: The release path
