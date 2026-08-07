@@ -12,6 +12,35 @@ actor CGEventChannel: Channel {
         let logicProPID: @Sendable () -> pid_t?
         let postKeyEvent: @Sendable (CGKeyCode, CGEventFlags, pid_t) -> Bool
         let sleepMicros: @Sendable (useconds_t) -> Void
+        /// #440 D: whether Logic currently owns the keyboard.
+        let isLogicFrontmost: @Sendable () -> Bool
+        /// #440 D: bring Logic forward. Must NOT activate in-process — an
+        /// in-process activation poisons this process's own `postToPid`, so the
+        /// production path goes through AppleScript.
+        let activateLogic: @Sendable () -> Bool
+
+        /// The two #440 fields default to an already-frontmost Logic so existing
+        /// callers that construct a Runtime for an unrelated reason keep
+        /// compiling. The default is deliberately the PERMISSIVE one: a test
+        /// that wants to exercise the gate must say so, and a test that does not
+        /// mention frontmost is testing something else and should not be
+        /// silently blocked by it. Production never takes these defaults — it
+        /// uses `.production`, which wires the real probes.
+        init(
+            isLogicProRunning: @escaping @Sendable () -> Bool,
+            logicProPID: @escaping @Sendable () -> pid_t?,
+            postKeyEvent: @escaping @Sendable (CGKeyCode, CGEventFlags, pid_t) -> Bool,
+            sleepMicros: @escaping @Sendable (useconds_t) -> Void,
+            isLogicFrontmost: @escaping @Sendable () -> Bool = { true },
+            activateLogic: @escaping @Sendable () -> Bool = { true }
+        ) {
+            self.isLogicProRunning = isLogicProRunning
+            self.logicProPID = logicProPID
+            self.postKeyEvent = postKeyEvent
+            self.sleepMicros = sleepMicros
+            self.isLogicFrontmost = isLogicFrontmost
+            self.activateLogic = activateLogic
+        }
 
         static let production = Runtime(
             isLogicProRunning: { ProcessUtils.isLogicProRunning },
@@ -19,9 +48,38 @@ actor CGEventChannel: Channel {
             postKeyEvent: { keyCode, flags, pid in
                 performKeyEvent(keyCode: keyCode, flags: flags, pid: pid)
             },
-            sleepMicros: { usleep($0) }
+            sleepMicros: { usleep($0) },
+            isLogicFrontmost: ProcessUtils.Runtime.production.logicIsFrontmost,
+            activateLogic: ProcessUtils.Runtime.production.activateLogicPro
         )
     }
+
+    /// #440 D: why no event was posted. A CGEvent keystroke delivered while
+    /// Logic is in the background is swallowed by the window server, and the
+    /// caller previously saw a sent-but-unverified success for a keystroke Logic
+    /// never received. Preparation now runs first and posts nothing when it
+    /// fails, so the failure is visible instead of silent.
+    enum FrontmostPreparation: String, Sendable {
+        /// Logic already owned the keyboard; nothing was activated.
+        case alreadyFrontmost = "already_frontmost"
+        /// Logic was background and came forward within the bound.
+        case activated = "activated"
+        /// Logic did not become frontmost within the bound. Zero events posted.
+        case activationTimedOut = "activation_timed_out"
+        /// The activation call itself refused. Zero events posted.
+        case activationRefused = "activation_refused"
+
+        var isReady: Bool { self == .alreadyFrontmost || self == .activated }
+    }
+
+    /// Consecutive frontmost observations required before posting. One reading
+    /// can catch the window server mid-switch, which is exactly the race that
+    /// makes a keystroke land nowhere.
+    static let requiredFrontmostObservations = 2
+    /// Bound on how long activation is given, as a count of polls.
+    static let maximumActivationPolls = 20
+    /// Settle between polls, and between activation and the first observation.
+    static let activationPollMicros: useconds_t = 50_000
 
     private let runtime: Runtime
 
@@ -140,6 +198,13 @@ actor CGEventChannel: Channel {
             guard let sequence = Self.gotoPositionSequence(for: position) else {
                 return .error("Unsupported position format for CGEvent fallback: \(position)")
             }
+            // #440 D: prepare BEFORE the sequence, not per keystroke. A sequence
+            // that lost the keyboard halfway would leave the Go To Position
+            // dialog open with a partial value typed into it.
+            let preparation = prepareFrontmost()
+            guard preparation.isReady else {
+                return Self.frontmostRefusal(operation: operation, preparation: preparation)
+            }
             let sent = postShortcutSequence(sequence, pid: pid)
             if sent {
                 // v3.1.1 (P2-2) — State B envelope. CGEvent sends keystrokes
@@ -151,6 +216,7 @@ actor CGEventChannel: Channel {
                         "operation": operation,
                         "method": "cgevent",
                         "position": position,
+                        "frontmost_preparation": preparation.rawValue,
                         "sent": true
                     ]
                 ))
@@ -163,6 +229,14 @@ actor CGEventChannel: Channel {
             return .error("No keyboard shortcut mapped for: \(operation)")
         }
 
+        // #440 D: same gate as the sequence path. A mapped chord posted while
+        // Logic is in the background is swallowed, and the State B envelope
+        // below would then report a keystroke Logic never received.
+        let preparation = prepareFrontmost()
+        guard preparation.isReady else {
+            return Self.frontmostRefusal(operation: operation, preparation: preparation)
+        }
+
         let sent = runtime.postKeyEvent(shortcut.keyCode, shortcut.flags, pid)
         if sent {
             // v3.1.1 (P2-2) — same rationale as above. Single key chord
@@ -172,6 +246,7 @@ actor CGEventChannel: Channel {
                 extras: [
                     "operation": operation,
                     "method": "cgevent",
+                    "frontmost_preparation": preparation.rawValue,
                     "sent": true
                 ]
             ))
@@ -241,6 +316,59 @@ actor CGEventChannel: Channel {
 
         Log.debug("Posted key \(keyCode) flags \(flags.rawValue) to PID \(pid)", subsystem: "cgEvent")
         return true
+    }
+
+    /// #440 D: bring Logic forward and prove it owns the keyboard, before any
+    /// event is created. Returns without posting anything when it cannot.
+    ///
+    /// Two consecutive frontmost observations are required rather than one. A
+    /// single reading can be taken while the window server is mid-switch, and a
+    /// keystroke posted in that window reaches nothing — which is the failure
+    /// this gate exists to remove, so a gate that could itself be fooled by it
+    /// would be pointless.
+    func prepareFrontmost() -> FrontmostPreparation {
+        if consecutiveFrontmostObservations() >= Self.requiredFrontmostObservations {
+            return .alreadyFrontmost
+        }
+        guard runtime.activateLogic() else { return .activationRefused }
+        for _ in 0..<Self.maximumActivationPolls {
+            runtime.sleepMicros(Self.activationPollMicros)
+            if consecutiveFrontmostObservations() >= Self.requiredFrontmostObservations {
+                return .activated
+            }
+        }
+        return .activationTimedOut
+    }
+
+    private func consecutiveFrontmostObservations() -> Int {
+        var seen = 0
+        for _ in 0..<Self.requiredFrontmostObservations {
+            guard runtime.isLogicFrontmost() else { return 0 }
+            seen += 1
+            if seen < Self.requiredFrontmostObservations {
+                runtime.sleepMicros(Self.activationPollMicros)
+            }
+        }
+        return seen
+    }
+
+    /// State C for a refused preparation. `write_attempted` is false and
+    /// `events_posted` is zero because nothing was created: the caller can
+    /// retry without wondering whether a partial keystroke landed.
+    static func frontmostRefusal(operation: String, preparation: FrontmostPreparation) -> ChannelResult {
+        .error(HonestContract.encodeStateC(
+            error: .axWriteFailed,
+            hint: "CGEvent keystrokes are delivered to the frontmost application; Logic Pro did not own the "
+                + "keyboard, so no event was posted. Bring Logic Pro to the front and retry.",
+            extras: [
+                "operation": operation,
+                "method": "cgevent",
+                "frontmost_preparation": preparation.rawValue,
+                "events_posted": 0,
+                "write_attempted": false,
+                "safe_to_retry": true,
+            ]
+        ))
     }
 
     private func postShortcutSequence(_ sequence: [Shortcut], pid: pid_t) -> Bool {
