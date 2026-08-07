@@ -22,13 +22,33 @@ actor ChannelRouter {
 
     private var channels: [ChannelID: any Channel] = [:]
 
-    private static let transportToggleOpsAllowingAXElementFallback: Set<String> = [
+    // Operations for which an Accessibility `element_not_found` is provably a
+    // PRE-WRITE miss, so a later channel may still run. Three conditions must all
+    // hold before an op belongs here, and #460 is why they are written down rather
+    // than left implicit:
+    //
+    //  1. `element_not_found` means the AX control was never located, so no
+    //     actuation reached Logic and no partial write can be stranded.
+    //  2. The failure is Accessibility-specific — a missing control-bar button or
+    //     ruler element — not a rejection of the request itself.
+    //  3. Every later candidate expresses the same semantics, so falling through
+    //     cannot silently change what the caller asked for.
+    //
+    // `transport.goto_position` satisfies all three exactly as the toggles do: a
+    // missing ruler element moves nothing, and MCU/CoreMIDI/CGEvent all position
+    // the playhead. Omitting it stranded a real default-install workflow whose
+    // first action was `goto_position` (Discussion #455).
+    //
+    // An op that can leave a partial write, or whose later candidates differ in
+    // meaning, must NOT be added here; it needs per-op recovery instead.
+    private static let opsAllowingAXElementNotFoundFallback: Set<String> = [
         "transport.play",
         "transport.stop",
         "transport.record",
         "transport.toggle_cycle",
         "transport.toggle_metronome",
         "transport.toggle_count_in",
+        "transport.goto_position",
     ]
 
     /// Active routing table (v2). `internal` so test-targets can introspect
@@ -258,7 +278,7 @@ actor ChannelRouter {
         message: String
     ) -> Bool {
         channelID == .accessibility &&
-            transportToggleOpsAllowingAXElementFallback.contains(operation) &&
+            opsAllowingAXElementNotFoundFallback.contains(operation) &&
             HonestContract.stateCErrorCode(message) == HonestContract.FailureError.elementNotFound.rawValue
     }
 

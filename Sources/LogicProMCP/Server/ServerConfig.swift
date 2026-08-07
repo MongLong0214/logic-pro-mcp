@@ -20,6 +20,15 @@ struct ServerConfig: Sendable {
     // MARK: - Timeouts
     static let appleScriptTimeout: TimeInterval = 5.0
 
+    // midi.import_file drives a File > Import > MIDI File sheet, a path-entry
+    // dialog, an import button and a tempo prompt, each polled inside the
+    // script itself. Summing one delay per iteration across those loops gives a
+    // floor of 17.2 s, so the shared 5.0 s bound killed osascript while Logic
+    // was still importing — the region landed but the caller saw a timeout
+    // (#449). This bound must stay above that floor; the polling loops in
+    // AccessibilityChannel+MIDIImport are the thing it has to outlast.
+    static let midiImportAppleScriptTimeout: TimeInterval = 30.0
+
     // MARK: - Logic Pro
     /// Resolved bundle ID for the active Logic Pro variant (desktop or Creator Studio).
     static var logicProBundleID: String { LogicProTarget.current.bundleID }

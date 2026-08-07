@@ -1067,4 +1067,53 @@ extension OperationTraceTests {
         }
         await OperationTraceStore.shared.clear()
     }
+
+    /// #452: the AppleScript segment of `midi.import_file` must be measurable
+    /// from outside the process. It lives in THIS suite rather than beside the
+    /// other #452 tests because it drives `OperationTraceStore.shared`; run in a
+    /// parallel suite it races the clears here and reads back a nil trace.
+    ///
+    /// The load-bearing assertion is that the value survives the store's
+    /// attribute filter. Undeclared keys are dropped silently, so a test that
+    /// only checked "record was called" would pass while the trace exposed
+    /// nothing — the exact failure this observability work exists to prevent.
+    @Test func OperationTraceMIDIImportRecordsScriptSegmentDuration() async throws {
+        await OperationTraceStore.shared.clear()
+        let traceID = await OperationTraceStore.shared.start(operationID: "midi.import_file")
+        let context = OperationTraceContext()
+        context.register(traceID)
+
+        let midiFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("issue452-\(UUID().uuidString).mid")
+        try Data([0x4D, 0x54, 0x68, 0x64]).write(to: midiFile)
+        defer { try? FileManager.default.removeItem(at: midiFile) }
+
+        await OperationTraceContext.$current.withValue(context) {
+            _ = await AccessibilityChannel.defaultImportMIDIFile(
+                systemEventsAuthorized: { true },
+                path: midiFile.path,
+                executeScript: { _ in
+                    // A deterministic, measurable segment: the recorded value has
+                    // to reflect this rather than the surrounding Swift AX work.
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                    return .error("stop after the measured segment")
+                }
+            )
+        }
+
+        let trace = try #require(await OperationTraceStore.shared.trace(traceID))
+        let segment = try #require(
+            trace.events.first { $0.phase == .scriptSegmentCompleted },
+            "the import path must emit a script_segment.completed event"
+        )
+        let raw = try #require(
+            segment.attributes["applescript_duration_ms"],
+            "the duration must survive the attribute filter, not merely be passed to record"
+        )
+        let milliseconds = try #require(Int(raw), "the duration must be an integer count of milliseconds")
+        #expect(milliseconds >= 40, "the recorded segment must cover the 50ms executor, got \(milliseconds)ms")
+        #expect(milliseconds < 30_000, "a segment longer than the bound itself means the clock is wrong")
+        #expect(segment.privacyClasses["applescript_duration_ms"] == .publicDiagnostic)
+        await OperationTraceStore.shared.clear()
+    }
 }

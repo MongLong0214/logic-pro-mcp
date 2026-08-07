@@ -124,8 +124,12 @@ private func issue26RepositoryRootURL() -> URL {
         "logic.version_support",
         "logic.application_state",
         "logic.blocking_dialog",
-        "channels.manual_validation",
+        // #457: keycmd_reference now precedes manual_validation because the approval
+        // check declares it as a dependency, and a dependency has to have run before
+        // blockingCause can see its status. The order is part of the JSON contract, so
+        // this move is deliberate and recorded rather than absorbed silently.
         "channels.keycmd_reference",
+        "channels.manual_validation",
         "channels.mcu_wiring_hint",
         "dependencies.click_fallback",
     ])
