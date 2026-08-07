@@ -114,8 +114,16 @@ extension SetupDoctor {
         .init(.logicVersionSupport, dependencies: [.logicInstallation], capabilityGroups: allCapabilityGroups, remediationAnchor: "docs/SETUP.md#doctor-logicversion-support"),
         .init(.logicApplicationState, capabilityGroups: allCapabilityGroups, remediationAnchor: "docs/SETUP.md#doctor-logicapplication-state"),
         .init(.logicBlockingDialog, dependencies: [.logicApplicationState, .permissionsAccessibility], capabilityGroups: ["track_management", "mixer_ax", "verified_plugin_applyback"], remediationAnchor: "docs/SETUP.md#doctor-logicblocking-dialog"),
-        .init(.channelsManualValidation, capabilityGroups: ["keycmd_only_ops", "legacy_scripter"], remediationAnchor: "docs/SETUP.md#doctor-channelsmanual-validation", profileRule: "keycmd|legacy-scripter|full"),
         .init(.channelsKeycmdReference, capabilityGroups: ["keycmd_only_ops"], remediationAnchor: "docs/SETUP.md#doctor-channelskeycmd-reference", profileRule: "keycmd|full"),
+        // #457: --approve-channel records an OPERATOR ASSERTION that manual setup was
+        // done; it neither configures nor verifies Logic. Ordering it before the
+        // staging step it attests let a new user approve both channels first and only
+        // then discover Key Commands had never been staged — a durable false
+        // attestation the helper cannot repair, because Logic 12.2+ still requires
+        // manual MIDI Learn that no file presence can prove. Declaring the dependency
+        // makes the fix plan put staging first instead of relying on declaration
+        // order among equal-severity manual checks.
+        .init(.channelsManualValidation, dependencies: [.channelsKeycmdReference], capabilityGroups: ["keycmd_only_ops", "legacy_scripter"], remediationAnchor: "docs/SETUP.md#doctor-channelsmanual-validation", profileRule: "keycmd|legacy-scripter|full"),
         .init(.channelsMCUWiringHint, capabilityGroups: ["mixer_mcu"], remediationAnchor: "docs/SETUP.md#doctor-channelsmcu-wiring-hint", profileRule: "full"),
         .init(.dependenciesClickFallback, remediationAnchor: "docs/SETUP.md#doctor-dependenciesclick-fallback"),
         .init(

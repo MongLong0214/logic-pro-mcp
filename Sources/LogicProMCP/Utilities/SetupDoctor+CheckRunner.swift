@@ -113,7 +113,8 @@ extension SetupDoctor {
             return manualValidationCheck(
                 approvals: context.approvals,
                 profile: context.doctorProfile,
-                storeHealth: context.manualStoreHealth
+                storeHealth: context.manualStoreHealth,
+                checks: checks
             )
         case .channelsKeycmdReference:
             return keycmdReferenceCheck(runtime: context.runtime, profile: context.doctorProfile)

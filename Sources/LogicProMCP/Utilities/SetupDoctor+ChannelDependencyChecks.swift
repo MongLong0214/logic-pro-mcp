@@ -4,7 +4,8 @@ extension SetupDoctor {
     static func manualValidationCheck(
         approvals: [ManualValidationChannel: ManualValidationApproval],
         profile: DoctorProfile,
-        storeHealth: ManualValidationStoreHealth
+        storeHealth: ManualValidationStoreHealth,
+        checks: [Check] = []
     ) -> Check {
         if case let .corrupt(reason) = storeHealth {
             return check(
@@ -28,6 +29,22 @@ extension SetupDoctor {
                 remediationType: .none,
                 optional: true,
                 skipReason: .profileNotRequired
+            )
+        }
+
+        // #457: hold the approval prompt until the setup it attests exists. The fix
+        // plan drops blocked checks, so a user is never told to assert readiness for
+        // a channel whose staging has not happened — the approval would be a durable
+        // false attestation that no later file check can repair.
+        if let cause = blockingCause(for: "channels.manual_validation", checks: checks) {
+            return check(
+                id: "channels.manual_validation",
+                domain: "channels",
+                status: .skipped,
+                summary: "Operator approval is held until Key Commands staging completes; approving first would attest setup that has not happened.",
+                evidence: ["blocked_by": cause],
+                remediationType: .docs,
+                blockedBy: cause
             )
         }
 
