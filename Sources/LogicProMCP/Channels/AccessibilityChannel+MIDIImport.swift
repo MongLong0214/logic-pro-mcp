@@ -130,7 +130,9 @@ extension AccessibilityChannel {
         systemEventsAuthorized: @Sendable () -> Bool = { PermissionChecker.checkSystemEventsAutomation() },
         path: String,
         runtime: AXLogicProElements.Runtime = .production,
-        executeScript: @escaping @Sendable (String) async -> ChannelResult = { await AppleScriptChannel.executeAppleScript($0) },
+        executeScript: @escaping @Sendable (String) async -> ChannelResult = {
+            await AppleScriptChannel.executeAppleScript($0, timeout: ServerConfig.midiImportAppleScriptTimeout)
+        },
         trackCount: (@Sendable () -> Int)? = nil,
         trackNames: (@Sendable () -> [String])? = nil,
         regionInfos: (@Sendable () -> MIDIImportRegionReadback)? = nil,

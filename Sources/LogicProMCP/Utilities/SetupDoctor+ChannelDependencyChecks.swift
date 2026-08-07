@@ -89,8 +89,23 @@ extension SetupDoctor {
                 : "Key Commands preset is not staged; ignore this if MIDIKeyCommands-only ops are unused.",
             evidence: ["preset_staged": String(staged)],
             remediationType: staged ? .none : .command,
-            remediationValueOverride: staged ? nil : "install-keycmds.sh"
+            remediationValueOverride: staged ? nil : keyCommandsRemediation(runtime: runtime)
         )
+    }
+
+    // #456: Homebrew installs install-keycmds.sh into the formula pkgshare, not on
+    // PATH, so printing the bare script name hands the user a command they cannot
+    // run — and fetching the script alone fails on its sibling keycmd-preset.plist.
+    // The share dir is already resolved for the install checks, so the remediation
+    // is derived from that same probe and stays runnable wherever the package put
+    // it. Only an unresolved share dir falls back to the bare name, and it says so.
+    static func keyCommandsRemediation(runtime: Runtime) -> String {
+        switch runtime.shareDirProbe() {
+        case let .complete(path, _), let .missing(path, _, _), let .invalid(path, _):
+            return "\(path)/install-keycmds.sh"
+        case .unresolved:
+            return "install-keycmds.sh (share dir unresolved; set LOGIC_PRO_MCP_SHARE_DIR or reinstall)"
+        }
     }
 
 
