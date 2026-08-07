@@ -1343,7 +1343,8 @@ extension AccessibilityChannel {
             &extras,
             kind: reconcileOutcome.kind,
             action: reconcileActionLabel(reconcileOutcome.decision),
-            newTrackAutoConfirmed: false
+            newTrackAutoConfirmed: false,
+            refusal: reconcileOutcome.refusal
         )
 
         for attempt in 0..<4 {
@@ -1470,6 +1471,10 @@ extension AccessibilityChannel {
         // fabricated success.
         var reconcileKind = ModalReconciliation.BlockingModalKind.none
         var reconcileAction = "none"
+        // #453: an acknowledgement the executor declined must reach the envelope.
+        // Kept beside kind/action so a refusal on any attempt survives to the
+        // result, rather than being overwritten by a later clean pass.
+        var reconcileRefusal: AlertAcknowledgeRefusal?
         var newTrackAutoConfirmed = false
 
         var lastObservedCount = beforeCount
@@ -1483,6 +1488,7 @@ extension AccessibilityChannel {
                 if outcome.kind != .none {
                     reconcileKind = outcome.kind
                     reconcileAction = reconcileActionLabel(outcome.decision)
+                    if let refusal = outcome.refusal { reconcileRefusal = refusal }
                     if outcome.kind == .mandatoryNewTrack && outcome.performed {
                         newTrackAutoConfirmed = true
                     }
@@ -1498,7 +1504,8 @@ extension AccessibilityChannel {
                     &extras,
                     kind: reconcileKind,
                     action: reconcileAction,
-                    newTrackAutoConfirmed: newTrackAutoConfirmed
+                    newTrackAutoConfirmed: newTrackAutoConfirmed,
+                    refusal: reconcileRefusal
                 )
                 return .success(HonestContract.encodeStateA(extras: extras))
             }
@@ -1513,7 +1520,8 @@ extension AccessibilityChannel {
             &extras,
             kind: reconcileKind,
             action: reconcileAction,
-            newTrackAutoConfirmed: newTrackAutoConfirmed
+            newTrackAutoConfirmed: newTrackAutoConfirmed,
+            refusal: reconcileRefusal
         )
         return .success(HonestContract.encodeStateB(
             reason: .retryExhausted,

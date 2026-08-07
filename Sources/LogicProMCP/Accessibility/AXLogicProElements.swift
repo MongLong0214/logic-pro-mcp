@@ -110,7 +110,23 @@ enum AXLogicProElements {
         let recoveryAction: String
     }
 
-    static func blockingDialogInfo(runtime: Runtime = .production) -> BlockingDialogInfo? {
+    /// #453: the blocking dialog together with the ELEMENT it was read from and
+    /// its titled button elements.
+    ///
+    /// `BlockingDialogInfo` is `Sendable` and carries only strings, which is what
+    /// makes it safe to publish as diagnostics — but it also means a caller that
+    /// decides something from it has to find the dialog again to act, and "find
+    /// the first AXDialog" evaluated a second time can resolve a DIFFERENT window.
+    /// A caller that must act on precisely the window it classified takes this
+    /// instead and holds the element, so identity is the element itself rather
+    /// than a predicate re-run against whatever is frontmost at click time.
+    struct BlockingDialogTarget {
+        let element: AXUIElement
+        let buttons: [(element: AXUIElement, title: String)]
+        let info: BlockingDialogInfo
+    }
+
+    static func blockingDialogTarget(runtime: Runtime = .production) -> BlockingDialogTarget? {
         guard let app = appRoot(runtime: runtime) else { return nil }
         let windows: [AXUIElement] = AXHelpers.getAttribute(
             app, kAXWindowsAttribute, runtime: runtime.ax
@@ -124,18 +140,42 @@ enum AXLogicProElements {
         let owningWindow = (mainWindow(runtime: runtime).flatMap {
             AXHelpers.getTitle($0, runtime: runtime.ax)
         } ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let buttons = AXHelpers.getChildren(dialog, runtime: runtime.ax)
-            .filter { AXHelpers.getRole($0, runtime: runtime.ax) == (kAXButtonRole as String) }
-            .compactMap { AXHelpers.getTitle($0, runtime: runtime.ax) }
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        return BlockingDialogInfo(
-            title: title,
-            role: role,
-            owningWindow: owningWindow,
-            buttonTitles: buttons,
-            recoveryAction: blockingDialogRecoveryAction(title: title, buttons: buttons)
+        let buttons = titledButtons(of: dialog, runtime: runtime.ax)
+        return BlockingDialogTarget(
+            element: dialog,
+            buttons: buttons,
+            info: BlockingDialogInfo(
+                title: title,
+                role: role,
+                owningWindow: owningWindow,
+                buttonTitles: buttons.map(\.title),
+                recoveryAction: blockingDialogRecoveryAction(title: title, buttons: buttons.map(\.title))
+            )
         )
+    }
+
+    /// The dialog's actionable buttons: direct children with the button role and
+    /// a non-empty trimmed title. Shared by the reader and the #453 re-check so
+    /// "exactly one button" means the same thing at classify time and click time
+    /// — two counts derived differently would let a gate pass on one definition
+    /// and act on another.
+    static func titledButtons(
+        of dialog: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> [(element: AXUIElement, title: String)] {
+        AXHelpers.getChildren(dialog, runtime: runtime)
+            .filter { AXHelpers.getRole($0, runtime: runtime) == (kAXButtonRole as String) }
+            .compactMap { button in
+                guard let title = AXHelpers.getTitle(button, runtime: runtime)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines),
+                    !title.isEmpty
+                else { return nil }
+                return (element: button, title: title)
+            }
+    }
+
+    static func blockingDialogInfo(runtime: Runtime = .production) -> BlockingDialogInfo? {
+        blockingDialogTarget(runtime: runtime)?.info
     }
 
     /// A safe, non-destructive recovery action for a blocking dialog. Prefers a
