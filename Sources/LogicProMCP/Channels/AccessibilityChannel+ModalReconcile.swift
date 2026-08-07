@@ -9,11 +9,48 @@ import Foundation
 /// closed — never blindly dismissed.
 extension AccessibilityChannel {
 
+    /// #453: why an authorized alert acknowledgement was refused at click time.
+    ///
+    /// A refusal is a SAFETY OUTCOME, not an error to be swallowed — the operator
+    /// needs to know the server declined to click and why. Every case is a
+    /// structural fact about the AX tree; none of them carries dialog text,
+    /// button titles or any other UI content, because a refusal reason travels
+    /// into extras and logs where user content must never appear.
+    enum AlertAcknowledgeRefusal: String, Sendable {
+        /// The classifier's dialog element was not carried to the executor.
+        case targetUnavailable = "alert_target_unavailable"
+        /// No blocking dialog is present any more — it closed itself.
+        case targetGone = "alert_target_gone"
+        /// A blocking dialog is present, but not the one that was classified.
+        case targetChanged = "alert_target_changed"
+        /// The re-read button count is not exactly one, so this is a CHOICE.
+        case buttonCountChanged = "alert_button_count_changed"
+        /// The single button was found but the press itself failed.
+        case pressFailed = "alert_press_failed"
+    }
+
     /// Outcome of one reconciliation pass, surfaced as honest extras by callers.
     struct ModalReconcileOutcome: Sendable, Equatable {
         let kind: ModalReconciliation.BlockingModalKind
         let decision: ModalReconciliation.ModalReconcileDecision
         let performed: Bool
+        /// Set only when an authorized action was declined at execution time.
+        /// `performed == false` alone cannot distinguish "the decision was not to
+        /// act" from "the decision was to act and the executor refused", and
+        /// those are very different things to report.
+        let refusal: AlertAcknowledgeRefusal?
+
+        init(
+            kind: ModalReconciliation.BlockingModalKind,
+            decision: ModalReconciliation.ModalReconcileDecision,
+            performed: Bool,
+            refusal: AlertAcknowledgeRefusal? = nil
+        ) {
+            self.kind = kind
+            self.decision = decision
+            self.performed = performed
+            self.refusal = refusal
+        }
 
         static let none = ModalReconcileOutcome(kind: .none, decision: .noAction, performed: false)
     }
@@ -62,7 +99,11 @@ extension AccessibilityChannel {
         clearMandatoryNewTrack: Bool,
         runtime: AXLogicProElements.Runtime
     ) async -> ModalReconcileOutcome {
-        let signals = readModalSignals(runtime: runtime)
+        // #453: the alert ELEMENT is captured with the signals and carried to the
+        // executor. `ModalSignals` is the pure core's input and stays string-only,
+        // so the element travels beside it rather than inside it.
+        let read = readModalSignalsAndAlertTarget(runtime: runtime)
+        let signals = read.signals
         let kind = ModalReconciliation.classify(signals)
         let decision = ModalReconciliation.decide(kind: kind, isDeleteContext: isDeleteContext)
 
@@ -77,8 +118,18 @@ extension AccessibilityChannel {
             return ModalReconcileOutcome(kind: kind, decision: decision, performed: false)
         }
 
-        let performed = await perform(decision, signals: signals, runtime: runtime)
-        return ModalReconcileOutcome(kind: kind, decision: decision, performed: performed)
+        let result = await perform(
+            decision,
+            signals: signals,
+            alertTarget: read.alertTarget,
+            runtime: runtime
+        )
+        return ModalReconcileOutcome(
+            kind: kind,
+            decision: decision,
+            performed: result.performed,
+            refusal: result.refusal
+        )
     }
 
     // MARK: - Signal reader
@@ -88,6 +139,14 @@ extension AccessibilityChannel {
     static func readModalSignals(
         runtime: AXLogicProElements.Runtime = .production
     ) -> ModalReconciliation.ModalSignals {
+        readModalSignalsAndAlertTarget(runtime: runtime).signals
+    }
+
+    /// #453: the same read, keeping the top-level alert's element so the executor
+    /// can act on the element that was classified instead of re-resolving one.
+    static func readModalSignalsAndAlertTarget(
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> (signals: ModalReconciliation.ModalSignals, alertTarget: AXLogicProElements.BlockingDialogTarget?) {
         guard let window = AXLogicProElements.mainWindow(runtime: runtime),
               let sheet = firstSheet(in: window, runtime: runtime.ax) else {
             // No main-window sheet: the remaining blockers are a top-level
@@ -95,7 +154,7 @@ extension AccessibilityChannel {
             // open menu. Alert signals are populated ONLY here, so any sheet
             // above still outranks a top-level alert.
             let alert = topLevelAlertSignals(runtime: runtime)
-            return ModalReconciliation.ModalSignals(
+            return (ModalReconciliation.ModalSignals(
                 sheetPresent: false,
                 sheetDescription: "",
                 createButtonPresent: false,
@@ -109,7 +168,7 @@ extension AccessibilityChannel {
                 createButtonTitle: "",
                 cancelButtonTitle: "",
                 deletePrimaryTitle: ""
-            )
+            ), alert.target)
         }
 
         let description = (AXHelpers.getAttribute(sheet, kAXDescriptionAttribute, runtime: runtime.ax) ?? "")
@@ -139,7 +198,7 @@ extension AccessibilityChannel {
             .flatMap { AXHelpers.getAttribute($0.element, kAXEnabledAttribute, runtime: runtime.ax) as Bool? }
             ?? true
 
-        return ModalReconciliation.ModalSignals(
+        return (ModalReconciliation.ModalSignals(
             sheetPresent: true,
             sheetDescription: description,
             createButtonPresent: createButton != nil,
@@ -153,7 +212,11 @@ extension AccessibilityChannel {
             createButtonTitle: createButton?.label ?? "",
             cancelButtonTitle: cancelButton?.label ?? "",
             deletePrimaryTitle: deleteButton?.label ?? ""
-        )
+        // A sheet outranks a top-level alert, so no alert target is carried here:
+        // the alert branch above is the only one that can reach the acknowledge
+        // executor, and handing back a target on this path would let a future
+        // caller act on a dialog this pass deliberately did not classify.
+        ), nil)
     }
 
     /// Detect a TOP-LEVEL informational `AXDialog` alert (NOT a main-window
@@ -165,12 +228,12 @@ extension AccessibilityChannel {
     /// (an `AXSystemDialog` we could not dismiss is deliberately not claimed).
     private static func topLevelAlertSignals(
         runtime: AXLogicProElements.Runtime
-    ) -> (present: Bool, buttonCount: Int, primaryButton: String) {
-        guard let info = AXLogicProElements.blockingDialogInfo(runtime: runtime),
-              info.role == (kAXDialogSubrole as String) else {
-            return (false, 0, "")
+    ) -> (present: Bool, buttonCount: Int, primaryButton: String, target: AXLogicProElements.BlockingDialogTarget?) {
+        guard let target = AXLogicProElements.blockingDialogTarget(runtime: runtime),
+              target.info.role == (kAXDialogSubrole as String) else {
+            return (false, 0, "", nil)
         }
-        return (true, info.buttonTitles.count, info.buttonTitles.first ?? "")
+        return (true, target.info.buttonTitles.count, target.info.buttonTitles.first ?? "", target)
     }
 
     /// The main window's first attached sheet. Real AX exposes an open sheet via
@@ -214,19 +277,20 @@ extension AccessibilityChannel {
     private static func perform(
         _ decision: ModalReconciliation.ModalReconcileDecision,
         signals: ModalReconciliation.ModalSignals,
+        alertTarget: AXLogicProElements.BlockingDialogTarget?,
         runtime: AXLogicProElements.Runtime
-    ) async -> Bool {
+    ) async -> (performed: Bool, refusal: AlertAcknowledgeRefusal?) {
         switch decision {
         case .noAction, .failClosed:
-            return false
+            return (false, nil)
         case .clickCreate:
-            return await clickNewTrackCreateButton(createTitle: signals.createButtonTitle)
+            return (await clickNewTrackCreateButton(createTitle: signals.createButtonTitle), nil)
         case .confirmDelete:
-            return await confirmDeleteTracksSheet(deleteTitle: signals.deletePrimaryTitle)
+            return (await confirmDeleteTracksSheet(deleteTitle: signals.deletePrimaryTitle), nil)
         case .acknowledgeAlert:
-            return await acknowledgeTopLevelAlert(primaryButton: signals.topLevelAlertPrimaryButton)
+            return acknowledgeTopLevelAlert(target: alertTarget, runtime: runtime)
         case .escapeMenu:
-            return await sendEscapeKey()
+            return (await sendEscapeKey(), nil)
         }
     }
 
@@ -272,26 +336,60 @@ extension AccessibilityChannel {
         return true
     }
 
-    /// Acknowledge a single-button top-level informational alert (the classifier
-    /// has already gated this to EXACTLY ONE button). Clicks the named button on
-    /// the first `AXDialog` window, falling back to that dialog's first button.
-    private static func acknowledgeTopLevelAlert(primaryButton: String) async -> Bool {
-        let target = LogicProTarget.appleScriptTarget()
-        let escapedButton = AppleScriptSafety.escapeForScript(primaryButton)
-        let script = """
-        tell application "System Events"
-            tell \(target.systemEventsProcessTarget)
-                set alertWindow to first window whose subrole is "AXDialog"
-                try
-                    click button "\(escapedButton)" of alertWindow
-                on error
-                    click button 1 of alertWindow
-                end try
-            end tell
-        end tell
-        return "acknowledged"
-        """
-        return await AppleScriptChannel.executeAppleScript(script).isSuccess
+    /// Acknowledge a single-button top-level informational alert.
+    ///
+    /// #453: the classifier gates this to EXACTLY ONE titled button — two or more
+    /// means a choice, and choices are never auto-answered. That decision used to
+    /// be made once and then thrown away: the executor re-resolved `first window
+    /// whose subrole is "AXDialog"` in AppleScript and clicked, so a dialog that
+    /// arrived in between was clicked though it was never classified, and a failed
+    /// title lookup fell through to `click button 1` with no count check at all.
+    /// On that fallback the safety discriminator did not participate.
+    ///
+    /// The gate is now enforced where the click happens, and three things changed
+    /// to make that possible:
+    ///
+    /// - The dialog is the ELEMENT the classifier read, carried here directly. No
+    ///   predicate is evaluated a second time, so there is no window in which a
+    ///   different dialog can be substituted.
+    /// - The button set is re-read from that element immediately before pressing
+    ///   and must still be exactly one. A dialog that gained a button between
+    ///   classification and click is refused.
+    /// - The first-button fallback is gone. There is no path that presses a
+    ///   control the single-button rule did not authorize.
+    ///
+    /// Refusal is the safe direction: an unacknowledged alert leaves the operator
+    /// with a visible dialog, while a wrong click answers a question on their
+    /// behalf and cannot be undone.
+    private static func acknowledgeTopLevelAlert(
+        target: AXLogicProElements.BlockingDialogTarget?,
+        runtime: AXLogicProElements.Runtime
+    ) -> (performed: Bool, refusal: AlertAcknowledgeRefusal?) {
+        guard let target else { return (false, .targetUnavailable) }
+
+        // Re-resolve the app's current blocking dialog and require it to be the
+        // SAME element. This is what makes "the dialog was replaced" and "several
+        // dialogs are present" refusals rather than silent mis-clicks: the reader
+        // returns the first blocking dialog, so a newly-frontmost one yields a
+        // different element and fails the identity check below.
+        guard let current = AXLogicProElements.blockingDialogTarget(runtime: runtime) else {
+            return (false, .targetGone)
+        }
+        guard CFEqual(current.element, target.element) else {
+            return (false, .targetChanged)
+        }
+
+        // Re-read the count from the live element rather than trusting the count
+        // captured at classification time.
+        let buttons = AXLogicProElements.titledButtons(of: current.element, runtime: runtime.ax)
+        guard buttons.count == 1, let only = buttons.first else {
+            return (false, .buttonCountChanged)
+        }
+
+        guard AXHelpers.performAction(only.element, kAXPressAction as String, runtime: runtime.ax) else {
+            return (false, .pressFailed)
+        }
+        return (true, nil)
     }
 
     /// Send Escape (key code 53) to close a stray open menu.
@@ -342,13 +440,20 @@ extension AccessibilityChannel {
         _ extras: inout [String: Any],
         kind: ModalReconciliation.BlockingModalKind,
         action: String,
-        newTrackAutoConfirmed: Bool
+        newTrackAutoConfirmed: Bool,
+        refusal: AlertAcknowledgeRefusal? = nil
     ) {
         guard kind != .none else { return }
         extras["reconciled_modal_kind"] = reconcileKindLabel(kind)
         extras["reconciled_action"] = action
         if newTrackAutoConfirmed {
             extras["new_track_dialog_auto_confirmed"] = true
+        }
+        // #453: an authorized action the executor declined. Reported so a caller
+        // can tell "we chose not to act" from "we tried and refused"; the value is
+        // a fixed structural token, never dialog text or a button title.
+        if let refusal {
+            extras["reconcile_refused"] = refusal.rawValue
         }
     }
 }
