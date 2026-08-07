@@ -392,7 +392,18 @@ extension AccessibilityChannel {
         end importMIDI
         return importMIDI()
         """
+        // #452: the only measurement of the segment the osascript bound governs.
+        // The clock brackets the call rather than the executor, so it observes
+        // whatever actually ran — wrapping the injected closure instead would
+        // measure the wrapper and prove nothing about production. Recorded on
+        // every outcome, including timeout, because a segment that hit its bound
+        // is exactly the one an operator needs the number for.
+        let segmentStart = ContinuousClock.now
         let result = await executeScript(script)
+        await OperationTraceContext.record(
+            .scriptSegmentCompleted,
+            attributes: ["applescript_duration_ms": elapsedMilliseconds(since: segmentStart)]
+        )
         switch result {
         case .success(let output):
             let scriptOutput = normalizedAppleScriptPayload(output)
