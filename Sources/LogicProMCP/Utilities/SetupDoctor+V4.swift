@@ -27,15 +27,52 @@ extension SetupDoctor {
         case notInProfile = "not_in_profile"
     }
 
+    /// #461: per-operation readiness inside a capability group. Additive to the
+    /// published schema — the group `status` keeps its existing four values, and
+    /// this row carries the finer taxonomy the group verdict is derived FROM.
+    struct OperationReadinessRow: Codable, Equatable, Sendable {
+        let operation: String
+        let readiness: String
+        /// Channels that could actually run it under the current snapshot.
+        let executableChannels: [String]
+        /// The prerequisite that blocked the first-choice candidate, if any, so
+        /// the output can name the setup action that would enable this operation.
+        let blockedBy: String?
+
+        enum CodingKeys: String, CodingKey {
+            case operation
+            case readiness
+            case executableChannels = "executable_channels"
+            case blockedBy = "blocked_by"
+        }
+    }
+
     struct CapabilityReadiness: Codable, Equatable, Sendable {
         let status: CapabilityStatus
         let checks: [String]
         let liveVerification: String?
+        /// Empty for groups that declare no operations yet; those keep the
+        /// pre-#461 check-only verdict rather than being silently claimed ready
+        /// on the strength of an empty operation list.
+        let operations: [OperationReadinessRow]
+
+        init(
+            status: CapabilityStatus,
+            checks: [String],
+            liveVerification: String?,
+            operations: [OperationReadinessRow] = []
+        ) {
+            self.status = status
+            self.checks = checks
+            self.liveVerification = liveVerification
+            self.operations = operations
+        }
 
         enum CodingKeys: String, CodingKey {
             case status
             case checks
             case liveVerification = "live_verification"
+            case operations
         }
     }
 
@@ -282,25 +319,103 @@ extension SetupDoctor {
             }
             let statuses = required.compactMap { byID[$0]?.status }
             let missingRequired = statuses.count != required.count
-            let status: CapabilityStatus
+            let checkStatus: CapabilityStatus
             if missingRequired || statuses.contains(.fail) || statuses.contains(.warn) {
-                status = .notReady
+                checkStatus = .notReady
             } else if statuses.contains(.manual) || statuses.contains(.skipped) {
-                status = .unknownLiveVerifyRequired
+                checkStatus = .unknownLiveVerifyRequired
             } else if definition.id == "mixer_mcu" {
-                status = .unknownLiveVerifyRequired
+                checkStatus = .unknownLiveVerifyRequired
             } else {
-                status = .ready
+                checkStatus = .ready
             }
+
+            // #461: the environment checks above say the SETUP looks fine. They
+            // do not say every operation the group advertises has a runnable
+            // route, and a group that passes its checks while one member
+            // operation has no executable candidate was still reported ready.
+            // The group verdict is now the weaker of the two, so a route gap can
+            // only lower it — a passing check set can never manufacture
+            // readiness the routes do not support.
+            let plans = OperationCapabilityRegistry.plan(
+                capability: definition.id,
+                health: healthSnapshot(from: checks)
+            )
+            let status = plans.isEmpty
+                ? checkStatus
+                : weaker(checkStatus, capabilityStatus(for: OperationCapabilityRegistry.aggregate(plans)))
+
             return (
                 definition.id,
                 CapabilityReadiness(
                     status: status,
                     checks: required,
-                    liveVerification: definition.liveVerification
+                    liveVerification: definition.liveVerification,
+                    operations: plans.map { plan in
+                        OperationReadinessRow(
+                            operation: plan.operation,
+                            readiness: plan.readiness.rawValue,
+                            executableChannels: plan.executableChannels.map(\.rawValue),
+                            blockedBy: plan.candidates.first(where: { !$0.isExecutable })?.blockingCheck
+                        )
+                    }
                 )
             )
         })
+    }
+
+    /// #461: translate the doctor check set into the pure planner's input.
+    ///
+    /// `manual` and `skipped` become AWAITING rather than false. A held approval
+    /// (#457) or an unstaged preset is not a broken environment — it is a step
+    /// the operator has not taken — and reporting it as a hard failure would tell
+    /// users something is wrong with their machine when nothing is.
+    ///
+    /// A check that did not run is absent from `satisfied` rather than recorded
+    /// as false, so the planner can distinguish "we did not look" from "it does
+    /// not work". Collapsing those is how an unverified claim becomes a verified
+    /// one.
+    static func healthSnapshot(from checks: [Check]) -> OperationCapabilityRegistry.HealthSnapshot {
+        var satisfied: [String: Bool] = [:]
+        var awaiting: Set<String> = []
+        for check in checks {
+            switch check.status {
+            case .pass:
+                satisfied[check.id] = true
+            case .fail, .warn:
+                satisfied[check.id] = false
+            case .manual, .skipped:
+                awaiting.insert(check.id)
+            }
+        }
+        return OperationCapabilityRegistry.HealthSnapshot(satisfied: satisfied, awaitingManual: awaiting)
+    }
+
+    private static func capabilityStatus(
+        for readiness: OperationCapabilityRegistry.OperationReadiness?
+    ) -> CapabilityStatus {
+        switch readiness {
+        case .readyVerified:
+            return .ready
+        // Executable but unconfirmed. Publishing either as `ready` would promote
+        // a send-only route to a verified claim, which is exactly what the
+        // Honest Contract forbids elsewhere.
+        case .readyDegraded, .unknownLiveVerifyRequired:
+            return .unknownLiveVerifyRequired
+        case .manualSetupRequired, .notReady:
+            return .notReady
+        case nil:
+            return .notReady
+        }
+    }
+
+    /// The more pessimistic of two verdicts. `notInProfile` is scoping, not
+    /// readiness, so it is never weakened by a route plan.
+    private static func weaker(_ lhs: CapabilityStatus, _ rhs: CapabilityStatus) -> CapabilityStatus {
+        let rank: [CapabilityStatus: Int] = [
+            .notReady: 0, .unknownLiveVerifyRequired: 1, .ready: 2, .notInProfile: 3,
+        ]
+        return (rank[lhs] ?? 0) <= (rank[rhs] ?? 0) ? lhs : rhs
     }
 
     static func buildEvidence(_ fields: [String: EvidenceValue]) -> [String: String] {
