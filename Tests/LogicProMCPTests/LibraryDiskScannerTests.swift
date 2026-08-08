@@ -233,14 +233,9 @@ struct LibraryDiskScannerTests {
     /// on the machine. Verifies that a full scan returns a clinically
     /// implausible-low count (e.g. under 1000 leaves) does NOT ship — the
     /// whole point of v3.0.5 is to fix the 345-leaf undercount.
-    @Test("local-machine integration: factory Library reports at least 1000 leaves when present")
+    @Test("local-machine integration: factory Library reports at least 1000 leaves when present",
+          .enabled(if: installedLogicLibraryExists))
     func scanLocalFactoryLibraryReportsFullCoverage() throws {
-        let home = URL(fileURLWithPath: NSHomeDirectory())
-        let bundleURL = home.appendingPathComponent(LibraryDiskScanner.defaultBundleRelativePath)
-        guard FileManager.default.fileExists(atPath: bundleURL.path) else {
-            // Expected in CI; skip silently.
-            return
-        }
         let root = try LibraryDiskScanner.scan()
         #expect(
             root.leafCount >= 1000,

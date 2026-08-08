@@ -19,17 +19,16 @@ import Testing
 // Logic Pro), so this guard is most useful on developer machines and
 // any future macOS runner with Logic available.
 
-private func logicProInstalled() -> Bool {
-    return FileManager.default.fileExists(atPath: "/Applications/Logic Pro.app")
-}
+/// Evaluated once, and used as an `.enabled(if:)` trait rather than as a guard
+/// inside each body. A body that returns early on a missing Logic install is
+/// reported as a passing test, so on a host without Logic these two would have
+/// claimed to pin the post-fix behaviour while asserting nothing at all.
+private let logicProInstalled: Bool = FileManager.default.fileExists(
+    atPath: "/Applications/Logic Pro.app"
+)
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(codexSeatbeltProcessInspectionDisabled, .enabled(if: logicProInstalled))
 func testProcessUtilsBundleURLResolvesWithoutAppKitRunloop() async {
-    guard logicProInstalled() else {
-        // CI without Logic Pro — the assertion below would fail on
-        // missing bundle, not on the bug under test. Skip cleanly.
-        return
-    }
 
     // Run the lookup on a detached cooperative-pool task — no main
     // runloop, no AppKit context. Pre-fix this returned nil because
@@ -44,10 +43,8 @@ func testProcessUtilsBundleURLResolvesWithoutAppKitRunloop() async {
     #expect(url?.lastPathComponent == "Logic Pro.app")
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(codexSeatbeltProcessInspectionDisabled, .enabled(if: logicProInstalled))
 func testProcessUtilsLogicProVersionResolvesOffMain() async {
-    guard logicProInstalled() else { return }
-
     let version: String? = await Task.detached(priority: .userInitiated) {
         ProcessUtils.logicProVersion(runtime: .production)
     }.value
