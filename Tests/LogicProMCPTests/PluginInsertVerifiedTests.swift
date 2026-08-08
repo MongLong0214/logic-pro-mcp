@@ -682,7 +682,7 @@ private func insertParams(
 // MARK: - #425: coordinate-free slot-popup navigation
 
 private let slotPopupOpenCustomAction =
-    "Name:Open plug-in menu with legacy plug-ins\\nTarget:0x0\\nSelector:(null)"
+    "\"Name:Open plug-in menu with legacy plug-ins\nTarget:0x0\nSelector:(null)\""
 
 /// Captures calls that pass through the injected AX action runtime seam. The
 /// tests run sequentially, so this deliberately lightweight recorder is safe.
