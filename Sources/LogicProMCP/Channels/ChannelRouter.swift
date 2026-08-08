@@ -259,7 +259,7 @@ actor ChannelRouter {
         // on a structured error code instead of regex-matching a free-form
         // string. Uses the dedicated `.channelsExhausted` error rather than
         // `.portUnavailable` (which is reserved for the bypass-op "this
-        // channel's port is unwired" semantic;
+        // channel's port is unwired" semantic; see
         // v3.4.5-rc5). `last_error` carries the original chain detail for
         // debugging; `operation` lets the harness route to per-op recovery.
         return .error(HonestContract.encodeStateC(
