@@ -8,7 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-(No unreleased changes yet.)
+### Changed — plugin-insert actuation
+
+- **#425 current behavior supersedes the 3.13.0 #425 entry below.** Slot-open performs the measured custom action; category and leaf selection use `AXPick`. `LOGIC_MCP_INSERT_COORD_FREE` / `insertCoordFree` is removed, not a kill switch. The coordinate click remains only as a fallback when the custom action is absent, and that fallback is recorded in the trace.
 
 ---
 
@@ -18,7 +20,7 @@ Small follow-on release: the coordinate-free actuation campaign now covers plugi
 
 ### Changed — coordinate-free actuation
 
-- **`logic_plugins.insert_verified` leaf selection is coordinate-free by default.** The direct/search leaf-selection path now presses the target plugin's entry in the AX-children format submenu (`AXPress`) instead of a synthetic coordinate click; `LOGIC_MCP_INSERT_COORD_FREE=0` is the kill-switch back to the coordinate path. The recursive category-hover fallback stays coordinate-only by governed waiver — reachable in principle but unexercised in practice for the three supported plugins — and the response's `select_trace.leaf_select_coord_free` is sourced from the winning strategy rather than the raw flag, so a recursive win still honestly reports `false` even with the flag on. Slot-open remains a coordinate click (AXPress was live-probed and rejected: it either no-ops or opens an `AXShowMenu` tracking loop that wedges Logic). A DEBUG-only test seam deterministically exercises the honest `commit_strategy` on a forced post-commit timeout; it is compiled out of release builds. ([#425](https://github.com/MongLong0214/logic-pro-mcp/issues/425))
+- **`logic_plugins.insert_verified` leaf selection is coordinate-free by default.** The direct/search leaf-selection path now presses the target plugin's entry in the AX-children format submenu (`AXPress`) instead of a synthetic coordinate click; `LOGIC_MCP_INSERT_COORD_FREE=0` is the kill-switch back to the coordinate path. The recursive category-hover fallback stays coordinate-only by governed waiver — reachable in principle but unexercised in practice for the three supported plugins — and the response's `select_trace.leaf_select_coord_free` is sourced from the winning strategy rather than the raw flag, so a recursive win still honestly reports `false` even with the flag on. Slot-open remains a coordinate click (AXPress was live-probed and rejected: it either no-ops or opens an `AXShowMenu` tracking loop that wedges Logic). A DEBUG-only test seam deterministically exercises the honest `commit_strategy` on a forced post-commit timeout; it is compiled out of release builds. ([#425](https://github.com/MongLong0214/logic-pro-mcp/issues/425)) (Historical 3.13.0 behavior; superseded for current code by the Unreleased #425 entry above.)
 
 ### Fixed
 

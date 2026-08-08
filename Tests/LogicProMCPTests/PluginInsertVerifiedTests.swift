@@ -706,6 +706,10 @@ private final class AXActionRecorder: @unchecked Sendable {
     func contains(elementID: Int, action: String) -> Bool {
         calls.contains { $0.elementID == elementID && $0.action == action }
     }
+
+    func count(elementID: Int, action: String) -> Int {
+        calls.count { $0.elementID == elementID && $0.action == action }
+    }
 }
 
 private let coordFreeExpectedPath = "/Users/me/Music/CoordFree425 copy.logicx"
@@ -714,6 +718,7 @@ private struct SlotPopupInsertFixture {
     let runtime: AXLogicProElements.Runtime
     let slotItemID: Int
     let categoryItemID: Int?
+    let nonMatchingLeafItemID: Int?
     let leafItemID: Int
     let actions: AXActionRecorder
 }
@@ -727,6 +732,7 @@ private func makeSlotPopupInsertFixture(
     popupInitiallyVisible: Bool = false,
     slotOpenResult: Bool = true,
     includeCategory: Bool = false,
+    includeNonMatchingLeaf: Bool = false,
     includeFormatLeaf: Bool = false,
     revealCategorySubmenuOnPick: Bool = true,
     categoryPickResult: Bool = true,
@@ -746,6 +752,7 @@ private func makeSlotPopupInsertFixture(
     let searchField = b.element(9009)
     let categoryItem = includeCategory ? b.element(9010) : nil
     let categoryMenu = includeCategory ? b.element(9011) : nil
+    let nonMatchingLeafItem = includeNonMatchingLeaf ? b.element(9016) : nil
     let formatLeafItem = includeFormatLeaf ? b.element(9014) : nil
     let formatMenu = includeFormatLeaf ? b.element(9015) : nil
 
@@ -788,6 +795,10 @@ private func makeSlotPopupInsertFixture(
     b.setAttribute(popupMenu, kAXRoleAttribute as String, kAXMenuRole as String)
     b.setAttribute(popupMenu, kAXPositionAttribute as String, axPoint(410, 320))
     b.setAttribute(popupMenu, kAXSizeAttribute as String, axSize(240, 420))
+    if let nonMatchingLeafItem {
+        b.setAttribute(nonMatchingLeafItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        b.setAttribute(nonMatchingLeafItem, kAXTitleAttribute as String, "Compressor")
+    }
     if let categoryItem, let categoryMenu {
         b.setAttribute(categoryItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
         b.setAttribute(categoryItem, kAXTitleAttribute as String, "Utility")
@@ -796,9 +807,9 @@ private func makeSlotPopupInsertFixture(
         // but starts invisible until the category action's observed effect.
         b.setChildren(categoryMenu, [gainItem])
         b.setChildren(categoryItem, [categoryMenu])
-        b.setChildren(popupMenu, [searchField, categoryItem])
+        b.setChildren(popupMenu, [searchField] + (nonMatchingLeafItem.map { [$0] } ?? []) + [categoryItem])
     } else {
-        b.setChildren(popupMenu, [searchField, gainItem])
+        b.setChildren(popupMenu, [searchField] + (nonMatchingLeafItem.map { [$0] } ?? []) + [gainItem])
     }
 
     // App: AXWindows for mainWindow; children so slotPopupMenu's app-descent finds
@@ -810,6 +821,7 @@ private func makeSlotPopupInsertFixture(
     let slotKey = b.elementID(slot)
     let leafKey = formatLeafItem.map(b.elementID) ?? b.elementID(gainItem)
     let categoryKey = categoryItem.map(b.elementID)
+    let nonMatchingLeafKey = nonMatchingLeafItem.map(b.elementID)
     let actions = AXActionRecorder()
     let pickAction = kAXPickAction as String
     let runtime = b.makeLogicRuntime(
@@ -852,6 +864,7 @@ private func makeSlotPopupInsertFixture(
         runtime: runtime,
         slotItemID: slotKey,
         categoryItemID: categoryKey,
+        nonMatchingLeafItemID: nonMatchingLeafKey,
         leafItemID: leafKey,
         actions: actions
     )
@@ -928,6 +941,25 @@ private func run425Insert(
     let trace = try #require(obj["select_trace"] as? [String: Any])
     let strategy = try #require(trace["winning_strategy"] as? String)
     #expect(strategy == "slot_popup_recursive_exact_leaf")
+}
+
+@Test func testPlugin425RecursiveWalkNeverPicksNonMatchingLeafBeforeCategory() async throws {
+    let fixture = makeSlotPopupInsertFixture(
+        includeCategory: true,
+        includeNonMatchingLeaf: true,
+        mountGainOnLeafPick: true
+    )
+    let obj = await run425Insert(
+        fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction]
+    )
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "A")
+    let categoryID = try #require(fixture.categoryItemID)
+    let nonMatchingLeafID = try #require(fixture.nonMatchingLeafItemID)
+    #expect(fixture.actions.contains(elementID: categoryID, action: kAXPickAction as String))
+    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+    #expect(fixture.actions.count(elementID: nonMatchingLeafID, action: kAXPickAction as String) == 0)
 }
 
 @Test func testPlugin425LeafPickFailureProceedsWhenInventoryDiffIsObserved() async throws {

@@ -23,6 +23,15 @@ struct Issue425ContractTests {
         return texts
     }
 
+    private static func markdownSection(named heading: String, in markdown: String) -> String? {
+        let lines = markdown.components(separatedBy: .newlines)
+        guard let headingIndex = lines.firstIndex(of: heading) else { return nil }
+
+        return lines[(headingIndex + 1)...]
+            .prefix { !$0.hasPrefix("## ") }
+            .joined(separator: "\n")
+    }
+
     @Test("#425 flag is absent from Sources or has a production consumer")
     func insertCoordinateFreeFlagIsNotInert() throws {
         let sources = try Self.sourceTexts()
@@ -55,5 +64,29 @@ struct Issue425ContractTests {
         #expect(!ticket.contains("LOGIC_MCP_INSERT_COORD_FREE"))
         #expect(ticket.contains("slot-open uses the exact custom action"))
         #expect(ticket.contains("`AXPick` for category and leaf selection"))
+    }
+
+    @Test("#425 changelog supersedes the removed coordinate-free control")
+    func changelogSupersedesRemovedCoordinateFreeControl() throws {
+        let changelog = try scriptContents("CHANGELOG.md")
+        let unreleased = try #require(
+            Self.markdownSection(named: "## [Unreleased]", in: changelog),
+            "CHANGELOG.md must contain an ## [Unreleased] section"
+        )
+        let hasRemovedControlToken = Self.inertFlagTokens.contains { changelog.contains($0) }
+        let unreleasedIsNonEmpty = !unreleased.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let unreleasedStatesRemoval = unreleased.contains("LOGIC_MCP_INSERT_COORD_FREE")
+            && unreleased.contains("insertCoordFree")
+            && unreleased.localizedCaseInsensitiveContains("removed")
+
+        #expect(unreleasedIsNonEmpty, "CHANGELOG.md ## [Unreleased] must not be empty")
+        #expect(
+            !unreleased.contains("(No unreleased changes yet.)"),
+            "CHANGELOG.md ## [Unreleased] must describe this branch's changes"
+        )
+        #expect(
+            !hasRemovedControlToken || unreleasedStatesRemoval,
+            "Historical coordinate-free control tokens require ## [Unreleased] to state their removal"
+        )
     }
 }

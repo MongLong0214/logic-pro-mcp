@@ -2507,12 +2507,14 @@ extension AccessibilityChannel {
         for item in items {
             guard let label = popupMenuItemLabel(item, runtime: runtime),
                   !popupMenuItemMatches(item, displayName: displayName, runtime: runtime),
-                  menuItemEnabled(item, runtime: runtime) else {
+                  menuItemEnabled(item, runtime: runtime),
+                  axChildMenu(of: item, runtime: runtime) != nil else {
                 continue
             }
-            // AXPick reveals Logic's already-attached AXMenu child without a
-            // hover. Its return code is untrustworthy, so only the observed menu
-            // visibility below is allowed to choose whether we descend.
+            // Only an item with Logic's already-attached AXMenu child is a proven
+            // category. AXPick reveals that child without a hover. Its return code
+            // is untrustworthy, so only the observed menu visibility below is
+            // allowed to choose whether we descend.
             _ = AXHelpers.performAction(item, kAXPickAction as String, runtime: runtime)
             try? await Task.sleep(for: .milliseconds(140))
             guard let submenu = visibleSubmenu(of: item, runtime: runtime) else {
