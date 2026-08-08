@@ -2,6 +2,14 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
+/// Whether this machine has the Logic factory Library installed. Used as an
+/// `.enabled(if:)` trait so an absent Library is reported as a skipped test
+/// rather than as a body that returns early and counts as a pass.
+private let installedLogicLibraryExists: Bool = FileManager.default.fileExists(
+    atPath: URL(fileURLWithPath: NSHomeDirectory())
+        .appendingPathComponent(LibraryDiskScanner.defaultBundleRelativePath).path
+)
+
 /// v3.0.5 — filesystem-backed library scan tests. Uses a real temp dir
 /// populated with fixture `.patch` bundles (empty directories suffixed with
 /// `.patch`) so the production code path under `FileManager.default` is
@@ -225,14 +233,9 @@ struct LibraryDiskScannerTests {
     /// on the machine. Verifies that a full scan returns a clinically
     /// implausible-low count (e.g. under 1000 leaves) does NOT ship — the
     /// whole point of v3.0.5 is to fix the 345-leaf undercount.
-    @Test("local-machine integration: factory Library reports at least 1000 leaves when present")
+    @Test("local-machine integration: factory Library reports at least 1000 leaves when present",
+          .enabled(if: installedLogicLibraryExists))
     func scanLocalFactoryLibraryReportsFullCoverage() throws {
-        let home = URL(fileURLWithPath: NSHomeDirectory())
-        let bundleURL = home.appendingPathComponent(LibraryDiskScanner.defaultBundleRelativePath)
-        guard FileManager.default.fileExists(atPath: bundleURL.path) else {
-            // Expected in CI; skip silently.
-            return
-        }
         let root = try LibraryDiskScanner.scan()
         #expect(
             root.leafCount >= 1000,
@@ -540,53 +543,78 @@ struct LibraryDiskScannerTests {
         #expect(kit.path == "Acoustic Drums/Multi-Channel Kits/8-Bit+")
     }
 
-    /// v3.0.6 contract assertion: every emitted top-level category must exist
-    /// in the v3.0.4 AX Panel snapshot's `categories` array. This is the
-    /// "mapping bug detector" — if a new disk taxonomy slips through without
-    /// a `diskToPanel` entry, this test starts failing.
-    @Test("scan result: every emitted category exists in Resources/library-inventory.json Panel snapshot")
-    func everyEmittedCategoryExistsInPanelInventory() throws {
-        let home = URL(fileURLWithPath: NSHomeDirectory())
-        let bundleURL = home.appendingPathComponent(LibraryDiskScanner.defaultBundleRelativePath)
-        guard FileManager.default.fileExists(atPath: bundleURL.path) else {
-            // Expected in CI; skip silently.
-            return
-        }
+    /// The v3.0.4 AX Panel inventory, as the sixteen category names the Panel
+    /// exposes. This lives here, in a committed file, because the machine-local
+    /// `Resources/library-inventory.json` it used to be read from is matched by
+    /// `.gitignore` and therefore can never be a shared oracle: on CI it is
+    /// absent, and on a developer machine it is whatever the last AX probe left
+    /// behind, which is not a Panel snapshot at all.
+    private static let panelCategoriesV304: Set<String> = [
+        "Bass", "Acoustic Drums", "Electronic Drums", "Percussion",
+        "Guitar", "Acoustic Piano", "Clavinet", "Electric Piano",
+        "Mellotron", "Organ", "Mallet", "Studio Horns",
+        "Studio Strings", "Synthesizer", "Orchestral", "World",
+    ]
 
-        // Load Panel snapshot from committed resource. Scan-result
-        // categories must be a subset.
-        let panelCategories = try loadPanelCategoriesFromResource()
-        guard !panelCategories.isEmpty else {
-            // Fixture missing — skip rather than misreport.
-            return
-        }
-
-        let root = try LibraryDiskScanner.scan()
-        for cat in root.categories {
-            #expect(
-                panelCategories.contains(cat),
-                "Disk scan emitted `\(cat)` which is not in the v3.0.4 AX Panel snapshot (\(panelCategories.sorted()))"
-            )
-        }
+    /// The mapping tables are the only two ways a category can be emitted, so
+    /// their combined range **is** the set of categories the scanner can
+    /// produce. Pinning that range against the Panel inventory catches a table
+    /// edit that invents a category `selectPath` could never navigate to —
+    /// which is the failure the old subset check was named for but could not
+    /// detect, because a path with no table entry is dropped rather than
+    /// emitted under its raw disk name.
+    @Test("the mapping tables can only ever emit v3.0.4 Panel categories")
+    func mappingTableRangeEqualsPanelInventory() {
+        let emittable = Set(LibraryDiskScanner.diskToPanel.values)
+            .union(LibraryDiskScanner.identityCategories)
+        #expect(
+            emittable == Self.panelCategoriesV304,
+            """
+            emittable-but-not-Panel: \(emittable.subtracting(Self.panelCategoriesV304).sorted()); \
+            Panel-but-unreachable: \(Self.panelCategoriesV304.subtracting(emittable).sorted())
+            """
+        )
     }
 
-    private func loadPanelCategoriesFromResource() throws -> Set<String> {
-        // Tests run from the package root by default; try a couple of
-        // candidate paths so either a raw `swift test` invocation or one
-        // launched from a subdirectory still resolves the resource.
-        let fm = FileManager.default
-        let candidates = [
-            fm.currentDirectoryPath + "/Resources/library-inventory.json",
-            fm.currentDirectoryPath + "/../Resources/library-inventory.json",
-        ]
-        for path in candidates where fm.fileExists(atPath: path) {
-            let data = try Data(contentsOf: URL(fileURLWithPath: path))
-            if let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let cats = obj["categories"] as? [String] {
-                return Set(cats)
-            }
-        }
-        return []
+    /// The real mapping-drift detector, and the one the old test could not be:
+    /// when Logic ships a new sub-taxonomy under a category the table already
+    /// knows, the scanner drops it. A silent drop costs the user library
+    /// content with no signal, so the drop must be counted and reported.
+    ///
+    /// This runs everywhere, including CI, because it drives a fixture rather
+    /// than the installed Library.
+    @Test("a new sub-taxonomy under a known parent is dropped, counted, and reported")
+    func newSubTaxonomyIsReportedNotSilentlyDropped() throws {
+        let (bundle, tmp) = try makeFixture(tree: [
+            "Keyboard/Acoustic Piano/Grand.patch",
+            "Keyboard/Harpsichord/Flemish.patch",
+        ])
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let root = try LibraryDiskScanner.scan(bundleURL: bundle)
+
+        #expect(root.categories == ["Acoustic Piano"])
+        #expect(!root.categories.contains("Harpsichord"))
+        #expect(root.candidatePatchCount == 2)
+        #expect(root.nonApplicablePatchCount == 1)
+        #expect(root.scanWarnings.contains { warning in
+            warning.contains("unmapped_patch")
+                && warning.contains("Keyboard/Harpsichord/Flemish")
+                && warning.contains("no_panel_taxonomy_route")
+        })
+    }
+
+    /// The subset property on the installed Library. It is environment-bound,
+    /// so the condition is a trait: where no Library exists the framework
+    /// reports the test as skipped instead of running a body that returns
+    /// early. An early return reads as a pass, which is how the previous
+    /// version of this test asserted nothing on CI for its whole life.
+    @Test("installed Library emits no category outside the Panel inventory",
+          .enabled(if: installedLogicLibraryExists))
+    func installedLibraryEmitsOnlyPanelCategories() throws {
+        let root = try LibraryDiskScanner.scan()
+        let unexpected = Set(root.categories).subtracting(Self.panelCategoriesV304)
+        #expect(unexpected.isEmpty, "emitted outside the Panel inventory: \(unexpected.sorted())")
     }
 
     @Test("scan handles symlink cycles via visited-set guard (no runaway recursion)")

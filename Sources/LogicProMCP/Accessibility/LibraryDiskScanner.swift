@@ -69,7 +69,11 @@ enum LibraryDiskScanner {
     /// 1-segment Panel path `Acoustic Drums/...` before the fallback
     /// `Drums & Percussion` → (no-match) check runs.
     ///
-    /// Verified against `Resources/library-inventory.json` (AX panel snapshot).
+    /// The combined range of this table and `identityCategories` is pinned
+    /// against the v3.0.4 Panel inventory by `LibraryDiskScannerTests`. It is
+    /// not verified against `Resources/library-inventory.json`: that path is
+    /// matched by `.gitignore`, so it is absent on CI and is a stale local AX
+    /// probe artifact anywhere else.
     /// Panel categories: Bass, Acoustic Drums, Electronic Drums, Percussion,
     /// Guitar, Acoustic Piano, Clavinet, Electric Piano, Mellotron, Organ,
     /// Mallet, Studio Horns, Studio Strings, Synthesizer, Orchestral, World.
