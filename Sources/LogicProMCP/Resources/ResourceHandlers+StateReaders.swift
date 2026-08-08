@@ -130,7 +130,7 @@ extension ResourceHandlers {
     ///      came up empty; "project_file" if poller never ran.
     ///   3. Empty array. Source: "default".
     ///
-    /// Inspector contamination guard (boomer P0 / E10): when AX traversal
+    /// Inspector contamination guard: when AX traversal
     /// returns >= 3 entries whose names ALL end in `:`, treat the data as the
     /// Inspector subtree leaking through (Logic Pro 12.x failure mode where a
     /// non-arrange panel is focused). Drop those rows and fall to Tier 2/3.
@@ -406,7 +406,7 @@ extension ResourceHandlers {
         let cacheFresh = projectFetchedAt > .distantPast || cached.lastUpdated > .distantPast
         let transportFresh = cachedTransport.lastUpdated > .distantPast
 
-        // Per-field merge (boomer P0): the existing AX `defaultGetProjectInfo`
+        // Per-field merge: the existing AX `defaultGetProjectInfo`
         // populates ONLY `name` + `lastUpdated`; tempo / timeSignature /
         // trackCount stay at struct defaults (120, "4/4", 0). A whole-record
         // "cache fresh wins" rule would therefore mask the file's correct

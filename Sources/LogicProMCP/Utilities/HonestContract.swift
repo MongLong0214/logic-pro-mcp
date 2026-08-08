@@ -78,7 +78,7 @@ enum HonestContract {
         /// candidate. Distinct from `.portUnavailable` (a specific channel's
         /// port is missing) and `.logicNotRunning` (a single channel's
         /// process gone): exhaustion is the chain-level aggregate signal.
-        /// v3.4.5-rc5 (Boomer BOOMER-6 / U — fixes semantic overload where
+        /// v3.4.5-rc5 (to fix semantic overload where
         /// every router fallthrough was being mis-classified as
         /// `port_unavailable` regardless of root cause).
         case channelsExhausted = "channels_exhausted"

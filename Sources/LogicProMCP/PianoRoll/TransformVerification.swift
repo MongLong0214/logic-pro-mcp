@@ -6,7 +6,8 @@ enum TransformVerdict: Equatable, Sendable {
 
 func verifyTransform(
     plan: RegionTransformPlan,
-    observedAfter: MIDIRegionNoteSnapshot
+    observedAfter: MIDIRegionNoteSnapshot,
+    expected: IndependentExpectedProof
 ) -> TransformVerdict {
     guard observedAfter.complete else {
         return .stateBUnverified(
@@ -20,30 +21,49 @@ func verifyTransform(
     guard !overflow, observedAfter.projectEpoch == expectedGeneration else {
         return .stateBUnverified(reason: "Post-write generation transition is not verified")
     }
+    guard let independent = expected.independentPayload else {
+        return .stateBUnverified(reason: "expected must carry a sealed independent provenance proof")
+    }
+    guard independent.rootID != observedAfter.conversionPipelineID else {
+        return .stateBUnverified(reason: "expected root shares the observed conversion pipeline")
+    }
+    guard independent.region == observedAfter.regionReference else {
+        return .stateBUnverified(reason: "expected proof is not bound to the observed region")
+    }
+    guard independent.contentBinding == midiRegionNoteDigest(independent.notes, ppq: independent.ppq) else {
+        return .stateBUnverified(reason: "expected proof content binding is invalid")
+    }
+    guard observedAfter.ppq > 0, independent.ppq > 0 else {
+        return .stateBUnverified(reason: "PPQ must be positive")
+    }
 
-    let expected = sortedNotes(plan.predictedAfter)
-    let observed = sortedNotes(observedAfter.notes)
-    guard observed != expected else { return .stateA }
+    let actual = canonicalize(observedAfter.notes, ppq: observedAfter.ppq)
+    guard let normalized = normalizePPQ(
+        independent.notes,
+        from: independent.ppq,
+        to: observedAfter.ppq
+    ) else {
+        return .stateBUnverified(reason: "PPQ normalization overflow")
+    }
+    let wanted = canonicalize(normalized, ppq: observedAfter.ppq)
+    guard actual != wanted else {
+        return .stateBUnverified(
+            reason: "R1 grants no positive match; independent positive verification is R2 live-ingestion"
+        )
+    }
 
-    var unmatchedExpected = expected
-    let unexpected = observed.filter { note in
-        guard let index = unmatchedExpected.firstIndex(of: note) else { return true }
-        unmatchedExpected.remove(at: index)
-        return false
+    var unmatched = wanted
+    var unexpected: [MIDINoteEvent] = []
+    for note in actual {
+        if let index = unmatched.firstIndex(of: note) {
+            unmatched.remove(at: index)
+        } else {
+            unexpected.append(note)
+        }
     }
     return .mismatch(unexpected: unexpected)
 }
 
 func compensationNotes(plan: RegionTransformPlan) -> [MIDINoteEvent] {
     plan.beforeSnapshot.notes
-}
-
-private func sortedNotes(_ notes: [MIDINoteEvent]) -> [MIDINoteEvent] {
-    notes.sorted { lhs, rhs in
-        if lhs.pitch != rhs.pitch { return lhs.pitch < rhs.pitch }
-        if lhs.startTicks != rhs.startTicks { return lhs.startTicks < rhs.startTicks }
-        if lhs.durationTicks != rhs.durationTicks { return lhs.durationTicks < rhs.durationTicks }
-        if lhs.velocity != rhs.velocity { return lhs.velocity < rhs.velocity }
-        return lhs.channel < rhs.channel
-    }
 }

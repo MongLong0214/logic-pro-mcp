@@ -885,7 +885,7 @@ private func runChannelEQFixture(
     #expect(!((obj["write_attempted"] as? Bool)!))
 }
 
-// MARK: - #234 zero-slot slot-addressing diagnostics (AC-5 / boomer R2-#2)
+// MARK: - #234 zero-slot slot-addressing diagnostics (AC-5)
 
 @Test func testSetParamVerifiedZeroSlotsStateCDistinctDiagnostics() async {
     // A zero-slot (Master-shaped) target strip through set_param_verified's slot-

@@ -1079,16 +1079,34 @@ func testE2EResourceHealthMatchesToolHealth() async throws {
 @Test(codexSeatbeltProcessInspectionDisabled)
 func testE2EConcurrentMixedToolsAndResourcesAreSafe() async throws {
     let h = await makeE2EHandlers()
-    try await withThrowingTaskGroup(of: Void.self) { group in
-        for i in 0..<10 {
+    var toolResults: [String] = []
+    var resourceResults: [String] = []
+    try await withThrowingTaskGroup(of: (isTool: Bool, text: String).self) { group in
+        for _ in 0..<10 {
             group.addTask {
-                let _ = await e2eCall(h, tool: "logic_system", command: "health")
+                (true, e2eText(await e2eCall(h, tool: "logic_system", command: "health")))
             }
             group.addTask {
-                let _ = try await h.readResource(.init(uri: "logic://system/health"))
+                (false, e2eResourceText(try await h.readResource(.init(uri: "logic://system/health"))))
             }
         }
-        try await group.waitForAll()
+        for try await result in group {
+            if result.isTool {
+                toolResults.append(result.text)
+            } else {
+                resourceResults.append(result.text)
+            }
+        }
+    }
+    #expect(toolResults.count == 10)
+    #expect(resourceResults.count == 10)
+    for text in toolResults {
+        let json = try #require(e2eJSON(text))
+        #expect(json["logic_pro_running"] != nil)
+    }
+    for text in resourceResults {
+        let json = try #require(e2eJSON(text))
+        #expect(json["logic_pro_running"] != nil)
     }
 }
 

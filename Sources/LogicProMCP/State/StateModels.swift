@@ -145,8 +145,7 @@ struct MarkerState: Sendable, Codable, Identifiable, Equatable {
     var positionSource: PositionSource
 
     /// `positionSource` 기본값은 `.unknown` — 호출 site가 명시적으로 `.parser`/
-    /// `.fallback` 을 지정하지 않으면 silent false provenance 발생을 방지한다
-    /// (boomer Phase G P2-1).
+    /// `.fallback` 을 지정하지 않으면 silent false provenance 발생을 방지한다.
     init(id: Int, name: String, position: String, positionSource: PositionSource = .unknown) {
         self.id = id
         self.name = name
@@ -155,7 +154,7 @@ struct MarkerState: Sendable, Codable, Identifiable, Equatable {
     }
 
     // v3.2 — Codable backward compat. v3.1.x snapshot 에 positionSource field 없음 →
-    // `.unknown` 으로 decode (false provenance 차단; boomer Phase C P1-2).
+    // `.unknown` 으로 decode (false provenance 차단).
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try c.decode(Int.self, forKey: .id)

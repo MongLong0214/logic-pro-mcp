@@ -169,7 +169,7 @@ private func parseEnvelope(_ msg: String) -> [String: Any]? {
     // channel reports available:false (the specific port for that op is
     // missing). When a non-bypass op exhausts every channel in its chain,
     // the wire surfaces `channels_exhausted` instead — the two States are
-    // now semantically distinct (Boomer BOOMER-6 / U, v3.4.5-rc5):
+    // now semantically distinct (v3.4.5-rc5):
     //   - portUnavailable: scoped to a bypass op whose dedicated channel
     //     reports its port is unwired (e.g. KeyCmd port not published).
     //   - channelsExhausted: chain-level aggregate when no channel could
