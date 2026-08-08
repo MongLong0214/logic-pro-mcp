@@ -93,7 +93,7 @@ import Foundation
     // No channels registered → error but no crash. v3.4.5-rc5 (Issues
     // #10/#11): the router now wraps chain exhaustion in a HC State C
     // `channels_exhausted` envelope (semantically distinct from
-    // `port_unavailable` per Boomer BOOMER-6 / U) instead of the legacy
+    // `port_unavailable`) instead of the legacy
     // free-form "All channels exhausted" string so harnesses can branch
     // on a stable error code.
     #expect(!result.isSuccess)

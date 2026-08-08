@@ -184,7 +184,7 @@ private actor SlowSendMCUTransport: MCUTransportProtocol {
     #expect(obj["mcu_last_feedback_age_ms"] is NSNull)
 }
 
-// v3.4.5-rc5 (Boomer BOOMER-6 / B2) — regression guard for the TOCTOU
+// v3.4.5-rc5 — regression guard for the TOCTOU
 // race that previously let `pollFaderEcho` pair an old value with a new
 // timestamp and false-positive State A. The fix routes both reads
 // through `StateCache.getFaderEchoSnapshot` so they happen in the same
@@ -248,7 +248,7 @@ private actor SlowSendMCUTransport: MCUTransportProtocol {
 }
 
 @Test func testMCUDiagnosticsClampsNegativeAgeFromClockJump() async {
-    // Boomer P2 (BOOMER-6 / E): if the system clock slews backwards between
+    // If the system clock slews backwards between
     // the feedback timestamp and the diagnostic read, `Date.timeIntervalSince`
     // returns a negative interval. The wire format must never carry a
     // negative age — clamp to 0 so harnesses can rely on the field being a

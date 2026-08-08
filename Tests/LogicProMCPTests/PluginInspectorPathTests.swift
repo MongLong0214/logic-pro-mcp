@@ -113,7 +113,7 @@ struct PluginInspectorPathTests {
     }
 
     @Test func resolveNegativeDisambigIndexReturnsNil() throws {
-        // Regression: negative index must not crash (P0 from Phase 6 boomer review)
+        // Regression: negative index must not crash.
         let hops = try PluginInspector.resolveMenuPath("Synth/Pad[-1]", in: fixture())
         #expect(hops == nil)
     }

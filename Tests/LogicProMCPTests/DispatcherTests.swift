@@ -3198,7 +3198,7 @@ private actor SelectiveFailChannel: Channel {
     #expect(mcuOps.isEmpty)
     expectExecutedOps(axOps, equals: [
         ("transport.goto_position", ["position": "12.1.1.1"]),
-        // v3.1.10 (boomer P1-1) — both index- and name-based goto_marker
+        // v3.1.10: both index- and name-based goto_marker
         // now resolve from cache and route via transport.goto_position
         // using the marker's `position` string (chorus at 17.1.1.1).
         ("transport.goto_position", ["position": "17.1.1.1"]),

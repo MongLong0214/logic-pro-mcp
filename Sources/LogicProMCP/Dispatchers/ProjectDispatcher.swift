@@ -949,7 +949,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
     /// commands. Splits the prior single `executed` line into three signals
     /// a SIEM can filter on.
     ///
-    /// **Contract — v3.4.1 (Boomer P2-3):** `executed` is emitted
+    /// **Contract — v3.4.1:** `executed` is emitted
     /// **immediately before** `router.route(...)` fires, not after. This
     /// records *invocation intent* rather than *outcome*. The reasons:
     ///   - Outcome lives in the channel response (success / hard error).
