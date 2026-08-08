@@ -89,7 +89,7 @@ enum FeatureFlags: Sendable {
     }
 
     /// #425 (Option B): coordinate-free plugin-insert LEAF selection (AXPress over an
-    /// AX-children format submenu) in place of moveElementCenter/clickElementCenter.
+    /// AX-children format submenu) in place of coordinate actuation.
     /// Live-verified during the spike, so promoted from opt-in to DEFAULT ON: the
     /// variable is now a kill-switch — read with `!= "0"` because an absent variable
     /// must mean ON. Only the exact string "0" rolls back to the legacy coordinate
