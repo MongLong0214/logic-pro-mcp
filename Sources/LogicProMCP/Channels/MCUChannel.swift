@@ -102,7 +102,7 @@ actor MCUChannel: Channel {
         let pollIntervalNs: UInt64 = 25_000_000
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
         while Date() < deadline {
-            // v3.4.5-rc5 (Boomer BOOMER-6 / B2): read volume + timestamp
+            // v3.4.5-rc5: read volume + timestamp
             // in a single actor turn. Two separate awaits left a TOCTOU
             // window where a concurrent `updateFader` could pair an old
             // value with a new timestamp and false-positive State A.
@@ -159,7 +159,7 @@ actor MCUChannel: Channel {
         let pollIntervalNs: UInt64 = 25_000_000
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
         while Date() < deadline {
-            // v3.4.5-rc5 (Boomer BOOMER-6 / B2): atomic (pan, updatedAt)
+            // v3.4.5-rc5: atomic (pan, updatedAt)
             // snapshot — same TOCTOU rationale as pollFaderEcho.
             let snapshot = await cache.getPanEchoSnapshot(strip: strip)
             if let observed = snapshot.pan, abs(observed - target) <= tolerance {

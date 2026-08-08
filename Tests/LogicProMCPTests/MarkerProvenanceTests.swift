@@ -23,7 +23,7 @@ func markerState_codableRoundTrip(_ source: PositionSource) throws {
 }
 
 // v3.1.x cache snapshot 디코딩 — positionSource field 없음 → .unknown
-// (Boomer P1-2: false provenance 차단).
+// false provenance 차단.
 @Test("MarkerState legacy snapshot decode → .unknown")
 func markerState_legacySnapshot_decodesAsUnknown() throws {
     let legacyJSON = #"{"id":0,"name":"VOCALS","position":"146.4.4.240"}"#

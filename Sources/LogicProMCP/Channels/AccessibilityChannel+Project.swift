@@ -257,7 +257,7 @@ extension AccessibilityChannel {
     /// (when 12.2 has dropped the arrangement-area identifier). Pre-v3.1.9
     /// this function did its own copy of the marker-list-window strategy
     /// AND then called `enumerateMarkers(in:)` which redundantly retried
-    /// the same lookup — boomer review flagged the double scrape.
+    /// the same lookup.
     /// v3.1.9-final puts strategy ordering in `enumerateMarkers` and uses
     /// the in-window helper directly only when there is no arrangement
     /// area to pass.

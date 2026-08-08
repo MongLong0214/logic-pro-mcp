@@ -50,7 +50,7 @@ struct NavigateDispatcher: OperationTraceDispatching {
             return await finalizeTrace(finalized, traceID: traceID)
 
         case "goto_marker":
-            // v3.1.10 (boomer P1-1) — resolve the target marker from cache and
+            // v3.1.10: resolve the target marker from cache and
             // navigate via `transport.goto_position` using its `position`
             // string. Pre-v3.1.10 this routed to `nav.goto_marker` →
             // `MIDIKeyCommandsChannel` CC 38 (Logic's "go to next marker"
