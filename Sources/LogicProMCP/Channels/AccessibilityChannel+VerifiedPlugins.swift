@@ -1822,8 +1822,8 @@ extension AccessibilityChannel {
     /// Logic's empty insert slot exposes this custom action verbatim, including
     /// the metadata lines. It opens the legacy-inclusive plug-in popup even
     /// though the AX call can report `cannotComplete` after opening it.
-    private static let slotPopupOpenCustomAction =
-        "\"Name:Open plug-in menu with legacy plug-ins\nTarget:0x0\nSelector:(null)\""
+    static let slotPopupOpenCustomAction =
+        "Name:Open plug-in menu with legacy plug-ins\nTarget:0x0\nSelector:(null)"
 
     /// Production exact-slot popup insert driver. Drives the target insert slot's
     /// own popup menu and returns a structured outcome plus a `select_trace`
