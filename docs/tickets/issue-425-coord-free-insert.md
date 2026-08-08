@@ -1,63 +1,50 @@
-# #425 — Coordinate-free plugin-insert (Option B)
+# #425 — Custom-action slot open and `AXPick` plugin selection
 
-Status: leaf selection coordinate-free by DEFAULT; slot-open and the recursive
-category-hover fallback remain coordinate by **governed waiver**.
+Status: shipped. Plugin insertion opens the requested slot with its measured
+custom action and selects popup categories and leaves with `AXPick`.
 
-## Decision (CEO-ratified Option B)
+## Shipped design
 
-The plugin-insert leaf SELECTION is coordinate-free by default: it reads the
-plugin's format submenu as an AX child and `AXPress`es the preferred-format leaf
-(`pressPopupPluginLeaf`), with no `moveElementCenter`/`clickElementCenter`. The
-`FeatureFlags.insertCoordFree` flag is retained as a **kill-switch** —
-`LOGIC_MCP_INSERT_COORD_FREE=0` rolls back to the legacy coordinate leaf click.
+When the target empty slot exposes the measured opener, slot-open uses the exact custom action name below. It is 70 UTF-8 bytes, has real newline characters, and has no surrounding quote characters:
 
-`clickPopupPluginLeaf` takes an explicit `coordFree` argument (not a direct flag
-read) so the two supported paths (direct / search) honor the flag while the
-recursive fallback can force the coordinate path.
+```
+Name:Open plug-in menu with legacy plug-ins
+Target:0x0
+Selector:(null)
+```
 
-## Governed coordinate waivers (live-probed, documented)
+The custom action's return code is not an acceptance signal. After dispatch, the
+driver polls for the popup and verifies that the popup is anchored to the target
+slot; those observations decide whether slot-open succeeded. On 2026-08-08, AX
+action return codes were observed to disagree with the effect in both directions:
+an action can report failure after opening the popup, and can report success
+without the required observed effect.
 
-1. **Slot-open stays a coordinate click.** Opening a slot's empty picker is a
-   coordinate click on the slot element (`liveExactSlotPopupInsert`). Coord-free
-   alternatives were live-probed and rejected:
-   - `AXPress` on the empty-slot element is a **no-op** — the picker never opens.
-   - `AXShowMenu` opens the picker into an **NSMenu tracking loop that wedges
-     Logic** (AX calls block).
+Popup navigation uses `AXPick` for category and leaf selection. Picking a category
+reveals its already-attached submenu without hover. Picking the exact plugin leaf
+(or its preferred format leaf) likewise ignores the AX action return code. The
+post-insert strip inventory diff decides the leaf outcome: it detects a mount in
+the requested slot, detects and rolls back a stray mount, or produces the
+appropriate fail-closed result when no verified change is observed.
 
-2. **Recursive category-hover fallback stays coordinate.** The recursive
-   discovery path (`clickPopupExactLeafRecursively`) hovers categories with
-   `moveElementCenter` and always selects the matched leaf with `coordFree:
-   false`. It is a **reachable** coordinate-only failure fallback — tried after
-   the direct and search strategies — but is **unreachable in practice for the
-   Release-1 supported plugins**: Gain, Channel EQ, and Compressor
-   (`insertableAllowlist`) are always found by the direct or search strategy, so
-   the recursive branch is a coordinate-only safety net the supported set never
-   exercises.
+## Narrow coordinate compatibility path
 
-## Discriminator honesty
+A coordinate click survives only when the target slot does not expose the custom
+action. This compatibility fallback is recorded in the trace as
+`slot_popup_open_fallback_taken: true` and
+`slot_popup_open_action: "coordinate_fallback"`. The custom-action path records
+`slot_popup_open_fallback_taken: false` and
+`slot_popup_open_action: "custom_action"`, so receipts say which path ran.
 
-`select_trace["leaf_select_coord_free"]` is sourced from the WINNING strategy
-(`SlotPopupPluginClick.coordFree`) via `leafSelectCoordFree(for:)`, not the raw
-flag. A recursive (coordinate-only) win therefore reports `false` even when the
-flag is on, so the receipt can never be falsely pinned to the flag value.
+There is no feature flag or coordinate leaf-selection fallback: category and leaf
+selection are `AXPick` actions, and the observed inventory diff remains the
+acceptance gate.
 
-## Tests
+## Coverage
 
-`Tests/LogicProMCPTests/PluginInsertVerifiedTests.swift` covers, at the helper
-level, leaf press via `kAXPress`, the discriminator's value on a coord-free
-direct win, `coordFree:false` taking the coordinate path (never `AXPress`), and
-fail-closed behavior when `AXPress` is neutralized.
-
-Response-level tests drive the real `defaultInsertVerified` flow (fake AX runtime
-plus a DEBUG-only coordinate-actuation seam, `forceCoordinateActuationForTests`,
-so no CGEvent / physical mouse is issued) and assert the assembled response's
-`select_trace["leaf_select_coord_free"]`:
-
-- a recursive (coordinate-only) win under the flag ON reports `false` — the
-  flag-vs-path divergence is exercised hermetically end to end, not merely
-  structurally;
-- a direct win selects the leaf via `kAXPress` under the flag ON
-  (`leaf_select_coord_free == true`) and via the coordinate primitives under the
-  flag OFF (`false`, with no `kAXPress` on the leaf);
-- an AXPress win that times out post-commit reports an AXPress commit strategy
-  (`commit_strategy`), never a physical/coordinate one.
+`Tests/LogicProMCPTests/PluginInsertVerifiedTests.swift` verifies that the custom
+action can report failure while the observed popup permits progress, that a
+success-looking action with no popup fails closed, that category `AXPick` reveals
+the submenu without hover, and that leaf `AXPick` is accepted only when the
+post-insert inventory observation supports it. It also verifies the trace values
+for both the custom-action and absent-action coordinate-fallback slot-open paths.
