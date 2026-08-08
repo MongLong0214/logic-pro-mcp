@@ -111,7 +111,7 @@ struct PluginWindowLifecycleTests {
     }
 
     @Test func openWindowTimeoutExactBoundaryThrows() async {
-        // Regression: at exactly timeoutMs elapsed, must throw (P2 from Phase 6 boomer review)
+        // Regression: at exactly timeoutMs elapsed, must throw.
         let clock = MutableBox(0)
         let win = wrapper()
         let runtime = PluginWindowRuntime(

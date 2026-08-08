@@ -54,7 +54,7 @@ private let toolText = sharedToolText
 }
 
 @Test func testNavigateDispatcherGotoMarkerByNameUsesCachedMarker() async {
-    // v3.1.10 (boomer P1-1) — name-based goto resolves the marker from
+    // v3.1.10: name-based goto resolves the marker from
     // cache, then routes via `transport.goto_position` using the
     // marker's `position` string. Pre-v3.1.10 routed via the keycmd
     // `nav.goto_marker` (CC 38) which ignores params and just fires the
@@ -80,7 +80,7 @@ private let toolText = sharedToolText
 }
 
 @Test func testNavigateDispatcherGotoMarkerByIndexUsesCachedPosition() async {
-    // v3.1.10 (boomer P1-1) — index-based goto also resolves from cache
+    // v3.1.10: index-based goto also resolves from cache
     // and routes via position when the marker is present.
     let router = ChannelRouter()
     let ax = MockChannel(id: .accessibility)

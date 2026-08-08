@@ -378,7 +378,7 @@ actor StateCache {
         return cs.pan
     }
 
-    /// v3.4.5-rc5 (Boomer BOOMER-6 / B2 — TOCTOU race fix). Atomic snapshot
+    /// v3.4.5-rc5 — TOCTOU race fix. Atomic snapshot
     /// of (volume, faderUpdatedAt) for a strip in a single actor turn.
     ///
     /// Background: `pollFaderEcho` previously read the volume and the
@@ -394,7 +394,7 @@ actor StateCache {
                 faderUpdatedAt[strip])
     }
 
-    /// v3.4.5-rc5 (Boomer BOOMER-6 / B2). Pan counterpart to
+    /// v3.4.5-rc5. Pan counterpart to
     /// `getFaderEchoSnapshot`. Same atomicity rationale.
     func getPanEchoSnapshot(strip: Int) -> (pan: Double?, updatedAt: Date?) {
         return (channelStrips.indices.contains(strip) ? channelStrips[strip].pan : nil,

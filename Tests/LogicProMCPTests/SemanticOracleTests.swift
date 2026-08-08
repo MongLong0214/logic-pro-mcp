@@ -116,7 +116,7 @@ struct SemanticOracleEngineTests {
     }
 
     /// #373 B1 equality-matrix — pins the exact `.fieldsEqual` contract every
-    /// safe-mutation oracle's requested==observed leans on (grok-ratified). It
+    /// safe-mutation oracle's requested==observed check relies on. It
     /// must accept `3`/`3.0` (JSON does not distinguish int/double), reject a
     /// number-vs-string `3`/`"3"`, and — crucially — never read an ABSENT key as
     /// agreement: `null`/missing and `""`/missing both fail closed.
