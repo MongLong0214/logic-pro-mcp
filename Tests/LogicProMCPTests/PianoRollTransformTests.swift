@@ -125,7 +125,7 @@ struct PianoRollTransformTests {
         )
     }
 
-    @Test func exactCompleteNextGenerationMultisetIsStateA() throws {
+    @Test func exactCompleteNextGenerationMultisetIsR1Unverified() throws {
         let target = region()
         let duplicate = note(pitch: 60, start: 120)
         let other = note(pitch: 64, start: 0)
@@ -147,7 +147,15 @@ struct PianoRollTransformTests {
             notes: [other, duplicate, duplicate]
         )
 
-        #expect(verifyTransform(plan: plan, observedAfter: observed) == .stateA)
+        guard case .stateBUnverified(let reason) = verifyTransform(
+            plan: plan,
+            observedAfter: observed,
+            expected: independentExpected(region: target, notes: [other, duplicate, duplicate])
+        ) else {
+            Issue.record("An R1 exact match must not be granted State A")
+            return
+        }
+        #expect(reason == "R1 grants no positive match; independent positive verification is R2 live-ingestion")
     }
 
     @Test func incompleteObservedSnapshotIsNeverStateA() throws {
@@ -159,7 +167,11 @@ struct PianoRollTransformTests {
             notes: plan.predictedAfter
         )
 
-        guard case .stateBUnverified = verifyTransform(plan: plan, observedAfter: observed) else {
+        guard case .stateBUnverified = verifyTransform(
+            plan: plan,
+            observedAfter: observed,
+            expected: .unproven
+        ) else {
             Issue.record("An incomplete post-write snapshot must never be State A")
             return
         }
@@ -173,7 +185,11 @@ struct PianoRollTransformTests {
             notes: plan.predictedAfter
         )
 
-        guard case .stateBUnverified = verifyTransform(plan: plan, observedAfter: observed) else {
+        guard case .stateBUnverified = verifyTransform(
+            plan: plan,
+            observedAfter: observed,
+            expected: .unproven
+        ) else {
             Issue.record("State A requires the expected generation transition")
             return
         }
@@ -187,7 +203,11 @@ struct PianoRollTransformTests {
             notes: plan.predictedAfter
         )
 
-        guard case .stateBUnverified = verifyTransform(plan: plan, observedAfter: observed) else {
+        guard case .stateBUnverified = verifyTransform(
+            plan: plan,
+            observedAfter: observed,
+            expected: .unproven
+        ) else {
             Issue.record("State A requires the same region reference")
             return
         }
@@ -210,10 +230,145 @@ struct PianoRollTransformTests {
         )
 
         #expect(
-            verifyTransform(plan: plan, observedAfter: observed) == .mismatch(
+            verifyTransform(
+                plan: plan,
+                observedAfter: observed,
+                expected: independentExpected(region: plan.regionRef, notes: [expected, expected])
+            ) == .mismatch(
                 unexpected: [unexpected]
             )
         )
+    }
+
+    @Test func samePathRederivationIsRejected() throws {
+        let plan = try #require(makePlan())
+        let observed = snapshot(
+            region: plan.regionRef,
+            generation: plan.boundGeneration + 1,
+            notes: plan.predictedAfter
+        )
+
+        guard case .stateBUnverified(let reason) = verifyTransform(
+            plan: plan,
+            observedAfter: observed,
+            expected: independentExpected(
+                rootID: observed.conversionPipelineID,
+                region: plan.regionRef,
+                notes: plan.predictedAfter
+            )
+        ) else {
+            Issue.record("An expected derived from the observed conversion pipeline must be rejected")
+            return
+        }
+        #expect(reason.contains("expected root shares the observed conversion pipeline"))
+    }
+
+    @Test func ppqSkewedBareSortedMatchIsRejected() throws {
+        let plan = try #require(makePlan())
+        let unscaled = note(pitch: 60, start: 120, duration: 120)
+        let observed = snapshot(
+            region: plan.regionRef,
+            generation: plan.boundGeneration + 1,
+            notes: [unscaled]
+        )
+
+        // The two raw events are equal, so the former bare sorted comparison would
+        // match. Their tick values differ after a 960→480 PPQ normalization.
+        guard case .mismatch(let unexpected) = verifyTransform(
+            plan: plan,
+            observedAfter: observed,
+            expected: independentExpected(region: plan.regionRef, notes: [unscaled], ppq: 960)
+        ) else {
+            Issue.record("A PPQ-skewed raw match must be a mismatch, never State A or the R1 refusal")
+            return
+        }
+        #expect(unexpected == [unscaled])
+    }
+
+    @Test func unprovenExpectedIsRejected() throws {
+        let plan = try #require(makePlan())
+        let observed = snapshot(
+            region: plan.regionRef,
+            generation: plan.boundGeneration + 1,
+            notes: plan.predictedAfter
+        )
+
+        guard case .stateBUnverified(let reason) = verifyTransform(
+            plan: plan,
+            observedAfter: observed,
+            expected: .unproven
+        ) else {
+            Issue.record("An unproven expected sequence must be rejected")
+            return
+        }
+        #expect(reason.contains("expected must carry a sealed independent provenance proof"))
+    }
+
+    @Test func corruptedExpectedContentBindingIsRejected() throws {
+        let plan = try #require(makePlan())
+        let observed = snapshot(
+            region: plan.regionRef,
+            generation: plan.boundGeneration + 1,
+            notes: plan.predictedAfter
+        )
+        let corrupted = IndependentExpectedSeam.makeCorruptedTestFixture(
+            root: .authoredIntent,
+            rootID: "authored.intent.v1",
+            region: plan.regionRef,
+            notes: plan.predictedAfter,
+            ppq: 480,
+            digest: "forged-binding"
+        )
+
+        guard case .stateBUnverified(let reason) = verifyTransform(
+            plan: plan,
+            observedAfter: observed,
+            expected: corrupted
+        ) else {
+            Issue.record("A corrupted expected content binding must be rejected")
+            return
+        }
+        #expect(reason.contains("expected proof content binding is invalid"))
+    }
+
+    @Test func independentlySourcedCanonicalizedMatchReachesR1Refusal() throws {
+        let plan = try #require(makePlan())
+        let observedNotes = [
+            note(pitch: 60, start: 0, duration: 240),
+            note(pitch: 60, start: 120, duration: 120),
+        ]
+        let observed = snapshot(
+            region: plan.regionRef,
+            generation: plan.boundGeneration + 1,
+            notes: observedNotes
+        )
+
+        guard case .stateBUnverified(let reason) = verifyTransform(
+            plan: plan,
+            observedAfter: observed,
+            expected: independentExpected(region: plan.regionRef, notes: observedNotes.reversed())
+        ) else {
+            Issue.record("A valid independent canonicalized match must reach the R1 refusal")
+            return
+        }
+        #expect(reason == "R1 grants no positive match; independent positive verification is R2 live-ingestion")
+    }
+
+    @Test func stateAIsUnreachableForFullyValidIndependentExpected() throws {
+        let plan = try #require(makePlan())
+        let notes = [note(pitch: 60), note(pitch: 64, start: 120)]
+        let observed = snapshot(
+            region: plan.regionRef,
+            generation: plan.boundGeneration + 1,
+            notes: notes
+        )
+        let verdict = verifyTransform(
+            plan: plan,
+            observedAfter: observed,
+            expected: independentExpected(region: plan.regionRef, notes: notes.reversed())
+        )
+
+        #expect(verdict != .stateA)
     }
 
     @Test func compensationRestoresExactBeforeSnapshot() throws {
@@ -271,6 +426,22 @@ struct PianoRollTransformTests {
         return complete
             ? .makeCompleteForTesting(regionReference: ref, projectEpoch: generation, ppq: 480, notes: notes)
             : .makeIncompleteForTesting(regionReference: ref, projectEpoch: generation, ppq: 480)
+    }
+
+    private func independentExpected(
+        root: IndependentExpectedRoot = .authoredIntent,
+        rootID: String = "authored.intent.v1",
+        region: MIDIRegionReference,
+        notes: [MIDINoteEvent],
+        ppq: Int = 480
+    ) -> IndependentExpectedProof {
+        IndependentExpectedSeam.makeTestFixture(
+            root: root,
+            rootID: rootID,
+            region: region,
+            notes: notes,
+            ppq: ppq
+        )
     }
 
     private func note(
