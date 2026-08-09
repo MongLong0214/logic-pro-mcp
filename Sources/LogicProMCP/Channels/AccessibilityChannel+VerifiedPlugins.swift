@@ -2508,7 +2508,8 @@ extension AccessibilityChannel {
             guard let label = popupMenuItemLabel(item, runtime: runtime),
                   !popupMenuItemMatches(item, displayName: displayName, runtime: runtime),
                   menuItemEnabled(item, runtime: runtime),
-                  axChildMenu(of: item, runtime: runtime) != nil else {
+                  let submenu = axChildMenu(of: item, runtime: runtime),
+                  !submenuIsPluginFormatMenu(submenu, runtime: runtime) else {
                 continue
             }
             // Only an item with Logic's already-attached AXMenu child is a proven
@@ -2556,6 +2557,23 @@ extension AccessibilityChannel {
     ) -> AXUIElement? {
         AXHelpers.getChildren(item, runtime: runtime).first {
             (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
+        }
+    }
+
+    /// True only for a non-empty submenu whose every menu item is a known plugin
+    /// format label. Requiring every item avoids classifying a category as a
+    /// format menu merely because one plugin happens to share a format label.
+    private static func submenuIsPluginFormatMenu(
+        _ submenu: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        let items = AXHelpers.getChildren(submenu, runtime: runtime).filter {
+            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuItemRole as String)
+        }
+        return !items.isEmpty && items.allSatisfy { item in
+            AXLocalePolicy.pluginFormatLeafPriority.contains { labels in
+                AXLocalePolicy.elementMatches(item, labels, runtime: runtime)
+            }
         }
     }
 

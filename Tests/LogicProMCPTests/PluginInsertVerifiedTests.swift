@@ -733,6 +733,8 @@ private func makeSlotPopupInsertFixture(
     slotOpenResult: Bool = true,
     includeCategory: Bool = false,
     includeNonMatchingLeaf: Bool = false,
+    includeNonMatchingLeafFormatMenu: Bool = false,
+    includeFormatNamedCategoryEntry: Bool = false,
     includeFormatLeaf: Bool = false,
     revealCategorySubmenuOnPick: Bool = true,
     categoryPickResult: Bool = true,
@@ -753,6 +755,10 @@ private func makeSlotPopupInsertFixture(
     let categoryItem = includeCategory ? b.element(9010) : nil
     let categoryMenu = includeCategory ? b.element(9011) : nil
     let nonMatchingLeafItem = includeNonMatchingLeaf ? b.element(9016) : nil
+    let nonMatchingFormatMenu = includeNonMatchingLeafFormatMenu ? b.element(9017) : nil
+    let nonMatchingFormatMono = includeNonMatchingLeafFormatMenu ? b.element(9018) : nil
+    let nonMatchingFormatMonoToStereo = includeNonMatchingLeafFormatMenu ? b.element(9019) : nil
+    let formatNamedCategoryItem = includeFormatNamedCategoryEntry ? b.element(9020) : nil
     let formatLeafItem = includeFormatLeaf ? b.element(9014) : nil
     let formatMenu = includeFormatLeaf ? b.element(9015) : nil
 
@@ -798,14 +804,27 @@ private func makeSlotPopupInsertFixture(
     if let nonMatchingLeafItem {
         b.setAttribute(nonMatchingLeafItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
         b.setAttribute(nonMatchingLeafItem, kAXTitleAttribute as String, "Compressor")
+        if let nonMatchingFormatMenu, let nonMatchingFormatMono, let nonMatchingFormatMonoToStereo {
+            b.setAttribute(nonMatchingFormatMenu, kAXRoleAttribute as String, kAXMenuRole as String)
+            b.setAttribute(nonMatchingFormatMono, kAXRoleAttribute as String, kAXMenuItemRole as String)
+            b.setAttribute(nonMatchingFormatMono, kAXTitleAttribute as String, "Mono")
+            b.setAttribute(nonMatchingFormatMonoToStereo, kAXRoleAttribute as String, kAXMenuItemRole as String)
+            b.setAttribute(nonMatchingFormatMonoToStereo, kAXTitleAttribute as String, "Mono->Stereo")
+            b.setChildren(nonMatchingFormatMenu, [nonMatchingFormatMono, nonMatchingFormatMonoToStereo])
+            b.setChildren(nonMatchingLeafItem, [nonMatchingFormatMenu])
+        }
     }
     if let categoryItem, let categoryMenu {
         b.setAttribute(categoryItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
         b.setAttribute(categoryItem, kAXTitleAttribute as String, "Utility")
         b.setAttribute(categoryMenu, kAXRoleAttribute as String, kAXMenuRole as String)
+        if let formatNamedCategoryItem {
+            b.setAttribute(formatNamedCategoryItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+            b.setAttribute(formatNamedCategoryItem, kAXTitleAttribute as String, "Mono")
+        }
         // AXPick controls visual exposure. The submenu is already an AX child,
         // but starts invisible until the category action's observed effect.
-        b.setChildren(categoryMenu, [gainItem])
+        b.setChildren(categoryMenu, (formatNamedCategoryItem.map { [$0] } ?? []) + [gainItem])
         b.setChildren(categoryItem, [categoryMenu])
         b.setChildren(popupMenu, [searchField] + (nonMatchingLeafItem.map { [$0] } ?? []) + [categoryItem])
     } else {
@@ -960,6 +979,43 @@ private func run425Insert(
     #expect(fixture.actions.contains(elementID: categoryID, action: kAXPickAction as String))
     #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
     #expect(fixture.actions.count(elementID: nonMatchingLeafID, action: kAXPickAction as String) == 0)
+}
+
+@Test func testPlugin425RecursiveWalkNeverPicksNonMatchingFormatLeafBeforeCategory() async throws {
+    let fixture = makeSlotPopupInsertFixture(
+        includeCategory: true,
+        includeNonMatchingLeaf: true,
+        includeNonMatchingLeafFormatMenu: true,
+        mountGainOnLeafPick: true
+    )
+    let obj = await run425Insert(
+        fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction]
+    )
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "A")
+    let categoryID = try #require(fixture.categoryItemID)
+    let nonMatchingLeafID = try #require(fixture.nonMatchingLeafItemID)
+    #expect(fixture.actions.contains(elementID: categoryID, action: kAXPickAction as String))
+    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+    #expect(fixture.actions.count(elementID: nonMatchingLeafID, action: kAXPickAction as String) == 0)
+}
+
+@Test func testPlugin425RecursiveWalkDescendsIntoCategoryWithFormatNamedPluginEntry() async throws {
+    let fixture = makeSlotPopupInsertFixture(
+        includeCategory: true,
+        includeFormatNamedCategoryEntry: true,
+        mountGainOnLeafPick: true
+    )
+    let obj = await run425Insert(
+        fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction]
+    )
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "A")
+    let categoryID = try #require(fixture.categoryItemID)
+    #expect(fixture.actions.contains(elementID: categoryID, action: kAXPickAction as String))
+    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
 }
 
 @Test func testPlugin425LeafPickFailureProceedsWhenInventoryDiffIsObserved() async throws {
