@@ -21,9 +21,9 @@ action return codes were observed to disagree with the effect in both directions
 an action can report failure after opening the popup, and can report success
 without the required observed effect.
 
-Discovery is read-only: it recurses through the already-attached `AXMenu` child
-and performs no AX action on any non-target item. `AXPick` is dispatched only to the leaf
-whose name matched the request exactly, and to its preferred-format leaf. As with
+Discovery is read-only: it uses no popup-search strategy or search-field writes,
+recurses through the already-attached `AXMenu` child, and performs no AX action on any non-target item.
+`AXPick` is dispatched only to the leaf whose name matched the request exactly, and to its preferred-format leaf. As with
 the slot opener, its return code is not accepted as success by itself. The
 post-insert strip inventory diff decides the leaf outcome: it detects a mount in
 the requested slot, detects and rolls back a stray mount, or produces the
@@ -64,7 +64,7 @@ inventory diff remains the acceptance gate.
 `Tests/LogicProMCPTests/PluginInsertVerifiedTests.swift` verifies that the custom
 action can report failure while the observed popup permits progress, that a
 success-looking action with no popup fails closed, that read-only category
-discovery reaches an already-attached submenu, and that leaf `AXPick` is accepted
-only when the post-insert inventory observation supports it. It also verifies the
-trace values for both the custom-action and absent-action coordinate-fallback
-slot-open paths.
+discovery reaches an already-attached submenu with neither non-target AX actions
+nor attribute writes, and that leaf `AXPick` is accepted only when the post-insert
+inventory observation supports it. It also verifies the trace values for both the
+custom-action and absent-action coordinate-fallback slot-open paths.

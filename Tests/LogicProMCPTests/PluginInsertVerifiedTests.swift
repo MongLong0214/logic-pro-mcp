@@ -284,12 +284,12 @@ private func insertParams(
     // The live driver stops after a strategy appears to dismiss/commit the dialog
     // but readback never observes the requested plugin. This prevents stale
     // stale clicks after a popup/menu commit changed the UI.
-    let fake = FakeInsertDriver(outcome: .postCommitTimeout(strategy: "slot_popup_physical_menu_click"))
+    let fake = FakeInsertDriver(outcome: .postCommitTimeout(strategy: "slot_popup_axpick_menu_select"))
     let obj = await runInsert(insertParams(insert: "0"), runtime: runtime, driver: fake.driver)
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "operation_timeout")
-    #expect(obj["commit_strategy"] as? String == "slot_popup_physical_menu_click")
+    #expect(obj["commit_strategy"] as? String == "slot_popup_axpick_menu_select")
     #expect((obj["safe_to_retry"] as? Bool)!)
     #expect((obj["write_attempted"] as? Bool)!)
 }
@@ -703,9 +703,14 @@ private let slotPopupOpenCustomAction = AccessibilityChannel.slotPopupOpenCustom
 /// tests run sequentially, so this deliberately lightweight recorder is safe.
 private final class AXActionRecorder: @unchecked Sendable {
     private(set) var calls: [(elementID: Int, action: String)] = []
+    private(set) var attributeWrites: [(elementID: Int, attribute: String)] = []
 
     func record(elementID: Int, action: String) {
         calls.append((elementID, action))
+    }
+
+    func recordAttributeWrite(elementID: Int, attribute: String) {
+        attributeWrites.append((elementID, attribute))
     }
 
     func contains(elementID: Int, action: String) -> Bool {
@@ -716,8 +721,12 @@ private final class AXActionRecorder: @unchecked Sendable {
         calls.count { $0.elementID == elementID && $0.action == action }
     }
 
-    func nonTargetCount(targetElementID: Int) -> Int {
+    func nonTargetActionCount(targetElementID: Int) -> Int {
         calls.count { $0.elementID != targetElementID }
+    }
+
+    func nonTargetAttributeWriteCount(targetElementID: Int) -> Int {
+        attributeWrites.count { $0.elementID != targetElementID }
     }
 }
 
@@ -728,10 +737,15 @@ private final class AXActionRecorder: @unchecked Sendable {
     let vendor = addMenuItem(b, 9102, title: "Fabricant", children: [vendorMenu])
     let categoryMenu = addMenu(b, 9103, children: [vendor])
     let category = addMenuItem(b, 9104, title: "Dienstprogramme", children: [categoryMenu])
-    let rootMenu = addMenu(b, 9105, children: [category])
+    let searchField = b.element(9106)
+    b.setAttribute(searchField, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    let rootMenu = addMenu(b, 9105, children: [searchField, category])
     let actions = AXActionRecorder()
     let runtime = b.makeAXRuntime(
-        setAttributeHandler: nil,
+        setAttributeHandler: { element, attribute, _ in
+            actions.recordAttributeWrite(elementID: b.elementID(element), attribute: attribute)
+            return true
+        },
         performActionHandler: { element, action in
             actions.record(elementID: b.elementID(element), action: action)
             return true
@@ -745,10 +759,28 @@ private final class AXActionRecorder: @unchecked Sendable {
         runtime: runtime
     )
 
-    #expect(actions.nonTargetCount(targetElementID: b.elementID(target)) == 0)
+    #expect(actions.nonTargetActionCount(targetElementID: b.elementID(target)) == 0)
+    #expect(actions.nonTargetAttributeWriteCount(targetElementID: b.elementID(target)) == 0)
+    #expect(actions.attributeWrites.isEmpty)
     let result = try #require(click)
     #expect(result.path == ["Dienstprogramme", "Fabricant", "Gain"])
     #expect(actions.count(elementID: b.elementID(target), action: kAXPickAction as String) == 1)
+}
+
+@Test func testPlugin425LeafSelectionHasNoCoordFreeStrategyDiscriminator() async throws {
+    let b = FakeAXRuntimeBuilder()
+    let target = addMenuItem(b, 9110, title: "Gain")
+    let rootMenu = addMenu(b, 9111, children: [target])
+    let click = await AccessibilityChannel.clickPluginInAnchoredSlotPopup(
+        pluginID: "logic.stock.effect.gain",
+        displayName: "Gain",
+        rootMenu: rootMenu,
+        runtime: b.makeAXRuntime()
+    )
+
+    let result = try #require(click)
+    let storedPropertyNames = Mirror(reflecting: result).children.compactMap(\.label)
+    #expect(!storedPropertyNames.contains("coordFree"))
 }
 
 private let coordFreeExpectedPath = "/Users/me/Music/CoordFree425 copy.logicx"
@@ -777,7 +809,8 @@ private func makeSlotPopupInsertFixture(
     includeFormatNamedCategoryEntry: Bool = false,
     includeFormatLeaf: Bool = false,
     leafPickResult: Bool = true,
-    mountGainOnLeafPick: Bool = false
+    mountGainOnLeafPick: Bool = false,
+    occupySlotOnWindowRaise: Bool = false
 ) -> SlotPopupInsertFixture {
     let b = FakeAXRuntimeBuilder()
     let app = b.element(9000)
@@ -876,6 +909,7 @@ private func makeSlotPopupInsertFixture(
     b.setChildren(app, popupInitiallyVisible ? [window, popupMenu] : [window])
 
     let slotKey = b.elementID(slot)
+    let windowKey = b.elementID(window)
     let leafKey = formatLeafItem.map(b.elementID) ?? b.elementID(gainItem)
     let categoryKey = categoryItem.map(b.elementID)
     let nonMatchingLeafKey = nonMatchingLeafItem.map(b.elementID)
@@ -887,6 +921,20 @@ private func makeSlotPopupInsertFixture(
         performActionHandler: { element, action in
             let elementID = b.elementID(element)
             actions.record(elementID: elementID, action: action)
+            if occupySlotOnWindowRaise,
+               elementID == windowKey,
+               action == (kAXRaiseAction as String) {
+                let bypass = b.element(9021)
+                let open = b.element(9022)
+                b.setAttribute(slot, kAXRoleAttribute as String, kAXGroupRole as String)
+                b.setAttribute(slot, kAXDescriptionAttribute as String, "Compressor")
+                b.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+                b.setAttribute(bypass, kAXDescriptionAttribute as String, "바이패스")
+                b.setAttribute(bypass, kAXValueAttribute as String, 0)
+                b.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
+                b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
+                b.setChildren(slot, [bypass, open])
+            }
             if elementID == slotKey, action == slotPopupOpenCustomAction {
                 if popupAppearsAfterSlotOpen {
                     b.setChildren(app, [window, popupMenu])
@@ -1017,6 +1065,29 @@ private func run425Insert(
     let trace = try #require(obj["select_trace"] as? [String: Any])
     let strategy = try #require(trace["winning_strategy"] as? String)
     #expect(strategy == "slot_popup_recursive_exact_leaf")
+    let leafSelectCoordFree = try #require(trace["leaf_select_coord_free"] as? Bool)
+    #expect(leafSelectCoordFree)
+}
+
+@Test func testPlugin425FailsClosedWhenTargetSlotBecomesOccupiedBeforeActuation() async throws {
+    let fixture = makeSlotPopupInsertFixture(
+        mountGainOnLeafPick: true,
+        occupySlotOnWindowRaise: true
+    )
+    let obj = await run425Insert(
+        fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction]
+    )
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "C")
+    let error = try #require(obj["error"] as? String)
+    #expect(error == "insert_setup_failed")
+    let stage = try #require(obj["setup_stage"] as? String)
+    #expect(stage == "target_slot_no_longer_empty")
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(!fixture.actions.contains(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction))
+    #expect(!fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
 }
 
 @Test func testPlugin425RecursiveWalkOnlyPicksExactLeaf() async throws {

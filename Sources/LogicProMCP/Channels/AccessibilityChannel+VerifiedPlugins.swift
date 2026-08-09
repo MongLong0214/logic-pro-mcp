@@ -1412,10 +1412,11 @@ extension AccessibilityChannel {
     // MARK: - insert_verified (exact slot popup insert → readback-gated State A)
 
     /// Structured result of one live insert attempt. The production driver opens
-    /// the requested slot's own popup and physically clicks the plugin menu item,
-    /// then diffs the pre- vs post-insert inventory to detect WHERE the requested
-    /// plugin actually landed. Only `.mounted` whose `slot` equals the requested
-    /// `insert` becomes State A; a different slot is honest State C
+    /// the requested slot's own popup with its measured custom AX action (or the
+    /// coordinate fallback when that action is absent) and selects the exact
+    /// plugin leaf with `AXPick`, then diffs the pre- vs post-insert inventory to
+    /// detect WHERE the requested plugin actually landed. Only `.mounted` whose
+    /// `slot` equals the requested `insert` becomes State A; a different slot is honest State C
     /// (`insert_landed_at_different_slot`), so a slot is never falsely confirmed.
     enum InsertDriverOutcome: Sendable {
         /// The requested plugin (`pluginID`) was observed newly mounted at the
@@ -1482,9 +1483,11 @@ extension AccessibilityChannel {
 
     /// Guarded verified insert entry. The write-preceding gates run live and are
     /// honest: schema → mode → project path → identity → inventory `complete:true`
-    /// → slot-empty. Only after every gate passes does the op drive the requested
-    /// slot's own popup menu by physical CGEvent clicks, then a post-insert
-    /// `get_inventory` readback (pre/post diff) is the SOLE State A precondition.
+    /// → slot-empty. Only after every gate passes does the op open the requested
+    /// slot's own popup with its custom AX action (falling back to a coordinate
+    /// click only when that action is absent), select the exact leaf with `AXPick`,
+    /// then use a post-insert `get_inventory` readback (pre/post diff) as the SOLE
+    /// State A precondition.
     ///
     /// State A is reachable ONLY when the readback observes the requested plugin
     /// newly mounted at the requested slot — a false verified insert is
@@ -1903,6 +1906,12 @@ extension AccessibilityChannel {
         guard let targetSlot = liveInsertSlot(track: track, insert: insert, runtime: runtime) else {
             return (.transientSetupFailure(stage: "target_slot_not_found"), trace)
         }
+        // The initial write gate and the just-read snapshot may already be stale.
+        // Re-resolve and require the physical target is still the empty slot the
+        // attempt was authorized to use before any popup-opening actuation.
+        guard preInventory[insert] == nil, targetSlot.isEmpty else {
+            return (.transientSetupFailure(stage: "target_slot_no_longer_empty"), trace)
+        }
         trace["target_slot_found"] = true
 
         switch slotPopupOpenCustomActionEnumerationResult(on: targetSlot.element, runtime: runtime.ax) {
@@ -1965,10 +1974,9 @@ extension AccessibilityChannel {
         trace["winning_strategy"] = pluginClick.strategy
         trace["winning_menu_path"] = pluginClick.path.joined(separator: " > ")
         trace["plugin_selection_id"] = pluginID
-        // Every popup-navigation strategy above is coordinate-free AXPick. Keep the
-        // receipt field for compatibility, sourced from the winning action rather
-        // than from a feature flag.
-        trace["leaf_select_coord_free"] = leafSelectCoordFree(for: pluginClick)
+        // Published compatibility receipt: every leaf-selection strategy at this
+        // head is AXPick, so this is constant and not a discriminator.
+        trace["leaf_select_coord_free"] = true
 
         #if DEBUG
         // QA/test-only seam (#425): after a winning leaf select, deterministically
@@ -1981,7 +1989,7 @@ extension AccessibilityChannel {
         // release (`#if DEBUG`).
         if forcePostCommitTimeoutForTestsActive {
             return (
-                .postCommitTimeout(strategy: postCommitTimeoutStrategy(coordFree: pluginClick.coordFree)),
+                .postCommitTimeout(strategy: "slot_popup_axpick_menu_select"),
                 trace
             )
         }
@@ -2028,10 +2036,8 @@ extension AccessibilityChannel {
         }
 
         if poll.satisfied == nil {
-            // #425: report the coordinate-free AXPick actuation that actually
-            // selected the leaf; the inventory observation remains the gate.
             return (
-                .postCommitTimeout(strategy: postCommitTimeoutStrategy(coordFree: pluginClick.coordFree)),
+                .postCommitTimeout(strategy: "slot_popup_axpick_menu_select"),
                 trace
             )
         }
@@ -2039,13 +2045,6 @@ extension AccessibilityChannel {
     }
 
     // MARK: - insert_verified live driver helpers
-
-    /// The honest commit-strategy label for a post-commit timeout. The popup path
-    /// now uses AXPick throughout; this remains a single source of truth for the
-    /// live timeout path and the DEBUG force-timeout QA seam.
-    static func postCommitTimeoutStrategy(coordFree: Bool) -> String {
-        coordFree ? "slot_popup_axpick_menu_select" : "slot_popup_physical_menu_click"
-    }
 
     #if DEBUG
     /// QA/test seam (#425): when set, `liveExactSlotPopupInsert` short-circuits to
@@ -2428,25 +2427,16 @@ extension AccessibilityChannel {
         return popupExactLeafPaths(displayName: displayName, rootMenu: rootMenu, runtime: runtime).first
     }
 
-    /// `internal` (was `private`) so the coord-free discriminator is unit-testable
+    /// `internal` (was `private`) so popup-navigation results are unit-testable
     /// without driving the CGEvent-bound live insert flow.
     struct SlotPopupPluginClick: Sendable {
         let strategy: String
         let path: [String]
         let strategies: [String]
-        /// Every winning popup strategy uses AXPick, so this remains true. The
-        /// caller records the actual winning actuation, never a feature flag.
-        let coordFree: Bool
     }
 
-    /// The single source of truth for the backwards-compatible
-    /// `leaf_select_coord_free` receipt field.
-    static func leafSelectCoordFree(for click: SlotPopupPluginClick) -> Bool {
-        click.coordFree
-    }
-
-    /// `internal` (was `private`) so the coord-free discriminator is unit-testable
-    /// without driving the CGEvent-bound live insert flow.
+    /// `internal` (was `private`) so popup navigation is unit-testable without
+    /// driving the CGEvent-bound live insert flow.
     static func clickPluginInAnchoredSlotPopup(
         pluginID: String,
         displayName: String,
@@ -2461,21 +2451,7 @@ extension AccessibilityChannel {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_direct_exact_leaf",
                 path: [label],
-                strategies: strategies,
-                coordFree: true
-            )
-        }
-
-        strategies.append("slot_popup_search_exact_leaf")
-        if await filterSlotPopupSearchField(displayName: displayName, rootMenu: rootMenu, runtime: runtime),
-           let item = directExactPopupMenuItem(displayName: displayName, in: rootMenu, runtime: runtime),
-           let label = popupMenuItemLabel(item, runtime: runtime),
-           await clickPopupPluginLeaf(item, runtime: runtime) {
-            return SlotPopupPluginClick(
-                strategy: "slot_popup_search_exact_leaf",
-                path: [label],
-                strategies: strategies,
-                coordFree: true
+                strategies: strategies
             )
         }
 
@@ -2490,40 +2466,12 @@ extension AccessibilityChannel {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_recursive_exact_leaf",
                 path: result,
-                strategies: strategies,
-                coordFree: true
+                strategies: strategies
             )
         }
 
         _ = pluginID // kept in the trace by the caller; selection is by exact display leaf.
         return nil
-    }
-
-    private static func filterSlotPopupSearchField(
-        displayName: String,
-        rootMenu: AXUIElement,
-        runtime: AXHelpers.Runtime
-    ) async -> Bool {
-        guard let field = AXHelpers.findDescendant(
-            of: rootMenu, role: kAXTextFieldRole as String, maxDepth: 4, runtime: runtime
-        ) else {
-            return false
-        }
-        _ = AXHelpers.setAttribute(field, kAXFocusedAttribute as String, true as CFTypeRef, runtime: runtime)
-        _ = AXHelpers.setAttribute(field, kAXValueAttribute as String, "" as CFTypeRef, runtime: runtime)
-        guard AXHelpers.setAttribute(
-            field, kAXValueAttribute as String, displayName as CFTypeRef, runtime: runtime
-        ) else {
-            return false
-        }
-        let deadline = Date().addingTimeInterval(0.9)
-        repeat {
-            if directExactPopupMenuItem(displayName: displayName, in: rootMenu, runtime: runtime) != nil {
-                return true
-            }
-            try? await Task.sleep(for: .milliseconds(90))
-        } while Date() < deadline
-        return false
     }
 
     private static func clickPopupExactLeafRecursively(
