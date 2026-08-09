@@ -4,6 +4,84 @@ import Foundation
 
 /// Project/document surface: project info, Save As via AX dialog, and marker reads.
 extension AccessibilityChannel {
+    // MARK: - Creator Studio New Project chooser
+
+    static func chooserSelectionIsUnambiguous(
+        windowTitle: String?,
+        emptyProjectLabelCount: Int,
+        chooseButtonCount: Int,
+        chooseEnabled: Bool
+    ) -> Bool {
+        windowTitle == "Choose a Project"
+            && emptyProjectLabelCount == 1
+            && chooseButtonCount == 1
+            && chooseEnabled
+    }
+
+    static func createEmptyProjectFromChooser(
+        runtime: AXLogicProElements.Runtime = .production
+    ) async -> ChannelResult {
+        guard let window = AXLogicProElements.mainWindow(runtime: runtime) else {
+            return .error("Creator Studio project chooser is not visible")
+        }
+        let windowTitle = AXHelpers.getTitle(window, runtime: runtime.ax)
+        let emptyProjectLabels = AXHelpers.findAllDescendants(
+            of: window, role: kAXStaticTextRole as String, maxDepth: 12, runtime: runtime.ax
+        ).filter { AXHelpers.getTitle($0, runtime: runtime.ax) == "Empty Project" }
+        let chooseButtons = AXHelpers.findAllDescendants(
+            of: window, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime.ax
+        ).filter { AXHelpers.getTitle($0, runtime: runtime.ax) == "Choose" }
+        let chooseEnabled: Bool = chooseButtons.first.flatMap {
+            AXHelpers.getAttribute($0, kAXEnabledAttribute as String, runtime: runtime.ax)
+        } ?? false
+
+        guard chooserSelectionIsUnambiguous(
+            windowTitle: windowTitle,
+            emptyProjectLabelCount: emptyProjectLabels.count,
+            chooseButtonCount: chooseButtons.count,
+            chooseEnabled: chooseEnabled
+        ), let chooseButton = chooseButtons.first else {
+            return .error("Creator Studio chooser is not the exact enabled Empty Project selection")
+        }
+        guard AXHelpers.performAction(chooseButton, kAXPressAction as String, runtime: runtime.ax) else {
+            return .error("Failed to press the exact Creator Studio Choose button")
+        }
+
+        // Empty Project opens Logic's mandatory New Track sheet. Reuse the
+        // existing structural classifier: it only clicks Create when the sheet
+        // is identified as mandatoryNewTrack; unknown sheets fail closed.
+        var createdTrack = false
+        for _ in 0..<24 {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            let outcome = await reconcileAfterMutation(isDeleteContext: false, runtime: runtime)
+            switch outcome.kind {
+            case .mandatoryNewTrack:
+                guard outcome.performed else {
+                    return .error("Mandatory New Track sheet was identified but Create was not performed")
+                }
+                createdTrack = true
+            case .unknownSheet, .deleteConfirm:
+                return .error("Unexpected blocking sheet after choosing Empty Project")
+            case .none, .informationalAlert, .strayMenu:
+                break
+            }
+            if createdTrack,
+               let current = AXLogicProElements.mainWindow(runtime: runtime),
+               AXHelpers.getTitle(current, runtime: runtime.ax) != "Choose a Project" {
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: [
+                        "operation": "project.new",
+                        "method": "accessibility",
+                        "selection": "Empty Project",
+                        "mandatory_track_created": true,
+                    ]
+                ))
+            }
+        }
+        return .error("Creator Studio did not expose a created Project after the exact chooser action")
+    }
+
     // MARK: - Save As via AX Dialog
 
     static func saveAsViaAXDialog(

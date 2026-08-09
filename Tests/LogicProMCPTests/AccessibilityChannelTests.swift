@@ -4,6 +4,34 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
+@Test("Creator Studio chooser requires one exact Empty Project and one enabled Choose button")
+func creatorStudioChooserSelectionGate() {
+    #expect(AccessibilityChannel.chooserSelectionIsUnambiguous(
+        windowTitle: "Choose a Project",
+        emptyProjectLabelCount: 1,
+        chooseButtonCount: 1,
+        chooseEnabled: true
+    ))
+    #expect(!AccessibilityChannel.chooserSelectionIsUnambiguous(
+        windowTitle: "Choose a Project",
+        emptyProjectLabelCount: 2,
+        chooseButtonCount: 1,
+        chooseEnabled: true
+    ))
+    #expect(!AccessibilityChannel.chooserSelectionIsUnambiguous(
+        windowTitle: "Choose a Project",
+        emptyProjectLabelCount: 1,
+        chooseButtonCount: 1,
+        chooseEnabled: false
+    ))
+    #expect(!AccessibilityChannel.chooserSelectionIsUnambiguous(
+        windowTitle: "Tracks",
+        emptyProjectLabelCount: 1,
+        chooseButtonCount: 1,
+        chooseEnabled: true
+    ))
+}
+
 private func decodeAccessibilityJSON(_ s: String) -> [String: Any] {
     (try? JSONSerialization.jsonObject(with: Data(s.utf8))) as? [String: Any] ?? [:]
 }
