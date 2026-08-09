@@ -140,6 +140,17 @@ struct RoutingAuditInvariantTests {
                 "transport.pause chain \(chain) must try AX/cgEvent before MMC; MMC pause is ignored by Logic 12.x")
     }
 
+    @Test("transport play prefers AppleScript before send-only fallbacks")
+    func playPrefersAppleScriptBeforeSendOnlyFallbacks() throws {
+        let chain = try #require(ChannelRouter.routingTable["transport.play"])
+        let appleScriptIndex = try #require(chain.firstIndex(of: .appleScript))
+        for channel in [ChannelID.coreMIDI, .cgEvent] {
+            let sendOnlyIndex = try #require(chain.firstIndex(of: channel))
+            #expect(appleScriptIndex < sendOnlyIndex,
+                    "transport.play chain \(chain) must try AppleScript before send-only \(channel)")
+        }
+    }
+
     @Test("transport stop and pause prefer CGEvent before AX while already running")
     func stopLikeCommandsPreferCGEventBeforeAX() throws {
         for operation in ["transport.stop", "transport.pause"] {

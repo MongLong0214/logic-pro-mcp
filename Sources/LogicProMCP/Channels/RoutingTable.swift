@@ -9,8 +9,12 @@ extension ChannelRouter {
     /// PRD §4.3 + §4.3.1 contract changes.
     static let v2RoutingTable: [String: [ChannelID]] = [
         // Transport — AX control-bar click primary (works without MCU / MIDI Learn),
-        // MCU / CoreMIDI / CGEvent / AppleScript as fallbacks.
-        "transport.play":             [.accessibility, .mcu, .coreMIDI, .cgEvent, .appleScript],
+        // AppleScript before send-only MIDI/CGEvent fallbacks. On Creator
+        // Studio 12.3 the AX control can be absent and MMC can return a
+        // successful send-only State B while playback remains stopped. Once a
+        // send-only channel crosses the write boundary it cannot safely fall
+        // through, so try the readback-capable AppleScript path first.
+        "transport.play":             [.accessibility, .appleScript, .mcu, .coreMIDI, .cgEvent],
         // Stop differs from Play/Record: in live 12.2 sessions the AX Play
         // checkbox can refuse to clear while playback is active, and MMC /
         // AppleScript "stop" can still leave transport running. The
