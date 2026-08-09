@@ -2165,6 +2165,9 @@ extension AccessibilityChannel {
         case ok
         case disabled
         case missing
+        /// The Edit menu offered an Undo entry, but it does not describe our plug-in insert. Nothing
+        /// was pressed: undoing it would revert the user's work.
+        case notOurs = "not_ours"
     }
 
     private static func clickEditUndoViaAXMenuClick(
@@ -2187,6 +2190,21 @@ extension AccessibilityChannel {
             ) else {
                 AXMouseHelper.pressEscape()
                 continue
+            }
+            // Only undo OUR insert. The prefix match above finds whatever sits on top of the stack,
+            // and pressing that undoes the user's last action when it is not ours. Measured live:
+            // Logic offers "Undo Insert Plug-in in Channel Strip" for our own write, and entries such
+            // as "Undo selected Channel Strips" for things we must not touch.
+            let offered: String = AXHelpers.getAttribute(
+                item, kAXTitleAttribute, runtime: runtime.ax
+            ) ?? ""
+            guard AXLocalePolicy.undoPluginInsertMenuItem.containsAny(in: offered) else {
+                Log.warn(
+                    "rollback refused: Edit menu offers \(offered.isEmpty ? "an unreadable entry" : "'\(offered)'"), not our plug-in insert",
+                    subsystem: "ax"
+                )
+                AXMouseHelper.pressEscape()
+                return .notOurs
             }
             if let enabled: Bool = AXHelpers.getAttribute(
                 item, kAXEnabledAttribute, runtime: runtime.ax
@@ -2933,6 +2951,12 @@ extension AccessibilityChannel {
         if menuResult == .ok || menuResult == .disabled {
             return menuResult.rawValue
         }
+        // A refusal must not fall through to the blind Cmd+Z below: we already read the entry and
+        // it was not ours, so sending the shortcut would undo the user's work anyway and make the
+        // check pointless.
+        if menuResult == .notOurs {
+            return menuResult.rawValue
+        }
         if postCommandZToLogic() {
             return "ok"
         }
@@ -3020,7 +3044,11 @@ extension AccessibilityChannel {
                     in: inv, strayPluginID: strayPluginID, straySlot: straySlot, strayName: strayName
                 ) == false
             } ?? false
-            if !stillDefinitelyPresent || clickRaw == "disabled" || clickRaw == "missing" {
+            // `not_ours` joins the stop list: the entry on top of the stack is not our insert, and
+            // re-reading the menu cannot change that. Retrying would only keep opening the Edit menu
+            // against the user's stack.
+            if !stillDefinitelyPresent
+                || clickRaw == "disabled" || clickRaw == "missing" || clickRaw == "not_ours" {
                 break
             }
         }

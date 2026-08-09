@@ -164,6 +164,18 @@ enum AXLocalePolicy {
         rationale: "Menu item includes the operation name after the localized Undo prefix."
     )
 
+    /// What the Edit-menu Undo entry says when the thing on top of the stack is a plug-in insert.
+    ///
+    /// The rollback path matched only the "Undo" prefix, so it pressed whatever was on top. Measured
+    /// on Logic 12.3 the entry for our own insert reads "Undo Insert Plug-in in Channel Strip", and
+    /// the same menu offers unrelated entries such as "Undo selected Channel Strips" — pressing one
+    /// of those undoes the user's work instead of ours.
+    static let undoPluginInsertMenuItem = LabelSet(
+        canonical: "Insert Plug-in in Channel Strip",
+        variants: ["채널 스트립에 플러그인 삽입"],
+        rationale: "Confirms the Undo entry describes OUR insert before a rollback presses it."
+    )
+
     static let goToPositionDialogTitle = LabelSet(
         canonical: "Go to Position",
         variants: ["위치로 이동"],

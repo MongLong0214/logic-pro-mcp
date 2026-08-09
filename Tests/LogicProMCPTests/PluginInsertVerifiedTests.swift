@@ -1147,3 +1147,71 @@ private func runRealInsert(runtime: AXLogicProElements.Runtime) async -> [String
     #expect(enumeration.strips.count == 2)
     #expect(enumeration.unreadableChildren == 0)
 }
+
+private final class AXPressLogBox: @unchecked Sendable {
+    private(set) var count = 0
+    func bump() { count += 1 }
+}
+
+/// #475 — a rollback must undo OUR insert, never whatever is on top of the user's undo stack.
+///
+/// The rollback matched only the localized "Undo" prefix and pressed the entry it found. Measured on
+/// Logic 12.3 the Edit menu offers "Undo Insert Plug-in in Channel Strip" for our own write, and
+/// entries such as "Undo selected Channel Strips" for actions that are not ours. Pressing the latter
+/// reverts the user's work while reporting a successful rollback.
+@Test func testPlugin475RollbackDoesNotUndoSomethingThatIsNotOurInsert() async throws {
+    let clicks = AXPressLogBox()
+    let result = await AccessibilityChannel.verifiedUndoPluginInsert(
+        track: 0,
+        strayPluginID: "logic.stock.effect.gain",
+        straySlot: 0,
+        strayName: "Gain",
+        runtime: emptyLogicRuntimeForRollbackTests(),
+        maxRetries: 4,
+        undoClick: { clicks.bump(); return "not_ours" }
+    )
+
+    // The properties that protect the user's work: the entry was looked at once, nothing was
+    // pressed, and there was no retry — a retry would keep hammering Undo at their stack.
+    //
+    // `succeeded` is not asserted here. This fixture's strip is empty, so the stray reads as already
+    // gone and removal confirms on its own; that says nothing about the refusal.
+    #expect(clicks.count == 1)
+    #expect(!result.attempted)
+    #expect(result.lastClickResult == "not_ours")
+}
+
+/// The positive twin: when the entry IS ours, the rollback proceeds, so the refusal above is a
+/// decision rather than a path that can never roll anything back.
+@Test func testPlugin475RollbackStillProceedsWhenTheEntryIsOurs() async throws {
+    let clicks = AXPressLogBox()
+    let result = await AccessibilityChannel.verifiedUndoPluginInsert(
+        track: 0,
+        strayPluginID: "logic.stock.effect.gain",
+        straySlot: 0,
+        strayName: "Gain",
+        runtime: emptyLogicRuntimeForRollbackTests(),
+        maxRetries: 4,
+        undoClick: { clicks.bump(); return "ok" }
+    )
+
+    #expect(clicks.count >= 1)
+    #expect(result.attempted)
+}
+
+/// A strip whose inventory reads empty is the removal-confirmation the rollback polls for.
+private func emptyLogicRuntimeForRollbackTests() -> AXLogicProElements.Runtime {
+    let b = FakeAXRuntimeBuilder()
+    let app = b.element(9700)
+    let window = b.element(9701)
+    let mixer = b.element(9702)
+    let strip = b.element(9703)
+    b.setAttribute(app, kAXMainWindowAttribute as String, window)
+    b.setChildren(window, [mixer])
+    b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
+    b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
+    b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setChildren(mixer, [strip])
+    b.setChildren(strip, [])
+    return b.makeLogicRuntime(appElement: app, setAttributeHandler: nil, performActionHandler: { _, _ in false })
+}
