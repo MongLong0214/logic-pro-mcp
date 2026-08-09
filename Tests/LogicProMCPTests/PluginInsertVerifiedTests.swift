@@ -812,6 +812,10 @@ private struct SlotPopupInsertFixture {
     let leafItemID: Int
     let actions: AXActionRecorder
     let slotOccupier: SlotOccupier
+    let slotReplacer: SlotOccupier
+    let replacementSlotID: Int
+    let nonFormatSubmenuItemIDs: [Int]
+    let nonTerminalFormatEntryID: Int?
     let coordinateFallbackClick: () -> Bool
 }
 
@@ -830,7 +834,9 @@ private func makeSlotPopupInsertFixture(
     includeFormatLeaf: Bool = false,
     leafPickResult: Bool = true,
     mountGainOnLeafPick: Bool = false,
-    occupySlotOnWindowRaise: Bool = false
+    occupySlotOnWindowRaise: Bool = false,
+    includeNonFormatSubmenu: Bool = false,
+    includeNonTerminalFormatEntry: Bool = false
 ) -> SlotPopupInsertFixture {
     let b = FakeAXRuntimeBuilder()
     let app = b.element(9000)
@@ -850,6 +856,13 @@ private func makeSlotPopupInsertFixture(
     let nonMatchingFormatMono = includeNonMatchingLeafFormatMenu ? b.element(9018) : nil
     let nonMatchingFormatMonoToStereo = includeNonMatchingLeafFormatMenu ? b.element(9019) : nil
     let formatNamedCategoryItem = includeFormatNamedCategoryEntry ? b.element(9020) : nil
+    let nonTerminalFormatMenu = includeNonTerminalFormatEntry ? b.element(9034) : nil
+    let nonTerminalFormatEntry = includeNonTerminalFormatEntry ? b.element(9035) : nil
+    let nonTerminalFormatChild = includeNonTerminalFormatEntry ? b.element(9036) : nil
+    let nonTerminalFormatChildMenu = includeNonTerminalFormatEntry ? b.element(9037) : nil
+    let nonFormatSubmenu = includeNonFormatSubmenu ? b.element(9031) : nil
+    let nonFormatEntryA = includeNonFormatSubmenu ? b.element(9032) : nil
+    let nonFormatEntryB = includeNonFormatSubmenu ? b.element(9033) : nil
     let formatLeafItem = includeFormatLeaf ? b.element(9014) : nil
     let formatMenu = includeFormatLeaf ? b.element(9015) : nil
 
@@ -881,9 +894,39 @@ private func makeSlotPopupInsertFixture(
     // Slot popup: visible + anchored after the modeled custom slot-open action.
     b.setAttribute(gainItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
     b.setAttribute(gainItem, kAXTitleAttribute as String, "Gain")
+    if let nonTerminalFormatMenu, let nonTerminalFormatEntry, let nonTerminalFormatChild,
+       let nonTerminalFormatChildMenu {
+        // Every entry carries a real format label, so the submenu passes the format discriminator —
+        // but the matching entry owns a menu of its own, i.e. it is a category wearing a format
+        // name. Picking it would actuate before any terminal target is known.
+        b.setAttribute(nonTerminalFormatChild, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        b.setAttribute(nonTerminalFormatChild, kAXTitleAttribute as String, "Gain")
+        b.setAttribute(nonTerminalFormatChildMenu, kAXRoleAttribute as String, kAXMenuRole as String)
+        b.setChildren(nonTerminalFormatChildMenu, [nonTerminalFormatChild])
+        b.setAttribute(nonTerminalFormatEntry, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        b.setAttribute(nonTerminalFormatEntry, kAXTitleAttribute as String, "Mono")
+        b.setChildren(nonTerminalFormatEntry, [nonTerminalFormatChildMenu])
+        b.setAttribute(nonTerminalFormatMenu, kAXRoleAttribute as String, kAXMenuRole as String)
+        b.setChildren(nonTerminalFormatMenu, [nonTerminalFormatEntry])
+        b.setChildren(gainItem, [nonTerminalFormatMenu])
+    }
+    if let nonFormatSubmenu, let nonFormatEntryA, let nonFormatEntryB {
+        // Entries a format chooser would never contain; the discriminator must refuse this submenu.
+        b.setAttribute(nonFormatEntryA, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        b.setAttribute(nonFormatEntryA, kAXTitleAttribute as String, "Legacy")
+        b.setAttribute(nonFormatEntryB, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        b.setAttribute(nonFormatEntryB, kAXTitleAttribute as String, "Utility")
+        b.setAttribute(nonFormatSubmenu, kAXRoleAttribute as String, kAXMenuRole as String)
+        b.setChildren(nonFormatSubmenu, [nonFormatEntryA, nonFormatEntryB])
+        b.setChildren(gainItem, [nonFormatSubmenu])
+    }
     if let formatLeafItem, let formatMenu {
         b.setAttribute(formatLeafItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
-        b.setAttribute(formatLeafItem, kAXTitleAttribute as String, "Audio Unit")
+        // Measured live on this Logic build: a plug-in entry's submenu contains only channel-format
+        // entries (Gain -> "Mono", "Mono->Stereo"; Compressor and Channel EQ -> "Mono"). The former
+        // "Audio Unit" label modelled no real entry and only kept the arbitrary items.first fallback
+        // looking justified.
+        b.setAttribute(formatLeafItem, kAXTitleAttribute as String, "Mono")
         b.setAttribute(formatMenu, kAXRoleAttribute as String, kAXMenuRole as String)
         b.setChildren(formatMenu, [formatLeafItem])
         b.setChildren(gainItem, [formatMenu])
@@ -938,6 +981,19 @@ private func makeSlotPopupInsertFixture(
     let formatNamedCategoryKey = formatNamedCategoryItem.map(b.elementID)
     let actions = AXActionRecorder()
     let pickAction = kAXPickAction as String
+    // The AX tree can hand back a DIFFERENT element for the same still-empty slot. Anything the
+    // driver learned about the old element — notably whether it exposes the custom opener — was
+    // never about this one.
+    let replacementSlot = b.element(9030)
+    let slotReplacer = SlotOccupier {
+        b.setAttribute(replacementSlot, kAXRoleAttribute as String, kAXButtonRole as String)
+        b.setAttribute(replacementSlot, kAXDescriptionAttribute as String, "오디오 플러그인")
+        b.setAttribute(replacementSlot, kAXHelpAttribute as String, "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다.")
+        b.setAttribute(replacementSlot, kAXPositionAttribute as String, axPoint(400, 300))
+        b.setAttribute(replacementSlot, kAXSizeAttribute as String, axSize(70, 18))
+        b.setChildren(strip, [replacementSlot])
+    }
+
     let slotOccupier = SlotOccupier {
         let bypass = b.element(9021)
         let open = b.element(9022)
@@ -998,6 +1054,10 @@ private func makeSlotPopupInsertFixture(
         leafItemID: leafKey,
         actions: actions,
         slotOccupier: slotOccupier,
+        slotReplacer: slotReplacer,
+        replacementSlotID: b.elementID(replacementSlot),
+        nonFormatSubmenuItemIDs: [nonFormatEntryA, nonFormatEntryB].compactMap { $0 }.map(b.elementID),
+        nonTerminalFormatEntryID: nonTerminalFormatEntry.map(b.elementID),
         coordinateFallbackClick: {
             b.setChildren(app, [window, popupMenu])
             return true
@@ -1257,6 +1317,54 @@ private func run425Insert(
     #expect(!writeAttempted)
     #expect(!fixture.actions.touched(elementID: fixture.slotItemID))
     #expect(!fixture.actions.touched(elementID: fixture.leafItemID))
+}
+
+@Test func testPlugin425NeverPicksAFormatLabelledEntryThatOwnsItsOwnMenu() async throws {
+    // A "Mono" entry that owns a submenu is a category wearing a format name. It satisfies the
+    // format-label check, so only the terminal requirement keeps AXPick off it.
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, includeNonTerminalFormatEntry: true)
+    _ = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
+        await runRealInsert(runtime: fixture.runtime)
+    }
+    let entryID = try #require(fixture.nonTerminalFormatEntryID)
+    #expect(!fixture.actions.touched(elementID: entryID))
+}
+
+@Test func testPlugin425NeverActuatesInsideANonFormatSubmenu() async throws {
+    // Logic exposes category entries named like plug-ins, so "the matched item owns an AXMenu" does
+    // not mean that menu is a channel-format chooser. Entering it and picking whatever sits first
+    // would actuate a target nothing identified.
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, includeNonFormatSubmenu: true)
+    _ = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
+        await runRealInsert(runtime: fixture.runtime)
+    }
+    for id in fixture.nonFormatSubmenuItemIDs {
+        #expect(!fixture.actions.touched(elementID: id))
+    }
+}
+
+@Test func testPlugin425FailsClosedWhenTheSlotElementIsReplacedDuringEnumeration() async throws {
+    // Whether the custom opener is present was read from ONE element. If the AX tree hands back a
+    // different element for the same still-empty slot, that answer was never about the element we
+    // are about to drive — so the attempt must refuse rather than actuate on an unexamined element.
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let replacer = fixture.slotReplacer
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
+        await AccessibilityChannel.withSlotPopupOpenActionEnumerationHookForTests {
+            replacer.occupy()
+        } operation: {
+            await runRealInsert(runtime: fixture.runtime)
+        }
+    }
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "C")
+    let stage = try #require(obj["setup_stage"] as? String)
+    #expect(stage == "target_slot_element_replaced")
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(!fixture.actions.touched(elementID: fixture.slotItemID))
+    #expect(!fixture.actions.touched(elementID: fixture.replacementSlotID))
 }
 
 @Test func testPlugin425CustomSlotOpenFailsClosedWhenSlotBecomesOccupiedDuringEnumeration() async throws {
