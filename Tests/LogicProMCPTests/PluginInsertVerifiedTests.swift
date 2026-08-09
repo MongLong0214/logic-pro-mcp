@@ -816,6 +816,8 @@ private struct SlotPopupInsertFixture {
     let replacementSlotID: Int
     let nonFormatSubmenuItemIDs: [Int]
     let nonTerminalFormatEntryID: Int?
+    let searchFieldID: Int
+    let leftoverMenuItemID: Int?
     let coordinateFallbackClick: () -> Bool
 }
 
@@ -836,7 +838,8 @@ private func makeSlotPopupInsertFixture(
     mountGainOnLeafPick: Bool = false,
     occupySlotOnWindowRaise: Bool = false,
     includeNonFormatSubmenu: Bool = false,
-    includeNonTerminalFormatEntry: Bool = false
+    includeNonTerminalFormatEntry: Bool = false,
+    leftoverNeighbourMenuVisible: Bool = false
 ) -> SlotPopupInsertFixture {
     let b = FakeAXRuntimeBuilder()
     let app = b.element(9000)
@@ -856,6 +859,9 @@ private func makeSlotPopupInsertFixture(
     let nonMatchingFormatMono = includeNonMatchingLeafFormatMenu ? b.element(9018) : nil
     let nonMatchingFormatMonoToStereo = includeNonMatchingLeafFormatMenu ? b.element(9019) : nil
     let formatNamedCategoryItem = includeFormatNamedCategoryEntry ? b.element(9020) : nil
+    let leftoverMenu = leftoverNeighbourMenuVisible ? b.element(9040) : nil
+    let leftoverSearch = leftoverNeighbourMenuVisible ? b.element(9041) : nil
+    let leftoverItem = leftoverNeighbourMenuVisible ? b.element(9042) : nil
     let nonTerminalFormatMenu = includeNonTerminalFormatEntry ? b.element(9034) : nil
     let nonTerminalFormatEntry = includeNonTerminalFormatEntry ? b.element(9035) : nil
     let nonTerminalFormatChild = includeNonTerminalFormatEntry ? b.element(9036) : nil
@@ -894,6 +900,18 @@ private func makeSlotPopupInsertFixture(
     // Slot popup: visible + anchored after the modeled custom slot-open action.
     b.setAttribute(gainItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
     b.setAttribute(gainItem, kAXTitleAttribute as String, "Gain")
+    if let leftoverMenu, let leftoverSearch, let leftoverItem {
+        // A pop-up left open by a neighbouring slot. It is a plug-in menu, it is visible, and it sits
+        // close enough that the geometric anchor test accepts it for our slot too — so only its
+        // having been there BEFORE we actuated distinguishes it from ours.
+        b.setAttribute(leftoverSearch, kAXRoleAttribute as String, kAXTextFieldRole as String)
+        b.setAttribute(leftoverItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        b.setAttribute(leftoverItem, kAXTitleAttribute as String, "Gain")
+        b.setAttribute(leftoverMenu, kAXRoleAttribute as String, kAXMenuRole as String)
+        b.setAttribute(leftoverMenu, kAXPositionAttribute as String, axPoint(400, 290))
+        b.setAttribute(leftoverMenu, kAXSizeAttribute as String, axSize(300, 400))
+        b.setChildren(leftoverMenu, [leftoverSearch, leftoverItem])
+    }
     if let nonTerminalFormatMenu, let nonTerminalFormatEntry, let nonTerminalFormatChild,
        let nonTerminalFormatChildMenu {
         // Every entry carries a real format label, so the submenu passes the format discriminator —
@@ -969,7 +987,11 @@ private func makeSlotPopupInsertFixture(
     // the (top-level) popup menu.
     b.setAttribute(app, kAXWindowsAttribute as String, [window])
     b.setAttribute(app, kAXMainWindowAttribute as String, window)
-    b.setChildren(app, popupInitiallyVisible ? [window, popupMenu] : [window])
+    // The leftover menu is present from the start: that is what makes it "already open".
+    var initialAppChildren: [AXUIElement] = [window]
+    if let leftoverMenu { initialAppChildren.append(leftoverMenu) }
+    if popupInitiallyVisible { initialAppChildren.append(popupMenu) }
+    b.setChildren(app, initialAppChildren)
 
     let slotKey = b.elementID(slot)
     let windowKey = b.elementID(window)
@@ -1022,7 +1044,7 @@ private func makeSlotPopupInsertFixture(
             }
             if elementID == slotKey, action == slotPopupOpenCustomAction {
                 if popupAppearsAfterSlotOpen {
-                    b.setChildren(app, [window, popupMenu])
+                    b.setChildren(app, leftoverMenu.map { [window, $0, popupMenu] } ?? [window, popupMenu])
                 }
                 return slotOpenResult
             }
@@ -1058,8 +1080,10 @@ private func makeSlotPopupInsertFixture(
         replacementSlotID: b.elementID(replacementSlot),
         nonFormatSubmenuItemIDs: [nonFormatEntryA, nonFormatEntryB].compactMap { $0 }.map(b.elementID),
         nonTerminalFormatEntryID: nonTerminalFormatEntry.map(b.elementID),
+        searchFieldID: b.elementID(searchField),
+        leftoverMenuItemID: leftoverItem.map(b.elementID),
         coordinateFallbackClick: {
-            b.setChildren(app, [window, popupMenu])
+            b.setChildren(app, leftoverMenu.map { [window, $0, popupMenu] } ?? [window, popupMenu])
             return true
         }
     )
@@ -1319,13 +1343,46 @@ private func run425Insert(
     #expect(!fixture.actions.touched(elementID: fixture.leafItemID))
 }
 
+@Test func testPlugin425NeverNavigatesAPopupThatWasAlreadyOpen() async throws {
+    // A menu left open by a neighbouring slot passes the geometric anchor test — slots sit ~17px
+    // apart while the bands are ±96px and ~500px. Only "it appeared after we actuated" separates it
+    // from ours, and navigating the wrong one mounts the plug-in on somebody else's slot.
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, leftoverNeighbourMenuVisible: true)
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
+        await runRealInsert(runtime: fixture.runtime)
+    }
+    let leftoverID = try #require(fixture.leftoverMenuItemID)
+    #expect(!fixture.actions.touched(elementID: leftoverID))
+    // and the run still did its real work, so this is not an absence caused by nothing happening
+    #expect(try #require(obj["state"] as? String) == "A")
+    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+}
+
+@Test func testPlugin425FullInsertWritesNoAttributesAnywhereInThePopup() async throws {
+    // The unit-level discovery test proves the recursive walk writes nothing. This asserts the same
+    // property end-to-end through the real driver, where the pop-up carries a search field: a whole
+    // successful insert must not set a single attribute on any pop-up element.
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
+        await runRealInsert(runtime: fixture.runtime)
+    }
+    #expect(try #require(obj["state"] as? String) == "A")
+    #expect(!fixture.actions.touched(elementID: fixture.searchFieldID))
+    #expect(fixture.actions.attributeWrites.isEmpty)
+}
+
 @Test func testPlugin425NeverPicksAFormatLabelledEntryThatOwnsItsOwnMenu() async throws {
     // A "Mono" entry that owns a submenu is a category wearing a format name. It satisfies the
     // format-label check, so only the terminal requirement keeps AXPick off it.
     let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, includeNonTerminalFormatEntry: true)
-    _ = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
         await runRealInsert(runtime: fixture.runtime)
     }
+    // Same reasoning: show the flow reached the pick, so "the category was untouched" is a result
+    // rather than a consequence of nothing having happened.
+    #expect(fixture.actions.contains(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction))
+    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+    #expect(try #require(obj["state"] as? String) == "A")
     let entryID = try #require(fixture.nonTerminalFormatEntryID)
     #expect(!fixture.actions.touched(elementID: entryID))
 }
@@ -1335,9 +1392,14 @@ private func run425Insert(
     // not mean that menu is a channel-format chooser. Entering it and picking whatever sits first
     // would actuate a target nothing identified.
     let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, includeNonFormatSubmenu: true)
-    _ = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
         await runRealInsert(runtime: fixture.runtime)
     }
+    // An absence assertion proves nothing if the flow never got there, so prove it did: the slot was
+    // opened and the exact Gain entry — not anything inside the foreign submenu — was picked.
+    #expect(fixture.actions.contains(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction))
+    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+    #expect(try #require(obj["state"] as? String) == "A")
     for id in fixture.nonFormatSubmenuItemIDs {
         #expect(!fixture.actions.touched(elementID: id))
     }

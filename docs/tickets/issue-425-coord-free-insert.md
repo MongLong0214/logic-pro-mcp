@@ -68,3 +68,27 @@ discovery reaches an already-attached submenu with neither non-target AX actions
 nor attribute writes, and that leaf `AXPick` is accepted only when the post-insert
 inventory observation supports it. It also verifies the trace values for both the
 custom-action and absent-action coordinate-fallback slot-open paths.
+
+## What State A does not prove
+
+These are limits of the verification, not open work items. They are written down so a reader does not
+read more into a State A receipt than it carries.
+
+**Product identity is a display string.** The leaf is chosen by exact title match and the mount is
+confirmed by mapping the observed slot name back to the requested id. Two products exposing the same
+AX title are indistinguishable to both steps, so State A certifies "a plug-in presenting this name is
+now at the requested slot", not "this exact product is". AX exposes no stable product identifier on
+these menu entries on the measured build.
+
+**Attribution is a diff, not a transaction.** Acceptance is a pre/post inventory diff taken around
+this call. If the requested plug-in arrives at the requested slot from another source inside that
+window, the diff cannot tell that apart from our own pick. A wrong SLOT is caught — the observed slot
+must equal the requested one and is rolled back otherwise — but a concurrent identical mount at the
+same slot is not distinguishable.
+
+**Check-and-act is not atomic.** Every guard here reads AX and then acts; macOS offers no way to hold
+the tree between the two. The window is now as small as the code can make it — the slot is re-read
+and required to be both still empty and still the same element immediately before actuation, and the
+pop-up must be one that appeared after that actuation — but a change landing inside that remaining
+window is not detectable from this process.
+

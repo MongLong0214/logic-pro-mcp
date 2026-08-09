@@ -1448,7 +1448,11 @@ extension AccessibilityChannel {
         /// attempted. Distinct from the
         /// permanent `.mountMismatch` (every strategy ran but the plugin never
         /// mounted) — these are retry-able (`safe_to_retry:true`), P2-3.
-        case transientSetupFailure(stage: String)
+        /// `actuated` records whether anything was already dispatched at the target when this
+        /// failure was raised. Several setup stages are only reachable after the slot's opener has
+        /// been performed or clicked, and reporting those as "no write attempted" denies an
+        /// actuation that did happen.
+        case transientSetupFailure(stage: String, actuated: Bool = false)
     }
 
     /// The injectable live-insert seam. Performs the live insert sequence and
@@ -1800,7 +1804,7 @@ extension AccessibilityChannel {
                 ]
             ))
 
-        case let .transientSetupFailure(stage):
+        case let .transientSetupFailure(stage, actuated):
             // A pre-mount UI-setup step did not complete (slot popup, anchor, or
             // exact leaf not ready). No write attempted → retry-able (P2-3), distinct from the
             // permanent insert_not_ax_automatable.
@@ -1812,9 +1816,11 @@ extension AccessibilityChannel {
                     "setup_stage": stage,
                     "select_trace": trace,
                     "what_was_attempted": "open the requested slot popup and choose \(pluginID)",
-                    "what_was_observed": "the exact slot popup UI was not ready at stage '\(stage)' — no insert was attempted",
+                    "what_was_observed": actuated
+                        ? "the slot's opener was dispatched, then setup stopped at stage '\(stage)' before any plugin was chosen"
+                        : "the exact slot popup UI was not ready at stage '\(stage)' — nothing was dispatched at the slot",
                     "safe_to_retry": true,
-                    "write_attempted": false,
+                    "write_attempted": actuated,
                 ]
             ))
         }
@@ -1927,6 +1933,10 @@ extension AccessibilityChannel {
             return (.transientSetupFailure(stage: "target_slot_no_longer_empty"), trace)
         }
         let popupAnchorSlot = slot.element
+        // Anything already open belongs to someone else; only a menu that appears after we actuate
+        // can be evidence that WE opened this slot's pop-up.
+        let preexistingMenus = visibleSlotPopupMenus(runtime: runtime)
+        trace["slot_popup_preexisting_menus"] = preexistingMenus.count
         let authorisation = slotPopupOpenCustomActionEnumerationResult(on: slot.element, runtime: runtime.ax)
 
         // Enumeration is a read and takes time, so the slot may be occupied by the time we act.
@@ -1960,7 +1970,7 @@ extension AccessibilityChannel {
             trace["slot_popup_open_action"] = "coordinate_fallback"
             trace["slot_popup_open_action_enumeration"] = "absent"
             guard clickElementCenter(slot.element, runtime: runtime.ax) else {
-                return (.transientSetupFailure(stage: "target_slot_click_failed"), trace)
+                return (.transientSetupFailure(stage: "target_slot_click_failed", actuated: true), trace)
             }
         case .enumerationFailed:
             // An AX read failure does not prove that this build lacks the custom action, so it must
@@ -1973,9 +1983,11 @@ extension AccessibilityChannel {
         }
         try? await Task.sleep(for: .milliseconds(250))
 
-        guard let rootMenu = await pollSlotPopupMenu(runtime: runtime, timeoutMs: 1_200) else {
+        guard let rootMenu = await pollSlotPopupMenu(
+            runtime: runtime, timeoutMs: 1_200, excluding: preexistingMenus
+        ) else {
             AXMouseHelper.pressEscape()
-            return (.transientSetupFailure(stage: "slot_popup_menu_not_found"), trace)
+            return (.transientSetupFailure(stage: "slot_popup_menu_not_found", actuated: true), trace)
         }
         trace["slot_popup_menu_found"] = true
 
@@ -1985,7 +1997,7 @@ extension AccessibilityChannel {
         trace["slot_popup_anchor_verified"] = anchorVerified
         guard anchorVerified else {
             AXMouseHelper.pressEscape()
-            return (.transientSetupFailure(stage: "slot_popup_not_anchored_to_target_slot"), trace)
+            return (.transientSetupFailure(stage: "slot_popup_not_anchored_to_target_slot", actuated: true), trace)
         }
 
         guard let pluginClick = await clickPluginInAnchoredSlotPopup(
@@ -1995,7 +2007,7 @@ extension AccessibilityChannel {
             runtime: runtime.ax
         ) else {
             AXMouseHelper.pressEscape()
-            return (.transientSetupFailure(stage: "plugin_exact_leaf_not_found"), trace)
+            return (.transientSetupFailure(stage: "plugin_exact_leaf_not_found", actuated: true), trace)
         }
         trace["strategies_attempted"] = pluginClick.strategies
         trace["winning_strategy"] = pluginClick.strategy
@@ -2314,13 +2326,25 @@ extension AccessibilityChannel {
         return slots[insert]
     }
 
+    /// Waits for a plug-in pop-up that was NOT already open before the caller actuated.
+    ///
+    /// Geometry alone cannot establish which slot a menu belongs to: insert slots in a strip sit
+    /// ~17px apart, while the anchor test accepts a menu anywhere within ±96px of its own height and
+    /// a ~500px horizontal band. A leftover menu from a neighbouring slot — or from a previous
+    /// attempt — therefore passes that test and would be navigated as though it were ours, mounting
+    /// the plug-in on somebody else's slot. Requiring the menu to have APPEARED after our actuation
+    /// is causal evidence that geometry cannot supply.
     private static func pollSlotPopupMenu(
         runtime: AXLogicProElements.Runtime,
-        timeoutMs: Int
+        timeoutMs: Int,
+        excluding preexisting: [AXUIElement] = []
     ) async -> AXUIElement? {
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
         repeat {
-            if let menu = slotPopupMenu(runtime: runtime) {
+            let fresh = visibleSlotPopupMenus(runtime: runtime).filter { menu in
+                !preexisting.contains { CFEqual($0, menu) }
+            }
+            if let menu = fresh.first {
                 return menu
             }
             try? await Task.sleep(for: .milliseconds(80))
@@ -2393,6 +2417,26 @@ extension AccessibilityChannel {
         )
     }
     #endif
+
+    /// Every currently visible plug-in pop-up, so a caller can tell a menu that was already there
+    /// from one its own actuation opened.
+    private static func visibleSlotPopupMenus(
+        runtime: AXLogicProElements.Runtime
+    ) -> [AXUIElement] {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return [] }
+        let menus = AXHelpers.findAllDescendants(
+            of: app, role: kAXMenuRole as String, maxDepth: 9, runtime: runtime.ax
+        )
+        return menus.filter { menu in
+            isVisibleMenu(menu, runtime: runtime.ax)
+                && AXHelpers.findDescendant(
+                    of: menu, role: kAXTextFieldRole as String, maxDepth: 3, runtime: runtime.ax
+                ) != nil
+                && AXHelpers.getChildren(menu, runtime: runtime.ax).contains(where: {
+                    (AXHelpers.getRole($0, runtime: runtime.ax) ?? "") == (kAXMenuItemRole as String)
+                })
+        }
+    }
 
     private static func slotPopupMenu(runtime: AXLogicProElements.Runtime) -> AXUIElement? {
         guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return nil }
