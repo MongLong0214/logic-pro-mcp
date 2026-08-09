@@ -73,6 +73,13 @@ extension AXLogicProElements {
         runtime: Runtime = .production
     ) -> AXUIElement? {
         guard let controlBar = getControlBar(runtime: runtime) else { return nil }
+        let localeLabels: AXLocalePolicy.LabelSet? = switch englishName {
+        case "Play": AXLocalePolicy.transportPlayControl
+        case "Record": AXLocalePolicy.transportRecordControl
+        case "Cycle": AXLocalePolicy.transportCycleControl
+        case "Metronome": AXLocalePolicy.transportMetronomeControl
+        default: nil
+        }
         let checkboxes = AXHelpers.findAllDescendants(
             of: controlBar, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime.ax
         )
@@ -81,12 +88,14 @@ extension AXLogicProElements {
             let title = AXHelpers.getTitle(cb, runtime: runtime.ax) ?? ""
             if title == koreanName { return cb }
             if let en = englishName, title == en { return cb }
+            if localeLabels?.matches(title, mode: .exactStrict) == true { return cb }
         }
         // Fallback: description match
         for cb in checkboxes {
             let desc = AXHelpers.getDescription(cb, runtime: runtime.ax) ?? ""
             if desc == koreanName { return cb }
             if let en = englishName, desc == en { return cb }
+            if localeLabels?.matches(desc, mode: .exactStrict) == true { return cb }
         }
         return nil
     }

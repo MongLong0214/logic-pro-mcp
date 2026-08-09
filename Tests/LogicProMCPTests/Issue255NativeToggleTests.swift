@@ -69,6 +69,43 @@ private func issue255Channel(
     #expect(object["button"] as? String == "Count In")
 }
 
+@Test func japaneseCreatorStudioPlayUsesExactLocalizedCheckboxAndReadback() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(25_504)
+    let window = builder.element(25_505)
+    let controlBar = builder.element(25_506)
+    let play = builder.element(25_507)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [controlBar])
+    builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "コントロールバー")
+    builder.setChildren(controlBar, [play])
+    builder.setAttribute(play, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(play, kAXTitleAttribute as String, "再生")
+    builder.setAttribute(play, kAXValueAttribute as String, NSNumber(value: false))
+
+    let logicRuntime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            guard element == play, action == kAXPressAction as String else { return false }
+            builder.setAttribute(play, kAXValueAttribute as String, NSNumber(value: true))
+            return true
+        }
+    )
+    let channel = issue255Channel(logicRuntime: logicRuntime)
+
+    let result = await channel.execute(operation: "transport.play", params: [:])
+
+    #expect(result.isSuccess)
+    let object = try #require(issue255Object(result.message))
+    #expect(object["state"] as? String == "A")
+    #expect(object["verified"] as? Bool == true)
+    #expect(object["observed"] as? Bool == true)
+    #expect(object["button"] as? String == "Play")
+}
+
 @Test func issue255StepInputUsesWindowMenuAndVerifiesWindowState() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(25_510)

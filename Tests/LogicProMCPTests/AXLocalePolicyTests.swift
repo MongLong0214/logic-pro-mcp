@@ -552,6 +552,7 @@ struct AXLocalePolicyTests {
     func controlBarAndSliderLabels() {
         #expect(AXLocalePolicy.controlBarGroupLabel.matches("control bar", mode: .exactStrict))
         #expect(AXLocalePolicy.controlBarGroupLabel.matches("컨트롤 막대", mode: .exactStrict))
+        #expect(AXLocalePolicy.controlBarGroupLabel.matches("コントロールバー", mode: .exactStrict))
         #expect(!AXLocalePolicy.controlBarGroupLabel.matches("transport", mode: .exactStrict))
 
         #expect(AXLocalePolicy.barSliderLabel.matches("bar", mode: .exactStrict))
@@ -560,6 +561,15 @@ struct AXLocalePolicyTests {
         #expect(AXLocalePolicy.beatSliderLabel.matches("beat", mode: .exactStrict))
         #expect(AXLocalePolicy.beatSliderLabel.matches("비트", mode: .exactStrict))
         #expect(!AXLocalePolicy.beatSliderLabel.matches("bar", mode: .exactStrict))
+    }
+
+    @Test("transport controls include actual Japanese Logic labels")
+    func japaneseTransportLabels() {
+        #expect(AXLocalePolicy.transportPlayControl.matches("再生"))
+        #expect(AXLocalePolicy.transportRecordControl.matches("録音"))
+        #expect(AXLocalePolicy.transportCycleControl.matches("サイクル"))
+        #expect(AXLocalePolicy.transportMetronomeControl.matches("メトロノーム"))
+        #expect(AXLocalePolicy.transportMetronomeControl.matches("クリック"))
     }
 
     /// Track-header Mute/Solo/Record button labels (read-only state extraction)

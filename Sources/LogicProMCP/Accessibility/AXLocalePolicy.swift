@@ -232,25 +232,25 @@ enum AXLocalePolicy {
 
     static let transportPlayControl = LabelSet(
         canonical: "play",
-        variants: ["재생"],
+        variants: ["재생", "再生"],
         rationale: "Identifies the Play transport control when reading TransportState; read-only."
     )
 
     static let transportRecordControl = LabelSet(
         canonical: "record",
-        variants: ["녹음"],
+        variants: ["녹음", "録音"],
         rationale: "Identifies the Record transport control; excluded by arm-tokens at the call site; read-only."
     )
 
     static let transportCycleControl = LabelSet(
         canonical: "cycle",
-        variants: ["loop", "사이클"],
+        variants: ["loop", "사이클", "サイクル"],
         rationale: "Identifies the Cycle/Loop transport control; read-only."
     )
 
     static let transportMetronomeControl = LabelSet(
         canonical: "metronome",
-        variants: ["click", "메트로놈", "클릭"],
+        variants: ["click", "메트로놈", "클릭", "メトロノーム", "クリック"],
         rationale: "Identifies the Metronome/Click transport control; read-only."
     )
 
@@ -284,7 +284,7 @@ enum AXLocalePolicy {
 
     static let controlBarGroupLabel = LabelSet(
         canonical: "control bar",
-        variants: ["컨트롤 막대"],
+        variants: ["컨트롤 막대", "コントロールバー"],
         rationale: "Identifies the control-bar AXGroup by description; read-only locator."
     )
 
@@ -480,7 +480,7 @@ enum AXLocalePolicy {
     /// Control-bar / transport container metadata tokens (id/title/desc scan).
     static let transportContainerMetadata = LabelSet(
         canonical: "transport",
-        variants: ["control bar", "컨트롤 막대"],
+        variants: ["control bar", "컨트롤 막대", "コントロールバー"],
         rationale: "Classifies the transport/control-bar container by metadata substring; read-only."
     )
 
@@ -488,7 +488,8 @@ enum AXLocalePolicy {
     static let transportContainerControlKeywords = LabelSet(
         canonical: "play",
         variants: ["stop", "record", "cycle", "loop", "metronome", "rewind", "forward",
-                   "재생", "녹음", "사이클", "메트로놈", "클릭"],
+                   "재생", "녹음", "사이클", "메트로놈", "클릭",
+                   "再生", "録音", "サイクル", "メトロノーム", "クリック"],
         rationale: "Counts distinct transport-control labels to classify the control bar; read-only."
     )
 
