@@ -7,9 +7,10 @@ enum AppleScriptSafety {
 
         static let production = Runtime(
             openFileURL: { url in
+                let target = LogicProTarget.current
                 let result = BoundedProcessRunner.run(
                     executable: "/usr/bin/open",
-                    arguments: ["-a", "Logic Pro", url.path],
+                    arguments: openArguments(for: url, bundleID: target.bundleID),
                     timeout: ServerConfig.appleScriptTimeout,
                     outputLimitBytes: 4 * 1024
                 )
@@ -20,6 +21,10 @@ enum AppleScriptSafety {
                 return output.exitCode == 0
             }
         )
+    }
+
+    static func openArguments(for url: URL, bundleID: String) -> [String] {
+        ["-b", bundleID, url.path]
     }
 
     /// Allowed transport actions — whitelist only.
