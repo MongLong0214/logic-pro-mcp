@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed — plugin-insert actuation
 
-- **#425 current behavior supersedes the 3.13.0 #425 entry below.** Slot-open performs the measured custom action; category and leaf selection use `AXPick`. `LOGIC_MCP_INSERT_COORD_FREE` / `insertCoordFree` is removed, not a kill switch. The coordinate click remains only as a fallback when the custom action is absent, and that fallback is recorded in the trace.
+- **#425 current behavior supersedes the 3.13.0 #425 entry below.** Slot-open uses the measured custom action. Discovery is read-only and recurses through each already-attached `AXMenu` child; `AXPick` is dispatched only to the exact target leaf. `LOGIC_MCP_INSERT_COORD_FREE` / `insertCoordFree` is removed, not a kill switch. The coordinate click remains only when action enumeration succeeds and the custom action is absent; enumeration failure fails closed as `slot_action_enumeration_failed` and is recorded in the trace.
 
 ---
 

@@ -1825,6 +1825,15 @@ extension AccessibilityChannel {
     static let slotPopupOpenCustomAction =
         "Name:Open plug-in menu with legacy plug-ins\nTarget:0x0\nSelector:(null)"
 
+    /// The custom-action enumeration outcome. Only an explicit successful
+    /// enumeration that omits the action may use the coordinate compatibility
+    /// path; an unreadable enumeration must fail closed before any write.
+    enum SlotPopupOpenCustomActionEnumerationResult: Sendable {
+        case enumeratedAndPresent
+        case enumeratedAndAbsent
+        case enumerationFailed
+    }
+
     /// Production exact-slot popup insert driver. Drives the target insert slot's
     /// own popup menu and returns a structured outcome plus a `select_trace`
     /// diagnostic dict. This is the default path that uses coordinate-free AX
@@ -1896,7 +1905,8 @@ extension AccessibilityChannel {
         }
         trace["target_slot_found"] = true
 
-        if slotPopupOpenCustomActionIsAvailable(on: targetSlot.element, runtime: runtime.ax) {
+        switch slotPopupOpenCustomActionEnumerationResult(on: targetSlot.element, runtime: runtime.ax) {
+        case .enumeratedAndPresent:
             // Live evidence: this can return `cannotComplete` (-25204) even when
             // it opens the popup. Dispatch it through the same runtime seam as
             // AXPress, but let the observed popup poll below make the decision.
@@ -1905,15 +1915,25 @@ extension AccessibilityChannel {
             )
             trace["slot_popup_open_fallback_taken"] = false
             trace["slot_popup_open_action"] = "custom_action"
-        } else {
+            trace["slot_popup_open_action_enumeration"] = "present"
+        case .enumeratedAndAbsent:
             // Compatibility path for builds that do not expose the measured custom
             // action. This is intentionally recorded: a coordinate fallback is not
             // silently treated as the preferred coordinate-free actuation.
             trace["slot_popup_open_fallback_taken"] = true
             trace["slot_popup_open_action"] = "coordinate_fallback"
+            trace["slot_popup_open_action_enumeration"] = "absent"
             guard clickElementCenter(targetSlot.element, runtime: runtime.ax) else {
                 return (.transientSetupFailure(stage: "target_slot_click_failed"), trace)
             }
+        case .enumerationFailed:
+            // An AX read failure does not prove that this build lacks the custom
+            // action, so it must not downgrade to the coordinate write path.
+            trace["slot_popup_open_fallback_taken"] = false
+            trace["slot_popup_open_action"] = "action_enumeration_failed"
+            trace["slot_popup_open_action_enumeration"] = "failed"
+            trace["slot_popup_open_setup_stage"] = "slot_action_enumeration_failed"
+            return (.transientSetupFailure(stage: "slot_action_enumeration_failed"), trace)
         }
         try? await Task.sleep(for: .milliseconds(250))
 
@@ -2282,16 +2302,16 @@ extension AccessibilityChannel {
         return nil
     }
 
-    /// Whether this specific slot currently exposes Logic's custom popup opener.
-    /// Action discovery is separate from action execution because the latter can
-    /// report failure after the popup is already open.
-    private static func slotPopupOpenCustomActionIsAvailable(
+    /// Enumerates the custom popup opener on this specific slot. Action discovery
+    /// is separate from action execution because the latter can report failure
+    /// after the popup is already open.
+    private static func slotPopupOpenCustomActionEnumerationResult(
         on element: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> Bool {
+    ) -> SlotPopupOpenCustomActionEnumerationResult {
         #if DEBUG
-        if let actionNames = slotPopupOpenActionNamesForTests {
-            return actionNames.contains(slotPopupOpenCustomAction)
+        if let result = slotPopupOpenCustomActionEnumerationResultForTests {
+            return result
         }
         #endif
         _ = runtime // action enumeration has no existing runtime hook.
@@ -2299,21 +2319,39 @@ extension AccessibilityChannel {
         guard AXUIElementCopyActionNames(element, &actionNames) == .success,
               let actionNames,
               let actions = actionNames as? [String] else {
-            return false
+            return .enumerationFailed
         }
         return actions.contains(slotPopupOpenCustomAction)
+            ? .enumeratedAndPresent
+            : .enumeratedAndAbsent
     }
 
     #if DEBUG
-    /// Test-only action-name discovery override. The action itself is still
+    /// Test-only action-enumeration override. The action itself is still
     /// dispatched through `AXHelpers.performAction` and the shared fake runtime.
-    @TaskLocal static var slotPopupOpenActionNamesForTests: [String]?
+    @TaskLocal static var slotPopupOpenCustomActionEnumerationResultForTests:
+        SlotPopupOpenCustomActionEnumerationResult?
 
+    static func withSlotPopupOpenCustomActionEnumerationResultForTests<Result>(
+        _ result: SlotPopupOpenCustomActionEnumerationResult,
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        try await $slotPopupOpenCustomActionEnumerationResultForTests.withValue(
+            result, operation: operation
+        )
+    }
+
+    /// Retained action-name test seam for present/absent compatibility fixtures.
     static func withSlotPopupOpenActionNamesForTests<Result>(
         _ actionNames: [String],
         operation: () async throws -> Result
     ) async rethrows -> Result {
-        try await $slotPopupOpenActionNamesForTests.withValue(actionNames, operation: operation)
+        let result: SlotPopupOpenCustomActionEnumerationResult = actionNames.contains(slotPopupOpenCustomAction)
+            ? .enumeratedAndPresent
+            : .enumeratedAndAbsent
+        return try await withSlotPopupOpenCustomActionEnumerationResultForTests(
+            result, operation: operation
+        )
     }
     #endif
 

@@ -965,6 +965,28 @@ private func run425Insert(
     #expect(!fallbackTaken)
 }
 
+@Test func testPlugin425SlotOpenFailsClosedWhenActionEnumerationFails() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let obj = await AccessibilityChannel.withSlotPopupOpenCustomActionEnumerationResultForTests(
+        .enumerationFailed
+    ) {
+        await AccessibilityChannel.withCoordinateActuationForTests(fixture.coordinateFallbackClick) {
+            await runRealInsert(runtime: fixture.runtime)
+        }
+    }
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "C")
+    let stage = try #require(obj["setup_stage"] as? String)
+    #expect(stage == "slot_action_enumeration_failed")
+    #expect(!fixture.actions.contains(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction))
+    let trace = try #require(obj["select_trace"] as? [String: Any])
+    let fallbackTaken = try #require(trace["slot_popup_open_fallback_taken"] as? Bool)
+    #expect(!fallbackTaken)
+    let slotOpenAction = try #require(trace["slot_popup_open_action"] as? String)
+    #expect(slotOpenAction == "action_enumeration_failed")
+}
+
 @Test func testPlugin425SlotOpenSuccessFailsClosedWhenPopupIsNotObserved() async throws {
     let fixture = makeSlotPopupInsertFixture(popupAppearsAfterSlotOpen: false)
     let obj = await run425Insert(

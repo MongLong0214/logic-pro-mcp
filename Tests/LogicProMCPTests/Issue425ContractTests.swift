@@ -94,6 +94,10 @@ struct Issue425ContractTests {
         let unreleasedStatesRemoval = unreleased.contains("LOGIC_MCP_INSERT_COORD_FREE")
             && unreleased.contains("insertCoordFree")
             && unreleased.localizedCaseInsensitiveContains("removed")
+        let categoryPickPattern = #"(?:`?AXPick`?[^.\n]*\bcategory\b|\bcategory\b[^.\n]*`?AXPick`?)"#
+        let unreleasedClaimsCategoryPick = unreleased.range(
+            of: categoryPickPattern, options: .regularExpression
+        ) != nil
 
         #expect(unreleasedIsNonEmpty, "CHANGELOG.md ## [Unreleased] must not be empty")
         #expect(
@@ -103,6 +107,10 @@ struct Issue425ContractTests {
         #expect(
             !hasRemovedControlToken || unreleasedStatesRemoval,
             "Historical coordinate-free control tokens require ## [Unreleased] to state their removal"
+        )
+        #expect(
+            !unreleasedClaimsCategoryPick,
+            "CHANGELOG.md ## [Unreleased] must not claim that a category is AXPick'ed"
         )
     }
 }
