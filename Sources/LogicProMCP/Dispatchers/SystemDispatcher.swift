@@ -195,6 +195,7 @@ struct SystemDispatcher: OperationTraceDispatching {
         let logicProRunning: Bool
         let logicProHasWindow: Bool
         let logicProHasDocument: Bool
+        let logicProProjectChooserVisible: Bool
         let logicProVersion: String
         let logicProBundleID: String
         let logicProVariant: String
@@ -211,6 +212,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             case logicProRunning = "logic_pro_running"
             case logicProHasWindow = "logic_pro_has_window"
             case logicProHasDocument = "logic_pro_has_document"
+            case logicProProjectChooserVisible = "logic_pro_project_chooser_visible"
             case logicProVersion = "logic_pro_version"
             case logicProBundleID = "logic_pro_bundle_id"
             case logicProVariant = "logic_pro_variant"
@@ -279,6 +281,9 @@ struct SystemDispatcher: OperationTraceDispatching {
         sagaRefreshAfterWrite: (@Sendable () async -> Void)? = nil,
         logicHealthObservation: @Sendable () -> LogicHealthObservation = {
             productionLogicHealthObservation()
+        },
+        projectChooserVisible: @Sendable () -> Bool = {
+            AccessibilityChannel.exactEmptyProjectChooserIsVisible()
         },
         // ADR-002 F5 — live AX track-header reader forwarded to the saga
         // executor so target_ref track/mixer steps fail closed on out-of-band
@@ -367,6 +372,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                 logicProRunning: logicObservation.running,
                 logicProHasWindow: logicProHasWindow,
                 logicProHasDocument: logicProHasDocument,
+                logicProProjectChooserVisible: projectChooserVisible(),
                 logicProVersion: logicObservation.version,
                 logicProBundleID: logicObservation.bundleID,
                 logicProVariant: logicObservation.variant.rawValue,

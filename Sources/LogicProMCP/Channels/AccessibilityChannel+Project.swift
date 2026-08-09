@@ -6,6 +6,28 @@ import Foundation
 extension AccessibilityChannel {
     // MARK: - Creator Studio New Project chooser
 
+    static func exactEmptyProjectChooserIsVisible(
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> Bool {
+        guard let window = AXLogicProElements.mainWindow(runtime: runtime) else { return false }
+        let windowTitle = AXHelpers.getTitle(window, runtime: runtime.ax)
+        let emptyProjectLabels = AXHelpers.findAllDescendants(
+            of: window, role: kAXStaticTextRole as String, maxDepth: 12, runtime: runtime.ax
+        ).filter { AXHelpers.getTitle($0, runtime: runtime.ax) == "Empty Project" }
+        let chooseButtons = AXHelpers.findAllDescendants(
+            of: window, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime.ax
+        ).filter { AXHelpers.getTitle($0, runtime: runtime.ax) == "Choose" }
+        let chooseEnabled: Bool = chooseButtons.first.flatMap {
+            AXHelpers.getAttribute($0, kAXEnabledAttribute as String, runtime: runtime.ax)
+        } ?? false
+        return chooserSelectionIsUnambiguous(
+            windowTitle: windowTitle,
+            emptyProjectLabelCount: emptyProjectLabels.count,
+            chooseButtonCount: chooseButtons.count,
+            chooseEnabled: chooseEnabled
+        )
+    }
+
     static func chooserSelectionIsUnambiguous(
         windowTitle: String?,
         emptyProjectLabelCount: Int,

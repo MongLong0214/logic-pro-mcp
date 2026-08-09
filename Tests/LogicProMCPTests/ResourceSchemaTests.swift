@@ -399,6 +399,23 @@ func testHealthResponseProcessFields() async {
 }
 
 @Test(codexSeatbeltProcessInspectionDisabled)
+func testHealthResponseIncludesExactProjectChooserObservation() async {
+    let cache = StateCache()
+    let router = ChannelRouter()
+
+    let result = await SystemDispatcher.handle(
+        command: "health",
+        params: [:],
+        router: router,
+        cache: cache,
+        logicHealthObservation: { qualificationHealthObservation() },
+        projectChooserVisible: { true }
+    )
+    let json = try! sharedParseJSON(toolText(result)) as! [String: Any]
+    #expect(json["logic_pro_project_chooser_visible"] as? Bool == true)
+}
+
+@Test(codexSeatbeltProcessInspectionDisabled)
 func testHealthResponseOmitsRemovedExternalClickDependencySection() async throws {
     let cache = StateCache()
     let router = ChannelRouter()
