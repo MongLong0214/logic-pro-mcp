@@ -2507,6 +2507,9 @@ extension AccessibilityChannel {
         runtime: AXHelpers.Runtime,
         coordFree: Bool
     ) async -> Bool {
+        // A disabled entry cannot act, so pressing it produces a silent no-op that the caller then
+        // has to distinguish from a real failure downstream. Refuse before touching it.
+        guard menuItemEnabledForActuation(item, runtime: runtime) else { return false }
         if coordFree {
             return await pressPopupPluginLeaf(item, runtime: runtime)
         }
@@ -2640,12 +2643,29 @@ extension AccessibilityChannel {
         return nil
     }
 
+    /// Lenient: an unreadable state counts as enabled. Used by READ-ONLY discovery, where refusing to
+    /// descend on an unreadable attribute would hide reachable plug-ins and actuates nothing.
     private static func menuItemEnabled(
         _ item: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Bool {
         let enabled: Bool? = AXHelpers.getAttribute(item, kAXEnabledAttribute as String, runtime: runtime)
         return enabled ?? true
+    }
+
+    /// Strict: only an explicitly readable `true` authorises a pick.
+    ///
+    /// `AXEnabled` is the one pre-press signal that separates "will act" from "will do nothing", so
+    /// guessing it while about to actuate is the wrong place to be lenient. Measured on Logic 12.3
+    /// with the menu chain open: all 1090 items expose a readable value and 264 of them are disabled
+    /// — section headers such as "Recent" among them. So there is a real population this can land on,
+    /// and no legitimate entry that the strictness excludes.
+    private static func menuItemEnabledForActuation(
+        _ item: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        let enabled: Bool? = AXHelpers.getAttribute(item, kAXEnabledAttribute as String, runtime: runtime)
+        return enabled == true
     }
 
     private static func visibleSubmenu(
