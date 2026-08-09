@@ -685,6 +685,7 @@ private let slotPopupOpenCustomAction = AccessibilityChannel.slotPopupOpenCustom
 
 @Test func testSlotPopupOpenCustomActionMatchesLiveAXMeasurement() {
     let action = AccessibilityChannel.slotPopupOpenCustomAction
+    let metadataLines = action.components(separatedBy: "\n")
 
     #expect(action.utf8.count == 70)
     #expect(!action.hasPrefix("\""))
@@ -692,6 +693,10 @@ private let slotPopupOpenCustomAction = AccessibilityChannel.slotPopupOpenCustom
     #expect(action.contains("\n"))
     #expect(!action.contains("\\n"))
     #expect(action.hasPrefix("Name:Open plug-in menu with legacy plug-ins"))
+    #expect(metadataLines.count == 3)
+    #expect(metadataLines[0] == "Name:Open plug-in menu with legacy plug-ins")
+    #expect(metadataLines[1] == "Target:0x0")
+    #expect(metadataLines[2] == "Selector:(null)")
 }
 
 /// Captures calls that pass through the injected AX action runtime seam. The
@@ -710,6 +715,40 @@ private final class AXActionRecorder: @unchecked Sendable {
     func count(elementID: Int, action: String) -> Int {
         calls.count { $0.elementID == elementID && $0.action == action }
     }
+
+    func nonTargetCount(targetElementID: Int) -> Int {
+        calls.count { $0.elementID != targetElementID }
+    }
+}
+
+@Test func testPlugin425RecursiveDiscoveryReadsAttachedSubmenusWithoutActuatingThem() async throws {
+    let b = FakeAXRuntimeBuilder()
+    let target = addMenuItem(b, 9100, title: "Gain")
+    let vendorMenu = addMenu(b, 9101, children: [target])
+    let vendor = addMenuItem(b, 9102, title: "Fabricant", children: [vendorMenu])
+    let categoryMenu = addMenu(b, 9103, children: [vendor])
+    let category = addMenuItem(b, 9104, title: "Dienstprogramme", children: [categoryMenu])
+    let rootMenu = addMenu(b, 9105, children: [category])
+    let actions = AXActionRecorder()
+    let runtime = b.makeAXRuntime(
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            actions.record(elementID: b.elementID(element), action: action)
+            return true
+        }
+    )
+
+    let click = await AccessibilityChannel.clickPluginInAnchoredSlotPopup(
+        pluginID: "logic.stock.effect.gain",
+        displayName: "Gain",
+        rootMenu: rootMenu,
+        runtime: runtime
+    )
+
+    #expect(actions.nonTargetCount(targetElementID: b.elementID(target)) == 0)
+    let result = try #require(click)
+    #expect(result.path == ["Dienstprogramme", "Fabricant", "Gain"])
+    #expect(actions.count(elementID: b.elementID(target), action: kAXPickAction as String) == 1)
 }
 
 private let coordFreeExpectedPath = "/Users/me/Music/CoordFree425 copy.logicx"
@@ -736,8 +775,6 @@ private func makeSlotPopupInsertFixture(
     includeNonMatchingLeafFormatMenu: Bool = false,
     includeFormatNamedCategoryEntry: Bool = false,
     includeFormatLeaf: Bool = false,
-    revealCategorySubmenuOnPick: Bool = true,
-    categoryPickResult: Bool = true,
     leafPickResult: Bool = true,
     mountGainOnLeafPick: Bool = false
 ) -> SlotPopupInsertFixture {
@@ -822,8 +859,8 @@ private func makeSlotPopupInsertFixture(
             b.setAttribute(formatNamedCategoryItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
             b.setAttribute(formatNamedCategoryItem, kAXTitleAttribute as String, "Mono")
         }
-        // AXPick controls visual exposure. The submenu is already an AX child,
-        // but starts invisible until the category action's observed effect.
+        // The submenu is already an AX child but has no visible frame. Recursive
+        // discovery must read this child directly without actuating the category.
         b.setChildren(categoryMenu, (formatNamedCategoryItem.map { [$0] } ?? []) + [gainItem])
         b.setChildren(categoryItem, [categoryMenu])
         b.setChildren(popupMenu, [searchField] + (nonMatchingLeafItem.map { [$0] } ?? []) + [categoryItem])
@@ -854,12 +891,6 @@ private func makeSlotPopupInsertFixture(
                     b.setChildren(app, [window, popupMenu])
                 }
                 return slotOpenResult
-            }
-            if let categoryKey, elementID == categoryKey, action == pickAction {
-                if revealCategorySubmenuOnPick, let categoryMenu {
-                    b.setFrame(categoryMenu, x: 620, y: 320, width: 240, height: 420)
-                }
-                return categoryPickResult
             }
             if elementID == leafKey, action == pickAction {
                 if mountGainOnLeafPick {
@@ -942,10 +973,9 @@ private func run425Insert(
     #expect(fixture.actions.contains(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction))
 }
 
-@Test func testPlugin425CategoryPickFailureProceedsOnlyAfterObservedSubmenu() async throws {
+@Test func testPlugin425AttachedCategoryDiscoveryDoesNotNeedCategoryPick() async throws {
     let fixture = makeSlotPopupInsertFixture(
         includeCategory: true,
-        categoryPickResult: false,
         mountGainOnLeafPick: true
     )
     let obj = await run425Insert(
@@ -955,14 +985,14 @@ private func run425Insert(
     let state = try #require(obj["state"] as? String)
     #expect(state == "A")
     let categoryID = try #require(fixture.categoryItemID)
-    #expect(fixture.actions.contains(elementID: categoryID, action: kAXPickAction as String))
+    #expect(fixture.actions.count(elementID: categoryID, action: kAXPickAction as String) == 0)
     #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
     let trace = try #require(obj["select_trace"] as? [String: Any])
     let strategy = try #require(trace["winning_strategy"] as? String)
     #expect(strategy == "slot_popup_recursive_exact_leaf")
 }
 
-@Test func testPlugin425RecursiveWalkNeverPicksNonMatchingLeafBeforeCategory() async throws {
+@Test func testPlugin425RecursiveWalkOnlyPicksExactLeaf() async throws {
     let fixture = makeSlotPopupInsertFixture(
         includeCategory: true,
         includeNonMatchingLeaf: true,
@@ -976,12 +1006,12 @@ private func run425Insert(
     #expect(state == "A")
     let categoryID = try #require(fixture.categoryItemID)
     let nonMatchingLeafID = try #require(fixture.nonMatchingLeafItemID)
-    #expect(fixture.actions.contains(elementID: categoryID, action: kAXPickAction as String))
+    #expect(fixture.actions.count(elementID: categoryID, action: kAXPickAction as String) == 0)
     #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
     #expect(fixture.actions.count(elementID: nonMatchingLeafID, action: kAXPickAction as String) == 0)
 }
 
-@Test func testPlugin425RecursiveWalkNeverPicksNonMatchingFormatLeafBeforeCategory() async throws {
+@Test func testPlugin425RecursiveWalkSkipsNonMatchingFormatLeafWithoutActuation() async throws {
     let fixture = makeSlotPopupInsertFixture(
         includeCategory: true,
         includeNonMatchingLeaf: true,
@@ -996,12 +1026,12 @@ private func run425Insert(
     #expect(state == "A")
     let categoryID = try #require(fixture.categoryItemID)
     let nonMatchingLeafID = try #require(fixture.nonMatchingLeafItemID)
-    #expect(fixture.actions.contains(elementID: categoryID, action: kAXPickAction as String))
+    #expect(fixture.actions.count(elementID: categoryID, action: kAXPickAction as String) == 0)
     #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
     #expect(fixture.actions.count(elementID: nonMatchingLeafID, action: kAXPickAction as String) == 0)
 }
 
-@Test func testPlugin425RecursiveWalkDescendsIntoCategoryWithFormatNamedPluginEntry() async throws {
+@Test func testPlugin425RecursiveWalkDescendsPastFormatNamedCategoryEntryWithoutActuation() async throws {
     let fixture = makeSlotPopupInsertFixture(
         includeCategory: true,
         includeFormatNamedCategoryEntry: true,
@@ -1014,7 +1044,7 @@ private func run425Insert(
     let state = try #require(obj["state"] as? String)
     #expect(state == "A")
     let categoryID = try #require(fixture.categoryItemID)
-    #expect(fixture.actions.contains(elementID: categoryID, action: kAXPickAction as String))
+    #expect(fixture.actions.count(elementID: categoryID, action: kAXPickAction as String) == 0)
     #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
 }
 

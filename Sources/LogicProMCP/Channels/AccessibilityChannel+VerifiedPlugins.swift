@@ -2508,19 +2508,11 @@ extension AccessibilityChannel {
             guard let label = popupMenuItemLabel(item, runtime: runtime),
                   !popupMenuItemMatches(item, displayName: displayName, runtime: runtime),
                   menuItemEnabled(item, runtime: runtime),
-                  let submenu = axChildMenu(of: item, runtime: runtime),
-                  !submenuIsPluginFormatMenu(submenu, runtime: runtime) else {
+                  let submenu = axChildMenu(of: item, runtime: runtime) else {
                 continue
             }
-            // Only an item with Logic's already-attached AXMenu child is a proven
-            // category. AXPick reveals that child without a hover. Its return code
-            // is untrustworthy, so only the observed menu visibility below is
-            // allowed to choose whether we descend.
-            _ = AXHelpers.performAction(item, kAXPickAction as String, runtime: runtime)
-            try? await Task.sleep(for: .milliseconds(140))
-            guard let submenu = visibleSubmenu(of: item, runtime: runtime) else {
-                continue
-            }
+            // Logic already exposes this submenu as an AX child, so discovery can
+            // recurse through the read-only tree without actuating the category.
             if let found = await clickPopupExactLeafRecursively(
                 displayName: displayName,
                 menu: submenu,
@@ -2557,23 +2549,6 @@ extension AccessibilityChannel {
     ) -> AXUIElement? {
         AXHelpers.getChildren(item, runtime: runtime).first {
             (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
-        }
-    }
-
-    /// True only for a non-empty submenu whose every menu item is a known plugin
-    /// format label. Requiring every item avoids classifying a category as a
-    /// format menu merely because one plugin happens to share a format label.
-    private static func submenuIsPluginFormatMenu(
-        _ submenu: AXUIElement,
-        runtime: AXHelpers.Runtime
-    ) -> Bool {
-        let items = AXHelpers.getChildren(submenu, runtime: runtime).filter {
-            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuItemRole as String)
-        }
-        return !items.isEmpty && items.allSatisfy { item in
-            AXLocalePolicy.pluginFormatLeafPriority.contains { labels in
-                AXLocalePolicy.elementMatches(item, labels, runtime: runtime)
-            }
         }
     }
 
@@ -2676,16 +2651,6 @@ extension AccessibilityChannel {
     ) -> Bool {
         let enabled: Bool? = AXHelpers.getAttribute(item, kAXEnabledAttribute as String, runtime: runtime)
         return enabled ?? true
-    }
-
-    private static func visibleSubmenu(
-        of item: AXUIElement,
-        runtime: AXHelpers.Runtime
-    ) -> AXUIElement? {
-        AXHelpers.getChildren(item, runtime: runtime).first {
-            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
-                && isVisibleMenu($0, runtime: runtime)
-        }
     }
 
     #if DEBUG
