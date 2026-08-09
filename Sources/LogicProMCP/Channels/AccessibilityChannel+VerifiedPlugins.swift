@@ -1709,6 +1709,38 @@ extension AccessibilityChannel {
                     extras: extras
                 ))
             }
+            // The front document was checked once, before any of this: track select, mixer raise,
+            // inventory, pop-up, discovery, pick and poll all happen after it. Switching project
+            // during that window would put the write — and this readback — in a different document
+            // than the caller named, and every check above would still agree with itself. Re-read it
+            // before certifying, so State A is never granted to a document we cannot still name.
+            if let expectedPath = params["project_expected_path"],
+               !expectedPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let stillObserved = await frontDocumentPath()
+                guard let stillObserved,
+                      AppleScriptChannel.projectPathsMatch(expectedPath, stillObserved) else {
+                    var driftIdentity = identity
+                    driftIdentity["project_path_expected"] = expectedPath
+                    driftIdentity["project_path_observed"] = stillObserved ?? NSNull()
+                    return .error(HonestContract.encodeV2StateC(
+                        error: .projectIdentityMismatch,
+                        extras: [
+                            "operation": operation,
+                            "target_identity": driftIdentity,
+                            "observed_plugin_id": observedID,
+                            "observed_plugin_name": observedName ?? NSNull(),
+                            "observed_slot": observedSlot,
+                            "select_trace": trace,
+                            "what_was_attempted": "confirm the front document is still the expected one before certifying the insert",
+                            "what_was_observed": stillObserved == nil
+                                ? "no front document path could be read after the write"
+                                : "the front document changed while the insert was in progress",
+                            "safe_to_retry": false,
+                            "write_attempted": true,
+                        ]
+                    ))
+                }
+            }
             return .success(HonestContract.encodeV2StateA(extras: [
                 "operation": operation,
                 "target_identity": identity,

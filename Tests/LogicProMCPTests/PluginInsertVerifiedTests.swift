@@ -1215,3 +1215,41 @@ private func emptyLogicRuntimeForRollbackTests() -> AXLogicProElements.Runtime {
     b.setChildren(strip, [])
     return b.makeLogicRuntime(appElement: app, setAttributeHandler: nil, performActionHandler: { _, _ in false })
 }
+
+/// #475 — State A must not be granted to a document we can no longer name.
+///
+/// The front document is checked once, before the work begins. Track select, mixer raise, inventory,
+/// pop-up, discovery, pick and poll all happen after it. Switching project inside that window puts
+/// both the write and its readback in a different document than the caller named — and every check
+/// in between still agrees with itself, because they all read the new document.
+@Test func testPlugin475ProjectSwitchedMidInsertIsNotCertified() async throws {
+    let fixture = makeSlotPopupInsertFixture(refuseLeafAXPress: false, mountGainOnLeafAXPress: true)
+    let reads = AXPressLogBox()
+    let result = await AccessibilityChannel.defaultInsertVerified(
+        params: [
+            "track": "0", "insert": "0", "plugin": "Gain",
+            "mode": "duplicate_applyback", "project_expected_path": coordFreeExpectedPath,
+        ],
+        runtime: fixture.runtime,
+        frontDocumentPath: {
+            // The gate's read matches; the post-write re-read finds a different document.
+            reads.bump()
+            return reads.count == 1 ? coordFreeExpectedPath : "/Users/me/Music/Something Else.logicx"
+        }
+    )
+    let obj = try! JSONSerialization.jsonObject(with: result.message.data(using: .utf8)!) as! [String: Any]
+
+    #expect(try #require(obj["state"] as? String) == "C")
+    #expect(try #require(obj["error"] as? String) == "project_identity_mismatch")
+    // The write did happen — denying that would be the other kind of dishonesty.
+    #expect(try #require(obj["write_attempted"] as? Bool))
+    #expect(reads.count >= 2)
+}
+
+/// The positive twin: an unchanged document still certifies, so the check above is a decision rather
+/// than a path that can never reach State A.
+@Test func testPlugin475UnchangedProjectStillCertifies() async throws {
+    let fixture = makeSlotPopupInsertFixture(refuseLeafAXPress: false, mountGainOnLeafAXPress: true)
+    let obj = await runRealInsert(runtime: fixture.runtime)
+    #expect(try #require(obj["state"] as? String) == "A")
+}
