@@ -9,23 +9,47 @@ extension AccessibilityChannel {
     static func exactEmptyProjectChooserIsVisible(
         runtime: AXLogicProElements.Runtime = .production
     ) -> Bool {
-        guard let window = AXLogicProElements.mainWindow(runtime: runtime) else { return false }
-        let windowTitle = AXHelpers.getTitle(window, runtime: runtime.ax)
-        let emptyProjectLabels = AXHelpers.findAllDescendants(
-            of: window, role: kAXStaticTextRole as String, maxDepth: 12, runtime: runtime.ax
-        ).filter { AXHelpers.getTitle($0, runtime: runtime.ax) == "Empty Project" }
-        let chooseButtons = AXHelpers.findAllDescendants(
-            of: window, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime.ax
-        ).filter { AXHelpers.getTitle($0, runtime: runtime.ax) == "Choose" }
-        let chooseEnabled: Bool = chooseButtons.first.flatMap {
-            AXHelpers.getAttribute($0, kAXEnabledAttribute as String, runtime: runtime.ax)
-        } ?? false
-        return chooserSelectionIsUnambiguous(
-            windowTitle: windowTitle,
-            emptyProjectLabelCount: emptyProjectLabels.count,
-            chooseButtonCount: chooseButtons.count,
-            chooseEnabled: chooseEnabled
-        )
+        exactEmptyProjectChooserWindow(runtime: runtime) != nil
+    }
+
+    private static func exactEmptyProjectChooserWindow(
+        runtime: AXLogicProElements.Runtime
+    ) -> AXUIElement? {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return nil }
+        let enumerated: [AXUIElement] = AXHelpers.getAttribute(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax
+        ) ?? []
+        let candidates: [AXUIElement]
+        if enumerated.isEmpty,
+           let main: AXUIElement = AXHelpers.getAttribute(
+               app, kAXMainWindowAttribute as String, runtime: runtime.ax
+           ) {
+            candidates = [main]
+        } else {
+            // The Creator Studio chooser can be exposed as a dialog. The
+            // generic mainWindow helper intentionally excludes dialogs to
+            // protect arrange reads, so this chooser-only classifier must
+            // inspect every AX window and still require one exact match.
+            candidates = enumerated
+        }
+        let matches = candidates.filter { window in
+            let emptyProjectLabels = AXHelpers.findAllDescendants(
+                of: window, role: kAXStaticTextRole as String, maxDepth: 12, runtime: runtime.ax
+            ).filter { AXHelpers.getTitle($0, runtime: runtime.ax) == "Empty Project" }
+            let chooseButtons = AXHelpers.findAllDescendants(
+                of: window, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime.ax
+            ).filter { AXHelpers.getTitle($0, runtime: runtime.ax) == "Choose" }
+            let chooseEnabled: Bool = chooseButtons.first.flatMap {
+                AXHelpers.getAttribute($0, kAXEnabledAttribute as String, runtime: runtime.ax)
+            } ?? false
+            return chooserSelectionIsUnambiguous(
+                windowTitle: AXHelpers.getTitle(window, runtime: runtime.ax),
+                emptyProjectLabelCount: emptyProjectLabels.count,
+                chooseButtonCount: chooseButtons.count,
+                chooseEnabled: chooseEnabled
+            )
+        }
+        return matches.count == 1 ? matches[0] : nil
     }
 
     static func chooserSelectionIsUnambiguous(
@@ -43,13 +67,9 @@ extension AccessibilityChannel {
     static func createEmptyProjectFromChooser(
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ChannelResult {
-        guard let window = AXLogicProElements.mainWindow(runtime: runtime) else {
+        guard let window = exactEmptyProjectChooserWindow(runtime: runtime) else {
             return .error("Creator Studio project chooser is not visible")
         }
-        let windowTitle = AXHelpers.getTitle(window, runtime: runtime.ax)
-        let emptyProjectLabels = AXHelpers.findAllDescendants(
-            of: window, role: kAXStaticTextRole as String, maxDepth: 12, runtime: runtime.ax
-        ).filter { AXHelpers.getTitle($0, runtime: runtime.ax) == "Empty Project" }
         let chooseButtons = AXHelpers.findAllDescendants(
             of: window, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime.ax
         ).filter { AXHelpers.getTitle($0, runtime: runtime.ax) == "Choose" }
@@ -57,12 +77,7 @@ extension AccessibilityChannel {
             AXHelpers.getAttribute($0, kAXEnabledAttribute as String, runtime: runtime.ax)
         } ?? false
 
-        guard chooserSelectionIsUnambiguous(
-            windowTitle: windowTitle,
-            emptyProjectLabelCount: emptyProjectLabels.count,
-            chooseButtonCount: chooseButtons.count,
-            chooseEnabled: chooseEnabled
-        ), let chooseButton = chooseButtons.first else {
+        guard chooseButtons.count == 1, chooseEnabled, let chooseButton = chooseButtons.first else {
             return .error("Creator Studio chooser is not the exact enabled Empty Project selection")
         }
         guard AXHelpers.performAction(chooseButton, kAXPressAction as String, runtime: runtime.ax) else {
