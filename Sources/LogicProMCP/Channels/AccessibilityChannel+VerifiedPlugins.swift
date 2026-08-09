@@ -2659,17 +2659,36 @@ extension AccessibilityChannel {
     /// real CGEvent. It is never compiled into release.
     @TaskLocal static var forceCoordinateActuationForTests: Bool?
 
+    /// A test-only coordinate-click effect. This is invoked only after the
+    /// fallback reaches `clickElementCenter`, so fixtures can model an observable
+    /// consequence of the coordinate click without a real CGEvent.
+    private struct CoordinateActuationTestEffect: @unchecked Sendable {
+        let perform: () -> Bool
+    }
+
+    @TaskLocal private static var coordinateActuationTestEffect: CoordinateActuationTestEffect?
+
     static func withForceCoordinateActuationForTests<Result>(
         _ value: Bool,
         operation: () async throws -> Result
     ) async rethrows -> Result {
         try await $forceCoordinateActuationForTests.withValue(value, operation: operation)
     }
+
+    static func withCoordinateActuationForTests<Result>(
+        _ effect: @escaping () -> Bool,
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        try await $coordinateActuationTestEffect.withValue(
+            CoordinateActuationTestEffect(perform: effect), operation: operation
+        )
+    }
     #endif
 
     @discardableResult
     private static func clickElementCenter(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
         #if DEBUG
+        if let coordinateActuationTestEffect { return coordinateActuationTestEffect.perform() }
         if let forceCoordinateActuationForTests { return forceCoordinateActuationForTests }
         #endif
         guard let center = elementCenter(element, runtime: runtime) else { return false }

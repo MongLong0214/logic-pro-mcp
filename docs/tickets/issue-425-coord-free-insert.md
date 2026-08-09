@@ -1,7 +1,8 @@
-# #425 — Custom-action slot open and `AXPick` plugin selection
+# #425 — Custom-action slot open and read-only plugin discovery
 
 Status: shipped. Plugin insertion opens the requested slot with its measured
-custom action and selects popup categories and leaves with `AXPick`.
+custom action, discovers popup entries without actuating categories, and selects
+only the requested plugin leaf with `AXPick`.
 
 ## Shipped design
 
@@ -20,12 +21,30 @@ action return codes were observed to disagree with the effect in both directions
 an action can report failure after opening the popup, and can report success
 without the required observed effect.
 
-Popup navigation uses `AXPick` for category and leaf selection. Picking a category
-reveals its already-attached submenu without hover. Picking the exact plugin leaf
-(or its preferred format leaf) likewise ignores the AX action return code. The
+Discovery is read-only: it recurses through the already-attached `AXMenu` child
+and performs no AX action on any non-target item. `AXPick` is dispatched only to the leaf
+whose name matched the request exactly, and to its preferred-format leaf. As with
+the slot opener, its return code is not accepted as success by itself. The
 post-insert strip inventory diff decides the leaf outcome: it detects a mount in
 the requested slot, detects and rolls back a stray mount, or produces the
 appropriate fail-closed result when no verified change is observed.
+
+Read-only discovery is sufficient on the measured Logic configuration because
+category submenus were already populated before any pick. Measured against the
+running application, the attached child counts were:
+
+| Category | Children before pick | Children after pick |
+| --- | ---: | ---: |
+| Gain | 2 | 2 |
+| Compressor | 1 | 1 |
+| Channel EQ | 1 | 1 |
+| Tremolo | 2 | 2 |
+| Flanger | 2 | 2 |
+| Amps and Pedals | 4 | 4 |
+
+Each category was therefore not lazy. This was measured on one Logic version and locale;
+it records why a read-only recursive walk is sufficient for that observed version,
+rather than assuming that every future version or locale behaves alike.
 
 ## Narrow coordinate compatibility path
 
@@ -36,15 +55,16 @@ action. This compatibility fallback is recorded in the trace as
 `slot_popup_open_fallback_taken: false` and
 `slot_popup_open_action: "custom_action"`, so receipts say which path ran.
 
-There is no feature flag or coordinate leaf-selection fallback: category and leaf
-selection are `AXPick` actions, and the observed inventory diff remains the
-acceptance gate.
+There is no feature flag or coordinate leaf-selection fallback: the exact
+matching leaf and its preferred-format leaf use `AXPick`, and the observed
+inventory diff remains the acceptance gate.
 
 ## Coverage
 
 `Tests/LogicProMCPTests/PluginInsertVerifiedTests.swift` verifies that the custom
 action can report failure while the observed popup permits progress, that a
-success-looking action with no popup fails closed, that category `AXPick` reveals
-the submenu without hover, and that leaf `AXPick` is accepted only when the
-post-insert inventory observation supports it. It also verifies the trace values
-for both the custom-action and absent-action coordinate-fallback slot-open paths.
+success-looking action with no popup fails closed, that read-only category
+discovery reaches an already-attached submenu, and that leaf `AXPick` is accepted
+only when the post-insert inventory observation supports it. It also verifies the
+trace values for both the custom-action and absent-action coordinate-fallback
+slot-open paths.

@@ -56,14 +56,30 @@ struct Issue425ContractTests {
         )
     }
 
-    @Test("#425 ticket documents the shipped custom-action and AXPick design")
+    @Test("#425 ticket documents the shipped custom-action and read-only discovery design")
     func ticketMatchesShippedDesign() throws {
         let ticket = try scriptContents("docs/tickets/issue-425-coord-free-insert.md")
+        let categoryPickPattern = #"(?:`?AXPick`?[^.\n]*\bcategory\b|\bcategory\b[^.\n]*`?AXPick`?)"#
+        let ticketClaimsCategoryPick = ticket.range(
+            of: categoryPickPattern, options: .regularExpression
+        ) != nil
 
         #expect(!ticket.contains("Slot-open stays a coordinate click."))
         #expect(!ticket.contains("LOGIC_MCP_INSERT_COORD_FREE"))
         #expect(ticket.contains("slot-open uses the exact custom action"))
-        #expect(ticket.contains("`AXPick` for category and leaf selection"))
+        #expect(ticket.contains("Discovery is read-only"))
+        #expect(ticket.contains("already-attached `AXMenu` child"))
+        #expect(ticket.contains("performs no AX action on any non-target item"))
+        #expect(ticket.contains("`AXPick` is dispatched only to the leaf"))
+        #expect(!ticketClaimsCategoryPick, "#425 ticket must not claim that a category is AXPick'ed")
+        #expect(ticket.contains("| Gain | 2 | 2 |"))
+        #expect(ticket.contains("| Compressor | 1 | 1 |"))
+        #expect(ticket.contains("| Channel EQ | 1 | 1 |"))
+        #expect(ticket.contains("| Tremolo | 2 | 2 |"))
+        #expect(ticket.contains("| Flanger | 2 | 2 |"))
+        #expect(ticket.contains("| Amps and Pedals | 4 | 4 |"))
+        #expect(ticket.contains("not lazy"))
+        #expect(ticket.contains("one Logic version and locale"))
     }
 
     @Test("#425 changelog supersedes the removed coordinate-free control")

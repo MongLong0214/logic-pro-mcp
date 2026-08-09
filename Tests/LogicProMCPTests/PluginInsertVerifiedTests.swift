@@ -760,6 +760,7 @@ private struct SlotPopupInsertFixture {
     let nonMatchingLeafItemID: Int?
     let leafItemID: Int
     let actions: AXActionRecorder
+    let coordinateFallbackClick: () -> Bool
 }
 
 /// The full AX tree the real insert driver walks. The action handler models the
@@ -916,7 +917,11 @@ private func makeSlotPopupInsertFixture(
         categoryItemID: categoryKey,
         nonMatchingLeafItemID: nonMatchingLeafKey,
         leafItemID: leafKey,
-        actions: actions
+        actions: actions,
+        coordinateFallbackClick: {
+            b.setChildren(app, [window, popupMenu])
+            return true
+        }
     )
 }
 
@@ -1083,11 +1088,13 @@ private func run425Insert(
 
 @Test func testPlugin425SlotOpenFallsBackToCoordinateClickWhenCustomActionIsAbsent() async throws {
     let fixture = makeSlotPopupInsertFixture(
-        popupInitiallyVisible: true, mountGainOnLeafPick: true
+        popupInitiallyVisible: false, mountGainOnLeafPick: true
     )
-    let obj = await run425Insert(
-        fixture: fixture, slotOpenActions: [], coordinateFallbackResult: true
-    )
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([]) {
+        await AccessibilityChannel.withCoordinateActuationForTests(fixture.coordinateFallbackClick) {
+            await runRealInsert(runtime: fixture.runtime)
+        }
+    }
 
     let state = try #require(obj["state"] as? String)
     #expect(state == "A")
@@ -1095,4 +1102,6 @@ private func run425Insert(
     let trace = try #require(obj["select_trace"] as? [String: Any])
     let fallbackTaken = try #require(trace["slot_popup_open_fallback_taken"] as? Bool)
     #expect(fallbackTaken)
+    let slotOpenAction = try #require(trace["slot_popup_open_action"] as? String)
+    #expect(slotOpenAction == "coordinate_fallback")
 }
