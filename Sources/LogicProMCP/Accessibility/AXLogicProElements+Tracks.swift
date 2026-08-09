@@ -130,8 +130,26 @@ extension AXLogicProElements {
             return true
         }
 
-        // Step 4 — child AXPress (some rows expose a selectable name label).
+        // Step 4 — child AXPress, but only on a child that could plausibly select the track.
+        //
+        // This used to press every child in order and stop at the first one that returned true.
+        // Measured on Logic 12.3, a track header's children are, in order: "Has Focus" (radio),
+        // "Individual Track Zoom" (splitter), a disclosure triangle, then Mute, Solo, Record Enable
+        // and Input Monitoring (checkboxes), two sliders, and the name field. All of the pressable
+        // ones accept AXPress, so if the first candidate declined, the ladder went on to press a
+        // zoom splitter, a stack disclosure, and then Mute — toggling the user's mix while trying to
+        // select a track, and reporting success because the press was accepted.
+        //
+        // Role alone separates them and needs no localized labels: a radio button and the name text
+        // field are the only children that could carry selection; a checkbox, a splitter and a
+        // disclosure triangle carry state that is not ours to change.
+        let selectableRoles: Set<String> = [
+            kAXRadioButtonRole as String,
+            kAXTextFieldRole as String,
+        ]
         for child in AXHelpers.getChildren(header, runtime: runtime.ax) {
+            guard let role = AXHelpers.getRole(child, runtime: runtime.ax),
+                  selectableRoles.contains(role) else { continue }
             if AXHelpers.performAction(child, kAXPressAction, runtime: runtime.ax) {
                 return true
             }
