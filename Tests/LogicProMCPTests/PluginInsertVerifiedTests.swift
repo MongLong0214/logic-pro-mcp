@@ -1100,3 +1100,50 @@ private func runRealInsert(runtime: AXLogicProElements.Runtime) async -> [String
     let coordCommit = try #require(coordObj["commit_strategy"] as? String)
     #expect(coordCommit == "slot_popup_physical_menu_click")
 }
+
+/// #475 — an unreadable mixer child renumbers every later strip, so ordinal addressing stops meaning
+/// what the caller asked for.
+///
+/// `mixerChannelStrips` filters to layout items; a child whose role cannot be read is dropped and
+/// each later strip moves down one. Callers address strips by ordinal, so a request for track 0 would
+/// act on physical strip 1. No downstream readback can catch it — the readback reads the same shifted
+/// list — so the write path refuses rather than addressing a list it cannot trust.
+@Test func testPlugin475UnreadableMixerChildIsNotSilentlyRenumbered() async throws {
+    let b = FakeAXRuntimeBuilder()
+    let mixer = b.element(9600)
+    let ghost = b.element(9601)      // role unreadable: dropped by the filter
+    let stripA = b.element(9602)
+    let stripB = b.element(9603)
+    b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
+    b.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
+    // `ghost` deliberately has NO role attribute.
+    b.setAttribute(stripA, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setAttribute(stripB, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setChildren(mixer, [ghost, stripA, stripB])
+
+    let runtime = b.makeAXRuntime(setAttributeHandler: nil, performActionHandler: { _, _ in false })
+    let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime)
+
+    // The filter still yields two strips, but they are NOT at the ordinals the caller means: the
+    // caller's "strip 0" is physically the second child here.
+    #expect(enumeration.strips.count == 2)
+    #expect(enumeration.unreadableChildren == 1)
+}
+
+@Test func testPlugin475FullyReadableMixerReportsNoUnreadableChildren() async throws {
+    let b = FakeAXRuntimeBuilder()
+    let mixer = b.element(9610)
+    let stripA = b.element(9611)
+    let stripB = b.element(9612)
+    b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
+    b.setAttribute(stripA, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setAttribute(stripB, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setChildren(mixer, [stripA, stripB])
+
+    let runtime = b.makeAXRuntime(setAttributeHandler: nil, performActionHandler: { _, _ in false })
+    let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime)
+
+    // The positive twin: a healthy mixer must not be refused, or the guard would block every write.
+    #expect(enumeration.strips.count == 2)
+    #expect(enumeration.unreadableChildren == 0)
+}

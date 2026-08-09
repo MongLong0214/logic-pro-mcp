@@ -2242,7 +2242,12 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime
     ) -> AXLogicProElements.PluginInsertSlot? {
         guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else { return nil }
-        let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax)
+        // Strips are addressed by ordinal, so a child whose role could not be read moves every
+        // later strip down one and turns a request for track N into an act on physical strip N+1.
+        // A downstream readback cannot catch that: it reads the same shifted list. Refuse instead.
+        let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax)
+        guard enumeration.unreadableChildren == 0 else { return nil }
+        let strips = enumeration.strips
         guard track >= 0, track < strips.count else { return nil }
         let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax)
         // #234 — a zero-slot result on this mid-flight re-resolution means the
@@ -2754,7 +2759,12 @@ extension AccessibilityChannel {
         track: Int, runtime: AXLogicProElements.Runtime
     ) -> [Int: InventoryEntry]? {
         guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else { return nil }
-        let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax)
+        // Strips are addressed by ordinal, so a child whose role could not be read moves every
+        // later strip down one and turns a request for track N into an act on physical strip N+1.
+        // A downstream readback cannot catch that: it reads the same shifted list. Refuse instead.
+        let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax)
+        guard enumeration.unreadableChildren == 0 else { return nil }
+        let strips = enumeration.strips
         guard track < strips.count else { return nil }
         let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax)
         guard !slots.contains(where: { $0.readStatus == .occupiedUnreadable }) else {
