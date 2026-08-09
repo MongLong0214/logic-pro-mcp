@@ -41,11 +41,7 @@ enum ProcessUtils {
                     }
                 )
             },
-            logicIsFrontmost: {
-                guard let app = NSWorkspace.shared.frontmostApplication,
-                      app.bundleIdentifier != nil else { return false }
-                return ProcessUtils.isKnownLogicPID(app.processIdentifier)
-            },
+            logicIsFrontmost: { ProcessUtils.logicOwnsTheKeyboard() },
             logicProBundleURL: {
                 // RB-2 (v3.4.0): same rationale as `logicProApp()` — both
                 // `NSRunningApplication.bundleURL` and
@@ -132,6 +128,30 @@ enum ProcessUtils {
 
     static func bundleIDForPID(_ pid: pid_t) -> String? {
         NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+    }
+
+    /// Whether Logic currently owns the keyboard, asked of the window server rather than of
+    /// `NSWorkspace`.
+    ///
+    /// `NSWorkspace.frontmostApplication` is served from a cache that a process only refreshes while
+    /// it runs a run loop. The MCP server is long-lived and does not, so the value goes stale:
+    /// measured here, after switching from Logic to Finder it kept answering "Logic Pro" for the
+    /// rest of the process's life while the window server and System Events both said "Finder".
+    /// A frontmost gate built on that reports `already_frontmost` for a backgrounded Logic — exactly
+    /// the state it exists to refuse — so the question is put to the component that actually decides
+    /// where keystrokes go.
+    static func logicOwnsTheKeyboard() -> Bool {
+        guard let infos = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID
+        ) as? [[String: Any]] else { return false }
+        // The list is ordered front to back; the first normal-layer window belongs to the app that
+        // owns the keyboard.
+        for info in infos {
+            guard (info[kCGWindowLayer as String] as? Int) == 0 else { continue }
+            guard let pid = info[kCGWindowOwnerPID as String] as? pid_t else { return false }
+            return isKnownLogicPID(pid)
+        }
+        return false
     }
 
     static func isKnownLogicPID(_ pid: pid_t) -> Bool {
