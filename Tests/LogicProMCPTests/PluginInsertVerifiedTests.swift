@@ -1381,10 +1381,11 @@ private func run425Insert(
     // Same reasoning: show the flow reached the pick, so "the category was untouched" is a result
     // rather than a consequence of nothing having happened.
     #expect(fixture.actions.contains(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction))
-    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
-    #expect(try #require(obj["state"] as? String) == "A")
     let entryID = try #require(fixture.nonTerminalFormatEntryID)
     #expect(!fixture.actions.touched(elementID: entryID))
+    // No terminal format leaf exists here, so nothing may be picked and no insert may be claimed.
+    #expect(!fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+    #expect(try #require(obj["state"] as? String) != "A")
 }
 
 @Test func testPlugin425NeverActuatesInsideANonFormatSubmenu() async throws {
@@ -1397,12 +1398,19 @@ private func run425Insert(
     }
     // An absence assertion proves nothing if the flow never got there, so prove it did: the slot was
     // opened and the exact Gain entry — not anything inside the foreign submenu — was picked.
+    // The slot really was opened, so the refusals below are results rather than a run that did
+    // nothing.
     #expect(fixture.actions.contains(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction))
-    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
-    #expect(try #require(obj["state"] as? String) == "A")
+    // Nothing inside the foreign submenu may be actuated...
     for id in fixture.nonFormatSubmenuItemIDs {
         #expect(!fixture.actions.touched(elementID: id))
     }
+    // ...and neither may its OWNER. An entry that owns a submenu we cannot identify as channel
+    // formats is a category wearing the plug-in's name; picking it actuates a category. The earlier
+    // revision of this test asserted that pick as the expected behaviour.
+    #expect(!fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+    // With no terminal target identified, the operation must not claim a verified insert.
+    #expect(try #require(obj["state"] as? String) != "A")
 }
 
 @Test func testPlugin425FailsClosedWhenTheSlotElementIsReplacedDuringEnumeration() async throws {

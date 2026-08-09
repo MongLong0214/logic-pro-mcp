@@ -1935,7 +1935,9 @@ extension AccessibilityChannel {
         let popupAnchorSlot = slot.element
         // Anything already open belongs to someone else; only a menu that appears after we actuate
         // can be evidence that WE opened this slot's pop-up.
-        let preexistingMenus = visibleSlotPopupMenus(runtime: runtime)
+        guard let preexistingMenus = visibleSlotPopupMenus(runtime: runtime) else {
+            return (.transientSetupFailure(stage: "popup_snapshot_unreadable"), trace)
+        }
         trace["slot_popup_preexisting_menus"] = preexistingMenus.count
         let authorisation = slotPopupOpenCustomActionEnumerationResult(on: slot.element, runtime: runtime.ax)
 
@@ -1969,7 +1971,13 @@ extension AccessibilityChannel {
             trace["slot_popup_open_fallback_taken"] = true
             trace["slot_popup_open_action"] = "coordinate_fallback"
             trace["slot_popup_open_action_enumeration"] = "absent"
-            guard clickElementCenter(slot.element, runtime: runtime.ax) else {
+            switch clickElementCenterOutcome(slot.element, runtime: runtime.ax) {
+            case .posted:
+                break
+            case .noTargetPoint:
+                // Nothing was created or posted, so the envelope must not claim a write.
+                return (.transientSetupFailure(stage: "target_slot_click_failed", actuated: false), trace)
+            case .postFailed:
                 return (.transientSetupFailure(stage: "target_slot_click_failed", actuated: true), trace)
             }
         case .enumerationFailed:
@@ -2341,7 +2349,7 @@ extension AccessibilityChannel {
     ) async -> AXUIElement? {
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
         repeat {
-            let fresh = visibleSlotPopupMenus(runtime: runtime).filter { menu in
+            let fresh = (visibleSlotPopupMenus(runtime: runtime) ?? []).filter { menu in
                 !preexisting.contains { CFEqual($0, menu) }
             }
             if let menu = fresh.first {
@@ -2420,10 +2428,12 @@ extension AccessibilityChannel {
 
     /// Every currently visible plug-in pop-up, so a caller can tell a menu that was already there
     /// from one its own actuation opened.
+    /// nil when the tree could not be read. An unreadable snapshot must not be mistaken for "nothing
+    /// was open": that would let a pop-up that existed all along be accepted as newly created.
     private static func visibleSlotPopupMenus(
         runtime: AXLogicProElements.Runtime
-    ) -> [AXUIElement] {
-        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return [] }
+    ) -> [AXUIElement]? {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return nil }
         let menus = AXHelpers.findAllDescendants(
             of: app, role: kAXMenuRole as String, maxDepth: 9, runtime: runtime.ax
         )
@@ -2530,11 +2540,8 @@ extension AccessibilityChannel {
         var strategies: [String] = []
         strategies.append("slot_popup_direct_exact_leaf")
         if let item = directExactPopupMenuItem(displayName: displayName, in: rootMenu, runtime: runtime),
-           let label = popupMenuItemLabel(item, runtime: runtime) {
-            // The pick dispatches and returns nothing: acceptance is the caller's post-insert
-            // inventory diff, never this call. It used to return a Bool that was always true and sat
-            // in this condition, reading like a gate that could not deny.
-            await clickPopupPluginLeaf(item, runtime: runtime)
+           let label = popupMenuItemLabel(item, runtime: runtime),
+           await clickPopupPluginLeaf(item, runtime: runtime) {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_direct_exact_leaf",
                 path: [label],
@@ -2571,8 +2578,8 @@ extension AccessibilityChannel {
         guard maxDepth >= 0 else { return nil }
 
         if let direct = directExactPopupMenuItem(displayName: displayName, in: menu, runtime: runtime),
-           let label = popupMenuItemLabel(direct, runtime: runtime) {
-            await clickPopupPluginLeaf(direct, runtime: runtime)
+           let label = popupMenuItemLabel(direct, runtime: runtime),
+           await clickPopupPluginLeaf(direct, runtime: runtime) {
             return path + [label]
         }
 
@@ -2602,17 +2609,25 @@ extension AccessibilityChannel {
     /// Dispatch AXPick to the matched plugin leaf (or its preferred format leaf).
     /// AX's return code is deliberately ignored: the caller's post-insert inventory
     /// diff is the only acceptance signal.
+    /// Dispatches `AXPick` at the plug-in, and reports whether it dispatched anything.
+    ///
+    /// The result CAN be false, and that is the point: an entry that owns a submenu we cannot
+    /// identify as a channel-format chooser is a category wearing a plug-in's name, and picking it
+    /// would actuate a category. Refusing lets the caller keep looking instead.
     static func clickPopupPluginLeaf(
         _ item: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) async {
-        if let submenu = axChildMenu(of: item, runtime: runtime),
-           submenuIsPluginFormatMenu(submenu, runtime: runtime),
-           let leaf = preferredFormatLeafByLabel(in: submenu, runtime: runtime) {
+    ) async -> Bool {
+        if let submenu = axChildMenu(of: item, runtime: runtime) {
+            guard submenuIsPluginFormatMenu(submenu, runtime: runtime),
+                  let leaf = preferredFormatLeafByLabel(in: submenu, runtime: runtime) else {
+                return false
+            }
             _ = AXHelpers.performAction(leaf, kAXPickAction as String, runtime: runtime)
-            return
+            return true
         }
         _ = AXHelpers.performAction(item, kAXPickAction as String, runtime: runtime)
+        return true
     }
 
     /// A submenu exposed as an AX child of `item`, regardless of visual visibility.
@@ -2738,6 +2753,8 @@ extension AccessibilityChannel {
         return nil
     }
 
+    /// Lenient: an unreadable state counts as enabled. Used by READ-ONLY discovery, where refusing
+    /// to descend on an unreadable attribute would hide reachable plug-ins and actuates nothing.
     private static func menuItemEnabled(
         _ item: AXUIElement,
         runtime: AXHelpers.Runtime
@@ -2777,6 +2794,31 @@ extension AccessibilityChannel {
         )
     }
     #endif
+
+    /// Outcome of a coordinate click, distinguishing "we never posted anything" from "we posted and
+    /// the post failed". The Honest Contract must not claim a write for the former.
+    enum CoordinateClickOutcome {
+        case posted
+        case noTargetPoint
+        case postFailed
+    }
+
+    private static func clickElementCenterOutcome(
+        _ element: AXUIElement, runtime: AXHelpers.Runtime
+    ) -> CoordinateClickOutcome {
+        #if DEBUG
+        if let coordinateActuationTestEffect { return coordinateActuationTestEffect.perform() ? .posted : .postFailed }
+        if let forceCoordinateActuationForTests { return forceCoordinateActuationForTests ? .posted : .postFailed }
+        #endif
+        guard let center = elementCenter(element, runtime: runtime) else { return .noTargetPoint }
+        let source = CGEventSource(stateID: .combinedSessionState)
+        guard let down = CGEvent(mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: center, mouseButton: .left),
+              let up = CGEvent(mouseEventSource: source, mouseType: .leftMouseUp, mouseCursorPosition: center, mouseButton: .left)
+        else { return .postFailed }
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+        return .posted
+    }
 
     @discardableResult
     private static func clickElementCenter(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
