@@ -1801,8 +1801,8 @@ extension AccessibilityChannel {
             ))
 
         case let .transientSetupFailure(stage):
-            // A pre-mount UI-setup step did not complete (menu/search-field/results
-            // not ready). No write attempted → retry-able (P2-3), distinct from the
+            // A pre-mount UI-setup step did not complete (slot popup, anchor, or
+            // exact leaf not ready). No write attempted → retry-able (P2-3), distinct from the
             // permanent insert_not_ax_automatable.
             return .error(HonestContract.encodeV2StateC(
                 error: .insertSetupFailed,
@@ -1845,15 +1845,15 @@ extension AccessibilityChannel {
     /// Sequence:
     ///   0. hide any stray plugin windows (a front plugin window from a prior
     ///      attempt steals the menu — R14 live: AXPress menu nav opened the track
-    ///      instrument window instead of the search dialog);
+    ///      instrument window instead of the requested slot popup);
     ///   1. select the target track and verify `AXSelected` readback;
     ///   2. raise the mixer/main window and read the full pre-insert inventory;
     ///   3. locate the requested filtered insert slot and invoke its discovered
     ///      custom action to open that slot's popup (coordinate fallback only when
     ///      the action is absent);
     ///   4. prove the popup is anchored to the target slot, then choose the stock
-    ///      plugin by exact leaf title from that anchored popup (direct/search/
-    ///      recursive discovery), not by localized category names;
+    ///      plugin by exact leaf title from that anchored popup (direct/recursive
+    ///      discovery), not by localized category names;
     ///   5. CONDITION-poll the inventory (wait for an actual change, not the first
     ///      readable snapshot) and diff against the pre-snapshot to detect WHERE
     ///      the requested plugin landed;
@@ -1914,14 +1914,20 @@ extension AccessibilityChannel {
         }
         trace["target_slot_found"] = true
 
+        var popupAnchorSlot = targetSlot.element
         switch slotPopupOpenCustomActionEnumerationResult(on: targetSlot.element, runtime: runtime.ax) {
         case .enumeratedAndPresent:
             // Live evidence: this can return `cannotComplete` (-25204) even when
             // it opens the popup. Dispatch it through the same runtime seam as
             // AXPress, but let the observed popup poll below make the decision.
+            guard let liveTargetSlot = liveInsertSlot(track: track, insert: insert, runtime: runtime),
+                  liveTargetSlot.isEmpty else {
+                return (.transientSetupFailure(stage: "target_slot_no_longer_empty"), trace)
+            }
             _ = AXHelpers.performAction(
-                targetSlot.element, slotPopupOpenCustomAction, runtime: runtime.ax
+                liveTargetSlot.element, slotPopupOpenCustomAction, runtime: runtime.ax
             )
+            popupAnchorSlot = liveTargetSlot.element
             trace["slot_popup_open_fallback_taken"] = false
             trace["slot_popup_open_action"] = "custom_action"
             trace["slot_popup_open_action_enumeration"] = "present"
@@ -1932,9 +1938,14 @@ extension AccessibilityChannel {
             trace["slot_popup_open_fallback_taken"] = true
             trace["slot_popup_open_action"] = "coordinate_fallback"
             trace["slot_popup_open_action_enumeration"] = "absent"
-            guard clickElementCenter(targetSlot.element, runtime: runtime.ax) else {
+            guard let liveTargetSlot = liveInsertSlot(track: track, insert: insert, runtime: runtime),
+                  liveTargetSlot.isEmpty else {
+                return (.transientSetupFailure(stage: "target_slot_no_longer_empty"), trace)
+            }
+            guard clickElementCenter(liveTargetSlot.element, runtime: runtime.ax) else {
                 return (.transientSetupFailure(stage: "target_slot_click_failed"), trace)
             }
+            popupAnchorSlot = liveTargetSlot.element
         case .enumerationFailed:
             // An AX read failure does not prove that this build lacks the custom
             // action, so it must not downgrade to the coordinate write path.
@@ -1953,7 +1964,7 @@ extension AccessibilityChannel {
         trace["slot_popup_menu_found"] = true
 
         let anchorVerified = slotPopupMenuIsAnchored(
-            rootMenu, toSlot: targetSlot.element, runtime: runtime.ax
+            rootMenu, toSlot: popupAnchorSlot, runtime: runtime.ax
         )
         trace["slot_popup_anchor_verified"] = anchorVerified
         guard anchorVerified else {
@@ -2310,6 +2321,7 @@ extension AccessibilityChannel {
     ) -> SlotPopupOpenCustomActionEnumerationResult {
         #if DEBUG
         if let result = slotPopupOpenCustomActionEnumerationResultForTests {
+            slotPopupOpenActionEnumerationHookForTests?()
             return result
         }
         #endif
@@ -2331,6 +2343,11 @@ extension AccessibilityChannel {
     @TaskLocal static var slotPopupOpenCustomActionEnumerationResultForTests:
         SlotPopupOpenCustomActionEnumerationResult?
 
+    /// Test-only hook that runs after a deterministic enumeration result and
+    /// before the selected slot-opening write. It models live UI drift in the
+    /// otherwise unobservable AX action-enumeration interval.
+    @TaskLocal static var slotPopupOpenActionEnumerationHookForTests: (@Sendable () -> Void)?
+
     static func withSlotPopupOpenCustomActionEnumerationResultForTests<Result>(
         _ result: SlotPopupOpenCustomActionEnumerationResult,
         operation: () async throws -> Result
@@ -2338,6 +2355,13 @@ extension AccessibilityChannel {
         try await $slotPopupOpenCustomActionEnumerationResultForTests.withValue(
             result, operation: operation
         )
+    }
+
+    static func withSlotPopupOpenActionEnumerationHookForTests<Result>(
+        _ hook: @escaping @Sendable () -> Void,
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        try await $slotPopupOpenActionEnumerationHookForTests.withValue(hook, operation: operation)
     }
 
     /// Retained action-name test seam for present/absent compatibility fixtures.

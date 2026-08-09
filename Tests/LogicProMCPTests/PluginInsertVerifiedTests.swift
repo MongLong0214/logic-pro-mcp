@@ -721,12 +721,29 @@ private final class AXActionRecorder: @unchecked Sendable {
         calls.count { $0.elementID == elementID && $0.action == action }
     }
 
+    func touched(elementID: Int) -> Bool {
+        calls.contains { $0.elementID == elementID }
+            || attributeWrites.contains { $0.elementID == elementID }
+    }
+
     func nonTargetActionCount(targetElementID: Int) -> Int {
         calls.count { $0.elementID != targetElementID }
     }
 
     func nonTargetAttributeWriteCount(targetElementID: Int) -> Int {
         attributeWrites.count { $0.elementID != targetElementID }
+    }
+}
+
+private final class SlotOccupier: @unchecked Sendable {
+    private let performOccupancy: () -> Void
+
+    init(_ performOccupancy: @escaping () -> Void) {
+        self.performOccupancy = performOccupancy
+    }
+
+    func occupy() {
+        performOccupancy()
     }
 }
 
@@ -790,8 +807,11 @@ private struct SlotPopupInsertFixture {
     let slotItemID: Int
     let categoryItemID: Int?
     let nonMatchingLeafItemID: Int?
+    let nonMatchingFormatLeafItemIDs: [Int]
+    let formatNamedCategoryItemID: Int?
     let leafItemID: Int
     let actions: AXActionRecorder
+    let slotOccupier: SlotOccupier
     let coordinateFallbackClick: () -> Bool
 }
 
@@ -913,27 +933,36 @@ private func makeSlotPopupInsertFixture(
     let leafKey = formatLeafItem.map(b.elementID) ?? b.elementID(gainItem)
     let categoryKey = categoryItem.map(b.elementID)
     let nonMatchingLeafKey = nonMatchingLeafItem.map(b.elementID)
+    let nonMatchingFormatLeafKeys = [nonMatchingFormatMono, nonMatchingFormatMonoToStereo]
+        .compactMap { $0.map(b.elementID) }
+    let formatNamedCategoryKey = formatNamedCategoryItem.map(b.elementID)
     let actions = AXActionRecorder()
     let pickAction = kAXPickAction as String
+    let slotOccupier = SlotOccupier {
+        let bypass = b.element(9021)
+        let open = b.element(9022)
+        b.setAttribute(slot, kAXRoleAttribute as String, kAXGroupRole as String)
+        b.setAttribute(slot, kAXDescriptionAttribute as String, "Compressor")
+        b.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        b.setAttribute(bypass, kAXDescriptionAttribute as String, "바이패스")
+        b.setAttribute(bypass, kAXValueAttribute as String, 0)
+        b.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
+        b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
+        b.setChildren(slot, [bypass, open])
+    }
     let runtime = b.makeLogicRuntime(
         appElement: app,
-        setAttributeHandler: nil,
+        setAttributeHandler: { element, attribute, _ in
+            actions.recordAttributeWrite(elementID: b.elementID(element), attribute: attribute)
+            return true
+        },
         performActionHandler: { element, action in
             let elementID = b.elementID(element)
             actions.record(elementID: elementID, action: action)
             if occupySlotOnWindowRaise,
                elementID == windowKey,
                action == (kAXRaiseAction as String) {
-                let bypass = b.element(9021)
-                let open = b.element(9022)
-                b.setAttribute(slot, kAXRoleAttribute as String, kAXGroupRole as String)
-                b.setAttribute(slot, kAXDescriptionAttribute as String, "Compressor")
-                b.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
-                b.setAttribute(bypass, kAXDescriptionAttribute as String, "바이패스")
-                b.setAttribute(bypass, kAXValueAttribute as String, 0)
-                b.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
-                b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
-                b.setChildren(slot, [bypass, open])
+                slotOccupier.occupy()
             }
             if elementID == slotKey, action == slotPopupOpenCustomAction {
                 if popupAppearsAfterSlotOpen {
@@ -964,8 +993,11 @@ private func makeSlotPopupInsertFixture(
         slotItemID: slotKey,
         categoryItemID: categoryKey,
         nonMatchingLeafItemID: nonMatchingLeafKey,
+        nonMatchingFormatLeafItemIDs: nonMatchingFormatLeafKeys,
+        formatNamedCategoryItemID: formatNamedCategoryKey,
         leafItemID: leafKey,
         actions: actions,
+        slotOccupier: slotOccupier,
         coordinateFallbackClick: {
             b.setChildren(app, [window, popupMenu])
             return true
@@ -1027,7 +1059,7 @@ private func run425Insert(
     #expect(state == "C")
     let stage = try #require(obj["setup_stage"] as? String)
     #expect(stage == "slot_action_enumeration_failed")
-    #expect(!fixture.actions.contains(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction))
+    #expect(!fixture.actions.touched(elementID: fixture.slotItemID))
     let trace = try #require(obj["select_trace"] as? [String: Any])
     let fallbackTaken = try #require(trace["slot_popup_open_fallback_taken"] as? Bool)
     #expect(!fallbackTaken)
@@ -1060,7 +1092,7 @@ private func run425Insert(
     let state = try #require(obj["state"] as? String)
     #expect(state == "A")
     let categoryID = try #require(fixture.categoryItemID)
-    #expect(fixture.actions.count(elementID: categoryID, action: kAXPickAction as String) == 0)
+    #expect(!fixture.actions.touched(elementID: categoryID))
     #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
     let trace = try #require(obj["select_trace"] as? [String: Any])
     let strategy = try #require(trace["winning_strategy"] as? String)
@@ -1086,8 +1118,8 @@ private func run425Insert(
     #expect(stage == "target_slot_no_longer_empty")
     let writeAttempted = try #require(obj["write_attempted"] as? Bool)
     #expect(!writeAttempted)
-    #expect(!fixture.actions.contains(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction))
-    #expect(!fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+    #expect(!fixture.actions.touched(elementID: fixture.slotItemID))
+    #expect(!fixture.actions.touched(elementID: fixture.leafItemID))
 }
 
 @Test func testPlugin425RecursiveWalkOnlyPicksExactLeaf() async throws {
@@ -1104,9 +1136,9 @@ private func run425Insert(
     #expect(state == "A")
     let categoryID = try #require(fixture.categoryItemID)
     let nonMatchingLeafID = try #require(fixture.nonMatchingLeafItemID)
-    #expect(fixture.actions.count(elementID: categoryID, action: kAXPickAction as String) == 0)
+    #expect(!fixture.actions.touched(elementID: categoryID))
     #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
-    #expect(fixture.actions.count(elementID: nonMatchingLeafID, action: kAXPickAction as String) == 0)
+    #expect(!fixture.actions.touched(elementID: nonMatchingLeafID))
 }
 
 @Test func testPlugin425RecursiveWalkSkipsNonMatchingFormatLeafWithoutActuation() async throws {
@@ -1124,9 +1156,12 @@ private func run425Insert(
     #expect(state == "A")
     let categoryID = try #require(fixture.categoryItemID)
     let nonMatchingLeafID = try #require(fixture.nonMatchingLeafItemID)
-    #expect(fixture.actions.count(elementID: categoryID, action: kAXPickAction as String) == 0)
+    #expect(!fixture.actions.touched(elementID: categoryID))
     #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
-    #expect(fixture.actions.count(elementID: nonMatchingLeafID, action: kAXPickAction as String) == 0)
+    #expect(!fixture.actions.touched(elementID: nonMatchingLeafID))
+    for formatLeafID in fixture.nonMatchingFormatLeafItemIDs {
+        #expect(!fixture.actions.touched(elementID: formatLeafID))
+    }
 }
 
 @Test func testPlugin425RecursiveWalkDescendsPastFormatNamedCategoryEntryWithoutActuation() async throws {
@@ -1142,7 +1177,9 @@ private func run425Insert(
     let state = try #require(obj["state"] as? String)
     #expect(state == "A")
     let categoryID = try #require(fixture.categoryItemID)
-    #expect(fixture.actions.count(elementID: categoryID, action: kAXPickAction as String) == 0)
+    let formatNamedCategoryID = try #require(fixture.formatNamedCategoryItemID)
+    #expect(!fixture.actions.touched(elementID: categoryID))
+    #expect(!fixture.actions.touched(elementID: formatNamedCategoryID))
     #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
 }
 
@@ -1191,10 +1228,54 @@ private func run425Insert(
 
     let state = try #require(obj["state"] as? String)
     #expect(state == "A")
-    #expect(!fixture.actions.contains(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction))
+    #expect(!fixture.actions.touched(elementID: fixture.slotItemID))
     let trace = try #require(obj["select_trace"] as? [String: Any])
     let fallbackTaken = try #require(trace["slot_popup_open_fallback_taken"] as? Bool)
     #expect(fallbackTaken)
     let slotOpenAction = try #require(trace["slot_popup_open_action"] as? String)
     #expect(slotOpenAction == "coordinate_fallback")
+}
+
+@Test func testPlugin425CoordinateFallbackFailsClosedWhenSlotBecomesOccupiedDuringEnumeration() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let slotOccupier = fixture.slotOccupier
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([]) {
+        await AccessibilityChannel.withSlotPopupOpenActionEnumerationHookForTests {
+            slotOccupier.occupy()
+        } operation: {
+            await AccessibilityChannel.withCoordinateActuationForTests(fixture.coordinateFallbackClick) {
+                await runRealInsert(runtime: fixture.runtime)
+            }
+        }
+    }
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "C")
+    let stage = try #require(obj["setup_stage"] as? String)
+    #expect(stage == "target_slot_no_longer_empty")
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(!fixture.actions.touched(elementID: fixture.slotItemID))
+    #expect(!fixture.actions.touched(elementID: fixture.leafItemID))
+}
+
+@Test func testPlugin425CustomSlotOpenFailsClosedWhenSlotBecomesOccupiedDuringEnumeration() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let slotOccupier = fixture.slotOccupier
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
+        await AccessibilityChannel.withSlotPopupOpenActionEnumerationHookForTests {
+            slotOccupier.occupy()
+        } operation: {
+            await runRealInsert(runtime: fixture.runtime)
+        }
+    }
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "C")
+    let stage = try #require(obj["setup_stage"] as? String)
+    #expect(stage == "target_slot_no_longer_empty")
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(!fixture.actions.touched(elementID: fixture.slotItemID))
+    #expect(!fixture.actions.touched(elementID: fixture.leafItemID))
 }
