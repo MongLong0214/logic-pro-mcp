@@ -244,10 +244,12 @@ private func filterCompleteness(_ filter: FilterEvidence) -> FilterAssessment {
     for control in FilterControlID.allCases where seen[control] == nil {
         return .incomplete
     }
+    // #495 — only `Notes` governs whether note events are shown. The other seven
+    // control event classes that are not notes, so their state cannot hide a note and
+    // must not be read as a scoping filter. They are still REQUIRED to be observed:
+    // a collector that cannot see the whole control set has not established that the
+    // one control it does care about is the only one that matters.
     guard seen[.noteEvents] == true else { return .filtered }
-    if seen[.channel] == true || seen[.scope] == true || seen[.takeFolder] == true {
-        return .filtered
-    }
     return .allNotesVisible
 }
 

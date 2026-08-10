@@ -43,16 +43,28 @@ import Testing
         [.position: posCol, .channel: chCol, .pitch: pitchCol, .velocity: velCol, .length: lenCol]
     }
 
-    /// The complete, well-formed filter control set (all note events visible, no
-    /// scoping filter). Individual tests override one control to exercise a case.
+    /// The complete, well-formed filter control set — the eight event-type checkboxes
+    /// the Event pane actually exposes (#495, measured live 2026-08-10). Individual
+    /// tests override one control to exercise a case.
     static func completeFilter(
-        noteEvents: Bool = true, channel: Bool = false, scope: Bool = false, takeFolder: Bool = false
+        noteEvents: Bool = true,
+        programChange: Bool = true,
+        pitchBend: Bool = true,
+        controller: Bool = true,
+        aftertouch: Bool = true,
+        polyAftertouch: Bool = true,
+        systemExclusive: Bool = true,
+        additionalInfo: Bool = false
     ) -> FilterEvidence {
         FilterEvidence(checkboxes: [
             .init(id: "noteEvents", checked: noteEvents),
-            .init(id: "channel", checked: channel),
-            .init(id: "scope", checked: scope),
-            .init(id: "takeFolder", checked: takeFolder),
+            .init(id: "programChange", checked: programChange),
+            .init(id: "pitchBend", checked: pitchBend),
+            .init(id: "controller", checked: controller),
+            .init(id: "aftertouch", checked: aftertouch),
+            .init(id: "polyAftertouch", checked: polyAftertouch),
+            .init(id: "systemExclusive", checked: systemExclusive),
+            .init(id: "additionalInfo", checked: additionalInfo),
         ])
     }
 
@@ -179,17 +191,83 @@ import Testing
         #expect(snap.noteCompleteness.partialReason == .filterNotAllNotes)
     }
 
-    @Test func scopeFilterActiveRejected() {
-        let snap = assessReadback(Self.evidence(filter: Self.completeFilter(scope: true)))
+    // `scopeFilterActiveRejected` is retired, not dropped. It asserted that an active
+    // `scope` filter makes the readback filtered — but the Event pane has no scope
+    // checkbox (#495, measured), so the test exercised a control that does not exist and
+    // could never fire against a faithful collector.
+    //
+    // The concern it protected — the list showing something other than the region the
+    // caller named — is carried by the region-identity predicates, and that coverage was
+    // checked rather than assumed: neutralising the `observed == resolvedIdentity`
+    // comparison makes `mismatchedObservedIdentityRejected` fail. That is a stronger
+    // check than a toggle, because it compares two independently obtained identities
+    // instead of trusting a boolean.
+
+    /// #495 — the enum must describe the controls Logic actually shows.
+    ///
+    /// Measured live 2026-08-10: the Event pane exposes eight event-type checkboxes —
+    /// Notes, Progr. Change, Pitch Bend, Controller, Aftertouch, Poly Aftertouch,
+    /// Syst. Exclusive, Additional Info — and no channel, scope or take-folder filter.
+    /// A collector that reports what it sees must be accepted; today it is rejected as
+    /// incomplete, and the only way to pass is to invent ids for controls that are not there.
+    @Test func filterAcceptsTheControlSetLogicActuallyExposes() {
+        let snap = assessReadback(Self.evidence(filter: FilterEvidence(checkboxes: [
+            .init(id: "noteEvents", checked: true),
+            .init(id: "programChange", checked: true),
+            .init(id: "pitchBend", checked: true),
+            .init(id: "controller", checked: true),
+            .init(id: "aftertouch", checked: true),
+            .init(id: "polyAftertouch", checked: true),
+            .init(id: "systemExclusive", checked: true),
+            .init(id: "additionalInfo", checked: false),
+        ])))
+        #expect(snap.noteCompleteness.partialReason != .filterEvidenceIncomplete)
+    }
+
+    /// The other seven filters govern event classes that are not notes, so their state
+    /// cannot make a note readback "filtered" — only Notes being off can.
+    @Test func filterOtherEventTypesOffDoesNotHideNotes() {
+        let snap = assessReadback(Self.evidence(filter: FilterEvidence(checkboxes: [
+            .init(id: "noteEvents", checked: true),
+            .init(id: "programChange", checked: false),
+            .init(id: "pitchBend", checked: false),
+            .init(id: "controller", checked: false),
+            .init(id: "aftertouch", checked: false),
+            .init(id: "polyAftertouch", checked: false),
+            .init(id: "systemExclusive", checked: false),
+            .init(id: "additionalInfo", checked: false),
+        ])))
+        #expect(snap.noteCompleteness.partialReason != .filterNotAllNotes)
+        #expect(snap.noteCompleteness.partialReason != .filterEvidenceIncomplete)
+    }
+
+    /// Notes off is the one filter state that does hide notes.
+    @Test func filterNotesOffIsStillFiltered() {
+        let snap = assessReadback(Self.evidence(filter: FilterEvidence(checkboxes: [
+            .init(id: "noteEvents", checked: false),
+            .init(id: "programChange", checked: true),
+            .init(id: "pitchBend", checked: true),
+            .init(id: "controller", checked: true),
+            .init(id: "aftertouch", checked: true),
+            .init(id: "polyAftertouch", checked: true),
+            .init(id: "systemExclusive", checked: true),
+            .init(id: "additionalInfo", checked: false),
+        ])))
         #expect(snap.noteCompleteness.partialReason == .filterNotAllNotes)
     }
 
+    /// One control of the eight omitted. Every id present IS recognised, so this
+    /// exercises the missing-control rule rather than the unknown-id rule.
     @Test func filterMissingControlRejected() {
         let snap = assessReadback(Self.evidence(filter: FilterEvidence(checkboxes: [
             .init(id: "noteEvents", checked: true),
-            .init(id: "channel", checked: false),
-            .init(id: "scope", checked: false),
-            // takeFolder omitted → incomplete
+            .init(id: "programChange", checked: true),
+            .init(id: "pitchBend", checked: true),
+            .init(id: "controller", checked: true),
+            .init(id: "aftertouch", checked: true),
+            .init(id: "polyAftertouch", checked: true),
+            .init(id: "systemExclusive", checked: true),
+            // additionalInfo omitted → incomplete
         ])))
         #expect(snap.noteCompleteness.partialReason == .filterEvidenceIncomplete)
     }
@@ -198,9 +276,13 @@ import Testing
         let snap = assessReadback(Self.evidence(filter: FilterEvidence(checkboxes: [
             .init(id: "noteEvents", checked: true),
             .init(id: "noteEvents", checked: true),
-            .init(id: "channel", checked: false),
-            .init(id: "scope", checked: false),
-            .init(id: "takeFolder", checked: false),
+            .init(id: "programChange", checked: true),
+            .init(id: "pitchBend", checked: true),
+            .init(id: "controller", checked: true),
+            .init(id: "aftertouch", checked: true),
+            .init(id: "polyAftertouch", checked: true),
+            .init(id: "systemExclusive", checked: true),
+            .init(id: "additionalInfo", checked: false),
         ])))
         #expect(snap.noteCompleteness.partialReason == .filterEvidenceIncomplete)
     }
@@ -208,9 +290,13 @@ import Testing
     @Test func filterUnknownControlRejected() {
         let snap = assessReadback(Self.evidence(filter: FilterEvidence(checkboxes: [
             .init(id: "noteEvents", checked: true),
-            .init(id: "channel", checked: false),
-            .init(id: "scope", checked: false),
-            .init(id: "takeFolder", checked: false),
+            .init(id: "programChange", checked: true),
+            .init(id: "pitchBend", checked: true),
+            .init(id: "controller", checked: true),
+            .init(id: "aftertouch", checked: true),
+            .init(id: "polyAftertouch", checked: true),
+            .init(id: "systemExclusive", checked: true),
+            .init(id: "additionalInfo", checked: false),
             .init(id: "mysteryControl", checked: false),
         ])))
         #expect(snap.noteCompleteness.partialReason == .filterEvidenceIncomplete)
