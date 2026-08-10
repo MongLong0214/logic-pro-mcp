@@ -131,3 +131,4 @@ enum FeatureFlags: Sendable {
         ProcessInfo.processInfo.environment["LOGIC_MCP_ADR018_HOST_PARAMS"] == "1"
     }
 }
+let thisDoesNotCompile: Int = "x"
