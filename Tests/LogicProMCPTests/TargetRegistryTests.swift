@@ -389,7 +389,7 @@ struct TargetRegistryTests {
 
             let projectRegistry = TargetRegistry()
             let projectRouter = ChannelRouter()
-            await projectRouter.register(TargetReferenceChannel(id: .appleScript))
+            await projectRouter.register(TargetReferenceChannel(id: .accessibility))
             _ = await ProjectDispatcher.handle(
                 command: "new",
                 params: [:],

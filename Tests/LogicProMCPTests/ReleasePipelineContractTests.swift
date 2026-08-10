@@ -29,7 +29,9 @@ import Testing
     let workflow = try scriptContents(".github/workflows/release.yml")
 
     let selectXcode = try #require(workflow.range(of: "name: Select Xcode"))
-    let testStep = try #require(workflow.range(of: "swift test --no-parallel"))
+    let testStep = try #require(workflow.range(
+        of: "swift test -Xswiftc -suppress-warnings --no-parallel"
+    ))
     let buildUniversal = try #require(workflow.range(of: "name: Build universal binary"))
     let package = try #require(workflow.range(of: "name: Package"))
 
