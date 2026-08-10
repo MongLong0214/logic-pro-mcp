@@ -68,11 +68,18 @@ extension ResourceHandlers {
     static func versionedCacheExtras(
         projectEpoch: UInt64,
         sectionRevision: UInt64,
+        droppedStaleWrites: UInt64 = 0,
         bodyJSON: String
     ) -> [String: Any] {
         [
             "project_epoch": projectEpoch,
             "section_revision": sectionRevision,
+            // How many times a refresh finished so late that its value was refused for this section
+            // (#289). A guard whose only evidence is the absence of a symptom cannot be checked: the
+            // symptom is transient and rare, so "we saw no corruption" is equally consistent with the
+            // guard working and with it never running. Counting refusals turns that into something a
+            // client — or a live test — can observe directly at the boundary where it matters.
+            "dropped_stale_writes": droppedStaleWrites,
             "etag": etag(of: bodyJSON),
         ]
     }
