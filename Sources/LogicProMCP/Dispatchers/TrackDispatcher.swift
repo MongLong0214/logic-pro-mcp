@@ -127,7 +127,20 @@ struct TrackDispatcher: OperationTraceDispatching {
             let name = stringParam(params, "name")
             if !name.isEmpty {
                 let tracks = await cache.getTracks()
-                if let track = tracks.first(where: { $0.name.localizedCaseInsensitiveContains(name) }) {
+                let matchingTracks = tracks.filter { $0.name.localizedCaseInsensitiveContains(name) }
+                if matchingTracks.count > 1 {
+                    return toolStateCResult(
+                        .ambiguousTargetName,
+                        hint: "'\(name)' matches more than one live track, so the target cannot be identified. Use an unambiguous name or select by index.",
+                        extras: [
+                            "operation": "track.select",
+                            "requested_name": name,
+                            "ambiguous_track_indices": matchingTracks.map(\.id).sorted(),
+                            "write_attempted": false,
+                        ]
+                    )
+                }
+                if let track = matchingTracks.first {
                     let traceID = await startTraceIfEnabled(command: command)
                     let result = await withWriteBoundaryArmed(traceID) {
                         await router.route(
