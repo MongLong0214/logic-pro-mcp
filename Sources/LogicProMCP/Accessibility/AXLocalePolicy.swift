@@ -260,9 +260,16 @@ enum AXLocalePolicy {
         rationale: "Identifies the Cycle/Loop transport control; read-only."
     )
 
+    /// Japanese Logic labels this control with ONE compound string, `メトロノームクリック`,
+    /// not with either half. Matching here is `.exactStrict`, so `メトロノーム` and `クリック`
+    /// alone find nothing on a Japanese install — measured live 2026-08-10 by switching the
+    /// application to Japanese and enumerating the control bar's 90 checkboxes.
+    ///
+    /// The two halves are kept: Logic uses bare `クリック` on other surfaces, and a label that
+    /// costs nothing to carry should not be removed on the strength of one build.
     static let transportMetronomeControl = LabelSet(
         canonical: "metronome",
-        variants: ["click", "메트로놈", "클릭", "メトロノーム", "クリック"],
+        variants: ["click", "메트로놈", "클릭", "メトロノームクリック", "メトロノーム", "クリック"],
         rationale: "Identifies the Metronome/Click transport control; read-only."
     )
 
