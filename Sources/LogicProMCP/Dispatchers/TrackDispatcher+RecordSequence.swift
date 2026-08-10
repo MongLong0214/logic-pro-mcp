@@ -563,16 +563,27 @@ extension TrackDispatcher {
         }
     }
 
-    private static func recordSequenceExpectedEndBar(
+    /// The bar Logic will report as the region's end.
+    ///
+    /// Logic numbers a region's end as the bar line it stops on: a region filling exactly bar 1 is
+    /// "1 to 2". The previous integer division added 2 unconditionally, which pushed a sequence
+    /// ending exactly ON a bar line into the next bar. Measured live at 120 BPM 4/4, four quarter
+    /// notes — the most ordinary sequence there is — produced expected 3 against Logic's observed 2
+    /// and the write was reported as `timing_mismatch`; shortening the last note by 100 ms made the
+    /// same sequence verify. Rounding up and adding one matches Logic in both cases and for
+    /// multi-bar sequences.
+    static func recordSequenceExpectedEndBar(
         for events: [SMFWriter.NoteEvent],
         requestedBar: Int,
         timeSignatureNumerator: Int = 4,
         ticksPerQuarter: Int = 480
     ) -> Int {
         let ticksPerBar = timeSignatureNumerator * ticksPerQuarter
+        guard ticksPerBar > 0 else { return 2 }
         let maxEndTicks = events.map { $0.offsetTicks + $0.durationTicks }.max() ?? 0
         let absoluteEndTicks = maxEndTicks + max(0, requestedBar - 1) * ticksPerBar
-        return max(2, (absoluteEndTicks / ticksPerBar) + 2)
+        let barsSpanned = (absoluteEndTicks + ticksPerBar - 1) / ticksPerBar
+        return max(2, barsSpanned + 1)
     }
 
     private static func recordSequenceRegionKey(_ region: RegionInfo) -> String {
