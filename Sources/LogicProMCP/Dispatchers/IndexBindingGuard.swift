@@ -170,7 +170,7 @@ enum IndexBindingGuard {
         let sameNameIndices = names.filter { $0.value == expectedName }.keys.sorted()
         guard sameNameIndices.count == 1 else {
             return toolStateCResult(
-                .targetNameAmbiguous,
+                .ambiguousTargetName,
                 hint: "\(operation) refused: '\(expectedName)' names \(sameNameIndices.count) live tracks, so matching it at index \(index) does not prove which one this is (same-named tracks can swap and stay self-consistent) — supply target_ref to bind by stable identity",
                 extras: [
                     "operation": operation,

@@ -452,12 +452,12 @@ private func runChannelEQFixture(
     let obj = await runLive(fixture: fixture, params: params)
 
     #expect(obj["state"] as? String == "C")
-    #expect(obj["error"] as? String == "stale_target_reference")
+    #expect(obj["error"] as? String == "ambiguous_target_name")
     let v1 = try #require(obj["write_attempted"] as? Bool)
     #expect(!v1)
     let v2 = try #require(obj["ambiguous_live_track_name"] as? Bool)
     #expect(v2)
-    #expect(obj["ambiguous_track_indices"] as? [Int] == [1])
+    #expect(obj["ambiguous_track_indices"] as? [Int] == [0, 1])
     #expect(fixture.currentSliderValue == 51)
 }
 

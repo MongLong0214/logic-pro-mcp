@@ -103,8 +103,10 @@ enum HonestContract {
         case trackSelectionFailed = "track_selection_failed"
         case staleSnapshot = "stale_snapshot"
         case staleTargetReference = "stale_target_reference"
-        /// The reference still names the right index and the right name, but that name is not
-        /// unique, so nothing can prove WHICH track is meant. Deliberately distinct from
+        /// A binding still names the right index and the right name, but that name is not unique,
+        /// so nothing can prove WHICH track is meant. `ambiguous_track_indices` always contains
+        /// all live tracks carrying the colliding name, whether the binding came from `target_ref`
+        /// or `expected_name`. Deliberately distinct from
         /// `.staleTargetReference`: nothing is stale and nothing was reordered, and reporting it as
         /// staleness sent callers looking for a reorder that never happened.
         case ambiguousTargetName = "ambiguous_target_name"
@@ -135,11 +137,6 @@ enum HonestContract {
         /// (`reason: header_unreadable`), which is never read as agreement.
         /// Fail-closed pre-write: the wrong track was NOT touched.
         case targetIdentityMismatch = "target_identity_mismatch"
-        /// `expected_name` matched the live header at the supplied index but is
-        /// NOT unique across the live surface. Two same-named tracks can swap
-        /// positions and keep (index, name) self-consistent, so a match proves
-        /// nothing; only a `target_ref` survives the swap.
-        case targetNameAmbiguous = "target_name_ambiguous"
         /// A `.refRequired` op was called with a bare index. Unlike
         /// `.indexBindingCorroborationRequired`, no `expected_name` can rescue
         /// this — a stable `target_ref` is the only accepted binding.
