@@ -499,7 +499,7 @@ actor AccessibilityChannel: Channel {
 
         // MARK: - Project lifecycle via AX
         case "project.new":
-            return await AccessibilityChannel.createEmptyProjectFromChooser(runtime: runtime.logicRuntime)
+            return await AccessibilityChannel.createEmptyProjectFromQualifiedState(runtime: runtime.logicRuntime)
         case "project.save_as":
             guard let path = params["path"] else {
                 return .error("Missing 'path' parameter for project.save_as")

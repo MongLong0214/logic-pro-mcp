@@ -195,10 +195,11 @@ extension ChannelRouter {
         "edit.toggle_step_input":     [.accessibility, .midiKeyCommands, .cgEvent],
         "edit.duplicate":             [.midiKeyCommands, .cgEvent],
 
-        // Creator Studio's File > New opens a project chooser; AppleScript's
-        // document identity can mistake that chooser for a created document.
-        // AX handles the exact Empty Project -> Choose lifecycle first.
-        "project.new":                [.accessibility, .appleScript, .cgEvent],
+        // Exact AX owns the full qualified lifecycle: either an already
+        // visible chooser or zero AX windows -> exact File > New -> exact
+        // Empty Project -> exact Choose. No AppleScript/CGEvent fallback may
+        // create an ambiguous document after this route rejects.
+        "project.new":                [.accessibility],
         "project.open":               [.appleScript],
         // #110: AppleScript-first — the direct `save front document` is the
         // reliable writer and lets the channel verify the .logicx package was

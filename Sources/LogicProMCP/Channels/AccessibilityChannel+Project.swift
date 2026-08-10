@@ -6,6 +6,51 @@ import Foundation
 extension AccessibilityChannel {
     // MARK: - Creator Studio New Project chooser
 
+    static func blankApplicationCanRevealChooser(windowCount: Int?) -> Bool {
+        windowCount == 0
+    }
+
+    static func createEmptyProjectFromQualifiedState(
+        runtime: AXLogicProElements.Runtime = .production
+    ) async -> ChannelResult {
+        if exactEmptyProjectChooserIsVisible(runtime: runtime) {
+            return await createEmptyProjectFromChooser(runtime: runtime)
+        }
+
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else {
+            return .error("Logic Pro AX application root is unavailable")
+        }
+        let windows: [AXUIElement]? = AXHelpers.getAttribute(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax
+        )
+        guard blankApplicationCanRevealChooser(windowCount: windows?.count) else {
+            return .error("Creator Studio has a non-chooser window; refusing project.new")
+        }
+
+        let target = LogicProTarget.appleScriptTarget()
+        let reveal = await runtime.executeAppleScript("""
+        \(target.activateByBundleID)
+        tell application "System Events"
+            tell \(target.systemEventsProcessTarget)
+                if (count of windows) is not 0 then return "WINDOWS_PRESENT"
+                if not (exists menu item "New" of menu 1 of menu bar item "File" of menu bar 1) then return "EXACT_NEW_NOT_FOUND"
+                click menu item "New" of menu 1 of menu bar item "File" of menu bar 1
+                return "EXACT_NEW_CLICKED"
+            end tell
+        end tell
+        """)
+        guard reveal.isSuccess, reveal.message.contains("EXACT_NEW_CLICKED") else {
+            return .error("Could not reveal Creator Studio chooser through exact File > New")
+        }
+        for _ in 0..<40 {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            if exactEmptyProjectChooserIsVisible(runtime: runtime) {
+                return await createEmptyProjectFromChooser(runtime: runtime)
+            }
+        }
+        return .error("Exact File > New did not expose the Creator Studio chooser")
+    }
+
     static func exactEmptyProjectChooserIsVisible(
         runtime: AXLogicProElements.Runtime = .production
     ) -> Bool {

@@ -238,10 +238,7 @@ func testCGEventProductionRuntimeSmokeExecutesWithoutCrash() {
     #expect(events[0].flags == .maskCommand)
 }
 
-@Test func testProjectNewRoutingPrefersExactChooserAXWithFallbacks() {
+@Test func testProjectNewRoutingHasOnlyExactQualifiedAX() {
     let routes = ChannelRouter.v2RoutingTable["project.new"]
-    #expect(routes != nil)
-    #expect(routes?.first == .accessibility)
-    #expect((routes?.contains(.appleScript))!)
-    #expect((routes?.contains(.cgEvent))!)
+    #expect(routes == [.accessibility])
 }

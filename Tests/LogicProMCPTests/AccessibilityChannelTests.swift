@@ -40,6 +40,13 @@ func creatorStudioEmptyProjectLabelGate() {
     #expect(!AccessibilityChannel.isExactEmptyProjectLabel(title: "Empty Project Copy", value: nil))
 }
 
+@Test("Creator Studio blank-app reveal requires an exact zero AX-window count")
+func creatorStudioBlankApplicationGate() {
+    #expect(AccessibilityChannel.blankApplicationCanRevealChooser(windowCount: 0))
+    #expect(!AccessibilityChannel.blankApplicationCanRevealChooser(windowCount: nil))
+    #expect(!AccessibilityChannel.blankApplicationCanRevealChooser(windowCount: 1))
+}
+
 private func decodeAccessibilityJSON(_ s: String) -> [String: Any] {
     (try? JSONSerialization.jsonObject(with: Data(s.utf8))) as? [String: Any] ?? [:]
 }
