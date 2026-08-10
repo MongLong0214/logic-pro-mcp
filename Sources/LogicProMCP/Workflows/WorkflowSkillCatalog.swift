@@ -551,7 +551,7 @@ enum WorkflowSkillCatalog {
             "saga_preflight", "saga_execute", "saga_status", "saga_cancel",
         ],
         "logic_audio": [
-            "analyze_file",
+            "analyze_file", "analyze_spectrum", "recommend_eq",
         ],
     ]
 

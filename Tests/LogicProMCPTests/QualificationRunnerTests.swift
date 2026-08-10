@@ -55,11 +55,11 @@ struct QualificationRunnerTests {
         // semantic validator, so the other 20 read-only ops were honestly
         // recorded protocolSmoke ("transport worked, nobody checked meaning").
         // Now every read-only spec has an oracle, so a read that returns its
-        // real payload qualifies: passed == 21 (20 oracles + health's bespoke
+        // real payload qualifies: passed == 23 (22 oracles + health's bespoke
         // validator), protocolSmoke == 0. The 87 mutating ops are unchanged —
         // they still defer to ADR-001-c for live mutation.
-        #expect(operationCases.count == 108)
-        #expect(operationCases.filter { $0.status == .passed }.count == 21)
+        #expect(operationCases.count == 110)
+        #expect(operationCases.filter { $0.status == .passed }.count == 23)
         #expect(operationCases.filter { $0.status == .protocolSmoke }.isEmpty)
         #expect(operationCases.filter { $0.status == .notQualified }.count == 87)
         #expect(operationCases.filter { $0.status == .failed }.isEmpty)
@@ -249,7 +249,7 @@ struct QualificationRunnerTests {
         let specs = OperationRegistry.specs
         let driveResult = Self.driveResult(specs: specs, qualifiedReadOperationCount: 0)
         #expect(driveResult.operationResults.values.filter { $0.status == .passed }.isEmpty)
-        #expect(driveResult.operationResults.values.filter { $0.status == .notQualified }.count == 108)
+        #expect(driveResult.operationResults.values.filter { $0.status == .notQualified }.count == 110)
         let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
         defer { fixture.remove() }
 
@@ -266,11 +266,20 @@ struct QualificationRunnerTests {
         ))
     }
 
-    @Test func thirteenLegacyTransportSuccessesAndNinetyFiveDeferralsRejectPromotion() async throws {
+    // The deferral count is DERIVED, not typed. It was written out twice — in the body and in the
+    // test's own name — so adding an operation broke the assertion and, had only the number been
+    // updated, would have left the name asserting something false. Registry size is already pinned
+    // by `OperationRegistry.specs.count` elsewhere; repeating it here bought no coverage and cost a
+    // second place to drift.
+    @Test func legacyTransportSuccessesWithEveryOtherOperationDeferredRejectPromotion() async throws {
         let specs = OperationRegistry.specs
-        let driveResult = Self.driveResult(specs: specs, qualifiedReadOperationCount: 13)
-        #expect(driveResult.operationResults.values.filter { $0.isError == false }.count == 13)
-        #expect(driveResult.operationResults.values.filter { $0.isError == true }.count == 95)
+        let qualified = 13
+        let driveResult = Self.driveResult(specs: specs, qualifiedReadOperationCount: qualified)
+        #expect(driveResult.operationResults.values.filter { $0.isError == false }.count == qualified)
+        #expect(
+            driveResult.operationResults.values.filter { $0.isError == true }.count
+                == driveResult.operationResults.count - qualified
+        )
         let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
         defer { fixture.remove() }
 
@@ -1175,7 +1184,7 @@ struct QualificationRunnerTests {
         ))
 
         #expect(result.handshakeOK)
-        #expect(result.catalog?.operationCount == 108)
+        #expect(result.catalog?.operationCount == 110)
         #expect(result.catalogCountMatch)
         #expect(result.traceOK)
 
@@ -1188,7 +1197,7 @@ struct QualificationRunnerTests {
 
         #expect(operationResults.count == OperationRegistry.specs.count)
         #expect(mutating.count == 87)
-        #expect(readOnly.count == 21)
+        #expect(readOnly.count == 23)
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(operationResults.allSatisfy { $0.responseData != nil && $0.readback != nil })
         #expect(Set(operationResults.compactMap(\.requestID)).count == operationResults.count)
@@ -1683,12 +1692,12 @@ struct QualificationRunnerTests {
         #expect(aggregateCases.filter { $0.status == .failed }.count == 1)
         #expect(aggregateCases.filter { $0.status == .notQualified }.count == 1)
         // #373 Phase A: the read-only surface now qualifies semantically.
-        #expect(operationCases.filter { $0.status == .passed }.count == 21)
+        #expect(operationCases.filter { $0.status == .passed }.count == 23)
         #expect(operationCases.filter { $0.status == .protocolSmoke }.isEmpty)
         #expect(operationCases.filter { $0.status == .notQualified }.count == 87)
-        // #373 Phase A: 20 oracled read-only ops + system.health's bespoke
+        // #373 Phase A: 22 oracled read-only ops + system.health's bespoke
         // validator. The aggregate axes contribute no passes here.
-        #expect(attestation.passed == 21)
+        #expect(attestation.passed == 23)
         #expect(attestation.failed == 1)
 
         for qualificationCase in operationCases {

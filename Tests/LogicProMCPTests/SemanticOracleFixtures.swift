@@ -303,6 +303,27 @@ enum SemanticOracleFixtures {
                 "spectral_centroid_hz":2200.0,\
                 "frequency_peaks":[{"frequencyHz":440.0,"magnitude":0.8}],\
                 "verification":{"status":"pass","reasons":[]}}
+            """,
+            readback: health
+        ),
+        .audioAnalyzeSpectrum: SemanticOracleFixture(
+            response: """
+                {"analysisRef":"audio.analyze_spectrum",\
+                "artifactFingerprint":"not_computed_by_dispatcher",\
+                "sampleRate":48000,"channelCount":2,"durationSeconds":12.5,\
+                "windowsAnalyzed":64,"channelMode":"stereo_energy_average",\
+                "complete":true,"bands":[{"centerHz":20.0,"energyDb":-72.0}],\
+                "resonances":[{"hz":5001.953125,"gainDb":36.0,"q":8.6,\
+                "resolutionLimited":true}],"spectralCentroidHz":2200.0,\
+                "frequencyPeaks":[{"frequency_hz":5001.953125,"magnitude":0.5}],\
+                "classification":"fullMix","confidence":0.8}
+                """,
+            readback: health
+        ),
+        .audioRecommendEQ: SemanticOracleFixture(
+            response: """
+                {"bands":[{"centerHz":5001.953125,"gainDb":-36.0,"q":8.6,\
+                "reason":"resonance_cut"}]}
                 """,
             readback: health
         ),

@@ -186,7 +186,7 @@ extension OperationTraceTests {
         let mutatingSpecs = OperationRegistry.specs.filter {
             $0.mutability == Mutability.`mutating`
         }
-        #expect(OperationRegistry.specs.count == 108)
+        #expect(OperationRegistry.specs.count == 110)
         #expect(mutatingSpecs.count == 87)
 
         // A mutating op that refuses BEFORE dispatch starts its trace (the
@@ -297,10 +297,10 @@ extension OperationTraceTests {
 
         let readOnlySpecs = OperationRegistry.specs.filter { $0.mutability == .readOnly }
         let mutatingSpecs = OperationRegistry.specs.filter { $0.mutability == Mutability.`mutating` }
-        #expect(OperationRegistry.specs.count == 108)
-        #expect(readOnlySpecs.count == 21)
+        #expect(OperationRegistry.specs.count == 110)
+        #expect(readOnlySpecs.count == 23)
         // Mutability is total: the mutating census (87) and this inverse gate
-        // (21) together account for every registered spec, so a new operation
+        // (23) together account for every registered spec, so a new operation
         // cannot land outside both gates.
         #expect(readOnlySpecs.count + mutatingSpecs.count == OperationRegistry.specs.count)
 

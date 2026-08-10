@@ -227,6 +227,10 @@ enum HonestContract {
         /// PRD-014: trace management requested while operation tracing is
         /// disabled — a no-op must never surface as success.
         case traceDisabled = "trace_disabled"
+        /// Audio spectral analysis was accepted but the safe decoder/feature
+        /// extraction path rejected the supplied artifact. The more specific
+        /// engine code is carried in `analysis_error`.
+        case spectralAnalysisFailed = "spectral_analysis_failed"
         case supportBundleExportFailed = "support_bundle_export_failed"
         /// PRD-015 (ADR-005 #288): `clear_traces` could not write its durable,
         /// append-only audit receipt (directory-create or append error), so the

@@ -24,7 +24,7 @@ struct OperationRegistryCoverageTests {
         let missing = Self.publicOperations.subtracting(Self.registeredOperations).sorted()
         let orphans = Self.registeredOperations.subtracting(Self.publicOperations).sorted()
 
-        #expect(OperationRegistry.specs.count == 108)
+        #expect(OperationRegistry.specs.count == 110)
         #expect(OperationRegistry.registeredToolRawValues == Set(WorkflowSkillCatalog.publicCommands.keys))
         #expect(Self.registeredOperations.count == OperationRegistry.specs.count)
         #expect(missing.isEmpty, "missing specs: \(missing)")
@@ -86,7 +86,7 @@ struct OperationRegistryCoverageTests {
         ]
 
         #expect(mutating.count == 87)
-        #expect(readOnly.count == 21)
+        #expect(readOnly.count == 23)
         #expect(targetBearingIDs == expectedTargetBearingIDs)
         #expect(targetless.count == 73)
         #expect(targetBearingIDs.count + targetless.count == mutating.count)
