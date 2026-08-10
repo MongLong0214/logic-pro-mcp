@@ -325,7 +325,7 @@ struct ADR002BProjectTargetTests {
     ) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let registry = TargetRegistry()
-            let channel: ChannelID = command == "new" ? .accessibility : .appleScript
+            let channel: ChannelID = ["new", "save_as"].contains(command) ? .accessibility : .appleScript
             let (router, _) = await router(id: channel)
             let result = await ProjectDispatcher.handle(
                 command: command,
