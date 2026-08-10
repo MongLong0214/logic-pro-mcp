@@ -103,6 +103,11 @@ enum HonestContract {
         case trackSelectionFailed = "track_selection_failed"
         case staleSnapshot = "stale_snapshot"
         case staleTargetReference = "stale_target_reference"
+        /// The reference still names the right index and the right name, but that name is not
+        /// unique, so nothing can prove WHICH track is meant. Deliberately distinct from
+        /// `.staleTargetReference`: nothing is stale and nothing was reordered, and reporting it as
+        /// staleness sent callers looking for a reorder that never happened.
+        case ambiguousTargetName = "ambiguous_target_name"
         case targetRefUnavailable = "target_ref_unavailable"
 
         // PRD-007 (ADR-002 #285) — index-binding ratchet. These describe the

@@ -59,18 +59,10 @@ actor CGEventChannel: Channel {
     /// caller previously saw a sent-but-unverified success for a keystroke Logic
     /// never received. Preparation now runs first and posts nothing when it
     /// fails, so the failure is visible instead of silent.
-    enum FrontmostPreparation: String, Sendable {
-        /// Logic already owned the keyboard; nothing was activated.
-        case alreadyFrontmost = "already_frontmost"
-        /// Logic was background and came forward within the bound.
-        case activated = "activated"
-        /// Logic did not become frontmost within the bound. Zero events posted.
-        case activationTimedOut = "activation_timed_out"
-        /// The activation call itself refused. Zero events posted.
-        case activationRefused = "activation_refused"
-
-        var isReady: Bool { self == .alreadyFrontmost || self == .activated }
-    }
+    /// The shared gate's outcome; kept under this name so existing callers and receipts are
+    /// unchanged. The algorithm lives in `FrontmostGate` because the AX transport path needs the
+    /// same precondition.
+    typealias FrontmostPreparation = FrontmostGate.Preparation
 
     /// Consecutive frontmost observations required before posting. One reading
     /// can catch the window server mid-switch, which is exactly the race that
@@ -327,17 +319,11 @@ actor CGEventChannel: Channel {
     /// this gate exists to remove, so a gate that could itself be fooled by it
     /// would be pointless.
     func prepareFrontmost() -> FrontmostPreparation {
-        if consecutiveFrontmostObservations() >= Self.requiredFrontmostObservations {
-            return .alreadyFrontmost
-        }
-        guard runtime.activateLogic() else { return .activationRefused }
-        for _ in 0..<Self.maximumActivationPolls {
-            runtime.sleepMicros(Self.activationPollMicros)
-            if consecutiveFrontmostObservations() >= Self.requiredFrontmostObservations {
-                return .activated
-            }
-        }
-        return .activationTimedOut
+        FrontmostGate.prepare(
+            isFrontmost: runtime.isLogicFrontmost,
+            activate: runtime.activateLogic,
+            sleepMicros: runtime.sleepMicros
+        )
     }
 
     private func consecutiveFrontmostObservations() -> Int {

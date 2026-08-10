@@ -53,11 +53,17 @@ private func addMenuItem(
     _ b: FakeAXRuntimeBuilder,
     _ id: Int,
     title: String,
-    children: [AXUIElement] = []
+    children: [AXUIElement] = [],
+    enabled: Bool = true
 ) -> AXUIElement {
     let item = b.element(id)
     b.setAttribute(item, kAXRoleAttribute as String, kAXMenuItemRole as String)
     b.setAttribute(item, kAXTitleAttribute as String, title)
+    // Measured on Logic 12.3: every one of the 1090 items in an open plug-in menu exposes a readable
+    // AXEnabled, and 264 of them are disabled — section headers like "Recent" among them. A fixture
+    // that leaves the attribute unset models a tree Logic does not produce, and it was the reason a
+    // strict pre-pick check could not be adopted.
+    b.setAttribute(item, kAXEnabledAttribute as String, enabled as CFTypeRef)
     b.setChildren(item, children)
     return item
 }
@@ -900,6 +906,9 @@ private func makeSlotPopupInsertFixture(
     // Slot popup: visible + anchored after the modeled custom slot-open action.
     b.setAttribute(gainItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
     b.setAttribute(gainItem, kAXTitleAttribute as String, "Gain")
+    // Live Logic exposes AXEnabled on every menu item in an open chain, so a fixture item without it
+    // models a tree that does not occur.
+    b.setAttribute(gainItem, kAXEnabledAttribute as String, true as CFTypeRef)
     if let leftoverMenu, let leftoverSearch, let leftoverItem {
         // A pop-up left open by a neighbouring slot. It is a plug-in menu, it is visible, and it sits
         // close enough that the geometric anchor test accepts it for our slot too — so only its
@@ -1456,4 +1465,65 @@ private func run425Insert(
     #expect(!writeAttempted)
     #expect(!fixture.actions.touched(elementID: fixture.slotItemID))
     #expect(!fixture.actions.touched(elementID: fixture.leafItemID))
+}
+
+/// #474 — an entry whose enabled state cannot be read must not be pressed.
+///
+/// `AXEnabled` is the one signal that distinguishes "will act" from "will do nothing" before the
+/// press, and the pick path used to treat an unreadable value as enabled. Measured on Logic 12.3 with
+/// the plug-in menu chain open, all 1090 items expose a readable value and 264 are disabled —
+/// section headers such as "Recent" among them — so this is a population the picker can land on.
+@Test func testPlugin474LeafWithUnreadableEnabledStateIsNotPressed() async throws {
+    // The gap is an UNREADABLE attribute, not a readable false: a readable false is already refused
+    // by the lenient discovery check, so a fixture that sets `enabled: false` tests behaviour that
+    // already worked. Build the item without the attribute at all, which is what "unreadable" means.
+    let b = FakeAXRuntimeBuilder()
+    let unreadable = b.element(9500)
+    b.setAttribute(unreadable, kAXRoleAttribute as String, kAXMenuItemRole as String)
+    b.setAttribute(unreadable, kAXTitleAttribute as String, "Gain")
+    let rootMenu = addMenu(b, 9501, children: [unreadable])
+    let recorder = AXPressRecorder()
+    let runtime = b.makeAXRuntime(
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            recorder.record(b.elementID(element))
+            return true
+        }
+    )
+
+    let click = await AccessibilityChannel.clickPluginInAnchoredSlotPopup(
+        pluginID: "logic.stock.effect.gain",
+        displayName: "Gain",
+        rootMenu: rootMenu,
+        runtime: runtime
+    )
+
+    #expect(click == nil)
+    #expect(!recorder.pressedElementIDs.contains(b.elementID(unreadable)))
+}
+
+/// The same fixture with the entry enabled must succeed, so the test above fails for the reason it
+/// names rather than because nothing could ever be picked.
+@Test func testPlugin474EnabledLeafIsStillPressed() async throws {
+    let b = FakeAXRuntimeBuilder()
+    let target = addMenuItem(b, 9510, title: "Gain")
+    let rootMenu = addMenu(b, 9511, children: [target])
+    let recorder = AXPressRecorder()
+    let runtime = b.makeAXRuntime(
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            recorder.record(b.elementID(element))
+            return true
+        }
+    )
+
+    let click = await AccessibilityChannel.clickPluginInAnchoredSlotPopup(
+        pluginID: "logic.stock.effect.gain",
+        displayName: "Gain",
+        rootMenu: rootMenu,
+        runtime: runtime
+    )
+
+    #expect(click != nil)
+    #expect(recorder.pressedElementIDs.contains(b.elementID(target)))
 }
