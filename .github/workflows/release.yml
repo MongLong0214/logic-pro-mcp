@@ -38,11 +38,7 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode_16.4.app
 
       - name: Run test suite
-        # Keep release logs bounded. The codebase still contains deprecated
-        # Swift Testing APIs, and unsuppressed diagnostics can expand to
-        # hundreds of megabytes before the actual test result is visible.
-        # CI's coverage test already uses the same compiler flag.
-        run: swift test -Xswiftc -suppress-warnings --no-parallel
+        run: swift test --no-parallel
 
       - name: Detect release mode
         id: mode
