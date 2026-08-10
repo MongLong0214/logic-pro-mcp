@@ -122,11 +122,31 @@ enum ObservedRegionIdentityProof: Sendable {
 /// see accounted for. Completeness is checked against this set: a missing,
 /// duplicated, or unrecognized control makes the filter evidence incomplete
 /// (fail-closed) rather than silently assuming an unseen control is "off".
+///
+/// #495 — this list is the set Logic actually exposes, measured live 2026-08-10 by
+/// enumerating every `AXCheckBox` in the Event pane. The earlier list named
+/// `channel`, `scope` and `takeFolder`, none of which exist as filter controls: the
+/// pane has eight event-type checkboxes and nothing else. A collector reporting the
+/// real surface was therefore rejected as incomplete, and the only way to satisfy the
+/// old list was to fabricate ids — the exact failure this check exists to prevent.
+///
+/// Scope is NOT represented here, deliberately. It is not a checkbox, and the
+/// assessment already binds scope through region identity (`resolvedIdentity` /
+/// `observedRegion`), which is a stronger check than a toggle would be. Encoding it
+/// twice would let a weak signal stand in for the strong one.
+///
+/// Three further checkboxes share the pane and are NOT filters — `Catch Playhead`,
+/// `MIDI In`, `MIDI Out` — so a collector must enumerate by audited title, not by role.
 enum FilterControlID: String, CaseIterable, Sendable {
+    /// `Notes` — the only one whose state can hide a note event.
     case noteEvents
-    case channel
-    case scope
-    case takeFolder
+    case programChange
+    case pitchBend
+    case controller
+    case aftertouch
+    case polyAftertouch
+    case systemExclusive
+    case additionalInfo
 }
 
 /// Raw Event-List filter checkbox states. The chokepoint DERIVES whether all
