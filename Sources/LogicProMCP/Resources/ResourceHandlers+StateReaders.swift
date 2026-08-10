@@ -212,7 +212,22 @@ extension ResourceHandlers {
         } else {
             body = encodeJSON(tracksOut)
         }
-        var extras: [String: Any] = ["source": source]
+        // Say whether this was observed, the way logic://markers already does. Without these a
+        // consumer reading `data` cannot tell "the project has no tracks" from "nothing has been
+        // read yet" — and before the first live read this document answers `data: []` for a project
+        // that demonstrably has tracks. `ax_live` is the only source that saw the real thing; the
+        // file-count tiers synthesise placeholder names from a count.
+        let observedLive = source == "ax_live"
+        var extras: [String: Any] = [
+            "source": source,
+            "readable": observedLive,
+            "verified_empty": observedLive && tracksOut.isEmpty,
+        ]
+        if !observedLive {
+            extras["reason"] = tracksOut.isEmpty
+                ? "no_live_track_read_yet"
+                : "track_names_synthesised_from_project_file"
+        }
         if FeatureFlags.adr006VersionedCache {
             extras.merge(versionedCacheExtras(
                 projectEpoch: await targetRegistry?.currentProjectEpoch ?? 0,

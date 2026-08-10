@@ -108,3 +108,28 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     #expect((data.first?["name"] as? String) == "Cached Marker")
     #expect(await cache.getMarkers().first?.name == "Cached Marker")
 }
+
+/// `nav.delete_marker` must work on a default install.
+///
+/// It used to route only to `[.midiKeyCommands, .cgEvent]`, so it did nothing at all until the
+/// operator installed the key-command preset and performed a manual MIDI Learn inside Logic. Until
+/// then the CC went out, Logic had nothing bound to it, the marker survived, and the caller was told
+/// `readback_unavailable` — a setup prerequisite reported as a readback problem.
+@Suite("nav.delete_marker has a route that needs no manual MIDI binding")
+struct MarkerDeleteRoutingTests {
+    @Test("the AX channel is the first rung, so a default install can delete a marker")
+    func deleteMarkerRoutesThroughAccessibilityFirst() throws {
+        let route = try #require(ChannelRouter.v2RoutingTable["nav.delete_marker"])
+        #expect(route.first == .accessibility)
+        // The keycmd rung stays as a fallback rather than being removed.
+        #expect(route.contains(.midiKeyCommands))
+    }
+
+    @Test("the marker-list rungs the AX path depends on are all AX-routed")
+    func supportingMarkerOperationsAreAXRouted() throws {
+        for operation in ["nav.open_marker_list", "nav.get_markers"] {
+            let route = try #require(ChannelRouter.v2RoutingTable[operation])
+            #expect(route.contains(.accessibility))
+        }
+    }
+}

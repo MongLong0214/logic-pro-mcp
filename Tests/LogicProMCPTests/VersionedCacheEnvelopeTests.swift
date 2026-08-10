@@ -65,6 +65,13 @@ struct VersionedCacheEnvelopeTests {
     /// SHIPPED default of every other flag (this deliberately does not pin
     /// `adr002TargetRef`, so the baseline tracks what users actually receive).
     ///
+    /// #476 — DELIBERATE PIN DIFF: `readable`, `verified_empty` and `reason` are now present.
+    /// Before this, a cold `logic://tracks` answered `data: []` with nothing saying it had never
+    /// looked, so a consumer reading `data` saw an empty project where one had tracks. The sibling
+    /// `logic://markers` already carried these three fields. This is an additive wire change and is
+    /// noted rather than hidden; ADR-006 OFF still contributes nothing of its own, which is what
+    /// this test exists to pin.
+    ///
     /// PRD-007 Part 2 — DELIBERATE PIN DIFF, `"data":[\n\n]` -> `"data":[]`.
     /// The expectation moved because `adr002TargetRef` is now default ON, which
     /// routes `logic://tracks` through the ref-capable `JSONSerialization`
@@ -82,7 +89,7 @@ struct VersionedCacheEnvelopeTests {
                 fileReader: headlessFileReader
             )
 
-            #expect(sharedResourceText(result) == "{\"cache_age_sec\":null,\"fetched_at\":null,\"ax_occluded\":false,\"source\":\"default\",\"data\":[]}")
+            #expect(sharedResourceText(result) == "{\"cache_age_sec\":null,\"fetched_at\":null,\"ax_occluded\":false,\"readable\":false,\"reason\":\"no_live_track_read_yet\",\"source\":\"default\",\"verified_empty\":false,\"data\":[]}")
         }
     }
 

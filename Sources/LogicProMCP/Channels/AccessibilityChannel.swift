@@ -105,6 +105,7 @@ actor AccessibilityChannel: Channel {
         let openMarkerList: @Sendable () async -> ChannelResult
         let createMarker: @Sendable ([String: String]) async -> ChannelResult
         let renameMarker: @Sendable ([String: String]) async -> ChannelResult
+        let deleteMarker: @Sendable ([String: String]) async -> ChannelResult
         let importMIDIFile: @Sendable (String) async -> ChannelResult
         let confirmNewTrackDialog: @Sendable () -> Void
         let canPostEvents: @Sendable () -> Bool
@@ -139,6 +140,7 @@ actor AccessibilityChannel: Channel {
             openMarkerList: @escaping @Sendable () async -> ChannelResult = { .error("openMarkerList not wired") },
             createMarker: @escaping @Sendable ([String: String]) async -> ChannelResult = { _ in .error("createMarker not wired") },
             renameMarker: @escaping @Sendable ([String: String]) async -> ChannelResult = { _ in .error("renameMarker not wired") },
+            deleteMarker: @escaping @Sendable ([String: String]) async -> ChannelResult = { _ in .error("deleteMarker not wired") },
             importMIDIFile: @escaping @Sendable (String) async -> ChannelResult = { _ in .error("importMIDIFile not wired") },
             confirmNewTrackDialog: @escaping @Sendable () -> Void = {
                 AccessibilityChannel.sendReturnKey()
@@ -171,6 +173,7 @@ actor AccessibilityChannel: Channel {
             self.openMarkerList = openMarkerList
             self.createMarker = createMarker
             self.renameMarker = renameMarker
+            self.deleteMarker = deleteMarker
             self.importMIDIFile = importMIDIFile
             self.confirmNewTrackDialog = confirmNewTrackDialog
             self.canPostEvents = canPostEvents
@@ -257,6 +260,12 @@ actor AccessibilityChannel: Channel {
                 renameMarker: {
                     await AccessibilityChannel.defaultRenameMarker(
                         params: $0,
+                        runtime: logicRuntime
+                    )
+                },
+                deleteMarker: { params in
+                    await AccessibilityChannel.defaultDeleteMarker(
+                        index: Int(params["index"] ?? "") ?? -1,
                         runtime: logicRuntime
                     )
                 },
@@ -623,6 +632,14 @@ actor AccessibilityChannel: Channel {
                 ))
             }
             return await runtime.renameMarker(["index": String(index), "name": name])
+        case "nav.delete_marker":
+            guard let rawIndex = params["index"], let index = Int(rawIndex), index >= 0 else {
+                return .error(HonestContract.encodeStateC(
+                    error: .invalidParams,
+                    hint: "nav.delete_marker requires 'index' as an integer >= 0"
+                ))
+            }
+            return await runtime.deleteMarker(["index": String(index)])
 
         // MARK: - Project
         case "project.get_info":

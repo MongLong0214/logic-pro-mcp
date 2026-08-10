@@ -1081,13 +1081,18 @@ struct TargetRefResolutionTests {
                 liveTrackName: { idx in [0: "Drums", 1: "Bass", 2: "Bass"][idx] },
                 liveTrackNames: { [0: "Drums", 1: "Bass", 2: "Bass"] }
             )
-            #expect(errorCode(result) == "stale_target_reference")
+            // Nothing here is stale and nothing was reordered: two live tracks share the name,
+            // so the target cannot be identified. Reporting that as staleness sent callers
+            // looking for a reorder that never happened, so it has its own code.
+            #expect(errorCode(result) == "ambiguous_target_name")
+            let hint = try #require(body(result)["hint"] as? String)
+            #expect(hint.contains("more than one live track"))
             let v1 = try #require(body(result)["write_attempted"] as? Bool)
             #expect(!v1)
             #expect(body(result)["expected_track_name"] as? String == "Bass")
             let v2 = try #require(body(result)["ambiguous_live_track_name"] as? Bool)
             #expect(v2)
-            #expect(body(result)["ambiguous_track_indices"] as? [Int] == [2])
+            #expect(body(result)["ambiguous_track_indices"] as? [Int] == [1, 2])
             #expect(await allOps(channels).isEmpty, "no wrong-target write")
         }
     }

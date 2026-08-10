@@ -53,11 +53,17 @@ private func addMenuItem(
     _ b: FakeAXRuntimeBuilder,
     _ id: Int,
     title: String,
-    children: [AXUIElement] = []
+    children: [AXUIElement] = [],
+    enabled: Bool = true
 ) -> AXUIElement {
     let item = b.element(id)
     b.setAttribute(item, kAXRoleAttribute as String, kAXMenuItemRole as String)
     b.setAttribute(item, kAXTitleAttribute as String, title)
+    // Measured on Logic 12.3: every one of the 1090 items in an open plug-in menu exposes a readable
+    // AXEnabled, and 264 of them are disabled — section headers like "Recent" among them. A fixture
+    // that leaves the attribute unset models a tree Logic does not produce, and it was the reason a
+    // strict pre-pick check could not be adopted.
+    b.setAttribute(item, kAXEnabledAttribute as String, enabled as CFTypeRef)
     b.setChildren(item, children)
     return item
 }
@@ -284,12 +290,12 @@ private func insertParams(
     // The live driver stops after a strategy appears to dismiss/commit the dialog
     // but readback never observes the requested plugin. This prevents stale
     // stale clicks after a popup/menu commit changed the UI.
-    let fake = FakeInsertDriver(outcome: .postCommitTimeout(strategy: "slot_popup_physical_menu_click"))
+    let fake = FakeInsertDriver(outcome: .postCommitTimeout(strategy: "slot_popup_axpick_menu_select"))
     let obj = await runInsert(insertParams(insert: "0"), runtime: runtime, driver: fake.driver)
 
     #expect(obj["state"] as? String == "C")
     #expect(obj["error"] as? String == "operation_timeout")
-    #expect(obj["commit_strategy"] as? String == "slot_popup_physical_menu_click")
+    #expect(obj["commit_strategy"] as? String == "slot_popup_axpick_menu_select")
     #expect((obj["safe_to_retry"] as? Bool)!)
     #expect((obj["write_attempted"] as? Bool)!)
 }
@@ -679,212 +685,167 @@ private func insertParams(
     #expect(hint.contains("no enumerable insert slots"))
 }
 
-// MARK: - #425 (Option B): coordinate-free leaf selection contract
-//
-// The four assertions below pin the contract for promoting the leaf SELECTION
-// to coordinate-free-by-default (kill-switch: insertCoordFree).
-// They exercise the real leaf-select seam (`clickPopupPluginLeaf` /
-// `clickPluginInAnchoredSlotPopup`) directly — a focused unit — because the
-// insert-entry tests above inject a fake driver that REPLACES the entire live
-// path (so they never reach leaf-select). The full `liveExactSlotPopupInsert`
-// flow (including its governed slot-open coordinate click) is driven end to end
-// by the RESPONSE-LEVEL tests further below via the DEBUG
-// `forceCoordinateActuationForTests` seam, so no CGEvent / physical mouse is
-// issued there either. In these focused tests the coordinate leaf primitives
-// (moveElementCenter/clickElementCenter) simply short-circuit to `false` when an
-// element has no on-screen geometry, before posting any CGEvent.
-// `clickPopupPluginLeaf` / `clickPluginInAnchoredSlotPopup` / `SlotPopupPluginClick`
-// were relaxed from `private` to `internal` solely so this contract is testable.
+// MARK: - #425: coordinate-free slot-popup navigation
 
-/// Records which elements received a `kAXPress` when the default action-
-/// recording is bypassed by an injected `performActionHandler` (contract C).
-/// Invoked sequentially within one test (awaited), so plain mutation is
-/// race-free here; `@unchecked Sendable` documents that.
-private final class AXPressRecorder: @unchecked Sendable {
-    private(set) var pressedElementIDs: [Int] = []
-    func record(_ id: Int) { pressedElementIDs.append(id) }
+private let slotPopupOpenCustomAction = AccessibilityChannel.slotPopupOpenCustomAction
+
+@Test func testSlotPopupOpenCustomActionMatchesLiveAXMeasurement() {
+    let action = AccessibilityChannel.slotPopupOpenCustomAction
+    let metadataLines = action.components(separatedBy: "\n")
+
+    #expect(action.utf8.count == 70)
+    #expect(!action.hasPrefix("\""))
+    #expect(!action.hasSuffix("\""))
+    #expect(action.contains("\n"))
+    #expect(!action.contains("\\n"))
+    #expect(action.hasPrefix("Name:Open plug-in menu with legacy plug-ins"))
+    #expect(metadataLines.count == 3)
+    #expect(metadataLines[0] == "Name:Open plug-in menu with legacy plug-ins")
+    #expect(metadataLines[1] == "Target:0x0")
+    #expect(metadataLines[2] == "Selector:(null)")
 }
 
-/// A plugin menu item whose format submenu is exposed as an AX child (as Logic
-/// exposes it without a hover) with a single preferred-format leaf ("Stereo").
-private func addPluginItemWithFormatLeaf(
-    _ b: FakeAXRuntimeBuilder,
-    itemID: Int,
-    title: String,
-    formatLeafTitle: String = "Stereo"
-) -> (item: AXUIElement, formatLeaf: AXUIElement) {
-    let formatLeaf = addMenuItem(b, itemID * 10 + 1, title: formatLeafTitle)
-    let submenu = addMenu(b, itemID * 10 + 2, children: [formatLeaf])
-    let item = addMenuItem(b, itemID, title: title, children: [submenu])
-    return (item, formatLeaf)
-}
+/// Captures calls that pass through the injected AX action runtime seam. The
+/// tests run sequentially, so this deliberately lightweight recorder is safe.
+private final class AXActionRecorder: @unchecked Sendable {
+    private(set) var calls: [(elementID: Int, action: String)] = []
+    private(set) var attributeWrites: [(elementID: Int, attribute: String)] = []
 
-// Contract A (mechanism): coordFree:true selects the matched leaf via kAXPress.
-@Test func test425ContractA_coordFreeTruePressesMatchedLeafViaAXPress() async {
-    let b = FakeAXRuntimeBuilder()
-    let (gain, formatLeaf) = addPluginItemWithFormatLeaf(b, itemID: 8210, title: "Gain")
-
-    let ok = await AccessibilityChannel.clickPopupPluginLeaf(
-        gain, runtime: b.makeAXRuntime(), coordFree: true
-    )
-
-    #expect(ok)
-    let pressAction = kAXPressAction as String
-    let leafID = b.elementID(formatLeaf)
-    // The preferred-format leaf was AXPressed …
-    #expect(b.actionCalls.contains { $0.elementID == leafID && $0.action == pressAction })
-    // … and NOTHING else happened via a non-AXPress action (no coordinate path).
-    #expect(b.actionCalls.allSatisfy { $0.action == pressAction })
-}
-
-// Contract A (discriminator): a coord-free DIRECT win reports coordFree == true.
-// `SlotPopupPluginClick.coordFree` is the exact value the production flow assigns
-// to `select_trace["leaf_select_coord_free"]` (liveExactSlotPopupInsert ~L1933),
-// so asserting it here asserts the discriminator's truth value for a coord-free
-// win — and it is sourced from the winning strategy, not the raw flag.
-@Test func test425ContractA_discriminatorTrueForCoordFreeDirectWin() async throws {
-    let b = FakeAXRuntimeBuilder()
-    let (gain, formatLeaf) = addPluginItemWithFormatLeaf(b, itemID: 8220, title: "Gain")
-    let root = addMenu(b, 8229, children: [gain])
-    let runtime = b.makeAXRuntime()
-
-    let click = await FeatureFlags.withInsertCoordFree(true) {
-        await AccessibilityChannel.clickPluginInAnchoredSlotPopup(
-            pluginID: "logic.stock.effect.gain",
-            displayName: "Gain",
-            rootMenu: root,
-            runtime: runtime
-        )
+    func record(elementID: Int, action: String) {
+        calls.append((elementID, action))
     }
 
-    let winner = try #require(click)
-    #expect(winner.strategy == "slot_popup_direct_exact_leaf")
-    #expect(winner.coordFree)
-    let pressAction = kAXPressAction as String
-    let leafID = b.elementID(formatLeaf)
-    #expect(b.actionCalls.contains { $0.elementID == leafID && $0.action == pressAction })
+    func recordAttributeWrite(elementID: Int, attribute: String) {
+        attributeWrites.append((elementID, attribute))
+    }
+
+    func contains(elementID: Int, action: String) -> Bool {
+        calls.contains { $0.elementID == elementID && $0.action == action }
+    }
+
+    func count(elementID: Int, action: String) -> Int {
+        calls.count { $0.elementID == elementID && $0.action == action }
+    }
+
+    func touched(elementID: Int) -> Bool {
+        calls.contains { $0.elementID == elementID }
+            || attributeWrites.contains { $0.elementID == elementID }
+    }
+
+    func nonTargetActionCount(targetElementID: Int) -> Int {
+        calls.count { $0.elementID != targetElementID }
+    }
+
+    func nonTargetAttributeWriteCount(targetElementID: Int) -> Int {
+        attributeWrites.count { $0.elementID != targetElementID }
+    }
 }
 
-// Contracts B & D: coordFree:false takes the COORDINATE path — never AXPress.
-// This is the exact mode the recursive category-hover fallback forces (it always
-// passes coordFree:false), so it also covers the "recursive is coordinate-only"
-// half of contract D at the helper level. A WINNING recursive path is exercised
-// end to end by the response-level
-// `test425ResponseTraceCoordFreeFalseOnRecursiveWinUnderFlagOn` (via the DEBUG
-// coordinate-actuation seam), which asserts the assembled response reports
-// coordFree == false even with the flag ON.
-@Test func test425ContractBD_coordFreeFalseUsesCoordinateNeverAXPress() async {
-    let b = FakeAXRuntimeBuilder()
-    // Deliberately NO kAXPosition/kAXSize: the coordinate primitives return false
-    // before posting a CGEvent, so the load-bearing assertion is the ABSENCE of
-    // AXPress, proving coordFree:false does not use the coord-free press path.
-    let (gain, _) = addPluginItemWithFormatLeaf(b, itemID: 8240, title: "Gain")
+private final class SlotOccupier: @unchecked Sendable {
+    private let performOccupancy: () -> Void
 
-    let ok = await AccessibilityChannel.clickPopupPluginLeaf(
-        gain, runtime: b.makeAXRuntime(), coordFree: false
-    )
+    init(_ performOccupancy: @escaping () -> Void) {
+        self.performOccupancy = performOccupancy
+    }
 
-    #expect(!ok)
-    let pressAction = kAXPressAction as String
-    #expect(!b.actionCalls.contains { $0.action == pressAction })
+    func occupy() {
+        performOccupancy()
+    }
 }
 
-// Contract C: if AXPress is neutralized, coord-free leaf select FAILS CLOSED —
-// it must not silently "succeed", and it must genuinely have attempted AXPress.
-@Test func test425ContractC_failsClosedWhenAXPressNeutralized() async {
+@Test func testPlugin425RecursiveDiscoveryReadsAttachedSubmenusWithoutActuatingThem() async throws {
     let b = FakeAXRuntimeBuilder()
-    let (gain, _) = addPluginItemWithFormatLeaf(b, itemID: 8250, title: "Gain")
-    let recorder = AXPressRecorder()
-    let pressAction = kAXPressAction as String
+    let target = addMenuItem(b, 9100, title: "Gain")
+    let vendorMenu = addMenu(b, 9101, children: [target])
+    let vendor = addMenuItem(b, 9102, title: "Fabricant", children: [vendorMenu])
+    let categoryMenu = addMenu(b, 9103, children: [vendor])
+    let category = addMenuItem(b, 9104, title: "Dienstprogramme", children: [categoryMenu])
+    let searchField = b.element(9106)
+    b.setAttribute(searchField, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    let rootMenu = addMenu(b, 9105, children: [searchField, category])
+    let actions = AXActionRecorder()
     let runtime = b.makeAXRuntime(
-        setAttributeHandler: nil,
+        setAttributeHandler: { element, attribute, _ in
+            actions.recordAttributeWrite(elementID: b.elementID(element), attribute: attribute)
+            return true
+        },
         performActionHandler: { element, action in
-            if action == pressAction { recorder.record(b.elementID(element)) }
-            return false // AXPress refused everywhere
+            actions.record(elementID: b.elementID(element), action: action)
+            return true
         }
     )
 
-    let ok = await AccessibilityChannel.clickPopupPluginLeaf(
-        gain, runtime: runtime, coordFree: true
+    let click = await AccessibilityChannel.clickPluginInAnchoredSlotPopup(
+        pluginID: "logic.stock.effect.gain",
+        displayName: "Gain",
+        rootMenu: rootMenu,
+        runtime: runtime
     )
 
-    #expect(!ok)
-    #expect(!recorder.pressedElementIDs.isEmpty)
+    #expect(actions.nonTargetActionCount(targetElementID: b.elementID(target)) == 0)
+    #expect(actions.nonTargetAttributeWriteCount(targetElementID: b.elementID(target)) == 0)
+    #expect(actions.attributeWrites.isEmpty)
+    let result = try #require(click)
+    #expect(result.path == ["Dienstprogramme", "Fabricant", "Gain"])
+    #expect(actions.count(elementID: b.elementID(target), action: kAXPickAction as String) == 1)
 }
 
-// Contract #3 (discriminator honesty) — the DIVERGENCE case. A recursive
-// (coordinate-only) win under the flag ON must report `coordFree == false`, NOT
-// the flag. This is the ONLY case where the honest value diverges from the raw
-// flag, so it is what makes the discriminator sourcing mutation-provable. The 4
-// tests above all use a direct win with the flag on, where pluginClick.coordFree
-// and FeatureFlags.insertCoordFree are BOTH true — they cannot catch a re-pin to
-// the flag. This one can, driven hermetically via the DEBUG coordinate-actuation
-// seam (no CGEvent / physical mouse): direct+search fail because AXPress is
-// refused, so the recursive strategy wins ONLY via the coordinate path. It kills:
-//   (i)   trace repinned to the flag        → leafSelectCoordFree(for:) returns false, not the flag
-//   (ii)  recursive SlotPopupPluginClick(coordFree:) flipped to the flag → winner.coordFree
-//   (iii) recursive clickPopupPluginLeaf(coordFree:) flipped to the flag → it would AXPress
-//         (refused) → no recursive win → #require fails
-@Test func test425Contract3_recursiveWinReportsCoordFreeFalseUnderFlagOn() async throws {
+@Test func testPlugin425LeafSelectionHasNoCoordFreeStrategyDiscriminator() async throws {
     let b = FakeAXRuntimeBuilder()
-    // Exact-match leaf at the ROOT, no format submenu / text field / geometry.
-    let gain = addMenuItem(b, 8260, title: "Gain")
-    let root = addMenu(b, 8269, children: [gain])
-    let pressAction = kAXPressAction as String
-    let runtime = b.makeAXRuntime(
-        setAttributeHandler: nil,
-        // Refuse AXPress everywhere so the ONLY route to a win is the coordinate
-        // path — a win therefore PROVES the recursive coordinate route executed.
-        performActionHandler: { _, action in action == pressAction ? false : true }
+    let target = addMenuItem(b, 9110, title: "Gain")
+    let rootMenu = addMenu(b, 9111, children: [target])
+    let click = await AccessibilityChannel.clickPluginInAnchoredSlotPopup(
+        pluginID: "logic.stock.effect.gain",
+        displayName: "Gain",
+        rootMenu: rootMenu,
+        runtime: b.makeAXRuntime()
     )
 
-    let click = await FeatureFlags.withInsertCoordFree(true) {
-        await AccessibilityChannel.withForceCoordinateActuationForTests(true) {
-            await AccessibilityChannel.clickPluginInAnchoredSlotPopup(
-                pluginID: "logic.stock.effect.gain",
-                displayName: "Gain",
-                rootMenu: root,
-                runtime: runtime
-            )
-        }
-    }
-
-    let winner = try #require(click)
-    #expect(winner.strategy == "slot_popup_recursive_exact_leaf")
-    // The divergence: flag override is true, honest path is coordinate → false.
-    #expect(!winner.coordFree)
-    #expect(!AccessibilityChannel.leafSelectCoordFree(for: winner))
+    let result = try #require(click)
+    let storedPropertyNames = Mirror(reflecting: result).children.compactMap(\.label)
+    #expect(!storedPropertyNames.contains("coordFree"))
 }
-
-// MARK: - #425 (Option B) RESPONSE-LEVEL coverage (real defaultInsertVerified flow)
-//
-// These drive the REAL `liveExactSlotPopupInsert` driver end to end (no injected
-// fake driver), so they traverse the ACTUAL trace assignment at
-// VerifiedPlugins ~L1936 (`trace["leaf_select_coord_free"] = leafSelectCoordFree(
-// for: pluginClick)`) AND the response serialization — which the helper-level
-// tests above cannot. The DEBUG `forceCoordinateActuationForTests` seam makes
-// every coordinate primitive (the governed slot-OPEN click AND the coordinate
-// leaf path) succeed WITHOUT posting a CGEvent, so no physical mouse moves. The
-// fake's post-inventory never changes, so a win settles on `postCommitTimeout`
-// (State C operation_timeout) carrying the populated select_trace + commit_strategy.
 
 private let coordFreeExpectedPath = "/Users/me/Music/CoordFree425 copy.logicx"
 
 private struct SlotPopupInsertFixture {
     let runtime: AXLogicProElements.Runtime
+    let slotItemID: Int
+    let categoryItemID: Int?
+    let nonMatchingLeafItemID: Int?
+    let nonMatchingFormatLeafItemIDs: [Int]
+    let formatNamedCategoryItemID: Int?
     let leafItemID: Int
-    let presses: AXPressRecorder
+    let actions: AXActionRecorder
+    let slotOccupier: SlotOccupier
+    let slotReplacer: SlotOccupier
+    let replacementSlotID: Int
+    let nonFormatSubmenuItemIDs: [Int]
+    let nonTerminalFormatEntryID: Int?
+    let searchFieldID: Int
+    let leftoverMenuItemID: Int?
+    let coordinateFallbackClick: () -> Bool
 }
 
-/// The full AX tree the real slot-popup insert flow walks: a track header
-/// (AXSelected, so selection verifies) → mixer → strip → ONE empty target slot
-/// (with geometry for the anchor check) → an app-reachable, slot-anchored popup
-/// menu holding the exact "Gain" leaf. `refuseLeafAXPress` makes AXPress on the
-/// leaf fail (forcing direct/search to fall through to the recursive coordinate
-/// path); track-header AXPress stays allowed so track selection still verifies.
+/// The full AX tree the real insert driver walks. The action handler models the
+/// separately-observed effects of opening a popup, revealing a submenu, and
+/// mounting a plugin, while its Bool return independently models AX's unreliable
+/// status code.
 private func makeSlotPopupInsertFixture(
-    refuseLeafAXPress: Bool,
-    mountGainOnLeafAXPress: Bool = false
+    popupAppearsAfterSlotOpen: Bool = true,
+    popupInitiallyVisible: Bool = false,
+    slotOpenResult: Bool = true,
+    includeCategory: Bool = false,
+    includeNonMatchingLeaf: Bool = false,
+    includeNonMatchingLeafFormatMenu: Bool = false,
+    includeFormatNamedCategoryEntry: Bool = false,
+    includeFormatLeaf: Bool = false,
+    leafPickResult: Bool = true,
+    mountGainOnLeafPick: Bool = false,
+    occupySlotOnWindowRaise: Bool = false,
+    includeNonFormatSubmenu: Bool = false,
+    includeNonTerminalFormatEntry: Bool = false,
+    leftoverNeighbourMenuVisible: Bool = false
 ) -> SlotPopupInsertFixture {
     let b = FakeAXRuntimeBuilder()
     let app = b.element(9000)
@@ -897,6 +858,25 @@ private func makeSlotPopupInsertFixture(
     let popupMenu = b.element(9007)
     let gainItem = b.element(9008)
     let searchField = b.element(9009)
+    let categoryItem = includeCategory ? b.element(9010) : nil
+    let categoryMenu = includeCategory ? b.element(9011) : nil
+    let nonMatchingLeafItem = includeNonMatchingLeaf ? b.element(9016) : nil
+    let nonMatchingFormatMenu = includeNonMatchingLeafFormatMenu ? b.element(9017) : nil
+    let nonMatchingFormatMono = includeNonMatchingLeafFormatMenu ? b.element(9018) : nil
+    let nonMatchingFormatMonoToStereo = includeNonMatchingLeafFormatMenu ? b.element(9019) : nil
+    let formatNamedCategoryItem = includeFormatNamedCategoryEntry ? b.element(9020) : nil
+    let leftoverMenu = leftoverNeighbourMenuVisible ? b.element(9040) : nil
+    let leftoverSearch = leftoverNeighbourMenuVisible ? b.element(9041) : nil
+    let leftoverItem = leftoverNeighbourMenuVisible ? b.element(9042) : nil
+    let nonTerminalFormatMenu = includeNonTerminalFormatEntry ? b.element(9034) : nil
+    let nonTerminalFormatEntry = includeNonTerminalFormatEntry ? b.element(9035) : nil
+    let nonTerminalFormatChild = includeNonTerminalFormatEntry ? b.element(9036) : nil
+    let nonTerminalFormatChildMenu = includeNonTerminalFormatEntry ? b.element(9037) : nil
+    let nonFormatSubmenu = includeNonFormatSubmenu ? b.element(9031) : nil
+    let nonFormatEntryA = includeNonFormatSubmenu ? b.element(9032) : nil
+    let nonFormatEntryB = includeNonFormatSubmenu ? b.element(9033) : nil
+    let formatLeafItem = includeFormatLeaf ? b.element(9014) : nil
+    let formatMenu = includeFormatLeaf ? b.element(9015) : nil
 
     // Track header rail (getTrackHeaders matches the "트랙 헤더" group), one
     // selected row so verifiedTrackSelected reads AXSelected == true.
@@ -923,59 +903,199 @@ private func makeSlotPopupInsertFixture(
     b.setAttribute(window, kAXTitleAttribute as String, "CoordFree425 — Tracks")
     b.setChildren(window, [headersGroup, mixer])
 
-    // Slot popup: visible (geometry) + anchored to the slot + holds the exact leaf.
-    // slotPopupMenu recognizes a slot popup by a search text field AND a menu item,
-    // so the fixture carries both (as the live Logic popup does). Refusing the leaf
-    // AXPress still fails the direct+search strategies at the CLICK step, forcing
-    // the recursive coordinate fallback.
+    // Slot popup: visible + anchored after the modeled custom slot-open action.
     b.setAttribute(gainItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
     b.setAttribute(gainItem, kAXTitleAttribute as String, "Gain")
+    // Live Logic exposes AXEnabled on every menu item in an open chain, so a fixture item without it
+    // models a tree that does not occur.
+    b.setAttribute(gainItem, kAXEnabledAttribute as String, true as CFTypeRef)
+    if let leftoverMenu, let leftoverSearch, let leftoverItem {
+        // A pop-up left open by a neighbouring slot. It is a plug-in menu, it is visible, and it sits
+        // close enough that the geometric anchor test accepts it for our slot too — so only its
+        // having been there BEFORE we actuated distinguishes it from ours.
+        b.setAttribute(leftoverSearch, kAXRoleAttribute as String, kAXTextFieldRole as String)
+        b.setAttribute(leftoverItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        b.setAttribute(leftoverItem, kAXTitleAttribute as String, "Gain")
+        b.setAttribute(leftoverMenu, kAXRoleAttribute as String, kAXMenuRole as String)
+        b.setAttribute(leftoverMenu, kAXPositionAttribute as String, axPoint(400, 290))
+        b.setAttribute(leftoverMenu, kAXSizeAttribute as String, axSize(300, 400))
+        b.setChildren(leftoverMenu, [leftoverSearch, leftoverItem])
+    }
+    if let nonTerminalFormatMenu, let nonTerminalFormatEntry, let nonTerminalFormatChild,
+       let nonTerminalFormatChildMenu {
+        // Every entry carries a real format label, so the submenu passes the format discriminator —
+        // but the matching entry owns a menu of its own, i.e. it is a category wearing a format
+        // name. Picking it would actuate before any terminal target is known.
+        b.setAttribute(nonTerminalFormatChild, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        b.setAttribute(nonTerminalFormatChild, kAXTitleAttribute as String, "Gain")
+        b.setAttribute(nonTerminalFormatChildMenu, kAXRoleAttribute as String, kAXMenuRole as String)
+        b.setChildren(nonTerminalFormatChildMenu, [nonTerminalFormatChild])
+        b.setAttribute(nonTerminalFormatEntry, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        b.setAttribute(nonTerminalFormatEntry, kAXTitleAttribute as String, "Mono")
+        b.setChildren(nonTerminalFormatEntry, [nonTerminalFormatChildMenu])
+        b.setAttribute(nonTerminalFormatMenu, kAXRoleAttribute as String, kAXMenuRole as String)
+        b.setChildren(nonTerminalFormatMenu, [nonTerminalFormatEntry])
+        b.setChildren(gainItem, [nonTerminalFormatMenu])
+    }
+    if let nonFormatSubmenu, let nonFormatEntryA, let nonFormatEntryB {
+        // Entries a format chooser would never contain; the discriminator must refuse this submenu.
+        b.setAttribute(nonFormatEntryA, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        b.setAttribute(nonFormatEntryA, kAXTitleAttribute as String, "Legacy")
+        b.setAttribute(nonFormatEntryB, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        b.setAttribute(nonFormatEntryB, kAXTitleAttribute as String, "Utility")
+        b.setAttribute(nonFormatSubmenu, kAXRoleAttribute as String, kAXMenuRole as String)
+        b.setChildren(nonFormatSubmenu, [nonFormatEntryA, nonFormatEntryB])
+        b.setChildren(gainItem, [nonFormatSubmenu])
+    }
+    if let formatLeafItem, let formatMenu {
+        b.setAttribute(formatLeafItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        // Measured live on this Logic build: a plug-in entry's submenu contains only channel-format
+        // entries (Gain -> "Mono", "Mono->Stereo"; Compressor and Channel EQ -> "Mono"). The former
+        // "Audio Unit" label modelled no real entry and only kept the arbitrary items.first fallback
+        // looking justified.
+        b.setAttribute(formatLeafItem, kAXTitleAttribute as String, "Mono")
+        b.setAttribute(formatMenu, kAXRoleAttribute as String, kAXMenuRole as String)
+        b.setChildren(formatMenu, [formatLeafItem])
+        b.setChildren(gainItem, [formatMenu])
+    }
     b.setAttribute(searchField, kAXRoleAttribute as String, kAXTextFieldRole as String)
     b.setAttribute(popupMenu, kAXRoleAttribute as String, kAXMenuRole as String)
     b.setAttribute(popupMenu, kAXPositionAttribute as String, axPoint(410, 320))
     b.setAttribute(popupMenu, kAXSizeAttribute as String, axSize(240, 420))
-    b.setChildren(popupMenu, [searchField, gainItem])
+    if let nonMatchingLeafItem {
+        b.setAttribute(nonMatchingLeafItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        b.setAttribute(nonMatchingLeafItem, kAXTitleAttribute as String, "Compressor")
+        if let nonMatchingFormatMenu, let nonMatchingFormatMono, let nonMatchingFormatMonoToStereo {
+            b.setAttribute(nonMatchingFormatMenu, kAXRoleAttribute as String, kAXMenuRole as String)
+            b.setAttribute(nonMatchingFormatMono, kAXRoleAttribute as String, kAXMenuItemRole as String)
+            b.setAttribute(nonMatchingFormatMono, kAXTitleAttribute as String, "Mono")
+            b.setAttribute(nonMatchingFormatMonoToStereo, kAXRoleAttribute as String, kAXMenuItemRole as String)
+            b.setAttribute(nonMatchingFormatMonoToStereo, kAXTitleAttribute as String, "Mono->Stereo")
+            b.setChildren(nonMatchingFormatMenu, [nonMatchingFormatMono, nonMatchingFormatMonoToStereo])
+            b.setChildren(nonMatchingLeafItem, [nonMatchingFormatMenu])
+        }
+    }
+    if let categoryItem, let categoryMenu {
+        b.setAttribute(categoryItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        b.setAttribute(categoryItem, kAXTitleAttribute as String, "Utility")
+        b.setAttribute(categoryMenu, kAXRoleAttribute as String, kAXMenuRole as String)
+        if let formatNamedCategoryItem {
+            b.setAttribute(formatNamedCategoryItem, kAXRoleAttribute as String, kAXMenuItemRole as String)
+            b.setAttribute(formatNamedCategoryItem, kAXTitleAttribute as String, "Mono")
+        }
+        // The submenu is already an AX child but has no visible frame. Recursive
+        // discovery must read this child directly without actuating the category.
+        b.setChildren(categoryMenu, (formatNamedCategoryItem.map { [$0] } ?? []) + [gainItem])
+        b.setChildren(categoryItem, [categoryMenu])
+        b.setChildren(popupMenu, [searchField] + (nonMatchingLeafItem.map { [$0] } ?? []) + [categoryItem])
+    } else {
+        b.setChildren(popupMenu, [searchField] + (nonMatchingLeafItem.map { [$0] } ?? []) + [gainItem])
+    }
 
     // App: AXWindows for mainWindow; children so slotPopupMenu's app-descent finds
     // the (top-level) popup menu.
     b.setAttribute(app, kAXWindowsAttribute as String, [window])
     b.setAttribute(app, kAXMainWindowAttribute as String, window)
-    b.setChildren(app, [window, popupMenu])
+    // The leftover menu is present from the start: that is what makes it "already open".
+    var initialAppChildren: [AXUIElement] = [window]
+    if let leftoverMenu { initialAppChildren.append(leftoverMenu) }
+    if popupInitiallyVisible { initialAppChildren.append(popupMenu) }
+    b.setChildren(app, initialAppChildren)
 
-    let leafKey = b.elementID(gainItem)
-    let presses = AXPressRecorder()
-    let pressAction = kAXPressAction as String
+    let slotKey = b.elementID(slot)
+    let windowKey = b.elementID(window)
+    let leafKey = formatLeafItem.map(b.elementID) ?? b.elementID(gainItem)
+    let categoryKey = categoryItem.map(b.elementID)
+    let nonMatchingLeafKey = nonMatchingLeafItem.map(b.elementID)
+    let nonMatchingFormatLeafKeys = [nonMatchingFormatMono, nonMatchingFormatMonoToStereo]
+        .compactMap { $0.map(b.elementID) }
+    let formatNamedCategoryKey = formatNamedCategoryItem.map(b.elementID)
+    let actions = AXActionRecorder()
+    let pickAction = kAXPickAction as String
+    // The AX tree can hand back a DIFFERENT element for the same still-empty slot. Anything the
+    // driver learned about the old element — notably whether it exposes the custom opener — was
+    // never about this one.
+    let replacementSlot = b.element(9030)
+    let slotReplacer = SlotOccupier {
+        b.setAttribute(replacementSlot, kAXRoleAttribute as String, kAXButtonRole as String)
+        b.setAttribute(replacementSlot, kAXDescriptionAttribute as String, "오디오 플러그인")
+        b.setAttribute(replacementSlot, kAXHelpAttribute as String, "오디오 이펙트 슬롯. 오디오 이펙트를 삽입합니다.")
+        b.setAttribute(replacementSlot, kAXPositionAttribute as String, axPoint(400, 300))
+        b.setAttribute(replacementSlot, kAXSizeAttribute as String, axSize(70, 18))
+        b.setChildren(strip, [replacementSlot])
+    }
+
+    let slotOccupier = SlotOccupier {
+        let bypass = b.element(9021)
+        let open = b.element(9022)
+        b.setAttribute(slot, kAXRoleAttribute as String, kAXGroupRole as String)
+        b.setAttribute(slot, kAXDescriptionAttribute as String, "Compressor")
+        b.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        b.setAttribute(bypass, kAXDescriptionAttribute as String, "바이패스")
+        b.setAttribute(bypass, kAXValueAttribute as String, 0)
+        b.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
+        b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
+        b.setChildren(slot, [bypass, open])
+    }
     let runtime = b.makeLogicRuntime(
         appElement: app,
-        setAttributeHandler: nil,
+        setAttributeHandler: { element, attribute, _ in
+            actions.recordAttributeWrite(elementID: b.elementID(element), attribute: attribute)
+            return true
+        },
         performActionHandler: { element, action in
-            if action == pressAction {
-                presses.record(b.elementID(element))
-                if b.elementID(element) == leafKey {
-                    if refuseLeafAXPress { return false }
-                    if mountGainOnLeafAXPress {
-                        // Model Logic mounting the plugin at the empty slot on the
-                        // leaf AXPress: swap the empty-button slot to an occupied
-                        // "Gain" group so a NON-seamed run reads back State A. This
-                        // lets the force-timeout seam be mutation-proved (seam OFF →
-                        // State A, seam ON → forced State-C timeout).
-                        b.setAttribute(slot, kAXRoleAttribute as String, kAXGroupRole as String)
-                        b.setAttribute(slot, kAXDescriptionAttribute as String, "Gain")
-                        let bypass = b.element(9010)
-                        let open = b.element(9011)
-                        b.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
-                        b.setAttribute(bypass, kAXDescriptionAttribute as String, "바이패스")
-                        b.setAttribute(bypass, kAXValueAttribute as String, 0)
-                        b.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
-                        b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
-                        b.setChildren(slot, [bypass, open])
-                    }
+            let elementID = b.elementID(element)
+            actions.record(elementID: elementID, action: action)
+            if occupySlotOnWindowRaise,
+               elementID == windowKey,
+               action == (kAXRaiseAction as String) {
+                slotOccupier.occupy()
+            }
+            if elementID == slotKey, action == slotPopupOpenCustomAction {
+                if popupAppearsAfterSlotOpen {
+                    b.setChildren(app, leftoverMenu.map { [window, $0, popupMenu] } ?? [window, popupMenu])
                 }
+                return slotOpenResult
+            }
+            if elementID == leafKey, action == pickAction {
+                if mountGainOnLeafPick {
+                    b.setAttribute(slot, kAXRoleAttribute as String, kAXGroupRole as String)
+                    b.setAttribute(slot, kAXDescriptionAttribute as String, "Gain")
+                    let bypass = b.element(9012)
+                    let open = b.element(9013)
+                    b.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+                    b.setAttribute(bypass, kAXDescriptionAttribute as String, "바이패스")
+                    b.setAttribute(bypass, kAXValueAttribute as String, 0)
+                    b.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
+                    b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
+                    b.setChildren(slot, [bypass, open])
+                }
+                return leafPickResult
             }
             return true
         }
     )
-    return SlotPopupInsertFixture(runtime: runtime, leafItemID: leafKey, presses: presses)
+    return SlotPopupInsertFixture(
+        runtime: runtime,
+        slotItemID: slotKey,
+        categoryItemID: categoryKey,
+        nonMatchingLeafItemID: nonMatchingLeafKey,
+        nonMatchingFormatLeafItemIDs: nonMatchingFormatLeafKeys,
+        formatNamedCategoryItemID: formatNamedCategoryKey,
+        leafItemID: leafKey,
+        actions: actions,
+        slotOccupier: slotOccupier,
+        slotReplacer: slotReplacer,
+        replacementSlotID: b.elementID(replacementSlot),
+        nonFormatSubmenuItemIDs: [nonFormatEntryA, nonFormatEntryB].compactMap { $0 }.map(b.elementID),
+        nonTerminalFormatEntryID: nonTerminalFormatEntry.map(b.elementID),
+        searchFieldID: b.elementID(searchField),
+        leftoverMenuItemID: leftoverItem.map(b.elementID),
+        coordinateFallbackClick: {
+            b.setChildren(app, leftoverMenu.map { [window, $0, popupMenu] } ?? [window, popupMenu])
+            return true
+        }
+    )
 }
 
 private func runRealInsert(runtime: AXLogicProElements.Runtime) async -> [String: Any] {
@@ -990,113 +1110,592 @@ private func runRealInsert(runtime: AXLogicProElements.Runtime) async -> [String
     return try! JSONSerialization.jsonObject(with: result.message.data(using: .utf8)!) as! [String: Any]
 }
 
-// The ASSEMBLED RESPONSE's select_trace["leaf_select_coord_free"] is false for a
-// recursive (coordinate-only) win under the flag ON — this traverses the real
-// trace assignment, so re-pinning it to the raw flag turns this RED.
-@Test func test425ResponseTraceCoordFreeFalseOnRecursiveWinUnderFlagOn() async throws {
-    let fixture = makeSlotPopupInsertFixture(refuseLeafAXPress: true)
-    let obj = await FeatureFlags.withInsertCoordFree(true) {
-        await AccessibilityChannel.withForceCoordinateActuationForTests(true) {
+private func run425Insert(
+    fixture: SlotPopupInsertFixture,
+    slotOpenActions: [String],
+    coordinateFallbackResult: Bool = false
+) async -> [String: Any] {
+    await AccessibilityChannel.withSlotPopupOpenActionNamesForTests(slotOpenActions) {
+        await AccessibilityChannel.withForceCoordinateActuationForTests(coordinateFallbackResult) {
             await runRealInsert(runtime: fixture.runtime)
         }
     }
+}
+
+@Test func testPlugin425SlotOpenCustomActionFailureProceedsWhenPopupIsObserved() async throws {
+    let fixture = makeSlotPopupInsertFixture(
+        slotOpenResult: false, mountGainOnLeafPick: true
+    )
+    let obj = await run425Insert(
+        fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction]
+    )
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "A")
+    #expect(fixture.actions.contains(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction))
+    let trace = try #require(obj["select_trace"] as? [String: Any])
+    let fallbackTaken = try #require(trace["slot_popup_open_fallback_taken"] as? Bool)
+    #expect(!fallbackTaken)
+}
+
+@Test func testPlugin425SlotOpenFailsClosedWhenActionEnumerationFails() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let obj = await AccessibilityChannel.withSlotPopupOpenCustomActionEnumerationResultForTests(
+        .enumerationFailed
+    ) {
+        await AccessibilityChannel.withCoordinateActuationForTests(fixture.coordinateFallbackClick) {
+            await runRealInsert(runtime: fixture.runtime)
+        }
+    }
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "C")
+    let stage = try #require(obj["setup_stage"] as? String)
+    #expect(stage == "slot_action_enumeration_failed")
+    #expect(!fixture.actions.touched(elementID: fixture.slotItemID))
+    let trace = try #require(obj["select_trace"] as? [String: Any])
+    let fallbackTaken = try #require(trace["slot_popup_open_fallback_taken"] as? Bool)
+    #expect(!fallbackTaken)
+    let slotOpenAction = try #require(trace["slot_popup_open_action"] as? String)
+    #expect(slotOpenAction == "action_enumeration_failed")
+}
+
+@Test func testPlugin425SlotOpenSuccessFailsClosedWhenPopupIsNotObserved() async throws {
+    let fixture = makeSlotPopupInsertFixture(popupAppearsAfterSlotOpen: false)
+    let obj = await run425Insert(
+        fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction]
+    )
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "C")
+    let stage = try #require(obj["setup_stage"] as? String)
+    #expect(stage == "slot_popup_menu_not_found")
+    #expect(fixture.actions.contains(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction))
+}
+
+@Test func testPlugin425AttachedCategoryDiscoveryDoesNotNeedCategoryPick() async throws {
+    let fixture = makeSlotPopupInsertFixture(
+        includeCategory: true,
+        mountGainOnLeafPick: true
+    )
+    let obj = await run425Insert(
+        fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction]
+    )
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "A")
+    let categoryID = try #require(fixture.categoryItemID)
+    #expect(!fixture.actions.touched(elementID: categoryID))
+    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
     let trace = try #require(obj["select_trace"] as? [String: Any])
     let strategy = try #require(trace["winning_strategy"] as? String)
     #expect(strategy == "slot_popup_recursive_exact_leaf")
-    // Divergence: flag ON, but the actual winning actuation is coordinate → false.
-    let coordFree = try #require(trace["leaf_select_coord_free"] as? Bool)
-    #expect(!coordFree)
-    // Coordinate win → physical commit strategy (pins the coordFree:false branch).
-    let commit = try #require(obj["commit_strategy"] as? String)
-    #expect(commit == "slot_popup_physical_menu_click")
+    let leafSelectCoordFree = try #require(trace["leaf_select_coord_free"] as? Bool)
+    #expect(leafSelectCoordFree)
 }
 
-// Flag ON (default): the kill-switch routes a direct/search win through the
-// AXPress path — leaf selected via kAXPress, response reports coordFree true.
-@Test func test425ResponseFlagOnSelectsLeafViaAXPress() async throws {
-    let fixture = makeSlotPopupInsertFixture(refuseLeafAXPress: false)
-    let obj = await FeatureFlags.withInsertCoordFree(true) {
-        await AccessibilityChannel.withForceCoordinateActuationForTests(true) {
-            await runRealInsert(runtime: fixture.runtime)
-        }
-    }
-    let trace = try #require(obj["select_trace"] as? [String: Any])
-    let coordFree = try #require(trace["leaf_select_coord_free"] as? Bool)
-    #expect(coordFree)
-    #expect(fixture.presses.pressedElementIDs.contains(fixture.leafItemID))
+@Test func testPlugin425FailsClosedWhenTargetSlotBecomesOccupiedBeforeActuation() async throws {
+    let fixture = makeSlotPopupInsertFixture(
+        mountGainOnLeafPick: true,
+        occupySlotOnWindowRaise: true
+    )
+    let obj = await run425Insert(
+        fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction]
+    )
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "C")
+    let error = try #require(obj["error"] as? String)
+    #expect(error == "insert_setup_failed")
+    let stage = try #require(obj["setup_stage"] as? String)
+    #expect(stage == "target_slot_no_longer_empty")
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(!fixture.actions.touched(elementID: fixture.slotItemID))
+    #expect(!fixture.actions.touched(elementID: fixture.leafItemID))
 }
 
-// Flag OFF: LOGIC_MCP_INSERT_COORD_FREE=0 routes the SAME direct win through the
-// COORDINATE path — no kAXPress on the leaf, response reports false.
-@Test func test425ResponseFlagOffUsesCoordinateNotAXPress() async throws {
-    let fixture = makeSlotPopupInsertFixture(refuseLeafAXPress: false)
-    let obj = await FeatureFlags.withInsertCoordFree(false) {
-        await AccessibilityChannel.withForceCoordinateActuationForTests(true) {
-            await runRealInsert(runtime: fixture.runtime)
-        }
-    }
-    let trace = try #require(obj["select_trace"] as? [String: Any])
-    let coordFree = try #require(trace["leaf_select_coord_free"] as? Bool)
-    #expect(!coordFree)
-    #expect(!fixture.presses.pressedElementIDs.contains(fixture.leafItemID))
+@Test func testPlugin425RecursiveWalkOnlyPicksExactLeaf() async throws {
+    let fixture = makeSlotPopupInsertFixture(
+        includeCategory: true,
+        includeNonMatchingLeaf: true,
+        mountGainOnLeafPick: true
+    )
+    let obj = await run425Insert(
+        fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction]
+    )
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "A")
+    let categoryID = try #require(fixture.categoryItemID)
+    let nonMatchingLeafID = try #require(fixture.nonMatchingLeafItemID)
+    #expect(!fixture.actions.touched(elementID: categoryID))
+    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+    #expect(!fixture.actions.touched(elementID: nonMatchingLeafID))
 }
 
-// A coord-free (AXPress) win that times out post-commit must report an AXPress
-// commit strategy, NOT the physical/coordinate one (commit_strategy honesty).
-@Test func test425ResponseAXPressWinReportsAXPressCommitStrategy() async throws {
-    let fixture = makeSlotPopupInsertFixture(refuseLeafAXPress: false)
-    let obj = await FeatureFlags.withInsertCoordFree(true) {
-        await AccessibilityChannel.withForceCoordinateActuationForTests(true) {
-            await runRealInsert(runtime: fixture.runtime)
-        }
+@Test func testPlugin425RecursiveWalkSkipsNonMatchingFormatLeafWithoutActuation() async throws {
+    let fixture = makeSlotPopupInsertFixture(
+        includeCategory: true,
+        includeNonMatchingLeaf: true,
+        includeNonMatchingLeafFormatMenu: true,
+        mountGainOnLeafPick: true
+    )
+    let obj = await run425Insert(
+        fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction]
+    )
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "A")
+    let categoryID = try #require(fixture.categoryItemID)
+    let nonMatchingLeafID = try #require(fixture.nonMatchingLeafItemID)
+    #expect(!fixture.actions.touched(elementID: categoryID))
+    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+    #expect(!fixture.actions.touched(elementID: nonMatchingLeafID))
+    for formatLeafID in fixture.nonMatchingFormatLeafItemIDs {
+        #expect(!fixture.actions.touched(elementID: formatLeafID))
     }
+}
+
+@Test func testPlugin425RecursiveWalkDescendsPastFormatNamedCategoryEntryWithoutActuation() async throws {
+    let fixture = makeSlotPopupInsertFixture(
+        includeCategory: true,
+        includeFormatNamedCategoryEntry: true,
+        mountGainOnLeafPick: true
+    )
+    let obj = await run425Insert(
+        fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction]
+    )
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "A")
+    let categoryID = try #require(fixture.categoryItemID)
+    let formatNamedCategoryID = try #require(fixture.formatNamedCategoryItemID)
+    #expect(!fixture.actions.touched(elementID: categoryID))
+    #expect(!fixture.actions.touched(elementID: formatNamedCategoryID))
+    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+}
+
+@Test func testPlugin425LeafPickFailureProceedsWhenInventoryDiffIsObserved() async throws {
+    let fixture = makeSlotPopupInsertFixture(
+        includeCategory: true,
+        includeFormatLeaf: true,
+        leafPickResult: false,
+        mountGainOnLeafPick: true
+    )
+    let obj = await run425Insert(
+        fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction]
+    )
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "A")
+    let verified = try #require(obj["verified"] as? Bool)
+    #expect(verified)
+    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+}
+
+@Test func testPlugin425LeafPickSuccessWithoutInventoryDiffFailsClosed() async throws {
+    let fixture = makeSlotPopupInsertFixture(leafPickResult: true)
+    let obj = await run425Insert(
+        fixture: fixture, slotOpenActions: [slotPopupOpenCustomAction]
+    )
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "C")
     let error = try #require(obj["error"] as? String)
     #expect(error == "operation_timeout")
-    let commit = try #require(obj["commit_strategy"] as? String)
-    #expect(commit == "slot_popup_axpress_menu_select")
-    let trace = try #require(obj["select_trace"] as? [String: Any])
-    let coordFree = try #require(trace["leaf_select_coord_free"] as? Bool)
-    #expect(coordFree)
+    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+    let verified = try #require(obj["verified"] as? Bool)
+    #expect(!verified)
 }
 
-// The DEBUG force-postcommit-timeout QA seam (LOGIC_MCP_FORCE_POSTCOMMIT_TIMEOUT
-// / @TaskLocal) deterministically routes a WINNING insert to the honest
-// postCommitTimeout envelope, reporting the commit_strategy of the actual
-// actuation. Fail-closed: State-C timeout, NEVER a false State-A verified mount —
-// proved by mounting Gain on the leaf press (so WITHOUT the seam this fixture
-// would read back State A; disabling the seam turns the State-C assertion RED).
-@Test func test425ForcePostCommitTimeoutSeamIsHonestAndFailsClosed() async throws {
-    // Coord-free (AXPress) win under flag ON; the fixture MOUNTS Gain on the leaf
-    // press, so a non-seamed run would reach State A. The seam forces the honest
-    // AXPress-commit timeout instead.
-    let axFixture = makeSlotPopupInsertFixture(refuseLeafAXPress: false, mountGainOnLeafAXPress: true)
-    let axObj = await FeatureFlags.withInsertCoordFree(true) {
-        await AccessibilityChannel.withForceCoordinateActuationForTests(true) {
-            await AccessibilityChannel.withForcePostCommitTimeoutForTests(true) {
-                await runRealInsert(runtime: axFixture.runtime)
-            }
+@Test func testPlugin425SlotOpenFallsBackToCoordinateClickWhenCustomActionIsAbsent() async throws {
+    let fixture = makeSlotPopupInsertFixture(
+        popupInitiallyVisible: false, mountGainOnLeafPick: true
+    )
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([]) {
+        await AccessibilityChannel.withCoordinateActuationForTests(fixture.coordinateFallbackClick) {
+            await runRealInsert(runtime: fixture.runtime)
         }
     }
-    let axState = try #require(axObj["state"] as? String)
-    #expect(axState == "C")
-    let axError = try #require(axObj["error"] as? String)
-    #expect(axError == "operation_timeout")
-    let axVerified = try #require(axObj["verified"] as? Bool)
-    #expect(!axVerified)
-    let axCommit = try #require(axObj["commit_strategy"] as? String)
-    #expect(axCommit == "slot_popup_axpress_menu_select")
 
-    // Coordinate win under flag OFF + seam → the physical commit strategy.
-    let coordFixture = makeSlotPopupInsertFixture(refuseLeafAXPress: false)
-    let coordObj = await FeatureFlags.withInsertCoordFree(false) {
-        await AccessibilityChannel.withForceCoordinateActuationForTests(true) {
-            await AccessibilityChannel.withForcePostCommitTimeoutForTests(true) {
-                await runRealInsert(runtime: coordFixture.runtime)
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "A")
+    #expect(!fixture.actions.touched(elementID: fixture.slotItemID))
+    let trace = try #require(obj["select_trace"] as? [String: Any])
+    let fallbackTaken = try #require(trace["slot_popup_open_fallback_taken"] as? Bool)
+    #expect(fallbackTaken)
+    let slotOpenAction = try #require(trace["slot_popup_open_action"] as? String)
+    #expect(slotOpenAction == "coordinate_fallback")
+}
+
+@Test func testPlugin425CoordinateFallbackFailsClosedWhenSlotBecomesOccupiedDuringEnumeration() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let slotOccupier = fixture.slotOccupier
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([]) {
+        await AccessibilityChannel.withSlotPopupOpenActionEnumerationHookForTests {
+            slotOccupier.occupy()
+        } operation: {
+            await AccessibilityChannel.withCoordinateActuationForTests(fixture.coordinateFallbackClick) {
+                await runRealInsert(runtime: fixture.runtime)
             }
         }
     }
-    let coordState = try #require(coordObj["state"] as? String)
-    #expect(coordState == "C")
-    let coordCommit = try #require(coordObj["commit_strategy"] as? String)
-    #expect(coordCommit == "slot_popup_physical_menu_click")
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "C")
+    let stage = try #require(obj["setup_stage"] as? String)
+    #expect(stage == "target_slot_no_longer_empty")
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(!fixture.actions.touched(elementID: fixture.slotItemID))
+    #expect(!fixture.actions.touched(elementID: fixture.leafItemID))
+}
+
+@Test func testPlugin425NeverNavigatesAPopupThatWasAlreadyOpen() async throws {
+    // A menu left open by a neighbouring slot passes the geometric anchor test — slots sit ~17px
+    // apart while the bands are ±96px and ~500px. Only "it appeared after we actuated" separates it
+    // from ours, and navigating the wrong one mounts the plug-in on somebody else's slot.
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, leftoverNeighbourMenuVisible: true)
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
+        await runRealInsert(runtime: fixture.runtime)
+    }
+    let leftoverID = try #require(fixture.leftoverMenuItemID)
+    #expect(!fixture.actions.touched(elementID: leftoverID))
+    // and the run still did its real work, so this is not an absence caused by nothing happening
+    #expect(try #require(obj["state"] as? String) == "A")
+    #expect(fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+}
+
+@Test func testPlugin425FullInsertWritesNoAttributesAnywhereInThePopup() async throws {
+    // The unit-level discovery test proves the recursive walk writes nothing. This asserts the same
+    // property end-to-end through the real driver, where the pop-up carries a search field: a whole
+    // successful insert must not set a single attribute on any pop-up element.
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
+        await runRealInsert(runtime: fixture.runtime)
+    }
+    #expect(try #require(obj["state"] as? String) == "A")
+    #expect(!fixture.actions.touched(elementID: fixture.searchFieldID))
+    #expect(fixture.actions.attributeWrites.isEmpty)
+}
+
+@Test func testPlugin425NeverPicksAFormatLabelledEntryThatOwnsItsOwnMenu() async throws {
+    // A "Mono" entry that owns a submenu is a category wearing a format name. It satisfies the
+    // format-label check, so only the terminal requirement keeps AXPick off it.
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, includeNonTerminalFormatEntry: true)
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
+        await runRealInsert(runtime: fixture.runtime)
+    }
+    // Same reasoning: show the flow reached the pick, so "the category was untouched" is a result
+    // rather than a consequence of nothing having happened.
+    #expect(fixture.actions.contains(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction))
+    let entryID = try #require(fixture.nonTerminalFormatEntryID)
+    #expect(!fixture.actions.touched(elementID: entryID))
+    // No terminal format leaf exists here, so nothing may be picked and no insert may be claimed.
+    #expect(!fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+    #expect(try #require(obj["state"] as? String) != "A")
+}
+
+@Test func testPlugin425NeverActuatesInsideANonFormatSubmenu() async throws {
+    // Logic exposes category entries named like plug-ins, so "the matched item owns an AXMenu" does
+    // not mean that menu is a channel-format chooser. Entering it and picking whatever sits first
+    // would actuate a target nothing identified.
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true, includeNonFormatSubmenu: true)
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
+        await runRealInsert(runtime: fixture.runtime)
+    }
+    // An absence assertion proves nothing if the flow never got there, so prove it did: the slot was
+    // opened and the exact Gain entry — not anything inside the foreign submenu — was picked.
+    // The slot really was opened, so the refusals below are results rather than a run that did
+    // nothing.
+    #expect(fixture.actions.contains(elementID: fixture.slotItemID, action: slotPopupOpenCustomAction))
+    // Nothing inside the foreign submenu may be actuated...
+    for id in fixture.nonFormatSubmenuItemIDs {
+        #expect(!fixture.actions.touched(elementID: id))
+    }
+    // ...and neither may its OWNER. An entry that owns a submenu we cannot identify as channel
+    // formats is a category wearing the plug-in's name; picking it actuates a category. The earlier
+    // revision of this test asserted that pick as the expected behaviour.
+    #expect(!fixture.actions.contains(elementID: fixture.leafItemID, action: kAXPickAction as String))
+    // With no terminal target identified, the operation must not claim a verified insert.
+    #expect(try #require(obj["state"] as? String) != "A")
+}
+
+@Test func testPlugin425FailsClosedWhenTheSlotElementIsReplacedDuringEnumeration() async throws {
+    // Whether the custom opener is present was read from ONE element. If the AX tree hands back a
+    // different element for the same still-empty slot, that answer was never about the element we
+    // are about to drive — so the attempt must refuse rather than actuate on an unexamined element.
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let replacer = fixture.slotReplacer
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
+        await AccessibilityChannel.withSlotPopupOpenActionEnumerationHookForTests {
+            replacer.occupy()
+        } operation: {
+            await runRealInsert(runtime: fixture.runtime)
+        }
+    }
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "C")
+    let stage = try #require(obj["setup_stage"] as? String)
+    #expect(stage == "target_slot_element_replaced")
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(!fixture.actions.touched(elementID: fixture.slotItemID))
+    #expect(!fixture.actions.touched(elementID: fixture.replacementSlotID))
+}
+
+@Test func testPlugin425CustomSlotOpenFailsClosedWhenSlotBecomesOccupiedDuringEnumeration() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let slotOccupier = fixture.slotOccupier
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests([slotPopupOpenCustomAction]) {
+        await AccessibilityChannel.withSlotPopupOpenActionEnumerationHookForTests {
+            slotOccupier.occupy()
+        } operation: {
+            await runRealInsert(runtime: fixture.runtime)
+        }
+    }
+
+    let state = try #require(obj["state"] as? String)
+    #expect(state == "C")
+    let stage = try #require(obj["setup_stage"] as? String)
+    #expect(stage == "target_slot_no_longer_empty")
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(!fixture.actions.touched(elementID: fixture.slotItemID))
+    #expect(!fixture.actions.touched(elementID: fixture.leafItemID))
+}
+
+/// Records which elements received a `kAXPress` when the default action-
+/// recording is bypassed by an injected `performActionHandler` (contract C).
+/// Invoked sequentially within one test (awaited), so plain mutation is
+/// race-free here; `@unchecked Sendable` documents that.
+private final class AXPressRecorder: @unchecked Sendable {
+    private(set) var pressedElementIDs: [Int] = []
+    func record(_ id: Int) { pressedElementIDs.append(id) }
+}
+
+/// #474 — an entry whose enabled state cannot be read must not be pressed.
+///
+/// `AXEnabled` is the one signal that distinguishes "will act" from "will do nothing" before the
+/// press, and the pick path used to treat an unreadable value as enabled. Measured on Logic 12.3 with
+/// the plug-in menu chain open, all 1090 items expose a readable value and 264 are disabled —
+/// section headers such as "Recent" among them — so this is a population the picker can land on.
+@Test func testPlugin474LeafWithUnreadableEnabledStateIsNotPressed() async throws {
+    // The gap is an UNREADABLE attribute, not a readable false: a readable false is already refused
+    // by the lenient discovery check, so a fixture that sets `enabled: false` tests behaviour that
+    // already worked. Build the item without the attribute at all, which is what "unreadable" means.
+    let b = FakeAXRuntimeBuilder()
+    let unreadable = b.element(9500)
+    b.setAttribute(unreadable, kAXRoleAttribute as String, kAXMenuItemRole as String)
+    b.setAttribute(unreadable, kAXTitleAttribute as String, "Gain")
+    let rootMenu = addMenu(b, 9501, children: [unreadable])
+    let recorder = AXPressRecorder()
+    let runtime = b.makeAXRuntime(
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            recorder.record(b.elementID(element))
+            return true
+        }
+    )
+
+    let click = await AccessibilityChannel.clickPluginInAnchoredSlotPopup(
+        pluginID: "logic.stock.effect.gain",
+        displayName: "Gain",
+        rootMenu: rootMenu,
+        runtime: runtime
+    )
+
+    #expect(click == nil)
+    #expect(!recorder.pressedElementIDs.contains(b.elementID(unreadable)))
+}
+
+/// The same fixture with the entry enabled must succeed, so the test above fails for the reason it
+/// names rather than because nothing could ever be picked.
+@Test func testPlugin474EnabledLeafIsStillPressed() async throws {
+    let b = FakeAXRuntimeBuilder()
+    let target = addMenuItem(b, 9510, title: "Gain")
+    let rootMenu = addMenu(b, 9511, children: [target])
+    let recorder = AXPressRecorder()
+    let runtime = b.makeAXRuntime(
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            recorder.record(b.elementID(element))
+            return true
+        }
+    )
+
+    let click = await AccessibilityChannel.clickPluginInAnchoredSlotPopup(
+        pluginID: "logic.stock.effect.gain",
+        displayName: "Gain",
+        rootMenu: rootMenu,
+        runtime: runtime
+    )
+
+    #expect(click != nil)
+    #expect(recorder.pressedElementIDs.contains(b.elementID(target)))
+}
+
+/// #475 — an unreadable mixer child renumbers every later strip, so ordinal addressing stops meaning
+/// what the caller asked for.
+///
+/// `mixerChannelStrips` filters to layout items; a child whose role cannot be read is dropped and
+/// each later strip moves down one. Callers address strips by ordinal, so a request for track 0 would
+/// act on physical strip 1. No downstream readback can catch it — the readback reads the same shifted
+/// list — so the write path refuses rather than addressing a list it cannot trust.
+@Test func testPlugin475UnreadableMixerChildIsNotSilentlyRenumbered() async throws {
+    let b = FakeAXRuntimeBuilder()
+    let mixer = b.element(9600)
+    let ghost = b.element(9601)      // role unreadable: dropped by the filter
+    let stripA = b.element(9602)
+    let stripB = b.element(9603)
+    b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
+    b.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
+    // `ghost` deliberately has NO role attribute.
+    b.setAttribute(stripA, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setAttribute(stripB, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setChildren(mixer, [ghost, stripA, stripB])
+
+    let runtime = b.makeAXRuntime(setAttributeHandler: nil, performActionHandler: { _, _ in false })
+    let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime)
+
+    // The filter still yields two strips, but they are NOT at the ordinals the caller means: the
+    // caller's "strip 0" is physically the second child here.
+    #expect(enumeration.strips.count == 2)
+    #expect(enumeration.unreadableChildren == 1)
+}
+
+@Test func testPlugin475FullyReadableMixerReportsNoUnreadableChildren() async throws {
+    let b = FakeAXRuntimeBuilder()
+    let mixer = b.element(9610)
+    let stripA = b.element(9611)
+    let stripB = b.element(9612)
+    b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
+    b.setAttribute(stripA, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setAttribute(stripB, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setChildren(mixer, [stripA, stripB])
+
+    let runtime = b.makeAXRuntime(setAttributeHandler: nil, performActionHandler: { _, _ in false })
+    let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime)
+
+    // The positive twin: a healthy mixer must not be refused, or the guard would block every write.
+    #expect(enumeration.strips.count == 2)
+    #expect(enumeration.unreadableChildren == 0)
+}
+
+private final class AXPressLogBox: @unchecked Sendable {
+    private(set) var count = 0
+    func bump() { count += 1 }
+}
+
+/// #475 — a rollback must undo OUR insert, never whatever is on top of the user's undo stack.
+///
+/// The rollback matched only the localized "Undo" prefix and pressed the entry it found. Measured on
+/// Logic 12.3 the Edit menu offers "Undo Insert Plug-in in Channel Strip" for our own write, and
+/// entries such as "Undo selected Channel Strips" for actions that are not ours. Pressing the latter
+/// reverts the user's work while reporting a successful rollback.
+@Test func testPlugin475RollbackDoesNotUndoSomethingThatIsNotOurInsert() async throws {
+    let clicks = AXPressLogBox()
+    let result = await AccessibilityChannel.verifiedUndoPluginInsert(
+        track: 0,
+        strayPluginID: "logic.stock.effect.gain",
+        straySlot: 0,
+        strayName: "Gain",
+        runtime: emptyLogicRuntimeForRollbackTests(),
+        maxRetries: 4,
+        undoClick: { clicks.bump(); return "not_ours" }
+    )
+
+    // The properties that protect the user's work: the entry was looked at once, nothing was
+    // pressed, and there was no retry — a retry would keep hammering Undo at their stack.
+    //
+    // `succeeded` is not asserted here. This fixture's strip is empty, so the stray reads as already
+    // gone and removal confirms on its own; that says nothing about the refusal.
+    #expect(clicks.count == 1)
+    #expect(!result.attempted)
+    #expect(result.lastClickResult == "not_ours")
+}
+
+/// The positive twin: when the entry IS ours, the rollback proceeds, so the refusal above is a
+/// decision rather than a path that can never roll anything back.
+@Test func testPlugin475RollbackStillProceedsWhenTheEntryIsOurs() async throws {
+    let clicks = AXPressLogBox()
+    let result = await AccessibilityChannel.verifiedUndoPluginInsert(
+        track: 0,
+        strayPluginID: "logic.stock.effect.gain",
+        straySlot: 0,
+        strayName: "Gain",
+        runtime: emptyLogicRuntimeForRollbackTests(),
+        maxRetries: 4,
+        undoClick: { clicks.bump(); return "ok" }
+    )
+
+    #expect(clicks.count >= 1)
+    #expect(result.attempted)
+}
+
+/// A strip whose inventory reads empty is the removal-confirmation the rollback polls for.
+private func emptyLogicRuntimeForRollbackTests() -> AXLogicProElements.Runtime {
+    let b = FakeAXRuntimeBuilder()
+    let app = b.element(9700)
+    let window = b.element(9701)
+    let mixer = b.element(9702)
+    let strip = b.element(9703)
+    b.setAttribute(app, kAXMainWindowAttribute as String, window)
+    b.setChildren(window, [mixer])
+    b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
+    b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
+    b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setChildren(mixer, [strip])
+    b.setChildren(strip, [])
+    return b.makeLogicRuntime(appElement: app, setAttributeHandler: nil, performActionHandler: { _, _ in false })
+}
+
+/// #475 — State A must not be granted to a document we can no longer name.
+///
+/// The front document is checked once, before the work begins. Track select, mixer raise, inventory,
+/// pop-up, discovery, pick and poll all happen after it. Switching project inside that window puts
+/// both the write and its readback in a different document than the caller named — and every check
+/// in between still agrees with itself, because they all read the new document.
+@Test func testPlugin475ProjectSwitchedMidInsertIsNotCertified() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let reads = AXPressLogBox()
+    // #472 made the slot-open path require the custom action; without this seam the insert bails
+    // before the write and this test would pass for the wrong reason.
+    let result = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests(
+        [slotPopupOpenCustomAction]
+    ) {
+        await AccessibilityChannel.defaultInsertVerified(
+            params: [
+                "track": "0", "insert": "0", "plugin": "Gain",
+                "mode": "duplicate_applyback", "project_expected_path": coordFreeExpectedPath,
+            ],
+            runtime: fixture.runtime,
+            frontDocumentPath: {
+                // The gate's read matches; the post-write re-read finds a different document.
+                reads.bump()
+                return reads.count == 1 ? coordFreeExpectedPath : "/Users/me/Music/Something Else.logicx"
+            }
+        )
+    }
+    let obj = try! JSONSerialization.jsonObject(with: result.message.data(using: .utf8)!) as! [String: Any]
+
+    #expect(try #require(obj["state"] as? String) == "C")
+    #expect(try #require(obj["error"] as? String) == "project_identity_mismatch")
+    // The write did happen — denying that would be the other kind of dishonesty.
+    #expect(try #require(obj["write_attempted"] as? Bool))
+    #expect(reads.count >= 2)
+}
+
+/// The positive twin: an unchanged document still certifies, so the check above is a decision rather
+/// than a path that can never reach State A.
+@Test func testPlugin475UnchangedProjectStillCertifies() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests(
+        [slotPopupOpenCustomAction]
+    ) {
+        await runRealInsert(runtime: fixture.runtime)
+    }
+    #expect(try #require(obj["state"] as? String) == "A")
 }
