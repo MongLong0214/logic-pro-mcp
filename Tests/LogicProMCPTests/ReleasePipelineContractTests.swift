@@ -29,7 +29,13 @@ import Testing
     let workflow = try scriptContents(".github/workflows/release.yml")
 
     let selectXcode = try #require(workflow.range(of: "name: Select Xcode"))
-    let testStep = try #require(workflow.range(of: "swift test --no-parallel"))
+    // release.yml runs the suite with the same flags as ci.yml (#496). The full
+    // invocation is asserted, not a prefix: "swift test --no-parallel" would still
+    // match after the flags diverged again, which is the drift this contract exists
+    // to catch — and it did catch it, twice, in both directions.
+    let testStep = try #require(workflow.range(
+        of: "swift test -Xswiftc -suppress-warnings --no-parallel"
+    ))
     let buildUniversal = try #require(workflow.range(of: "name: Build universal binary"))
     let package = try #require(workflow.range(of: "name: Package"))
 
