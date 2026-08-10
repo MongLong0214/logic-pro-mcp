@@ -191,18 +191,27 @@ actor StatePoller {
 
         let projectReady = await poll(
             operation: "project.get_info", label: "ProjectInfo",
+            section: .project,
             axChannel: axChannel, cache: cache, as: ProjectInfo.self
-        ) { cache, info in await cache.updateProject(info) }
+        ) { cache, info, observed in
+            await cache.updateProject(info, ifCurrent: observed)
+        }
         if projectReady { cacheKeys.append(.project) }
         let tracksReady: Bool
+        let tracksVersion = await cache.currentVersion(for: .tracks)
         if let tracks = await axChannel.readTrackStates() {
-            await cache.updateTracks(tracks)
+            // Same reasoning as `poll`: the read succeeded, so tracks are readable. Whether this
+            // particular value was applied or dropped in favour of a newer one does not change that.
+            _ = await cache.updateTracks(tracks, ifCurrent: tracksVersion)
             tracksReady = true
         } else {
             tracksReady = await poll(
                 operation: "track.get_tracks", label: "Track",
+                section: .tracks,
                 axChannel: axChannel, cache: cache, as: [TrackState].self
-            ) { cache, tracks in await cache.updateTracks(tracks) }
+            ) { cache, tracks, observed in
+                await cache.updateTracks(tracks, ifCurrent: observed)
+            }
         }
         if tracksReady { cacheKeys.append(.tracks) }
         let hasDocument = projectReady || tracksReady
@@ -250,21 +259,29 @@ actor StatePoller {
 
         let transportReady = await poll(
             operation: "transport.get_state", label: "Transport",
+            section: .transport,
             axChannel: axChannel, cache: cache, as: TransportState.self
-        ) { cache, state in await cache.updateTransport(state) }
+        ) { cache, state, observed in
+            await cache.updateTransport(state, ifCurrent: observed)
+        }
         if transportReady { cacheKeys.append(.transport) }
         let mixerReady = await poll(
             operation: "mixer.get_state", label: "Mixer",
+            section: .mixer,
             axChannel: axChannel, cache: cache, as: [ChannelStripState].self
-        ) { cache, strips in await cache.updateChannelStrips(strips) }
+        ) { cache, strips, observed in
+            await cache.updateChannelStrips(strips, ifCurrent: observed)
+        }
         if mixerReady { cacheKeys.append(.mixer) }
         markerPollTick += 1
         if markerPollTick >= Self.markerPollInterval {
             markerPollTick = 0
-            let markersReady = await poll(
+            let markersReady = await pollUnversioned(
                 operation: "nav.get_markers", label: "Marker",
                 axChannel: axChannel, cache: cache, as: [MarkerState].self
-            ) { cache, markers in await cache.updateMarkers(markers) }
+            ) { cache, markers in
+                await cache.updateMarkers(markers)
+            }
             if markersReady {
                 cacheKeys.append(.markers)
             } else {
@@ -301,6 +318,40 @@ actor StatePoller {
     /// `ResourceHandlers.readProjectInfo` against `MetaData.plist`.
     @discardableResult
     private func poll<T: Decodable & Sendable>(
+        operation: String,
+        label: String,
+        section: CacheSectionID,
+        axChannel: AccessibilityChannel,
+        cache: StateCache,
+        as type: T.Type,
+        update: (StateCache, T, StateCache.SectionVersion) async -> Bool
+    ) async -> Bool {
+        // This must happen before `execute`: observing after the AX read
+        // returns would make a stale result look current and reintroduce the
+        // overwrite race this guard is meant to prevent.
+        let observed = await cache.currentVersion(for: section)
+        let result = await axChannel.execute(operation: operation, params: [:])
+        guard case .success(let json) = result else { return false }
+        guard let data = json.data(using: .utf8) else { return false }
+        do {
+            let value = try Self.iso8601Decoder.decode(T.self, from: data)
+            // The return value answers "does this section have a usable value", NOT "did this write
+            // land". A dropped write means the cache already holds something NEWER, so the section is
+            // if anything more current than if we had applied ours. Returning the write outcome here
+            // feeds `hasDocument`, and enough consecutive drops would make the poller declare the
+            // document closed — turning the guard into a worse bug than the race it prevents.
+            _ = await update(cache, value, observed)
+            return true
+        } catch {
+            Log.debug("\(label) poll failed: \(error)", subsystem: "poller")
+            return false
+        }
+    }
+
+    /// Poll helper for cache values that do not have a `CacheSectionID` and
+    /// therefore cannot participate in section-version rejection yet.
+    @discardableResult
+    private func pollUnversioned<T: Decodable & Sendable>(
         operation: String,
         label: String,
         axChannel: AccessibilityChannel,

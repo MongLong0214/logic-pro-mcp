@@ -3,6 +3,14 @@ import Foundation
 /// Thread-safe in-memory cache for Logic Pro project state.
 /// Read by tools for instant response; written by the StatePoller.
 actor StateCache {
+    /// The cache version a reader captures immediately before starting a
+    /// section refresh. Present it to a conditional write when the refresh
+    /// completes so the actor can reject a value from a superseded read.
+    struct SectionVersion: Sendable, Equatable {
+        let projectEpoch: UInt64
+        let sectionRevision: UInt64
+    }
+
     private(set) var transport = TransportState()
     private(set) var tracks: [TrackState] = []
     private(set) var channelStrips: [ChannelStripState] = []
@@ -13,7 +21,9 @@ actor StateCache {
     private(set) var project = ProjectInfo()
     private(set) var mcuConnection = MCUConnectionState()
     private(set) var mcuDisplay = MCUDisplayState()
+    private var projectEpoch: UInt64 = 0
     private var sectionRevisions: [CacheSectionID: UInt64] = [:]
+    private var droppedStaleWriteCounts: [CacheSectionID: UInt64] = [:]
 
     /// Whether Logic Pro has an open document with a visible window.
     /// Defaults to true (optimistic) — StatePoller sets to false when no document detected.
@@ -112,6 +122,22 @@ actor StateCache {
         sectionRevisions[section, default: 0]
     }
 
+    /// Atomically captures the project epoch and one section's revision.
+    /// Call this immediately before beginning an asynchronous refresh, then
+    /// present the result to that section's `ifCurrent` write overload.
+    func currentVersion(for section: CacheSectionID) -> SectionVersion {
+        SectionVersion(
+            projectEpoch: projectEpoch,
+            sectionRevision: sectionRevisions[section, default: 0]
+        )
+    }
+
+    /// Number of conditional writes rejected because their observed version
+    /// no longer matches this section. This counter never decreases.
+    func droppedStaleWriteCount(for section: CacheSectionID) -> UInt64 {
+        droppedStaleWriteCounts[section, default: 0]
+    }
+
     /// v3.1.4 (#4) — current AX occlusion flag. See field comment for
     /// semantics; flips to true when StatePoller detects a dialog/plugin
     /// window suppressing AX project/track reads, false on the next clean
@@ -201,6 +227,7 @@ actor StateCache {
         // combine hasDocument with transport_age_sec to distinguish
         // "no project open" from "project open, idle playback".
         transport = TransportState()
+        advanceProjectEpoch()
         advanceSectionRevision(.transport)
         advanceSectionRevision(.tracks)
         advanceSectionRevision(.mixer)
@@ -235,9 +262,42 @@ actor StateCache {
         sectionRevisions[section, default: 0] += 1
     }
 
+    /// Advances the cache's project epoch without changing section content.
+    /// Project lifecycle invalidation normally reaches this through
+    /// `clearProjectState`; the standalone operation is useful when an
+    /// authoritative project identity change has already been applied by a
+    /// different cache owner.
+    func advanceProjectEpoch() {
+        projectEpoch += 1
+    }
+
+    /// Returns whether a refresh that began at `observed` can still write the
+    /// given section. A rejected refresh changes no section state; only the
+    /// per-section diagnostic counter records the drop.
+    private func accepts(
+        _ observed: SectionVersion,
+        for section: CacheSectionID
+    ) -> Bool {
+        guard projectEpoch == observed.projectEpoch,
+              sectionRevisions[section, default: 0] == observed.sectionRevision else {
+            droppedStaleWriteCounts[section, default: 0] += 1
+            return false
+        }
+        return true
+    }
+
     func updateTransport(_ state: TransportState) {
         transport = state
         advanceSectionRevision(.transport)
+    }
+
+    /// Applies `state` only if the transport has not changed since `observed`
+    /// was captured before the read that produced it.
+    @discardableResult
+    func updateTransport(_ state: TransportState, ifCurrent observed: SectionVersion) -> Bool {
+        guard accepts(observed, for: .transport) else { return false }
+        updateTransport(state)
+        return true
     }
 
     func updateTracks(_ newTracks: [TrackState]) {
@@ -264,6 +324,15 @@ actor StateCache {
         advanceSectionRevision(.tracks)
     }
 
+    /// Applies `newTracks` only if the tracks section has not moved on since
+    /// `observed` was captured before the read that produced it.
+    @discardableResult
+    func updateTracks(_ newTracks: [TrackState], ifCurrent observed: SectionVersion) -> Bool {
+        guard accepts(observed, for: .tracks) else { return false }
+        updateTracks(newTracks)
+        return true
+    }
+
     /// v3.1.1 (P1-3) — exposed for diagnostics and tests. Returns the number
     /// of consecutive empty `updateTracks([])` calls suppressed since the
     /// last non-empty update. Resets to 0 once any non-empty update lands or
@@ -283,6 +352,19 @@ actor StateCache {
         advanceSectionRevision(.tracks)
     }
 
+    /// Applies the track mutation only if the tracks section has not moved on
+    /// since `observed` was captured before the read that produced it.
+    @discardableResult
+    func updateTrack(
+        at index: Int,
+        ifCurrent observed: SectionVersion,
+        mutator: (inout TrackState) -> Void
+    ) -> Bool {
+        guard accepts(observed, for: .tracks) else { return false }
+        updateTrack(at: index, mutator: mutator)
+        return true
+    }
+
     /// Mark exactly one track as selected, clearing the flag on every other
     /// track. Mirrors Logic Pro's single-selection model so the cache never
     /// reports two tracks selected at once.
@@ -295,10 +377,31 @@ actor StateCache {
         advanceSectionRevision(.tracks)
     }
 
+    /// Applies the selection only if the tracks section has not moved on since
+    /// `observed` was captured before the read that produced it.
+    @discardableResult
+    func selectOnly(trackAt index: Int, ifCurrent observed: SectionVersion) -> Bool {
+        guard accepts(observed, for: .tracks) else { return false }
+        selectOnly(trackAt: index)
+        return true
+    }
+
     func updateChannelStrips(_ strips: [ChannelStripState]) {
         channelStrips = strips
         mixerFetchedAt = Date()
         advanceSectionRevision(.mixer)
+    }
+
+    /// Applies `strips` only if the mixer has not changed since `observed` was
+    /// captured before the read that produced it.
+    @discardableResult
+    func updateChannelStrips(
+        _ strips: [ChannelStripState],
+        ifCurrent observed: SectionVersion
+    ) -> Bool {
+        guard accepts(observed, for: .mixer) else { return false }
+        updateChannelStrips(strips)
+        return true
     }
 
     func updateRegions(_ newRegions: [RegionState], complete: Bool) {
@@ -334,6 +437,15 @@ actor StateCache {
         advanceSectionRevision(.project)
     }
 
+    /// Applies `info` only if the project section has not changed since
+    /// `observed` was captured before the read that produced it.
+    @discardableResult
+    func updateProject(_ info: ProjectInfo, ifCurrent observed: SectionVersion) -> Bool {
+        guard accepts(observed, for: .project) else { return false }
+        updateProject(info)
+        return true
+    }
+
     // MARK: - MCU Feedback Write
 
     func updateFader(strip: Int, volume: Double) {
@@ -345,6 +457,19 @@ actor StateCache {
         // identical-value set_volume call.
         faderUpdatedAt[strip] = Date()
         advanceSectionRevision(.mixer)
+    }
+
+    /// Applies the fader value only if the mixer has not changed since
+    /// `observed` was captured before the read that produced it.
+    @discardableResult
+    func updateFader(
+        strip: Int,
+        volume: Double,
+        ifCurrent observed: SectionVersion
+    ) -> Bool {
+        guard accepts(observed, for: .mixer) else { return false }
+        updateFader(strip: strip, volume: volume)
+        return true
     }
 
     /// v3.1.0 (Ralph-2 / C1) — last time an MCU echo (or any other caller)
@@ -363,6 +488,19 @@ actor StateCache {
         channelStrips[strip].pan = min(max(value, -1.0), 1.0)
         panUpdatedAt[strip] = Date()
         advanceSectionRevision(.mixer)
+    }
+
+    /// Applies the pan value only if the mixer has not changed since
+    /// `observed` was captured before the read that produced it.
+    @discardableResult
+    func updatePan(
+        strip: Int,
+        value: Double,
+        ifCurrent observed: SectionVersion
+    ) -> Bool {
+        guard accepts(observed, for: .mixer) else { return false }
+        updatePan(strip: strip, value: value)
+        return true
     }
 
     /// v3.1.3 (#1) — last time a V-Pot LED-ring echo wrote a pan into this
@@ -406,6 +544,18 @@ actor StateCache {
         advanceSectionRevision(.mixer)
     }
 
+    /// Applies the connection state only if the mixer has not changed since
+    /// `observed` was captured before the read that produced it.
+    @discardableResult
+    func updateMCUConnection(
+        _ state: MCUConnectionState,
+        ifCurrent observed: SectionVersion
+    ) -> Bool {
+        guard accepts(observed, for: .mixer) else { return false }
+        updateMCUConnection(state)
+        return true
+    }
+
     /// v3.8.0 (WS6 / AC3, audit #7) — atomic read-modify-write of the MCU
     /// connection state within a single actor turn. The MCU feedback parser
     /// and the channel's start()/stop() both touch this struct; a
@@ -416,6 +566,18 @@ actor StateCache {
     func updateMCUConnection(mutator: (inout MCUConnectionState) -> Void) {
         mutator(&mcuConnection)
         advanceSectionRevision(.mixer)
+    }
+
+    /// Applies the connection mutation only if the mixer has not changed
+    /// since `observed` was captured before the read that produced it.
+    @discardableResult
+    func updateMCUConnection(
+        ifCurrent observed: SectionVersion,
+        mutator: (inout MCUConnectionState) -> Void
+    ) -> Bool {
+        guard accepts(observed, for: .mixer) else { return false }
+        updateMCUConnection(mutator: mutator)
+        return true
     }
 
     func updateMCUDisplay(_ display: MCUDisplayState) {
