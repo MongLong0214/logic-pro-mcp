@@ -125,8 +125,76 @@ extension AccessibilityChannel {
         return normalized.hasSuffix(arrangeSuffix) && normalized.count > arrangeSuffix.count
     }
 
+    static func createdProjectWindowSelectionIsUnambiguous(
+        windowTitle: String?,
+        windowRole: String?,
+        windowSubrole: String?
+    ) -> Bool {
+        windowRole == (kAXWindowRole as String)
+            && windowSubrole == (kAXStandardWindowSubrole as String)
+            && isCreatedProjectWindowTitle(windowTitle)
+    }
+
+    private static func exactCreatedProjectWindow(
+        runtime: AXLogicProElements.Runtime
+    ) -> AXUIElement? {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return nil }
+        var candidates: [AXUIElement] = AXHelpers.getAttribute(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax
+        ) ?? []
+        if candidates.isEmpty,
+           let main: AXUIElement = AXHelpers.getAttribute(
+               app, kAXMainWindowAttribute as String, runtime: runtime.ax
+           ) {
+            candidates = [main]
+        }
+        let matches = candidates.filter { window in
+            createdProjectWindowSelectionIsUnambiguous(
+                windowTitle: AXHelpers.getTitle(window, runtime: runtime.ax),
+                windowRole: AXHelpers.getRole(window, runtime: runtime.ax),
+                windowSubrole: AXHelpers.getAttribute(
+                    window, kAXSubroleAttribute as String, runtime: runtime.ax
+                )
+            )
+        }
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    private static func observedWindowTitles(
+        runtime: AXLogicProElements.Runtime
+    ) -> [String] {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return [] }
+        let windows: [AXUIElement] = AXHelpers.getAttribute(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax
+        ) ?? []
+        return windows.compactMap { AXHelpers.getTitle($0, runtime: runtime.ax) }
+    }
+
+    static func projectNewPendingReadbackEnvelope(
+        mandatoryTrackCreated: Bool,
+        observedWindowTitles: [String],
+        observationBudgetMs: Int
+    ) -> String {
+        HonestContract.encodeStateB(
+            reason: .readbackUnavailable,
+            extras: [
+                "operation": "project.new",
+                "method": "accessibility",
+                "selection": "Empty Project",
+                "phase": "created_project_window_pending",
+                "mandatory_track_created": mandatoryTrackCreated,
+                "observed_window_titles": observedWindowTitles,
+                "observation_budget_ms": observationBudgetMs,
+                "write_attempted": true,
+                "safe_to_retry": false,
+            ]
+        )
+    }
+
     static func createEmptyProjectFromChooser(
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        observationAttempts: Int = 80,
+        observationDelayNanoseconds: UInt64 = 250_000_000
     ) async -> ChannelResult {
         guard let window = exactEmptyProjectChooserWindow(runtime: runtime) else {
             return .error("Creator Studio project chooser is not visible")
@@ -154,34 +222,70 @@ extension AccessibilityChannel {
         // The caller still performs independent Project-resource readback
         // before saving.
         var createdTrack = false
-        for _ in 0..<24 {
-            try? await Task.sleep(nanoseconds: 250_000_000)
+        let attempts = max(1, observationAttempts)
+        for attempt in 0..<attempts {
+            try? await Task.sleep(nanoseconds: observationDelayNanoseconds)
             let outcome = await reconcileAfterMutation(isDeleteContext: false, runtime: runtime)
             switch outcome.kind {
             case .mandatoryNewTrack:
                 guard outcome.performed else {
-                    return .error("Mandatory New Track sheet was identified but Create was not performed")
+                    return .error(HonestContract.encodeStateB(
+                        reason: .readbackUnavailable,
+                        extras: [
+                            "operation": "project.new",
+                            "method": "accessibility",
+                            "selection": "Empty Project",
+                            "phase": "mandatory_track_create_unconfirmed",
+                            "write_attempted": true,
+                            "safe_to_retry": false,
+                        ]
+                    ))
                 }
                 createdTrack = true
             case .unknownSheet, .deleteConfirm:
-                return .error("Unexpected blocking sheet after choosing Empty Project")
+                return .error(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: [
+                        "operation": "project.new",
+                        "method": "accessibility",
+                        "selection": "Empty Project",
+                        "phase": "unexpected_blocking_sheet",
+                        "sheet_kind": String(describing: outcome.kind),
+                        "write_attempted": true,
+                        "safe_to_retry": false,
+                    ]
+                ))
             case .none, .informationalAlert, .strayMenu:
                 break
             }
-            if let current = AXLogicProElements.mainWindow(runtime: runtime),
-               isCreatedProjectWindowTitle(AXHelpers.getTitle(current, runtime: runtime.ax)) {
+            if let current = exactCreatedProjectWindow(runtime: runtime) {
                 return .success(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
                     extras: [
                         "operation": "project.new",
                         "method": "accessibility",
                         "selection": "Empty Project",
+                        "phase": "created_project_window_observed",
+                        "window_title": AXHelpers.getTitle(current, runtime: runtime.ax) ?? "",
                         "mandatory_track_created": createdTrack,
+                        "observation_elapsed_ms": (attempt + 1) * Int(observationDelayNanoseconds / 1_000_000),
+                        "write_attempted": true,
+                        "safe_to_retry": false,
                     ]
                 ))
             }
         }
-        return .error("Creator Studio did not expose a created Project after the exact chooser action")
+        // The exact Choose press already crossed the write boundary. Creator
+        // Studio may publish the generated Project bundle before its standard
+        // arrange window stabilizes in AX. Report an honest State B and let the
+        // qualification orchestrator perform its independent, run-owned
+        // Project-resource readback; never misclassify this as a pre-write C or
+        // trigger another project.new attempt.
+        return .success(projectNewPendingReadbackEnvelope(
+            mandatoryTrackCreated: createdTrack,
+            observedWindowTitles: observedWindowTitles(runtime: runtime),
+            observationBudgetMs: attempts * Int(observationDelayNanoseconds / 1_000_000)
+        ))
     }
 
     // MARK: - Save As via AX Dialog

@@ -51,6 +51,129 @@ func creatorStudioDirectEmptyProjectWindowGate() {
     #expect(!AccessibilityChannel.isCreatedProjectWindowTitle(nil))
 }
 
+@Test("Creator Studio created Project witness requires one exact standard window")
+func creatorStudioCreatedProjectWindowStructureGate() {
+    #expect(AccessibilityChannel.createdProjectWindowSelectionIsUnambiguous(
+        windowTitle: "Untitled - Tracks",
+        windowRole: kAXWindowRole as String,
+        windowSubrole: kAXStandardWindowSubrole as String
+    ))
+    #expect(!AccessibilityChannel.createdProjectWindowSelectionIsUnambiguous(
+        windowTitle: "Untitled - Tracks",
+        windowRole: kAXWindowRole as String,
+        windowSubrole: kAXDialogSubrole as String
+    ))
+    #expect(!AccessibilityChannel.createdProjectWindowSelectionIsUnambiguous(
+        windowTitle: "Choose a Project",
+        windowRole: kAXWindowRole as String,
+        windowSubrole: kAXStandardWindowSubrole as String
+    ))
+}
+
+@Test("Creator Studio delayed Project witness stays State B and never authorizes retry")
+func creatorStudioDelayedProjectWindowIsHonestStateB() {
+    let body = decodeAccessibilityJSON(
+        AccessibilityChannel.projectNewPendingReadbackEnvelope(
+            mandatoryTrackCreated: false,
+            observedWindowTitles: ["Untitled"],
+            observationBudgetMs: 20_000
+        )
+    )
+    #expect(body["state"] as? String == "B")
+    #expect(body["verified"] as? Bool == false)
+    #expect(body["write_attempted"] as? Bool == true)
+    #expect(body["safe_to_retry"] as? Bool == false)
+    #expect(body["phase"] as? String == "created_project_window_pending")
+    #expect(body["observation_budget_ms"] as? Int == 20_000)
+}
+
+@Test("Creator Studio chooser transition observes one exact created Project window")
+func creatorStudioChooserToCreatedProjectTransition() async {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(40)
+    let chooser = builder.element(41)
+    let emptyProject = builder.element(42)
+    let choose = builder.element(43)
+    let arrange = builder.element(44)
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [chooser])
+    builder.setAttribute(chooser, kAXTitleAttribute as String, "Choose a Project")
+    builder.setChildren(chooser, [emptyProject, choose])
+    builder.setAttribute(emptyProject, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    builder.setAttribute(emptyProject, kAXValueAttribute as String, "Empty Project")
+    builder.setAttribute(choose, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(choose, kAXTitleAttribute as String, "Choose")
+    builder.setAttribute(choose, kAXEnabledAttribute as String, true)
+    builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(arrange, kAXSubroleAttribute as String, kAXStandardWindowSubrole as String)
+    builder.setAttribute(arrange, kAXTitleAttribute as String, "Untitled - Tracks")
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            if builder.elementID(element) == builder.elementID(choose),
+               action == (kAXPressAction as String) {
+                builder.setAttribute(app, kAXWindowsAttribute as String, [arrange])
+            }
+            return true
+        }
+    )
+    let result = await AccessibilityChannel.createEmptyProjectFromChooser(
+        runtime: runtime,
+        observationAttempts: 1,
+        observationDelayNanoseconds: 0
+    )
+    let body = decodeAccessibilityJSON(result.message)
+
+    #expect(result.isSuccess)
+    #expect(body["state"] as? String == "B")
+    #expect(body["phase"] as? String == "created_project_window_observed")
+    #expect(body["window_title"] as? String == "Untitled - Tracks")
+    #expect(body["safe_to_retry"] as? Bool == false)
+}
+
+@Test("Creator Studio chooser transition with delayed AX publication stays pending State B")
+func creatorStudioChooserToDelayedProjectTransition() async {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(50)
+    let chooser = builder.element(51)
+    let emptyProject = builder.element(52)
+    let choose = builder.element(53)
+
+    builder.setAttribute(app, kAXWindowsAttribute as String, [chooser])
+    builder.setAttribute(chooser, kAXTitleAttribute as String, "Choose a Project")
+    builder.setChildren(chooser, [emptyProject, choose])
+    builder.setAttribute(emptyProject, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    builder.setAttribute(emptyProject, kAXValueAttribute as String, "Empty Project")
+    builder.setAttribute(choose, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(choose, kAXTitleAttribute as String, "Choose")
+    builder.setAttribute(choose, kAXEnabledAttribute as String, true)
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            if builder.elementID(element) == builder.elementID(choose),
+               action == (kAXPressAction as String) {
+                builder.setAttribute(app, kAXWindowsAttribute as String, [AXUIElement]())
+            }
+            return true
+        }
+    )
+    let result = await AccessibilityChannel.createEmptyProjectFromChooser(
+        runtime: runtime,
+        observationAttempts: 1,
+        observationDelayNanoseconds: 0
+    )
+    let body = decodeAccessibilityJSON(result.message)
+
+    #expect(result.isSuccess)
+    #expect(body["state"] as? String == "B")
+    #expect(body["phase"] as? String == "created_project_window_pending")
+    #expect(body["safe_to_retry"] as? Bool == false)
+}
+
 @Test("Creator Studio Save As requires the exact top-level dialog structure")
 func creatorStudioSaveAsDialogGate() {
     #expect(AccessibilityChannel.saveAsDialogSelectionIsUnambiguous(
