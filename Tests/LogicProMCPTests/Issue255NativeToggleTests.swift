@@ -101,8 +101,10 @@ private func issue255Channel(
     #expect(result.isSuccess)
     let object = try #require(issue255Object(result.message))
     #expect(object["state"] as? String == "A")
-    #expect(object["verified"] as? Bool == true)
-    #expect(object["observed"] as? Bool == true)
+    let verified = try #require(object["verified"] as? Bool)
+    let observed = try #require(object["observed"] as? Bool)
+    #expect(verified)
+    #expect(observed)
     #expect(object["button"] as? String == "Play")
 }
 

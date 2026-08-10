@@ -412,7 +412,8 @@ func testHealthResponseIncludesExactProjectChooserObservation() async {
         projectChooserVisible: { true }
     )
     let json = try! sharedParseJSON(toolText(result)) as! [String: Any]
-    #expect(json["logic_pro_project_chooser_visible"] as? Bool == true)
+    let chooserVisible = try #require(json["logic_pro_project_chooser_visible"] as? Bool)
+    #expect(chooserVisible)
 }
 
 @Test(codexSeatbeltProcessInspectionDisabled)

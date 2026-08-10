@@ -71,7 +71,7 @@ func creatorStudioCreatedProjectWindowStructureGate() {
 }
 
 @Test("Creator Studio delayed Project witness stays State B and never authorizes retry")
-func creatorStudioDelayedProjectWindowIsHonestStateB() {
+func creatorStudioDelayedProjectWindowIsHonestStateB() throws {
     let body = decodeAccessibilityJSON(
         AccessibilityChannel.projectNewPendingReadbackEnvelope(
             mandatoryTrackCreated: false,
@@ -80,15 +80,18 @@ func creatorStudioDelayedProjectWindowIsHonestStateB() {
         )
     )
     #expect(body["state"] as? String == "B")
-    #expect(body["verified"] as? Bool == false)
-    #expect(body["write_attempted"] as? Bool == true)
-    #expect(body["safe_to_retry"] as? Bool == false)
+    let verified = try #require(body["verified"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
+    #expect(!verified)
+    #expect(writeAttempted)
+    #expect(!safeToRetry)
     #expect(body["phase"] as? String == "created_project_window_pending")
     #expect(body["observation_budget_ms"] as? Int == 20_000)
 }
 
 @Test("Creator Studio chooser transition observes one exact created Project window")
-func creatorStudioChooserToCreatedProjectTransition() async {
+func creatorStudioChooserToCreatedProjectTransition() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(40)
     let chooser = builder.element(41)
@@ -130,11 +133,12 @@ func creatorStudioChooserToCreatedProjectTransition() async {
     #expect(body["state"] as? String == "B")
     #expect(body["phase"] as? String == "created_project_window_observed")
     #expect(body["window_title"] as? String == "Untitled - Tracks")
-    #expect(body["safe_to_retry"] as? Bool == false)
+    let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
+    #expect(!safeToRetry)
 }
 
 @Test("Creator Studio chooser transition with delayed AX publication stays pending State B")
-func creatorStudioChooserToDelayedProjectTransition() async {
+func creatorStudioChooserToDelayedProjectTransition() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(50)
     let chooser = builder.element(51)
@@ -171,7 +175,8 @@ func creatorStudioChooserToDelayedProjectTransition() async {
     #expect(result.isSuccess)
     #expect(body["state"] as? String == "B")
     #expect(body["phase"] as? String == "created_project_window_pending")
-    #expect(body["safe_to_retry"] as? Bool == false)
+    let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
+    #expect(!safeToRetry)
 }
 
 @Test("Creator Studio Save As requires the exact top-level dialog structure")
