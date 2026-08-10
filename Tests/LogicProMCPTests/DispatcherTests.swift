@@ -3206,6 +3206,9 @@ private actor SelectiveFailChannel: Channel {
         ("nav.open_marker_list", [:]),
         ("nav.get_markers", [:]),
         ("nav.create_marker", ["name": "Bridge"]),
+        // nav.delete_marker moved to the AX rung: the keycmd path only works after a manual MIDI
+        // Learn, so on a default install it deleted nothing while reporting a readback problem.
+        ("nav.delete_marker", ["index": "1"]),
         ("nav.rename_marker", ["index": "2", "name": "Big Chorus"]),
         // #109 — set_zoom is now AX-first (writable Horizontal-Zoom slider);
         // zoom_to_fit stays on the key-command path (no slider equivalent).
@@ -3217,7 +3220,6 @@ private actor SelectiveFailChannel: Channel {
         // v3.1.10 — `nav.goto_marker` keycmd path is reserved for the
         // cold-cache fallback (cache empty, index supplied). Cached path
         // routes to AX `transport.goto_position` (see axOps above).
-        ("nav.delete_marker", ["index": "1"]),
         ("nav.zoom_to_fit", [:]),
     ])
 }
