@@ -483,10 +483,15 @@ extension ResourceHandlers {
             info.trackCount = count
             fileContributed = true
         }
-        // AX does not expose a trustworthy absolute project path.  The
-        // validated current-document bundle path is independent of the AX
-        // cache and therefore always supplies filePath when readable.
-        if let bp = metadata?.bundlePath {
+        // AX does not expose a trustworthy absolute project path, so the validated
+        // current-document bundle path fills `filePath` independently of AX cache
+        // freshness — that is the point of #489, since a fresh cache used to leave the
+        // caller with no path at all.
+        //
+        // It FILLS, it does not override. A cache record that already carries a path is
+        // the more specific answer, and overriding it would replace a caller-visible
+        // value with a different one on every read.
+        if (info.filePath ?? "").isEmpty, let bp = metadata?.bundlePath {
             info.filePath = bp.path
         }
         // The remaining file fields only replace struct defaults when the
