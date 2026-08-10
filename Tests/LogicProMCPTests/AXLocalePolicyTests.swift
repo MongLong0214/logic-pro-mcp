@@ -552,6 +552,7 @@ struct AXLocalePolicyTests {
     func controlBarAndSliderLabels() {
         #expect(AXLocalePolicy.controlBarGroupLabel.matches("control bar", mode: .exactStrict))
         #expect(AXLocalePolicy.controlBarGroupLabel.matches("컨트롤 막대", mode: .exactStrict))
+        #expect(AXLocalePolicy.controlBarGroupLabel.matches("コントロールバー", mode: .exactStrict))
         #expect(!AXLocalePolicy.controlBarGroupLabel.matches("transport", mode: .exactStrict))
 
         #expect(AXLocalePolicy.barSliderLabel.matches("bar", mode: .exactStrict))
@@ -560,6 +561,29 @@ struct AXLocalePolicyTests {
         #expect(AXLocalePolicy.beatSliderLabel.matches("beat", mode: .exactStrict))
         #expect(AXLocalePolicy.beatSliderLabel.matches("비트", mode: .exactStrict))
         #expect(!AXLocalePolicy.beatSliderLabel.matches("bar", mode: .exactStrict))
+    }
+
+    /// The metronome is the one Japanese transport label that is a compound word.
+    /// Measured on a Japanese Logic build: the control bar checkbox reads
+    /// `メトロノームクリック`, and `.exactStrict` matches nothing shorter — so a set carrying
+    /// only the halves cannot find it. This asserts the whole string, not the halves.
+    @Test("the Japanese metronome control is one compound label")
+    func japaneseMetronomeIsACompoundLabel() {
+        #expect(AXLocalePolicy.transportMetronomeControl.matches("メトロノームクリック", mode: .exactStrict))
+        // The halves remain valid on surfaces that use them.
+        #expect(AXLocalePolicy.transportMetronomeControl.matches("クリック", mode: .exactStrict))
+        #expect(AXLocalePolicy.transportMetronomeControl.matches("メトロノーム", mode: .exactStrict))
+        // Exactness is deliberate: a longer unrelated string must not match.
+        #expect(!AXLocalePolicy.transportMetronomeControl.matches("メトロノームクリックを表示", mode: .exactStrict))
+    }
+
+    @Test("transport controls include actual Japanese Logic labels")
+    func japaneseTransportLabels() {
+        #expect(AXLocalePolicy.transportPlayControl.matches("再生"))
+        #expect(AXLocalePolicy.transportRecordControl.matches("録音"))
+        #expect(AXLocalePolicy.transportCycleControl.matches("サイクル"))
+        #expect(AXLocalePolicy.transportMetronomeControl.matches("メトロノーム"))
+        #expect(AXLocalePolicy.transportMetronomeControl.matches("クリック"))
     }
 
     /// Track-header Mute/Solo/Record button labels (read-only state extraction)

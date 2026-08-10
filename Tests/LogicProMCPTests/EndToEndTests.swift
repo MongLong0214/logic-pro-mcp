@@ -636,7 +636,7 @@ typealias ServerStartRecorder = SharedServerStartRecorder
     #expect(text.contains("logic_system"))
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testE2ESystemHealthReturnsValidJSON() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_system", command: "health")
@@ -657,7 +657,7 @@ func testE2ESystemHealthReturnsValidJSON() async {
     #expect(process?["uptime_sec"] != nil)
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testE2ESystemHealthChannelsArrayIsComplete() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_system", command: "health")
@@ -675,7 +675,7 @@ func testE2ESystemHealthChannelsArrayIsComplete() async {
     }
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testE2ESystemPermissionsDispatches() async {
     let h = await makeE2EHandlers()
     let r = await e2eCall(h, tool: "logic_system", command: "permissions")
@@ -917,7 +917,7 @@ func testE2ESystemPermissionsDispatches() async {
 
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testE2EResourceHealthMatchesToolHealth() async throws {
     let h = await makeE2EHandlers()
     let resourceResult = try await h.readResource(.init(uri: "logic://system/health"))
@@ -1076,7 +1076,7 @@ func testE2EResourceHealthMatchesToolHealth() async throws {
     }
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testE2EConcurrentMixedToolsAndResourcesAreSafe() async throws {
     let h = await makeE2EHandlers()
     var toolResults: [String] = []

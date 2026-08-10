@@ -203,7 +203,7 @@ struct VersionedCacheEnvelopeTests {
             #expect(FeatureFlags.adr006VersionedCache)
 
             let router = ChannelRouter()
-            await router.register(MockChannel(id: .appleScript))
+            await router.register(MockChannel(id: .accessibility))
             let cache = StateCache()
             let registry = TargetRegistry()
             let epochBefore = await registry.currentProjectEpoch

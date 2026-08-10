@@ -25,13 +25,14 @@ struct Issue60LocalePhase3Tests {
         #expect(labels.contains("컨트롤 막대"))
     }
 
-    @Test("transport control keywords preserve the full EN + KO token set")
+    @Test("transport control keywords preserve the full EN + KO + JA token set")
     func transportControlKeywords() {
         let labels = Set(AXLocalePolicy.transportContainerControlKeywords.labels)
         // The exact set the inline literal carried (order-independent).
         let expected: Set<String> = [
             "play", "stop", "record", "cycle", "loop", "metronome", "rewind", "forward",
             "재생", "녹음", "사이클", "메트로놈", "클릭",
+            "再生", "録音", "サイクル", "メトロノーム", "クリック",
         ]
         #expect(labels == expected, "token set drifted: \(labels.symmetricDifference(expected))")
     }

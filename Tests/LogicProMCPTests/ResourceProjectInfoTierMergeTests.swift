@@ -82,7 +82,10 @@ func cacheLive_filePresent_cachePreferred_sourceAxLive() async throws {
     }
     #expect(data["tempo"] as? Double == 95, "cache wins; got \(String(describing: data["tempo"]))")
     #expect(data["timeSignature"] as? String == "3/4")
+    #expect(data["filePath"] as? String == bundle.path)
     #expect(envelope["source"] as? String == "ax_live")
+    #expect(envelope["identity_source"] as? String == "current_document_project_file")
+    #expect(envelope["identity_fetched_at"] as? String != nil)
 }
 
 @Test
@@ -197,6 +200,8 @@ func cacheStale_fileMetadata_useFile_sourceProjectFile() async throws {
     #expect(data["trackCount"] as? Int == 31)
     #expect(envelope["source"] as? String == "project_file")
     #expect(envelope["last_saved_age_sec"] != nil)
+    #expect(envelope["fetched_at"] as? String != nil)
+    #expect(data["filePath"] as? String == bundle.path)
 }
 
 @Test

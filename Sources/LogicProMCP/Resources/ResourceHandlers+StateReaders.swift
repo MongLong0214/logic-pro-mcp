@@ -433,6 +433,10 @@ extension ResourceHandlers {
         //   4. Fill any remaining defaults from file metadata.
         //   5. `source` is "ax_live"/"cache" if any non-default field came
         //      from cache; otherwise "project_file"; otherwise "default".
+        // The project identity read is intentionally performed for every
+        // resource request.  A live AX cache entry must never mask the exact
+        // on-disk document path: clients use this path as their write boundary.
+        let identityFetchedAt = Date()
         let metadata = await LogicProjectFileReader.read(runtime: fileReader)
 
         var info = cacheFresh ? cached : ProjectInfo()
@@ -479,9 +483,20 @@ extension ResourceHandlers {
             info.trackCount = count
             fileContributed = true
         }
-        // filePath / name from cache wins; if cache empty, file supplies
-        if !cacheFresh, let bp = metadata?.bundlePath {
+        // AX does not expose a trustworthy absolute project path, so the validated
+        // current-document bundle path fills `filePath` independently of AX cache
+        // freshness — that is the point of #489, since a fresh cache used to leave the
+        // caller with no path at all.
+        //
+        // It FILLS, it does not override. A cache record that already carries a path is
+        // the more specific answer, and overriding it would replace a caller-visible
+        // value with a different one on every read.
+        if (info.filePath ?? "").isEmpty, let bp = metadata?.bundlePath {
             info.filePath = bp.path
+        }
+        // The remaining file fields only replace struct defaults when the
+        // project cache has not produced a live record.
+        if !cacheFresh, metadata != nil {
             info.lastUpdated = metadata?.metadataMTime ?? .distantPast
         }
 
@@ -510,6 +525,10 @@ extension ResourceHandlers {
         info.lastSavedAgeSec = lastSavedAgeSec
 
         var extras: [String: Any] = ["source": source]
+        if metadata != nil {
+            extras["identity_source"] = "current_document_project_file"
+            extras["identity_fetched_at"] = ISO8601DateFormatter.cacheFormatter.string(from: identityFetchedAt)
+        }
         if let age = lastSavedAgeSec { extras["last_saved_age_sec"] = age }
 
         var body = encodeJSON(info)
@@ -548,7 +567,9 @@ extension ResourceHandlers {
         let cacheReferenceDate = cacheContributionDates.max() ?? cachedProjectReferenceDate
         let envelope = wrapWithCacheEnvelope(
             bodyJSON: body,
-            fetchedAt: (source == "ax_live" || source == "cache") ? cacheReferenceDate : nil,
+            fetchedAt: (source == "ax_live" || source == "cache")
+                ? cacheReferenceDate
+                : (source == "project_file" ? identityFetchedAt : nil),
             axOccluded: snapshot.axOccluded,
             extras: extras
         )

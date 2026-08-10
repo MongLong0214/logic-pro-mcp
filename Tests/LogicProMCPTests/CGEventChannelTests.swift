@@ -210,7 +210,7 @@ private func makeCGEventRuntime(
     try await running.start()
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testCGEventProductionRuntimeSmokeExecutesWithoutCrash() {
     let runtime = CGEventChannel.Runtime.production
 
@@ -238,9 +238,7 @@ func testCGEventProductionRuntimeSmokeExecutesWithoutCrash() {
     #expect(events[0].flags == .maskCommand)
 }
 
-@Test func testProjectNewRoutingPrefersAppleScriptWithCGEventFallback() {
+@Test func testProjectNewRoutingHasOnlyExactQualifiedAX() {
     let routes = ChannelRouter.v2RoutingTable["project.new"]
-    #expect(routes != nil)
-    #expect(routes?.first == .appleScript)
-    #expect((routes?.contains(.cgEvent))!)
+    #expect(routes == [.accessibility])
 }

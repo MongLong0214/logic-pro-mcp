@@ -27,7 +27,7 @@ private let logicProInstalled: Bool = FileManager.default.fileExists(
     atPath: "/Applications/Logic Pro.app"
 )
 
-@Test(codexSeatbeltProcessInspectionDisabled, .enabled(if: logicProInstalled))
+@Test(processInspectionUnavailableInSandbox, .enabled(if: logicProInstalled))
 func testProcessUtilsBundleURLResolvesWithoutAppKitRunloop() async {
 
     // Run the lookup on a detached cooperative-pool task — no main
@@ -43,7 +43,7 @@ func testProcessUtilsBundleURLResolvesWithoutAppKitRunloop() async {
     #expect(url?.lastPathComponent == "Logic Pro.app")
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled, .enabled(if: logicProInstalled))
+@Test(processInspectionUnavailableInSandbox, .enabled(if: logicProInstalled))
 func testProcessUtilsLogicProVersionResolvesOffMain() async {
     let version: String? = await Task.detached(priority: .userInitiated) {
         ProcessUtils.logicProVersion(runtime: .production)
@@ -57,7 +57,7 @@ func testProcessUtilsLogicProVersionResolvesOffMain() async {
     }
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testProcessUtilsIsLogicProRunningWorksOffMain() async {
     // Even without Logic running, the *call* must return a valid Bool
     // (not deadlock, not crash) when invoked off-main with no AppKit

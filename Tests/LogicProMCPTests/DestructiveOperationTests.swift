@@ -97,6 +97,13 @@ private final class AppleScriptOpenHarness: @unchecked Sendable {
     #expect(AppleScriptSafety.projectURL(from: missingPath, requireExisting: true) == nil)
 }
 
+@Test func testOpenArgumentsBindCreatorStudioByBundleID() {
+    let url = URL(fileURLWithPath: "/private/tmp/qualification.logicx")
+    #expect(AppleScriptSafety.openArguments(for: url, bundleID: "com.apple.mobilelogic") == [
+        "-b", "com.apple.mobilelogic", "/private/tmp/qualification.logicx",
+    ])
+}
+
 @Test func testAppleScriptOpenFileRejectsMissingAndNonProjectTargets() throws {
     let temporaryDirectory = FileManager.default.temporaryDirectory
 

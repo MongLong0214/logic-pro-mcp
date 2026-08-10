@@ -118,7 +118,7 @@ private let serverResourceText = sharedResourceText
     #expect(serverToolText(unknown).contains("Unknown tool"))
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testLogicProServerHandlersReadResourcesWithoutRegisteredTransport() async throws {
     let server = LogicProServer()
     let handlers = await server.makeHandlers()

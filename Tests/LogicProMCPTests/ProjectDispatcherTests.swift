@@ -42,8 +42,8 @@ private func seedCacheWithStaleProject(_ cache: StateCache) async {
 
 @Test func testProjectNewClearsCacheOnSuccess() async {
     let router = ChannelRouter()
-    let appleScript = projectMockChannel(.appleScript)
-    await router.register(appleScript)
+    let accessibility = projectMockChannel(.accessibility)
+    await router.register(accessibility)
 
     let cache = StateCache()
     await seedCacheWithStaleProject(cache)
@@ -94,15 +94,15 @@ private func seedCacheWithStaleProject(_ cache: StateCache) async {
 }
 
 @Test func testProjectNewLeavesCacheUntouchedOnFailure() async {
-    // Failure path: if AppleScript channel reports an error, the cache must
-    // be left as-is. Otherwise a transient AppleScript hiccup would wipe
+    // Failure path: if the exact Accessibility route reports an error, the
+    // cache must be left as-is. Otherwise a transient AX failure would wipe
     // the user's actual project state from the cache.
     actor AlwaysFailChannel: Channel {
-        nonisolated let id: ChannelID = .appleScript
+        nonisolated let id: ChannelID = .accessibility
         func start() async throws {}
         func stop() async {}
         func execute(operation: String, params: [String: String]) async -> ChannelResult {
-            .error("AppleScript channel failed (mock)")
+            .error("Accessibility channel failed (mock)")
         }
         func healthCheck() async -> ChannelHealth { .healthy(detail: "mock") }
     }
