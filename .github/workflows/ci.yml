@@ -34,9 +34,9 @@ jobs:
           path: |
             .build
             ~/Library/Caches/org.swift.swiftpm
-          key: spm-macos15-xcode164-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          key: spm-macos15-xcode164-release-${{ hashFiles('Package.resolved', 'Package.swift') }}
           restore-keys: |
-            spm-macos15-xcode164-
+            spm-macos15-xcode164-release-
 
       - name: Select Xcode
         # Xcode 16.4 ships Swift 6.2 — required by swift-sdk 0.11.0+ which
@@ -49,6 +49,34 @@ jobs:
 
       - name: Verify Package.resolved is unchanged
         run: git diff --exit-code Package.resolved
+
+
+  test:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Forbid dead boolean #expect (#393 test-integrity)
+        # `#expect(<Bool> == true/false)` and kin pass unconditionally on this toolchain — they
+        # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
+        run: bash Scripts/ci-forbid-dead-expect.sh
+
+      - name: Cache SwiftPM and build products
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+          key: spm-macos15-xcode164-debug-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: |
+            spm-macos15-xcode164-debug-
+
+      - name: Select Xcode
+        # Xcode 16.4 ships Swift 6.2 — required by swift-sdk 0.11.0+ which
+        # adopts the short-form `withThrowingTaskGroup { ... }` syntax. The
+        # previous 16.2 pin (Swift 6.0) cannot compile that form.
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app
 
       - name: Coverage report
         # H-4 (2026-05-08 enterprise review) closed in v3.4.0: re-armed
