@@ -27,7 +27,7 @@ enum VerifiedPluginCatalog {
 
     /// Display-name / alias → canonical `logic.stock.*` id table.
     ///
-    /// MVP scope (R5): the four allowlisted stock plugins. Compressor `threshold`
+    /// MVP scope (R5): the three allowlisted stock plugins. Compressor `threshold`
     /// is the first verified parameter-write target (audit #28); the others
     /// (including Gain) are identity/insert only. Display
     /// names are accepted as user-facing aliases but never become the identity
