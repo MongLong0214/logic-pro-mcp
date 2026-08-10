@@ -399,7 +399,7 @@ func testHealthResponseProcessFields() async {
 }
 
 @Test(codexSeatbeltProcessInspectionDisabled)
-func testHealthResponseIncludesExactProjectChooserObservation() async {
+func testHealthResponseIncludesExactProjectChooserObservation() async throws {
     let cache = StateCache()
     let router = ChannelRouter()
 
