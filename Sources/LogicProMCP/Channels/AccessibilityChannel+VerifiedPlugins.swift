@@ -1716,6 +1716,38 @@ extension AccessibilityChannel {
                     extras: extras
                 ))
             }
+            // The front document was checked once, before any of this: track select, mixer raise,
+            // inventory, pop-up, discovery, pick and poll all happen after it. Switching project
+            // during that window would put the write — and this readback — in a different document
+            // than the caller named, and every check above would still agree with itself. Re-read it
+            // before certifying, so State A is never granted to a document we cannot still name.
+            if let expectedPath = params["project_expected_path"],
+               !expectedPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let stillObserved = await frontDocumentPath()
+                guard let stillObserved,
+                      AppleScriptChannel.projectPathsMatch(expectedPath, stillObserved) else {
+                    var driftIdentity = identity
+                    driftIdentity["project_path_expected"] = expectedPath
+                    driftIdentity["project_path_observed"] = stillObserved ?? NSNull()
+                    return .error(HonestContract.encodeV2StateC(
+                        error: .projectIdentityMismatch,
+                        extras: [
+                            "operation": operation,
+                            "target_identity": driftIdentity,
+                            "observed_plugin_id": observedID,
+                            "observed_plugin_name": observedName ?? NSNull(),
+                            "observed_slot": observedSlot,
+                            "select_trace": trace,
+                            "what_was_attempted": "confirm the front document is still the expected one before certifying the insert",
+                            "what_was_observed": stillObserved == nil
+                                ? "no front document path could be read after the write"
+                                : "the front document changed while the insert was in progress",
+                            "safe_to_retry": false,
+                            "write_attempted": true,
+                        ]
+                    ))
+                }
+            }
             return .success(HonestContract.encodeV2StateA(extras: [
                 "operation": operation,
                 "target_identity": identity,
@@ -2244,6 +2276,9 @@ extension AccessibilityChannel {
         case ok
         case disabled
         case missing
+        /// The Edit menu offered an Undo entry, but it does not describe our plug-in insert. Nothing
+        /// was pressed: undoing it would revert the user's work.
+        case notOurs = "not_ours"
     }
 
     private static func clickEditUndoViaAXMenuClick(
@@ -2266,6 +2301,21 @@ extension AccessibilityChannel {
             ) else {
                 AXMouseHelper.pressEscape()
                 continue
+            }
+            // Only undo OUR insert. The prefix match above finds whatever sits on top of the stack,
+            // and pressing that undoes the user's last action when it is not ours. Measured live:
+            // Logic offers "Undo Insert Plug-in in Channel Strip" for our own write, and entries such
+            // as "Undo selected Channel Strips" for things we must not touch.
+            let offered: String = AXHelpers.getAttribute(
+                item, kAXTitleAttribute, runtime: runtime.ax
+            ) ?? ""
+            guard AXLocalePolicy.undoPluginInsertMenuItem.containsAny(in: offered) else {
+                Log.warn(
+                    "rollback refused: Edit menu offers \(offered.isEmpty ? "an unreadable entry" : "'\(offered)'"), not our plug-in insert",
+                    subsystem: "ax"
+                )
+                AXMouseHelper.pressEscape()
+                return .notOurs
             }
             if let enabled: Bool = AXHelpers.getAttribute(
                 item, kAXEnabledAttribute, runtime: runtime.ax
@@ -2321,7 +2371,12 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime
     ) -> AXLogicProElements.PluginInsertSlot? {
         guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else { return nil }
-        let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax)
+        // Strips are addressed by ordinal, so a child whose role could not be read moves every
+        // later strip down one and turns a request for track N into an act on physical strip N+1.
+        // A downstream readback cannot catch that: it reads the same shifted list. Refuse instead.
+        let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax)
+        guard enumeration.unreadableChildren == 0 else { return nil }
+        let strips = enumeration.strips
         guard track >= 0, track < strips.count else { return nil }
         let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax)
         // #234 — a zero-slot result on this mid-flight re-resolution means the
@@ -2883,7 +2938,12 @@ extension AccessibilityChannel {
         track: Int, runtime: AXLogicProElements.Runtime
     ) -> [Int: InventoryEntry]? {
         guard let mixer = AXLogicProElements.getMixerArea(runtime: runtime) else { return nil }
-        let strips = AXLogicProElements.mixerChannelStrips(in: mixer, runtime: runtime.ax)
+        // Strips are addressed by ordinal, so a child whose role could not be read moves every
+        // later strip down one and turns a request for track N into an act on physical strip N+1.
+        // A downstream readback cannot catch that: it reads the same shifted list. Refuse instead.
+        let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax)
+        guard enumeration.unreadableChildren == 0 else { return nil }
+        let strips = enumeration.strips
         guard track < strips.count else { return nil }
         let slots = AXLogicProElements.audioPluginInsertSlots(in: strips[track], runtime: runtime.ax)
         guard !slots.contains(where: { $0.readStatus == .occupiedUnreadable }) else {
@@ -3052,6 +3112,12 @@ extension AccessibilityChannel {
         if menuResult == .ok || menuResult == .disabled {
             return menuResult.rawValue
         }
+        // A refusal must not fall through to the blind Cmd+Z below: we already read the entry and
+        // it was not ours, so sending the shortcut would undo the user's work anyway and make the
+        // check pointless.
+        if menuResult == .notOurs {
+            return menuResult.rawValue
+        }
         if postCommandZToLogic() {
             return "ok"
         }
@@ -3139,7 +3205,11 @@ extension AccessibilityChannel {
                     in: inv, strayPluginID: strayPluginID, straySlot: straySlot, strayName: strayName
                 ) == false
             } ?? false
-            if !stillDefinitelyPresent || clickRaw == "disabled" || clickRaw == "missing" {
+            // `not_ours` joins the stop list: the entry on top of the stack is not our insert, and
+            // re-reading the menu cannot change that. Retrying would only keep opening the Edit menu
+            // against the user's stack.
+            if !stillDefinitelyPresent
+                || clickRaw == "disabled" || clickRaw == "missing" || clickRaw == "not_ours" {
                 break
             }
         }

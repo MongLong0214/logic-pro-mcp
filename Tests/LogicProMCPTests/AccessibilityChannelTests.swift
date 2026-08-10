@@ -4002,3 +4002,67 @@ func testLibraryAndPluginScansAreMutuallyExclusive() async {
     let aResult = await scanA.value
     #expect(!aResult.message.contains("already in progress"))
 }
+
+private final class AXPressLog: @unchecked Sendable {
+    private(set) var ids: [Int] = []
+    func add(_ id: Int) { ids.append(id) }
+}
+
+/// #475 — selecting a track must never toggle the user's mix.
+///
+/// The selection ladder's last rung pressed every child of the track header in order and stopped at
+/// the first one that accepted the press. Measured on Logic 12.3 those children are, in order:
+/// "Has Focus" (radio), "Individual Track Zoom" (splitter), a disclosure triangle, then Mute, Solo,
+/// Record Enable and Input Monitoring (checkboxes), two sliders, and the name field — and every
+/// pressable one accepts AXPress. So a header whose radio declined would see the ladder press a zoom
+/// splitter, a stack disclosure, and then Mute, reporting success because the press was accepted.
+@Test func testTrackSelectFallbackNeverPressesMuteOrOtherStateControls() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(6200)
+    let window = builder.element(6201)
+    let trackList = builder.element(6202)
+    let header = builder.element(6203)
+    let focus = builder.element(6204)
+    let splitter = builder.element(6205)
+    let mute = builder.element(6206)
+    let name = builder.element(6207)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [trackList])
+    builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setChildren(trackList, [header])
+    builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    builder.setAttribute(header, kAXTitleAttribute as String, "Track 1")
+
+    // The measured order, with the roles that matter.
+    builder.setAttribute(focus, kAXRoleAttribute as String, kAXRadioButtonRole as String)
+    builder.setAttribute(focus, kAXDescriptionAttribute as String, "Has Focus")
+    builder.setAttribute(splitter, kAXRoleAttribute as String, kAXSplitterRole as String)
+    builder.setAttribute(splitter, kAXDescriptionAttribute as String, "Individual Track Zoom")
+    builder.setAttribute(mute, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+    builder.setAttribute(mute, kAXDescriptionAttribute as String, "Mute")
+    builder.setAttribute(name, kAXRoleAttribute as String, kAXTextFieldRole as String)
+    builder.setAttribute(name, kAXDescriptionAttribute as String, "Sum 1")
+    builder.setChildren(header, [focus, splitter, mute, name])
+
+    let recorder = AXPressLog()
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: { _, _, _ in false },   // Steps 1-2 rejected
+        performActionHandler: { element, action in
+            guard action == (kAXPressAction as String) else { return false }
+            let id = builder.elementID(element)
+            recorder.add(id)
+            // The focus radio declines, which is what used to send the ladder into the checkboxes.
+            return id != builder.elementID(header) && id != builder.elementID(focus)
+        }
+    )
+
+    _ = AXLogicProElements.selectTrackViaAX(at: 0, runtime: runtime)
+
+    #expect(!recorder.ids.contains(builder.elementID(mute)))
+    #expect(!recorder.ids.contains(builder.elementID(splitter)))
+    // and it still reaches a control that could legitimately select
+    #expect(recorder.ids.contains(builder.elementID(name)))
+}

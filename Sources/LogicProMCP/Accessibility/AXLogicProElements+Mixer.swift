@@ -188,11 +188,33 @@ extension AXLogicProElements {
         in mixer: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> [AXUIElement] {
+        stripEnumeration(in: mixer, runtime: runtime).strips
+    }
+
+    /// The strips, plus whether any child's role could not be read.
+    ///
+    /// A child whose role is unreadable is dropped by the filter, and every later strip then moves
+    /// down one. Callers address strips by ORDINAL, so a request for track 0 would act on physical
+    /// strip 1 — a wrong-target write that no downstream readback can catch, because the readback
+    /// reads the same shifted list. The count is returned so a mutating caller can refuse instead of
+    /// addressing a list it cannot trust. A read-only caller may still use the strips.
+    static func stripEnumeration(
+        in mixer: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> (strips: [AXUIElement], unreadableChildren: Int) {
         let children = AXHelpers.getChildren(mixer, runtime: runtime)
-        let layoutItems = children.filter {
-            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXLayoutItemRole as String)
+        var unreadable = 0
+        var layoutItems: [AXUIElement] = []
+        for child in children {
+            guard let role = AXHelpers.getRole(child, runtime: runtime) else {
+                unreadable += 1
+                continue
+            }
+            if role == (kAXLayoutItemRole as String) { layoutItems.append(child) }
         }
-        return layoutItems.isEmpty ? children : layoutItems
+        return layoutItems.isEmpty
+            ? (children, unreadable)
+            : (layoutItems, unreadable)
     }
 
     static func findVolumeFader(

@@ -1536,3 +1536,166 @@ private final class AXPressRecorder: @unchecked Sendable {
     #expect(click != nil)
     #expect(recorder.pressedElementIDs.contains(b.elementID(target)))
 }
+
+/// #475 — an unreadable mixer child renumbers every later strip, so ordinal addressing stops meaning
+/// what the caller asked for.
+///
+/// `mixerChannelStrips` filters to layout items; a child whose role cannot be read is dropped and
+/// each later strip moves down one. Callers address strips by ordinal, so a request for track 0 would
+/// act on physical strip 1. No downstream readback can catch it — the readback reads the same shifted
+/// list — so the write path refuses rather than addressing a list it cannot trust.
+@Test func testPlugin475UnreadableMixerChildIsNotSilentlyRenumbered() async throws {
+    let b = FakeAXRuntimeBuilder()
+    let mixer = b.element(9600)
+    let ghost = b.element(9601)      // role unreadable: dropped by the filter
+    let stripA = b.element(9602)
+    let stripB = b.element(9603)
+    b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
+    b.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
+    // `ghost` deliberately has NO role attribute.
+    b.setAttribute(stripA, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setAttribute(stripB, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setChildren(mixer, [ghost, stripA, stripB])
+
+    let runtime = b.makeAXRuntime(setAttributeHandler: nil, performActionHandler: { _, _ in false })
+    let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime)
+
+    // The filter still yields two strips, but they are NOT at the ordinals the caller means: the
+    // caller's "strip 0" is physically the second child here.
+    #expect(enumeration.strips.count == 2)
+    #expect(enumeration.unreadableChildren == 1)
+}
+
+@Test func testPlugin475FullyReadableMixerReportsNoUnreadableChildren() async throws {
+    let b = FakeAXRuntimeBuilder()
+    let mixer = b.element(9610)
+    let stripA = b.element(9611)
+    let stripB = b.element(9612)
+    b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
+    b.setAttribute(stripA, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setAttribute(stripB, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setChildren(mixer, [stripA, stripB])
+
+    let runtime = b.makeAXRuntime(setAttributeHandler: nil, performActionHandler: { _, _ in false })
+    let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime)
+
+    // The positive twin: a healthy mixer must not be refused, or the guard would block every write.
+    #expect(enumeration.strips.count == 2)
+    #expect(enumeration.unreadableChildren == 0)
+}
+
+private final class AXPressLogBox: @unchecked Sendable {
+    private(set) var count = 0
+    func bump() { count += 1 }
+}
+
+/// #475 — a rollback must undo OUR insert, never whatever is on top of the user's undo stack.
+///
+/// The rollback matched only the localized "Undo" prefix and pressed the entry it found. Measured on
+/// Logic 12.3 the Edit menu offers "Undo Insert Plug-in in Channel Strip" for our own write, and
+/// entries such as "Undo selected Channel Strips" for actions that are not ours. Pressing the latter
+/// reverts the user's work while reporting a successful rollback.
+@Test func testPlugin475RollbackDoesNotUndoSomethingThatIsNotOurInsert() async throws {
+    let clicks = AXPressLogBox()
+    let result = await AccessibilityChannel.verifiedUndoPluginInsert(
+        track: 0,
+        strayPluginID: "logic.stock.effect.gain",
+        straySlot: 0,
+        strayName: "Gain",
+        runtime: emptyLogicRuntimeForRollbackTests(),
+        maxRetries: 4,
+        undoClick: { clicks.bump(); return "not_ours" }
+    )
+
+    // The properties that protect the user's work: the entry was looked at once, nothing was
+    // pressed, and there was no retry — a retry would keep hammering Undo at their stack.
+    //
+    // `succeeded` is not asserted here. This fixture's strip is empty, so the stray reads as already
+    // gone and removal confirms on its own; that says nothing about the refusal.
+    #expect(clicks.count == 1)
+    #expect(!result.attempted)
+    #expect(result.lastClickResult == "not_ours")
+}
+
+/// The positive twin: when the entry IS ours, the rollback proceeds, so the refusal above is a
+/// decision rather than a path that can never roll anything back.
+@Test func testPlugin475RollbackStillProceedsWhenTheEntryIsOurs() async throws {
+    let clicks = AXPressLogBox()
+    let result = await AccessibilityChannel.verifiedUndoPluginInsert(
+        track: 0,
+        strayPluginID: "logic.stock.effect.gain",
+        straySlot: 0,
+        strayName: "Gain",
+        runtime: emptyLogicRuntimeForRollbackTests(),
+        maxRetries: 4,
+        undoClick: { clicks.bump(); return "ok" }
+    )
+
+    #expect(clicks.count >= 1)
+    #expect(result.attempted)
+}
+
+/// A strip whose inventory reads empty is the removal-confirmation the rollback polls for.
+private func emptyLogicRuntimeForRollbackTests() -> AXLogicProElements.Runtime {
+    let b = FakeAXRuntimeBuilder()
+    let app = b.element(9700)
+    let window = b.element(9701)
+    let mixer = b.element(9702)
+    let strip = b.element(9703)
+    b.setAttribute(app, kAXMainWindowAttribute as String, window)
+    b.setChildren(window, [mixer])
+    b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
+    b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
+    b.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    b.setChildren(mixer, [strip])
+    b.setChildren(strip, [])
+    return b.makeLogicRuntime(appElement: app, setAttributeHandler: nil, performActionHandler: { _, _ in false })
+}
+
+/// #475 — State A must not be granted to a document we can no longer name.
+///
+/// The front document is checked once, before the work begins. Track select, mixer raise, inventory,
+/// pop-up, discovery, pick and poll all happen after it. Switching project inside that window puts
+/// both the write and its readback in a different document than the caller named — and every check
+/// in between still agrees with itself, because they all read the new document.
+@Test func testPlugin475ProjectSwitchedMidInsertIsNotCertified() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let reads = AXPressLogBox()
+    // #472 made the slot-open path require the custom action; without this seam the insert bails
+    // before the write and this test would pass for the wrong reason.
+    let result = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests(
+        [slotPopupOpenCustomAction]
+    ) {
+        await AccessibilityChannel.defaultInsertVerified(
+            params: [
+                "track": "0", "insert": "0", "plugin": "Gain",
+                "mode": "duplicate_applyback", "project_expected_path": coordFreeExpectedPath,
+            ],
+            runtime: fixture.runtime,
+            frontDocumentPath: {
+                // The gate's read matches; the post-write re-read finds a different document.
+                reads.bump()
+                return reads.count == 1 ? coordFreeExpectedPath : "/Users/me/Music/Something Else.logicx"
+            }
+        )
+    }
+    let obj = try! JSONSerialization.jsonObject(with: result.message.data(using: .utf8)!) as! [String: Any]
+
+    #expect(try #require(obj["state"] as? String) == "C")
+    #expect(try #require(obj["error"] as? String) == "project_identity_mismatch")
+    // The write did happen — denying that would be the other kind of dishonesty.
+    #expect(try #require(obj["write_attempted"] as? Bool))
+    #expect(reads.count >= 2)
+}
+
+/// The positive twin: an unchanged document still certifies, so the check above is a decision rather
+/// than a path that can never reach State A.
+@Test func testPlugin475UnchangedProjectStillCertifies() async throws {
+    let fixture = makeSlotPopupInsertFixture(mountGainOnLeafPick: true)
+    let obj = await AccessibilityChannel.withSlotPopupOpenActionNamesForTests(
+        [slotPopupOpenCustomAction]
+    ) {
+        await runRealInsert(runtime: fixture.runtime)
+    }
+    #expect(try #require(obj["state"] as? String) == "A")
+}
