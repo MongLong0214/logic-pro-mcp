@@ -32,6 +32,14 @@ func creatorStudioChooserSelectionGate() {
     ))
 }
 
+@Test("Creator Studio Empty Project label accepts exact AXTitle or AXValue only")
+func creatorStudioEmptyProjectLabelGate() {
+    #expect(AccessibilityChannel.isExactEmptyProjectLabel(title: "Empty Project", value: nil))
+    #expect(AccessibilityChannel.isExactEmptyProjectLabel(title: nil, value: "Empty Project"))
+    #expect(!AccessibilityChannel.isExactEmptyProjectLabel(title: nil, value: "Live Loops"))
+    #expect(!AccessibilityChannel.isExactEmptyProjectLabel(title: "Empty Project Copy", value: nil))
+}
+
 private func decodeAccessibilityJSON(_ s: String) -> [String: Any] {
     (try? JSONSerialization.jsonObject(with: Data(s.utf8))) as? [String: Any] ?? [:]
 }

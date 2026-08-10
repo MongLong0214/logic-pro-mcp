@@ -35,7 +35,12 @@ extension AccessibilityChannel {
         let matches = candidates.filter { window in
             let emptyProjectLabels = AXHelpers.findAllDescendants(
                 of: window, role: kAXStaticTextRole as String, maxDepth: 12, runtime: runtime.ax
-            ).filter { AXHelpers.getTitle($0, runtime: runtime.ax) == "Empty Project" }
+            ).filter {
+                let value = AXHelpers.getValue($0, runtime: runtime.ax) as? String
+                return isExactEmptyProjectLabel(
+                    title: AXHelpers.getTitle($0, runtime: runtime.ax), value: value
+                )
+            }
             let chooseButtons = AXHelpers.findAllDescendants(
                 of: window, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime.ax
             ).filter { AXHelpers.getTitle($0, runtime: runtime.ax) == "Choose" }
@@ -62,6 +67,10 @@ extension AccessibilityChannel {
             && emptyProjectLabelCount == 1
             && chooseButtonCount == 1
             && chooseEnabled
+    }
+
+    static func isExactEmptyProjectLabel(title: String?, value: String?) -> Bool {
+        title == "Empty Project" || value == "Empty Project"
     }
 
     static func createEmptyProjectFromChooser(
