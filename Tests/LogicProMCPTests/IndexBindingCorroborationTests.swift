@@ -17,7 +17,7 @@ import Testing
 //   - `expected_name` != live name     -> target_identity_mismatch
 //   - live header unreadable           -> target_identity_mismatch (header_unreadable)
 //   - `expected_name` matches but is
-//     NON-UNIQUE across the live surface -> target_name_ambiguous
+//     NON-UNIQUE across the live surface -> ambiguous_target_name
 //   - unique match                     -> the existing index write path, unchanged
 // Every failure is pre-write and fail-closed: `write_attempted:false` AND the
 // probe channels record zero routed operations.
@@ -174,7 +174,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     )
 
     #expect(result.isError!, "a matching name that is not unique proves nothing")
-    #expect(corroborationErrorCode(result) == "target_name_ambiguous")
+    #expect(corroborationErrorCode(result) == "ambiguous_target_name")
     let v1 = try #require(writeAttempted(result))
     #expect(!v1)
 
@@ -492,7 +492,7 @@ private func writeAttempted(_ result: CallTool.Result) -> Bool? {
     )
 
     #expect(result.isError!)
-    #expect(corroborationErrorCode(result) == "target_name_ambiguous")
+    #expect(corroborationErrorCode(result) == "ambiguous_target_name")
     let v1 = try #require(writeAttempted(result))
     #expect(!v1)
     let object = sharedJSONObject(sharedToolText(result))
