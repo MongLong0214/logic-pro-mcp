@@ -177,7 +177,7 @@ enum AXLocalePolicy {
     )
 
     static let goToPositionDialogTitle = LabelSet(
-        canonical: "Go to Position",
+        canonical: "Go To Position",
         variants: ["위치로 이동"],
         rationale: "Used only to dismiss a stale dialog before another verified operation."
     )
