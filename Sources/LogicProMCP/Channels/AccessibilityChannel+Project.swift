@@ -118,6 +118,13 @@ extension AccessibilityChannel {
         title == "Empty Project" || value == "Empty Project"
     }
 
+    static func isCreatedProjectWindowTitle(_ title: String?) -> Bool {
+        guard let title else { return false }
+        let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let arrangeSuffix = " - Tracks"
+        return normalized.hasSuffix(arrangeSuffix) && normalized.count > arrangeSuffix.count
+    }
+
     static func createEmptyProjectFromChooser(
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ChannelResult {
@@ -138,9 +145,14 @@ extension AccessibilityChannel {
             return .error("Failed to press the exact Creator Studio Choose button")
         }
 
-        // Empty Project opens Logic's mandatory New Track sheet. Reuse the
-        // existing structural classifier: it only clicks Create when the sheet
-        // is identified as mandatoryNewTrack; unknown sheets fail closed.
+        // Some Creator Studio builds open a zero-track Project directly, while
+        // others expose Logic's mandatory New Track sheet. Reuse the existing
+        // structural classifier for the sheet path: it only clicks Create when
+        // the sheet is identified as mandatoryNewTrack; unknown sheets fail
+        // closed. In either path, an exact English arrange-window title is the
+        // bounded AX witness that the exact Empty Project selection completed.
+        // The caller still performs independent Project-resource readback
+        // before saving.
         var createdTrack = false
         for _ in 0..<24 {
             try? await Task.sleep(nanoseconds: 250_000_000)
@@ -156,16 +168,15 @@ extension AccessibilityChannel {
             case .none, .informationalAlert, .strayMenu:
                 break
             }
-            if createdTrack,
-               let current = AXLogicProElements.mainWindow(runtime: runtime),
-               AXHelpers.getTitle(current, runtime: runtime.ax) != "Choose a Project" {
+            if let current = AXLogicProElements.mainWindow(runtime: runtime),
+               isCreatedProjectWindowTitle(AXHelpers.getTitle(current, runtime: runtime.ax)) {
                 return .success(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
                     extras: [
                         "operation": "project.new",
                         "method": "accessibility",
                         "selection": "Empty Project",
-                        "mandatory_track_created": true,
+                        "mandatory_track_created": createdTrack,
                     ]
                 ))
             }

@@ -40,6 +40,17 @@ func creatorStudioEmptyProjectLabelGate() {
     #expect(!AccessibilityChannel.isExactEmptyProjectLabel(title: "Empty Project Copy", value: nil))
 }
 
+@Test("Creator Studio accepts a direct zero-track Project window after exact chooser selection")
+func creatorStudioDirectEmptyProjectWindowGate() {
+    #expect(AccessibilityChannel.isCreatedProjectWindowTitle("Untitled - Tracks"))
+    #expect(AccessibilityChannel.isCreatedProjectWindowTitle("Qualification - Tracks"))
+    #expect(!AccessibilityChannel.isCreatedProjectWindowTitle("Choose a Project"))
+    #expect(!AccessibilityChannel.isCreatedProjectWindowTitle("Tracks"))
+    #expect(!AccessibilityChannel.isCreatedProjectWindowTitle("Unexpected Window"))
+    #expect(!AccessibilityChannel.isCreatedProjectWindowTitle("  "))
+    #expect(!AccessibilityChannel.isCreatedProjectWindowTitle(nil))
+}
+
 @Test("Creator Studio blank-app reveal requires an exact zero AX-window count")
 func creatorStudioBlankApplicationGate() {
     #expect(AccessibilityChannel.blankApplicationCanRevealChooser(windowCount: 0))
