@@ -767,9 +767,16 @@ extension AccessibilityChannel {
         ))
     }
 
+    /// #440 D: the same precondition the CGEvent channel applies. Measured on the release artifact,
+    /// driving this from the background lands on the wrong bar — requested 1.1.1.1, observed 3.3.1.1
+    /// and 2.3.1.1 on two runs, against 2/2 exact hits with Logic frontmost — so the playhead moves
+    /// before anything can tell it went wrong. The seams carry production defaults; tests inject.
     static func gotoPositionViaBarSlider(
         params: [String: String],
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        isFrontmost: @Sendable () -> Bool = ProcessUtils.Runtime.production.logicIsFrontmost,
+        activateLogic: @Sendable () -> Bool = ProcessUtils.Runtime.production.activateLogicPro,
+        sleepMicros: @Sendable (UInt32) -> Void = { usleep($0) }
     ) async -> ChannelResult {
         var targetBar: Int? = nil
         if let barStr = params["bar"], let b = Int(barStr) {
@@ -790,10 +797,40 @@ extension AccessibilityChannel {
             ))
         }
 
-        let baseExtras: [String: Any] = ["requested": "\(bar).1.1.1"]
+        var baseExtras: [String: Any] = ["requested": "\(bar).1.1.1"]
+
+        // Refuse before touching anything: a non-ready result means nothing has been actuated, so
+        // the caller can retry without wondering whether the playhead already moved.
+        let preparation = FrontmostGate.prepare(
+            isFrontmost: isFrontmost, activate: activateLogic, sleepMicros: sleepMicros
+        )
+        guard preparation.isReady else {
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "goto_position drives Logic's own UI; from the background it moves the playhead "
+                    + "to the wrong bar, so nothing was touched. Bring Logic Pro to the front and retry.",
+                extras: baseExtras.merging([
+                    "operation": "transport.goto_position",
+                    "method": "ax_bar_slider",
+                    "frontmost_preparation": preparation.rawValue,
+                    "write_attempted": false,
+                    "safe_to_retry": true,
+                ]) { _, new in new }
+            ))
+        }
+        // Record it on the success paths too: a receipt that only mentions the gate when it refuses
+        // cannot show that a successful run had to bring Logic forward first.
+        baseExtras["frontmost_preparation"] = preparation.rawValue
 
         let dialogResult = await gotoPositionViaDialog(bar: bar)
-        if case .success = dialogResult { return dialogResult }
+        if case let .success(payload) = dialogResult {
+            // The dialog rung builds its own envelope, so without this the same operation reports
+            // the frontmost gate on one path and stays silent on the other — a receipt field you
+            // cannot rely on is worse than none.
+            return .success(mergingJSONField(
+                payload, key: "frontmost_preparation", value: preparation.rawValue
+            ))
+        }
 
         guard let slider = AXLogicProElements.findControlBarBarSlider(runtime: runtime) else {
             return .error(HonestContract.encodeStateC(
@@ -839,6 +876,19 @@ extension AccessibilityChannel {
     /// extends project length; however the menu item is disabled when no
     /// regions exist yet, in which case this returns an error and callers
     /// should try the slider fallback.
+    /// Adds one field to an already-encoded JSON envelope, leaving it untouched if it cannot be
+    /// parsed — a receipt is never worth corrupting to annotate.
+    private static func mergingJSONField(_ payload: String, key: String, value: String) -> String {
+        guard let data = payload.data(using: .utf8),
+              var obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return payload }
+        obj[key] = value
+        guard let merged = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]),
+              let text = String(data: merged, encoding: .utf8)
+        else { return payload }
+        return text
+    }
+
     private static func gotoPositionViaDialog(bar: Int) async -> ChannelResult {
         // Poll for the dialog's presence instead of relying on a fixed delay.
         // Without this guard, a slow machine (>500ms to render the dialog) would
