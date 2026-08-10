@@ -1467,6 +1467,15 @@ private func run425Insert(
     #expect(!fixture.actions.touched(elementID: fixture.leafItemID))
 }
 
+/// Records which elements received a `kAXPress` when the default action-
+/// recording is bypassed by an injected `performActionHandler` (contract C).
+/// Invoked sequentially within one test (awaited), so plain mutation is
+/// race-free here; `@unchecked Sendable` documents that.
+private final class AXPressRecorder: @unchecked Sendable {
+    private(set) var pressedElementIDs: [Int] = []
+    func record(_ id: Int) { pressedElementIDs.append(id) }
+}
+
 /// #474 — an entry whose enabled state cannot be read must not be pressed.
 ///
 /// `AXEnabled` is the one signal that distinguishes "will act" from "will do nothing" before the
