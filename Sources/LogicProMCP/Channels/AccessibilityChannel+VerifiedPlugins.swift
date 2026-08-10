@@ -11,7 +11,7 @@ import Foundation
 ///     Unsupported or unverified parameters fail closed at capability preflight.
 ///   - `plugin.insert_verified` — live validation gates (schema/mode/path/
 ///     identity/inventory-complete/slot-empty) followed by the
-///     target slot's own popup menu, driven by CGEvent clicks. The
+///     target slot's own popup menu, driven by AX actions. The
 ///     slot-popup path preserves the target slot context, and
 ///     a post-insert `get_inventory` readback is the SOLE State A precondition —
 ///     State A is reachable only when the requested plugin is observed at the
@@ -1412,10 +1412,11 @@ extension AccessibilityChannel {
     // MARK: - insert_verified (exact slot popup insert → readback-gated State A)
 
     /// Structured result of one live insert attempt. The production driver opens
-    /// the requested slot's own popup and physically clicks the plugin menu item,
-    /// then diffs the pre- vs post-insert inventory to detect WHERE the requested
-    /// plugin actually landed. Only `.mounted` whose `slot` equals the requested
-    /// `insert` becomes State A; a different slot is honest State C
+    /// the requested slot's own popup with its measured custom AX action (or the
+    /// coordinate fallback when that action is absent) and selects the exact
+    /// plugin leaf with `AXPick`, then diffs the pre- vs post-insert inventory to
+    /// detect WHERE the requested plugin actually landed. Only `.mounted` whose
+    /// `slot` equals the requested `insert` becomes State A; a different slot is honest State C
     /// (`insert_landed_at_different_slot`), so a slot is never falsely confirmed.
     enum InsertDriverOutcome: Sendable {
         /// The requested plugin (`pluginID`) was observed newly mounted at the
@@ -1447,13 +1448,17 @@ extension AccessibilityChannel {
         /// attempted. Distinct from the
         /// permanent `.mountMismatch` (every strategy ran but the plugin never
         /// mounted) — these are retry-able (`safe_to_retry:true`), P2-3.
-        case transientSetupFailure(stage: String)
+        /// `actuated` records whether anything was already dispatched at the target when this
+        /// failure was raised. Several setup stages are only reachable after the slot's opener has
+        /// been performed or clicked, and reporting those as "no write attempted" denies an
+        /// actuation that did happen.
+        case transientSetupFailure(stage: String, actuated: Bool = false)
     }
 
     /// The injectable live-insert seam. Performs the live insert sequence and
     /// returns a structured outcome plus a `select_trace` diagnostic dict. Injected
     /// so the gate→outcome→envelope mapping is unit-testable without ever issuing
-    /// real CGEvent/menu actions; the production default (`liveExactSlotPopupInsert`)
+    /// real AX actions (custom opener + AXPick); the production default (`liveExactSlotPopupInsert`)
     /// is the only path that touches the live UI.
     typealias PluginInsertDriver = @Sendable (
         _ track: Int,
@@ -1482,9 +1487,11 @@ extension AccessibilityChannel {
 
     /// Guarded verified insert entry. The write-preceding gates run live and are
     /// honest: schema → mode → project path → identity → inventory `complete:true`
-    /// → slot-empty. Only after every gate passes does the op drive the requested
-    /// slot's own popup menu by physical CGEvent clicks, then a post-insert
-    /// `get_inventory` readback (pre/post diff) is the SOLE State A precondition.
+    /// → slot-empty. Only after every gate passes does the op open the requested
+    /// slot's own popup with its custom AX action (falling back to a coordinate
+    /// click only when that action is absent), select the exact leaf with `AXPick`,
+    /// then use a post-insert `get_inventory` readback (pre/post diff) as the SOLE
+    /// State A precondition.
     ///
     /// State A is reachable ONLY when the readback observes the requested plugin
     /// newly mounted at the requested slot — a false verified insert is
@@ -1829,9 +1836,9 @@ extension AccessibilityChannel {
                 ]
             ))
 
-        case let .transientSetupFailure(stage):
-            // A pre-mount UI-setup step did not complete (menu/search-field/results
-            // not ready). No write attempted → retry-able (P2-3), distinct from the
+        case let .transientSetupFailure(stage, actuated):
+            // A pre-mount UI-setup step did not complete (slot popup, anchor, or
+            // exact leaf not ready). No write attempted → retry-able (P2-3), distinct from the
             // permanent insert_not_ax_automatable.
             return .error(HonestContract.encodeV2StateC(
                 error: .insertSetupFailed,
@@ -1841,9 +1848,11 @@ extension AccessibilityChannel {
                     "setup_stage": stage,
                     "select_trace": trace,
                     "what_was_attempted": "open the requested slot popup and choose \(pluginID)",
-                    "what_was_observed": "the exact slot popup UI was not ready at stage '\(stage)' — no insert was attempted",
+                    "what_was_observed": actuated
+                        ? "the slot's opener was dispatched, then setup stopped at stage '\(stage)' before any plugin was chosen"
+                        : "the exact slot popup UI was not ready at stage '\(stage)' — nothing was dispatched at the slot",
                     "safe_to_retry": true,
-                    "write_attempted": false,
+                    "write_attempted": actuated,
                 ]
             ))
         }
@@ -1851,22 +1860,38 @@ extension AccessibilityChannel {
 
     // MARK: - insert_verified live drivers
 
+    /// Logic's empty insert slot exposes this custom action verbatim, including
+    /// the metadata lines. It opens the legacy-inclusive plug-in popup even
+    /// though the AX call can report `cannotComplete` after opening it.
+    static let slotPopupOpenCustomAction =
+        "Name:Open plug-in menu with legacy plug-ins\nTarget:0x0\nSelector:(null)"
+
+    /// The custom-action enumeration outcome. Only an explicit successful
+    /// enumeration that omits the action may use the coordinate compatibility
+    /// path; an unreadable enumeration must fail closed before any write.
+    enum SlotPopupOpenCustomActionEnumerationResult: Sendable {
+        case enumeratedAndPresent
+        case enumeratedAndAbsent
+        case enumerationFailed
+    }
+
     /// Production exact-slot popup insert driver. Drives the target insert slot's
     /// own popup menu and returns a structured outcome plus a `select_trace`
-    /// diagnostic dict. This is the default path that issues real slot/menu
-    /// CGEvents; `defaultInsertVerified` is unit-tested against an injected fake.
+    /// diagnostic dict. This is the default path that uses coordinate-free AX
+    /// actions; `defaultInsertVerified` is unit-tested against an injected fake.
     ///
     /// Sequence:
     ///   0. hide any stray plugin windows (a front plugin window from a prior
     ///      attempt steals the menu — R14 live: AXPress menu nav opened the track
-    ///      instrument window instead of the search dialog);
+    ///      instrument window instead of the requested slot popup);
     ///   1. select the target track and verify `AXSelected` readback;
     ///   2. raise the mixer/main window and read the full pre-insert inventory;
-    ///   3. locate the requested filtered insert slot and click its center to open
-    ///      that slot's popup;
+    ///   3. locate the requested filtered insert slot and invoke its discovered
+    ///      custom action to open that slot's popup (coordinate fallback only when
+    ///      the action is absent);
     ///   4. prove the popup is anchored to the target slot, then choose the stock
-    ///      plugin by exact leaf title from that anchored popup (direct/search/
-    ///      recursive discovery), not by localized category names or AXPress;
+    ///      plugin by exact leaf title from that anchored popup (direct/recursive
+    ///      discovery), not by localized category names;
     ///   5. CONDITION-poll the inventory (wait for an actual change, not the first
     ///      readable snapshot) and diff against the pre-snapshot to detect WHERE
     ///      the requested plugin landed;
@@ -1919,32 +1944,100 @@ extension AccessibilityChannel {
         guard let targetSlot = liveInsertSlot(track: track, insert: insert, runtime: runtime) else {
             return (.transientSetupFailure(stage: "target_slot_not_found"), trace)
         }
+        // The initial write gate and the just-read snapshot may already be stale.
+        // Re-resolve and require the physical target is still the empty slot the
+        // attempt was authorized to use before any popup-opening actuation.
+        guard preInventory[insert] == nil, targetSlot.isEmpty else {
+            return (.transientSetupFailure(stage: "target_slot_no_longer_empty"), trace)
+        }
         trace["target_slot_found"] = true
 
-        // #425 note: the empty-slot picker is opened by a coordinate click. Coord-free
-        // alternatives were live-probed and rejected: AXPress on the slot element is a
-        // no-op (picker never opens), and AXShowMenu opens the picker into an NSMenu
-        // tracking loop that WEDGES Logic (AX blocks). The slot-open therefore stays a
-        // coordinate click (governed waiver); only the leaf SELECTION is coord-free.
-        guard clickElementCenter(targetSlot.element, runtime: runtime.ax) else {
-            return (.transientSetupFailure(stage: "target_slot_click_failed"), trace)
+        // One element must carry BOTH the authorisation and the actuation. Enumerating the custom
+        // action on one resolution and acting on a later one authorised an element that is not the
+        // element being driven: if the AX tree replaces the still-empty slot in between, the
+        // replacement may expose the action, or have an unreadable action list — the case the
+        // three-state enumeration exists to refuse — and would be actuated anyway.
+        //
+        // So re-resolve as late as possible, prove it is still the empty slot the attempt was
+        // authorised to use, and from here on read and act only through `slot`.
+        guard let slot = liveInsertSlot(track: track, insert: insert, runtime: runtime),
+              slot.isEmpty else {
+            return (.transientSetupFailure(stage: "target_slot_no_longer_empty"), trace)
         }
-        trace["slot_popup_open_clicked"] = true
+        let popupAnchorSlot = slot.element
+        // Anything already open belongs to someone else; only a menu that appears after we actuate
+        // can be evidence that WE opened this slot's pop-up.
+        guard let preexistingMenus = visibleSlotPopupMenus(runtime: runtime) else {
+            return (.transientSetupFailure(stage: "popup_snapshot_unreadable"), trace)
+        }
+        trace["slot_popup_preexisting_menus"] = preexistingMenus.count
+        let authorisation = slotPopupOpenCustomActionEnumerationResult(on: slot.element, runtime: runtime.ax)
+
+        // Enumeration is a read and takes time, so the slot may be occupied by the time we act.
+        // Re-read it — but require the SAME element, not merely an empty one: a replacement element
+        // was never the subject of `authorisation`, and it may expose the custom action or refuse to
+        // enumerate at all. Occupancy and identity are reported separately so the receipt says which
+        // one refused.
+        guard let fresh = liveInsertSlot(track: track, insert: insert, runtime: runtime) else {
+            return (.transientSetupFailure(stage: "target_slot_no_longer_empty"), trace)
+        }
+        guard fresh.isEmpty else {
+            return (.transientSetupFailure(stage: "target_slot_no_longer_empty"), trace)
+        }
+        guard CFEqual(fresh.element, slot.element) else {
+            return (.transientSetupFailure(stage: "target_slot_element_replaced"), trace)
+        }
+
+        switch authorisation {
+        case .enumeratedAndPresent:
+            // Live evidence: this can return `cannotComplete` (-25204) even when it opens the popup.
+            // Dispatch it through the same runtime seam as AXPress, and let the observed popup poll
+            // below make the decision.
+            _ = AXHelpers.performAction(slot.element, slotPopupOpenCustomAction, runtime: runtime.ax)
+            trace["slot_popup_open_fallback_taken"] = false
+            trace["slot_popup_open_action"] = "custom_action"
+            trace["slot_popup_open_action_enumeration"] = "present"
+        case .enumeratedAndAbsent:
+            // Compatibility path for builds that do not expose the measured custom action. Recorded
+            // deliberately: a coordinate fallback is never reported as the coordinate-free path.
+            trace["slot_popup_open_fallback_taken"] = true
+            trace["slot_popup_open_action"] = "coordinate_fallback"
+            trace["slot_popup_open_action_enumeration"] = "absent"
+            switch clickElementCenterOutcome(slot.element, runtime: runtime.ax) {
+            case .posted:
+                break
+            case .noTargetPoint:
+                // Nothing was created or posted, so the envelope must not claim a write.
+                return (.transientSetupFailure(stage: "target_slot_click_failed", actuated: false), trace)
+            case .postFailed:
+                return (.transientSetupFailure(stage: "target_slot_click_failed", actuated: true), trace)
+            }
+        case .enumerationFailed:
+            // An AX read failure does not prove that this build lacks the custom action, so it must
+            // not downgrade to the coordinate write path.
+            trace["slot_popup_open_fallback_taken"] = false
+            trace["slot_popup_open_action"] = "action_enumeration_failed"
+            trace["slot_popup_open_action_enumeration"] = "failed"
+            trace["slot_popup_open_setup_stage"] = "slot_action_enumeration_failed"
+            return (.transientSetupFailure(stage: "slot_action_enumeration_failed"), trace)
+        }
         try? await Task.sleep(for: .milliseconds(250))
 
-        guard let rootMenu = await pollSlotPopupMenu(runtime: runtime, timeoutMs: 1_200) else {
+        guard let rootMenu = await pollSlotPopupMenu(
+            runtime: runtime, timeoutMs: 1_200, excluding: preexistingMenus
+        ) else {
             AXMouseHelper.pressEscape()
-            return (.transientSetupFailure(stage: "slot_popup_menu_not_found"), trace)
+            return (.transientSetupFailure(stage: "slot_popup_menu_not_found", actuated: true), trace)
         }
         trace["slot_popup_menu_found"] = true
 
         let anchorVerified = slotPopupMenuIsAnchored(
-            rootMenu, toSlot: targetSlot.element, runtime: runtime.ax
+            rootMenu, toSlot: popupAnchorSlot, runtime: runtime.ax
         )
         trace["slot_popup_anchor_verified"] = anchorVerified
         guard anchorVerified else {
             AXMouseHelper.pressEscape()
-            return (.transientSetupFailure(stage: "slot_popup_not_anchored_to_target_slot"), trace)
+            return (.transientSetupFailure(stage: "slot_popup_not_anchored_to_target_slot", actuated: true), trace)
         }
 
         guard let pluginClick = await clickPluginInAnchoredSlotPopup(
@@ -1954,18 +2047,15 @@ extension AccessibilityChannel {
             runtime: runtime.ax
         ) else {
             AXMouseHelper.pressEscape()
-            return (.transientSetupFailure(stage: "plugin_exact_leaf_not_found"), trace)
+            return (.transientSetupFailure(stage: "plugin_exact_leaf_not_found", actuated: true), trace)
         }
         trace["strategies_attempted"] = pluginClick.strategies
         trace["winning_strategy"] = pluginClick.strategy
         trace["winning_menu_path"] = pluginClick.path.joined(separator: " > ")
         trace["plugin_selection_id"] = pluginID
-        // #425: record which leaf-selection path ACTUALLY executed so the receipt
-        // self-attests coordinate-free (AXPress) vs the legacy coordinate click.
-        // Sourced from the winning strategy via `leafSelectCoordFree(for:)`, not the
-        // raw flag, so a recursive (coordinate-only) win reports false even when the
-        // flag is on — the discriminator can never be falsely pinned to the flag.
-        trace["leaf_select_coord_free"] = leafSelectCoordFree(for: pluginClick)
+        // Published compatibility receipt: every leaf-selection strategy at this
+        // head is AXPick, so this is constant and not a discriminator.
+        trace["leaf_select_coord_free"] = true
 
         #if DEBUG
         // QA/test-only seam (#425): after a winning leaf select, deterministically
@@ -1978,7 +2068,7 @@ extension AccessibilityChannel {
         // release (`#if DEBUG`).
         if forcePostCommitTimeoutForTestsActive {
             return (
-                .postCommitTimeout(strategy: postCommitTimeoutStrategy(coordFree: pluginClick.coordFree)),
+                .postCommitTimeout(strategy: "slot_popup_axpick_menu_select"),
                 trace
             )
         }
@@ -2025,11 +2115,8 @@ extension AccessibilityChannel {
         }
 
         if poll.satisfied == nil {
-            // #425: report the actuation that ACTUALLY selected the leaf, derived
-            // from the winning strategy — a coord-free (AXPress) win must not
-            // misreport a physical/coordinate menu commit.
             return (
-                .postCommitTimeout(strategy: postCommitTimeoutStrategy(coordFree: pluginClick.coordFree)),
+                .postCommitTimeout(strategy: "slot_popup_axpick_menu_select"),
                 trace
             )
         }
@@ -2037,14 +2124,6 @@ extension AccessibilityChannel {
     }
 
     // MARK: - insert_verified live driver helpers
-
-    /// The honest commit-strategy label for a post-commit timeout, derived from
-    /// the winning actuation (coord-free AXPress vs the legacy coordinate menu
-    /// click). Single source of truth so the live timeout path and the DEBUG
-    /// force-timeout QA seam can never report different strategies.
-    static func postCommitTimeoutStrategy(coordFree: Bool) -> String {
-        coordFree ? "slot_popup_axpress_menu_select" : "slot_popup_physical_menu_click"
-    }
 
     #if DEBUG
     /// QA/test seam (#425): when set, `liveExactSlotPopupInsert` short-circuits to
@@ -2310,18 +2389,118 @@ extension AccessibilityChannel {
         return slots[insert]
     }
 
+    /// Waits for a plug-in pop-up that was NOT already open before the caller actuated.
+    ///
+    /// Geometry alone cannot establish which slot a menu belongs to: insert slots in a strip sit
+    /// ~17px apart, while the anchor test accepts a menu anywhere within ±96px of its own height and
+    /// a ~500px horizontal band. A leftover menu from a neighbouring slot — or from a previous
+    /// attempt — therefore passes that test and would be navigated as though it were ours, mounting
+    /// the plug-in on somebody else's slot. Requiring the menu to have APPEARED after our actuation
+    /// is causal evidence that geometry cannot supply.
     private static func pollSlotPopupMenu(
         runtime: AXLogicProElements.Runtime,
-        timeoutMs: Int
+        timeoutMs: Int,
+        excluding preexisting: [AXUIElement] = []
     ) async -> AXUIElement? {
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
         repeat {
-            if let menu = slotPopupMenu(runtime: runtime) {
+            let fresh = (visibleSlotPopupMenus(runtime: runtime) ?? []).filter { menu in
+                !preexisting.contains { CFEqual($0, menu) }
+            }
+            if let menu = fresh.first {
                 return menu
             }
             try? await Task.sleep(for: .milliseconds(80))
         } while Date() < deadline
         return nil
+    }
+
+    /// Enumerates the custom popup opener on this specific slot. Action discovery
+    /// is separate from action execution because the latter can report failure
+    /// after the popup is already open.
+    private static func slotPopupOpenCustomActionEnumerationResult(
+        on element: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> SlotPopupOpenCustomActionEnumerationResult {
+        #if DEBUG
+        if let result = slotPopupOpenCustomActionEnumerationResultForTests {
+            slotPopupOpenActionEnumerationHookForTests?()
+            return result
+        }
+        #endif
+        _ = runtime // action enumeration has no existing runtime hook.
+        var actionNames: CFArray?
+        guard AXUIElementCopyActionNames(element, &actionNames) == .success,
+              let actionNames,
+              let actions = actionNames as? [String] else {
+            return .enumerationFailed
+        }
+        return actions.contains(slotPopupOpenCustomAction)
+            ? .enumeratedAndPresent
+            : .enumeratedAndAbsent
+    }
+
+    #if DEBUG
+    /// Test-only action-enumeration override. The action itself is still
+    /// dispatched through `AXHelpers.performAction` and the shared fake runtime.
+    @TaskLocal static var slotPopupOpenCustomActionEnumerationResultForTests:
+        SlotPopupOpenCustomActionEnumerationResult?
+
+    /// Test-only hook that runs after a deterministic enumeration result and
+    /// before the selected slot-opening write. It models live UI drift in the
+    /// otherwise unobservable AX action-enumeration interval.
+    @TaskLocal static var slotPopupOpenActionEnumerationHookForTests: (@Sendable () -> Void)?
+
+    static func withSlotPopupOpenCustomActionEnumerationResultForTests<Result>(
+        _ result: SlotPopupOpenCustomActionEnumerationResult,
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        try await $slotPopupOpenCustomActionEnumerationResultForTests.withValue(
+            result, operation: operation
+        )
+    }
+
+    static func withSlotPopupOpenActionEnumerationHookForTests<Result>(
+        _ hook: @escaping @Sendable () -> Void,
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        try await $slotPopupOpenActionEnumerationHookForTests.withValue(hook, operation: operation)
+    }
+
+    /// Retained action-name test seam for present/absent compatibility fixtures.
+    static func withSlotPopupOpenActionNamesForTests<Result>(
+        _ actionNames: [String],
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        let result: SlotPopupOpenCustomActionEnumerationResult = actionNames.contains(slotPopupOpenCustomAction)
+            ? .enumeratedAndPresent
+            : .enumeratedAndAbsent
+        return try await withSlotPopupOpenCustomActionEnumerationResultForTests(
+            result, operation: operation
+        )
+    }
+    #endif
+
+    /// Every currently visible plug-in pop-up, so a caller can tell a menu that was already there
+    /// from one its own actuation opened.
+    /// nil when the tree could not be read. An unreadable snapshot must not be mistaken for "nothing
+    /// was open": that would let a pop-up that existed all along be accepted as newly created.
+    private static func visibleSlotPopupMenus(
+        runtime: AXLogicProElements.Runtime
+    ) -> [AXUIElement]? {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return nil }
+        let menus = AXHelpers.findAllDescendants(
+            of: app, role: kAXMenuRole as String, maxDepth: 9, runtime: runtime.ax
+        )
+        return menus.filter { menu in
+            isVisibleMenu(menu, runtime: runtime.ax)
+                && AXHelpers.findDescendant(
+                    of: menu, role: kAXTextFieldRole as String, maxDepth: 3, runtime: runtime.ax
+                ) != nil
+                && AXHelpers.getChildren(menu, runtime: runtime.ax).contains(where: {
+                    (AXHelpers.getRole($0, runtime: runtime.ax) ?? "") == (kAXMenuItemRole as String)
+                })
+        }
     }
 
     private static func slotPopupMenu(runtime: AXLogicProElements.Runtime) -> AXUIElement? {
@@ -2397,33 +2576,16 @@ extension AccessibilityChannel {
         return popupExactLeafPaths(displayName: displayName, rootMenu: rootMenu, runtime: runtime).first
     }
 
-    /// `internal` (was `private`) so the coord-free discriminator is unit-testable
-    /// without driving the CGEvent-bound live insert flow.
+    /// `internal` (was `private`) so popup-navigation results are unit-testable
+    /// without driving the live insert flow.
     struct SlotPopupPluginClick: Sendable {
         let strategy: String
         let path: [String]
         let strategies: [String]
-        /// The coord-free value the WINNING strategy actually used. Direct/search
-        /// carry `FeatureFlags.insertCoordFree`; the recursive category-hover
-        /// fallback is coordinate-only and always carries `false`. The caller
-        /// records THIS (not the raw flag) as `trace["leaf_select_coord_free"]`, so
-        /// a recursive win truthfully reports `false` even when the flag is on.
-        let coordFree: Bool
     }
 
-    /// The single source of truth for the `leaf_select_coord_free` discriminator:
-    /// the coord-free value the WINNING strategy actually used, read off the result
-    /// — NOT the raw `FeatureFlags.insertCoordFree` flag. A recursive
-    /// (coordinate-only) win carries `false` here even when the flag is on, so the
-    /// receipt can never be falsely pinned to the flag. Extracted (and `internal`)
-    /// so the flag-vs-path divergence is unit-testable without the CGEvent-bound
-    /// live insert flow.
-    static func leafSelectCoordFree(for click: SlotPopupPluginClick) -> Bool {
-        click.coordFree
-    }
-
-    /// `internal` (was `private`) so the coord-free discriminator is unit-testable
-    /// without driving the CGEvent-bound live insert flow.
+    /// `internal` (was `private`) so popup navigation is unit-testable without
+    /// driving the live insert flow.
     static func clickPluginInAnchoredSlotPopup(
         pluginID: String,
         displayName: String,
@@ -2431,33 +2593,14 @@ extension AccessibilityChannel {
         runtime: AXHelpers.Runtime
     ) async -> SlotPopupPluginClick? {
         var strategies: [String] = []
-        // Direct/search honor the #425 flag; the recursive fallback below is
-        // coordinate-only. Captured once so the value passed to the leaf click and
-        // the value recorded on the winning result cannot diverge.
-        let coordFree = FeatureFlags.insertCoordFree
-
         strategies.append("slot_popup_direct_exact_leaf")
         if let item = directExactPopupMenuItem(displayName: displayName, in: rootMenu, runtime: runtime),
            let label = popupMenuItemLabel(item, runtime: runtime),
-           await clickPopupPluginLeaf(item, runtime: runtime, coordFree: coordFree) {
+           await clickPopupPluginLeaf(item, runtime: runtime) {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_direct_exact_leaf",
                 path: [label],
-                strategies: strategies,
-                coordFree: coordFree
-            )
-        }
-
-        strategies.append("slot_popup_search_exact_leaf")
-        if await filterSlotPopupSearchField(displayName: displayName, rootMenu: rootMenu, runtime: runtime),
-           let item = directExactPopupMenuItem(displayName: displayName, in: rootMenu, runtime: runtime),
-           let label = popupMenuItemLabel(item, runtime: runtime),
-           await clickPopupPluginLeaf(item, runtime: runtime, coordFree: coordFree) {
-            return SlotPopupPluginClick(
-                strategy: "slot_popup_search_exact_leaf",
-                path: [label],
-                strategies: strategies,
-                coordFree: coordFree
+                strategies: strategies
             )
         }
 
@@ -2472,40 +2615,12 @@ extension AccessibilityChannel {
             return SlotPopupPluginClick(
                 strategy: "slot_popup_recursive_exact_leaf",
                 path: result,
-                strategies: strategies,
-                coordFree: false
+                strategies: strategies
             )
         }
 
         _ = pluginID // kept in the trace by the caller; selection is by exact display leaf.
         return nil
-    }
-
-    private static func filterSlotPopupSearchField(
-        displayName: String,
-        rootMenu: AXUIElement,
-        runtime: AXHelpers.Runtime
-    ) async -> Bool {
-        guard let field = AXHelpers.findDescendant(
-            of: rootMenu, role: kAXTextFieldRole as String, maxDepth: 4, runtime: runtime
-        ) else {
-            return false
-        }
-        _ = AXHelpers.setAttribute(field, kAXFocusedAttribute as String, true as CFTypeRef, runtime: runtime)
-        _ = AXHelpers.setAttribute(field, kAXValueAttribute as String, "" as CFTypeRef, runtime: runtime)
-        guard AXHelpers.setAttribute(
-            field, kAXValueAttribute as String, displayName as CFTypeRef, runtime: runtime
-        ) else {
-            return false
-        }
-        let deadline = Date().addingTimeInterval(0.9)
-        repeat {
-            if directExactPopupMenuItem(displayName: displayName, in: rootMenu, runtime: runtime) != nil {
-                return true
-            }
-            try? await Task.sleep(for: .milliseconds(90))
-        } while Date() < deadline
-        return false
     }
 
     private static func clickPopupExactLeafRecursively(
@@ -2519,7 +2634,7 @@ extension AccessibilityChannel {
 
         if let direct = directExactPopupMenuItem(displayName: displayName, in: menu, runtime: runtime),
            let label = popupMenuItemLabel(direct, runtime: runtime),
-           await clickPopupPluginLeaf(direct, runtime: runtime, coordFree: false) {
+           await clickPopupPluginLeaf(direct, runtime: runtime) {
             return path + [label]
         }
 
@@ -2528,13 +2643,11 @@ extension AccessibilityChannel {
             guard let label = popupMenuItemLabel(item, runtime: runtime),
                   !popupMenuItemMatches(item, displayName: displayName, runtime: runtime),
                   menuItemEnabled(item, runtime: runtime),
-                  moveElementCenter(item, runtime: runtime) else {
+                  let submenu = axChildMenu(of: item, runtime: runtime) else {
                 continue
             }
-            try? await Task.sleep(for: .milliseconds(140))
-            guard let submenu = visibleSubmenu(of: item, runtime: runtime) else {
-                continue
-            }
+            // Logic already exposes this submenu as an AX child, so discovery can
+            // recurse through the read-only tree without actuating the category.
             if let found = await clickPopupExactLeafRecursively(
                 displayName: displayName,
                 menu: submenu,
@@ -2548,48 +2661,31 @@ extension AccessibilityChannel {
         return nil
     }
 
-    /// Select the matched plugin leaf. `coordFree == true` (the #425 default) uses
-    /// AXPress over the AX-children format submenu (`pressPopupPluginLeaf`, no
-    /// coordinates); `coordFree == false` uses the legacy coordinate path
-    /// (moveElementCenter/clickElementCenter). The mode is a PARAMETER rather than a
-    /// direct `FeatureFlags.insertCoordFree` read so the recursive category-hover
-    /// fallback can force the coordinate path (it always passes `coordFree: false`),
-    /// while direct/search honor the flag. `internal` (was `private`) so the
-    /// coord-free-vs-coordinate contract is unit-testable without the CGEvent-bound
-    /// live insert flow.
+    /// Dispatch AXPick to the matched plugin leaf (or its preferred format leaf).
+    /// AX's return code is deliberately ignored: the caller's post-insert inventory
+    /// diff is the only acceptance signal.
+    /// Dispatches `AXPick` at the plug-in, and reports whether it dispatched anything.
+    ///
+    /// The result CAN be false, and that is the point: an entry that owns a submenu we cannot
+    /// identify as a channel-format chooser is a category wearing a plug-in's name, and picking it
+    /// would actuate a category. Refusing lets the caller keep looking instead.
     static func clickPopupPluginLeaf(
-        _ item: AXUIElement,
-        runtime: AXHelpers.Runtime,
-        coordFree: Bool
-    ) async -> Bool {
-        if coordFree {
-            return await pressPopupPluginLeaf(item, runtime: runtime)
-        }
-        guard moveElementCenter(item, runtime: runtime) else { return false }
-        try? await Task.sleep(for: .milliseconds(120))
-        if let submenu = visibleSubmenu(of: item, runtime: runtime),
-           let leaf = preferredFormatLeaf(in: submenu, runtime: runtime) {
-            return clickElementCenter(leaf, runtime: runtime)
-        }
-        return clickElementCenter(item, runtime: runtime)
-    }
-
-    /// #425: coordinate-free leaf selection. Reads the plugin's format submenu (if
-    /// any) as an AX child — populated without a hover, per `popupExactLeafPaths` —
-    /// and AXPresses the preferred-format leaf; otherwise AXPresses the item itself.
-    /// If a format submenu exists but AXPress on its leaf did not take, fall through
-    /// to pressing the item (which on many builds opens the submenu / selects the
-    /// default format). Fail-closed: no coordinate fallback.
-    private static func pressPopupPluginLeaf(
         _ item: AXUIElement,
         runtime: AXHelpers.Runtime
     ) async -> Bool {
-        if let submenu = axChildMenu(of: item, runtime: runtime),
-           let leaf = preferredFormatLeafByLabel(in: submenu, runtime: runtime),
-           pressElement(leaf, runtime: runtime) {
+        // A disabled entry cannot act, so pressing it produces a silent no-op that the caller then
+        // has to distinguish from a real failure downstream. Refuse before touching it.
+        guard menuItemEnabledForActuation(item, runtime: runtime) else { return false }
+        if let submenu = axChildMenu(of: item, runtime: runtime) {
+            guard submenuIsPluginFormatMenu(submenu, runtime: runtime),
+                  let leaf = preferredFormatLeafByLabel(in: submenu, runtime: runtime) else {
+                return false
+            }
+            _ = AXHelpers.performAction(leaf, kAXPickAction as String, runtime: runtime)
             return true
         }
-        return pressElement(item, runtime: runtime)
+        _ = AXHelpers.performAction(item, kAXPickAction as String, runtime: runtime)
+        return true
     }
 
     /// A submenu exposed as an AX child of `item`, regardless of visual visibility.
@@ -2614,11 +2710,31 @@ extension AccessibilityChannel {
         for labels in AXLocalePolicy.pluginFormatLeafPriority {
             if let match = items.first(where: {
                 AXLocalePolicy.elementMatches($0, labels, runtime: runtime)
+                    && axChildMenu(of: $0, runtime: runtime) == nil
             }) {
                 return match
             }
         }
-        return items.first
+        // No "whatever is first" fallback. An entry that matches no known format label is an entry
+        // nothing identified, and picking it would actuate a target the caller never asked for.
+        return nil
+    }
+
+    /// True when every entry of `submenu` is a known plug-in format label. Logic exposes category
+    /// entries named like formats, so descending into "the first AXMenu child" is not enough to know
+    /// the submenu is a format chooser rather than more of the plug-in tree.
+    private static func submenuIsPluginFormatMenu(
+        _ submenu: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        let items = AXHelpers.getChildren(submenu, runtime: runtime).filter {
+            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuItemRole as String)
+        }
+        return !items.isEmpty && items.allSatisfy { item in
+            AXLocalePolicy.pluginFormatLeafPriority.contains { labels in
+                AXLocalePolicy.elementMatches(item, labels, runtime: runtime)
+            }
+        }
     }
 
     private static func popupExactLeafPaths(
@@ -2695,6 +2811,8 @@ extension AccessibilityChannel {
         return nil
     }
 
+    /// Lenient: an unreadable state counts as enabled. Used by READ-ONLY discovery, where refusing to
+    /// descend on an unreadable attribute would hide reachable plug-ins and actuates nothing.
     private static func menuItemEnabled(
         _ item: AXUIElement,
         runtime: AXHelpers.Runtime
@@ -2703,42 +2821,35 @@ extension AccessibilityChannel {
         return enabled ?? true
     }
 
-    private static func visibleSubmenu(
-        of item: AXUIElement,
+    /// Strict: only an explicitly readable `true` authorises a pick.
+    ///
+    /// `AXEnabled` is the one pre-press signal that separates "will act" from "will do nothing", so
+    /// guessing it while about to actuate is the wrong place to be lenient. Measured on Logic 12.3
+    /// with the menu chain open: all 1090 items expose a readable value and 264 of them are disabled
+    /// — section headers such as "Recent" among them. So there is a real population this can land on,
+    /// and no legitimate entry that the strictness excludes.
+    private static func menuItemEnabledForActuation(
+        _ item: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> AXUIElement? {
-        AXHelpers.getChildren(item, runtime: runtime).first {
-            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
-                && isVisibleMenu($0, runtime: runtime)
-        }
-    }
-
-    private static func preferredFormatLeaf(
-        in submenu: AXUIElement,
-        runtime: AXHelpers.Runtime
-    ) -> AXUIElement? {
-        let items = AXHelpers.getChildren(submenu, runtime: runtime).filter {
-            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuItemRole as String)
-                && elementCenter($0, runtime: runtime) != nil
-        }
-        for labels in AXLocalePolicy.pluginFormatLeafPriority {
-            if let match = items.first(where: {
-                AXLocalePolicy.elementMatches($0, labels, runtime: runtime)
-            }) {
-                return match
-            }
-        }
-        return items.first
+    ) -> Bool {
+        let enabled: Bool? = AXHelpers.getAttribute(item, kAXEnabledAttribute as String, runtime: runtime)
+        return enabled == true
     }
 
     #if DEBUG
-    /// Test seam (coord-free #425 durability): when set, the coordinate hover/click
-    /// primitives below return this value INSTEAD of computing an element centre and
-    /// posting a real CGEvent. It lets a hermetic test drive the coordinate-only
-    /// recursive-win path — proving the discriminator reports `coordFree == false`
-    /// even with the flag on — without moving the physical mouse. Never compiled
-    /// into release; production always posts the real CGEvent.
+    /// Test seam for the documented absent-custom-action coordinate fallback. When
+    /// set, the retained coordinate primitives return this value without posting a
+    /// real CGEvent. It is never compiled into release.
     @TaskLocal static var forceCoordinateActuationForTests: Bool?
+
+    /// A test-only coordinate-click effect. This is invoked only after the
+    /// fallback reaches `clickElementCenter`, so fixtures can model an observable
+    /// consequence of the coordinate click without a real CGEvent.
+    private struct CoordinateActuationTestEffect: @unchecked Sendable {
+        let perform: () -> Bool
+    }
+
+    @TaskLocal private static var coordinateActuationTestEffect: CoordinateActuationTestEffect?
 
     static func withForceCoordinateActuationForTests<Result>(
         _ value: Bool,
@@ -2746,28 +2857,46 @@ extension AccessibilityChannel {
     ) async rethrows -> Result {
         try await $forceCoordinateActuationForTests.withValue(value, operation: operation)
     }
+
+    static func withCoordinateActuationForTests<Result>(
+        _ effect: @escaping () -> Bool,
+        operation: () async throws -> Result
+    ) async rethrows -> Result {
+        try await $coordinateActuationTestEffect.withValue(
+            CoordinateActuationTestEffect(perform: effect), operation: operation
+        )
+    }
     #endif
 
-    @discardableResult
-    private static func moveElementCenter(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
+    /// Outcome of a coordinate click, distinguishing "we never posted anything" from "we posted and
+    /// the post failed". The Honest Contract must not claim a write for the former.
+    enum CoordinateClickOutcome {
+        case posted
+        case noTargetPoint
+        case postFailed
+    }
+
+    private static func clickElementCenterOutcome(
+        _ element: AXUIElement, runtime: AXHelpers.Runtime
+    ) -> CoordinateClickOutcome {
         #if DEBUG
-        if let forceCoordinateActuationForTests { return forceCoordinateActuationForTests }
+        if let coordinateActuationTestEffect { return coordinateActuationTestEffect.perform() ? .posted : .postFailed }
+        if let forceCoordinateActuationForTests { return forceCoordinateActuationForTests ? .posted : .postFailed }
         #endif
-        guard let center = elementCenter(element, runtime: runtime) else { return false }
+        guard let center = elementCenter(element, runtime: runtime) else { return .noTargetPoint }
         let source = CGEventSource(stateID: .combinedSessionState)
-        guard let move = CGEvent(
-            mouseEventSource: source,
-            mouseType: .mouseMoved,
-            mouseCursorPosition: center,
-            mouseButton: .left
-        ) else { return false }
-        move.post(tap: .cghidEventTap)
-        return true
+        guard let down = CGEvent(mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: center, mouseButton: .left),
+              let up = CGEvent(mouseEventSource: source, mouseType: .leftMouseUp, mouseCursorPosition: center, mouseButton: .left)
+        else { return .postFailed }
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+        return .posted
     }
 
     @discardableResult
     private static func clickElementCenter(_ element: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
         #if DEBUG
+        if let coordinateActuationTestEffect { return coordinateActuationTestEffect.perform() }
         if let forceCoordinateActuationForTests { return forceCoordinateActuationForTests }
         #endif
         guard let center = elementCenter(element, runtime: runtime) else { return false }
