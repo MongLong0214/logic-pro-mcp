@@ -186,6 +186,89 @@ extension AccessibilityChannel {
 
     // MARK: - Save As via AX Dialog
 
+    static func saveAsDialogSelectionIsUnambiguous(
+        containerRole: String?,
+        containerSubrole: String?,
+        windowTitle: String?,
+        filenameFieldCount: Int,
+        saveButtonCount: Int,
+        saveEnabled: Bool,
+        cancelButtonCount: Int,
+        packageRadioCount: Int,
+        folderRadioCount: Int
+    ) -> Bool {
+        let exactContainer = containerRole == (kAXSheetRole as String)
+            || (containerRole == (kAXWindowRole as String)
+                && containerSubrole == (kAXDialogSubrole as String))
+        return exactContainer
+            && windowTitle == "Save"
+            && filenameFieldCount == 1
+            && saveButtonCount == 1
+            && saveEnabled
+            && cancelButtonCount == 1
+            && packageRadioCount == 1
+            && folderRadioCount == 1
+    }
+
+    private static func exactSaveAsDialog(
+        runtime: AXLogicProElements.Runtime
+    ) -> AXUIElement? {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return nil }
+        var candidates: [AXUIElement] = AXHelpers.getAttribute(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax
+        ) ?? []
+        if let main = AXLogicProElements.mainWindow(runtime: runtime) {
+            for child in AXHelpers.getChildren(main, runtime: runtime.ax) {
+                let role = AXHelpers.getRole(child, runtime: runtime.ax)
+                guard role == (kAXSheetRole as String) || role == (kAXWindowRole as String) else {
+                    continue
+                }
+                if !candidates.contains(where: { CFEqual($0, child) }) {
+                    candidates.append(child)
+                }
+            }
+        }
+
+        let matches = candidates.filter { candidate in
+            let filenameFields = AXHelpers.findAllDescendants(
+                of: candidate, role: kAXTextFieldRole as String, maxDepth: 12, runtime: runtime.ax
+            ).filter { AXHelpers.getDescription($0, runtime: runtime.ax) == "text field" }
+            let buttons = AXHelpers.findAllDescendants(
+                of: candidate, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime.ax
+            )
+            let saveButtons = buttons.filter {
+                AXLocalePolicy.elementMatches($0, AXLocalePolicy.saveConfirmationButton, runtime: runtime.ax)
+            }
+            let cancelButtons = buttons.filter {
+                AXLocalePolicy.elementMatches($0, AXLocalePolicy.cancelButton, runtime: runtime.ax)
+            }
+            let saveEnabled: Bool = saveButtons.first.flatMap {
+                AXHelpers.getAttribute($0, kAXEnabledAttribute as String, runtime: runtime.ax)
+            } ?? false
+            let radios = AXHelpers.findAllDescendants(
+                of: candidate, role: kAXRadioButtonRole as String, maxDepth: 12, runtime: runtime.ax
+            )
+            return saveAsDialogSelectionIsUnambiguous(
+                containerRole: AXHelpers.getRole(candidate, runtime: runtime.ax),
+                containerSubrole: AXHelpers.getAttribute(
+                    candidate, kAXSubroleAttribute as String, runtime: runtime.ax
+                ),
+                windowTitle: AXHelpers.getTitle(candidate, runtime: runtime.ax),
+                filenameFieldCount: filenameFields.count,
+                saveButtonCount: saveButtons.count,
+                saveEnabled: saveEnabled,
+                cancelButtonCount: cancelButtons.count,
+                packageRadioCount: radios.filter {
+                    AXHelpers.getTitle($0, runtime: runtime.ax) == "Package"
+                }.count,
+                folderRadioCount: radios.filter {
+                    AXHelpers.getTitle($0, runtime: runtime.ax) == "Folder"
+                }.count
+            )
+        }
+        return matches.count == 1 ? matches[0] : nil
+    }
+
     static func saveAsViaAXDialog(
         path: String,
         runtime: AXLogicProElements.Runtime = .production
@@ -204,32 +287,23 @@ extension AccessibilityChannel {
             return .error("Failed to open Save As dialog via menu")
         }
 
-        // Step 2: Wait for save dialog sheet to appear (up to 3s)
-        var sheet: AXUIElement?
+        // Creator Studio 12.3 exposes this panel as a top-level AXDialog rather
+        // than a child sheet. Accept either representation, but only after the
+        // exact structural classifier finds one unambiguous Save As surface.
+        var dialog: AXUIElement?
         for _ in 0..<15 {
             try? await Task.sleep(nanoseconds: 200_000_000)
-            guard let window = AXLogicProElements.mainWindow(runtime: runtime) else { continue }
-            let children = AXHelpers.getChildren(window, runtime: runtime.ax)
-            for child in children {
-                let role = AXHelpers.getRole(child, runtime: runtime.ax)
-                if role == "AXSheet" || role == "AXWindow" {
-                    let descendants = AXHelpers.findAllDescendants(of: child, role: "AXTextField", runtime: runtime.ax)
-                    if !descendants.isEmpty {
-                        sheet = child
-                        break
-                    }
-                }
-            }
-            if sheet != nil { break }
+            dialog = exactSaveAsDialog(runtime: runtime)
+            if dialog != nil { break }
         }
 
-        guard let saveSheet = sheet else {
-            return .error("Save As dialog did not appear within 3 seconds")
+        guard let saveDialog = dialog else {
+            return .error("Exact Save As dialog did not appear within 3 seconds")
         }
 
         // Helper: dismiss dialog on failure (press Escape to avoid blocking UI)
         func dismissDialog() {
-            let cancelButtons = AXHelpers.findAllDescendants(of: saveSheet, role: "AXButton", runtime: runtime.ax)
+            let cancelButtons = AXHelpers.findAllDescendants(of: saveDialog, role: "AXButton", runtime: runtime.ax)
             for btn in cancelButtons {
                 if AXLocalePolicy.elementMatches(btn, AXLocalePolicy.cancelButton, runtime: runtime.ax) {
                     AXHelpers.performAction(btn, kAXPressAction, runtime: runtime.ax)
@@ -239,31 +313,35 @@ extension AccessibilityChannel {
         }
 
         // Step 3: Find filename text field and set full path
-        let textFields = AXHelpers.findAllDescendants(of: saveSheet, role: "AXTextField", runtime: runtime.ax)
-        guard let filenameField = textFields.first else {
+        let filenameFields = AXHelpers.findAllDescendants(
+            of: saveDialog, role: kAXTextFieldRole as String, maxDepth: 12, runtime: runtime.ax
+        ).filter { AXHelpers.getDescription($0, runtime: runtime.ax) == "text field" }
+        guard filenameFields.count == 1, let filenameField = filenameFields.first else {
             dismissDialog()
-            return .error("Cannot find filename field in Save As dialog")
+            return .error("Cannot resolve the exact filename field in Save As dialog")
         }
 
-        AXHelpers.setAttribute(filenameField, kAXValueAttribute, path as CFTypeRef, runtime: runtime.ax)
+        guard AXHelpers.setAttribute(
+            filenameField, kAXValueAttribute, path as CFTypeRef, runtime: runtime.ax
+        ) else {
+            dismissDialog()
+            return .error("Cannot set the exact Save As filename field")
+        }
         // Confirm the text entry so the save panel updates its internal path state
         AXHelpers.performAction(filenameField, kAXConfirmAction, runtime: runtime.ax)
         try? await Task.sleep(nanoseconds: 300_000_000) // 300ms for panel to process
 
         // Step 4: Find and click Save button
-        let buttons = AXHelpers.findAllDescendants(of: saveSheet, role: "AXButton", runtime: runtime.ax)
-        var saveClicked = false
-        for button in buttons {
-            if AXLocalePolicy.elementMatches(button, AXLocalePolicy.saveConfirmationButton, runtime: runtime.ax) {
-                AXHelpers.performAction(button, kAXPressAction, runtime: runtime.ax)
-                saveClicked = true
-                break
-            }
+        let saveButtons = AXHelpers.findAllDescendants(
+            of: saveDialog, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime.ax
+        ).filter {
+            AXLocalePolicy.elementMatches($0, AXLocalePolicy.saveConfirmationButton, runtime: runtime.ax)
         }
-
-        guard saveClicked else {
+        guard saveButtons.count == 1,
+              let saveButton = saveButtons.first,
+              AXHelpers.performAction(saveButton, kAXPressAction, runtime: runtime.ax) else {
             dismissDialog()
-            return .error("Cannot find Save button in Save As dialog")
+            return .error("Cannot press the exact Save button in Save As dialog")
         }
 
         // Step 5: Verify file exists (up to 5s)

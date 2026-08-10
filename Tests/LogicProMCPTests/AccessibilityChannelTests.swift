@@ -51,6 +51,48 @@ func creatorStudioDirectEmptyProjectWindowGate() {
     #expect(!AccessibilityChannel.isCreatedProjectWindowTitle(nil))
 }
 
+@Test("Creator Studio Save As requires the exact top-level dialog structure")
+func creatorStudioSaveAsDialogGate() {
+    #expect(AccessibilityChannel.saveAsDialogSelectionIsUnambiguous(
+        containerRole: kAXWindowRole as String,
+        containerSubrole: kAXDialogSubrole as String,
+        windowTitle: "Save",
+        filenameFieldCount: 1,
+        saveButtonCount: 1,
+        saveEnabled: true,
+        cancelButtonCount: 1,
+        packageRadioCount: 1,
+        folderRadioCount: 1
+    ))
+    #expect(!AccessibilityChannel.saveAsDialogSelectionIsUnambiguous(
+        containerRole: kAXWindowRole as String,
+        containerSubrole: kAXStandardWindowSubrole as String,
+        windowTitle: "Save",
+        filenameFieldCount: 1,
+        saveButtonCount: 1,
+        saveEnabled: true,
+        cancelButtonCount: 1,
+        packageRadioCount: 1,
+        folderRadioCount: 1
+    ))
+    #expect(!AccessibilityChannel.saveAsDialogSelectionIsUnambiguous(
+        containerRole: kAXWindowRole as String,
+        containerSubrole: kAXDialogSubrole as String,
+        windowTitle: "Save",
+        filenameFieldCount: 2,
+        saveButtonCount: 1,
+        saveEnabled: true,
+        cancelButtonCount: 1,
+        packageRadioCount: 1,
+        folderRadioCount: 1
+    ))
+}
+
+@Test("project.save_as has no partial-write AppleScript fallback")
+func projectSaveAsUsesOnlyExactAccessibilityRoute() {
+    #expect(ChannelRouter.v2RoutingTable["project.save_as"] == [.accessibility])
+}
+
 @Test("Creator Studio blank-app reveal requires an exact zero AX-window count")
 func creatorStudioBlankApplicationGate() {
     #expect(AccessibilityChannel.blankApplicationCanRevealChooser(windowCount: 0))

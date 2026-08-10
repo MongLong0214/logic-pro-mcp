@@ -206,7 +206,10 @@ extension ChannelRouter {
         // (re)written on disk (export/bounce prerequisite). KeyCmd/CGEvent
         // remain as fallbacks (e.g. AppleScript automation denied).
         "project.save":               [.appleScript, .midiKeyCommands, .cgEvent],
-        "project.save_as":            [.accessibility, .appleScript],
+        // An AppleScript fallback can create the target bundle and then time
+        // out behind Creator Studio's Save AXDialog, turning one operation into
+        // a partial write. The exact AX route owns the whole interaction.
+        "project.save_as":            [.accessibility],
         "project.close":              [.appleScript, .cgEvent],
         "project.get_info":           [.accessibility],
         "project.bounce":             [.accessibility, .midiKeyCommands, .cgEvent],
