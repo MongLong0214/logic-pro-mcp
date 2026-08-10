@@ -2483,9 +2483,11 @@ private actor SelectiveFailChannel: Channel {
 
 @Test func testProjectDispatcherRoutesLifecycleCommandsAndValidatesPaths() async throws {
     let router = ChannelRouter()
+    let accessibility = MockChannel(id: .accessibility)
     let keyCmd = MockChannel(id: .midiKeyCommands)
     let appleScript = MockChannel(id: .appleScript)
     let cgEvent = MockChannel(id: .cgEvent)
+    await router.register(accessibility)
     await router.register(keyCmd)
     await router.register(appleScript)
     await router.register(cgEvent)
@@ -2522,14 +2524,17 @@ private actor SelectiveFailChannel: Channel {
     #expect(!bounceResult.isError!)
 
     let keyCmdOps = await keyCmd.executedOps
+    let accessibilityOps = await accessibility.executedOps
     let appleScriptOps = await appleScript.executedOps
     let cgEventOps = await cgEvent.executedOps
     expectExecutedOps(cgEventOps, equals: [])
+    expectExecutedOps(accessibilityOps, equals: [
+        ("project.new", [:]),
+    ])
     expectExecutedOps(keyCmdOps, equals: [
         ("project.bounce", [:]),
     ])
     expectExecutedOps(appleScriptOps, equals: [
-        ("project.new", [:]),
         ("project.open", ["path": existingPath]),
         ("project.save_as", ["path": saveAsPath]),
         ("project.close", ["saving": "yes"]),
