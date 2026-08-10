@@ -3047,20 +3047,28 @@ extension AccessibilityChannel {
         return (first.key, first.value.pluginID, first.value.name)
     }
 
-    /// Close a leftover "위치로 이동" / "Go to Position" floating dialog (a prior
+    /// Close a leftover "위치로 이동" / "Go To Position" floating dialog (a prior
     /// AX side effect) so it cannot steal focus / keep the Mix menu disabled.
     /// Best-effort via AX + CGEvent only: click Cancel/close if present, otherwise
     /// Escape. Returns whether a matching dialog was found.
     @discardableResult
-    private static func closeGoToPositionDialog(runtime: AXLogicProElements.Runtime) -> Bool {
+    static func closeGoToPositionDialog(runtime: AXLogicProElements.Runtime) -> Bool {
         guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return false }
         let windows: [AXUIElement] = AXHelpers.getAttribute(
             app, kAXWindowsAttribute as String, runtime: runtime.ax
         ) ?? []
         var found = false
         for window in windows {
+            let subrole: String? = AXHelpers.getAttribute(
+                window, kAXSubroleAttribute as String, runtime: runtime.ax
+            )
+            let isModal: Bool? = AXHelpers.getAttribute(
+                window, kAXModalAttribute as String, runtime: runtime.ax
+            )
             let title = AXHelpers.getTitle(window, runtime: runtime.ax) ?? ""
-            guard AXLocalePolicy.goToPositionDialogTitle.matches(title, mode: .contains) else {
+            guard subrole == kAXFloatingWindowSubrole as String,
+                  isModal == true,
+                  AXLocalePolicy.goToPositionDialogTitle.matches(title, mode: .exactStrict) else {
                 continue
             }
             found = true
