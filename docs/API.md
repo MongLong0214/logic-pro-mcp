@@ -89,7 +89,7 @@ Every failure below is fail-closed and **pre-write**: `write_attempted: false` i
 | No `expected_name` and no `target_ref` | `index_binding_corroboration_required` | `true` — supply either binding |
 | Live name at the index ≠ `expected_name` | `target_identity_mismatch` (`reason: name_mismatch`) | `false` — re-read `logic://tracks` first |
 | Live header unreadable | `target_identity_mismatch` (`reason: header_unreadable`) | `false` — an unreadable surface is never read as agreement |
-| `expected_name` matches but names >1 live track | `target_name_ambiguous` | `false` — use `target_ref` |
+| `expected_name` matches but names >1 live track | `ambiguous_target_name` (`ambiguous_track_indices` lists all colliding indices) | `false` — use `target_ref` |
 | `expected_name` **and** `target_ref` both supplied | `invalid_params` | `true` — send exactly one binding |
 
 Uniqueness is not a nicety. Two tracks sharing a name can swap positions and leave `(index, name)` self-consistent at **both** ordinals, so a match would prove nothing; `target_ref` is the only binding a swap cannot fool. Supplying `target_ref` bypasses this path entirely — the reference machinery carries its own live-identity and ambiguity checks, and the two are never stacked.

@@ -283,10 +283,10 @@ enum TargetRefResolver {
             )
         }
         let ambiguousIndices = names
-            .filter { $0.key != index && $0.value == expected }
+            .filter { $0.value == expected }
             .map(\.key)
             .sorted()
-        guard ambiguousIndices.isEmpty else {
+        guard ambiguousIndices.count <= 1 else {
             return staleLiveIdentityResult(
                 rawReference,
                 operation: operation,
@@ -325,9 +325,8 @@ enum TargetRefResolver {
         if !ambiguousIndices.isEmpty {
             // Nothing is stale here and nothing was reordered: the reference still names the right
             // index and the right name, but that name is shared, so no evidence can say WHICH track
-            // is meant. Refusing is right; calling it staleness sent callers after a reorder that
-            // never happened, and the way out — make the name unique — was not discoverable from
-            // the message.
+            // is meant. The field deliberately includes the bound index as well as every other
+            // collision, matching the explicit-index corroboration path.
             extras["ambiguous_live_track_name"] = true
             extras["ambiguous_track_indices"] = ambiguousIndices
             extras["what_was_observed"] = "live track name '\(expected)' also appeared at indices \(ambiguousIndices.map(String.init).joined(separator: ", "))"

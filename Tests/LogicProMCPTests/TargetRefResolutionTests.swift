@@ -1092,7 +1092,7 @@ struct TargetRefResolutionTests {
             #expect(body(result)["expected_track_name"] as? String == "Bass")
             let v2 = try #require(body(result)["ambiguous_live_track_name"] as? Bool)
             #expect(v2)
-            #expect(body(result)["ambiguous_track_indices"] as? [Int] == [2])
+            #expect(body(result)["ambiguous_track_indices"] as? [Int] == [1, 2])
             #expect(await allOps(channels).isEmpty, "no wrong-target write")
         }
     }

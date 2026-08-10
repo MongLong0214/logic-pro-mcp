@@ -705,12 +705,12 @@ extension AccessibilityChannel {
             ))
         }
         let ambiguousIndices = names
-            .filter { $0.key != track && $0.value == expected }
+            .filter { $0.value == expected }
             .map(\.key)
             .sorted()
-        guard ambiguousIndices.isEmpty else {
+        guard ambiguousIndices.count <= 1 else {
             return .error(HonestContract.encodeV2StateC(
-                error: .staleTargetReference,
+                error: .ambiguousTargetName,
                 extras: [
                     "operation": operation,
                     "target_identity": identity,
