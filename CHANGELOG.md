@@ -8,6 +8,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Changed — three operations lose their fallback channels
+
+Each of these narrows an operation to a single channel. In an environment where that
+channel is unavailable the operation now **fails closed** where it previously fell
+through, so this is a behaviour change, not only a reordering.
+
+- **`project.new`** — `[appleScript, cgEvent]` becomes `[accessibility]`. A fallback
+  can create a second, ambiguous document after the exact route has already refused,
+  and nothing downstream can tell which document a later write landed in.
+- **`project.save_as`** — `[accessibility, appleScript]` becomes `[accessibility]`.
+  The AppleScript fallback can create the target bundle and then time out behind the
+  Save dialog, turning one operation into a partial write.
+- **`transport.play`** — `[accessibility, mcu, coreMIDI, cgEvent, appleScript]`
+  becomes `[accessibility, appleScript, mcu, coreMIDI, cgEvent]`. This one keeps every
+  channel and only reorders: the three send-only channels could report a successful
+  State B while the transport never moved, and once a send-only channel has crossed
+  the write boundary, falling through to the next is no longer safe.
+
+### Fixed
+
+- **#489** — `logic://project/info` now carries the current document's `filePath` and a
+  non-null `fetched_at` on every read, with `identity_source` and
+  `identity_fetched_at` naming where the answer came from and how old it is.
+  Previously a fresh AX cache left the caller with a project name but no path, so an
+  exact write boundary could not be established. The path *fills* an empty field and
+  does not override one the cache already supplies.
+- **#490** — Japanese transport controls resolve: `再生`, `録音`, `サイクル` and
+  `メトロノームクリック`. The metronome is one compound label on a Japanese install, not
+  either half; matching stays `.exactStrict`, because a containment match would let an
+  unrelated label containing `再生` be taken for Play.
+- **#491** — the Logic project chooser is addressable: its windows are enumerated by
+  role and label, the exact route is required first, and chooser health is exposed so
+  a caller can tell whether the surface is usable before driving it.
+- **#492** — see the transport reordering above.
+
+
 ### Changed — plugin-insert actuation
 
 - **#425 current behavior supersedes the 3.13.0 #425 entry below.** Slot-open uses the measured custom action. Discovery is read-only and recurses through each already-attached `AXMenu` child; `AXPick` is dispatched only to the exact target leaf. `LOGIC_MCP_INSERT_COORD_FREE` / `insertCoordFree` is removed, not a kill switch. The coordinate click remains only when action enumeration succeeds and the custom action is absent; enumeration failure fails closed as `slot_action_enumeration_failed` and is recorded in the trace.
