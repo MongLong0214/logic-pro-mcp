@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+- `logic://` resource envelopes served under `LOGIC_MCP_ADR006_VERSIONED_CACHE=1` now carry
+  `dropped_stale_writes` beside `section_revision`: the number of refreshes whose value was refused
+  for that section because it finished after the section had already moved on (#289). The field is
+  always present and starts at zero, so a client can tell "the guard never had to fire" apart from
+  "this build does not report it".
+
 ### Changed — three operations lose their fallback channels
 
 Each of these narrows an operation to a single channel. In an environment where that

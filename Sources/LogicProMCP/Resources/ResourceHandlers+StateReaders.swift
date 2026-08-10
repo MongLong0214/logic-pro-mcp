@@ -33,6 +33,7 @@ extension ResourceHandlers {
             extras.merge(versionedCacheExtras(
                 projectEpoch: await targetRegistry?.currentProjectEpoch ?? 0,
                 sectionRevision: await cache.sectionRevision(.transport),
+                droppedStaleWrites: await cache.droppedStaleWriteCount(for: .transport),
                 bodyJSON: body
             )) { _, new in new }
         }
@@ -232,6 +233,7 @@ extension ResourceHandlers {
             extras.merge(versionedCacheExtras(
                 projectEpoch: await targetRegistry?.currentProjectEpoch ?? 0,
                 sectionRevision: await cache.sectionRevision(.tracks),
+                droppedStaleWrites: await cache.droppedStaleWriteCount(for: .tracks),
                 bodyJSON: body
             )) { _, new in new }
         }
@@ -366,6 +368,7 @@ extension ResourceHandlers {
             versionedFragment = encodeExtrasFragment(versionedCacheExtras(
                 projectEpoch: await targetRegistry?.currentProjectEpoch ?? 0,
                 sectionRevision: await cache.sectionRevision(.mixer),
+                droppedStaleWrites: await cache.droppedStaleWriteCount(for: .mixer),
                 bodyJSON: stripsJSON
             ))
         } else {
@@ -561,6 +564,7 @@ extension ResourceHandlers {
             extras.merge(versionedCacheExtras(
                 projectEpoch: await targetRegistry?.currentProjectEpoch ?? 0,
                 sectionRevision: await cache.sectionRevision(.project),
+                droppedStaleWrites: await cache.droppedStaleWriteCount(for: .project),
                 bodyJSON: body
             )) { _, new in new }
         }

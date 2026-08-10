@@ -281,6 +281,12 @@ actor StateCache {
         guard projectEpoch == observed.projectEpoch,
               sectionRevisions[section, default: 0] == observed.sectionRevision else {
             droppedStaleWriteCounts[section, default: 0] += 1
+            Log.debug(
+                "stale write refused for \(section.rawValue): observed "
+                + "(epoch \(observed.projectEpoch), rev \(observed.sectionRevision)) vs current "
+                + "(epoch \(projectEpoch), rev \(sectionRevisions[section, default: 0]))",
+                subsystem: "cache"
+            )
             return false
         }
         return true

@@ -105,13 +105,25 @@ struct VersionedCacheEnvelopeTests {
         let extras = ResourceHandlers.versionedCacheExtras(
             projectEpoch: 7,
             sectionRevision: 11,
+            droppedStaleWrites: 5,
             bodyJSON: "{\"x\":1}"
         )
 
-        #expect(extras.count == 3)
+        #expect(extras.count == 4)
         #expect(extras["project_epoch"] as? UInt64 == 7)
         #expect(extras["section_revision"] as? UInt64 == 11)
+        #expect(extras["dropped_stale_writes"] as? UInt64 == 5)
         #expect(extras["etag"] as? String == "bdd3d53c3a0b3fd6")
+
+        // Defaulting to zero keeps the key present rather than making it appear only once something
+        // has gone wrong: a field that materialises on failure cannot be used to tell "the guard
+        // never fired" apart from "this build does not report it".
+        let quiet = ResourceHandlers.versionedCacheExtras(
+            projectEpoch: 7,
+            sectionRevision: 11,
+            bodyJSON: "{\"x\":1}"
+        )
+        #expect(quiet["dropped_stale_writes"] as? UInt64 == 0)
     }
 
     @Test func sectionRevisionsAdvanceIndependentlyOnAcceptedUpdates() async {
