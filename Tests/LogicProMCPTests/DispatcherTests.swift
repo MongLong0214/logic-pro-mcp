@@ -18,6 +18,7 @@ private func expectExecutedOps(
     equals expected: [(String, [String: String])]
 ) {
     #expect(actual.count == expected.count)
+    guard actual.count == expected.count else { return }
     for index in expected.indices {
         expectExecutedOp(actual[index], equals: expected[index])
     }
@@ -2530,13 +2531,12 @@ private actor SelectiveFailChannel: Channel {
     expectExecutedOps(cgEventOps, equals: [])
     expectExecutedOps(accessibilityOps, equals: [
         ("project.new", [:]),
-    ])
-    expectExecutedOps(keyCmdOps, equals: [
+        ("project.save_as", ["path": saveAsPath]),
         ("project.bounce", [:]),
     ])
+    expectExecutedOps(keyCmdOps, equals: [])
     expectExecutedOps(appleScriptOps, equals: [
         ("project.open", ["path": existingPath]),
-        ("project.save_as", ["path": saveAsPath]),
         ("project.close", ["saving": "yes"]),
     ])
 }
