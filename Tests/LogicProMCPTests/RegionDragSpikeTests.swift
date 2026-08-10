@@ -126,12 +126,16 @@ private func assertRegionDragSpikeBlocked(
     )
 }
 
-@Test func regionDragSpikeBlocksCurrentWorkingDirectoryExportDir() throws {
+/// The positive twin is `regionDragSpikeAcceptsControlledTmpExportDirBeforeCoordinateGate`,
+/// which already asserts that a scratch-root path gets past this gate — so this rejection
+/// test cannot be passing merely because everything is rejected.
+@Test func regionDragSpikeBlocksAnExportDirOutsideTheScratchRoot() throws {
     try assertRegionDragSpikeBlocked(
-        exportDir: FileManager.default.currentDirectoryPath,
+        exportDir: NSHomeDirectory(),
         noteContains: "controlled_scratch_root"
     )
 }
+
 
 @Test func regionDragSpikeBlocksTmpSymlinkEscapeOutsideScratchRoot() throws {
     let link = URL(fileURLWithPath: "/tmp/LogicProMCP-region-drag-spike-link-\(UUID().uuidString)")
