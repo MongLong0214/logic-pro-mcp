@@ -333,7 +333,8 @@ enum TargetRefResolver {
             return toolStateCResult(
                 .ambiguousTargetName,
                 hint: "'\(expected)' names more than one live track, so the target cannot be "
-                    + "identified. Rename one of them, or address the track by an unambiguous name.",
+                    + "identified. Rename it with rename {name, index} — the index form is not "
+                    + "blocked by name ambiguity — then retry with the new name.",
                 extras: extras
             )
         }
