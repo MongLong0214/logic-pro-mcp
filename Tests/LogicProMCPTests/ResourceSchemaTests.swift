@@ -340,7 +340,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect(mixer.contents.first?.text != nil)
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testHealthResponseMCUFields() async {
     let cache = StateCache()
     var conn = MCUConnectionState()
@@ -370,7 +370,7 @@ func testHealthResponseMCUFields() async {
     #expect(lastFeedbackAt != nil)
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testHealthResponseProcessFields() async {
     let cache = StateCache()
     let router = ChannelRouter()
@@ -398,7 +398,7 @@ func testHealthResponseProcessFields() async {
     #expect((uptimeSec ?? -1) >= 0)
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testHealthResponseIncludesExactProjectChooserObservation() async throws {
     let cache = StateCache()
     let router = ChannelRouter()
@@ -416,7 +416,7 @@ func testHealthResponseIncludesExactProjectChooserObservation() async throws {
     #expect(chooserVisible)
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testHealthResponseOmitsRemovedExternalClickDependencySection() async throws {
     let cache = StateCache()
     let router = ChannelRouter()
@@ -484,7 +484,7 @@ func testHealthResponseOmitsRemovedExternalClickDependencySection() async throws
     #expect(ops[0].0 == "midi.list_ports")
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testHealthResponseMCUDisconnected() async {
     let cache = StateCache()
     let router = ChannelRouter()
@@ -504,7 +504,7 @@ func testHealthResponseMCUDisconnected() async {
     #expect(display.upperRow.hasPrefix("Vocals"))
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testHealthResponseFullSchema() async throws {
     let cache = StateCache()
     let router = ChannelRouter()
@@ -544,7 +544,7 @@ func testHealthResponseFullSchema() async throws {
     #expect(json["process"] as? [String: Any] != nil)
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testHealthResponseExposesChannelVerificationStatus() async {
     let cache = StateCache()
     let router = ChannelRouter()
@@ -571,7 +571,7 @@ func testHealthResponseExposesChannelVerificationStatus() async {
     #expect(!((byName["Scripter"]?["ready"] as? Bool)!))
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testSystemHealthToolMatchesResource() async {
     let cache = StateCache()
     let router = ChannelRouter()

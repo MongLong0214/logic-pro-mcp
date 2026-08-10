@@ -319,7 +319,7 @@ final class MIDIPortRuntimeHarness: @unchecked Sendable {
     #expect(harness.disposedClients == [100])
 }
 
-@Test(codexSeatbeltCoreMIDIDisabled)
+@Test(coreMIDIUnavailableInSandbox)
 func testMIDIPortManagerProductionRuntimeSmokeCreatesAndStopsPorts() async throws {
     let manager = MIDIPortManager()
     let sendOnlyName = "LogicProMCP-Smoke-\(UUID().uuidString)"

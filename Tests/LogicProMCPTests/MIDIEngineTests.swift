@@ -371,7 +371,7 @@ private final class MIDIEngineRuntimeHarness: @unchecked Sendable {
     }
 }
 
-@Test(codexSeatbeltCoreMIDIDisabled)
+@Test(coreMIDIUnavailableInSandbox)
 func testMIDIEngineProductionRuntimeStartStopSmoke() async throws {
     let engine = MIDIEngine()
 

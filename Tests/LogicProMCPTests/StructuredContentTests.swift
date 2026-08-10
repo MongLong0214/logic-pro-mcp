@@ -78,7 +78,7 @@ struct StructuredContentTests {
         }
     }
 
-    @Test("tools_call_probe_includes_structured_content", codexSeatbeltProcessInspectionDisabled)
+    @Test("tools_call_probe_includes_structured_content", processInspectionUnavailableInSandbox)
     func toolsCallProbeIncludesStructuredContent() async throws {
         let server = LogicProServer()
         let transport = MCPProtocolProbeTransport()

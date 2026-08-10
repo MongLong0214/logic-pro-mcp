@@ -121,7 +121,7 @@ private final class PermissionRuntimeHarness: @unchecked Sendable {
     #expect(status.summary.contains("NOT VERIFIABLE"))
 }
 
-@Test(codexSeatbeltProcessInspectionDisabled)
+@Test(processInspectionUnavailableInSandbox)
 func testPermissionCheckerProductionWrapperFunctionsReturnStatuses() {
     // The Bool returns are environment-dependent (real TCC state), so no value
     // assertion is possible; the deterministic invariant is that check() always

@@ -209,7 +209,7 @@ private func waitForFeedbackEvents(
     #expect(packets.first?.1 == [0x90, 0x3C, 0x64])
 }
 
-@Test(codexSeatbeltCoreMIDIDisabled)
+@Test(coreMIDIUnavailableInSandbox)
 func testProductionKeyCmdTransportDefaultPacketSinkSmoke() async throws {
     let manager = MIDIPortManager()
     let transport = ProductionKeyCmdTransport(
