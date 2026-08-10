@@ -28,6 +28,16 @@ jobs:
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
 
+      - name: Cache SwiftPM and build products
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: |
+            .build
+            ~/Library/Caches/org.swift.swiftpm
+          key: spm-macos15-xcode164-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: |
+            spm-macos15-xcode164-
+
       - name: Select Xcode
         # Xcode 16.4 ships Swift 6.2 — required by swift-sdk 0.11.0+ which
         # adopts the short-form `withThrowingTaskGroup { ... }` syntax. The
