@@ -56,6 +56,36 @@ func issue498DoesNotTouchStandardNonModalProjectWindow() {
     #expect(fixture.builder.actionCalls.isEmpty)
 }
 
+/// Each guard needs a fixture that ONLY it can reject, or the three cannot be told
+/// apart. The window below is modal and titled exactly right, so the subrole check is
+/// the only thing standing between it and a keypress — mutation-tested: removing that
+/// check makes this test, and only this test, fail.
+@Test("Issue498: a modal, exactly-titled window that is not floating is not touched")
+func issue498SubroleAloneRejectsAStandardModalWindow() {
+    let fixture = makeIssue498Fixture(
+        title: "Go To Position",
+        subrole: kAXStandardWindowSubrole as String,
+        isModal: true
+    )
+
+    #expect(!AccessibilityChannel.closeGoToPositionDialog(runtime: fixture.runtime))
+    #expect(fixture.builder.actionCalls.isEmpty)
+}
+
+/// The same isolation for modality: floating and exactly titled, so only AXModal can
+/// reject it.
+@Test("Issue498: a floating, exactly-titled window that is not modal is not touched")
+func issue498ModalityAloneRejectsANonModalFloatingWindow() {
+    let fixture = makeIssue498Fixture(
+        title: "Go To Position",
+        subrole: kAXFloatingWindowSubrole as String,
+        isModal: false
+    )
+
+    #expect(!AccessibilityChannel.closeGoToPositionDialog(runtime: fixture.runtime))
+    #expect(fixture.builder.actionCalls.isEmpty)
+}
+
 @Test("Issue498: floating modal window with title suffix is not touched")
 func issue498DoesNotTouchFloatingModalTitleSuffix() {
     let fixture = makeIssue498Fixture(
