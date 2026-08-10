@@ -40,7 +40,7 @@ struct MutationGateCompletenessTests {
             "clear_traces", "get_trace", "health", "help", "list_recent_traces", "permissions",
             "refresh_cache", "saga_preflight", "saga_status",
         ],
-        "logic_audio": ["analyze_file"],
+        "logic_audio": ["analyze_file", "analyze_spectrum", "recommend_eq"],
         "logic_plugins": ["get_inventory"],
     ]
 

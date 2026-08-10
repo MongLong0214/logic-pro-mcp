@@ -70,7 +70,7 @@ enum SemanticOracleTable {
     // map back to. The census is therefore generalized to two axes with DELIBER-
     // ATELY DIFFERENT completeness contracts:
     //
-    //   * read-only  — FULLY covered (all 20; `coveredSpecIDs`), unchanged.
+    //   * read-only  — FULLY covered (all 22; `coveredSpecIDs`), unchanged.
     //   * mutating   — covered INCREMENTALLY. B1 lands the verified-write oracles
     //                  below; B2/B3 add the rest. Full 51-op mutating coverage is
     //                  NOT required yet, so the census must not demand it.
@@ -78,7 +78,7 @@ enum SemanticOracleTable {
     // Soundness is kept by pinning the mutating increment EXACTLY
     // (`phaseB1MutatingOperationIDs`) and by proving every id in it is a real
     // `.mutating`, non-`.unsupported` registry spec — a read-only id or a typo
-    // cannot masquerade as mutating coverage, and the read-only 20 stay pinned.
+    // cannot masquerade as mutating coverage, and the read-only 22 stay pinned.
 
     /// The mutating operations B1 covers with a verified-write (State A) oracle.
     /// Each was derived by READING its dispatcher/channel handler and pinning
@@ -438,6 +438,8 @@ enum SemanticOracleTable {
         projectAudit,
         projectCleanupPlan,
         audioAnalyzeFile,
+        audioAnalyzeSpectrum,
+        audioRecommendEQ,
         midiListPorts,
         tracksListLibrary,
         tracksScanLibrary,
@@ -864,6 +866,49 @@ enum SemanticOracleTable {
             // analyzer would mean the measurement, not the file, is wrong.
             .numericRange(key: "peak_dbfs", min: -200, max: 0),
             .numericRange(key: "silence_ratio", min: 0, max: 1),
+        ]
+    )
+
+    // AudioDispatcher `spectralAnalysisResult` encodes SpectralAnalysisResult
+    // unchanged. A complete extraction always has the default log-band grid;
+    // AudioFeatureExtractionEngine.Config pins its centres to 20...20,000 Hz.
+    static let audioAnalyzeSpectrum = OperationOracle(
+        .audioAnalyzeSpectrum,
+        strength: .shapeAndDomain,
+        constraints: [
+            .typedField(key: "analysisRef", type: .string),
+            .typedField(key: "artifactFingerprint", type: .string),
+            .typedField(key: "sampleRate", type: .number),
+            .typedField(key: "channelCount", type: .number),
+            .typedField(key: "durationSeconds", type: .number),
+            .typedField(key: "windowsAnalyzed", type: .number),
+            .enumMember(
+                key: "channelMode",
+                allowed: ["mono", "stereo_energy_average", "multichannel_energy_average"]
+            ),
+            .valueEquals(key: "complete", expected: .bool(true)),
+            .nonEmptyArray(key: "bands"),
+            .numericRange(key: "bands.0.centerHz", min: 20, max: 20_000),
+            .typedField(key: "bands.0.energyDb", type: .number),
+            .typedField(key: "resonances", type: .array),
+            .typedField(key: "frequencyPeaks", type: .array),
+            .enumMember(key: "classification", allowed: ["vocal", "drums", "bass", "fullMix", "unknown"]),
+            .numericRange(key: "confidence", min: 0, max: 1),
+        ]
+    )
+
+    // AudioDispatcher `eqRecommendationResult` encodes EQBandRecommendation
+    // directly. The default six-bands-per-octave grid keeps a detected
+    // resonance's Q at or below 10; recommendEQ makes gainDb non-positive.
+    static let audioRecommendEQ = OperationOracle(
+        .audioRecommendEQ,
+        strength: .shapeAndDomain,
+        constraints: [
+            .nonEmptyArray(key: "bands"),
+            .numericRange(key: "bands.0.centerHz", min: 20, max: 20_000),
+            .typedField(key: "bands.0.gainDb", type: .number),
+            .numericRange(key: "bands.0.q", min: 0, max: 10),
+            .valueEquals(key: "bands.0.reason", expected: .string("resonance_cut")),
         ]
     )
 
