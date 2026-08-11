@@ -9,6 +9,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ## [Unreleased]
 
 ### Fixed
+- **`project.new` works on a Logic that is not in English (#519).** The menu drive named the English
+  menu-bar item, so on a Korean Logic it returned `channels_exhausted` in 2.8 s with "Could not
+  reveal Creator Studio chooser through exact File > New" — never reaching either creation branch.
+  The File menu is `파일` and its New entry is `신규`. The menu is now resolved through
+  `AXLocalePolicy` against the live menu bar and driven with the resolved titles, which also removes
+  this path's System Events dependency. The arrange-window witness was English-only for the same
+  reason and now accepts the localized suffix (`- Tracks`, `- 트랙`). Verified live in both
+  languages: Korean 6.5 s producing `무제 30 - 트랙`, English 6.4 s producing `Untitled 56 - Tracks`.
+  Locale variants are read from the live menu bar rather than translated — the Korean New entry is
+  `신규`, not the `새로 만들기` a translation would produce.
+
+### Fixed
 - **`project.new` no longer fails for a project it just created (#516).** It required Logic to answer
   `File ▸ New` with the template chooser. Where the chooser is skipped — Logic creates the untitled
   project immediately and shows only its mandatory New Track sheet — the operation polled ten seconds

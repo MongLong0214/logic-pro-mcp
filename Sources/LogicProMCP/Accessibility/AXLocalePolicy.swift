@@ -152,6 +152,21 @@ enum AXLocalePolicy {
         rationale: "Verifies the Step Input Keyboard window opened or closed after the menu action."
     )
 
+    /// Variants are READ FROM THE LIVE MENU BAR, never translated by hand. Measured on a Korean
+    /// Logic 12.3: the File menu is `파일` and its first entry is `신규` (U+C2E0 U+ADDC) — not the
+    /// `새로 만들기` a translator would reach for, which is the whole reason these are measured.
+    static let fileMenuBar = LabelSet(
+        canonical: "File",
+        variants: ["파일", "ファイル"],
+        rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
+    )
+
+    static let newProjectMenuItem = LabelSet(
+        canonical: "New",
+        variants: ["신규", "新規"],
+        rationale: "Reveals the New Project chooser, or creates the project directly where Logic skips it."
+    )
+
     static let editMenuBar = LabelSet(
         canonical: "Edit",
         variants: ["편집"],
@@ -345,6 +360,17 @@ enum AXLocalePolicy {
     )
 
     // --- Track-header read-only locators ---
+
+    /// The suffix Logic appends to the arrange window's title. Measured live on 2026-08-11: an
+    /// English Logic shows `Untitled 55 - Tracks` and a Korean one `Untitled 55 - 트랙`
+    /// (U+D2B8 U+B799). `project.new` uses this suffix as its witness that a project was created, so
+    /// an English-only literal made the operation report failure for a project it had just created —
+    /// the #516 regression, still live for anyone not running Logic in English.
+    static let arrangeWindowTitleSuffix = LabelSet(
+        canonical: "Tracks",
+        variants: ["트랙", "トラック"],
+        rationale: "Witnesses that an arrange window exists after project.new; read-only classification."
+    )
 
     static let trackMuteButton = LabelSet(
         canonical: "Mute",
