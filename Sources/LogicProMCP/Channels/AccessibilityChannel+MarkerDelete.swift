@@ -83,6 +83,7 @@ extension AccessibilityChannel {
         guard markerTableHasKeyboardFocus(runtime: runtime) else {
             // Refusing here is the point: the same keystroke elsewhere deletes a region or a track.
             extras["write_attempted"] = false
+            extras["fallback_unsafe"] = true
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: "The Marker List did not hold keyboard focus, so Delete was not pressed — "
