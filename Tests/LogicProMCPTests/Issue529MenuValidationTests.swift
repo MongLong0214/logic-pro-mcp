@@ -85,6 +85,24 @@ struct Issue529MenuValidationTests {
         #expect(entryCleanup < menuBarOpen)
     }
 
+    /// Measured, not reasoned: refusing at entry on any non-CLOSED value sent 5 of 8 fresh server
+    /// processes to the slider route, because the first menu-bar read on a cold System Events
+    /// connection is frequently unreadable. Nothing has been opened at that point, so an unreadable
+    /// menu bar is an absent observation rather than evidence of an open menu. After this run opens
+    /// one, the same value IS a refusal — that asymmetry is the point.
+    @Test("entry refuses only on an observed open menu, never on an unreadable one")
+    func entryCleanupDoesNotRefuseOnAnUnreadableMenuBar() throws {
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let entryGuard = try issue529Position(of: "if entryMenuCleanup is \"OPEN\" then", in: script)
+        let localeDecision = try issue529Position(of: "if exists menu item \"위치…\"", in: script)
+
+        #expect(entryGuard < localeDecision)
+        #expect(!script.contains("if entryMenuCleanup is not \"CLOSED\" then"))
+        // The post-actuation refusals keep the strict form, so the asymmetry is asserted
+        // rather than assumed.
+        #expect(script.contains("if cleanupState is not \"CLOSED\" then"))
+    }
+
     @Test("every refusal uses observed menu cleanup")
     func refusalPathsUseObservedMenuCleanup() throws {
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
@@ -93,7 +111,7 @@ struct Issue529MenuValidationTests {
             in: script
         )
         let entryRefusal = try issue529Position(
-            of: "return \"MENU_PICK_FAILED: entry menu cleanup",
+            of: "return \"MENU_PICK_FAILED: a menu was open at entry",
             in: script
         )
         let refusalReturns = issue529Positions(of: "return \"", in: script).filter { position in

@@ -942,9 +942,16 @@ extension AccessibilityChannel {
                 -- observe that state before this run performs any menu read or
                 -- actuation, so a later fallback never inherits an open menu.
                 set entryMenuCleanup to my dismissOpenMenu(logicProcess)
-                if entryMenuCleanup is not "CLOSED" then
-                    return "MENU_PICK_FAILED: entry menu cleanup was not observed (" & entryMenuCleanup & ")"
+                if entryMenuCleanup is "OPEN" then
+                    return "MENU_PICK_FAILED: a menu was open at entry and would not close"
                 end if
+                -- UNREADABLE is NOT a refusal here. Nothing has been opened by this
+                -- run yet, so an unreadable menu bar is an absent observation, not
+                -- evidence that something is open — and on a cold System Events
+                -- connection the first read frequently is unreadable. Refusing on it
+                -- sent 5 of 8 fresh processes to the slider route, measured. After
+                -- this run opens a menu the same value IS a refusal, because then
+                -- there is something known to be open.
                 delay 0.2
 
                 -- Locale selection is a read-only path-resolution step. It
