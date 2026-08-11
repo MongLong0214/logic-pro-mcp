@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Fixed
+- **`project.new` no longer fails for a project it just created (#516).** It required Logic to answer
+  `File ▸ New` with the template chooser. Where the chooser is skipped — Logic creates the untitled
+  project immediately and shows only its mandatory New Track sheet — the operation polled ten seconds
+  for a window that was never coming and returned `channels_exhausted`, while the requested project
+  sat on screen. Both outcomes are now accepted: the chooser route is unchanged, and a created arrange
+  window completes through the same sheet-reconciliation and arrange-window witness the chooser route
+  already used. Measured live: `state C / channels_exhausted` after 14.9 s becomes `state B /
+  created_project_window_observed` after 5.7 s, with the project confirmed at
+  `logic://project/info`.
+
 ### Added
 - `logic://` resource envelopes served under `LOGIC_MCP_ADR006_VERSIONED_CACHE=1` now carry
   `dropped_stale_writes` beside `section_revision`: the number of refreshes whose value was refused

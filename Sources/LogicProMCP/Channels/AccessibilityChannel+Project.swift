@@ -47,8 +47,19 @@ extension AccessibilityChannel {
             if exactEmptyProjectChooserIsVisible(runtime: runtime) {
                 return await createEmptyProjectFromChooser(runtime: runtime)
             }
+            // Logic does not always answer File > New with the chooser. Where the chooser is skipped
+            // it creates the untitled project immediately and presents only the mandatory New Track
+            // sheet — measured live: the arrange window read "Untitled 56 - Tracks" while this loop
+            // was still waiting for a chooser that was never coming, and the operation then reported
+            // failure for a project it had just created. A created project IS the requested outcome,
+            // so accept it here rather than timing out beside it.
+            if exactCreatedProjectWindow(runtime: runtime) != nil {
+                return await observeProjectCreationOutcome(runtime: runtime, selection: "direct")
+            }
         }
-        return .error("Exact File > New did not expose the Creator Studio chooser")
+        return .error(
+            "Exact File > New exposed neither the Creator Studio chooser nor a created project window"
+        )
     }
 
     static func exactEmptyProjectChooserIsVisible(
@@ -212,7 +223,28 @@ extension AccessibilityChannel {
         guard AXHelpers.performAction(chooseButton, kAXPressAction as String, runtime: runtime.ax) else {
             return .error("Failed to press the exact Creator Studio Choose button")
         }
+        return await observeProjectCreationOutcome(
+            runtime: runtime,
+            selection: "Empty Project",
+            observationAttempts: observationAttempts,
+            observationDelayNanoseconds: observationDelayNanoseconds
+        )
+    }
 
+    /// Watch for the project a `project.new` was asked to create, from whichever route produced it.
+    ///
+    /// Split out of `createEmptyProjectFromChooser` so the direct-creation route can reuse it. Logic
+    /// does not always answer `File ▸ New` with the template chooser: on a machine where the chooser
+    /// is skipped it creates the untitled project immediately and presents only the mandatory New
+    /// Track sheet. That is the SAME outcome the chooser route reaches one step later, and it needs
+    /// the same handling — the sheet reconciliation, the arrange-window witness, and the honest
+    /// State B that leaves the independent Project-resource readback to the caller.
+    static func observeProjectCreationOutcome(
+        runtime: AXLogicProElements.Runtime,
+        selection: String,
+        observationAttempts: Int = 80,
+        observationDelayNanoseconds: UInt64 = 250_000_000
+    ) async -> ChannelResult {
         // Some Creator Studio builds open a zero-track Project directly, while
         // others expose Logic's mandatory New Track sheet. Reuse the existing
         // structural classifier for the sheet path: it only clicks Create when
@@ -234,7 +266,7 @@ extension AccessibilityChannel {
                         extras: [
                             "operation": "project.new",
                             "method": "accessibility",
-                            "selection": "Empty Project",
+                            "selection": selection,
                             "phase": "mandatory_track_create_unconfirmed",
                             "write_attempted": true,
                             "safe_to_retry": false,
@@ -248,7 +280,7 @@ extension AccessibilityChannel {
                     extras: [
                         "operation": "project.new",
                         "method": "accessibility",
-                        "selection": "Empty Project",
+                        "selection": selection,
                         "phase": "unexpected_blocking_sheet",
                         "sheet_kind": String(describing: outcome.kind),
                         "write_attempted": true,
@@ -264,7 +296,7 @@ extension AccessibilityChannel {
                     extras: [
                         "operation": "project.new",
                         "method": "accessibility",
-                        "selection": "Empty Project",
+                        "selection": selection,
                         "phase": "created_project_window_observed",
                         "window_title": AXHelpers.getTitle(current, runtime: runtime.ax) ?? "",
                         "mandatory_track_created": createdTrack,
