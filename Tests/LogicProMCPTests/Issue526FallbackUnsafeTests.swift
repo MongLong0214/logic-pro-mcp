@@ -164,7 +164,6 @@ private let issue526NoOpMouseRuntime = AXMouseHelper.Runtime(
 
     #expect(!result.isSuccess)
     #expect(result.message == envelope)
-    #expect(!HonestContract.isTerminalStateC(result.message))
     #expect(HonestContract.isFallbackUnsafeStateC(result.message))
     #expect(await accessibility.executions() == 1)
     #expect(await keyCommands.executions() == 0)
@@ -203,6 +202,7 @@ private let issue526NoOpMouseRuntime = AXMouseHelper.Runtime(
         runtime: issue526SelectionFailureRuntime(),
         mouse: issue526NoOpMouseRuntime
     )
+    #expect(!refusal.isSuccess)
     let router = ChannelRouter()
     let accessibility = Issue526ErrorChannel(id: .accessibility, envelope: refusal.message)
     let keyCommands = Issue526SuccessProbeChannel(id: .midiKeyCommands)

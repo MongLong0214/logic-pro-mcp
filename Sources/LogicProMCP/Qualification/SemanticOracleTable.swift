@@ -113,8 +113,8 @@ enum SemanticOracleTable {
     ///
     /// DELIBERATELY ABSENT (audited, no State-A envelope to verify — see
     /// `structurallyUnverifiedMutatingOperationIDs`): transport.rewind,
-    /// transport.fast_forward, navigate.zoom_to_fit, navigate.delete_marker,
-    /// navigate.toggle_view. Every one routes ONLY to send-only channels
+    /// transport.fast_forward, navigate.zoom_to_fit, navigate.toggle_view.
+    /// Every one routes ONLY to send-only channels
     /// (MCU / MIDIKeyCommands / CGEvent) whose handlers emit State B
     /// `readback_unavailable` with no read-back — there is no State A to pin, so a
     /// verified-write oracle would have to invent a contract the handler can never
@@ -126,9 +126,9 @@ enum SemanticOracleTable {
         .transportPlay, .transportStop, .transportRecord, .transportPause,
         .transportToggleCycle, .transportToggleMetronome, .transportToggleCountIn,
         .transportToggleAutopunch, .transportSetTempo, .transportGotoPosition,
-        // navigate (5 of the 8 audited — zoom_to_fit/delete_marker/toggle_view are send-only)
+        // navigate (6 of the 8 audited — zoom_to_fit/toggle_view are send-only)
         .navigateGotoBar, .navigateGotoMarker, .navigateCreateMarker,
-        .navigateRenameMarker, .navigateSetZoom,
+        .navigateDeleteMarker, .navigateRenameMarker, .navigateSetZoom,
     ]
 
     /// The mutating operations B3 covers with a verified-write (State A) oracle:
@@ -271,11 +271,6 @@ enum SemanticOracleTable {
             "send-only — routes to [.midiKeyCommands, .cgEvent]; both fire a blind key "
             + "command (CC 46 / key Z) with no arrange-zoom read-back, so the op is honestly "
             + "State B and never reaches a verified State A",
-        .navigateDeleteMarker:
-            "send-only — routes to [.midiKeyCommands, .cgEvent] (CC 45 / keystroke); the "
-            + "keycmd channel gives no marker-list read-back, so a delete is State B only. "
-            + "(Availability is .requiresKeyBinding, but that is a SETUP axis — the reason "
-            + "it has no State A is the echo-less channel, not the keybinding requirement.)",
         .navigateToggleView:
             "send-only — routes each view to [.midiKeyCommands, .cgEvent] (view.toggle_*); "
             + "the key command fires blind with no view-state read-back, so no State A exists",
@@ -472,6 +467,7 @@ enum SemanticOracleTable {
         navigateGotoBar,
         navigateGotoMarker,
         navigateCreateMarker,
+        navigateDeleteMarker,
         navigateRenameMarker,
         navigateSetZoom,
         // #373 Phase B3 — project/tracks/system/midi verified-write oracles.
@@ -1590,6 +1586,27 @@ enum SemanticOracleTable {
             .typedField(key: "observed_marker_id", type: .number),
             .typedField(key: "marker_count_after", type: .number),
             .typedField(key: "marker_count_before", type: .number),
+        ]
+    )
+
+    // AccessibilityChannel+MarkerDelete `defaultDeleteMarker` is accessibility-only.
+    // Its State-A gate is stronger than a count check: it reads the marker list
+    // after the delete until two consecutive readings settle, then compares the
+    // complete observed survivor set (`name@position` for every remaining marker)
+    // with the full expected set captured before the write. Only an exact match
+    // emits State A. The survivor set itself is the handler's State-A gate rather
+    // than a response field, so this oracle pins the stable-readback signal and
+    // the target/count identity carried by that verified envelope.
+    static let navigateDeleteMarker = SafeMutationOracle.oracle(
+        .navigateDeleteMarker,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("nav.delete_marker")),
+            .typedField(key: "requested_index", type: .number),
+            .typedField(key: "target_name", type: .string),
+            .typedField(key: "target_position", type: .string),
+            .typedField(key: "marker_count_before", type: .number),
+            .valueEquals(key: "readback_settled", expected: .bool(true)),
+            .typedField(key: "marker_count_after", type: .number),
         ]
     )
 

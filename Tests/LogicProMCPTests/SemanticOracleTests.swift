@@ -397,12 +397,15 @@ struct SemanticOracleCensusTests {
     /// a count) is what makes the increment a deliberate, reviewable diff. B1, B2,
     /// B3 and B4 are each pinned by count so a premature or miscounted oracle in any
     /// fails here.
+    /// B2 went 15 -> 16 and the total 48 -> 49 when `navigate.delete_marker` stopped being
+    /// structurally unverifiable: its chain is accessibility-only, and that path reads the
+    /// surviving marker set back, so it has a State A to pin and an oracle to pin it with.
     @Test func mutatingOraclesAreExactlyTheDeclaredIncrement() {
         let mutatingOracles = Set(SemanticOracleTable.byOperationID.keys)
             .intersection(SemanticOracleTable.mutatingSpecIDs)
         #expect(mutatingOracles == SemanticOracleTable.coveredMutatingOperationIDs)
         #expect(SemanticOracleTable.phaseB1MutatingOperationIDs.count == 12)
-        #expect(SemanticOracleTable.phaseB2MutatingOperationIDs.count == 15)
+        #expect(SemanticOracleTable.phaseB2MutatingOperationIDs.count == 16)
         #expect(SemanticOracleTable.phaseB3MutatingOperationIDs.count == 15)
         #expect(SemanticOracleTable.phaseB4MutatingOperationIDs.count == 6)
         // B1, B2, B3 and B4 are PAIRWISE-DISJOINT increments — no op claimed twice.
@@ -420,7 +423,7 @@ struct SemanticOracleCensusTests {
                 )
             }
         }
-        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 48)
+        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 49)
     }
 
     /// #373 B4 — the mutating oracle inventory is CLOSED. Every supported
@@ -488,13 +491,15 @@ struct SemanticOracleCensusTests {
         let exclusions = SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs
         #expect(!exclusions.isEmpty)
         #expect(exclusions[.mixerSetPluginParam] != nil)
-        // The five B2 send-only ops that structurally cannot reach State A.
+        // The four B2 send-only ops that structurally cannot reach State A.
         for id in [
             OperationID.transportRewind, .transportFastForward,
-            .navigateZoomToFit, .navigateDeleteMarker, .navigateToggleView,
+            .navigateZoomToFit, .navigateToggleView,
         ] {
             #expect(exclusions[id] != nil, "\(id.rawValue) missing its send-only exclusion reason")
         }
+        #expect(exclusions[.navigateDeleteMarker] == nil)
+        #expect(SemanticOracleTable.coveredMutatingOperationIDs.contains(.navigateDeleteMarker))
         // The B3 audited exclusions: project lifecycle ops with no State A
         // (new/open/close State-B ceiling, launch/quit prose), the send-only
         // tracks.duplicate, and the send-only midi surface (a representative

@@ -93,15 +93,30 @@ struct RoutingAuditInvariantTests {
         )
     }
 
-    @Test("MIDIKeyCommandsChannel health detail enumerates every keycmd-only op")
-    func healthDetailMentionsEveryKeycmdOnlyOp() {
+    @Test("MIDIKeyCommandsChannel health detail exactly enumerates keycmd-only ops")
+    func healthDetailExactlyMatchesKeycmdOnlyOps() throws {
         let detail = MIDIKeyCommandsChannel.manualValidationDetailSuffix
-        let missing = Self.expectedKeycmdOnlyOps
-            .filter { !detail.contains($0) }
-            .sorted()
+        let effectivePrefix = "Effectively keycmd-only (no working non-keycmd fallback on Logic 12.2): "
+        let effectiveSection = try #require(
+            detail.components(separatedBy: effectivePrefix).dropFirst().first?
+                .components(separatedBy: ". Other preset ops").first
+        )
+        let orphanPrefix = "Orphans (in mappingTable + routingTable but no MCP tool exposes a call path): "
+        let orphanSection = try #require(
+            detail.components(separatedBy: orphanPrefix).dropFirst().first?
+                .components(separatedBy: ". Tracked in NG6 follow-up.").first
+        )
+        let declared = Set(
+            (effectiveSection + "," + orphanSection)
+                .split(separator: ",")
+                .map { entry in
+                    entry.trimmingCharacters(in: .whitespacesAndNewlines)
+                        .components(separatedBy: " ").first ?? ""
+                }
+        )
         #expect(
-            missing.isEmpty,
-            "expectedKeycmdOnlyOps has ops the health detail does not mention — SETUP.md §4.1 and the runtime health string would disagree: \(missing)"
+            declared == Self.expectedKeycmdOnlyOps,
+            "health detail's declared keycmd-only set must exactly match expectedKeycmdOnlyOps — declared: \(declared.sorted()), expected: \(Self.expectedKeycmdOnlyOps.sorted())"
         )
     }
 
