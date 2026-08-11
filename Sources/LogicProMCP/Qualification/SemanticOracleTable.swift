@@ -1591,12 +1591,16 @@ enum SemanticOracleTable {
 
     // AccessibilityChannel+MarkerDelete `defaultDeleteMarker` is accessibility-only.
     // Its State-A gate is stronger than a count check: it reads the marker list
-    // after the delete until two consecutive readings settle, then compares the
-    // complete observed survivor set (`name@position` for every remaining marker)
-    // with the full expected set captured before the write. Only an exact match
-    // emits State A. The survivor set itself is the handler's State-A gate rather
-    // than a response field, so this oracle pins the stable-readback signal and
-    // the target/count identity carried by that verified envelope.
+    // after the delete until two consecutive POSITION multisets settle. State A
+    // requires the expected pre-write positions with one target-position instance
+    // removed, the observed positions to equal that expectation, and the count to
+    // decrease by one. Each position is length-prefixed before the entries are
+    // sorted and joined, so the envelope's strings have unambiguous boundaries.
+    // The oracle binds that independently read-back multiset to the
+    // request-derived expectation. This proves a position occurrence disappeared,
+    // but cannot tell WHICH marker disappeared when multiple markers share that
+    // position; marker names are intentionally only State-B diagnostics because
+    // Logic can renumber auto-generated names after deletion.
     static let navigateDeleteMarker = SafeMutationOracle.oracle(
         .navigateDeleteMarker,
         semantics: [
@@ -1607,6 +1611,10 @@ enum SemanticOracleTable {
             .typedField(key: "marker_count_before", type: .number),
             .valueEquals(key: "readback_settled", expected: .bool(true)),
             .typedField(key: "marker_count_after", type: .number),
+            .fieldsEqual(
+                keyA: "expected_survivor_position_multiset",
+                keyB: "observed_survivor_position_multiset"
+            ),
         ]
     )
 

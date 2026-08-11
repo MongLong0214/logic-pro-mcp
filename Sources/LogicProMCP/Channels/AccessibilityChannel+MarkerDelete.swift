@@ -58,10 +58,20 @@ extension AccessibilityChannel {
             ))
         }
 
-        // Identify the survivor set by name+position rather than by index: indices renumber when a
-        // row disappears, so comparing indices after the write would prove nothing.
-        let expectedSurvivors = before.filter { $0.id != index }
-            .map { "\($0.name)@\($0.position)" }
+        // Indices renumber when a row disappears, so comparing them after the write would prove
+        // nothing. Instead, expect the pre-write POSITION multiset with exactly one instance of
+        // the target's position removed. Position entries are length-prefixed before sorting and
+        // joining, so their concatenation has unambiguous boundaries.
+        let expectedSurvivorMarkers = before.filter { $0.id != index }
+        let expectedSurvivorPositions = expectedSurvivorMarkers
+            .map(\.position)
+            .map(canonicalMarkerPosition)
+            .sorted()
+        // Names are deliberately not part of the State-A proof: Logic renumbers its generated
+        // marker names after a delete. Retain unambiguous name/position identities for a State-B
+        // mismatch diagnostic, where they help a human understand what was read back.
+        let expectedSurvivors = expectedSurvivorMarkers
+            .map { canonicalMarkerIdentity(name: $0.name, position: $0.position) }
             .sorted()
         var extras: [String: Any] = [
             "operation": "nav.delete_marker",
@@ -109,19 +119,24 @@ extension AccessibilityChannel {
         // name. Verifying against a single read produced a State A for a marker that was still
         // there. So require two consecutive identical readings before believing either of them, and
         // report State B when they will not settle rather than certifying a guess.
-        var survivors: [String] = []
+        var observedSurvivorPositions: [String] = []
+        var observedSurvivors: [String] = []
         var settled = false
-        var previous: [String]?
+        var previousPositions: [String]?
         for _ in 0..<6 {
             let reading = AXLogicProElements.enumerateMarkersFromListWindow(
                 afterBinding.window, runtime: runtime.ax
-            ).map { "\($0.name)@\($0.position)" }.sorted()
-            if let previous, previous == reading {
-                survivors = reading
+            )
+            let positions = reading.map(\.position).map(canonicalMarkerPosition).sorted()
+            if let previousPositions, previousPositions == positions {
+                observedSurvivorPositions = positions
+                observedSurvivors = reading
+                    .map { canonicalMarkerIdentity(name: $0.name, position: $0.position) }
+                    .sorted()
                 settled = true
                 break
             }
-            previous = reading
+            previousPositions = positions
             mouse.sleepMicros(250_000)
         }
         guard settled else {
@@ -129,16 +144,42 @@ extension AccessibilityChannel {
             return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
         }
         extras["readback_settled"] = true
-        extras["marker_count_after"] = survivors.count
+        extras["marker_count_after"] = observedSurvivorPositions.count
 
-        guard survivors == expectedSurvivors else {
-            // Either the target survived, or something else went with it. Both are mismatches, and
-            // saying which is more useful than a bare count.
-            extras["observed_survivors"] = survivors
+        // This proves that precisely one position occurrence disappeared and that it was an
+        // occurrence at the target's position. It cannot establish WHICH marker was removed when
+        // multiple markers share that position; the position multiset contains no such identity.
+        guard observedSurvivorPositions.count == before.count - 1,
+              observedSurvivorPositions == expectedSurvivorPositions else {
+            // Either the target position survived, or another position disappeared. The
+            // name-carrying diagnostics make that mismatch useful to a human without making names
+            // part of the stable State-A comparison.
+            extras["observed_survivors"] = observedSurvivors
             extras["expected_survivors"] = expectedSurvivors
             return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
         }
+        // Bind the request-derived position-multiset expectation to the independently read-back
+        // position multiset in State A. Names are not exposed here because Logic may renumber them.
+        extras["expected_survivor_position_multiset"] = expectedSurvivorPositions.joined()
+        extras["observed_survivor_position_multiset"] = observedSurvivorPositions.joined()
         return .success(HonestContract.encodeStateA(extras: extras))
+    }
+
+    /// An unambiguous element of a position multiset.
+    ///
+    /// The wire form is `<position UTF-8 byte count>:<position>`. Sorting these elements and
+    /// concatenating them creates an unambiguous multiset encoding without trusting a delimiter.
+    private static func canonicalMarkerPosition(_ position: String) -> String {
+        "\(position.lengthOfBytes(using: .utf8)):\(position)"
+    }
+
+    /// An unambiguous, stable marker identity for survivor-set comparison and reporting.
+    ///
+    /// The wire form is `<name UTF-8 byte count>:<name><position UTF-8 byte count>:<position>`.
+    /// Because the two payload strings are length-prefixed, concatenating sorted entries cannot
+    /// be forged by putting a former joining character (such as `@`) in a marker name.
+    private static func canonicalMarkerIdentity(name: String, position: String) -> String {
+        "\(name.lengthOfBytes(using: .utf8)):\(name)\(position.lengthOfBytes(using: .utf8)):\(position)"
     }
 
     /// Selects the row and confirms the table agrees, since a write that reports success without

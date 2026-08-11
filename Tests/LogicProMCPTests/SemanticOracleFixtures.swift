@@ -767,16 +767,19 @@ enum SemanticOracleFixtures {
             """,
             readback: "{}"
         ),
-        // defaultDeleteMarker State A: the settled AX marker-list readback exactly
-        // matched the complete expected survivor set (name@position for every
-        // marker except the requested target).
+        // defaultDeleteMarker State A: the settled AX marker-list POSITION multiset
+        // exactly matched the pre-write positions with the target occurrence
+        // removed. Each sorted position entry is length-prefixed, then the entries
+        // join without an ambiguous delimiter.
         .navigateDeleteMarker: SemanticOracleFixture(
             response: """
                 {"success":true,"verified":true,"state":"A",\
                 "operation":"nav.delete_marker","requested_index":1,\
                 "target_name":"Verse","target_position":"5.1.1.1",\
                 "marker_count_before":3,"write_attempted":true,\
-                "readback_settled":true,"marker_count_after":2}
+                "readback_settled":true,"marker_count_after":2,\
+                "expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1",\
+                "observed_survivor_position_multiset":"7:1.1.1.18:12.1.1.1"}
                 """,
             readback: "{}"
         ),

@@ -708,6 +708,47 @@ struct SemanticOracleMutationTests {
         #expect(!failure, "metronome oracle accepted a State C failure")
     }
 
+    /// `nav.delete_marker` reaches State A only after the settled marker-list
+    /// POSITION multiset equals the pre-write expectation with one instance of
+    /// the target position removed. The envelope must bind that equality:
+    /// otherwise stable reads, typed counts, and echoed target metadata can
+    /// falsely certify a no-op or the deletion of a marker at another position.
+    @Test func deleteMarkerOracleRequiresTheExactSettledPositionMultiset() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.navigateDeleteMarker])
+        let fixture = try #require(SemanticOracleFixtures.byOperationID[.navigateDeleteMarker])
+
+        let honest = try #require(oracle.evaluate(
+            responseData: fixture.responseData, readbackData: fixture.readbackData))
+        #expect(honest, "delete_marker rejected its honest settled position multiset")
+
+        // Mutation: put the target-position entry back into observed positions.
+        // A settled no-op must be rejected even though the rest of State-A's
+        // envelope shape is intact.
+        let noOp = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":3,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:5.1.1.18:12.1.1.1"}"#.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!noOp, "delete_marker accepted a settled State A whose position multiset lost no target occurrence")
+
+        // Mutation: replace the expected 12.1.1.1 survivor with the target's
+        // 5.1.1.1 position. Count-only validation would accept this wrong delete.
+        let wrongPositions = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:5.1.1.1"}"#.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!wrongPositions, "delete_marker accepted a settled readback with wrong positions")
+
+        // Mutation: every remaining default marker name shifted down by one after
+        // deleting index 0, but their positions are exactly right. State A does
+        // not normally carry these State-B diagnostic fields; including them here
+        // proves the oracle deliberately binds the position multiset, not names.
+        let namesShifted = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":0,"target_name":"Marker 1","target_position":"1.1.1.1","marker_count_before":4,"write_attempted":true,"readback_settled":true,"marker_count_after":3,"expected_survivor_position_multiset":"7:1.1.1.17:1.1.1.18:5.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:1.1.1.18:5.1.1.1","expected_survivors":["8:Marker 27:1.1.1.1","8:Marker 37:1.1.1.1","8:Marker 48:5.1.1.1"],"observed_survivors":["8:Marker 17:1.1.1.1","8:Marker 27:1.1.1.1","8:Marker 38:5.1.1.1"]}"#.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(namesShifted, "delete_marker rejected correct positions solely because default names shifted")
+    }
+
     /// #373 B3 — project.save_as is envelope-only because its
     /// [.accessibility, .appleScript] chain reaches State A in two shapes with
     /// DISJOINT non-envelope keys (AX-dialog: requested/observed/via; AppleScript:
