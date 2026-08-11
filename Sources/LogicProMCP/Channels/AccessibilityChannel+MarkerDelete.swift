@@ -80,19 +80,37 @@ extension AccessibilityChannel {
             ))
         }
 
-        guard markerTableHasKeyboardFocus(runtime: runtime) else {
-            // Refusing here is the point: the same keystroke elsewhere deletes a region or a track.
-            extras["write_attempted"] = false
-            return .error(HonestContract.encodeStateC(
-                error: .axWriteFailed,
-                hint: "The Marker List did not hold keyboard focus, so Delete was not pressed — "
-                    + "the same key deletes a region or a track when focus is in the arrange area.",
-                extras: extras
-            ))
+        // The window's own Edit ▸ Delete is aimed at THIS list and needs no keyboard focus, so it is
+        // tried first. The keystroke below does need focus, and its guard was refusing nearly every
+        // call — measured (#523). The refusal is right in itself; what it exposed is worse. The
+        // router treats a deliberate `write_attempted: false` State C as a failure and falls through
+        // to the MIDI key-command channel, which fires a CC nothing is bound to and answers
+        // `success: true, state: B`. A safety refusal was being turned into a reported success for an
+        // operation that never happened. Acting through the menu removes the reason to be there.
+        //
+        // The entry is matched EXACTLY: the same menu offers `Delete Undo History`, which a prefix
+        // match reaches first — that is not hypothetical, it discarded a project's undo history while
+        // this was being investigated.
+        if deleteViaMarkerListEditMenu(in: window, runtime: runtime) {
+            extras["write_attempted"] = true
+            extras["actuation"] = "marker_list_edit_menu"
+        } else {
+            guard markerTableHasKeyboardFocus(runtime: runtime) else {
+                // Refusing here is the point: the same keystroke elsewhere deletes a region or a track.
+                extras["write_attempted"] = false
+                extras["actuation"] = "refused_no_keyboard_focus"
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: "The Marker List's Edit menu offered no exact Delete entry and the list did "
+                        + "not hold keyboard focus, so Delete was not pressed — the same key deletes "
+                        + "a region or a track when focus is in the arrange area.",
+                    extras: extras
+                ))
+            }
+            extras["write_attempted"] = true
+            extras["actuation"] = "delete_key"
+            _ = mouse.postKeyEvent(0x33)  // kVK_Delete
         }
-
-        extras["write_attempted"] = true
-        _ = mouse.postKeyEvent(0x33)  // kVK_Delete
         mouse.sleepMicros(400_000)
 
         guard let afterBinding = AXLogicProElements.markerListBinding(runtime: runtime),
@@ -199,4 +217,37 @@ extension AccessibilityChannel {
         }
         return false
     }
+
+    /// Press the Marker List window's own `Delete` entry.
+    ///
+    /// Matched by exact title against a locale policy entry, because the same menu carries
+    /// `Delete Undo History` and anything looser reaches that one first.
+    private static func deleteViaMarkerListEditMenu(
+        in window: AXUIElement,
+        runtime: AXLogicProElements.Runtime
+    ) -> Bool {
+        let buttons = AXHelpers.findAllDescendants(
+            of: window, role: kAXMenuButtonRole as String, maxDepth: 10, runtime: runtime.ax
+        ).filter {
+            AXLocalePolicy.elementMatches($0, AXLocalePolicy.editMenuBar, runtime: runtime.ax)
+        }
+        guard buttons.count == 1, let editButton = buttons.first else { return false }
+        _ = AXHelpers.performAction(editButton, "AXShowMenu", runtime: runtime.ax)
+        guard let menu = AXHelpers.getChildren(editButton, runtime: runtime.ax).first(where: {
+            AXHelpers.getRole($0, runtime: runtime.ax) == (kAXMenuRole as String)
+        }) else { return false }
+        let entries = AXHelpers.findAllDescendants(
+            of: menu, role: kAXMenuItemRole as String, maxDepth: 4, runtime: runtime.ax
+        ).filter {
+            AXLocalePolicy.elementMatches(
+                $0, AXLocalePolicy.deleteMenuItem, mode: .exactStrict, runtime: runtime.ax
+            )
+        }
+        guard entries.count == 1, let entry = entries.first else {
+            _ = AXHelpers.performAction(menu, kAXCancelAction as String, runtime: runtime.ax)
+            return false
+        }
+        return AXHelpers.performAction(entry, kAXPickAction as String, runtime: runtime.ax)
+    }
+
 }

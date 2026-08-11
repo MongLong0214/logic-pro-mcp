@@ -212,6 +212,17 @@ enum AXLocalePolicy {
         rationale: "Reveals the New Project chooser, or creates the project directly where Logic skips it."
     )
 
+    /// The plain `Delete` entry on a list window's Edit menu.
+    ///
+    /// Matched with `.exactStrict`, never as a prefix: the same menu offers `Delete Undo History`,
+    /// and a prefix match reaches it first. That is not a hypothetical — it happened during the
+    /// investigation of #523 and discarded a project's undo history.
+    static let deleteMenuItem = LabelSet(
+        canonical: "Delete",
+        variants: ["삭제"],
+        rationale: "Removes the selected row from a list window; exact match only."
+    )
+
     static let editMenuBar = LabelSet(
         canonical: "Edit",
         variants: ["편집"],

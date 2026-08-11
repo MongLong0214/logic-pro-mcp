@@ -9,6 +9,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ## [Unreleased]
 
 ### Fixed
+- **`navigate.delete_marker` deletes the marker, and says so honestly (#523).** It reported
+  `success: true, state: B` while the marker stayed. The accessibility path's safety guard was
+  refusing — correctly, because the same keystroke deletes a region or a track when focus is not in
+  the Marker List — and the router treated that deliberate `write_attempted: false` refusal as a
+  failure, fell through to the MIDI key-command channel, and that channel fired a CC nothing is bound
+  to and answered success. The operation now acts through the Marker List window's own Edit ▸ Delete,
+  which is aimed at that list and needs no keyboard focus; the keystroke and its guard remain as the
+  fallback. Verified live: `state A`, `verified true`, 15 markers to 14.
+
 - **The MIDI readback collector can resolve the Event List display mode (#524).** It searched the
   **application** menu bar for `Event Position and Length as Time`; that menu has sixteen entries on
   Logic 12.3 and none of them is the setting, which lives in the Event pane's own View menu beside the
