@@ -897,44 +897,118 @@ extension AccessibilityChannel {
         // send Cmd+A to the arrange area, selecting all regions unexpectedly.
         let logicProAppleScript = LogicProTarget.appleScriptTarget()
         return """
-        \(logicProAppleScript.activateByBundleID)
-        delay 0.2
-        tell application "System Events"
-            tell \(logicProAppleScript.systemEventsProcessTarget)
-                try
-                    -- Opening each menu makes Logic validate the child item before
-                    -- AXEnabled is read. A closed menu can expose a stale value.
-                    click menu bar item "탐색" of menu bar 1
-                    click menu item "이동" of menu 1 of menu bar item "탐색" of menu bar 1
-                    set mi to menu item "위치…" of menu 1 of menu item "이동" of menu 1 of menu bar item "탐색" of menu bar 1
-                on error errMsg
+        -- A selected menu-bar item is the AX observation that one of Logic's
+        -- menus is currently open. Return UNREADABLE rather than treating a
+        -- failed read as a clean menu state.
+        on menuOpenState(theProcess)
+            using terms from application "System Events"
+                tell theProcess
                     try
-                        -- The Korean lookup may have opened a menu before failing.
-                        -- Dismiss it before opening the English fallback chain.
-                        key code 53
-                        click menu bar item "Navigate" of menu bar 1
-                        click menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1
-                        set mi to menu item "Position…" of menu 1 of menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1
-                    on error errMsg2
-                        key code 53
-                        return "MENU_NOT_FOUND: " & errMsg2
+                        repeat with menuBarItem in every menu bar item of menu bar 1
+                            if selected of menuBarItem then return "OPEN"
+                        end repeat
+                        return "CLOSED"
+                    on error
+                        return "UNREADABLE"
                     end try
+                end tell
+            end using terms from
+        end menuOpenState
+
+        -- Never claim that Escape cleaned up a menu until AXSelected says so.
+        -- Three attempts are enough to cover a menu/submenu chain without
+        -- turning a failed close into an unbounded retry.
+        on dismissOpenMenu(theProcess)
+            set menuState to my menuOpenState(theProcess)
+            if menuState is "CLOSED" then return "CLOSED"
+            if menuState is not "OPEN" then return menuState
+            repeat 3 times
+                using terms from application "System Events"
+                    tell theProcess to key code 53
+                end using terms from
+                delay 0.1
+                set menuState to my menuOpenState(theProcess)
+                if menuState is "CLOSED" then return "CLOSED"
+                if menuState is not "OPEN" then return menuState
+            end repeat
+            return "OPEN"
+        end dismissOpenMenu
+
+        \(logicProAppleScript.activateByBundleID)
+        tell application "System Events"
+            set logicProcess to \(logicProAppleScript.systemEventsProcessTarget)
+            tell logicProcess
+                -- A timed-out predecessor can leave a menu open. Clear and
+                -- observe that state before this run performs any menu read or
+                -- actuation, so a later fallback never inherits an open menu.
+                set entryMenuCleanup to my dismissOpenMenu(logicProcess)
+                if entryMenuCleanup is not "CLOSED" then
+                    return "MENU_PICK_FAILED: entry menu cleanup was not observed (" & entryMenuCleanup & ")"
+                end if
+                delay 0.2
+
+                -- Locale selection is a read-only path-resolution step. It
+                -- deliberately performs no click, so an AX error cannot turn a
+                -- Korean attempt into a second English menu actuation.
+                try
+                    if exists menu item "위치…" of menu 1 of menu item "이동" of menu 1 of menu bar item "탐색" of menu bar 1 then
+                        set selectedMenuBarItem to menu bar item "탐색" of menu bar 1
+                        set selectedSubmenuItem to menu item "이동" of menu 1 of selectedMenuBarItem
+                        set mi to menu item "위치…" of menu 1 of selectedSubmenuItem
+                    else if exists menu item "Position…" of menu 1 of menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1 then
+                        set selectedMenuBarItem to menu bar item "Navigate" of menu bar 1
+                        set selectedSubmenuItem to menu item "Go To" of menu 1 of selectedMenuBarItem
+                        set mi to menu item "Position…" of menu 1 of selectedSubmenuItem
+                    else
+                        set cleanupState to my dismissOpenMenu(logicProcess)
+                        if cleanupState is not "CLOSED" then
+                            return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                        end if
+                        return "MENU_NOT_FOUND"
+                    end if
+                on error errMsg
+                    set cleanupState to my dismissOpenMenu(logicProcess)
+                    if cleanupState is not "CLOSED" then
+                        return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                    end if
+                    return "MENU_NOT_FOUND: " & errMsg
+                end try
+                try
+                    -- Opening the selected chain refreshes AXEnabled. This is
+                    -- the only menu-bar chain that can be clicked in this run.
+                    click selectedMenuBarItem
+                    click selectedSubmenuItem
+                on error errMsg
+                    set cleanupState to my dismissOpenMenu(logicProcess)
+                    if cleanupState is not "CLOSED" then
+                        return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                    end if
+                    return "MENU_NOT_FOUND: " & errMsg
                 end try
                 try
                     set menuItemEnabled to enabled of mi
                 on error
                     -- An unreadable AXEnabled must not authorise the pick.
-                    key code 53
+                    set cleanupState to my dismissOpenMenu(logicProcess)
+                    if cleanupState is not "CLOSED" then
+                        return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                    end if
                     return "MENU_STATE_UNREADABLE"
                 end try
                 if not menuItemEnabled then
-                    key code 53
+                    set cleanupState to my dismissOpenMenu(logicProcess)
+                    if cleanupState is not "CLOSED" then
+                        return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                    end if
                     return "MENU_DISABLED"
                 end if
                 try
                     click mi
                 on error errMsg
-                    key code 53
+                    set cleanupState to my dismissOpenMenu(logicProcess)
+                    if cleanupState is not "CLOSED" then
+                        return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                    end if
                     return "MENU_PICK_FAILED: " & errMsg
                 end try
                 -- Wait up to 3s for the dialog window to appear before typing,
@@ -955,7 +1029,10 @@ extension AccessibilityChannel {
                     end try
                 end repeat
                 if not dialogReady then
-                    key code 53
+                    set cleanupState to my dismissOpenMenu(logicProcess)
+                    if cleanupState is not "CLOSED" then
+                        return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                    end if
                     return "DIALOG_NOT_READY"
                 end if
             end tell

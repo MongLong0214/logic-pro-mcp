@@ -21,60 +21,104 @@ private func issue529Position(
     return range.lowerBound
 }
 
+private func issue529Position(
+    of fragment: String,
+    before end: String.Index,
+    in script: String
+) throws -> String.Index {
+    let range = try #require(
+        script.range(of: fragment, options: .backwards, range: script.startIndex..<end),
+        "Generated AppleScript must contain \(fragment) before the refusal"
+    )
+    return range.lowerBound
+}
+
+private func issue529Positions(of fragment: String, in script: String) -> [String.Index] {
+    var positions: [String.Index] = []
+    var searchStart = script.startIndex
+    while let range = script.range(of: fragment, range: searchStart..<script.endIndex) {
+        positions.append(range.lowerBound)
+        searchStart = range.upperBound
+    }
+    return positions
+}
+
 @Suite("Issue #529 — Go To Position menu validation")
 struct Issue529MenuValidationTests {
-    @Test("Korean menu chain opens before AXEnabled is read")
-    func koreanMenuOpensBeforeEnabledRead() throws {
+    @Test("locale is decided by non-actuating reads before one selected chain opens")
+    func localeIsDecidedBeforeSingleMenuChainOpens() throws {
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
-        let menuBarOpen = try issue529Position(
-            of: "click menu bar item \"탐색\" of menu bar 1",
+        let koreanDecision = try issue529Position(
+            of: "if exists menu item \"위치…\"",
             in: script
         )
-        let submenuOpen = try issue529Position(
-            of: "click menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
+        let englishDecision = try issue529Position(
+            of: "else if exists menu item \"Position…\"",
             in: script
         )
-        let enabledRead = try issue529Position(of: "enabled of mi", in: script)
-        let englishMenuBarOpen = try issue529Position(
-            of: "click menu bar item \"Navigate\" of menu bar 1",
-            in: script
-        )
-
-        #expect(menuBarOpen < submenuOpen)
-        #expect(submenuOpen < enabledRead)
-        #expect(menuBarOpen < englishMenuBarOpen)
-    }
-
-    @Test("English fallback menu chain opens before AXEnabled is read")
-    func englishMenuOpensBeforeEnabledRead() throws {
-        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
-        let menuBarOpen = try issue529Position(
-            of: "click menu bar item \"Navigate\" of menu bar 1",
-            in: script
-        )
-        let submenuOpen = try issue529Position(
-            of: "click menu item \"Go To\" of menu 1 of menu bar item \"Navigate\" of menu bar 1",
-            in: script
-        )
+        let menuBarOpen = try issue529Position(of: "click selectedMenuBarItem", in: script)
+        let submenuOpen = try issue529Position(of: "click selectedSubmenuItem", in: script)
         let enabledRead = try issue529Position(of: "enabled of mi", in: script)
 
+        #expect(koreanDecision < englishDecision)
+        #expect(englishDecision < menuBarOpen)
         #expect(menuBarOpen < submenuOpen)
         #expect(submenuOpen < enabledRead)
+        #expect(!script.contains("click menu bar item"))
+        #expect(issue529Positions(of: "click selectedMenuBarItem", in: script).count == 1)
+        #expect(issue529Positions(of: "click selectedSubmenuItem", in: script).count == 1)
     }
 
-    @Test("disabled menu path dismisses the open menu before refusing")
-    func disabledMenuIsDismissedBeforeRefusal() throws {
+    @Test("entry cleanup runs before locale discovery or menu actuation")
+    func entryTimeCleanupPrecedesMenuWork() throws {
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
-        let disabledGuard = try issue529Position(of: "if not menuItemEnabled then", in: script)
-        let dismissal = try issue529Position(of: "key code 53", after: disabledGuard, in: script)
-        let disabledReturn = try issue529Position(
-            of: "return \"MENU_DISABLED\"",
-            after: disabledGuard,
+        let entryCleanup = try issue529Position(
+            of: "set entryMenuCleanup to my dismissOpenMenu(logicProcess)",
+            in: script
+        )
+        let firstOperationalDelay = try issue529Position(of: "delay 0.2", in: script)
+        let localeDecision = try issue529Position(of: "if exists menu item \"위치…\"", in: script)
+        let menuBarOpen = try issue529Position(of: "click selectedMenuBarItem", in: script)
+
+        #expect(entryCleanup < firstOperationalDelay)
+        #expect(entryCleanup < localeDecision)
+        #expect(entryCleanup < menuBarOpen)
+    }
+
+    @Test("every refusal uses observed menu cleanup")
+    func refusalPathsUseObservedMenuCleanup() throws {
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let entryCleanup = try issue529Position(
+            of: "set entryMenuCleanup to my dismissOpenMenu(logicProcess)",
+            in: script
+        )
+        let entryRefusal = try issue529Position(
+            of: "return \"MENU_PICK_FAILED: entry menu cleanup",
+            in: script
+        )
+        let refusalReturns = issue529Positions(of: "return \"", in: script).filter { position in
+            let line = script[position...]
+            return position > entryRefusal
+                && (line.hasPrefix("return \"MENU_") || line.hasPrefix("return \"DIALOG_NOT_READY"))
+        }
+        let escape = try issue529Position(of: "key code 53", in: script)
+        let observation = try issue529Position(
+            of: "set menuState to my menuOpenState(theProcess)",
+            after: escape,
             in: script
         )
 
-        #expect(disabledGuard < dismissal)
-        #expect(dismissal < disabledReturn)
+        #expect(refusalReturns.count > 0)
+        #expect(entryCleanup < entryRefusal)
+        #expect(escape < observation)
+        for refusalReturn in refusalReturns {
+            let cleanup = try issue529Position(
+                of: "set cleanupState to my dismissOpenMenu(logicProcess)",
+                before: refusalReturn,
+                in: script
+            )
+            #expect(cleanup < refusalReturn)
+        }
     }
 
     @Test("JSON-wrapped menu-not-found result refuses the dialog route")
