@@ -1592,15 +1592,16 @@ enum SemanticOracleTable {
     // AccessibilityChannel+MarkerDelete `defaultDeleteMarker` is accessibility-only.
     // Its State-A gate is stronger than a count check: it reads the marker list
     // after the delete until two consecutive POSITION multisets settle. State A
-    // requires the expected pre-write positions with one target-position instance
-    // removed, the observed positions to equal that expectation, and the count to
-    // decrease by one. Each position is length-prefixed before the entries are
-    // sorted and joined, so the envelope's strings have unambiguous boundaries.
+    // requires a unique, canonically parsed target position; the expected pre-write
+    // positions with one target-position instance removed; the observed positions
+    // to equal that expectation; and the count to decrease by one. Each position
+    // is length-prefixed before the entries are sorted and joined, so the envelope's
+    // strings have unambiguous boundaries and can be checked against both counts.
     // The oracle binds that independently read-back multiset to the
-    // request-derived expectation. This proves a position occurrence disappeared,
-    // but cannot tell WHICH marker disappeared when multiple markers share that
-    // position; marker names are intentionally only State-B diagnostics because
-    // Logic can renumber auto-generated names after deletion.
+    // request-derived expectation. A shared or synthetic target position is State B:
+    // a position occurrence can disappear without identifying which marker it was.
+    // Marker names remain only State-B diagnostics because Logic can renumber
+    // auto-generated names after deletion.
     static let navigateDeleteMarker = SafeMutationOracle.oracle(
         .navigateDeleteMarker,
         semantics: [
@@ -1608,9 +1609,21 @@ enum SemanticOracleTable {
             .typedField(key: "requested_index", type: .number),
             .typedField(key: "target_name", type: .string),
             .typedField(key: "target_position", type: .string),
+            .valueEquals(key: "target_position_unique", expected: .bool(true)),
+            .valueEquals(key: "position_evidence_canonical", expected: .bool(true)),
             .typedField(key: "marker_count_before", type: .number),
             .valueEquals(key: "readback_settled", expected: .bool(true)),
             .typedField(key: "marker_count_after", type: .number),
+            .lengthPrefixedEntryCountEquals(
+                key: "expected_survivor_position_multiset",
+                countKey: "marker_count_before",
+                offset: -1
+            ),
+            .lengthPrefixedEntryCountEquals(
+                key: "observed_survivor_position_multiset",
+                countKey: "marker_count_after",
+                offset: 0
+            ),
             .fieldsEqual(
                 keyA: "expected_survivor_position_multiset",
                 keyB: "observed_survivor_position_multiset"

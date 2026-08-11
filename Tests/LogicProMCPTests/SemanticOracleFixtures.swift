@@ -776,6 +776,7 @@ enum SemanticOracleFixtures {
                 {"success":true,"verified":true,"state":"A",\
                 "operation":"nav.delete_marker","requested_index":1,\
                 "target_name":"Verse","target_position":"5.1.1.1",\
+                "target_position_unique":true,"position_evidence_canonical":true,\
                 "marker_count_before":3,"write_attempted":true,\
                 "readback_settled":true,"marker_count_after":2,\
                 "expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1",\

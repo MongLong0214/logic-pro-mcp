@@ -73,11 +73,19 @@ extension AccessibilityChannel {
         let expectedSurvivors = expectedSurvivorMarkers
             .map { canonicalMarkerIdentity(name: $0.name, position: $0.position) }
             .sorted()
+        let targetPositionMatchCount = before.filter { $0.position == target.position }.count
+        let targetPositionUnique = targetPositionMatchCount == 1
+        // A parse fallback manufactures `ordinal + 1.1.1.1`, which can happen to equal a
+        // different marker's parsed position. Do not let a synthetic position participate in a
+        // State-A identity proof, even if it happens not to collide in this particular reading.
+        let prewritePositionEvidenceCanonical = before.allSatisfy { $0.positionSource == .parser }
         var extras: [String: Any] = [
             "operation": "nav.delete_marker",
             "requested_index": index,
             "target_name": target.name,
             "target_position": target.position,
+            "target_position_unique": targetPositionUnique,
+            "prewrite_position_evidence_canonical": prewritePositionEvidenceCanonical,
             "marker_count_before": before.count,
         ]
 
@@ -121,6 +129,7 @@ extension AccessibilityChannel {
         // report State B when they will not settle rather than certifying a guess.
         var observedSurvivorPositions: [String] = []
         var observedSurvivors: [String] = []
+        var observedPositionEvidenceCanonical = false
         var settled = false
         var previousPositions: [String]?
         for _ in 0..<6 {
@@ -133,6 +142,9 @@ extension AccessibilityChannel {
                 observedSurvivors = reading
                     .map { canonicalMarkerIdentity(name: $0.name, position: $0.position) }
                     .sorted()
+                observedPositionEvidenceCanonical = reading.allSatisfy {
+                    $0.positionSource == .parser
+                }
                 settled = true
                 break
             }
@@ -145,6 +157,9 @@ extension AccessibilityChannel {
         }
         extras["readback_settled"] = true
         extras["marker_count_after"] = observedSurvivorPositions.count
+        extras["observed_position_evidence_canonical"] = observedPositionEvidenceCanonical
+        extras["position_evidence_canonical"] = prewritePositionEvidenceCanonical
+            && observedPositionEvidenceCanonical
 
         // This proves that precisely one position occurrence disappeared and that it was an
         // occurrence at the target's position. It cannot establish WHICH marker was removed when
@@ -162,6 +177,18 @@ extension AccessibilityChannel {
         // position multiset in State A. Names are not exposed here because Logic may renumber them.
         extras["expected_survivor_position_multiset"] = expectedSurvivorPositions.joined()
         extras["observed_survivor_position_multiset"] = observedSurvivorPositions.joined()
+        guard targetPositionUnique else {
+            extras["reason_detail"] = "Delete was attempted and the marker count moved, but "
+                + "\(targetPositionMatchCount) pre-write markers shared target position "
+                + "\(target.position), so this readback cannot establish which marker was deleted."
+            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+        }
+        guard prewritePositionEvidenceCanonical, observedPositionEvidenceCanonical else {
+            extras["reason_detail"] = "Delete was attempted and the marker count moved, but at "
+                + "least one marker position came from an ordinal parse fallback; synthetic "
+                + "positions cannot support a verified target identity."
+            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+        }
         return .success(HonestContract.encodeStateA(extras: extras))
     }
 

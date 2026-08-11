@@ -104,6 +104,81 @@ private let issue526NoOpMouseRuntime = AXMouseHelper.Runtime(
     sleepMicros: { _ in }
 )
 
+/// Builds a Marker List whose Delete key removes `actualDeleteIndex`. Keeping that
+/// distinct from the requested index lets this fixture exercise the verification
+/// proof without using a coordinate click.
+private func issue526MarkerDeleteReadbackRuntime(
+    markers: [(position: String, name: String)],
+    actualDeleteIndex: Int
+) -> (runtime: AXLogicProElements.Runtime, mouse: AXMouseHelper.Runtime) {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(52_700)
+    let arrange = builder.element(52_701)
+    let markerList = builder.element(52_702)
+    let table = builder.element(52_703)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, markerList])
+    builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(arrange, kAXTitleAttribute as String, "Issue526 - Tracks")
+    builder.setAttribute(arrange, kAXDocumentAttribute as String, "/Issue526.logicx")
+    builder.setAttribute(markerList, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(markerList, kAXTitleAttribute as String, "Issue526 - Marker List")
+    builder.setAttribute(markerList, kAXDocumentAttribute as String, "/Issue526.logicx")
+    builder.setAttribute(table, kAXRoleAttribute as String, kAXTableRole as String)
+    builder.setAttribute(table, kAXDescriptionAttribute as String, "Marker Table")
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, table)
+
+    let rows: [AXUIElement] = markers.enumerated().map { index, marker in
+        let base = 52_710 + index * 10
+        let row = builder.element(base)
+        let lockCell = builder.element(base + 1)
+        let positionCell = builder.element(base + 2)
+        let markerNameCell = builder.element(base + 3)
+        let position = builder.element(base + 4)
+        let markerName = builder.element(base + 5)
+        builder.setAttribute(row, kAXRoleAttribute as String, kAXRowRole as String)
+        for cell in [lockCell, positionCell, markerNameCell] {
+            builder.setAttribute(cell, kAXRoleAttribute as String, kAXCellRole as String)
+        }
+        builder.setAttribute(position, kAXDescriptionAttribute as String, marker.position)
+        builder.setAttribute(markerName, kAXDescriptionAttribute as String, marker.name)
+        builder.setChildren(positionCell, [position])
+        builder.setChildren(markerNameCell, [markerName])
+        builder.setChildren(row, [lockCell, positionCell, markerNameCell])
+        return row
+    }
+    builder.setAttribute(table, "AXRows", rows)
+    builder.setChildren(table, rows)
+    builder.setChildren(markerList, [table])
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: { element, attribute, _ in
+            if attribute == kAXSelectedAttribute as String {
+                builder.setAttribute(table, "AXSelectedRows", [element])
+            }
+            return true
+        },
+        performActionHandler: nil
+    )
+    let mouse = AXMouseHelper.Runtime(
+        postMouseEvent: { _, _, _ in false },
+        postKeyEvent: { keyCode in
+            guard keyCode == 0x33 else { return false }
+            let postDeleteRows = rows.enumerated()
+                .filter { $0.offset != actualDeleteIndex }
+                .map { $0.element }
+            builder.setAttribute(table, "AXRows", postDeleteRows)
+            builder.setChildren(table, postDeleteRows)
+            return true
+        },
+        postUnicodeScalar: { _ in false },
+        sleepMicros: { _ in }
+    )
+    return (runtime, mouse)
+}
+
 @Test func testIssue526FallbackUnsafeStateCStopsMultiChannelFallback() async {
     let router = ChannelRouter()
     let envelope = HonestContract.encodeStateC(
@@ -217,4 +292,63 @@ private let issue526NoOpMouseRuntime = AXMouseHelper.Runtime(
     #expect(result.message == refusal.message)
     #expect(await accessibility.executions() == 1)
     #expect(await keyCommands.executions() == 0)
+}
+
+@Test func testIssue526DuplicateTargetPositionReturnsStateBWhenWrongRowWasDeleted() async throws {
+    // The requested target at index 1 and the actually deleted row at index 2
+    // share 5.1.1.1. Their position multisets are therefore identical after
+    // either deletion; the old gate returned State A for this wrong-target write.
+    let fixture = issue526MarkerDeleteReadbackRuntime(
+        markers: [
+            (position: "1 1 1 1", name: "Intro"),
+            (position: "5 1 1 1", name: "Requested Target"),
+            (position: "5 1 1 1", name: "Wrong Row"),
+            (position: "9 1 1 1", name: "Outro"),
+        ],
+        actualDeleteIndex: 2
+    )
+
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8)
+    ) as? [String: Any])
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "B")
+    #expect(envelope["reason"] as? String == "readback_unavailable")
+    #expect(try #require(envelope["write_attempted"] as? Bool))
+    #expect(envelope["marker_count_before"] as? Int == 4)
+    #expect(envelope["marker_count_after"] as? Int == 3)
+    #expect(!(try #require(envelope["target_position_unique"] as? Bool)))
+    #expect(try #require(envelope["position_evidence_canonical"] as? Bool))
+    #expect(try #require(envelope["reason_detail"] as? String).contains("cannot establish which marker"))
+}
+
+@Test func testIssue526FallbackPositionCollisionAlsoReturnsStateB() async throws {
+    // A failed parse manufactures ordinal 1 as 1.1.1.1, which collides with
+    // the next row's genuine 1.1.1.1. Deleting that next row reproduces the
+    // same multiset expected after deleting the requested fallback row.
+    let fixture = issue526MarkerDeleteReadbackRuntime(
+        markers: [
+            (position: "not a position", name: "Fallback Target"),
+            (position: "1 1 1 1", name: "Parsed Same Position"),
+            (position: "9 1 1 1", name: "Outro"),
+        ],
+        actualDeleteIndex: 1
+    )
+
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8)
+    ) as? [String: Any])
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "B")
+    #expect(!(try #require(envelope["target_position_unique"] as? Bool)))
+    #expect(!(try #require(envelope["prewrite_position_evidence_canonical"] as? Bool)))
+    #expect(try #require(envelope["reason_detail"] as? String).contains("cannot establish which marker"))
 }
