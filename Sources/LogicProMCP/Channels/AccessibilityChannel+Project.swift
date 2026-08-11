@@ -27,21 +27,31 @@ extension AccessibilityChannel {
             return .error("Creator Studio has a non-chooser window; refusing project.new")
         }
 
-        let target = LogicProTarget.appleScriptTarget()
-        let reveal = await runtime.executeAppleScript("""
-        \(target.activateByBundleID)
-        tell application "System Events"
-            tell \(target.systemEventsProcessTarget)
-                if (count of windows) is not 0 then return "WINDOWS_PRESENT"
-                if not (exists menu item "New" of menu 1 of menu bar item "File" of menu bar 1) then return "EXACT_NEW_NOT_FOUND"
-                click menu item "New" of menu 1 of menu bar item "File" of menu bar 1
-                return "EXACT_NEW_CLICKED"
-            end tell
-        end tell
-        """)
-        guard reveal.isSuccess, reveal.message.contains("EXACT_NEW_CLICKED") else {
-            return .error("Could not reveal Creator Studio chooser through exact File > New")
+        // Drive the menu through AX with locale-resolved titles instead of an AppleScript that
+        // names the English menu. Measured on a Korean Logic: the bar item is `파일` and the entry is
+        // `신규`, so the previous script returned EXACT_NEW_NOT_FOUND and project.new failed in 2.8 s
+        // without ever reaching either creation branch (#519). This also drops the System Events
+        // dependency, which needs its own Automation grant and raises a prompt this process cannot
+        // dismiss.
+        guard let menuBarAny = AXHelpers.getAttribute(app, "AXMenuBar", runtime: runtime.ax) as AXUIElement?,
+              let fileItem = AXLocalePolicy.findMenuBarItem(
+                  in: menuBarAny, matching: AXLocalePolicy.fileMenuBar, runtime: runtime.ax
+              )
+        else {
+            return .error("Could not resolve the File menu in this Logic's language")
         }
+        guard let newItem = AXLocalePolicy.findMenuItem(
+            under: fileItem, matching: AXLocalePolicy.newProjectMenuItem, runtime: runtime.ax
+        ) else {
+            return .error("Could not resolve the New entry under the File menu in this Logic's language")
+        }
+        // Press the bar item first so the menu materialises, then the entry. The return codes are
+        // not consulted: on Logic 12.3 a press that works can still report failure, so the observed
+        // window below is the only thing that decides.
+        _ = AXHelpers.performAction(fileItem, kAXPressAction as String, runtime: runtime.ax)
+        try? await Task.sleep(nanoseconds: 400_000_000)
+        _ = AXHelpers.performAction(newItem, kAXPickAction as String, runtime: runtime.ax)
+
         for _ in 0..<40 {
             try? await Task.sleep(nanoseconds: 250_000_000)
             if exactEmptyProjectChooserIsVisible(runtime: runtime) {
@@ -132,8 +142,16 @@ extension AccessibilityChannel {
     static func isCreatedProjectWindowTitle(_ title: String?) -> Bool {
         guard let title else { return false }
         let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let arrangeSuffix = " - Tracks"
-        return normalized.hasSuffix(arrangeSuffix) && normalized.count > arrangeSuffix.count
+        // The suffix is localized. Measured live: `Untitled 55 - Tracks` in English,
+        // `Untitled 55 - 트랙` in Korean. Hard-coding the English form made project.new report
+        // failure for a project it had just created on every non-English Logic.
+        for label in AXLocalePolicy.arrangeWindowTitleSuffix.labels {
+            let suffix = " - " + label
+            if normalized.hasSuffix(suffix), normalized.count > suffix.count {
+                return true
+            }
+        }
+        return false
     }
 
     static func createdProjectWindowSelectionIsUnambiguous(
