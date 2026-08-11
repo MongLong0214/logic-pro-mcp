@@ -244,27 +244,28 @@ enum AXLocalePolicy {
 
     static let cancelButton = LabelSet(
         canonical: "Cancel",
-        variants: ["취소"],
-        rationale: "Dialog dismissal fallback; no success state is inferred from this click."
+        variants: ["취소", "キャンセル"],
+        rationale: "Dialog dismissal fallback; no success state is inferred from this click. JA live-confirmed (Logic 12.3: `キャンセル`)."
     )
 
     /// #346/#350: the mandatory New Track sheet's only exit ("Create"). The modal
     /// reconciler clicks it to un-wedge Logic, then verifies via track-count
     /// readback — the click itself gates no State-A success. KO live-confirmed
-    /// (Logic 12.3: `생성`).
+    /// (Logic 12.3: `생성`); JA live-confirmed (Logic 12.3: `作成`).
     static let createButton = LabelSet(
         canonical: "Create",
-        variants: ["생성"],
-        rationale: "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3)."
+        variants: ["생성", "作成"],
+        rationale: "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`)."
     )
 
     /// #346/#350: `AXDescription` that identifies the mandatory New Track sheet.
     /// One of two signals (with disabled-Cancel) the reconciler uses to classify
-    /// the sheet; read-only classifier. KO live-confirmed (Logic 12.3: `새로운 트랙`).
+    /// the sheet; read-only classifier. KO live-confirmed (Logic 12.3: `새로운 트랙`);
+    /// JA live-confirmed (Logic 12.3: `新規トラック`).
     static let newTrackSheetDescription = LabelSet(
         canonical: "New Track",
-        variants: ["새로운 트랙"],
-        rationale: "Identifies the mandatory New Track sheet by AXDescription (with disabled-Cancel); read-only classifier. KO live-confirmed (Logic 12.3)."
+        variants: ["새로운 트랙", "新規トラック"],
+        rationale: "Identifies the mandatory New Track sheet by AXDescription (with disabled-Cancel); read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`)."
     )
 
     /// #346/#350: primary destructive button on the "delete channel strips that
