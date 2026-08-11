@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ## [Unreleased]
 
 ### Fixed
+- **The MIDI readback collector can resolve the Event List display mode (#524).** It searched the
+  **application** menu bar for `Event Position and Length as Time`; that menu has sixteen entries on
+  Logic 12.3 and none of them is the setting, which lives in the Event pane's own View menu beside the
+  column toggles. Every `collect()` therefore threw `displayModeUnavailable` before it could return
+  evidence. Nothing caught it because the collector is reachable from no dispatcher and the unit tests
+  supplied the mode through a seam; the fixture placed the item on the menu bar too, so it agreed with
+  the bug.
+
 - **MIDI readback evidence states which Logic product produced it (#293).** Qualification is judged
   per axis — variant crossed with locale, profile, cache state and fixture — and a reading that cannot
   name its product cannot be placed on that grid. `EventListReadbackEvidence` now carries the

@@ -146,16 +146,24 @@ import Testing
             builder.setChildren(pane, AXHelpers.getChildren(pane, runtime: builder.makeAXRuntime()) + [text])
         }
 
-        let menuBar = element()
+        // The display-mode setting hangs off the EVENT PANE's own View menu button, beside the
+        // column toggles — not the application menu bar. This fixture used to place it on the menu
+        // bar, which is why the collector could search there and pass here while failing on every
+        // real Logic (#524). Measured on 12.3: the app View menu has sixteen entries and none is
+        // this one.
+        let viewButton = element()
         let viewMenu = element()
         let displayMode = element()
-        builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
-        builder.setAttribute(viewMenu, kAXTitleAttribute as String, "View")
+        builder.setRole(viewButton, kAXMenuButtonRole as String)
+        builder.setAttribute(viewButton, kAXTitleAttribute as String, "View")
+        builder.setAttribute(viewButton, kAXParentAttribute as String, pane)
+        builder.setRole(viewMenu, kAXMenuRole as String)
         builder.setRole(displayMode, kAXMenuItemRole as String)
         builder.setAttribute(displayMode, kAXTitleAttribute as String, "Event Position and Length as Time")
         builder.setAttribute(displayMode, kAXMenuItemMarkCharAttribute as String, timeMark)
-        builder.setChildren(menuBar, [viewMenu])
         builder.setChildren(viewMenu, [displayMode])
+        builder.setChildren(viewButton, [viewMenu])
+        builder.setChildren(pane, AXHelpers.getChildren(pane, runtime: builder.makeAXRuntime()) + [viewButton])
 
         return Fixture(
             builder: builder,

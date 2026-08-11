@@ -189,6 +189,17 @@ enum AXLocalePolicy {
     static let eventListColumnLength = LabelSet(canonical: "Length", variants: ["길이"],
         rationale: "Region-level length column; distinguishes the region list from the event list.")
 
+    /// The Event pane's "position and length as Time" toggle. Matched by title on the pane's own View
+    /// menu; a Time-mode reading is refused because the collector's tick arithmetic assumes bars and
+    /// beats. Korean variant to be measured before it is claimed — this entry has not been read on a
+    /// non-English Logic yet, and an invented translation is worse than an English-only match that
+    /// fails closed.
+    static let eventPositionAsTimeMenuItem = LabelSet(
+        canonical: "Event Position and Length as Time",
+        variants: [],
+        rationale: "Decides whether Event List positions are bar/beat or timecode; read-only."
+    )
+
     static let fileMenuBar = LabelSet(
         canonical: "File",
         variants: ["파일", "ファイル"],
