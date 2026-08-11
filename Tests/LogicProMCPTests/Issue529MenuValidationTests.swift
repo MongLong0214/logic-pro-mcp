@@ -76,4 +76,51 @@ struct Issue529MenuValidationTests {
         #expect(disabledGuard < dismissal)
         #expect(dismissal < disabledReturn)
     }
+
+    @Test("JSON-wrapped menu-not-found result refuses the dialog route")
+    func jsonWrappedMenuNotFoundRefusesDialogRoute() {
+        let classification = AccessibilityChannel.classifyGotoPositionDialogResult(
+            #"{"result":"MENU_NOT_FOUND: Navigate menu missing"}"#
+        )
+
+        #expect(classification == .failure(.menuNotFound))
+    }
+
+    @Test("JSON-wrapped menu-pick-failed result refuses the dialog route")
+    func jsonWrappedMenuPickFailedRefusesDialogRoute() {
+        let classification = AccessibilityChannel.classifyGotoPositionDialogResult(
+            #"{"result":"MENU_PICK_FAILED: AXPress failed"}"#
+        )
+
+        #expect(classification == .failure(.menuPickFailed))
+    }
+
+    @Test("JSON-wrapped disabled and not-ready sentinels still refuse the dialog route")
+    func jsonWrappedExistingSentinelsRefuseDialogRoute() {
+        let disabled = AccessibilityChannel.classifyGotoPositionDialogResult(
+            #"{"result":"MENU_DISABLED"}"#
+        )
+        let notReady = AccessibilityChannel.classifyGotoPositionDialogResult(
+            #"{"result":"DIALOG_NOT_READY"}"#
+        )
+
+        #expect(disabled == .failure(.menuDisabled))
+        #expect(notReady == .failure(.dialogNotReady))
+    }
+
+    @Test("only JSON-wrapped OK counts as driving the dialog route")
+    func jsonWrappedOKDrivesDialogRoute() {
+        let classification = AccessibilityChannel.classifyGotoPositionDialogResult(
+            #"{"result":"OK"}"#
+        )
+
+        #expect(classification == .driven)
+    }
+
+    @Test("malformed result payload refuses the dialog route")
+    func malformedPayloadRefusesDialogRoute() {
+        let classification = AccessibilityChannel.classifyGotoPositionDialogResult("MENU_NOT_FOUND: unwrapped")
+
+        #expect(classification == .failure(.malformedPayload))
+    }
 }

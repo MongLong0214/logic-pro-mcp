@@ -971,43 +971,100 @@ extension AccessibilityChannel {
         """
     }
 
+    /// The successful AppleScript channel payload is a JSON object containing the
+    /// script's return value in `result`. Only an exact `OK` means this route
+    /// reached the dialog and submitted it; any sentinel or malformed payload
+    /// must fall through to the slider route.
+    enum GotoPositionDialogResultClassification: Equatable {
+        enum Failure: Equatable {
+            case menuNotFound
+            case menuStateUnreadable
+            case menuDisabled
+            case menuPickFailed
+            case dialogNotReady
+            case malformedPayload
+            case unexpectedResult
+        }
+
+        case driven
+        case failure(Failure)
+    }
+
+    private struct GotoPositionDialogScriptPayload: Decodable {
+        let result: String
+    }
+
+    /// Kept internal for the menu-validation regression tests. This consumes
+    /// the JSON envelope produced by `AppleScriptChannel.channelResult` rather
+    /// than inspecting its serialized representation.
+    static func classifyGotoPositionDialogResult(
+        _ output: String
+    ) -> GotoPositionDialogResultClassification {
+        guard let data = output.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(GotoPositionDialogScriptPayload.self, from: data)
+        else {
+            return .failure(.malformedPayload)
+        }
+
+        switch payload.result {
+        case "OK":
+            return .driven
+        case let value where value.hasPrefix("MENU_NOT_FOUND"):
+            return .failure(.menuNotFound)
+        case "MENU_STATE_UNREADABLE":
+            return .failure(.menuStateUnreadable)
+        case "MENU_DISABLED":
+            return .failure(.menuDisabled)
+        case let value where value.hasPrefix("MENU_PICK_FAILED"):
+            return .failure(.menuPickFailed)
+        case "DIALOG_NOT_READY":
+            return .failure(.dialogNotReady)
+        default:
+            return .failure(.unexpectedResult)
+        }
+    }
+
     private static func gotoPositionViaDialog(bar: Int) async -> ChannelResult {
         let script = gotoPositionViaDialogAppleScript(bar: bar)
-        let result = await AppleScriptChannel.executeAppleScript(script)
+        // Fixed waits consume 0.8 s and the dialog poll can consume 3.0 s.
+        // Eight seconds leaves 4.2 s for osascript startup and menu traversal.
+        let result = await AppleScriptChannel.executeAppleScript(script, timeout: 8.0)
         switch result {
         case .success(let output):
-            if output.contains("MENU_DISABLED") {
-                return .error("goto-position dialog disabled (project has no regions yet)")
-            }
-            if output.contains("MENU_STATE_UNREADABLE") {
+            switch classifyGotoPositionDialogResult(output) {
+            case .driven:
+                // #105: this State B reports only that the Go-To-Position dialog
+                // keystroke was sent; the playhead is verified independently by
+                // `TransportDispatcher.finalizeGotoPositionResult` via a transport-
+                // state read-back. Earlier this carried a `note` claiming the
+                // playhead was "not read back" — which the finalize step then
+                // contradicted by reading it back and gating `verified` on it, so a
+                // verified State A shipped a self-contradictory note. The provenance
+                // (`via:"dialog"`) plus finalize's `verification_source` /
+                // `observed` / `verified` fields describe the outcome honestly
+                // without it.
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: [
+                        "requested": "\(bar).1.1.1",
+                        "via": "dialog"
+                    ]
+                ))
+            case .failure(.menuDisabled):
+                return .error("goto-position dialog menu state did not authorize the pick")
+            case .failure(.menuStateUnreadable):
                 return .error("goto-position dialog menu enabled state unavailable")
-            }
-            if output.hasPrefix("MENU_NOT_FOUND") {
-                return .error("goto-position menu not found: \(output)")
-            }
-            if output.hasPrefix("MENU_PICK_FAILED") {
-                return .error("goto-position dialog menu pick failed: \(output)")
-            }
-            if output.contains("DIALOG_NOT_READY") {
+            case .failure(.menuNotFound):
+                return .error("goto-position menu not found")
+            case .failure(.menuPickFailed):
+                return .error("goto-position dialog menu pick failed")
+            case .failure(.dialogNotReady):
                 return .error("goto-position dialog did not appear within timeout")
+            case .failure(.malformedPayload):
+                return .error("goto-position dialog returned an invalid result payload")
+            case .failure(.unexpectedResult):
+                return .error("goto-position dialog returned an unexpected result")
             }
-            // #105: this State B reports only that the Go-To-Position dialog
-            // keystroke was sent; the playhead is verified independently by
-            // `TransportDispatcher.finalizeGotoPositionResult` via a transport-
-            // state read-back. Earlier this carried a `note` claiming the
-            // playhead was "not read back" — which the finalize step then
-            // contradicted by reading it back and gating `verified` on it, so a
-            // verified State A shipped a self-contradictory note. The provenance
-            // (`via:"dialog"`) plus finalize's `verification_source` /
-            // `observed` / `verified` fields describe the outcome honestly
-            // without it.
-            return .success(HonestContract.encodeStateB(
-                reason: .readbackUnavailable,
-                extras: [
-                    "requested": "\(bar).1.1.1",
-                    "via": "dialog"
-                ]
-            ))
         case .error(let msg):
             return .error("goto-position dialog failed: \(msg)")
         }
