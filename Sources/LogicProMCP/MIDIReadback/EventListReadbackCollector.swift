@@ -92,6 +92,12 @@ enum EventListReadbackCollector {
     private static let expectedHeaderTitles = [
         "L", "M", "Position", "Status", "Ch", "Num", "Val", "Length/Info",
     ]
+    /// Logic uses this distinct schema while the Event List is showing regions
+    /// instead of the selected region's events. It is a recoverable navigation
+    /// failure, not a column-layout drift.
+    private static let regionLevelHeaderTitles = [
+        "L", "M", "Position", "Name", "Trk", "Length",
+    ]
     private static let maximumMaterializationPasses = 64
 
     private struct HeaderBinding {
@@ -235,6 +241,10 @@ enum EventListReadbackCollector {
             throw EventListReadbackCollectorError.headerSortButtonsUnavailable
         }
         let titles = sortButtons.map { AXHelpers.getTitle($0, runtime: runtime) }
+
+        if titles == regionLevelHeaderTitles {
+            throw EventListReadbackCollectorError.paneAtRegionLevel
+        }
 
         for index in expectedHeaderTitles.indices {
             let expected = expectedHeaderTitles[index]
@@ -527,6 +537,7 @@ enum EventListReadbackCollectorError: Error, Equatable, Sendable, CustomStringCo
     case eventTableAmbiguous(count: Int)
     case headerUnavailable
     case headerSortButtonsUnavailable
+    case paneAtRegionLevel
     case headerMismatch(expected: String, actual: String?)
     case filterEvidenceIncomplete(title: String)
     case itemCountMissing
@@ -551,6 +562,7 @@ enum EventListReadbackCollectorError: Error, Equatable, Sendable, CustomStringCo
         case let .eventTableAmbiguous(count): return "Event List table is ambiguous (\(count) matches)."
         case .headerUnavailable: return "Event List table has no AXHeader."
         case .headerSortButtonsUnavailable: return "Event List header does not expose only sort-button columns."
+        case .paneAtRegionLevel: return "Event List is at region level; event-level rows are unavailable."
         case let .headerMismatch(expected, actual):
             return "Event List column mismatch at \(expected): found \(actual ?? "<missing>")."
         case let .filterEvidenceIncomplete(title): return "Event List filter evidence is incomplete: \(title)."
