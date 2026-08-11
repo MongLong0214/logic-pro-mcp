@@ -169,10 +169,11 @@ extension ChannelRouter {
         "nav.goto_marker":            [.midiKeyCommands, .cgEvent],
         "nav.open_marker_list":       [.accessibility],
         "nav.create_marker":          [.accessibility],
-        // AX first: the keycmd rung only works after the operator installs the preset and performs a
-        // manual MIDI Learn, so on a default install this operation used to do nothing at all while
-        // reporting a readback problem. The AX rung drives the Marker List directly.
-        "nav.delete_marker":          [.accessibility, .midiKeyCommands, .cgEvent],
+        // A channel that cannot express the operation's target must not be in that operation's chain.
+        // `delete_marker` takes an `index`; the MIDI key-command rung has no way to carry it and can
+        // only fire CC 45 at whichever marker happens to be selected. It also requires a manual MIDI
+        // Learn, so on a default install it did nothing while reporting a readback problem.
+        "nav.delete_marker":          [.accessibility],
         "nav.rename_marker":          [.accessibility],
         "nav.get_markers":            [.accessibility],
         "nav.zoom_to_fit":            [.midiKeyCommands, .cgEvent],

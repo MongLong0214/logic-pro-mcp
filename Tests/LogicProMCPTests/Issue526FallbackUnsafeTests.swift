@@ -77,6 +77,8 @@ private func issue526SelectionFailureRuntime() -> AXLogicProElements.Runtime {
     builder.setAttribute(markerList, kAXTitleAttribute as String, "Issue526 - Marker List")
     builder.setAttribute(markerList, kAXDocumentAttribute as String, "/Issue526.logicx")
     builder.setAttribute(table, kAXRoleAttribute as String, kAXTableRole as String)
+    builder.setAttribute(table, kAXDescriptionAttribute as String, "Marker Table")
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, table)
     builder.setAttribute(row, kAXRoleAttribute as String, kAXRowRole as String)
     for cell in [lockCell, positionCell, markerNameCell] {
         builder.setAttribute(cell, kAXRoleAttribute as String, kAXCellRole as String)
@@ -117,7 +119,7 @@ private let issue526NoOpMouseRuntime = AXMouseHelper.Runtime(
     await router.register(accessibility)
     await router.register(keyCommands)
 
-    let result = await router.route(operation: "nav.delete_marker", params: ["index": "1"])
+    let result = await router.route(operation: "nav.set_zoom_level", params: ["level": "50"])
 
     #expect(!result.isSuccess)
     #expect(result.message == envelope)
@@ -138,7 +140,7 @@ private let issue526NoOpMouseRuntime = AXMouseHelper.Runtime(
     await router.register(accessibility)
     await router.register(keyCommands)
 
-    let result = await router.route(operation: "nav.delete_marker", params: ["index": "1"])
+    let result = await router.route(operation: "nav.set_zoom_level", params: ["level": "50"])
 
     #expect(result.isSuccess)
     #expect(!HonestContract.isFallbackUnsafeStateC(envelope))
@@ -146,11 +148,11 @@ private let issue526NoOpMouseRuntime = AXMouseHelper.Runtime(
     #expect(await keyCommands.executions() == 1)
 }
 
-@Test func testIssue526FallbackUnsafeTerminalStateCRemainsVerbatim() async {
+@Test func testIssue526FallbackUnsafeNonTerminalStateCStopsMultiChannelFallback() async {
     let router = ChannelRouter()
     let envelope = HonestContract.encodeStateC(
-        error: .elementNotFound,
-        hint: "Marker List row was not found",
+        error: .axWriteFailed,
+        hint: "Marker List selection is unsafe to fall back from",
         extras: ["fallback_unsafe": true]
     )
     let accessibility = Issue526ErrorChannel(id: .accessibility, envelope: envelope)
@@ -158,11 +160,11 @@ private let issue526NoOpMouseRuntime = AXMouseHelper.Runtime(
     await router.register(accessibility)
     await router.register(keyCommands)
 
-    let result = await router.route(operation: "nav.delete_marker", params: ["index": "1"])
+    let result = await router.route(operation: "nav.set_zoom_level", params: ["level": "50"])
 
     #expect(!result.isSuccess)
     #expect(result.message == envelope)
-    #expect(HonestContract.isTerminalStateC(result.message))
+    #expect(!HonestContract.isTerminalStateC(result.message))
     #expect(HonestContract.isFallbackUnsafeStateC(result.message))
     #expect(await accessibility.executions() == 1)
     #expect(await keyCommands.executions() == 0)
@@ -207,9 +209,10 @@ private let issue526NoOpMouseRuntime = AXMouseHelper.Runtime(
     await router.register(accessibility)
     await router.register(keyCommands)
 
-    let result = await router.route(operation: "nav.delete_marker", params: ["index": "0"])
+    let result = await router.route(operation: "nav.set_zoom_level", params: ["level": "50"])
 
     #expect(HonestContract.isFallbackUnsafeStateC(refusal.message))
+    #expect(refusal.message.contains("could not be selected"))
     #expect(!result.isSuccess)
     #expect(result.message == refusal.message)
     #expect(await accessibility.executions() == 1)

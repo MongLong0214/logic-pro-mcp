@@ -38,7 +38,6 @@ struct RoutingAuditInvariantTests {
         "edit.duplicate",                 // logic_edit.duplicate
         "edit.normalize",                 // logic_edit.normalize
         "nav.goto_marker",                // logic_navigate.goto_marker (with index)
-        "nav.delete_marker",              // logic_navigate.delete_marker
         // Channel-only router op — no public MCP tool command exposes it, but
         // it remains a real mappingTable/routingTable path if a future surface
         // promotes it.
