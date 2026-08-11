@@ -9,15 +9,16 @@ import Testing
 // fileprivate to the assessment file, so no other file can construct one, and there
 // is no public/internal initializer, factory, or decoder — so no production
 // `.complete` can be minted outside `assessReadback`. This scan is a SECONDARY aid:
-// it hard-fails on unreadable sources and flags an `assessReadback` production
-// reference or an unexpected count of `CompleteProof` construction sites in the
-// assessment file, over the construction forms it recognizes. It does NOT claim to
-// census every possible future Swift alias/factory form — a same-file `typealias`
-// or helper mint is caught by source review of the change, not by this heuristic. The
-// scan is syntax-aware (string content is `.stringSegment`, comments are trivia),
-// so it is not defeated by strings/comments the way a hand lexer would be.
+// it hard-fails on unreadable sources and permits exactly one production caller —
+// the Event List provider adapter — plus the expected `CompleteProof` construction
+// sites in the assessment file. It does NOT claim to census every possible future
+// Swift alias/factory form — a same-file `typealias` or helper mint is caught by
+// source review of the change, not by this heuristic. The scan is syntax-aware
+// (string content is `.stringSegment`, comments are trivia), so it is not defeated
+// by strings/comments the way a hand lexer would be.
 @Suite struct MIDIReadbackCallSiteLintTests {
     private static let assessmentFile = "MIDIReadbackAssessment.swift"
+    private static let providerFile = "EventListMIDINoteReadbackProvider.swift"
     // The only permitted `CompleteProof()` mint sites, both in the assessment
     // file: the production return of `assessReadback` and the debug-only seam.
     private static let expectedProofMintSites = 2
@@ -50,7 +51,7 @@ import Testing
         return counter.count
     }
 
-    @Test func noProductionAssessReadbackReferenceAndProofMintIsExact() throws {
+    @Test func onlyEventListProviderMayAssessReadbackAndProofMintIsExact() throws {
         let thisFile = URL(fileURLWithPath: #filePath)
         let repoRoot = thisFile
             .deletingLastPathComponent()  // LogicProMCPTests
@@ -70,6 +71,7 @@ import Testing
         var sawAssessmentFile = false
         var offenders: [String] = []
         var proofMintInAssessment = 0
+        var assessmentReferencesInProvider = 0
         let enumerator = fm.enumerator(at: sources, includingPropertiesForKeys: nil)
         while let url = enumerator?.nextObject() as? URL {
             guard url.pathExtension == "swift" else { continue }
@@ -89,7 +91,10 @@ import Testing
                 proofMintInAssessment = proofMints
                 continue
             }
-            if Self.identifierCount(text, "assessReadback") > 0 {
+            let assessmentReferences = Self.identifierCount(text, "assessReadback")
+            if url.lastPathComponent == Self.providerFile {
+                assessmentReferencesInProvider = assessmentReferences
+            } else if assessmentReferences > 0 {
                 offenders.append("\(url.lastPathComponent): references assessReadback")
             }
             if proofMints > 0 {
@@ -100,6 +105,8 @@ import Testing
         #expect(sawAssessmentFile, "expected the assessment file at \(assessmentPath)")
         #expect(scanned > 50, "expected to scan the LogicProMCP source tree; scanned \(scanned) files")
         #expect(offenders.isEmpty, "dark-core call-site lint offenders: \(offenders)")
+        #expect(assessmentReferencesInProvider == 1,
+                "\(Self.providerFile) must be the sole adapter call site for assessReadback")
         #expect(proofMintInAssessment == Self.expectedProofMintSites,
                 "CompleteProof mint sites in \(Self.assessmentFile) = \(proofMintInAssessment), expected \(Self.expectedProofMintSites)")
     }
