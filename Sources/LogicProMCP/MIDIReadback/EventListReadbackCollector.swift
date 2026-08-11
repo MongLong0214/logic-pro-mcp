@@ -89,15 +89,27 @@ enum EventListReadbackCollector {
 
     // MARK: - Event pane identity
 
-    private static let expectedHeaderTitles = [
-        "L", "M", "Position", "Status", "Ch", "Num", "Val", "Length/Info",
+    /// Column identity is the CANONICAL English form; the locale variants only widen what the live
+    /// header is allowed to say. Measured on a Korean Logic 12.3 the same columns read
+    /// `["L","M","위치","상태","채널","번호","값","길이/정보"]`, and comparing those against English
+    /// literals threw `headerMismatch` — the readback could not run at all outside English.
+    private static let expectedHeaderColumns: [AXLocalePolicy.LabelSet] = [
+        AXLocalePolicy.eventListColumnL, AXLocalePolicy.eventListColumnM,
+        AXLocalePolicy.eventListColumnPosition, AXLocalePolicy.eventListColumnStatus,
+        AXLocalePolicy.eventListColumnChannel, AXLocalePolicy.eventListColumnNumber,
+        AXLocalePolicy.eventListColumnValue, AXLocalePolicy.eventListColumnLengthInfo,
     ]
+    private static let expectedHeaderTitles = expectedHeaderColumns.map(\.canonical)
     /// Logic uses this distinct schema while the Event List is showing regions
     /// instead of the selected region's events. It is a recoverable navigation
     /// failure, not a column-layout drift.
-    private static let regionLevelHeaderTitles = [
-        "L", "M", "Position", "Name", "Trk", "Length",
+    /// Measured in Korean as `["L","M","위치","이름","트랙","길이"]`.
+    private static let regionLevelHeaderColumns: [AXLocalePolicy.LabelSet] = [
+        AXLocalePolicy.eventListColumnL, AXLocalePolicy.eventListColumnM,
+        AXLocalePolicy.eventListColumnPosition, AXLocalePolicy.eventListColumnName,
+        AXLocalePolicy.eventListColumnTrack, AXLocalePolicy.eventListColumnLength,
     ]
+    private static let regionLevelHeaderTitles = regionLevelHeaderColumns.map(\.canonical)
     private static let maximumMaterializationPasses = 64
 
     private struct HeaderBinding {
@@ -242,15 +254,27 @@ enum EventListReadbackCollector {
         }
         let titles = sortButtons.map { AXHelpers.getTitle($0, runtime: runtime) }
 
-        if titles == regionLevelHeaderTitles {
+        func matchesAll(_ columns: [AXLocalePolicy.LabelSet]) -> Bool {
+            guard titles.count == columns.count else { return false }
+            for (index, column) in columns.enumerated() where !column.matches(titles[index]) {
+                return false
+            }
+            return true
+        }
+
+        if matchesAll(regionLevelHeaderColumns) {
             throw EventListReadbackCollectorError.paneAtRegionLevel
         }
 
-        for index in expectedHeaderTitles.indices {
-            let expected = expectedHeaderTitles[index]
+        for index in expectedHeaderColumns.indices {
+            let column = expectedHeaderColumns[index]
             let actual = titles.indices.contains(index) ? titles[index] : nil
-            guard actual == expected else {
-                throw EventListReadbackCollectorError.headerMismatch(expected: expected, actual: actual)
+            guard column.matches(actual) else {
+                // The reported `expected` stays canonical so the error names one thing across
+                // locales, while `actual` carries whatever Logic really rendered.
+                throw EventListReadbackCollectorError.headerMismatch(
+                    expected: column.canonical, actual: actual
+                )
             }
         }
         guard titles.count == expectedHeaderTitles.count else {
