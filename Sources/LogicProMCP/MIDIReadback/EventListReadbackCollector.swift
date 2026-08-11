@@ -69,7 +69,12 @@ enum EventListReadbackCollector {
             headers: headers,
             runtime: runtime.ax
         )
-        try refuseTimeDisplayIfNeeded(runtime: runtime, rows: harvest.passA, positionColumn: headers.positionID)
+        try refuseTimeDisplayIfNeeded(
+            pane: paneAndTable.pane,
+            runtime: runtime,
+            rows: harvest.passA,
+            positionColumn: headers.positionID
+        )
 
         return EventListReadbackEvidence(
             // Resolved from the process actually being read, not from a build-time assumption. On an
@@ -510,18 +515,45 @@ enum EventListReadbackCollector {
 
     // MARK: - Display mode
 
+    /// The Event pane's own View menu, opened so its items are readable.
+    ///
+    /// The menu has to be shown before its entries materialise; the mark character that says whether
+    /// the Time display is active is only meaningful once they have. The menu is cancelled again by
+    /// the caller's `defer` so the pane is left as it was found.
+    private static func paneViewMenu(
+        in pane: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        let buttons = AXHelpers.findAllDescendants(
+            of: pane, role: kAXMenuButtonRole as String, maxDepth: 8, runtime: runtime
+        ).filter {
+            AXLocalePolicy.elementMatches($0, AXLocalePolicy.viewMenuBar, runtime: runtime)
+        }
+        guard buttons.count == 1, let button = buttons.first else { return nil }
+        if let existing = AXHelpers.getChildren(button, runtime: runtime).first(where: {
+            AXHelpers.getRole($0, runtime: runtime) == (kAXMenuRole as String)
+        }) {
+            return existing
+        }
+        _ = AXHelpers.performAction(button, "AXShowMenu", runtime: runtime)
+        return AXHelpers.getChildren(button, runtime: runtime).first {
+            AXHelpers.getRole($0, runtime: runtime) == (kAXMenuRole as String)
+        }
+    }
+
     private static func refuseTimeDisplayIfNeeded(
+        pane: AXUIElement,
         runtime: AXLogicProElements.Runtime,
         rows: [RowKey: RawEventRow],
         positionColumn: AXColumnID
     ) throws {
-        guard let menuBar = AXLogicProElements.getMenuBar(runtime: runtime),
-              let viewMenu = AXLocalePolicy.findMenuBarItem(
-                in: menuBar,
-                matching: AXLocalePolicy.viewMenuBar,
-                runtime: runtime.ax
-              )
-        else {
+        // The setting lives in the EVENT PANE's own View menu, together with the column toggles —
+        // not in the application menu bar. Measured on Logic 12.3: the app View menu holds sixteen
+        // entries (Library, Inspector, Mixer, … Enter Full Screen) and none of them is this one, so
+        // searching there found zero matches and every collect() threw displayModeUnavailable before
+        // it could return evidence. Nothing caught it because the collector is reachable from no
+        // dispatcher, and the unit tests supply the mode through a seam rather than a live menu.
+        guard let viewMenu = paneViewMenu(in: pane, runtime: runtime.ax) else {
             throw EventListReadbackCollectorError.displayModeUnavailable
         }
         let menuItems = AXHelpers.findAllDescendants(
@@ -530,7 +562,9 @@ enum EventListReadbackCollector {
             maxDepth: 8,
             runtime: runtime.ax
         ).filter {
-            AXHelpers.getTitle($0, runtime: runtime.ax) == "Event Position and Length as Time"
+            AXLocalePolicy.elementMatches(
+                $0, AXLocalePolicy.eventPositionAsTimeMenuItem, runtime: runtime.ax
+            )
         }
         guard menuItems.count == 1, let menuItem = menuItems.first else {
             throw EventListReadbackCollectorError.displayModeUnavailable
