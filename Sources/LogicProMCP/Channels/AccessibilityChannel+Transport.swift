@@ -889,29 +889,54 @@ extension AccessibilityChannel {
         return text
     }
 
-    private static func gotoPositionViaDialog(bar: Int) async -> ChannelResult {
+    /// The script is internal so the menu-validation regression tests can assert the
+    /// exact generated AppleScript ordering without invoking Logic Pro.
+    static func gotoPositionViaDialogAppleScript(bar: Int) -> String {
         // Poll for the dialog's presence instead of relying on a fixed delay.
         // Without this guard, a slow machine (>500ms to render the dialog) would
         // send Cmd+A to the arrange area, selecting all regions unexpectedly.
         let logicProAppleScript = LogicProTarget.appleScriptTarget()
-        let script = """
+        return """
         \(logicProAppleScript.activateByBundleID)
         delay 0.2
         tell application "System Events"
             tell \(logicProAppleScript.systemEventsProcessTarget)
                 try
+                    -- Opening each menu makes Logic validate the child item before
+                    -- AXEnabled is read. A closed menu can expose a stale value.
+                    click menu bar item "탐색" of menu bar 1
+                    click menu item "이동" of menu 1 of menu bar item "탐색" of menu bar 1
                     set mi to menu item "위치…" of menu 1 of menu item "이동" of menu 1 of menu bar item "탐색" of menu bar 1
                 on error errMsg
                     try
+                        -- The Korean lookup may have opened a menu before failing.
+                        -- Dismiss it before opening the English fallback chain.
+                        key code 53
+                        click menu bar item "Navigate" of menu bar 1
+                        click menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1
                         set mi to menu item "Position…" of menu 1 of menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1
                     on error errMsg2
+                        key code 53
                         return "MENU_NOT_FOUND: " & errMsg2
                     end try
                 end try
-                if not (enabled of mi) then
+                try
+                    set menuItemEnabled to enabled of mi
+                on error
+                    -- An unreadable AXEnabled must not authorise the pick.
+                    key code 53
+                    return "MENU_STATE_UNREADABLE"
+                end try
+                if not menuItemEnabled then
+                    key code 53
                     return "MENU_DISABLED"
                 end if
-                click mi
+                try
+                    click mi
+                on error errMsg
+                    key code 53
+                    return "MENU_PICK_FAILED: " & errMsg
+                end try
                 -- Wait up to 3s for the dialog window to appear before typing,
                 -- otherwise keystrokes would go to the arrange area and click
                 -- Cmd+A there — silently "Select All Regions".
@@ -930,6 +955,7 @@ extension AccessibilityChannel {
                     end try
                 end repeat
                 if not dialogReady then
+                    key code 53
                     return "DIALOG_NOT_READY"
                 end if
             end tell
@@ -943,14 +969,24 @@ extension AccessibilityChannel {
         end tell
         return "OK"
         """
+    }
+
+    private static func gotoPositionViaDialog(bar: Int) async -> ChannelResult {
+        let script = gotoPositionViaDialogAppleScript(bar: bar)
         let result = await AppleScriptChannel.executeAppleScript(script)
         switch result {
         case .success(let output):
             if output.contains("MENU_DISABLED") {
                 return .error("goto-position dialog disabled (project has no regions yet)")
             }
+            if output.contains("MENU_STATE_UNREADABLE") {
+                return .error("goto-position dialog menu enabled state unavailable")
+            }
             if output.hasPrefix("MENU_NOT_FOUND") {
                 return .error("goto-position menu not found: \(output)")
+            }
+            if output.hasPrefix("MENU_PICK_FAILED") {
+                return .error("goto-position dialog menu pick failed: \(output)")
             }
             if output.contains("DIALOG_NOT_READY") {
                 return .error("goto-position dialog did not appear within timeout")
