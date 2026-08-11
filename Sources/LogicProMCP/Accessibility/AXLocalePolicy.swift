@@ -155,6 +155,40 @@ enum AXLocalePolicy {
     /// Variants are READ FROM THE LIVE MENU BAR, never translated by hand. Measured on a Korean
     /// Logic 12.3: the File menu is `파일` and its first entry is `신규` (U+C2E0 U+ADDC) — not the
     /// `새로 만들기` a translator would reach for, which is the whole reason these are measured.
+    /// Event List column headers. Every variant is READ FROM A LIVE LOGIC, never translated.
+    /// Measured 2026-08-11 on Logic 12.3 in Korean; the English forms stay the canonical column
+    /// identity, so a snapshot taken in one language is comparable with one taken in another.
+    ///
+    /// The collector compared these positionally against English literals, so on a Korean Logic it
+    /// threw `headerMismatch` and the note readback could not run at all — the `English and Korean
+    /// locale coverage` proof `MIDIProviderGate` requires of this provider.
+    static let eventListColumnL = LabelSet(canonical: "L", variants: [],
+        rationale: "Event List lock column; unlabelled in every locale measured.")
+    static let eventListColumnM = LabelSet(canonical: "M", variants: [],
+        rationale: "Event List mute column; unlabelled in every locale measured.")
+    static let eventListColumnPosition = LabelSet(canonical: "Position", variants: ["위치"],
+        rationale: "Event List position column; identity is the canonical English form.")
+    static let eventListColumnStatus = LabelSet(canonical: "Status", variants: ["상태"],
+        rationale: "Event List status column; identity is the canonical English form.")
+    static let eventListColumnChannel = LabelSet(canonical: "Ch", variants: ["채널"],
+        rationale: "Event List channel column; identity is the canonical English form.")
+    static let eventListColumnNumber = LabelSet(canonical: "Num", variants: ["번호"],
+        rationale: "Event List number column; identity is the canonical English form.")
+    static let eventListColumnValue = LabelSet(canonical: "Val", variants: ["값"],
+        rationale: "Event List value column; identity is the canonical English form.")
+    static let eventListColumnLengthInfo = LabelSet(canonical: "Length/Info", variants: ["길이/정보"],
+        rationale: "Event List length column; identity is the canonical English form.")
+
+    /// The region-level header, which is how the collector tells "you are looking at the wrong level"
+    /// apart from "Logic changed its columns". Measured in Korean as
+    /// `["L","M","위치","이름","트랙","길이"]`.
+    static let eventListColumnName = LabelSet(canonical: "Name", variants: ["이름"],
+        rationale: "Region-level name column; distinguishes the region list from the event list.")
+    static let eventListColumnTrack = LabelSet(canonical: "Trk", variants: ["트랙"],
+        rationale: "Region-level track column; distinguishes the region list from the event list.")
+    static let eventListColumnLength = LabelSet(canonical: "Length", variants: ["길이"],
+        rationale: "Region-level length column; distinguishes the region list from the event list.")
+
     static let fileMenuBar = LabelSet(
         canonical: "File",
         variants: ["파일", "ファイル"],

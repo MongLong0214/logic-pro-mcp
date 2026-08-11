@@ -9,6 +9,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ## [Unreleased]
 
 ### Fixed
+- **MIDI note readback works on a Korean Logic (#293).** The Event List collector compared its column
+  headers positionally against English literals, so every read outside English threw
+  `headerMismatch` and the readback could not run at all — one of the two `ABSENT` proofs
+  `MIDIProviderGate` requires of this provider. Headers are now matched through `AXLocalePolicy`,
+  with the **canonical English form kept as the column identity** so a snapshot taken in one language
+  stays comparable with one taken in another. Measured on Logic 12.3 in Korean: event level
+  `["L","M","위치","상태","채널","번호","값","길이/정보"]`, region level
+  `["L","M","위치","이름","트랙","길이"]`.
+
+### Fixed
 - **`project.new` works on a Logic that is not in English (#519).** The menu drive named the English
   menu-bar item, so on a Korean Logic it returned `channels_exhausted` in 2.8 s with "Could not
   reveal Creator Studio chooser through exact File > New" — never reaching either creation branch.
