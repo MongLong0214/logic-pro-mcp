@@ -89,6 +89,7 @@ import Testing
         calibration: CalibrationTriple? = CalibrationTriple(pitch: 60, velocity: 100, startTickValue: 1)
     ) -> EventListReadbackEvidence {
         EventListReadbackEvidence(
+            variant: .desktop,
             requestedRegion: requestedRegion,
             resolvedIdentity: resolved ?? RegionIdentityRegistrySeam.mint(boundRegion: region, identity: identity),
             observedRegion: observed,

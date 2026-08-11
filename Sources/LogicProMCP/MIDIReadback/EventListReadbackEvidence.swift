@@ -230,6 +230,16 @@ enum TimingEvidence: Sendable {
 // MARK: - Evidence package
 
 struct EventListReadbackEvidence: Sendable {
+    /// Which Logic product this reading came from.
+    ///
+    /// `MIDIProviderGate` requires "Desktop variant coverage" of this provider, and qualification is
+    /// judged per axis — variant crossed with locale, profile, cache state and fixture. Evidence that
+    /// does not say which product produced it cannot be placed on that grid, so a desktop reading
+    /// could be counted as covering Creator Studio, whose Event List this project has never observed.
+    /// `.unknown` is carried rather than guessed: a reading from an unrecognised bundle identifier is
+    /// still a reading, and saying so is what stops it from being filed under a product it did not
+    /// come from.
+    let variant: LogicProVariant
     let requestedRegion: MIDIRegionReference
     let resolvedIdentity: RegistryResolvedIdentityProof
     let observedRegion: ObservedRegionIdentityProof

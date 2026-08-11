@@ -72,6 +72,10 @@ enum EventListReadbackCollector {
         try refuseTimeDisplayIfNeeded(runtime: runtime, rows: harvest.passA, positionColumn: headers.positionID)
 
         return EventListReadbackEvidence(
+            // Resolved from the process actually being read, not from a build-time assumption. On an
+            // unrecognised bundle identifier this is `.unknown`, which is the honest answer and keeps
+            // the reading off a coverage axis it did not earn.
+            variant: LogicProTarget.current.variant,
             requestedRegion: requestedRegion,
             resolvedIdentity: resolvedIdentity,
             observedRegion: .unproven,

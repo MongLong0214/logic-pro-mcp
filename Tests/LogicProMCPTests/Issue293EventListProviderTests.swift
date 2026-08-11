@@ -61,6 +61,7 @@ import Testing
             (RowKey(index: index), row)
         })
         return EventListReadbackEvidence(
+            variant: .desktop,
             requestedRegion: region,
             resolvedIdentity: RegionIdentityRegistrySeam.mint(
                 boundRegion: region,
