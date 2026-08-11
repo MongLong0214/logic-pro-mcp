@@ -1,3 +1,5 @@
+@preconcurrency import ApplicationServices
+import Foundation
 import Testing
 @testable import LogicProMCP
 
@@ -5,30 +7,6 @@ private func issue529Position(of fragment: String, in script: String) throws -> 
     let range = try #require(
         script.range(of: fragment),
         "Generated AppleScript must contain: \(fragment)"
-    )
-    return range.lowerBound
-}
-
-private func issue529Position(
-    of fragment: String,
-    after start: String.Index,
-    in script: String
-) throws -> String.Index {
-    let range = try #require(
-        script.range(of: fragment, range: start..<script.endIndex),
-        "Generated AppleScript must contain \(fragment) after the preceding guard"
-    )
-    return range.lowerBound
-}
-
-private func issue529Position(
-    of fragment: String,
-    before end: String.Index,
-    in script: String
-) throws -> String.Index {
-    let range = try #require(
-        script.range(of: fragment, options: .backwards, range: script.startIndex..<end),
-        "Generated AppleScript must contain \(fragment) before the refusal"
     )
     return range.lowerBound
 }
@@ -41,6 +19,57 @@ private func issue529Positions(of fragment: String, in script: String) -> [Strin
         searchStart = range.upperBound
     }
     return positions
+}
+
+private final class Issue529Counter: @unchecked Sendable {
+    private(set) var value = 0
+
+    func bump() {
+        value += 1
+    }
+}
+
+private func issue529SliderRuntime(sliderWrites: Issue529Counter) -> AXLogicProElements.Runtime {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(5290)
+    let window = builder.element(5291)
+    let controlBar = builder.element(5292)
+    let barSlider = builder.element(5293)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [controlBar])
+    builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
+    builder.setChildren(controlBar, [barSlider])
+    builder.setAttribute(barSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setAttribute(barSlider, kAXDescriptionAttribute as String, "Bar")
+    builder.setAttribute(barSlider, kAXValueAttribute as String, NSNumber(value: 1))
+
+    return builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: { element, attribute, value in
+            if element == barSlider, attribute == kAXValueAttribute as String {
+                sliderWrites.bump()
+            }
+            builder.setAttribute(element, attribute, value)
+            return true
+        },
+        performActionHandler: { _, _ in true }
+    )
+}
+
+private func issue529Envelope(_ result: ChannelResult) -> [String: Any]? {
+    let payload: String
+    switch result {
+    case let .success(text), let .error(text):
+        payload = text
+    }
+    guard let data = payload.data(using: .utf8),
+          let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
+        return nil
+    }
+    return envelope
 }
 
 @Suite("Issue #529 — Go To Position menu validation")
@@ -114,28 +143,28 @@ struct Issue529MenuValidationTests {
             of: "return \"MENU_PICK_FAILED: a menu was open at entry",
             in: script
         )
-        let refusalReturns = issue529Positions(of: "return \"", in: script).filter { position in
+        let cleanupRefusalReturns = issue529Positions(of: "return \"", in: script).filter { position in
             let line = script[position...]
             return position > entryRefusal
-                && (line.hasPrefix("return \"MENU_") || line.hasPrefix("return \"DIALOG_NOT_READY"))
+                && line.hasPrefix("return \"MENU_PICK_FAILED: menu cleanup was not observed")
         }
         let escape = try issue529Position(of: "key code 53", in: script)
-        let observation = try issue529Position(
+        let menuStateObservations = issue529Positions(
             of: "set menuState to my menuOpenState(theProcess)",
-            after: escape,
             in: script
         )
 
-        #expect(refusalReturns.count > 0)
+        #expect(cleanupRefusalReturns.count > 0)
         #expect(entryCleanup < entryRefusal)
-        #expect(escape < observation)
-        for refusalReturn in refusalReturns {
-            let cleanup = try issue529Position(
+        #expect(menuStateObservations.contains { escape < $0 })
+        var previousRefusalReturn = entryRefusal
+        for refusalReturn in cleanupRefusalReturns {
+            let cleanupBetweenRefusals = issue529Positions(
                 of: "set cleanupState to my dismissOpenMenu(logicProcess)",
-                before: refusalReturn,
                 in: script
-            )
-            #expect(cleanup < refusalReturn)
+            ).contains { previousRefusalReturn < $0 && $0 < refusalReturn }
+            #expect(cleanupBetweenRefusals)
+            previousRefusalReturn = refusalReturn
         }
     }
 
@@ -155,6 +184,48 @@ struct Issue529MenuValidationTests {
         )
 
         #expect(classification == .failure(.menuPickFailed))
+    }
+
+    @Test("a menu that could not be closed returns State C without touching the slider")
+    func menuCloseFailureDoesNotFallThroughToSlider() async throws {
+        let sliderWrites = Issue529Counter()
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                .success(#"{"result":"MENU_PICK_FAILED: menu cleanup was not observed (OPEN)"}"#)
+            }
+        )
+
+        let envelope = try #require(issue529Envelope(result))
+        #expect(try #require(envelope["state"] as? String) == "C")
+        #expect(try #require(envelope["menu_state"] as? String) == "could_not_be_closed")
+        let hint = try #require(envelope["hint"] as? String)
+        #expect(hint.contains("could not be closed"))
+        #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+        #expect(sliderWrites.value == 0)
+    }
+
+    @Test("a menu-not-found dialog result still falls through to the slider")
+    func menuNotFoundStillFallsThroughToSlider() async throws {
+        let sliderWrites = Issue529Counter()
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                .success(#"{"result":"MENU_NOT_FOUND"}"#)
+            }
+        )
+
+        let envelope = try #require(issue529Envelope(result))
+        #expect(try #require(envelope["via"] as? String) == "slider")
+        #expect(sliderWrites.value > 0)
     }
 
     @Test("JSON-wrapped disabled and not-ready sentinels still refuse the dialog route")

@@ -776,7 +776,10 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime = .production,
         isFrontmost: @Sendable () -> Bool = ProcessUtils.Runtime.production.logicIsFrontmost,
         activateLogic: @Sendable () -> Bool = ProcessUtils.Runtime.production.activateLogicPro,
-        sleepMicros: @Sendable (UInt32) -> Void = { usleep($0) }
+        sleepMicros: @Sendable (UInt32) -> Void = { usleep($0) },
+        executeDialogScript: @escaping @Sendable (String) async -> ChannelResult = { script in
+            await AppleScriptChannel.executeAppleScript(script, timeout: 8.0)
+        }
     ) async -> ChannelResult {
         var targetBar: Int? = nil
         if let barStr = params["bar"], let b = Int(barStr) {
@@ -822,13 +825,31 @@ extension AccessibilityChannel {
         // cannot show that a successful run had to bring Logic forward first.
         baseExtras["frontmost_preparation"] = preparation.rawValue
 
-        let dialogResult = await gotoPositionViaDialog(bar: bar)
-        if case let .success(payload) = dialogResult {
+        let dialogResult = await gotoPositionViaDialog(
+            bar: bar, executeScript: executeDialogScript
+        )
+        if case let .driven(payload) = dialogResult {
             // The dialog rung builds its own envelope, so without this the same operation reports
             // the frontmost gate on one path and stays silent on the other — a receipt field you
             // cannot rely on is worse than none.
             return .success(mergingJSONField(
                 payload, key: "frontmost_preparation", value: preparation.rawValue
+            ))
+        }
+        if case let .failed(classification) = dialogResult,
+           classification.isUnsafeToActuateAgain {
+            // `dismissOpenMenu` could not prove that the menu closed. A slider write from this
+            // state can operate on the still-open menu, so this is terminal rather than fallback.
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "The Go To Position menu could not be closed; the slider fallback was not attempted.",
+                extras: baseExtras.merging([
+                    "operation": "transport.goto_position",
+                    "method": "dialog",
+                    "menu_state": "could_not_be_closed",
+                    "write_attempted": false,
+                    "safe_to_retry": false,
+                ]) { _, new in new }
             ))
         }
 
@@ -1057,21 +1078,31 @@ extension AccessibilityChannel {
 
     /// The successful AppleScript channel payload is a JSON object containing the
     /// script's return value in `result`. Only an exact `OK` means this route
-    /// reached the dialog and submitted it; any sentinel or malformed payload
-    /// must fall through to the slider route.
+    /// reached the dialog and submitted it. Most failures may fall through to
+    /// the slider route, except a menu-close failure that leaves the UI unsafe
+    /// for further actuation.
     enum GotoPositionDialogResultClassification: Equatable {
         enum Failure: Equatable {
             case menuNotFound
             case menuStateUnreadable
             case menuDisabled
             case menuPickFailed
+            case menuCouldNotBeClosed
             case dialogNotReady
             case malformedPayload
             case unexpectedResult
+            case executionFailed
         }
 
         case driven
         case failure(Failure)
+
+        var isUnsafeToActuateAgain: Bool {
+            if case .failure(.menuCouldNotBeClosed) = self {
+                return true
+            }
+            return false
+        }
     }
 
     private struct GotoPositionDialogScriptPayload: Decodable {
@@ -1100,6 +1131,10 @@ extension AccessibilityChannel {
         case "MENU_DISABLED":
             return .failure(.menuDisabled)
         case let value where value.hasPrefix("MENU_PICK_FAILED"):
+            if value.hasPrefix("MENU_PICK_FAILED: a menu was open at entry and would not close")
+                || value.hasPrefix("MENU_PICK_FAILED: menu cleanup was not observed") {
+                return .failure(.menuCouldNotBeClosed)
+            }
             return .failure(.menuPickFailed)
         case "DIALOG_NOT_READY":
             return .failure(.dialogNotReady)
@@ -1108,14 +1143,21 @@ extension AccessibilityChannel {
         }
     }
 
-    private static func gotoPositionViaDialog(bar: Int) async -> ChannelResult {
+    private enum GotoPositionDialogRouteResult {
+        case driven(String)
+        case failed(GotoPositionDialogResultClassification)
+    }
+
+    private static func gotoPositionViaDialog(
+        bar: Int,
+        executeScript: @escaping @Sendable (String) async -> ChannelResult
+    ) async -> GotoPositionDialogRouteResult {
         let script = gotoPositionViaDialogAppleScript(bar: bar)
-        // Fixed waits consume 0.8 s and the dialog poll can consume 3.0 s.
-        // Eight seconds leaves 4.2 s for osascript startup and menu traversal.
-        let result = await AppleScriptChannel.executeAppleScript(script, timeout: 8.0)
+        let result = await executeScript(script)
         switch result {
         case .success(let output):
-            switch classifyGotoPositionDialogResult(output) {
+            let classification = classifyGotoPositionDialogResult(output)
+            switch classification {
             case .driven:
                 // #105: this State B reports only that the Go-To-Position dialog
                 // keystroke was sent; the playhead is verified independently by
@@ -1127,30 +1169,18 @@ extension AccessibilityChannel {
                 // (`via:"dialog"`) plus finalize's `verification_source` /
                 // `observed` / `verified` fields describe the outcome honestly
                 // without it.
-                return .success(HonestContract.encodeStateB(
+                return .driven(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
                     extras: [
                         "requested": "\(bar).1.1.1",
                         "via": "dialog"
                     ]
                 ))
-            case .failure(.menuDisabled):
-                return .error("goto-position dialog menu state did not authorize the pick")
-            case .failure(.menuStateUnreadable):
-                return .error("goto-position dialog menu enabled state unavailable")
-            case .failure(.menuNotFound):
-                return .error("goto-position menu not found")
-            case .failure(.menuPickFailed):
-                return .error("goto-position dialog menu pick failed")
-            case .failure(.dialogNotReady):
-                return .error("goto-position dialog did not appear within timeout")
-            case .failure(.malformedPayload):
-                return .error("goto-position dialog returned an invalid result payload")
-            case .failure(.unexpectedResult):
-                return .error("goto-position dialog returned an unexpected result")
+            case .failure:
+                return .failed(classification)
             }
-        case .error(let msg):
-            return .error("goto-position dialog failed: \(msg)")
+        case .error:
+            return .failed(.failure(.executionFailed))
         }
     }
 
