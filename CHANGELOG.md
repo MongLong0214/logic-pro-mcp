@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ## [Unreleased]
 
 ### Fixed
+- **MIDI readback evidence states which Logic product produced it (#293).** Qualification is judged
+  per axis — variant crossed with locale, profile, cache state and fixture — and a reading that cannot
+  name its product cannot be placed on that grid. `EventListReadbackEvidence` now carries the
+  `LogicProVariant` resolved from the process actually being read, `.unknown` included rather than
+  guessed. Creator Studio is not installed on the verifying host, so nothing is claimed about it.
+
 - **MIDI note readback works on a Korean Logic (#293).** The Event List collector compared its column
   headers positionally against English literals, so every read outside English threw
   `headerMismatch` and the readback could not run at all — one of the two `ABSENT` proofs
