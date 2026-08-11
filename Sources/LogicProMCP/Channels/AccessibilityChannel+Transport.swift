@@ -847,7 +847,11 @@ extension AccessibilityChannel {
                     "operation": "transport.goto_position",
                     "method": "dialog",
                     "menu_state": "could_not_be_closed",
-                    "write_attempted": false,
+                    // An entry-time close failure happens before this run has actuated anything;
+                    // after a menu click, however, the operation has already attempted a write.
+                    // Keep State C (the requested navigation did not land), but report that fact
+                    // honestly rather than presenting the latter as a pre-write refusal.
+                    "write_attempted": classification.writeAttemptedBeforeUnsafeRefusal,
                     "safe_to_retry": false,
                 ]) { _, new in new }
             ))
@@ -942,6 +946,10 @@ extension AccessibilityChannel {
         on dismissOpenMenu(theProcess)
             set menuState to my menuOpenState(theProcess)
             if menuState is "CLOSED" then return "CLOSED"
+            -- An unreadable state before this run has observed OPEN remains an
+            -- absent observation. The same state after Escape is different: we
+            -- know a menu was open and cannot prove the dismissal worked.
+            if menuState is "UNREADABLE" then return "UNREADABLE"
             if menuState is not "OPEN" then return menuState
             repeat 3 times
                 using terms from application "System Events"
@@ -950,10 +958,19 @@ extension AccessibilityChannel {
                 delay 0.1
                 set menuState to my menuOpenState(theProcess)
                 if menuState is "CLOSED" then return "CLOSED"
+                if menuState is "UNREADABLE" then return "OPEN_UNREADABLE"
                 if menuState is not "OPEN" then return menuState
             end repeat
             return "OPEN"
         end dismissOpenMenu
+
+        -- Appending this context lets the Swift receipt distinguish an unsafe
+        -- entry cleanup (no operation actuation) from an unsafe cleanup after a
+        -- menu click. It is deliberately attached only to refusal results.
+        on menuCleanupActuationContext(menuActuationAttempted)
+            if menuActuationAttempted then return " after menu actuation"
+            return ""
+        end menuCleanupActuationContext
 
         \(logicProAppleScript.activateByBundleID)
         tell application "System Events"
@@ -963,8 +980,8 @@ extension AccessibilityChannel {
                 -- observe that state before this run performs any menu read or
                 -- actuation, so a later fallback never inherits an open menu.
                 set entryMenuCleanup to my dismissOpenMenu(logicProcess)
-                if entryMenuCleanup is "OPEN" then
-                    return "MENU_PICK_FAILED: a menu was open at entry and would not close"
+                if entryMenuCleanup is "OPEN" or entryMenuCleanup is "OPEN_UNREADABLE" then
+                    return "MENU_PICK_FAILED: a menu was open at entry and would not close (" & entryMenuCleanup & ")"
                 end if
                 -- UNREADABLE is NOT a refusal here. Nothing has been opened by this
                 -- run yet, so an unreadable menu bar is an absent observation, not
@@ -973,6 +990,7 @@ extension AccessibilityChannel {
                 -- sent 5 of 8 fresh processes to the slider route, measured. After
                 -- this run opens a menu the same value IS a refusal, because then
                 -- there is something known to be open.
+                set menuActuationAttempted to false
                 delay 0.2
 
                 -- Locale selection is a read-only path-resolution step. It
@@ -990,26 +1008,27 @@ extension AccessibilityChannel {
                     else
                         set cleanupState to my dismissOpenMenu(logicProcess)
                         if cleanupState is not "CLOSED" then
-                            return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                            return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                         end if
                         return "MENU_NOT_FOUND"
                     end if
                 on error errMsg
                     set cleanupState to my dismissOpenMenu(logicProcess)
                     if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
                     return "MENU_NOT_FOUND: " & errMsg
                 end try
                 try
                     -- Opening the selected chain refreshes AXEnabled. This is
                     -- the only menu-bar chain that can be clicked in this run.
+                    set menuActuationAttempted to true
                     click selectedMenuBarItem
                     click selectedSubmenuItem
                 on error errMsg
                     set cleanupState to my dismissOpenMenu(logicProcess)
                     if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
                     return "MENU_NOT_FOUND: " & errMsg
                 end try
@@ -1019,14 +1038,14 @@ extension AccessibilityChannel {
                     -- An unreadable AXEnabled must not authorise the pick.
                     set cleanupState to my dismissOpenMenu(logicProcess)
                     if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
                     return "MENU_STATE_UNREADABLE"
                 end try
                 if not menuItemEnabled then
                     set cleanupState to my dismissOpenMenu(logicProcess)
                     if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
                     return "MENU_DISABLED"
                 end if
@@ -1035,7 +1054,7 @@ extension AccessibilityChannel {
                 on error errMsg
                     set cleanupState to my dismissOpenMenu(logicProcess)
                     if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
                     return "MENU_PICK_FAILED: " & errMsg
                 end try
@@ -1059,7 +1078,7 @@ extension AccessibilityChannel {
                 if not dialogReady then
                     set cleanupState to my dismissOpenMenu(logicProcess)
                     if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
                     return "DIALOG_NOT_READY"
                 end if
@@ -1087,7 +1106,7 @@ extension AccessibilityChannel {
             case menuStateUnreadable
             case menuDisabled
             case menuPickFailed
-            case menuCouldNotBeClosed
+            case menuCouldNotBeClosed(writeAttempted: Bool)
             case dialogNotReady
             case malformedPayload
             case unexpectedResult
@@ -1100,6 +1119,13 @@ extension AccessibilityChannel {
         var isUnsafeToActuateAgain: Bool {
             if case .failure(.menuCouldNotBeClosed) = self {
                 return true
+            }
+            return false
+        }
+
+        var writeAttemptedBeforeUnsafeRefusal: Bool {
+            if case let .failure(.menuCouldNotBeClosed(writeAttempted)) = self {
+                return writeAttempted
             }
             return false
         }
@@ -1133,7 +1159,11 @@ extension AccessibilityChannel {
         case let value where value.hasPrefix("MENU_PICK_FAILED"):
             if value.hasPrefix("MENU_PICK_FAILED: a menu was open at entry and would not close")
                 || value.hasPrefix("MENU_PICK_FAILED: menu cleanup was not observed") {
-                return .failure(.menuCouldNotBeClosed)
+                return .failure(.menuCouldNotBeClosed(
+                    writeAttempted: value.hasPrefix(
+                        "MENU_PICK_FAILED: menu cleanup was not observed after menu actuation"
+                    )
+                ))
             }
             return .failure(.menuPickFailed)
         case "DIALOG_NOT_READY":

@@ -117,19 +117,62 @@ struct Issue529MenuValidationTests {
     /// Measured, not reasoned: refusing at entry on any non-CLOSED value sent 5 of 8 fresh server
     /// processes to the slider route, because the first menu-bar read on a cold System Events
     /// connection is frequently unreadable. Nothing has been opened at that point, so an unreadable
-    /// menu bar is an absent observation rather than evidence of an open menu. After this run opens
-    /// one, the same value IS a refusal — that asymmetry is the point.
-    @Test("entry refuses only on an observed open menu, never on an unreadable one")
+    /// menu bar is an absent observation rather than evidence of an open menu. `OPEN_UNREADABLE`
+    /// is distinct: this run observed OPEN, sent Escape, and then could not observe closure.
+    @Test("entry permits a fresh unreadable menu bar")
     func entryCleanupDoesNotRefuseOnAnUnreadableMenuBar() throws {
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
-        let entryGuard = try issue529Position(of: "if entryMenuCleanup is \"OPEN\" then", in: script)
+        let entryGuard = try issue529Position(
+            of: "if entryMenuCleanup is \"OPEN\" or entryMenuCleanup is \"OPEN_UNREADABLE\" then",
+            in: script
+        )
         let localeDecision = try issue529Position(of: "if exists menu item \"위치…\"", in: script)
 
         #expect(entryGuard < localeDecision)
         #expect(!script.contains("if entryMenuCleanup is not \"CLOSED\" then"))
-        // The post-actuation refusals keep the strict form, so the asymmetry is asserted
+        #expect(!script.contains("if entryMenuCleanup is \"OPEN\" then"))
+        // Post-actuation refusals still require a confirmed close, so the asymmetry is asserted
         // rather than assumed.
         #expect(script.contains("if cleanupState is not \"CLOSED\" then"))
+    }
+
+    /// Script fixture: `menuOpenState` returns OPEN, Escape is posted, and the next read is
+    /// UNREADABLE. The distinct `OPEN_UNREADABLE` outcome must be terminal at entry; changing the
+    /// entry guard back to `entryMenuCleanup is "OPEN"` makes this test fail.
+    @Test("OPEN then Escape then UNREADABLE refuses at entry")
+    func entryCleanupRefusesUnreadableAfterObservedOpen() async throws {
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let escape = try issue529Position(of: "key code 53", in: script)
+        let unreadableAfterEscape = try issue529Position(
+            of: "if menuState is \"UNREADABLE\" then return \"OPEN_UNREADABLE\"",
+            in: script
+        )
+        let entryGuard = try issue529Position(
+            of: "if entryMenuCleanup is \"OPEN\" or entryMenuCleanup is \"OPEN_UNREADABLE\" then",
+            in: script
+        )
+        let localeDecision = try issue529Position(of: "if exists menu item \"위치…\"", in: script)
+
+        #expect(escape < unreadableAfterEscape)
+        #expect(unreadableAfterEscape < entryGuard)
+        #expect(entryGuard < localeDecision)
+
+        let sliderWrites = Issue529Counter()
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                .success(#"{"result":"MENU_PICK_FAILED: a menu was open at entry and would not close (OPEN_UNREADABLE)"}"#)
+            }
+        )
+
+        let envelope = try #require(issue529Envelope(result))
+        #expect(try #require(envelope["state"] as? String) == "C")
+        #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+        #expect(sliderWrites.value == 0)
     }
 
     @Test("every refusal uses observed menu cleanup")
@@ -168,6 +211,27 @@ struct Issue529MenuValidationTests {
         }
     }
 
+    @Test("cleanup after click mi is marked as an attempted menu write")
+    func menuItemClickMarksSubsequentCleanupAsAttempted() throws {
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let attempted = try issue529Position(of: "set menuActuationAttempted to true", in: script)
+        let menuBarClick = try issue529Position(of: "click selectedMenuBarItem", in: script)
+        let menuItemClick = try issue529Position(of: "click mi", in: script)
+        let cleanupAfterMenuItemClick = try #require(
+            issue529Positions(of: "set cleanupState to my dismissOpenMenu(logicProcess)", in: script)
+                .first { $0 > menuItemClick }
+        )
+        let refusalContextAfterMenuItemClick = try #require(
+            issue529Positions(of: "my menuCleanupActuationContext(menuActuationAttempted)", in: script)
+                .first { $0 > cleanupAfterMenuItemClick }
+        )
+
+        #expect(attempted < menuBarClick)
+        #expect(menuBarClick < menuItemClick)
+        #expect(menuItemClick < cleanupAfterMenuItemClick)
+        #expect(cleanupAfterMenuItemClick < refusalContextAfterMenuItemClick)
+    }
+
     @Test("JSON-wrapped menu-not-found result refuses the dialog route")
     func jsonWrappedMenuNotFoundRefusesDialogRoute() {
         let classification = AccessibilityChannel.classifyGotoPositionDialogResult(
@@ -186,8 +250,8 @@ struct Issue529MenuValidationTests {
         #expect(classification == .failure(.menuPickFailed))
     }
 
-    @Test("a menu that could not be closed returns State C without touching the slider")
-    func menuCloseFailureDoesNotFallThroughToSlider() async throws {
+    @Test("a pre-actuation menu close failure returns State C without touching the slider")
+    func preActuationMenuCloseFailureDoesNotFallThroughToSlider() async throws {
         let sliderWrites = Issue529Counter()
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "529"],
@@ -206,6 +270,26 @@ struct Issue529MenuValidationTests {
         let hint = try #require(envelope["hint"] as? String)
         #expect(hint.contains("could not be closed"))
         #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+        #expect(sliderWrites.value == 0)
+    }
+
+    @Test("a post-click menu close failure reports the attempted write")
+    func postClickMenuCloseFailureReportsAttemptedWrite() async throws {
+        let sliderWrites = Issue529Counter()
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                .success(#"{"result":"MENU_PICK_FAILED: menu cleanup was not observed after menu actuation (UNREADABLE)"}"#)
+            }
+        )
+
+        let envelope = try #require(issue529Envelope(result))
+        #expect(try #require(envelope["state"] as? String) == "C")
+        #expect((try #require(envelope["write_attempted"] as? Bool)))
         #expect(sliderWrites.value == 0)
     }
 
