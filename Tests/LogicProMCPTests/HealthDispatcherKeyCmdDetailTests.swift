@@ -55,7 +55,7 @@ private func t7StartedChannel(tag: String) async throws -> ChannelHealth {
     #expect(health.detail.contains("edit.normalize"))
     #expect(!health.detail.contains("edit.toggle_step_input"))
     #expect(health.detail.contains("nav.goto_marker"))
-    #expect(health.detail.contains("nav.delete_marker"))
+    #expect(!health.detail.contains("nav.delete_marker"))
     #expect(!health.detail.contains("nav.set_zoom_level"))
     #expect(!health.detail.contains("project.bounce"))
 }

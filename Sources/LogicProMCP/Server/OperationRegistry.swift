@@ -586,7 +586,7 @@ enum OperationRegistry {
         (.navigateGotoBar, "goto_bar", .readbackRequired, .defaultInstall, ["bar"]),
         (.navigateGotoMarker, "goto_marker", .readbackRequired, .defaultInstall, ["index", "name"]),
         (.navigateCreateMarker, "create_marker", .readbackRequired, .defaultInstall, ["name"]),
-        (.navigateDeleteMarker, "delete_marker", .none, .requiresKeyBinding, ["index"]),
+        (.navigateDeleteMarker, "delete_marker", .readbackRequired, .defaultInstall, ["index"]),
         (.navigateRenameMarker, "rename_marker", .readbackRequired, .defaultInstall, ["index", "name"]),
         (.navigateZoomToFit, "zoom_to_fit", .readbackRequired, .defaultInstall, []),
         (.navigateSetZoom, "set_zoom", .readbackRequired, .defaultInstall, ["direction", "level"]),
