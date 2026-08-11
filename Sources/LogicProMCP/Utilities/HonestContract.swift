@@ -506,8 +506,11 @@ enum HonestContract {
               let obj = raw as? [String: Any] else {
             return false
         }
-        // State A / B both carry `success:true`; only State C is `false`.
-        guard let success = obj["success"] as? Bool, success == false else {
+        // Encoders merge extras after their canonical fields, so `success:false` alone does not
+        // prove State C. Require the complete State C shape before honoring this router directive.
+        guard let success = obj["success"] as? Bool, success == false,
+              let state = obj["state"] as? String, state == "C",
+              obj["error"] as? String != nil else {
             return false
         }
         return obj["fallback_unsafe"] as? Bool == true

@@ -200,6 +200,12 @@ actor ChannelRouter {
                 // keystroke whose target focus cannot be proved). This is
                 // separate from terminal error-code classification and must
                 // preserve the original State C envelope verbatim.
+                // This check intentionally precedes terminal-State-C handling, so a marked
+                // terminal `element_not_found` would bypass `shouldContinueAfterTerminalStateC`.
+                // The two envelopes carrying the marker today — both marker-delete refusals — use
+                // `ax_write_failed`, which is NOT terminal, so the ordering changes no current
+                // behaviour. Do not reorder this, and do not put the marker on a terminal code,
+                // without revisiting that consequence.
                 if HonestContract.isFallbackUnsafeStateC(msg) {
                     Log.debug(
                         "\(operation) State C via \(channelID.rawValue) forbids fallback",

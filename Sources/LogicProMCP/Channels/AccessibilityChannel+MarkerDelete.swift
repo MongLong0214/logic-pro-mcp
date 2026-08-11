@@ -72,7 +72,10 @@ extension AccessibilityChannel {
         ]
 
         guard selectMarkerRowForDeletion(index, in: window, runtime: runtime.ax) else {
+            // A weaker key-command channel cannot answer an indexed delete: it ignores `index`
+            // and fires CC 45 blindly, without proving which marker would be removed.
             extras["write_attempted"] = false
+            extras["fallback_unsafe"] = true
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: "Marker index \(index) could not be selected, so nothing was pressed",
