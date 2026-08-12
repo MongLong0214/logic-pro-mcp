@@ -89,7 +89,7 @@ extension AccessibilityChannel {
             "marker_count_before": before.count,
         ]
 
-        guard let selectedTable = selectMarkerRowForDeletion(index, in: window, runtime: runtime.ax) else {
+        guard let selection = selectMarkerRowForDeletion(index, in: window, runtime: runtime.ax) else {
             // A weaker key-command channel cannot answer an indexed delete: it ignores `index`
             // and fires CC 45 blindly, without proving which marker would be removed.
             extras["write_attempted"] = false
@@ -104,9 +104,13 @@ extension AccessibilityChannel {
         // Selecting a row is itself an AX write and moves the visible selection.  `write_attempted`
         // remains scoped to the destructive Delete key, but a refusal after this point must disclose
         // that the caller's selection was changed.
-        extras["selection_changed"] = true
+        // `selection_write_attempted` is what this call did; `selection_changed` is what it
+        // actually altered. A row that was already the sole selection is not a change, and saying
+        // so would be the same over-claim this refusal exists to remove.
+        extras["selection_write_attempted"] = true
+        extras["selection_changed"] = selection.changedSelection
         guard markerTableHasKeyboardFocus(
-            table: selectedTable,
+            table: selection.table,
             in: binding.window,
             runtime: runtime
         ) else {
@@ -223,7 +227,7 @@ extension AccessibilityChannel {
         _ index: Int,
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> AXUIElement? {
+    ) -> (table: AXUIElement, changedSelection: Bool)? {
         guard let table = AXHelpers.findAllDescendants(
             of: window, role: kAXTableRole as String, maxDepth: 12, runtime: runtime
         ).first else { return nil }
@@ -231,13 +235,21 @@ extension AccessibilityChannel {
             of: table, role: kAXRowRole as String, maxDepth: 4, runtime: runtime
         )
         guard index >= 0, index < rows.count else { return nil }
+        // Read the selection BEFORE writing. A post-write read proves the target is selected NOW,
+        // not that this call changed anything — if the row was already selected, reporting a
+        // selection change would assert an effect that did not happen.
+        let before: [AXUIElement] = AXHelpers.getAttribute(
+            table, "AXSelectedRows", runtime: runtime
+        ) ?? []
+        let wasAlreadyExactlyTheTarget = before.count == 1 && CFEqual(before[0], rows[index])
         _ = AXHelpers.setAttribute(
             rows[index], kAXSelectedAttribute as String, kCFBooleanTrue, runtime: runtime
         )
         let selected: [AXUIElement] = AXHelpers.getAttribute(
             table, "AXSelectedRows", runtime: runtime
         ) ?? []
-        return selected.count == 1 && CFEqual(selected[0], rows[index]) ? table : nil
+        guard selected.count == 1, CFEqual(selected[0], rows[index]) else { return nil }
+        return (table: table, changedSelection: !wasAlreadyExactlyTheTarget)
     }
 
     /// True only when focus lives in the exact table selected above, in the exact Marker List

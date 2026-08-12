@@ -195,3 +195,52 @@ func issue535FocusRequiresTheBoundTableEvenWithinOneWindow() async throws {
     #expect(envelope["state"] as? String == "C")
     #expect(deleteKeyPosts.value == 0)
 }
+
+/// `selection_changed` must report what the call ALTERED, not what is true afterwards. A row that
+/// was already the sole selection is not a change, and claiming one would be the same over-claim
+/// this refusal exists to remove.
+@Test("#532: an already-selected row is not reported as a selection change")
+func issue532AlreadySelectedRowIsNotAChange() async throws {
+    // Mutation that must fail this test: set `selection_changed` unconditionally true again.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(53_900)
+    let arrange = builder.element(53_901)
+    let markerList = builder.element(53_902)
+    let table = builder.element(53_903)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, markerList])
+    builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(arrange, kAXTitleAttribute as String, "Preselected - Tracks")
+    builder.setAttribute(arrange, kAXDocumentAttribute as String, "/Preselected.logicx")
+    builder.setAttribute(markerList, kAXTitleAttribute as String, "Preselected - Marker List")
+    builder.setAttribute(markerList, kAXDocumentAttribute as String, "/Preselected.logicx")
+
+    let rows = issue532535537MarkerList(
+        builder: builder, window: markerList, table: table, firstID: 53_910,
+        markers: [(position: "5 1 1 1", name: "Target")]
+    )
+    // The target row is ALREADY the sole selection before the operation runs.
+    builder.setAttribute(table, "AXSelectedRows", [rows[0]])
+    // Focus is elsewhere, so the operation refuses after selecting — the path that reports this.
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, arrange)
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: { _, _, _ in true },
+        performActionHandler: nil
+    )
+    let mouse = AXMouseHelper.Runtime(
+        postMouseEvent: { _, _, _ in false },
+        postKeyEvent: { _ in true },
+        postUnicodeScalar: { _ in false },
+        sleepMicros: { _ in }
+    )
+
+    let result = await AccessibilityChannel.defaultDeleteMarker(index: 0, runtime: runtime, mouse: mouse)
+    let envelope = try issue532535537Envelope(result)
+    #expect(!result.isSuccess)
+    let writeAttempted = try #require(envelope["selection_write_attempted"] as? Bool)
+    #expect(writeAttempted)
+    let changed = try #require(envelope["selection_changed"] as? Bool)
+    #expect(!changed)
+}
