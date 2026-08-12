@@ -54,6 +54,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         appElement: AXUIElement? = nil,
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
         attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
+        childrenResultHandler: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXHelpers.AXStatusError>?)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
         executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
@@ -97,6 +98,17 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
             },
             actionNames: { [self] element in
                 actionNames[key(for: element)] ?? []
+            },
+            // Without this the status-preserving reader falls through to the REAL
+            // `AXUIElementCopyAttributeValue` and asks the window server about a fake element, which
+            // answers a genuine AX failure. Every fixture then reports "unreadable" for children it
+            // plainly set, and the defect looks like a product bug. Supply the seam by default so no
+            // fixture can reach the live API by omission.
+            childrenResult: { [self] element in
+                if let handled = childrenResultHandler?(element) {
+                    return handled
+                }
+                return .success(children[key(for: element)] ?? [])
             },
             attributeValueResult: { [self] element, attribute in
                 if let handled = attributeValueResultHandler?(element, attribute) {
