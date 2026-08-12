@@ -124,8 +124,34 @@ func enumerateMarkers_emptyMarkerListWindow_returnsEmpty() async {
         rows: []
     )
     let runtime = builder.makeLogicRuntime(appElement: app)
-    let markers = AXLogicProElements.enumerateMarkers(in: arrange, runtime: runtime)
-    #expect(markers.isEmpty)
+    let result = AXLogicProElements.enumerateMarkersFromListWindow(listWin, runtime: runtime.ax)
+
+    // Source mutation applied once: turn the successful empty `AXRows` result into a failure.
+    // This table genuinely exposes zero rows, so the restored reader must preserve its empty answer.
+    if case .success(let markers) = result {
+        #expect(markers.isEmpty)
+    } else {
+        #expect(false, "an exposed table with zero rows must be a readable empty list")
+    }
+}
+
+@Test
+func enumerateMarkers_missingTableIsUnavailableRatherThanEmpty() async {
+    // Source mutation applied once: restore `.success([])` when markerListTable finds no table.
+    // This window has no table, so that mutation fails the unavailable-read assertion.
+    let builder = FakeAXRuntimeBuilder()
+    let listWin = builder.element(7_150)
+    builder.setAttribute(listWin, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setChildren(listWin, [])
+
+    let result = AXLogicProElements.enumerateMarkersFromListWindow(
+        listWin, runtime: builder.makeAXRuntime()
+    )
+    if case .failure(let error) = result {
+        #expect(error.raw == AXError.noValue.rawValue)
+    } else {
+        #expect(false, "a Marker List without its table cannot certify an empty list")
+    }
 }
 
 @Test
@@ -286,11 +312,10 @@ func enumerateMarkers_listAndRulerBothPresent_listWins() async {
 // MARK: - StateCache.updateMarkers fetchedAt invariant (v3.1.9 Issue #8 cache bug)
 
 @Test
-func enumerateMarkers_malformedRow_skipsRowKeepsValid() async {
-    // A row with fewer than 3 cells (the `guard cells.count >= 3` branch
-    // in enumerateMarkersFromListWindow) should be silently skipped while
-    // valid rows are still surfaced. Pins the guard so future refactors
-    // that drop it surface as a test failure.
+func enumerateMarkers_malformedRowMakesEnumerationUnavailable() async {
+    // A present row with fewer than 3 cells has not been read completely. It must not be silently
+    // skipped while valid rows are surfaced, because a destructive caller could mistake that
+    // partial list for a complete survivor set.
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(7600)
     let arrange = builder.element(7601)
@@ -348,12 +373,15 @@ func enumerateMarkers_malformedRow_skipsRowKeepsValid() async {
     builder.setChildren(table, rows)
 
     let runtime = builder.makeLogicRuntime(appElement: app)
-    let markers = AXLogicProElements.enumerateMarkers(in: arrange, runtime: runtime)
-    #expect(markers.count == 2, "malformed row skipped, two valid rows surface")
-    #expect(markers[0].name == "ValidA")
-    #expect(markers[0].positionSource == .parser)
-    #expect(markers[1].name == "ValidB")
-    #expect(markers[1].positionSource == .parser)
+    let result = AXLogicProElements.enumerateMarkersFromListWindow(listWin, runtime: runtime.ax)
+
+    // Source mutation applied once: replace the incomplete-row failure with `continue`. That
+    // returns two valid-looking rows and fails this explicit unavailable-read assertion.
+    if case .failure(let error) = result {
+        #expect(error.raw == AXError.noValue.rawValue)
+    } else {
+        #expect(false, "a present unreadable row must make enumeration unavailable")
+    }
 }
 
 @Test

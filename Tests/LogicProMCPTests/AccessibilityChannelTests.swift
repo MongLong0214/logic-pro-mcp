@@ -837,7 +837,7 @@ private func makeSetInstrumentFixture() -> (
 
 @Test func testAccessibilityChannelFastValidationErrorsCoverDeepOperationsWithoutTouchingUI() async {
     let channel = AccessibilityChannel(runtime: makeAccessibilityRuntime())
-    let cases: [(operation: String, params: [String: String], expected: String)] = [
+    let cases: [(String, [String: String], String)] = [
         ("transport.goto_position", [:], "goto_position requires"),
         ("transport.goto_position", ["position": "01:02:03:04"], "cannot handle timecode"),
         ("project.save_as", [:], "Missing 'path'"),
@@ -849,10 +849,12 @@ private func makeSetInstrumentFixture() -> (
         ("plugin.insert", ["track": "0", "slot": "1"], "unsupported plugin"),
     ]
 
-    for testCase in cases {
-        let result = await channel.execute(operation: testCase.operation, params: testCase.params)
-        #expect(!result.isSuccess, "Expected \(testCase.operation) to fail validation")
-        #expect(result.message.contains(testCase.expected), "Expected \(result.message) to contain \(testCase.expected)")
+    // Source mutation applied once: replace `result.message.contains(expected)` with `false`.
+    // The per-row binding must make that validation assertion fail for every table row.
+    for (operation, params, expected) in cases {
+        let result = await channel.execute(operation: operation, params: params)
+        #expect(!result.isSuccess, "Expected \(operation) to fail validation")
+        #expect(result.message.contains(expected), "Expected \(result.message) to contain \(expected)")
     }
 }
 

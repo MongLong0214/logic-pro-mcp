@@ -214,7 +214,10 @@ extension AXLogicProElements {
         case .success(let foundTable?):
             table = foundTable
         case .success(nil):
-            return .success([])
+            // An open Marker List without its table is not an empty Marker List. The caller
+            // asked to enumerate the table's rows; with no table exposed it cannot establish that
+            // every row was read (and a destructive caller must treat the readback as unavailable).
+            return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
         case .failure(let error):
             return .failure(error)
         }
@@ -243,9 +246,16 @@ extension AXLogicProElements {
             return .failure(error)
         }
 
+        // The cap prevents unbounded AX work, but it must not turn a partial traversal into a
+        // complete marker list. A caller that needs a complete list has to receive an unavailable
+        // result rather than an apparently valid prefix.
+        guard rows.count <= markerLimit else {
+            return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+        }
+
         var markers: [MarkerState] = []
         markers.reserveCapacity(min(rows.count, markerLimit))
-        for (index, row) in rows.prefix(markerLimit).enumerated() {
+        for (index, row) in rows.enumerated() {
             let cells: [AXUIElement]
             switch directChildren(of: row, withRole: kAXCellRole as String, runtime: runtime) {
             case .success(let children):
@@ -254,23 +264,33 @@ extension AXLogicProElements {
                 return .failure(error)
             }
             // Need at least 3 cells: [Lock, Position, Name, ...].
-            guard cells.count >= 3 else { continue }
+            // A present row whose required cells are absent is an incomplete row read, not proof
+            // that the row does not represent a marker.
+            guard cells.count >= 3 else {
+                return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+            }
             let positionRaw: String
             switch firstChildDescription(of: cells[1], runtime: runtime) {
-            case .success(let value):
-                positionRaw = value ?? ""
+            case .success(let value?):
+                positionRaw = value
+            case .success(nil):
+                return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
             case .failure(let error):
                 return .failure(error)
             }
             let nameRaw: String
             switch firstChildDescription(of: cells[2], runtime: runtime) {
-            case .success(let value):
-                nameRaw = value ?? ""
+            case .success(let value?):
+                nameRaw = value
+            case .success(nil):
+                return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
             case .failure(let error):
                 return .failure(error)
             }
             let name = nameRaw.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { continue }
+            guard !name.isEmpty else {
+                return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+            }
             let parsed = parseMarkerListPosition(positionRaw)
             markers.append(.fromParsed(parsed, ordinal: index, name: name))
         }

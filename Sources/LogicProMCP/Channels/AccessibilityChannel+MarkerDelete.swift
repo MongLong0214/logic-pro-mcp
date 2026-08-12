@@ -25,7 +25,10 @@ extension AccessibilityChannel {
         index: Int,
         runtime: AXLogicProElements.Runtime = .production,
         mouse: AXMouseHelper.Runtime = .production,
-        logicIsFrontmost: @escaping @Sendable () -> Bool = ProcessUtils.Runtime.production.logicIsFrontmost
+        logicIsFrontmost: @escaping @Sendable () -> Bool = ProcessUtils.Runtime.production.logicIsFrontmost,
+        postKeyEventToLogic: @escaping @Sendable (CGKeyCode, pid_t) -> Bool = { keyCode, pid in
+            CGEventChannel.Runtime.production.postKeyEvent(keyCode, [], pid)
+        }
     ) async -> ChannelResult {
         guard index >= 0 else {
             return .error(HonestContract.encodeStateC(
@@ -152,19 +155,39 @@ extension AccessibilityChannel {
                 ))
             }
 
-        case .routeUnavailable(let failure, let keyboardFallbackMayBeSafe, let axStatus):
+        case .routeUnavailable(
+            let failure, let keyboardFallbackMayBeSafe, let axStatus, let menuState,
+            let menuCancelActionState
+        ):
             extras["edit_menu_route_state"] = failure.state
             // "Unreadable" without the status tells a caller nothing it can act on, and cost two
             // rounds of guessing to diagnose live. Report which AX status stopped the route.
             if let axStatus { extras["edit_menu_route_ax_status"] = Int(axStatus) }
+            if let menuState {
+                // AXShowMenu may have left an unobservable menu on screen. No keyboard fallback is
+                // safe until the opener's child list proves that menu closed; this is not a table
+                // focus failure and must not be reported as one.
+                extras["write_attempted"] = false
+                extras["safe_to_retry"] = false
+                extras["fallback_unsafe"] = true
+                extras["menu_state"] = menuState
+                if let menuCancelActionState {
+                    extras["menu_cancel_action_state"] = menuCancelActionState
+                }
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: failure.hint + " The Edit menu could not be confirmed closed, so no keyboard fallback was posted.",
+                    extras: extras
+                ))
+            }
             guard keyboardFallbackMayBeSafe,
                   markerTableHasKeyboardFocus(
                       table: selection.table,
                       in: binding.window,
                       runtime: runtime
                   ) else {
-                // A failed menu read or dismissal leaves this route unavailable but does not make
-                // a global key safe. The selection write is disclosed above; Delete is not posted.
+                // The selection write is disclosed above; Delete is not posted until this exact
+                // Marker List table, in its bound window, has keyboard focus.
                 extras["write_attempted"] = false
                 extras["safe_to_retry"] = true
                 extras["fallback_unsafe"] = true
@@ -174,9 +197,10 @@ extension AccessibilityChannel {
                     extras: extras
                 ))
             }
-            // Frontmost is a safety precondition that prevents a Delete intended for Logic from
-            // landing in another application. It is deliberately not included in verification
-            // evidence; survivor readback below remains the sole evidence of any deletion.
+            // Pid-bound delivery cannot land in another application, but a background Logic can
+            // still ignore its focused-key command. Keep this check as Logic input-readiness, not
+            // as cross-application routing protection. Survivor readback remains the only deletion
+            // evidence.
             guard logicIsFrontmost() else {
                 extras["write_attempted"] = false
                 extras["safe_to_retry"] = true
@@ -187,9 +211,19 @@ extension AccessibilityChannel {
                     extras: extras
                 ))
             }
+            guard let logicPID = runtime.logicProPID() else {
+                extras["write_attempted"] = false
+                extras["safe_to_retry"] = true
+                extras["fallback_unsafe"] = true
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: failure.hint + " Keyboard fallback was not posted because Logic's process ID was unavailable.",
+                    extras: extras
+                ))
+            }
             extras["write_attempted"] = true
             extras["actuation_route"] = "focused_delete_key"
-            _ = mouse.postKeyEvent(0x33)  // kVK_Delete; its return is not evidence.
+            _ = postKeyEventToLogic(0x33, logicPID)  // kVK_Delete; its return is not evidence.
             mouse.sleepMicros(400_000)
         }
 
@@ -410,7 +444,7 @@ extension AccessibilityChannel {
             case .menuAbsent:
                 "The Marker List Edit menu was not available, so its Delete entry was not picked."
             case .menuUnreadable:
-                "The Marker List Edit menu could not be read after opening, so its Delete entry was not picked."
+                "The Marker List Edit menu route could not be read, so its Delete entry was not picked."
             case .exactDeleteEntryMissingOrDisabled:
                 "The Marker List Edit menu's exact Delete entry was missing or disabled, so it was not picked."
             }
@@ -427,7 +461,9 @@ extension AccessibilityChannel {
         case routeUnavailable(
             MarkerListEditMenuRouteFailure,
             keyboardFallbackMayBeSafe: Bool,
-            axStatus: Int32? = nil
+            axStatus: Int32? = nil,
+            menuState: String? = nil,
+            menuCancelActionState: String? = nil
         )
     }
 
@@ -441,6 +477,7 @@ extension AccessibilityChannel {
     ) -> MarkerListEditMenuDeleteOutcome {
         let search = markerListEditMenuControls(in: window, runtime: runtime)
         let controls = search.controls
+        var unreadable = search.unreadable
         for control in controls {
             switch markerListElementMatches(
                 control, labels: AXLocalePolicy.markerListEditMenuButton,
@@ -451,9 +488,10 @@ extension AccessibilityChannel {
             case .success(false):
                 continue
             case .failure(let error):
-                return .routeUnavailable(
-                    .menuUnreadable, keyboardFallbackMayBeSafe: true, axStatus: error.raw
-                )
+                // This control did not answer; it is neither a usable Edit candidate nor a final
+                // verdict. A later toolbar Edit control may be fully readable.
+                unreadable = unreadable ?? error
+                continue
             }
 
             // This is intentionally action discovery, not a press ladder. A live Marker List's
@@ -463,9 +501,8 @@ extension AccessibilityChannel {
             case .success(let actions):
                 guard actions.contains(kAXShowMenuAction as String) else { continue }
             case .failure(let error):
-                return .routeUnavailable(
-                    .menuUnreadable, keyboardFallbackMayBeSafe: true, axStatus: error.raw
-                )
+                unreadable = unreadable ?? error
+                continue
             }
 
             // As with AXPick, the return code does not prove the UI state. Read the scoped AX tree
@@ -480,14 +517,18 @@ extension AccessibilityChannel {
                 menu = observedMenu
             case .absent:
                 continue
-            case .unknown:
+            case .unknown(let observationError):
                 // AXShowMenu may have succeeded even though its scoped child reads failed or
                 // disagreed. Attempt AX-only cleanup before honestly reporting unreadable state.
+                let cleanup = dismissMarkerListEditMenuAfterUnknownDiscovery(
+                    from: control, runtime: runtime, mouse: mouse
+                )
                 return .routeUnavailable(
                     .menuUnreadable,
-                    keyboardFallbackMayBeSafe: dismissMarkerListEditMenuAfterUnknownDiscovery(
-                        from: control, runtime: runtime, mouse: mouse
-                    )
+                    keyboardFallbackMayBeSafe: cleanup.wasClosed,
+                    axStatus: observationError?.raw ?? cleanup.axStatus,
+                    menuState: cleanup.wasClosed ? nil : "could_not_be_closed",
+                    menuCancelActionState: cleanup.cancelActionState
                 )
             }
 
@@ -502,12 +543,13 @@ extension AccessibilityChannel {
                         menu, from: control, runtime: runtime, mouse: mouse
                     )
                 )
-            case .failure:
+            case .failure(let error):
                 return .routeUnavailable(
                     .menuUnreadable,
                     keyboardFallbackMayBeSafe: dismissMarkerListEditMenu(
                         menu, from: control, runtime: runtime, mouse: mouse
-                    )
+                    ),
+                    axStatus: error.raw
                 )
             }
             switch markerListMenuItemEnabledForActuation(entry, runtime: runtime) {
@@ -520,12 +562,13 @@ extension AccessibilityChannel {
                         menu, from: control, runtime: runtime, mouse: mouse
                     )
                 )
-            case .unreadable:
+            case .unreadable(let error):
                 return .routeUnavailable(
                     .menuUnreadable,
                     keyboardFallbackMayBeSafe: dismissMarkerListEditMenu(
                         menu, from: control, runtime: runtime, mouse: mouse
-                    )
+                    ),
+                    axStatus: error.raw
                 )
             }
 
@@ -541,7 +584,7 @@ extension AccessibilityChannel {
         }
         // Nothing matched. Whether that means "there is no Edit control" or "there is one and part
         // of the tree would not answer" is exactly the distinction a caller needs, so keep it.
-        if let unreadable = search.unreadable {
+        if let unreadable {
             return .routeUnavailable(
                 .menuUnreadable, keyboardFallbackMayBeSafe: true, axStatus: unreadable.raw
             )
@@ -683,7 +726,7 @@ extension AccessibilityChannel {
     private enum MarkerListEditMenuObservation {
         case present(AXUIElement)
         case absent
-        case unknown
+        case unknown(AXHelpers.AXStatusError?)
     }
 
     private static func settledMarkerListEditMenuObservation(
@@ -705,6 +748,7 @@ extension AccessibilityChannel {
         // a scoped child read can come back -25200 on one poll and answer normally on the next while
         // other reads in the same call succeed. So a failure retires that poll, not the observation.
         var absentReadings = 0
+        var unreadable: AXHelpers.AXStatusError?
         for _ in 0..<6 {
             switch markerListEditMenu(under: control, runtime: runtime) {
             case .success(let menu?):
@@ -712,13 +756,14 @@ extension AccessibilityChannel {
             case .success(nil):
                 absentReadings += 1
                 if absentReadings >= 2 { return .absent }
-            case .failure:
+            case .failure(let error):
+                unreadable = unreadable ?? error
                 break
             }
             mouse.sleepMicros(250_000)
         }
         // Every poll was spent without two agreeing absences and without ever seeing the menu.
-        return .unknown
+        return .unknown(unreadable)
     }
 
     private static func markerListEditMenuIsSettledClosed(
@@ -734,27 +779,59 @@ extension AccessibilityChannel {
         return false
     }
 
-    /// Discovery was unknown before it yielded an AXMenu that can receive AXCancel. Re-observe in
-    /// case the menu settles; otherwise leave the UI untouched and prohibit a focused-key fallback.
+    private struct MarkerListEditMenuUnknownDiscoveryCleanup {
+        let wasClosed: Bool
+        let cancelActionState: String?
+        let axStatus: Int32?
+    }
+
+    /// Discovery was unknown before it yielded an AXMenu. Re-observe in case the menu settles;
+    /// otherwise only send AXCancel to the opener if it expressly advertises that action, then
+    /// require a settled closed observation before permitting a focused-key fallback.
     private static func dismissMarkerListEditMenuAfterUnknownDiscovery(
         from control: AXUIElement,
         runtime: AXHelpers.Runtime,
         mouse: AXMouseHelper.Runtime
-    ) -> Bool {
+    ) -> MarkerListEditMenuUnknownDiscoveryCleanup {
         switch settledMarkerListEditMenuObservation(under: control, runtime: runtime, mouse: mouse) {
         case .present(let menu):
-            return dismissMarkerListEditMenu(menu, from: control, runtime: runtime, mouse: mouse)
+            return MarkerListEditMenuUnknownDiscoveryCleanup(
+                wasClosed: dismissMarkerListEditMenu(menu, from: control, runtime: runtime, mouse: mouse),
+                cancelActionState: nil,
+                axStatus: nil
+            )
         case .absent:
-            return true
+            return MarkerListEditMenuUnknownDiscoveryCleanup(
+                wasClosed: true, cancelActionState: nil, axStatus: nil
+            )
         case .unknown:
             // AXShowMenu was already issued, so a menu may be open on screen even though this run
-            // cannot read it. Doing nothing leaves it there. Cancel the control we are holding —
-            // an AX action on a bound element, not a key and not a coordinate — and still report
-            // the closure as unobserved, because it is.
-            _ = AXHelpers.performAction(control, kAXCancelAction as String, runtime: runtime)
+            // cannot read it. AXCancel is generic rather than a "close this opener" action, so do
+            // not send it speculatively: first prove the bound control advertises it.
+            switch AXHelpers.getActionNamesResult(control, runtime: runtime) {
+            case .success(let actions) where actions.contains(kAXCancelAction as String):
+                _ = AXHelpers.performAction(control, kAXCancelAction as String, runtime: runtime)
+                return MarkerListEditMenuUnknownDiscoveryCleanup(
+                    wasClosed: markerListEditMenuIsSettledClosed(
+                        under: control, runtime: runtime, mouse: mouse
+                    ),
+                    cancelActionState: "advertised_and_issued",
+                    axStatus: nil
+                )
+            case .success:
+                return MarkerListEditMenuUnknownDiscoveryCleanup(
+                    wasClosed: false,
+                    cancelActionState: "not_advertised",
+                    axStatus: nil
+                )
+            case .failure(let error):
+                return MarkerListEditMenuUnknownDiscoveryCleanup(
+                    wasClosed: false,
+                    cancelActionState: "unreadable",
+                    axStatus: error.raw
+                )
+            }
         }
-
-        return false
     }
 
     /// Dismiss the exact menu this run observed, then prove it disappeared from the opener's
@@ -821,14 +898,14 @@ extension AccessibilityChannel {
             return .enabled
         case .success:
             return .disabled
-        case .failure:
-            return .unreadable
+        case .failure(let error):
+            return .unreadable(error)
         }
     }
 
     private enum MarkerListMenuItemEnablement {
         case enabled
         case disabled
-        case unreadable
+        case unreadable(AXHelpers.AXStatusError)
     }
 }
