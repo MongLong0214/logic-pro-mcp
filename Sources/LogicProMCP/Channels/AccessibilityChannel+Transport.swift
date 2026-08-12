@@ -906,9 +906,9 @@ extension AccessibilityChannel {
         }
         if case let .failed(classification) = dialogResult,
            classification.requiresFallbackSuppression {
-            // A dead child after LEAF_ARMED/RETURN_ARMED leaves the UI boundary indeterminate, so
-            // another position actuator remains unsafe. That safety rule is not evidence that a
-            // Return was sent: only a normal script result can claim a position submission.
+            // A normal global-input result or a dead child after a durable UI/input boundary leaves
+            // the target indeterminate, so another position actuator remains unsafe. The boundary
+            // does not prove a Return was sent: only a normal script result can claim a submission.
             let dialogState = classification.cleanupObservedClosed ? "closed" : "unobserved"
             var extras = baseExtras.merging([
                 "operation": "transport.goto_position",
@@ -918,9 +918,26 @@ extension AccessibilityChannel {
                 "safe_to_retry": false,
                 "fallback_unsafe": true,
             ]) { _, new in new }
+            if classification.globalInputMayHaveOccurred {
+                extras["dialog_input_attempted"] = true
+                if let inputBoundary = classification.globalInputBoundary {
+                    extras["dialog_input_boundary"] = inputBoundary.rawValue
+                }
+                extras["dialog_input_target"] = "unknown"
+                // The marker is written before the global event. A child can die immediately
+                // afterwards, so this is deliberately conservative rather than a claim that the
+                // observed Go To Position window consumed the input.
+                extras["write_attempted"] = true
+            }
             if classification.dialogSubmissionWasObserved {
                 extras["dialog_submission_attempted"] = true
                 extras["write_attempted"] = true
+            } else if classification.dialogSubmissionMayHaveOccurred {
+                extras["dialog_submission_indeterminate"] = true
+            } else if classification.globalInputMayHaveOccurred {
+                // The completed script proved it did not advance to RETURN_ARMED, but an earlier
+                // global key may already have changed whichever target owned focus.
+                extras["dialog_submission_attempted"] = false
             } else {
                 extras["dialog_submission_indeterminate"] = true
             }
@@ -1377,8 +1394,9 @@ extension AccessibilityChannel {
                     return "DIALOG_ACTUATION_ISSUED: dialog did not become ready"
                 end if
             end tell
-            -- Everything in this block is provably before Return. A normal script result from
-            -- here must therefore remain a non-submission failure, never State B-after-nothing.
+            -- Everything in this block is before Return, but System Events keyboard input is
+            -- global. Once an input boundary is durably armed, a normal result must report that
+            -- it may have reached an unknown target rather than advertising a clean retry.
             set dialogFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)
             if dialogFocusState is not "FOCUSED" then
                 set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
@@ -1392,18 +1410,29 @@ extension AccessibilityChannel {
                 return "DIALOG_SUBMISSION_NOT_ISSUED: observed Go To Position dialog was not focused before typing (" & dialogFocusState & ")"
             end if
             try
+                if not my recordDialogIssuance("SELECT_ALL_ARMED", "\(ledgerPath)") then
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                    if dialogCleanupState is not "CLOSED" then
+                        return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                    end if
+                    set cleanupState to my dismissOpenMenu(logicProcess, true)
+                    if cleanupState is not "CLOSED" then
+                        return "DIALOG_SUBMISSION_NOT_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
+                    end if
+                    return "DIALOG_SUBMISSION_NOT_ISSUED: could not persist Cmd+A issuance"
+                end if
                 keystroke "a" using command down
                 delay 0.1
             on error errMsg
                 set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
                 if dialogCleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                    return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
                 set cleanupState to my dismissOpenMenu(logicProcess, true)
                 if cleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_NOT_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
+                    return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: menu cleanup was not observed (" & cleanupState & ")"
                 end if
-                return "DIALOG_SUBMISSION_NOT_ISSUED: dialog input failed before Return (" & errMsg & ")"
+                return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: Cmd+A may have been sent (" & errMsg & ")"
             end try
 
             -- Cmd+A is global too. Re-check the same observed window immediately before typing
@@ -1412,54 +1441,65 @@ extension AccessibilityChannel {
             if dialogTypingFocusState is not "FOCUSED" then
                 set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
                 if dialogCleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                    return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
                 set cleanupState to my dismissOpenMenu(logicProcess, true)
                 if cleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_NOT_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
+                    return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: menu cleanup was not observed (" & cleanupState & ")"
                 end if
-                return "DIALOG_SUBMISSION_NOT_ISSUED: observed Go To Position dialog was not focused before typing (" & dialogTypingFocusState & ")"
+                return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: observed Go To Position dialog was not focused before typing (" & dialogTypingFocusState & ")"
             end if
             try
+                if not my recordDialogIssuance("POSITION_INPUT_ARMED", "\(ledgerPath)") then
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                    if dialogCleanupState is not "CLOSED" then
+                        return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                    end if
+                    set cleanupState to my dismissOpenMenu(logicProcess, true)
+                    if cleanupState is not "CLOSED" then
+                        return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: menu cleanup was not observed (" & cleanupState & ")"
+                    end if
+                    return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: could not persist position input issuance"
+                end if
                 keystroke "\(position)"
                 delay 0.1
             on error errMsg
                 set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
                 if dialogCleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                    return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
                 set cleanupState to my dismissOpenMenu(logicProcess, true)
                 if cleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_NOT_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
+                    return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: menu cleanup was not observed (" & cleanupState & ")"
                 end if
-                return "DIALOG_SUBMISSION_NOT_ISSUED: dialog input failed before Return (" & errMsg & ")"
+                return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: position text may have been sent (" & errMsg & ")"
             end try
 
-            -- This durable marker is the position-write boundary. It is written before Return so
-            -- a timeout or nonzero child exit after this point is conservatively reported as a
-            -- possibly-issued submission rather than releasing another actuator.
+            -- POSITION_INPUT_ARMED above is the text-write boundary. This separate marker is the
+            -- Return submission boundary, so a timeout or nonzero child exit after either point is
+            -- conservatively reported rather than releasing another actuator.
             set dialogReturnFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)
             if dialogReturnFocusState is not "FOCUSED" then
                 set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
                 if dialogCleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                    return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
                 set cleanupState to my dismissOpenMenu(logicProcess, true)
                 if cleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_NOT_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
+                    return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: menu cleanup was not observed (" & cleanupState & ")"
                 end if
-                return "DIALOG_SUBMISSION_NOT_ISSUED: observed Go To Position dialog was not focused before Return (" & dialogReturnFocusState & ")"
+                return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: observed Go To Position dialog was not focused before Return (" & dialogReturnFocusState & ")"
             end if
             if not my recordDialogIssuance("RETURN_ARMED", "\(ledgerPath)") then
                 set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
                 if dialogCleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                    return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
                 set cleanupState to my dismissOpenMenu(logicProcess, true)
                 if cleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_NOT_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
+                    return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: menu cleanup was not observed (" & cleanupState & ")"
                 end if
-                return "DIALOG_SUBMISSION_NOT_ISSUED: could not persist Return issuance"
+                return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: could not persist Return issuance"
             end if
             try
                 keystroke return
@@ -1499,6 +1539,8 @@ extension AccessibilityChannel {
     enum DialogIssuanceStage: String, Equatable {
         case notIssued = "NOT_ISSUED"
         case leafArmed = "LEAF_ARMED"
+        case selectAllArmed = "SELECT_ALL_ARMED"
+        case positionInputArmed = "POSITION_INPUT_ARMED"
         case returnArmed = "RETURN_ARMED"
         case unknown
     }
@@ -1542,6 +1584,7 @@ extension AccessibilityChannel {
             case dialogNotReady
             case dialogActuationIssued(cleanupObservedClosed: Bool)
             case dialogSubmissionNotIssued(cleanupObservedClosed: Bool)
+            case dialogInputIssued(issuance: DialogIssuanceStage, cleanupObservedClosed: Bool)
             case dialogSubmissionIssued(cleanupObservedClosed: Bool)
             case executionFailed(issuance: DialogIssuanceStage, cleanupObservedClosed: Bool)
             case malformedPayload
@@ -1570,6 +1613,8 @@ extension AccessibilityChannel {
                 return "dialog_actuation_issued_cleanup_closed_\(closed)"
             case let .failure(.dialogSubmissionNotIssued(closed)):
                 return "dialog_submission_not_issued_cleanup_closed_\(closed)"
+            case let .failure(.dialogInputIssued(issuance, closed)):
+                return "dialog_input_issued_\(issuance.rawValue)_cleanup_closed_\(closed)"
             case let .failure(.dialogSubmissionIssued(closed)):
                 return "dialog_submission_issued_cleanup_closed_\(closed)"
             case let .failure(.executionFailed(issuance, closed)):
@@ -1579,13 +1624,16 @@ extension AccessibilityChannel {
             }
         }
 
-        /// A second position actuator is unsafe after a normal Return or a dead child that crossed
-        /// either durable UI boundary. LEAF_ARMED is a safety boundary only: it does not prove a
-        /// dialog actuation or position submission occurred.
+        /// A second position actuator is unsafe after a normal global input or a dead child that
+        /// crossed any durable UI/input boundary. LEAF_ARMED is a safety boundary only: it does
+        /// not prove a dialog actuation, global input, or position submission occurred.
         var requiresFallbackSuppression: Bool {
             switch self {
-            case .failure(.dialogSubmissionIssued),
+            case .failure(.dialogInputIssued),
+                 .failure(.dialogSubmissionIssued),
                  .failure(.executionFailed(issuance: .leafArmed, cleanupObservedClosed: _)),
+                 .failure(.executionFailed(issuance: .selectAllArmed, cleanupObservedClosed: _)),
+                 .failure(.executionFailed(issuance: .positionInputArmed, cleanupObservedClosed: _)),
                  .failure(.executionFailed(issuance: .returnArmed, cleanupObservedClosed: _)),
                  .failure(.executionFailed(issuance: .unknown, cleanupObservedClosed: _)):
                 return true
@@ -1603,9 +1651,56 @@ extension AccessibilityChannel {
             return false
         }
 
+        /// True once the script reported a global key may have been issued, or a dead child
+        /// crossed the corresponding durable marker. This protects the receipt from claiming
+        /// `write_attempted:false` after Cmd+A, text entry, or Return could have reached another
+        /// focused target.
+        var globalInputMayHaveOccurred: Bool {
+            switch self {
+            case .failure(.dialogInputIssued),
+                 .failure(.dialogSubmissionIssued),
+                 .failure(.executionFailed(issuance: .selectAllArmed, cleanupObservedClosed: _)),
+                 .failure(.executionFailed(issuance: .positionInputArmed, cleanupObservedClosed: _)),
+                 .failure(.executionFailed(issuance: .returnArmed, cleanupObservedClosed: _)):
+                return true
+            default:
+                return false
+            }
+        }
+
+        /// The last durable global-input boundary for receipt diagnostics. A normal script result
+        /// reports the exact stage; an execution failure reports the last marker safely persisted
+        /// before the child exited.
+        var globalInputBoundary: DialogIssuanceStage? {
+            switch self {
+            case let .failure(.dialogInputIssued(issuance, _)):
+                return issuance
+            case .failure(.dialogSubmissionIssued):
+                return .returnArmed
+            case let .failure(.executionFailed(issuance, _)) where issuance == .selectAllArmed
+                || issuance == .positionInputArmed || issuance == .returnArmed:
+                return issuance
+            default:
+                return nil
+            }
+        }
+
+        /// A normal input result before Return proves no submission was attempted. A dead child
+        /// after RETURN_ARMED, or with no readable ledger, cannot make that same claim.
+        var dialogSubmissionMayHaveOccurred: Bool {
+            switch self {
+            case .failure(.dialogSubmissionIssued),
+                 .failure(.executionFailed(issuance: .returnArmed, cleanupObservedClosed: _)),
+                 .failure(.executionFailed(issuance: .unknown, cleanupObservedClosed: _)):
+                return true
+            default:
+                return false
+            }
+        }
+
         /// A later position route is unsafe when a non-submission path cannot prove the menu/dialog UI is gone.
-        /// A clean, normal leaf/input failure may fall through because the script proved no Return
-        /// was sent *and* observed the relevant UI closed.
+        /// A clean, normal leaf or pre-input focus failure may fall through because the script
+        /// proved no global input or Return was sent and observed the relevant UI closed.
         var requiresUnsafeUIRefusal: Bool {
             switch self {
             case .failure(.menuCouldNotBeClosed),
@@ -1626,7 +1721,10 @@ extension AccessibilityChannel {
             case .failure(.dialogNotReady),
                  .failure(.dialogActuationIssued),
                  .failure(.dialogSubmissionNotIssued),
+                 .failure(.dialogInputIssued),
                  .failure(.dialogSubmissionIssued),
+                 .failure(.executionFailed(issuance: .selectAllArmed, cleanupObservedClosed: _)),
+                 .failure(.executionFailed(issuance: .positionInputArmed, cleanupObservedClosed: _)),
                  .failure(.executionFailed(issuance: .returnArmed, cleanupObservedClosed: _)),
                  .failure(.executionFailed(issuance: .unknown, cleanupObservedClosed: _)):
                 return true
@@ -1639,6 +1737,7 @@ extension AccessibilityChannel {
             switch self {
             case let .failure(.dialogActuationIssued(cleanupObservedClosed)),
                  let .failure(.dialogSubmissionNotIssued(cleanupObservedClosed)),
+                 let .failure(.dialogInputIssued(issuance: _, cleanupObservedClosed: cleanupObservedClosed)),
                  let .failure(.dialogSubmissionIssued(cleanupObservedClosed)),
                  let .failure(.executionFailed(issuance: _, cleanupObservedClosed)):
                 return cleanupObservedClosed
@@ -1705,6 +1804,16 @@ extension AccessibilityChannel {
             ))
         case let value where value.hasPrefix("DIALOG_SUBMISSION_NOT_ISSUED"):
             return .failure(.dialogSubmissionNotIssued(
+                cleanupObservedClosed: !value.contains("cleanup was not observed")
+            ))
+        case let value where value.hasPrefix("DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED"):
+            return .failure(.dialogInputIssued(
+                issuance: .selectAllArmed,
+                cleanupObservedClosed: !value.contains("cleanup was not observed")
+            ))
+        case let value where value.hasPrefix("DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED"):
+            return .failure(.dialogInputIssued(
+                issuance: .positionInputArmed,
                 cleanupObservedClosed: !value.contains("cleanup was not observed")
             ))
         case let value where value.hasPrefix("DIALOG_SUBMISSION_ISSUED"):

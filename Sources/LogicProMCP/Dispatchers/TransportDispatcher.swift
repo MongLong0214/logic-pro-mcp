@@ -573,13 +573,13 @@ struct TransportDispatcher: OperationTraceDispatching {
         // synthesized from the Bar/Beat sliders. State A requires every component named by the
         // request to have been read back from AX.
         //
-        // The two conjuncts are redundant for every input reachable today, so NEITHER is
-        // individually mutation-detectable — removing one leaves the other covering the same
-        // cases. That is deliberate rather than accidental, and each covers a different way the
-        // other could be weakened: the component set stops a readback that never happened (the
-        // model's `"1.1.1.1"` default), and the readback value stops a partial read being
-        // compared as if it were whole. Do not delete either on the grounds that tests still
-        // pass without it.
+        // Value equality is individually covered by the existing mismatch tests: a request for
+        // `9.1.1.1` with a full readback of `8.1.1.1` must not reach State A. The component-set
+        // conjunct has no individual coverage yet. Its separating input is representable
+        // (`"9.1.1.1"` paired with only `.bar`/`.beat` observations), but the current extractor
+        // does not emit that shape. Keep both checks: the component set stops a readback that
+        // never happened (the model's `"1.1.1.1"` default), while value equality rejects a
+        // genuinely different complete readback.
         if !requestedPosition.contains(":"),
            unobservedMusicalComponents.isEmpty,
            observedTransport.positionReadback?.value == requestedPosition {

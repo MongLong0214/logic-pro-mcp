@@ -585,44 +585,74 @@ struct Issue529MenuValidationTests {
         #expect(contenderScriptCalls.value == 0)
     }
 
-    @Test("only the post-Return branch is submission-issued")
-    func preReturnFailuresFallThroughWhilePostReturnFailuresAreStateB() async throws {
-        // Mutations this rejects:
-        // 1. Move `keystroke return` into the pre-Return error scope or delete it — the generated
-        //    script ordering assertions fail.
-        // 2. Classify `DIALOG_SUBMISSION_NOT_ISSUED` as issued — the pre-Return receipt stops
-        //    disclosing that no position write was sent.
+    @Test("global-input and Return boundaries suppress a clean retry")
+    func inputAndReturnIssuanceAreReportedAsUnsafe() async throws {
+        // Source mutations: remove either SELECT_ALL_ARMED/POSITION_INPUT_ARMED checkpoint, or
+        // classify DIALOG_INPUT_ISSUED as a clean non-submission failure. The first leaves a
+        // timeout gap; the second returns State C with `write_attempted:false` after global input.
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
-        let inputFailure = try issue529Position(
-            of: "return \"DIALOG_SUBMISSION_NOT_ISSUED: dialog input failed before Return",
+        let selectAllLedger = try issue529Position(
+            of: "recordDialogIssuance(\"SELECT_ALL_ARMED\"",
             in: script
         )
+        let selectAll = try issue529Position(of: "keystroke \"a\" using command down", in: script)
+        let positionInputLedger = try issue529Position(
+            of: "recordDialogIssuance(\"POSITION_INPUT_ARMED\"",
+            in: script
+        )
+        let positionInput = try issue529Position(of: "keystroke \"529.1.1.1\"", in: script)
         let returnLedger = try issue529Position(
             of: "recordDialogIssuance(\"RETURN_ARMED\"",
             in: script
         )
         let returnKey = try issue529Position(of: "keystroke return", in: script)
-        #expect(inputFailure < returnLedger)
+        #expect(selectAllLedger < selectAll)
+        #expect(selectAll < positionInputLedger)
+        #expect(positionInputLedger < positionInput)
+        #expect(positionInput < returnLedger)
         #expect(returnLedger < returnKey)
 
-        let preReturnSliderWrites = Issue529Counter()
-        let preReturn = await AccessibilityChannel.gotoPositionViaBarSlider(
+        let preInputSliderWrites = Issue529Counter()
+        let preInput = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "529"],
-            runtime: issue529SliderRuntime(sliderWrites: preReturnSliderWrites),
+            runtime: issue529SliderRuntime(sliderWrites: preInputSliderWrites),
             isFrontmost: { true },
             activateLogic: { true },
             sleepMicros: { _ in },
             executeDialogScript: { _ in
-                .success(#"{"result":"DIALOG_SUBMISSION_NOT_ISSUED: dialog input failed before Return (AX error)"}"#)
+                .success(#"{"result":"DIALOG_SUBMISSION_NOT_ISSUED: observed Go To Position dialog was not focused before typing (NOT_FOCUSED)"}"#)
             }
         )
-        let preReturnEnvelope = try #require(issue529Envelope(preReturn))
-        #expect(!preReturn.isSuccess)
-        #expect(try #require(preReturnEnvelope["state"] as? String) == "C")
-        #expect(try #require(preReturnEnvelope["position_route"] as? String) == "unavailable")
-        let preReturnWriteAttempted = try #require(preReturnEnvelope["write_attempted"] as? Bool)
-        #expect(!preReturnWriteAttempted)
-        #expect(preReturnSliderWrites.value == 0)
+        let preInputEnvelope = try #require(issue529Envelope(preInput))
+        #expect(!preInput.isSuccess)
+        #expect(try #require(preInputEnvelope["state"] as? String) == "C")
+        #expect(try #require(preInputEnvelope["position_route"] as? String) == "unavailable")
+        let preInputWriteAttempted = try #require(preInputEnvelope["write_attempted"] as? Bool)
+        #expect(!preInputWriteAttempted)
+        #expect(preInputSliderWrites.value == 0)
+
+        let inputSliderWrites = Issue529Counter()
+        let input = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: inputSliderWrites),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                .success(#"{"result":"DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: position text may have been sent (AX error)"}"#)
+            }
+        )
+        let inputEnvelope = try #require(issue529Envelope(input))
+        #expect(input.isSuccess)
+        #expect(try #require(inputEnvelope["state"] as? String) == "B")
+        #expect(try #require(inputEnvelope["dialog_input_attempted"] as? Bool))
+        #expect(try #require(inputEnvelope["dialog_input_boundary"] as? String) == "POSITION_INPUT_ARMED")
+        #expect(try #require(inputEnvelope["dialog_input_target"] as? String) == "unknown")
+        #expect(try #require(inputEnvelope["write_attempted"] as? Bool))
+        #expect(!(try #require(inputEnvelope["safe_to_retry"] as? Bool)))
+        #expect(try #require(inputEnvelope["fallback_unsafe"] as? Bool))
+        #expect(!(try #require(inputEnvelope["dialog_submission_attempted"] as? Bool)))
+        #expect(inputSliderWrites.value == 0)
 
         let postReturnSliderWrites = Issue529Counter()
         let postReturn = await AccessibilityChannel.gotoPositionViaBarSlider(
@@ -793,7 +823,6 @@ func dismissalContextKeepsLocaleReadsUnownedUntilResolvedLeafIssuance() throws {
 
     // Entry, locale discovery, enabled/disabled handling, and a failed durable checkpoint are all
     // unowned until the resolved leaf is actually issued.
-    #expect(script.contains("my dismissOpenMenu(logicProcess, false)"))
     #expect(issue529Positions(of: "my dismissOpenMenu(logicProcess, false)", in: script).count == 6)
 
     let leafCheckpoint = try issue529Position(
@@ -814,10 +843,11 @@ func dismissalContextKeepsLocaleReadsUnownedUntilResolvedLeafIssuance() throws {
     #expect(script.contains("if menuState is \"UNREADABLE\" and not knownOpen then return \"UNREADABLE\""))
 }
 
-@Test("the Go To Position dialog is a new focused AXDialog bound before global typing")
+@Test("the Go To Position dialog is newly observed and focus-bound before global typing")
 func gotoPositionDialogRequiresAppearanceTransitionAndFocusedBinding() throws {
-    // Source mutations: remove the pre-leaf absence check, accept title without AXSubrole, or
-    // move either Cmd+A/position keystroke before the observed-dialog focus guard. Any one lets a
+    // Source mutations: remove AXFloatingWindow from either the discovery or focus-validation
+    // subrole set, remove the pre-leaf absence check, or move either Cmd+A/position keystroke
+    // before the observed-dialog focus guard. Any one rejects the measured dialog or lets a
     // stale/concurrent dialog or another frontmost app receive this request's input.
     let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(position: "529.4.7.123")
     let preLeafObservation = try issue529Position(
@@ -857,11 +887,17 @@ func gotoPositionDialogRequiresAppearanceTransitionAndFocusedBinding() throws {
     #expect(observedDialog < focusGuard)
     #expect(focusGuard < focusRefusal)
     #expect(focusRefusal < selectAll)
-    #expect(selectAll < positionInput)
     #expect(selectAll < typingFocusGuard)
     #expect(typingFocusGuard < positionInput)
     #expect(script.contains("set dialogSubrole to subrole of dialogWindow"))
-    #expect(script.contains("if focused of dialogWindow then return \"FOCUSED\""))
+    #expect(script.contains(
+        "if dialogSubrole is \"AXFloatingWindow\" or dialogSubrole is \"AXDialog\" or dialogSubrole is \"AXSystemDialog\" then return contents of dialogWindow"
+    ))
+    #expect(script.contains(
+        "if dialogSubrole is not \"AXFloatingWindow\" and dialogSubrole is not \"AXDialog\" and dialogSubrole is not \"AXSystemDialog\" then return \"MISSING\""
+    ))
+    #expect(script.contains("set processFocusedWindow to value of attribute \"AXFocusedWindow\""))
+    #expect(script.contains("if processFocusedWindow is dialogWindow then return \"FOCUSED\""))
 }
 
 @Test("an unreadable Cancel result re-observes the dialog before Escape")

@@ -449,17 +449,48 @@ enum AXValueExtractors {
             }
         }
 
-        let sliders = AXHelpers.findAllDescendants(of: transport, role: kAXSliderRole, maxDepth: 4, runtime: runtime)
+        // Logic 12.3 nests the Bar/Beat controls six levels below the Control Bar. Resolve the
+        // Depth 8 covers both the measured live tree (Control Bar -> group -> Playhead Position ->
+        // sliders, three hops) and the deeper fixture topology. It is deliberately not locked by a
+        // test: the group sits within four hops in both, so lowering the bound does not fail
+        // anything. The live check that does bind it is the readback returning "37.3" rather than
+        // nothing.
+        // same named Playhead Position owner as the locator before scanning its subtree, so an
+        // unrelated Position group cannot become a transport readback.
+        let sliders = AXHelpers.findAllDescendants(
+            of: transport, role: kAXSliderRole, maxDepth: 8, runtime: runtime
+        )
+        let playheadPositionGroups = AXHelpers.findAllDescendants(
+            of: transport, role: kAXGroupRole, maxDepth: 8, runtime: runtime
+        )
+        let positionSliders = playheadPositionGroups
+            .first(where: {
+                AXLocalePolicy.playheadPositionGroupLabel.matches(
+                    AXHelpers.getDescription($0, runtime: runtime), mode: .exactStrict
+                )
+            })
+            .map {
+                AXHelpers.findAllDescendants(
+                    of: $0, role: kAXSliderRole, maxDepth: 8, runtime: runtime
+                )
+            }
+            ?? []
         var barValue: Int?
         var beatValue: Int?
         for slider in sliders {
             let desc = (AXHelpers.getDescription(slider, runtime: runtime) ?? "").lowercased()
             if AXLocalePolicy.tempoSliderContainsLabel.containsAny(in: desc), let tempo = extractSliderValue(slider, runtime: runtime) {
                 state.tempo = tempo
-            } else if AXLocalePolicy.barSliderLabel.containsAny(in: desc) {
-                barValue = Int(extractSliderValue(slider, runtime: runtime) ?? 0)
-            } else if AXLocalePolicy.beatSliderLabel.containsAny(in: desc) {
-                beatValue = Int(extractSliderValue(slider, runtime: runtime) ?? 0)
+            }
+        }
+        for slider in positionSliders {
+            let desc = (AXHelpers.getDescription(slider, runtime: runtime) ?? "").lowercased()
+            if AXLocalePolicy.barSliderLabel.containsAny(in: desc),
+               let value = extractSliderValue(slider, runtime: runtime) {
+                barValue = Int(value)
+            } else if AXLocalePolicy.beatSliderLabel.containsAny(in: desc),
+                      let value = extractSliderValue(slider, runtime: runtime) {
+                beatValue = Int(value)
             }
         }
         // The Control Bar exposes bar and beat independently. They are observations, but they
