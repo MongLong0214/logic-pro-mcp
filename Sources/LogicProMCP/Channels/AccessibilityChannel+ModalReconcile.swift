@@ -200,9 +200,11 @@ extension AccessibilityChannel {
         witnessAttempts: Int,
         witnessDelayNanoseconds: UInt64
     ) async -> ModalReconcileOutcome {
-        // #453: the alert ELEMENT is captured with the signals and carried to the
-        // executor. `ModalSignals` is the pure core's input and stays string-only,
-        // so the element travels beside it rather than inside it.
+        // #453 / #538: actionable AX ELEMENTs are captured with the signals and
+        // carried to the executor. `ModalSignals` is the pure core's input and
+        // stays string-only, so the elements travel beside it rather than inside
+        // it. Re-finding a button through an ordinal window/sheet path can target
+        // a different Logic window from the sheet the reader classified.
         let read = readModalSignalsAndAlertTarget(runtime: runtime)
         let signals = read.signals
         let kind = ModalReconciliation.classify(signals)
@@ -221,8 +223,9 @@ extension AccessibilityChannel {
 
         let result = await perform(
             decision,
-            signals: signals,
             alertTarget: read.alertTarget,
+            createButton: read.createButton,
+            deleteButton: read.deleteButton,
             runtime: runtime,
             witnessAttempts: witnessAttempts,
             witnessDelayNanoseconds: witnessDelayNanoseconds
@@ -247,11 +250,17 @@ extension AccessibilityChannel {
         readModalSignalsAndAlertTarget(runtime: runtime).signals
     }
 
-    /// #453: the same read, keeping the top-level alert's element so the executor
-    /// can act on the element that was classified instead of re-resolving one.
+    /// #453 / #538: the same read, keeping every actionable element so the
+    /// executor can act on the element that was classified instead of
+    /// re-resolving it through a fresh ordinal AX path.
     static func readModalSignalsAndAlertTarget(
         runtime: AXLogicProElements.Runtime = .production
-    ) -> (signals: ModalReconciliation.ModalSignals, alertTarget: AXLogicProElements.BlockingDialogTarget?) {
+    ) -> (
+        signals: ModalReconciliation.ModalSignals,
+        alertTarget: AXLogicProElements.BlockingDialogTarget?,
+        createButton: AXUIElement?,
+        deleteButton: AXUIElement?
+    ) {
         guard let window = AXLogicProElements.mainWindow(runtime: runtime),
               let sheet = firstSheet(in: window, runtime: runtime.ax) else {
             // No main-window sheet: the remaining blockers are a top-level
@@ -273,7 +282,7 @@ extension AccessibilityChannel {
                 createButtonTitle: "",
                 cancelButtonTitle: "",
                 deletePrimaryTitle: ""
-            ), alert.target)
+            ), alert.target, nil, nil)
         }
 
         let description = (AXHelpers.getAttribute(sheet, kAXDescriptionAttribute, runtime: runtime.ax) ?? "")
@@ -282,8 +291,9 @@ extension AccessibilityChannel {
         // aware against the AXLocalePolicy LabelSets (EN + KO + JA) so Korean and
         // Japanese Logic's localized New Track sheets are recognized, not just
         // the English literals.
-        // The captured labels are threaded to the executor so it clicks the REAL
-        // localized title rather than a hardcoded English string.
+        // The resolved elements are threaded to the executor so it presses the
+        // REAL localized control rather than re-finding a title under an ordinal
+        // window/sheet path.
         let labeled = AXHelpers.findAllDescendants(
             of: sheet, role: kAXButtonRole as String, maxDepth: 6, runtime: runtime.ax
         ).map { (element: $0, label: buttonLabel($0, runtime: runtime.ax)) }
@@ -322,7 +332,7 @@ extension AccessibilityChannel {
         // the alert branch above is the only one that can reach the acknowledge
         // executor, and handing back a target on this path would let a future
         // caller act on a dialog this pass deliberately did not classify.
-        ), nil)
+        ), nil, createButton?.element, deleteButton?.element)
     }
 
     /// Detect a TOP-LEVEL informational `AXDialog` alert (NOT a main-window
@@ -724,8 +734,9 @@ extension AccessibilityChannel {
 
     private static func perform(
         _ decision: ModalReconciliation.ModalReconcileDecision,
-        signals: ModalReconciliation.ModalSignals,
         alertTarget: AXLogicProElements.BlockingDialogTarget?,
+        createButton: AXUIElement?,
+        deleteButton: AXUIElement?,
         runtime: AXLogicProElements.Runtime,
         witnessAttempts: Int,
         witnessDelayNanoseconds: UInt64
@@ -736,8 +747,8 @@ extension AccessibilityChannel {
                 performed: false, refusal: nil, sheetWitness: [], witnessSummary: nil
             )
         case .clickCreate:
-            let actionAccepted = await clickNewTrackCreateButton(
-                createTitle: signals.createButtonTitle,
+            let actionAccepted = clickNewTrackCreateButton(
+                createButton: createButton,
                 runtime: runtime
             )
             let witness = await pollMainWindowSheetWitness(
@@ -753,8 +764,8 @@ extension AccessibilityChannel {
                 witnessSummary: summary
             )
         case .confirmDelete:
-            let actionAccepted = await confirmDeleteTracksSheet(
-                deleteTitle: signals.deletePrimaryTitle,
+            let actionAccepted = confirmDeleteTracksSheet(
+                deleteButton: deleteButton,
                 runtime: runtime
             )
             let witness = await pollMainWindowSheetWitness(
@@ -798,52 +809,27 @@ extension AccessibilityChannel {
         }
     }
 
-    /// Click the mandatory New Track sheet's only exit (`Create` / `생성`). The
-    /// title is the localized on-screen label the reader resolved (#350), so this
-    /// works on Korean Logic; Escape/Cancel are inert on this sheet.
+    /// Press the mandatory New Track sheet's resolved `Create` / `생성` element.
+    /// Escape/Cancel are inert on this sheet; an unavailable or rejected element
+    /// is reported by the false action result and is never replaced by a fresh
+    /// ordinal lookup.
     private static func clickNewTrackCreateButton(
-        createTitle: String,
+        createButton: AXUIElement?,
         runtime: AXLogicProElements.Runtime
-    ) async -> Bool {
-        let target = LogicProTarget.appleScriptTarget()
-        let escapedTitle = AppleScriptSafety.escapeForScript(createTitle)
-        let script = """
-        tell application "System Events"
-            tell \(target.systemEventsProcessTarget)
-                click button "\(escapedTitle)" of group 1 of sheet 1 of window 1
-            end tell
-        end tell
-        return "clicked"
-        """
-        return await runtime.executeAppleScript(script).isSuccess
+    ) -> Bool {
+        guard let createButton else { return false }
+        return AXHelpers.performAction(createButton, kAXPressAction as String, runtime: runtime.ax)
     }
 
-    /// Confirm the delete-channel-strips sheet by its primary destructive button,
-    /// clicking the localized title the reader resolved (#350). Falls back to the
-    /// sheet's default button (Return) when the title is absent/unmatched — which
-    /// also covers the KO path (the KO delete title is unverified, so no variant).
+    /// Confirm the delete-channel-strips sheet by pressing its resolved primary
+    /// destructive button. A missing or rejected element is an unperformed
+    /// action, not permission to send Return at an unidentified sheet.
     private static func confirmDeleteTracksSheet(
-        deleteTitle: String,
+        deleteButton: AXUIElement?,
         runtime: AXLogicProElements.Runtime
-    ) async -> Bool {
-        let target = LogicProTarget.appleScriptTarget()
-        let escapedTitle = AppleScriptSafety.escapeForScript(deleteTitle)
-        let script = """
-        tell application "System Events"
-            tell \(target.systemEventsProcessTarget)
-                click button "\(escapedTitle)" of sheet 1 of window 1
-            end tell
-        end tell
-        return "clicked"
-        """
-        if !deleteTitle.isEmpty,
-           await runtime.executeAppleScript(script).isSuccess {
-            return true
-        }
-        // Fall back to the default button — the primary delete action is the
-        // sheet's default, so Return commits it.
-        sendReturnKey()
-        return true
+    ) -> Bool {
+        guard let deleteButton else { return false }
+        return AXHelpers.performAction(deleteButton, kAXPressAction as String, runtime: runtime.ax)
     }
 
     /// Acknowledge a single-button top-level informational alert.

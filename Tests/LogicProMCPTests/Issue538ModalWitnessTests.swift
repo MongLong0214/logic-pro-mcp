@@ -153,7 +153,7 @@ struct Issue538ModalWitnessTests {
     }
 
     @Test("a witnessed mandatory-sheet close is the only successful reconciliation")
-    func witnessedSheetCloseSetsPerformed() async {
+    func witnessedSheetCloseSetsPerformed() async throws {
         let fixture = makeMandatorySheetFixture(postActionWitness: .gone)
 
         let outcome = await AccessibilityChannel.reconcileAfterMutation(
@@ -167,8 +167,9 @@ struct Issue538ModalWitnessTests {
             outcome.performed,
             "Mutation caught: return the AppleScript success before the gone witness; an observed close must set performed."
         )
+        let observedGone = try #require(outcome.witnessSummary?.observedGone)
         #expect(
-            outcome.witnessSummary?.observedGone == true,
+            observedGone,
             "Mutation caught: drop the gone observation from the summary; performed would no longer have witness evidence."
         )
     }
@@ -191,6 +192,60 @@ struct Issue538ModalWitnessTests {
         #expect(
             outcome.sheetWitness.map(\.observation) == [.present],
             "Mutation caught: turn the still-present sheet into gone; the negative performed path must remain observable."
+        )
+    }
+
+    /// The live Logic 12.3 regression: the app's first AX window is untitled,
+    /// while the Tracks window owns this sheet. An ordinal AppleScript path would
+    /// therefore click in the wrong window; only the Create element read from the
+    /// owning sheet may close it.
+    @Test("mandatory Create presses the reader-bound button, not window 1")
+    func mandatoryCreateUsesResolvedButtonInsteadOfOrdinalWindow() async {
+        let fixture = makeOrdinalWindowSheetFixture(action: .create)
+
+        let outcome = await AccessibilityChannel.reconcileAfterMutation(
+            isDeleteContext: false,
+            runtime: fixture.runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        #expect(
+            outcome.performed,
+            "Mutation caught: replace the resolved AX press with the former window 1 / sheet 1 AppleScript lookup; the owning sheet stays present."
+        )
+        #expect(
+            fixture.resolvedButtonPressed.get(),
+            "Mutation caught: press any re-found control instead of the Create element read under the owning sheet."
+        )
+        #expect(
+            !fixture.ordinalAppleScriptUsed.get(),
+            "Mutation caught: reintroduce an ordinal AppleScript actuator; this path must only press the captured AX element."
+        )
+    }
+
+    @Test("delete confirmation presses the reader-bound button, not window 1")
+    func deleteConfirmationUsesResolvedButtonInsteadOfOrdinalWindow() async {
+        let fixture = makeOrdinalWindowSheetFixture(action: .delete)
+
+        let outcome = await AccessibilityChannel.reconcileAfterMutation(
+            isDeleteContext: true,
+            runtime: fixture.runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        #expect(
+            outcome.performed,
+            "Mutation caught: replace the resolved AX press with the former window 1 / sheet 1 AppleScript lookup; the owning delete sheet stays present."
+        )
+        #expect(
+            fixture.resolvedButtonPressed.get(),
+            "Mutation caught: press any re-found control instead of the delete element read under the owning sheet."
+        )
+        #expect(
+            !fixture.ordinalAppleScriptUsed.get(),
+            "Mutation caught: restore the old ordinal delete actuator or a Return fallback instead of reporting the rejected element press."
         )
     }
 
@@ -329,13 +384,102 @@ private func makeMandatorySheetFixture(
             return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
         },
         setAttributeHandler: nil,
-        performActionHandler: nil,
+        performActionHandler: { element, action in
+            guard CFEqual(element, create), action == (kAXPressAction as String) else { return false }
+            actionIssued.set()
+            return true
+        },
         executeAppleScript: { _ in
             actionIssued.set()
             return .success("clicked")
         }
     )
     return (runtime, actionIssued)
+}
+
+private enum OrdinalWindowSheetAction {
+    case create
+    case delete
+}
+
+private struct OrdinalWindowSheetFixture {
+    let runtime: AXLogicProElements.Runtime
+    let resolvedButtonPressed: LockedFlag
+    let ordinalAppleScriptUsed: LockedFlag
+}
+
+private func makeOrdinalWindowSheetFixture(
+    action: OrdinalWindowSheetAction
+) -> OrdinalWindowSheetFixture {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(40)
+    let untitledWindow = builder.element(41) // Deliberately AX window 1.
+    let tracksWindow = builder.element(42) // The actual owning main window.
+    let sheet = builder.element(43)
+    let group = builder.element(44)
+    let primaryButton = builder.element(45)
+    let cancel = builder.element(46)
+    let resolvedButtonPressed = LockedFlag()
+    let ordinalAppleScriptUsed = LockedFlag()
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, tracksWindow)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [untitledWindow, tracksWindow])
+    // The untitled window is deliberately first, so an AppleScript `window 1` lookup resolves
+    // against it. The arrange window is identified the way the product identifies it — by its
+    // track-header rail — which is what made this reachable live: the resolver picked the right
+    // window while the actuator's ordinal path picked the wrong one.
+    builder.setAttribute(untitledWindow, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(tracksWindow, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(tracksWindow, kAXTitleAttribute as String, "Issue538 - Tracks")
+    let trackHeaders = builder.element(47)
+    builder.setAttribute(trackHeaders, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(trackHeaders, kAXDescriptionAttribute as String, "Track headers")
+    builder.setChildren(tracksWindow, [trackHeaders])
+    builder.setAttribute(sheet, kAXDescriptionAttribute as String, action == .create ? "New Track" : "Delete Tracks")
+    builder.setAttribute(group, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(primaryButton, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(
+        primaryButton,
+        kAXTitleAttribute as String,
+        action == .create ? "Create" : "Delete Tracks and Content"
+    )
+    builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+    builder.setAttribute(cancel, kAXEnabledAttribute as String, action != .create)
+    // The primary button is one AX group below the sheet, matching Logic 12.3.
+    builder.setChildren(sheet, [group])
+    builder.setChildren(group, [primaryButton, cancel])
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueHandler: { element, attribute in
+            guard CFEqual(element, tracksWindow), attribute == "AXSheets" else { return nil }
+            if resolvedButtonPressed.get() {
+                return .some([] as NSArray)
+            }
+            return .some([sheet] as NSArray)
+        },
+        setAttributeHandler: nil,
+        performActionHandler: { element, actionName in
+            guard CFEqual(element, primaryButton), actionName == (kAXPressAction as String) else {
+                return false
+            }
+            resolvedButtonPressed.set()
+            return true
+        },
+        executeAppleScript: { _ in
+            // The old executor re-found `window 1`; model its silent acceptance
+            // without closing the Tracks-owned sheet.
+            ordinalAppleScriptUsed.set()
+            return .success("clicked")
+        }
+    )
+
+    return OrdinalWindowSheetFixture(
+        runtime: runtime,
+        resolvedButtonPressed: resolvedButtonPressed,
+        ordinalAppleScriptUsed: ordinalAppleScriptUsed
+    )
 }
 
 private final class LockedCounter: @unchecked Sendable {
