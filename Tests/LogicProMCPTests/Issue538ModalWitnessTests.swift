@@ -279,14 +279,69 @@ struct Issue538ModalWitnessTests {
         let systemDialog = builder.element(55)
         builder.setAttribute(app, kAXMainWindowAttribute as String, window)
         builder.setAttribute(app, kAXWindowsAttribute as String, [window, systemDialog])
+        builder.setAttribute(systemDialog, kAXModalAttribute as String, true)
         builder.setAttribute(systemDialog, kAXSubroleAttribute as String, kAXSystemDialogSubrole as String)
         let runtime = builder.makeLogicRuntime(appElement: app, setAttributeHandler: nil, performActionHandler: nil)
 
         let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
 
-        // Mutation source: restore the AXDialog-only equality check; this
-        // AXSystemDialog would be omitted and the pass would look clean.
+        // Mutation `system-modal-attribute-omission`: remove AXModal from the
+        // scan; this AXSystemDialog would be omitted and the pass would look clean.
         #expect(kind == .unknownSheet)
+    }
+
+    @Test("an AXModal floating window blocks a clean modal observation")
+    func floatingModalWindowFailsClosed() {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(56)
+        let arrange = builder.element(57)
+        let goToPosition = builder.element(58)
+        builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, goToPosition])
+        builder.setAttribute(goToPosition, kAXSubroleAttribute as String, "AXFloatingWindow")
+        builder.setAttribute(goToPosition, kAXModalAttribute as String, true)
+
+        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(
+            runtime: builder.makeLogicRuntime(appElement: app)
+        ))
+
+        // Mutation `floating-modal-attribute-omission`: restore the former
+        // AXDialog/AXSystemDialog allowlist. The known Go To Position shape then
+        // disappears and the complete scan falsely returns `.none`.
+        #expect(kind == .unknownSheet)
+    }
+
+    @Test("the complete scan retains its status-preserving AXDialog subrole")
+    func observedDialogSubroleIsNotRereadBestEffort() {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(59)
+        let arrange = builder.element(60)
+        let dialog = builder.element(61)
+        let subroleReads = LockedCounter()
+        builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, dialog])
+        builder.setAttribute(dialog, kAXModalAttribute as String, true)
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, dialog), attribute == (kAXSubroleAttribute as String) else {
+                    return nil
+                }
+                return subroleReads.next() == 1
+                    ? .success(kAXDialogSubrole as NSString)
+                    : .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+
+        // Mutation `observed-subrole-reread`: call the best-effort dialog
+        // helper without the captured subrole. Its second, failed read makes an
+        // already-observed AXDialog vanish from the complete blocker set.
+        #expect(kind == .unknownSheet)
+        #expect(subroleReads.current() == 1)
     }
 
     @Test("an unreadable menu scan cannot certify a clean blocker set")
@@ -314,16 +369,20 @@ struct Issue538ModalWitnessTests {
         #expect(kind == .unknownSheet)
     }
 
-    @Test("an accepted direct Create needs a fresh clean modal read after its bound sheet invalidates")
-    func acceptedCreateGoneSheetIsPerformed() async {
+    @Test("an accepted Create with a gone bound sheet reports observations, not causation")
+    func acceptedCreateGoneSheetIsNotPerformed() async throws {
         let fixture = makeBoundSheetFixture(action: .create, actionAccepted: true, postAction: .gone)
 
         let outcome = await reconcile(fixture, isDeleteContext: false)
+        let witness = try #require(outcome.witnessSummary)
 
-        #expect(
-            outcome.performed,
-            "Mutation source: make a successful classifier-bound Create AXPress return unaccepted; this clean fixture must establish performed after the direct press and fresh clean scan."
-        )
+        // Mutation `sheet-close-causation-create`: restore a causal `performed`
+        // conjunction. A user-close between AX accepting the press and this
+        // witness is indistinguishable, so only the press and gone observation
+        // may be reported.
+        #expect(!outcome.performed)
+        #expect(outcome.actionAttempted)
+        #expect(witness.observedGone)
         #expect(
             !fixture.ordinalFallbackUsed.get(),
             "Mutation caught: replace the bound Create press with an ordinal fallback; only the captured Create element may produce this success."
@@ -367,16 +426,19 @@ struct Issue538ModalWitnessTests {
         )
     }
 
-    @Test("an accepted direct delete press needs a fresh clean modal read after its bound sheet invalidates")
-    func acceptedDeleteGoneSheetIsPerformed() async {
+    @Test("an accepted delete confirmation with a gone bound sheet reports observations, not causation")
+    func acceptedDeleteGoneSheetIsNotPerformed() async throws {
         let fixture = makeBoundSheetFixture(action: .delete, actionAccepted: true, postAction: .gone)
 
         let outcome = await reconcile(fixture, isDeleteContext: true)
+        let witness = try #require(outcome.witnessSummary)
 
-        #expect(
-            outcome.performed,
-            "Mutation source: make a successful classifier-bound Delete AXPress return unaccepted; this clean fixture must establish performed after the direct press and fresh clean scan."
-        )
+        // Mutation `sheet-close-causation-delete`: restore a causal `performed`
+        // conjunction. The action was directly attempted and the target is gone,
+        // but those observations cannot establish who closed the sheet.
+        #expect(!outcome.performed)
+        #expect(outcome.actionAttempted)
+        #expect(witness.observedGone)
         #expect(
             !fixture.ordinalFallbackUsed.get(),
             "Mutation caught: replace the bound delete press with an ordinal fallback; only the captured destructive button may produce this success."
@@ -443,6 +505,28 @@ struct Issue538ModalWitnessTests {
             !fixture.ordinalFallbackUsed.get(),
             "Mutation caught: invoke an ordinal fallback while the captured sheet is still present; the witness test must remain direct-element-only."
         )
+    }
+
+    @Test("the confirmation scan stays on the original sheet host when AXMainWindow drifts")
+    func confirmationScanUsesOriginalSheetHost() async {
+        let fixture = makeBoundSheetFixture(
+            action: .create,
+            actionAccepted: true,
+            postAction: .replaced,
+            rawMainWindowDriftsToAuxiliary: true
+        )
+
+        _ = await reconcile(fixture, isDeleteContext: false)
+        let clear = AccessibilityChannel.freshCompleteModalReadIsClear(
+            in: fixture.arrangeWindow,
+            runtime: fixture.runtime
+        )
+
+        // Mutation `confirmation-main-window-reresolution`: replace the bound
+        // host with a fresh AXMainWindow lookup. That auxiliary window has no
+        // sheet and would hide the replacement still attached to the arrange
+        // window, producing a false clean confirmation.
+        #expect(!clear)
     }
 
     @Test("a failed native press does not trigger an ordinal fallback")
@@ -696,12 +780,50 @@ struct Issue538ModalWitnessTests {
             try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
         )
         let verified = try #require(envelope["verified"] as? Bool)
+        let trackCountAfterWasUnobserved = envelope["track_count_after"] is NSNull
+        let observedDeltaWasUnobserved = envelope["observed_delta"] is NSNull
 
-        // Mutation: change allTrackHeadersRead's `TrackDescendantsRead.unresolved`
-        // arm to `.read([])`. The failed AXChildren traversal becomes a fictional
-        // zero-track count, and the explicit status assertion below fails.
+        // Mutation `unreadable-after-count-echo`: restore `beforeCount` as the
+        // post-delete fallback. Four unreadable reads would then masquerade as a
+        // successfully observed no-delta result.
         #expect(traversalWasUnreadable)
         #expect(!verified)
+        #expect(trackCountAfterWasUnobserved)
+        #expect(observedDeltaWasUnobserved)
+    }
+
+    @Test("a readable empty Track Headers rail ignores an unrelated unreadable subtree")
+    func readableTrackHeadersIgnoreUnrelatedUnreadableSubtree() {
+        let builder = FakeAXRuntimeBuilder()
+        let window = builder.element(150)
+        let headers = builder.element(151)
+        let unrelatedInspector = builder.element(152)
+        builder.setChildren(window, [headers, unrelatedInspector])
+        builder.setAttribute(headers, kAXRoleAttribute as String, kAXListRole as String)
+        builder.setAttribute(headers, kAXIdentifierAttribute as String, "Track Headers")
+        builder.setChildren(headers, [])
+        builder.setAttribute(unrelatedInspector, kAXRoleAttribute as String, kAXGroupRole as String)
+        let runtime = builder.makeLogicRuntime(
+            childrenResultHandler: { element in
+                guard CFEqual(element, unrelatedInspector) else { return nil }
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let read = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+        let observedEmptyRail: Bool
+        if case .read(let headers) = read {
+            observedEmptyRail = headers.isEmpty
+        } else {
+            observedEmptyRail = false
+        }
+
+        // Mutation `whole-window-strict-track-traversal`: make an unrelated
+        // child failure abort candidate discovery. The readable empty rail then
+        // becomes `.unreadable` even though its own children were read.
+        #expect(observedEmptyRail)
     }
 
     @Test("the complete modal scan ignores a plug-in editor AXDialog")
@@ -715,6 +837,7 @@ struct Issue538ModalWitnessTests {
 
         builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
         builder.setAttribute(app, kAXWindowsAttribute as String, [editor, arrange])
+        builder.setAttribute(editor, kAXModalAttribute as String, true)
         builder.setAttribute(editor, kAXSubroleAttribute as String, kAXDialogSubrole as String)
         builder.setAttribute(editor, kAXCloseButtonAttribute as String, close)
         builder.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
@@ -725,9 +848,10 @@ struct Issue538ModalWitnessTests {
             runtime: builder.makeLogicRuntime(appElement: app)
         ))
 
-        // Mutation: record the first AXDialog before applying
-        // `isBlockingDialogWindow`; this editor becomes unknownSheet and no
-        // successful delete can accumulate a clean streak.
+        // Mutation `plugin-editor-exclusion-after-axmodal`: skip the shared
+        // plug-in-editor exclusion after AXModal confirms modality. This editor
+        // becomes unknownSheet and no successful delete can accumulate a clean
+        // streak.
         #expect(kind == .none)
     }
 
@@ -741,6 +865,7 @@ struct Issue538ModalWitnessTests {
 
         builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
         builder.setAttribute(app, kAXWindowsAttribute as String, [controls, arrange])
+        builder.setAttribute(controls, kAXModalAttribute as String, true)
         builder.setAttribute(controls, kAXSubroleAttribute as String, kAXDialogSubrole as String)
         builder.setAttribute(controls, kAXTitleAttribute as String, "")
         builder.setAttribute(toggle, kAXRoleAttribute as String, kAXButtonRole as String)
@@ -751,7 +876,7 @@ struct Issue538ModalWitnessTests {
             runtime: builder.makeLogicRuntime(appElement: app)
         ))
 
-        // Mutation: bypass the shared Smart Controls exclusion in the complete
+        // Mutation `smart-controls-exclusion-after-axmodal`: bypass the shared Smart Controls exclusion in the complete
         // scan. This ordinary pane is then promoted to unknownSheet.
         #expect(kind == .none)
     }
@@ -811,13 +936,12 @@ struct Issue538ModalWitnessTests {
         let envelope = try #require(
             try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
         )
-        let mandatoryTrackCreated = try #require(envelope["mandatory_track_created"] as? Bool)
-
-        // Mutation source: have `mandatoryTrackCreationWasObserved` return only
-        // `createActionPerformed`; this accepted Create with zero headers would
-        // falsely claim a project-level track fact.
-        #expect(result.isSuccess)
-        #expect(!mandatoryTrackCreated)
+        // Mutation `project-new-sheet-close-causation`: restore the former
+        // causal `performed` result for an accepted Create followed by sheet
+        // disappearance. Without an independently observed track, project.new
+        // must not publish a `mandatory_track_created` fact at all.
+        #expect(!result.isSuccess)
+        #expect(envelope["mandatory_track_created"] == nil)
     }
 
     @Test("a delete-confirm followed by New Track presses each classifier-bound action once")
@@ -898,6 +1022,12 @@ private final class LockedCounter: @unchecked Sendable {
         value += 1
         return value
     }
+
+    func current() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
 }
 
 private final class LockedActionCount: @unchecked Sendable {
@@ -919,6 +1049,7 @@ private final class LockedActionCount: @unchecked Sendable {
 
 private struct BoundSheetFixture {
     let runtime: AXLogicProElements.Runtime
+    let arrangeWindow: AXUIElement
     let ordinalFallbackUsed: LockedFlag
 }
 
@@ -1032,7 +1163,11 @@ private func makeBoundSheetFixture(
         }
     )
 
-    return BoundSheetFixture(runtime: runtime, ordinalFallbackUsed: ordinalFallbackUsed)
+    return BoundSheetFixture(
+        runtime: runtime,
+        arrangeWindow: arrangeWindow,
+        ordinalFallbackUsed: ordinalFallbackUsed
+    )
 }
 
 private enum SequentialDeleteSheetStage {

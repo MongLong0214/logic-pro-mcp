@@ -215,75 +215,108 @@ extension AXLogicProElements {
             return .unavailable
         }
 
-        let nodes: [AXUIElement]
-        switch trackDescendantsRead(in: window, maxDepth: 32, runtime: runtime.ax) {
-        case .complete(let descendants):
-            nodes = [window] + descendants
-        case .unresolved:
-            return .unreadable
-        }
-
-        var roles: [(element: AXUIElement, role: String)] = []
-        for node in nodes {
-            switch trackStringAttribute(node, kAXRoleAttribute as String, runtime: runtime.ax) {
-            case .success(.some(let role)):
-                roles.append((element: node, role: role))
-            case .success(.none):
-                continue
-            case .failure:
-                return .unreadable
-            }
-        }
-
         // Preserve `getTrackHeaders`' established locator order: named list,
         // named scroll area, structural/labelled group, then trusted
-        // outline/table fallback.
-        for candidate in roles where candidate.role == (kAXListRole as String) {
-            switch trackStringAttribute(candidate.element, kAXIdentifierAttribute as String, runtime: runtime.ax) {
-            case .success(let identifier) where identifier == "Track Headers":
-                return enumerateTrackHeaderRows(in: candidate.element, runtime: runtime.ax)
-            case .success:
+        // outline/table fallback. Candidate discovery is intentionally tolerant
+        // of an unrelated subtree being mid-load: the question is whether the
+        // Track Headers rail can be read, not whether every descendant of the
+        // arrange window can be read.
+        let candidates = trackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax)
+        for candidate in candidates.lists {
+            return enumerateTrackHeaderRows(in: candidate, runtime: runtime.ax)
+        }
+        for candidate in candidates.scrollAreas {
+            return enumerateTrackHeaderRows(in: candidate, runtime: runtime.ax)
+        }
+        for candidate in candidates.groups {
+            return enumerateTrackHeaderRows(in: candidate, runtime: runtime.ax)
+        }
+        for candidate in candidates.outlinesAndTables {
+            switch AXHelpers.childrenResult(candidate, runtime: runtime.ax) {
+            case .failure:
+                // This candidate was not established as the rail, so an
+                // unrelated outline/table loading underneath the arrange window
+                // cannot poison a readable named or group candidate elsewhere.
                 continue
-            case .failure:
-                return .unreadable
-            }
-        }
-        for candidate in roles where candidate.role == (kAXScrollAreaRole as String) {
-            switch trackStringAttribute(candidate.element, kAXIdentifierAttribute as String, runtime: runtime.ax) {
-            case .success(let identifier) where identifier == "Tracks":
-                return enumerateTrackHeaderRows(in: candidate.element, runtime: runtime.ax)
-            case .success:
-                continue
-            case .failure:
-                return .unreadable
-            }
-        }
-        for candidate in roles where candidate.role == (kAXGroupRole as String) {
-            if isTrackHeadersGroup(candidate.element, runtime: runtime.ax) {
-                return enumerateTrackHeaderRows(in: candidate.element, runtime: runtime.ax)
-            }
-        }
-        for candidate in roles where candidate.role == (kAXOutlineRole as String)
-            || candidate.role == (kAXTableRole as String) {
-            switch AXHelpers.childrenResult(candidate.element, runtime: runtime.ax) {
-            case .failure:
-                return .unreadable
             case .success(let children):
                 var hasLayoutItem = false
+                var childRoleUnreadable = false
                 for child in children {
                     switch trackStringAttribute(child, kAXRoleAttribute as String, runtime: runtime.ax) {
                     case .success(let role):
                         hasLayoutItem = hasLayoutItem || role == (kAXLayoutItemRole as String)
                     case .failure:
-                        return .unreadable
+                        childRoleUnreadable = true
                     }
                 }
+                // No positive Track Headers identity was found for this
+                // outline/table. Its unreadable child therefore cannot make a
+                // separately readable rail unavailable.
+                guard !childRoleUnreadable else { continue }
                 if hasLayoutItem {
-                    return enumerateTrackHeaderRows(in: candidate.element, runtime: runtime.ax)
+                    return enumerateTrackHeaderRows(in: candidate, runtime: runtime.ax)
                 }
             }
         }
         return .unavailable
+    }
+
+    private struct TrackHeaderCandidates {
+        var lists: [AXUIElement] = []
+        var scrollAreas: [AXUIElement] = []
+        var groups: [AXUIElement] = []
+        var outlinesAndTables: [AXUIElement] = []
+    }
+
+    /// Discover potential Track Headers rails without making an unrelated AX
+    /// branch part of the rail's read contract. Once a candidate is positively
+    /// identified, `enumerateTrackHeaderRows` resumes strict, status-preserving
+    /// traversal of that candidate itself. A depth cap or AX failure here only
+    /// stops this untrusted branch; it must not turn a separately readable empty
+    /// rail into `.unreadable`.
+    private static func trackHeaderCandidates(
+        in root: AXUIElement,
+        maxDepth: Int,
+        runtime: AXHelpers.Runtime
+    ) -> TrackHeaderCandidates {
+        var candidates = TrackHeaderCandidates()
+
+        func visit(_ element: AXUIElement, remainingDepth: Int) {
+            switch trackStringAttribute(element, kAXRoleAttribute as String, runtime: runtime) {
+            case .success(.some(let role)):
+                if role == (kAXListRole as String),
+                   case .success(let identifier) = trackStringAttribute(
+                        element, kAXIdentifierAttribute as String, runtime: runtime
+                   ),
+                   identifier == "Track Headers" {
+                    candidates.lists.append(element)
+                } else if role == (kAXScrollAreaRole as String),
+                          case .success(let identifier) = trackStringAttribute(
+                            element, kAXIdentifierAttribute as String, runtime: runtime
+                          ),
+                          identifier == "Tracks" {
+                    candidates.scrollAreas.append(element)
+                } else if role == (kAXGroupRole as String),
+                          isTrackHeadersGroup(element, runtime: runtime) {
+                    candidates.groups.append(element)
+                } else if role == (kAXOutlineRole as String) || role == (kAXTableRole as String) {
+                    candidates.outlinesAndTables.append(element)
+                }
+            case .success(.none), .failure:
+                break
+            }
+
+            guard remainingDepth > 0 else { return }
+            guard case .success(let children) = AXHelpers.childrenResult(element, runtime: runtime) else {
+                return
+            }
+            for child in children {
+                visit(child, remainingDepth: remainingDepth - 1)
+            }
+        }
+
+        visit(root, remainingDepth: maxDepth)
+        return candidates
     }
 
     private enum TrackDescendantsRead {

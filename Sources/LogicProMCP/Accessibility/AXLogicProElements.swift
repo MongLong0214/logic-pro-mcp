@@ -218,9 +218,31 @@ enum AXLogicProElements {
         runtime: Runtime = .production
     ) -> BlockingDialogTarget? {
         guard isBlockingDialogWindow(dialog, runtime: runtime.ax) else { return nil }
+        let subrole: String? = AXHelpers.getAttribute(dialog, kAXSubroleAttribute, runtime: runtime.ax)
+        return blockingDialogTarget(
+            dialog,
+            observedSubrole: subrole,
+            runtime: runtime
+        )
+    }
+
+    /// Build a target from a window whose subrole was already read through a
+    /// status-preserving scan. The complete modal reader must not discard that
+    /// answer by asking the best-effort API a second time: a transient failure on
+    /// the second request must not make an already-observed dialog disappear.
+    static func blockingDialogTarget(
+        _ dialog: AXUIElement,
+        observedSubrole: String?,
+        runtime: Runtime = .production
+    ) -> BlockingDialogTarget? {
+        guard isBlockingModalWindow(
+            dialog,
+            observedSubrole: observedSubrole,
+            runtime: runtime.ax
+        ) else { return nil }
         let title = (AXHelpers.getAttribute(dialog, kAXTitleAttribute, runtime: runtime.ax) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let role = (AXHelpers.getAttribute(dialog, kAXSubroleAttribute, runtime: runtime.ax) ?? (kAXDialogSubrole as String))
+        let role = observedSubrole ?? (kAXDialogSubrole as String)
         let owningWindow = (mainWindow(runtime: runtime).flatMap {
             AXHelpers.getTitle($0, runtime: runtime.ax)
         } ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -297,10 +319,29 @@ enum AXLogicProElements {
         _ window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Bool {
-        guard isDialogWindow(window, runtime: runtime) else { return false }
+        let subrole: String? = AXHelpers.getAttribute(window, kAXSubroleAttribute, runtime: runtime)
+        guard subrole == (kAXDialogSubrole as String)
+                || subrole == (kAXSystemDialogSubrole as String)
+        else { return false }
+        return isBlockingModalWindow(window, observedSubrole: subrole, runtime: runtime)
+    }
+
+    /// Applies the established non-blocking-dialog exclusions to a window whose
+    /// modality was determined separately from `AXModal`. `AXSubrole` answers
+    /// which modal kind this is; it does not decide whether the window blocks.
+    /// A modal floating window has no current exclusion and therefore remains a
+    /// blocker rather than being erased by the dialog-only exclusion helpers.
+    static func isBlockingModalWindow(
+        _ window: AXUIElement,
+        observedSubrole: String?,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        guard observedSubrole == (kAXDialogSubrole as String)
+                || observedSubrole == (kAXSystemDialogSubrole as String)
+        else { return true }
         return !isKeyboardLayoutOverlayWindow(window, runtime: runtime)
-            && !isPluginEditorWindow(window, runtime: runtime)
-            && !isSmartControlsWindow(window, runtime: runtime)
+            && !isPluginEditorWindow(window, observedSubrole: observedSubrole, runtime: runtime)
+            && !isSmartControlsWindow(window, observedSubrole: observedSubrole, runtime: runtime)
     }
 
     /// #234: Logic 12.3 tags plugin-EDITOR windows with subrole `AXDialog` and a
@@ -349,7 +390,16 @@ enum AXLogicProElements {
         runtime: AXHelpers.Runtime
     ) -> Bool {
         let subrole: String? = AXHelpers.getAttribute(window, kAXSubroleAttribute, runtime: runtime)
-        guard subrole == (kAXDialogSubrole as String) else { return false }
+        return isPluginEditorWindow(window, observedSubrole: subrole, runtime: runtime)
+    }
+
+    /// As above, but reuse a caller's status-preserving subrole read.
+    static func isPluginEditorWindow(
+        _ window: AXUIElement,
+        observedSubrole: String?,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        guard observedSubrole == (kAXDialogSubrole as String) else { return false }
 
         let closeButton: AXUIElement? = AXHelpers.getAttribute(
             window, kAXCloseButtonAttribute, runtime: runtime
@@ -422,7 +472,16 @@ enum AXLogicProElements {
         runtime: AXHelpers.Runtime
     ) -> Bool {
         let subrole: String? = AXHelpers.getAttribute(window, kAXSubroleAttribute, runtime: runtime)
-        guard subrole == (kAXDialogSubrole as String) else { return false }
+        return isSmartControlsWindow(window, observedSubrole: subrole, runtime: runtime)
+    }
+
+    /// As above, but reuse a caller's status-preserving subrole read.
+    static func isSmartControlsWindow(
+        _ window: AXUIElement,
+        observedSubrole: String?,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        guard observedSubrole == (kAXDialogSubrole as String) else { return false }
 
         let title: String = AXHelpers.getAttribute(window, kAXTitleAttribute, runtime: runtime) ?? ""
         guard title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }

@@ -130,6 +130,8 @@ private func makeAlertFixture(
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
     builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(dialog, kAXModalAttribute as String, true)
+    builder.setAttribute(otherDialog, kAXModalAttribute as String, true)
     builder.setAttribute(dialog, kAXSubroleAttribute as String, kAXDialogSubrole as String)
     builder.setAttribute(otherDialog, kAXSubroleAttribute as String, kAXDialogSubrole as String)
 
@@ -243,6 +245,9 @@ struct Issue453AlertAcknowledgeBindingTests {
             witnessDelayNanoseconds: 0
         )
 
+        // Mutation `informational-alert-axmodal-omission`: ignore AXModal in
+        // the complete scan. This genuine single-button alert would not reach
+        // its classifier-bound acknowledgement path.
         #expect(outcome.kind == .informationalAlert)
         #expect(outcome.decision == .acknowledgeAlert)
         #expect(outcome.performed)

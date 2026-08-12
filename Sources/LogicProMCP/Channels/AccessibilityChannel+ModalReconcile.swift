@@ -43,8 +43,8 @@ extension AccessibilityChannel {
         /// `witnessSummary`, never this trace.
         let sheetWitness: [ModalSheetWitnessPoll]
         /// Compact, response-safe observation summary for the action's witness.
-        /// For sheet actions, `gone` is only a candidate closure; `performed`
-        /// also requires a fresh complete modal scan to be clean.
+        /// For sheet actions, `gone` says only that the captured sheet identity
+        /// disappeared; it is intentionally not attributed to the direct press.
         let witnessSummary: ModalReconcileWitnessSummary?
         /// Set only when an authorized action was declined at execution time.
         /// `performed == false` alone cannot distinguish "the decision was not to
@@ -244,7 +244,8 @@ extension AccessibilityChannel {
         // stays string-only, so the elements travel beside it rather than inside
         // it. Re-finding a button through an ordinal window/sheet path can target
         // a different Logic window from the sheet the reader classified.
-        let read = readModalSignalsAndAlertTarget(runtime: runtime)
+        let mainWindow = modalMainWindow(runtime: runtime)
+        let read = readModalSignalsAndAlertTarget(runtime: runtime, mainWindow: mainWindow)
         let signals = read.signals
         let kind = ModalReconciliation.classify(signals)
         let decision = ModalReconciliation.decide(kind: kind, isDeleteContext: isDeleteContext)
@@ -264,6 +265,10 @@ extension AccessibilityChannel {
             decision,
             alertTarget: read.alertTarget,
             sheet: read.sheet,
+            sheetHost: {
+                if case .found(let window) = mainWindow { return window }
+                return nil
+            }(),
             createButton: read.createButton,
             deleteButton: read.deleteButton,
             runtime: runtime,
@@ -573,12 +578,13 @@ extension AccessibilityChannel {
         case unreadable
     }
 
-    /// Read every top-level window with a status-preserving subrole lookup. An
-    /// `AXSystemDialog` remains a blocker even though this reconciler has no
-    /// authorised action for it. An unreadable `AXWindows` list cannot be
-    /// replaced with focused/main-window best-effort discovery: that would
-    /// leave other top-level dialogs unexamined and falsely certify a clean
-    /// blocker set.
+    /// Read every top-level window with a status-preserving `AXModal` lookup.
+    /// Modality decides whether a window blocks; its subrole only determines
+    /// whether this reconciler can classify it as an actionable informational
+    /// alert or must retain it as an unknown blocker. An unreadable `AXWindows`
+    /// list cannot be replaced with focused/main-window best-effort discovery:
+    /// that would leave other top-level modals unexamined and falsely certify a
+    /// clean blocker set.
     private static func topLevelDialogRead(
         runtime: AXLogicProElements.Runtime
     ) -> TopLevelDialogRead {
@@ -604,34 +610,52 @@ extension AccessibilityChannel {
         var firstBlockingDialog: (element: AXUIElement, subrole: String)?
         for window in windows {
             switch AXHelpers.getAttributeResult(
-                window, kAXSubroleAttribute as String, runtime: runtime.ax
-            ) as Result<String?, AXHelpers.AXStatusError> {
-            case .success(let subrole):
-                guard let subrole else { continue }
-                if subrole == (kAXDialogSubrole as String)
-                    || subrole == (kAXSystemDialogSubrole as String) {
-                    // The complete scan must use the same exclusions as the
-                    // ordinary modal guard. Plug-in editors, Smart Controls and
-                    // the keyboard-layout overlay may report AXDialog but are
-                    // normal working UI, not blockers that should poison every
-                    // clean deletion poll.
-                    guard AXLogicProElements.isBlockingDialogWindow(window, runtime: runtime.ax) else {
-                        continue
-                    }
-                    if firstBlockingDialog == nil {
-                        firstBlockingDialog = (window, subrole)
-                    }
-                }
+                window, kAXModalAttribute as String, runtime: runtime.ax
+            ) as Result<Bool?, AXHelpers.AXStatusError> {
+            case .success(let modal) where modal != true:
+                continue
             case .failure(let error) where axStatusIsDefinitiveAbsence(error):
                 continue
             case .failure:
                 return .unreadable
+            case .success:
+                break
+            }
+
+            // `AXModal == true` is already enough to make this window block.
+            // Retain the same status-preserving subrole value for the exclusion
+            // and alert-target paths; asking the best-effort API again here used
+            // to turn a confirmed AXDialog into a clean observation on a transient
+            // `cannotComplete` response.
+            switch AXHelpers.getAttributeResult(
+                window, kAXSubroleAttribute as String, runtime: runtime.ax
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case .success(let subrole):
+                let knownSubrole = subrole ?? ""
+                guard AXLogicProElements.isBlockingModalWindow(
+                    window,
+                    observedSubrole: subrole,
+                    runtime: runtime.ax
+                ) else { continue }
+                if firstBlockingDialog == nil {
+                    firstBlockingDialog = (window, knownSubrole)
+                }
+            case .failure(let error) where axStatusIsDefinitiveAbsence(error):
+                if firstBlockingDialog == nil {
+                    firstBlockingDialog = (window, "")
+                }
+            case .failure:
+                // We cannot name the modal kind, but AXModal already proved that
+                // it blocks. This remains a blocker rather than an unreadable
+                // answer or, worse, a clean one.
+                return .blocking
             }
         }
         guard let firstBlockingDialog else { return .none }
         guard firstBlockingDialog.subrole == (kAXDialogSubrole as String),
               let target = AXLogicProElements.blockingDialogTarget(
                 firstBlockingDialog.element,
+                observedSubrole: firstBlockingDialog.subrole,
                 runtime: runtime
               ),
               target.info.role == (kAXDialogSubrole as String)
@@ -1004,6 +1028,7 @@ extension AccessibilityChannel {
         _ decision: ModalReconciliation.ModalReconcileDecision,
         alertTarget: AXLogicProElements.BlockingDialogTarget?,
         sheet: AXUIElement?,
+        sheetHost: AXUIElement?,
         createButton: AXUIElement?,
         deleteButton: AXUIElement?,
         runtime: AXLogicProElements.Runtime,
@@ -1032,8 +1057,20 @@ extension AccessibilityChannel {
                 witness = []
             }
             let summary = ModalReconcileWitnessSummary(sheetWitness: witness)
+            let completeBlockerSetIsClear = action.accepted && summary.observedGone
+                && freshCompleteModalReadIsClear(in: sheetHost, runtime: runtime)
+            Log.info(
+                "modal_sheet_confirmation action=click_create accepted=\(action.accepted) "
+                    + "bound_sheet_gone=\(summary.observedGone) blocker_set_clear=\(completeBlockerSetIsClear)",
+                subsystem: .ax
+            )
             return ModalActionPerformResult(
-                performed: action.accepted && summary.observedGone && freshCompleteModalReadIsClear(runtime: runtime),
+                // AX accepts a press before Logic applies it. A subsequently
+                // invalid sheet identity only says that this sheet disappeared;
+                // it cannot distinguish our press from the user closing it.
+                // Keep the direct action and bound observations in the receipt,
+                // but never turn that temporal correlation into a causal claim.
+                performed: false,
                 actionAttempted: action.attempted,
                 refusal: nil,
                 actionFailure: action.failure,
@@ -1057,8 +1094,17 @@ extension AccessibilityChannel {
                 witness = []
             }
             let summary = ModalReconcileWitnessSummary(sheetWitness: witness)
+            let completeBlockerSetIsClear = action.accepted && summary.observedGone
+                && freshCompleteModalReadIsClear(in: sheetHost, runtime: runtime)
+            Log.info(
+                "modal_sheet_confirmation action=confirm_delete accepted=\(action.accepted) "
+                    + "bound_sheet_gone=\(summary.observedGone) blocker_set_clear=\(completeBlockerSetIsClear)",
+                subsystem: .ax
+            )
             return ModalActionPerformResult(
-                performed: action.accepted && summary.observedGone && freshCompleteModalReadIsClear(runtime: runtime),
+                // See clickCreate above: the observations establish only that
+                // the captured sheet is gone, not what caused the close.
+                performed: false,
                 actionAttempted: action.attempted,
                 refusal: nil,
                 actionFailure: action.failure,
@@ -1098,15 +1144,21 @@ extension AccessibilityChannel {
         }
     }
 
-    /// An invalid reference says only that the captured AX object can no longer
-    /// be queried. Before that event can contribute to `performed`, reread the
-    /// entire current blocker set: normal closure is the one case where the
-    /// fresh, complete scan is clean. App termination, AX-tree regeneration,
-    /// and replacement by another sheet all remain non-clean.
-    private static func freshCompleteModalReadIsClear(
+    /// Re-read the complete blocker set against the exact sheet host that the
+    /// action targeted. `AXMainWindow` can drift while a sheet is closing, so a
+    /// fresh main-window lookup could inspect an auxiliary window and miss a
+    /// replacement sheet still attached to the arrange window.
+    static func freshCompleteModalReadIsClear(
+        in sheetHost: AXUIElement?,
         runtime: AXLogicProElements.Runtime
     ) -> Bool {
-        ModalReconciliation.classify(readModalSignalsAndAlertTarget(runtime: runtime).signals) == .none
+        guard let sheetHost else { return false }
+        return ModalReconciliation.classify(
+            readModalSignalsAndAlertTarget(
+                runtime: runtime,
+                mainWindow: .found(sheetHost)
+            ).signals
+        ) == .none
     }
 
     /// Press the mandatory New Track sheet's resolved `Create` / `생성` element.

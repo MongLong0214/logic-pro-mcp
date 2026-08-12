@@ -63,10 +63,10 @@ LABELLED_TUPLE_LOOP = re.compile(
 )
 
 # This compiler bug is specific to Bool expectations. A collection can state
-# that type explicitly or infer it from a labelled `expected: true/false`
-# literal; both forms need coverage. Other labelled tuples (for example, enum
-# equality) remain ordinary live comparisons and must not be swept into this
-# Boolean-integrity lint.
+# that type explicitly, name that labelled tuple through a typealias, or infer
+# it from a labelled `expected: true/false` literal; all three forms need
+# coverage. Other labelled tuples (for example, enum equality) remain ordinary
+# live comparisons and must not be swept into this Boolean-integrity lint.
 BOOL_LABELLED_TUPLE_COLLECTION = re.compile(
     r'\b(?:let|var)\s+(?P<collection>[A-Za-z_]\w*)\s*:\s*'
     r'\[\([^\]]*\bexpected\s*:\s*Bool\b[^\]]*\)\]'
@@ -75,6 +75,15 @@ INFERRED_BOOL_LABELLED_TUPLE_COLLECTION = re.compile(
     r'\b(?:let|var)\s+(?P<collection>[A-Za-z_]\w*)\s*=\s*'
     r'\[\s*\([^\]]*?\bexpected\s*:\s*(?:true|false)\b',
     re.DOTALL,
+)
+BOOL_LABELLED_TUPLE_ALIAS = re.compile(
+    r'\btypealias\s+(?P<alias>[A-Za-z_]\w*)\s*=\s*'
+    r'\([^)]*\bexpected\s*:\s*Bool\b[^)]*\)',
+    re.DOTALL,
+)
+ALIASED_BOOL_LABELLED_TUPLE_COLLECTION = re.compile(
+    r'\b(?:let|var)\s+(?P<collection>[A-Za-z_]\w*)\s*:\s*'
+    r'\[\s*(?P<alias>[A-Za-z_]\w*)\s*\]'
 )
 
 def calls(text):
@@ -195,6 +204,15 @@ for f in sorted(glob.glob('Tests/**/*.swift', recursive=True)):
     bool_labelled_tuple_collections.update(
         match.group('collection')
         for match in INFERRED_BOOL_LABELLED_TUPLE_COLLECTION.finditer(cleaned)
+    )
+    bool_labelled_tuple_aliases = {
+        match.group('alias')
+        for match in BOOL_LABELLED_TUPLE_ALIAS.finditer(cleaned)
+    }
+    bool_labelled_tuple_collections.update(
+        match.group('collection')
+        for match in ALIASED_BOOL_LABELLED_TUPLE_COLLECTION.finditer(cleaned)
+        if match.group('alias') in bool_labelled_tuple_aliases
     )
     cleaned_calls = list(calls(cleaned))
     for match in LABELLED_TUPLE_LOOP.finditer(cleaned):

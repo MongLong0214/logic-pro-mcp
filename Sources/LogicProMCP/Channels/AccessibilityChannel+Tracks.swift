@@ -1525,7 +1525,11 @@ extension AccessibilityChannel {
         var mandatoryNewTrackReconciliationPerformed = false
         var consecutiveCleanModalObservations = 0
 
-        var lastObservedCount = beforeCount
+        // `nil` means no post-delete rail read succeeded. Do not initialize this
+        // from `beforeCount`: serialising that pre-delete number as "after" makes
+        // four unreadable polls externally indistinguishable from four observed
+        // no-delta polls.
+        var lastObservedCount: Int?
         for attempt in 0..<4 {
             try? await Task.sleep(nanoseconds: 250_000_000)
 
@@ -1639,8 +1643,8 @@ extension AccessibilityChannel {
             }
         }
 
-        extras["track_count_after"] = lastObservedCount
-        extras["observed_delta"] = lastObservedCount - beforeCount
+        extras["track_count_after"] = lastObservedCount ?? NSNull()
+        extras["observed_delta"] = lastObservedCount.map { $0 - beforeCount } ?? NSNull()
         if reconcileKind == .mandatoryNewTrack {
             extras["mandatory_track_reconciliation_performed"] = mandatoryNewTrackReconciliationPerformed
         }
