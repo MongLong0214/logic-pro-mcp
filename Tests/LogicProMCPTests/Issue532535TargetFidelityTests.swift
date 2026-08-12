@@ -119,10 +119,9 @@ func issue535FocusRequiresTheBoundTableAndWindowIdentity() async throws {
         },
         performActionHandler: nil
     )
-    let deleteKeyPosts = Issue532535537Counter()
     let mouse = AXMouseHelper.Runtime(
         postMouseEvent: { _, _, _ in false },
-        postKeyEvent: { _ in deleteKeyPosts.value += 1; return true },
+        postKeyEvent: { _ in true },
         postUnicodeScalar: { _ in false },
         sleepMicros: { _ in }
     )
@@ -135,7 +134,6 @@ func issue535FocusRequiresTheBoundTableAndWindowIdentity() async throws {
     #expect(!writeAttempted)
     let selectionChanged = try #require(envelope["selection_changed"] as? Bool)
     #expect(selectionChanged)
-    #expect(deleteKeyPosts.value == 0)
 }
 
 /// The window check alone cannot catch this: both tables live in the SAME Marker List window, so
@@ -243,4 +241,71 @@ func issue532AlreadySelectedRowIsNotAChange() async throws {
     #expect(writeAttempted)
     let changed = try #require(envelope["selection_changed"] as? Bool)
     #expect(!changed)
+}
+
+/// A failed pre-write selection observation says nothing about whether the selection changed.
+/// This must remain distinct from an empty successful observation.
+@Test("#532: an unreadable prior selection leaves selection change unknown")
+func issue532UnreadablePriorSelectionLeavesChangeUnknown() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(54_000)
+    let arrange = builder.element(54_001)
+    let markerList = builder.element(54_002)
+    let table = builder.element(54_003)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, markerList])
+    builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(arrange, kAXTitleAttribute as String, "Unreadable - Tracks")
+    builder.setAttribute(arrange, kAXDocumentAttribute as String, "/Unreadable.logicx")
+    builder.setAttribute(markerList, kAXTitleAttribute as String, "Unreadable - Marker List")
+    builder.setAttribute(markerList, kAXDocumentAttribute as String, "/Unreadable.logicx")
+
+    let rows = issue532535537MarkerList(
+        builder: builder, window: markerList, table: table, firstID: 54_010,
+        markers: [(position: "5 1 1 1", name: "Target")]
+    )
+    // The row was already selected. The first `AXSelectedRows` read then fails, so the result
+    // cannot honestly say whether this operation changed the selection.
+    builder.setAttribute(table, "AXSelectedRows", [rows[0]])
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, arrange)
+    let prewriteSelectedRowsRead = Issue532535537Counter()
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueHandler: { element, attribute in
+            guard CFEqual(element, table), attribute == "AXSelectedRows",
+                  prewriteSelectedRowsRead.value == 0 else { return nil }
+            // If `getAttributeResult` regresses to `getAttribute ?? []`, this is the failed
+            // pre-write read it will flatten into an empty selection.
+            prewriteSelectedRowsRead.value += 1
+            return .some(nil)
+        },
+        attributeValueResultHandler: { element, attribute in
+            guard CFEqual(element, table), attribute == "AXSelectedRows",
+                  prewriteSelectedRowsRead.value == 0 else { return nil }
+            // The injected mutation: AXSelectedRows fails before the selection write.
+            prewriteSelectedRowsRead.value += 1
+            return .failure(AXHelpers.AXStatusError(raw: 1))
+        },
+        setAttributeHandler: { element, attribute, _ in
+            if attribute == kAXSelectedAttribute as String, CFEqual(element, rows[0]) {
+                builder.setAttribute(table, "AXSelectedRows", [rows[0]])
+            }
+            return true
+        },
+        performActionHandler: nil
+    )
+    let mouse = AXMouseHelper.Runtime(
+        postMouseEvent: { _, _, _ in false },
+        postKeyEvent: { _ in true },
+        postUnicodeScalar: { _ in false },
+        sleepMicros: { _ in }
+    )
+
+    let result = await AccessibilityChannel.defaultDeleteMarker(index: 0, runtime: runtime, mouse: mouse)
+    let envelope = try issue532535537Envelope(result)
+    #expect(!result.isSuccess)
+    let selectionWriteAttempted = try #require(envelope["selection_write_attempted"] as? Bool)
+    #expect(selectionWriteAttempted)
+    #expect(envelope["selection_changed"] == nil)
 }

@@ -48,6 +48,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
     func makeAXRuntime(
         appElement: AXUIElement? = nil,
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
+        attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
         executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
@@ -88,6 +89,19 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
             },
             childCount: { [self] element in
                 children[key(for: element)]?.count
+            },
+            attributeValueResult: { [self] element, attribute in
+                if let handled = attributeValueResultHandler?(element, attribute) {
+                    return handled
+                }
+                if let handled = attributeValueHandler?(element, attribute) {
+                    return .success(handled)
+                }
+                if attribute == kAXWindowsAttribute as String,
+                   attributes[key(for: element)]?[attribute] == nil {
+                    return .success(NSArray())
+                }
+                return .success(bridge(attributes[key(for: element)]?[attribute]))
             }
         )
     }
@@ -105,6 +119,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         pid: pid_t? = 4242,
         appElement: AXUIElement? = nil,
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
+        attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
         executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
@@ -116,6 +131,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
             ax: makeAXRuntime(
                 appElement: appElement,
                 attributeValueHandler: attributeValueHandler,
+                attributeValueResultHandler: attributeValueResultHandler,
                 setAttributeHandler: setAttributeHandler,
                 performActionHandler: performActionHandler
             ),

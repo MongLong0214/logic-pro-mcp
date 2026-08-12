@@ -108,7 +108,11 @@ extension AccessibilityChannel {
         // actually altered. A row that was already the sole selection is not a change, and saying
         // so would be the same over-claim this refusal exists to remove.
         extras["selection_write_attempted"] = true
-        extras["selection_changed"] = selection.changedSelection
+        // An unreadable pre-write selection is not evidence of either a change or no change.
+        // Omit the optional field rather than reporting a Boolean guess.
+        if let changedSelection = selection.changedSelection {
+            extras["selection_changed"] = changedSelection
+        }
         guard markerTableHasKeyboardFocus(
             table: selection.table,
             in: binding.window,
@@ -227,7 +231,7 @@ extension AccessibilityChannel {
         _ index: Int,
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> (table: AXUIElement, changedSelection: Bool)? {
+    ) -> (table: AXUIElement, changedSelection: Bool?)? {
         guard let table = AXHelpers.findAllDescendants(
             of: window, role: kAXTableRole as String, maxDepth: 12, runtime: runtime
         ).first else { return nil }
@@ -238,10 +242,19 @@ extension AccessibilityChannel {
         // Read the selection BEFORE writing. A post-write read proves the target is selected NOW,
         // not that this call changed anything — if the row was already selected, reporting a
         // selection change would assert an effect that did not happen.
-        let before: [AXUIElement] = AXHelpers.getAttribute(
+        let before: Result<[AXUIElement]?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
             table, "AXSelectedRows", runtime: runtime
-        ) ?? []
-        let wasAlreadyExactlyTheTarget = before.count == 1 && CFEqual(before[0], rows[index])
+        )
+        let wasAlreadyExactlyTheTarget: Bool?
+        switch before {
+        case .success(let selectedRows):
+            let selectedRows = selectedRows ?? []
+            wasAlreadyExactlyTheTarget = selectedRows.count == 1
+                && CFEqual(selectedRows[0], rows[index])
+        case .failure:
+            // A failed read cannot establish whether selecting this row altered anything.
+            wasAlreadyExactlyTheTarget = nil
+        }
         _ = AXHelpers.setAttribute(
             rows[index], kAXSelectedAttribute as String, kCFBooleanTrue, runtime: runtime
         )
@@ -249,7 +262,7 @@ extension AccessibilityChannel {
             table, "AXSelectedRows", runtime: runtime
         ) ?? []
         guard selected.count == 1, CFEqual(selected[0], rows[index]) else { return nil }
-        return (table: table, changedSelection: !wasAlreadyExactlyTheTarget)
+        return (table: table, changedSelection: wasAlreadyExactlyTheTarget.map { !$0 })
     }
 
     /// True only when focus lives in the exact table selected above, in the exact Marker List
