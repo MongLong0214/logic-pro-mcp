@@ -224,7 +224,97 @@ struct Issue538ModalWitnessTests {
         )
     }
 
-    @Test("an accepted direct Create with an invalidated bound sheet is performed")
+    @Test("an absent main window is an answer for the modal read, not an unknown blocker")
+    func absentMainWindowIsAnAnswer() {
+        // There is no main-window sheet when there is no main window, and during `project.new`
+        // there genuinely is not one between choosing a template and Logic publishing the arrange
+        // window. Calling that unreadable made project creation report an unknown blocking sheet
+        // during the exact phase it exists to describe. The other two blocker kinds are still read
+        // below it, so this remains a complete observation. What a track deletion additionally
+        // needs — the window its count came from — is required at that call site instead.
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(50)
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+
+        // Mutation: treat an absent `AXMainWindow` as unreadable again; this becomes `.unknownSheet`.
+        #expect(kind == .none)
+    }
+
+    @Test("an unreadable top-level dialog scan cannot certify a clean blocker set")
+    func unreadableTopLevelDialogFailsClosed() {
+        for status in [AXError.cannotComplete.rawValue, AXError.attributeUnsupported.rawValue] {
+            let builder = FakeAXRuntimeBuilder()
+            let app = builder.element(51)
+            let window = builder.element(52)
+            builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+            let runtime = builder.makeLogicRuntime(
+                appElement: app,
+                attributeValueResultHandler: { element, attribute in
+                    guard CFEqual(element, app), attribute == (kAXWindowsAttribute as String) else { return nil }
+                    return .failure(AXHelpers.AXStatusError(raw: status))
+                },
+                setAttributeHandler: nil,
+                performActionHandler: nil
+            )
+
+            let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+
+            // Mutation source: flatten a failed AXWindows list (including
+            // -25205) to an empty list; that would incorrectly produce `.none`.
+            #expect(kind == .unknownSheet)
+        }
+    }
+
+    @Test("an AXSystemDialog remains a blocker instead of becoming no alert")
+    func systemDialogFailsClosed() {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(53)
+        let window = builder.element(54)
+        let systemDialog = builder.element(55)
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window, systemDialog])
+        builder.setAttribute(systemDialog, kAXSubroleAttribute as String, kAXSystemDialogSubrole as String)
+        let runtime = builder.makeLogicRuntime(appElement: app, setAttributeHandler: nil, performActionHandler: nil)
+
+        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+
+        // Mutation source: restore the AXDialog-only equality check; this
+        // AXSystemDialog would be omitted and the pass would look clean.
+        #expect(kind == .unknownSheet)
+    }
+
+    @Test("an unreadable menu scan cannot certify a clean blocker set")
+    func unreadableStrayMenuFailsClosed() {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(56)
+        let window = builder.element(57)
+        let menuBar = builder.element(58)
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            childrenResultHandler: { element in
+                guard CFEqual(element, menuBar) else { return nil }
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+
+        // Mutation source: convert a menu-child AX failure to `gone`; this
+        // otherwise empty fixture would incorrectly produce `.none`.
+        #expect(kind == .unknownSheet)
+    }
+
+    @Test("an accepted direct Create needs a fresh clean modal read after its bound sheet invalidates")
     func acceptedCreateGoneSheetIsPerformed() async {
         let fixture = makeBoundSheetFixture(action: .create, actionAccepted: true, postAction: .gone)
 
@@ -232,12 +322,25 @@ struct Issue538ModalWitnessTests {
 
         #expect(
             outcome.performed,
-            "Mutation caught: remove the direct classifier-bound Create AXPress or force `performed` false; the accepted press followed by invalidUIElement must be reported performed."
+            "Mutation source: make a successful classifier-bound Create AXPress return unaccepted; this clean fixture must establish performed after the direct press and fresh clean scan."
         )
         #expect(
             !fixture.ordinalFallbackUsed.get(),
             "Mutation caught: replace the bound Create press with an ordinal fallback; only the captured Create element may produce this success."
         )
+    }
+
+    @Test("a replacement sheet after invalidation is not attributed to the Create press")
+    func acceptedCreateWithReplacementSheetIsNotPerformed() async {
+        let fixture = makeBoundSheetFixture(action: .create, actionAccepted: true, postAction: .replaced)
+
+        let outcome = await reconcile(fixture, isDeleteContext: false)
+
+        // Mutation source: remove the fresh complete modal scan from Create's
+        // `performed` conjunction; the stale bound reference alone would make
+        // this replacement sheet look like a created track.
+        #expect(!outcome.performed)
+        #expect(outcome.actionAttempted)
     }
 
     @Test("accepted Create with a persistent sheet is not performed")
@@ -264,7 +367,7 @@ struct Issue538ModalWitnessTests {
         )
     }
 
-    @Test("an accepted direct delete press with an invalidated bound sheet is performed")
+    @Test("an accepted direct delete press needs a fresh clean modal read after its bound sheet invalidates")
     func acceptedDeleteGoneSheetIsPerformed() async {
         let fixture = makeBoundSheetFixture(action: .delete, actionAccepted: true, postAction: .gone)
 
@@ -272,12 +375,25 @@ struct Issue538ModalWitnessTests {
 
         #expect(
             outcome.performed,
-            "Mutation caught: remove the direct classifier-bound delete AXPress or force `performed` false; the accepted press followed by invalidUIElement must be reported performed."
+            "Mutation source: make a successful classifier-bound Delete AXPress return unaccepted; this clean fixture must establish performed after the direct press and fresh clean scan."
         )
         #expect(
             !fixture.ordinalFallbackUsed.get(),
             "Mutation caught: replace the bound delete press with an ordinal fallback; only the captured destructive button may produce this success."
         )
+    }
+
+    @Test("a replacement sheet after delete confirmation is not attributed to the Delete press")
+    func acceptedDeleteWithReplacementSheetIsNotPerformed() async {
+        let fixture = makeBoundSheetFixture(action: .delete, actionAccepted: true, postAction: .replaced)
+
+        let outcome = await reconcile(fixture, isDeleteContext: true)
+
+        // Mutation source: remove the fresh complete modal scan from delete's
+        // `performed` conjunction; the stale bound reference would mark the
+        // Delete press performed while another sheet is still blocking.
+        #expect(!outcome.performed)
+        #expect(outcome.actionAttempted)
     }
 
     @Test("accepted delete confirmation with a persistent sheet is not performed")
@@ -337,11 +453,11 @@ struct Issue538ModalWitnessTests {
 
         #expect(
             !outcome.performed,
-            "Mutation caught: add an ordinal or keyboard fallback after native AXPress fails; this rejected press must stay unperformed."
+            "Mutation caught: promote a rejected direct AXPress to performed; this rejected press must stay unperformed."
         )
         #expect(
             !fixture.ordinalFallbackUsed.get(),
-            "Mutation caught: invoke the former ordinal AppleScript fallback after a failed native press; this fixture exercises that failure branch."
+            "Mutation caught: invoke the former ordinal AppleScript fallback after a failed native press; this fixture observes that injected AppleScript seam."
         )
     }
 
@@ -402,13 +518,24 @@ struct Issue538ModalWitnessTests {
                 decision: .noAction,
                 performed: testCase.performed
             )
-            let actual = AccessibilityChannel.deletionModalObservationIsSettledClean(outcome)
+            let actual = AccessibilityChannel.deletionModalObservationIsSettledClean(
+                outcome, arrangeWindowPresent: true
+            )
             if testCase.expected {
                 #expect(actual)
             } else {
                 #expect(!actual)
             }
         }
+
+        // The arrange window is where the track count came from. A decrement observed while it
+        // cannot be resolved is a transient AX failure shaped like a successful delete, so no
+        // modal outcome may certify it clean.
+        // Mutation: drop `arrangeWindowPresent` from the conjunction; this assertion becomes true.
+        #expect(!AccessibilityChannel.deletionModalObservationIsSettledClean(
+            AccessibilityChannel.ModalReconcileOutcome(kind: .none, decision: .noAction, performed: false),
+            arrangeWindowPresent: false
+        ))
     }
 
     @Test("State A gate truth table requires both a decrement and a settled clean observation")
@@ -438,6 +565,95 @@ struct Issue538ModalWitnessTests {
         #expect(!countOnly)
         #expect(both)
     }
+
+    @Test("State A waits for two consecutive complete clean modal observations")
+    func deletionCleanObservationStreakRequiresTwoPasses() {
+        let oneCleanObservation = AccessibilityChannel.deletionCleanObservationStreakIsSettled(1)
+        let twoCleanObservations = AccessibilityChannel.deletionCleanObservationStreakIsSettled(2)
+
+        // Mutation source: change the threshold from `>= 2` to `>= 1`; the
+        // first binding becomes true and exposes the single-snapshot race.
+        #expect(!oneCleanObservation)
+        #expect(twoCleanObservations)
+    }
+
+    @Test("mandatory-track creation requires a positive post-action track count")
+    func mandatoryTrackCreationRequiresTrackCount() {
+        let performedWithoutTrack = AccessibilityChannel.mandatoryTrackCreationWasObserved(
+            createActionPerformed: true,
+            observedTrackCount: 0
+        )
+        let performedWithTrack = AccessibilityChannel.mandatoryTrackCreationWasObserved(
+            createActionPerformed: true,
+            observedTrackCount: 1
+        )
+
+        // Mutation source: drop `observedTrackCount > 0`; an invalidated sheet
+        // with no project-level track read would become `mandatory_track_created`.
+        #expect(!performedWithoutTrack)
+        #expect(performedWithTrack)
+    }
+
+    @Test("project.new does not report a mandatory track without a post-Create track count")
+    func projectNewDoesNotPromoteCreateToTrackFact() async throws {
+        let fixture = makeProjectNewPerformedCreateWithoutTrackFixture()
+
+        let result = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: fixture.runtime,
+            selection: "Empty Project",
+            observationAttempts: 1,
+            observationDelayNanoseconds: 0
+        )
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+        let mandatoryTrackCreated = try #require(envelope["mandatory_track_created"] as? Bool)
+
+        // Mutation source: have `mandatoryTrackCreationWasObserved` return only
+        // `createActionPerformed`; this accepted Create with zero headers would
+        // falsely claim a project-level track fact.
+        #expect(result.isSuccess)
+        #expect(!mandatoryTrackCreated)
+    }
+
+    @Test("a delete-confirm followed by New Track presses each classifier-bound action once")
+    func sequentialDeleteAndMandatorySheetEachReceiveOneAction() async throws {
+        let fixture = makeSequentialDeleteSheetFixture()
+
+        let result = await AccessibilityChannel.defaultDeleteTrack(runtime: fixture.runtime)
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+        let action = try #require(envelope["reconciled_action"] as? String)
+
+        // Mutation source: restore the former operation-wide action latch; the
+        // delete confirm still presses, but the later mandatory Create count is
+        // zero while its decision label would be falsely reported as a press.
+        #expect(fixture.deleteConfirmPresses.get() == 1)
+        #expect(fixture.createPresses.get() == 1)
+        #expect(action == "click_create")
+    }
+
+    @Test("project.new preserves a stale Create status in its unconfirmed envelope")
+    func projectNewUnconfirmedCreatePreservesActionError() async throws {
+        let fixture = makeProjectNewStaleCreateFixture()
+
+        let result = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: fixture.runtime,
+            selection: "Empty Project",
+            observationAttempts: 1,
+            observationDelayNanoseconds: 0
+        )
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+        let actionError = try #require(envelope["reconcile_action_error"] as? String)
+
+        // Mutation source: remove `outcome.actionFailure` from the mandatory
+        // create-unconfirmed extras; the direct stale Create status disappears.
+        #expect(!result.isSuccess)
+        #expect(actionError == "ax_\(AXError.invalidUIElement.rawValue)")
+    }
 }
 
 private enum BoundSheetAction {
@@ -448,6 +664,7 @@ private enum BoundSheetAction {
 private enum BoundSheetPostAction {
     case gone
     case present
+    case replaced
 }
 
 private final class LockedFlag: @unchecked Sendable {
@@ -475,6 +692,23 @@ private final class LockedCounter: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         value += 1
+        return value
+    }
+}
+
+private final class LockedActionCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func increment() {
+        lock.lock()
+        value += 1
+        lock.unlock()
+    }
+
+    func get() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
         return value
     }
 }
@@ -511,6 +745,7 @@ private func makeBoundSheetFixture(
     let sheet = builder.element(104)
     let primary = builder.element(105)
     let cancel = builder.element(106)
+    let replacementSheet = builder.element(107)
     let actionIssued = LockedFlag()
     let ordinalFallbackUsed = LockedFlag()
 
@@ -527,6 +762,8 @@ private func makeBoundSheetFixture(
     builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
     builder.setAttribute(cancel, kAXEnabledAttribute as String, action != .create)
     builder.setChildren(sheet, [primary, cancel])
+    builder.setAttribute(replacementSheet, kAXRoleAttribute as String, kAXSheetRole as String)
+    builder.setAttribute(replacementSheet, kAXDescriptionAttribute as String, "New Track")
 
     if rawMainWindowDriftsToAuxiliary {
         builder.setAttribute(app, kAXWindowsAttribute as String, [auxiliaryWindow, arrangeWindow])
@@ -539,6 +776,12 @@ private func makeBoundSheetFixture(
 
     let attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??) = { element, attribute in
         if CFEqual(element, arrangeWindow), attribute == "AXSheets" {
+            if actionIssued.get(), postAction == .gone {
+                return .some([] as NSArray)
+            }
+            if actionIssued.get(), postAction == .replaced {
+                return .some([replacementSheet] as NSArray)
+            }
             return .some([sheet] as NSArray)
         }
         if rawMainWindowDriftsToAuxiliary,
@@ -551,7 +794,7 @@ private func makeBoundSheetFixture(
     }
     let attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?) = { element, attribute in
         guard actionIssued.get(),
-              postAction == .gone,
+              postAction == .gone || postAction == .replaced,
               CFEqual(element, sheet),
               attribute == (kAXRoleAttribute as String)
         else { return nil }
@@ -586,4 +829,213 @@ private func makeBoundSheetFixture(
     )
 
     return BoundSheetFixture(runtime: runtime, ordinalFallbackUsed: ordinalFallbackUsed)
+}
+
+private enum SequentialDeleteSheetStage {
+    case noSheet
+    case deleteConfirm
+    case mandatoryNewTrack
+}
+
+private final class SequentialDeleteSheetState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stage: SequentialDeleteSheetStage = .noSheet
+
+    func set(_ next: SequentialDeleteSheetStage) {
+        lock.lock()
+        stage = next
+        lock.unlock()
+    }
+
+    func get() -> SequentialDeleteSheetStage {
+        lock.lock()
+        defer { lock.unlock() }
+        return stage
+    }
+}
+
+private struct SequentialDeleteSheetFixture {
+    let runtime: AXLogicProElements.Runtime
+    let deleteConfirmPresses: LockedActionCount
+    let createPresses: LockedActionCount
+}
+
+private func makeSequentialDeleteSheetFixture() -> SequentialDeleteSheetFixture {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(200)
+    let window = builder.element(201)
+    let menuBar = builder.element(202)
+    let trackMenu = builder.element(203)
+    let deleteMenuItem = builder.element(204)
+    let trackHeaders = builder.element(205)
+    let trackHeader = builder.element(206)
+    let deleteSheet = builder.element(207)
+    let deletePrimary = builder.element(208)
+    let deleteCancel = builder.element(209)
+    let mandatorySheet = builder.element(210)
+    let createPrimary = builder.element(211)
+    let createCancel = builder.element(212)
+    let state = SequentialDeleteSheetState()
+    let deleteConfirmPresses = LockedActionCount()
+    let createPresses = LockedActionCount()
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setChildren(window, [trackHeaders])
+    builder.setAttribute(trackHeaders, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(trackHeaders, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setChildren(trackHeaders, [trackHeader])
+    builder.setAttribute(trackHeader, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    builder.setChildren(menuBar, [trackMenu])
+    builder.setAttribute(trackMenu, kAXTitleAttribute as String, "Track")
+    builder.setChildren(trackMenu, [deleteMenuItem])
+    builder.setAttribute(deleteMenuItem, kAXTitleAttribute as String, "Delete Track")
+
+    builder.setAttribute(deleteSheet, kAXRoleAttribute as String, kAXSheetRole as String)
+    builder.setAttribute(deleteSheet, kAXDescriptionAttribute as String, "Delete Tracks")
+    builder.setAttribute(deletePrimary, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(deletePrimary, kAXTitleAttribute as String, "Delete Tracks and Content")
+    builder.setAttribute(deleteCancel, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(deleteCancel, kAXTitleAttribute as String, "Cancel")
+    builder.setAttribute(deleteCancel, kAXEnabledAttribute as String, true)
+    builder.setChildren(deleteSheet, [deletePrimary, deleteCancel])
+
+    builder.setAttribute(mandatorySheet, kAXRoleAttribute as String, kAXSheetRole as String)
+    builder.setAttribute(mandatorySheet, kAXDescriptionAttribute as String, "New Track")
+    builder.setAttribute(createPrimary, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(createPrimary, kAXTitleAttribute as String, "Create")
+    builder.setAttribute(createCancel, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(createCancel, kAXTitleAttribute as String, "Cancel")
+    builder.setAttribute(createCancel, kAXEnabledAttribute as String, false)
+    builder.setChildren(mandatorySheet, [createPrimary, createCancel])
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueHandler: { element, attribute in
+            guard CFEqual(element, window), attribute == "AXSheets" else { return nil }
+            switch state.get() {
+            case .noSheet: return .some([] as NSArray)
+            case .deleteConfirm: return .some([deleteSheet] as NSArray)
+            case .mandatoryNewTrack: return .some([mandatorySheet] as NSArray)
+            }
+        },
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            guard action == (kAXPressAction as String) else { return false }
+            if CFEqual(element, deleteMenuItem) {
+                state.set(.deleteConfirm)
+                return true
+            }
+            if CFEqual(element, deletePrimary) {
+                deleteConfirmPresses.increment()
+                builder.setChildren(trackHeaders, [])
+                state.set(.mandatoryNewTrack)
+                return true
+            }
+            if CFEqual(element, createPrimary) {
+                createPresses.increment()
+                return true
+            }
+            return false
+        }
+    )
+    return SequentialDeleteSheetFixture(
+        runtime: runtime,
+        deleteConfirmPresses: deleteConfirmPresses,
+        createPresses: createPresses
+    )
+}
+
+private struct ProjectNewStaleCreateFixture {
+    let runtime: AXLogicProElements.Runtime
+}
+
+private struct ProjectNewPerformedCreateWithoutTrackFixture {
+    let runtime: AXLogicProElements.Runtime
+}
+
+private func makeProjectNewPerformedCreateWithoutTrackFixture() -> ProjectNewPerformedCreateWithoutTrackFixture {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(280)
+    let window = builder.element(281)
+    let menuBar = builder.element(282)
+    let sheet = builder.element(283)
+    let create = builder.element(284)
+    let cancel = builder.element(285)
+    let actionIssued = LockedFlag()
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+    builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setChildren(menuBar, [])
+    builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(window, kAXSubroleAttribute as String, kAXStandardWindowSubrole as String)
+    builder.setAttribute(window, kAXTitleAttribute as String, "Untitled 1 - Tracks")
+    builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+    builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+    builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+    builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+    builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+    builder.setChildren(sheet, [create, cancel])
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueHandler: { element, attribute in
+            guard CFEqual(element, window), attribute == "AXSheets" else { return nil }
+            return actionIssued.get() ? .some([] as NSArray) : .some([sheet] as NSArray)
+        },
+        attributeValueResultHandler: { element, attribute in
+            guard actionIssued.get(),
+                  CFEqual(element, sheet),
+                  attribute == (kAXRoleAttribute as String)
+            else { return nil }
+            return .failure(AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue))
+        },
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            guard CFEqual(element, create), action == (kAXPressAction as String) else { return false }
+            actionIssued.set()
+            return true
+        }
+    )
+    return ProjectNewPerformedCreateWithoutTrackFixture(runtime: runtime)
+}
+
+private func makeProjectNewStaleCreateFixture() -> ProjectNewStaleCreateFixture {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(300)
+    let window = builder.element(301)
+    let sheet = builder.element(302)
+    let create = builder.element(303)
+    let cancel = builder.element(304)
+    let stale = AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+    builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+    builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+    builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+    builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+    builder.setChildren(sheet, [create, cancel])
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueHandler: { element, attribute in
+            guard CFEqual(element, window), attribute == "AXSheets" else { return nil }
+            return .some([sheet] as NSArray)
+        },
+        setAttributeHandler: nil,
+        performActionHandler: { _, _ in false },
+        performActionResultHandler: { element, action in
+            guard CFEqual(element, create), action == (kAXPressAction as String) else {
+                return .failure(stale)
+            }
+            return .failure(stale)
+        }
+    )
+    return ProjectNewStaleCreateFixture(runtime: runtime)
 }

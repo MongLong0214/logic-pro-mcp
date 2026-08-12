@@ -48,6 +48,35 @@ DEAD = re.compile(
     r'|==\s*(?:Optional\s*(?:<[^>]*>)?\s*)?\.some\s*\('
 )
 
+# swift-testing on this toolchain also fails to evaluate a labelled-tuple
+# field comparison inside a loop. In particular, this superficially sensible
+# table test passes even if `actual` is hard-coded:
+#
+#     for testCase in cases { #expect(actual == testCase.expected) }
+#
+# Catch that shape at the file level (rather than in an individual macro call)
+# so the loop variable and its labelled field can be related. Keep the matcher
+# deliberately narrow: it targets a loop variable's field on one side of a
+# `#expect` equality, which is the measured dead form, not ordinary live
+# comparisons between independent values.
+LABELLED_TUPLE_LOOP_EXPECT = re.compile(
+    r'\bfor\s+(?P<variable>[A-Za-z_]\w*)\s+in\s+(?P<collection>[A-Za-z_]\w*)\s*\{'
+    # Stay within a small, brace-free loop body. This is intentionally a
+    # detector for the measured table-test spelling, not a parser for every
+    # Swift loop: wandering past nested closures or the loop's closing brace
+    # would create false positives in unrelated tests.
+    r'(?:(?![{}])[^\n]*\n){0,20}?'
+    r'\s*#expect\s*\(\s*[A-Za-z_]\w*\s*==\s*(?P=variable)\.[A-Za-z_]\w*\s*\)',
+)
+
+# This compiler bug is specific to Bool expectations. Other labelled tuples
+# (for example, enum equality) remain ordinary live comparisons and must not
+# be swept into this Boolean-integrity lint.
+BOOL_LABELLED_TUPLE_COLLECTION = re.compile(
+    r'\b(?:let|var)\s+(?P<collection>[A-Za-z_]\w*)\s*:\s*'
+    r'\[\([^\]]*\bexpected\s*:\s*Bool\b[^\]]*\)\]'
+)
+
 def calls(text):
     """Yield (start_offset, call_text) for each #expect(/#require( with a balanced-paren arg."""
     for m in re.finditer(r'#(?:expect|require)\s*\(', text):
@@ -64,7 +93,14 @@ def calls(text):
         yield m.start(), text[m.start():j + 1]
 
 def blank_strings(s):
-    return re.sub(r'"(?:\\.|[^"\\])*"', '""', s)
+    # Preserve offsets (and newlines) because findings are reported against the
+    # original source. A short replacement shifts every later line lookup and
+    # can make a real loop finding appear to be inside an unrelated string.
+    return re.sub(
+        r'"(?:\\.|[^"\\])*"',
+        lambda match: ''.join('\n' if char == '\n' else ' ' for char in match.group()),
+        s,
+    )
 
 def strip_comments(s):
     # blank block and line comments so trivia between an operator and a literal
@@ -101,6 +137,21 @@ for f in sorted(glob.glob('Tests/**/*.swift', recursive=True)):
             continue
         if DEAD.search(drop_closures(strip_comments(blank_strings(call)))):
             hits.append((f, lineno, raw.strip()[:110]))
+    # The labelled-tuple loop form is dead independently of literal Bool
+    # comparisons, so scan the comment/string-stripped source after the macro
+    # pass above. Report the #expect line, not the loop line, for a direct fix.
+    cleaned = strip_comments(blank_strings(text))
+    bool_labelled_tuple_collections = {
+        match.group('collection')
+        for match in BOOL_LABELLED_TUPLE_COLLECTION.finditer(cleaned)
+    }
+    for match in LABELLED_TUPLE_LOOP_EXPECT.finditer(cleaned):
+        if match.group('collection') not in bool_labelled_tuple_collections:
+            continue
+        expect_offset = cleaned.find('#expect', match.start(), match.end())
+        lineno = bisect.bisect_right(starts, expect_offset)
+        raw = lines[lineno - 1]
+        hits.append((f, lineno, raw.strip()[:110]))
 
 if hits:
     print("::error::Dead swift-testing boolean expectations found (#393). These pass unconditionally.")

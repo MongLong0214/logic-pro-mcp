@@ -266,7 +266,7 @@ enum AXLocalePolicy {
     static let newTrackSheetDescription = LabelSet(
         canonical: "New Track",
         variants: ["새로운 트랙", "新規トラック"],
-        rationale: "Identifies the mandatory New Track sheet by AXDescription (with disabled-Cancel); read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`)."
+        rationale: "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled)."
     )
 
     /// #346/#350: primary destructive button on the "delete channel strips that

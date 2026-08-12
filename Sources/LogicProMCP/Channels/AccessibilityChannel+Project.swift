@@ -164,6 +164,16 @@ extension AccessibilityChannel {
             && isCreatedProjectWindowTitle(windowTitle)
     }
 
+    /// A mandatory-sheet Create action is an input to verification, not a fact
+    /// about the Project. Only a subsequent positive track-count observation
+    /// permits the response to say that the mandatory track was created.
+    static func mandatoryTrackCreationWasObserved(
+        createActionPerformed: Bool,
+        observedTrackCount: Int
+    ) -> Bool {
+        createActionPerformed && observedTrackCount > 0
+    }
+
     private static func exactCreatedProjectWindow(
         runtime: AXLogicProElements.Runtime
     ) -> AXUIElement? {
@@ -276,6 +286,10 @@ extension AccessibilityChannel {
         // bounded AX witness that the exact Empty Project selection completed.
         // The caller still performs independent Project-resource readback
         // before saving.
+        // A stale bound-sheet reference does not establish project causation.
+        // Keep the accepted reconciliation separate until a subsequent AX track
+        // count positively observes the mandatory track.
+        var mandatoryTrackCreatePerformed = false
         var createdTrack = false
         var witnessSummary: ModalReconcileWitnessSummary?
         let attempts = max(1, observationAttempts)
@@ -297,12 +311,15 @@ extension AccessibilityChannel {
                     if let witnessSummary {
                         extras["modal_reconciliation_witness"] = witnessSummary.envelopeValue
                     }
+                    if let actionFailure = outcome.actionFailure {
+                        extras["reconcile_action_error"] = actionFailure.diagnosticLabel
+                    }
                     return .error(HonestContract.encodeStateB(
                         reason: .readbackUnavailable,
                         extras: extras
                     ))
                 }
-                createdTrack = true
+                mandatoryTrackCreatePerformed = true
             case .unknownSheet, .deleteConfirm:
                 return .error(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
@@ -318,6 +335,15 @@ extension AccessibilityChannel {
                 ))
             case .none, .informationalAlert, .strayMenu:
                 break
+            }
+            // `allTrackHeaders` is the project-level fact we can safely report:
+            // do not promote a successful Create request or a stale sheet alone
+            // into `mandatory_track_created`.
+            if mandatoryTrackCreationWasObserved(
+                createActionPerformed: mandatoryTrackCreatePerformed,
+                observedTrackCount: AXLogicProElements.allTrackHeaders(runtime: runtime).count
+            ) {
+                createdTrack = true
             }
             if let current = exactCreatedProjectWindow(runtime: runtime) {
                 var extras: [String: Any] = [

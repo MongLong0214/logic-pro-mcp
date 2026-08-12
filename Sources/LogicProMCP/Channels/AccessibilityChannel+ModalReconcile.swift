@@ -34,12 +34,17 @@ extension AccessibilityChannel {
         let kind: ModalReconciliation.BlockingModalKind
         let decision: ModalReconciliation.ModalReconcileDecision
         let performed: Bool
+        /// True only when this pass actually issued the classifier-bound action.
+        /// A decision describes what would be safe; it is not evidence that a
+        /// press or key event was attempted.
+        let actionAttempted: Bool
         /// Per-poll post-action sheet observations. These stay in-process for
         /// debug logging and tests; response envelopes carry only
         /// `witnessSummary`, never this trace.
         let sheetWitness: [ModalSheetWitnessPoll]
         /// Compact, response-safe observation summary for the action's witness.
-        /// `performed` is true only when this summary includes `gone`.
+        /// For sheet actions, `gone` is only a candidate closure; `performed`
+        /// also requires a fresh complete modal scan to be clean.
         let witnessSummary: ModalReconcileWitnessSummary?
         /// Set only when an authorized action was declined at execution time.
         /// `performed == false` alone cannot distinguish "the decision was not to
@@ -55,6 +60,7 @@ extension AccessibilityChannel {
             kind: ModalReconciliation.BlockingModalKind,
             decision: ModalReconciliation.ModalReconcileDecision,
             performed: Bool,
+            actionAttempted: Bool = false,
             sheetWitness: [ModalSheetWitnessPoll] = [],
             witnessSummary: ModalReconcileWitnessSummary? = nil,
             refusal: AlertAcknowledgeRefusal? = nil,
@@ -63,6 +69,7 @@ extension AccessibilityChannel {
             self.kind = kind
             self.decision = decision
             self.performed = performed
+            self.actionAttempted = actionAttempted
             self.sheetWitness = sheetWitness
             self.witnessSummary = witnessSummary
             self.refusal = refusal
@@ -249,6 +256,7 @@ extension AccessibilityChannel {
             kind: kind,
             decision: decision,
             performed: result.performed,
+            actionAttempted: result.actionAttempted,
             sheetWitness: result.sheetWitness,
             witnessSummary: result.witnessSummary,
             refusal: result.refusal,
@@ -258,8 +266,10 @@ extension AccessibilityChannel {
 
     // MARK: - Signal reader
 
-    /// Read the main window's sheet into `ModalSignals`. When no sheet is
-    /// present the only remaining blocker we reconcile is a stray open menu.
+    /// Read the complete blocker set into `ModalSignals`. `.none` is emitted
+    /// only after the main-window sheet, every top-level dialog, and the menu
+    /// bar each produced a successful absent read; an unavailable source is an
+    /// unknown blocking sheet, never an empty answer.
     static func readModalSignals(
         runtime: AXLogicProElements.Runtime = .production
     ) -> ModalReconciliation.ModalSignals {
@@ -278,57 +288,158 @@ extension AccessibilityChannel {
         createButton: AXUIElement?,
         deleteButton: AXUIElement?
     ) {
-        guard let window = AXLogicProElements.mainWindow(runtime: runtime) else {
-            // No main-window sheet: the remaining blockers are a top-level
-            // informational alert (safe only when single-button) and a stray
-            // open menu. Alert signals are populated ONLY here, so any sheet
-            // above still outranks a top-level alert.
-            let alert = topLevelAlertSignals(runtime: runtime)
-            return (ModalReconciliation.ModalSignals(
-                sheetPresent: false,
-                sheetDescription: "",
-                createButtonPresent: false,
-                cancelButtonPresent: false,
-                cancelButtonEnabled: false,
-                deleteConfirmButtonPresent: false,
-                strayMenuOpen: detectStrayMenuOpen(runtime: runtime),
-                topLevelAlertPresent: alert.present,
-                topLevelAlertButtonCount: alert.buttonCount,
-                topLevelAlertPrimaryButton: alert.primaryButton,
-                createButtonTitle: "",
-                cancelButtonTitle: "",
-                deletePrimaryTitle: ""
-            ), alert.target, nil, nil, nil)
+        let window: AXUIElement
+        switch modalMainWindow(runtime: runtime) {
+        case .found(let observed):
+            window = observed
+        case .absent:
+            // No main window means no main-window sheet. The other two blocker kinds are still
+            // read below, so this stays a complete observation rather than an unknown one.
+            switch topLevelDialogRead(runtime: runtime) {
+            case .unreadable, .blocking:
+                return unreadableModalSignals()
+            case .informational(let target):
+                return noSheetModalSignals(
+                    strayMenuOpen: false,
+                    topLevelAlertPresent: true,
+                    topLevelAlertButtonCount: target.info.buttonTitles.count,
+                    topLevelAlertPrimaryButton: target.info.buttonTitles.first ?? "",
+                    alertTarget: target
+                )
+            case .none:
+                switch strayMenuWitnessObservation(runtime: runtime) {
+                case .present:
+                    return noSheetModalSignals(strayMenuOpen: true)
+                case .gone:
+                    return noSheetModalSignals(strayMenuOpen: false)
+                case .unreadable:
+                    return unreadableModalSignals()
+                }
+            }
+        case .unreadable:
+            return unreadableModalSignals()
         }
 
         switch firstSheetLookup(in: window, maxDepth: 32, runtime: runtime.ax) {
+        case .found(let sheet):
+            // A sheet already proves this is not a clean pass. It outranks the
+            // other blocker kinds, so no action target from another window is
+            // carried into this classification.
+            return readModalSignals(from: sheet, runtime: runtime)
+        case .incomplete, .unreadable(_):
+            return unreadableModalSignals()
         case .absent:
-            // No main-window sheet: the remaining blockers are a top-level
-            // informational alert (safe only when single-button) and a stray
-            // open menu. Alert signals are populated ONLY here, so any sheet
-            // above still outranks a top-level alert.
-            let alert = topLevelAlertSignals(runtime: runtime)
-            return (ModalReconciliation.ModalSignals(
+            break
+        }
+
+        // A sheet is absent only after the status-preserving traversal above.
+        // To return `.none`, the other two blocker kinds must now also be read
+        // completely. A present dialog/menu is already sufficient to block; a
+        // failed read is represented as an unknown sheet and cannot certify A.
+        switch topLevelDialogRead(runtime: runtime) {
+        case .unreadable, .blocking:
+            return unreadableModalSignals()
+        case .informational(let target):
+            return noSheetModalSignals(
+                strayMenuOpen: false,
+                topLevelAlertPresent: true,
+                topLevelAlertButtonCount: target.info.buttonTitles.count,
+                topLevelAlertPrimaryButton: target.info.buttonTitles.first ?? "",
+                alertTarget: target
+            )
+        case .none:
+            switch strayMenuWitnessObservation(runtime: runtime) {
+            case .present:
+                return noSheetModalSignals(strayMenuOpen: true)
+            case .gone:
+                return noSheetModalSignals(strayMenuOpen: false)
+            case .unreadable:
+                return unreadableModalSignals()
+            }
+        }
+    }
+
+    /// This intentionally reads the app's `AXMainWindow` directly. The general
+    /// `mainWindow` helper is a best-effort arrange-window finder and its `nil`
+    /// answer is useful to ordinary UI discovery; here a missing or failed main
+    /// window read cannot prove that a sheet is absent.
+    /// Three outcomes, not two. Collapsing "there is no main window" into "the main window could
+    /// not be read" made `project.new` report an unknown blocking sheet during the window it exists
+    /// to describe: between choosing a template and Logic publishing the arrange window there IS no
+    /// main window, and that is an answer. Only a failed read is unreadable.
+    private enum ModalMainWindowLookup {
+        case found(AXUIElement)
+        case absent
+        case unreadable
+    }
+
+    private static func modalMainWindow(
+        runtime: AXLogicProElements.Runtime
+    ) -> ModalMainWindowLookup {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return .unreadable }
+        switch AXHelpers.getAttributeResult(
+            app, kAXMainWindowAttribute as String, runtime: runtime.ax
+        ) as Result<AXUIElement?, AXHelpers.AXStatusError> {
+        case .success(.some(let window)):
+            return .found(window)
+        case .success(.none):
+            return .absent
+        case .failure(let error) where axStatusIsDefinitiveAbsence(error):
+            return .absent
+        case .failure:
+            return .unreadable
+        }
+    }
+
+    private static func noSheetModalSignals(
+        strayMenuOpen: Bool,
+        topLevelAlertPresent: Bool = false,
+        topLevelAlertButtonCount: Int = 0,
+        topLevelAlertPrimaryButton: String = "",
+        alertTarget: AXLogicProElements.BlockingDialogTarget? = nil
+    ) -> (
+        signals: ModalReconciliation.ModalSignals,
+        alertTarget: AXLogicProElements.BlockingDialogTarget?,
+        sheet: AXUIElement?,
+        createButton: AXUIElement?,
+        deleteButton: AXUIElement?
+    ) {
+        (
+            ModalReconciliation.ModalSignals(
                 sheetPresent: false,
                 sheetDescription: "",
                 createButtonPresent: false,
                 cancelButtonPresent: false,
                 cancelButtonEnabled: false,
                 deleteConfirmButtonPresent: false,
-                strayMenuOpen: detectStrayMenuOpen(runtime: runtime),
-                topLevelAlertPresent: alert.present,
-                topLevelAlertButtonCount: alert.buttonCount,
-                topLevelAlertPrimaryButton: alert.primaryButton,
+                strayMenuOpen: strayMenuOpen,
+                topLevelAlertPresent: topLevelAlertPresent,
+                topLevelAlertButtonCount: topLevelAlertButtonCount,
+                topLevelAlertPrimaryButton: topLevelAlertPrimaryButton,
                 createButtonTitle: "",
                 cancelButtonTitle: "",
                 deletePrimaryTitle: ""
-            ), alert.target, nil, nil, nil)
-        case .incomplete, .unreadable(_):
-            // A bounded traversal that did not visit every subtree, or a
-            // malformed/failed read, cannot prove that a sheet is absent. Feed
-            // the pure classifier an unknown blocking sheet so callers fail
-            // closed rather than treating this as a clean modal observation.
-            return (ModalReconciliation.ModalSignals(
+            ),
+            alertTarget,
+            nil,
+            nil,
+            nil
+        )
+    }
+
+    /// The common fail-closed projection for any incomplete blocker read.
+    /// `unknownSheet` is the pure classifier's established representation for
+    /// an unknown blocker, including an unreadable source rather than a literal
+    /// sheet node.
+    private static func unreadableModalSignals() -> (
+        signals: ModalReconciliation.ModalSignals,
+        alertTarget: AXLogicProElements.BlockingDialogTarget?,
+        sheet: AXUIElement?,
+        createButton: AXUIElement?,
+        deleteButton: AXUIElement?
+    ) {
+        (
+            ModalReconciliation.ModalSignals(
                 sheetPresent: true,
                 sheetDescription: "",
                 createButtonPresent: false,
@@ -342,13 +453,12 @@ extension AccessibilityChannel {
                 createButtonTitle: "",
                 cancelButtonTitle: "",
                 deletePrimaryTitle: ""
-            ), nil, nil, nil, nil)
-        case .found(let sheet):
-            return readModalSignals(
-                from: sheet,
-                runtime: runtime
-            )
-        }
+            ),
+            nil,
+            nil,
+            nil,
+            nil
+        )
     }
 
     private static func readModalSignals(
@@ -411,21 +521,74 @@ extension AccessibilityChannel {
         ), nil, sheet, createButton?.element, deleteButton?.element)
     }
 
-    /// Detect a TOP-LEVEL informational `AXDialog` alert (NOT a main-window
-    /// sheet). Reuses `blockingDialogInfo` — which already scans top-level
-    /// windows, excludes plugin-editor / keyboard-layout overlays, and returns
-    /// the dialog's titled buttons — so the single-button safety gate applies to
-    /// its `buttonTitles.count`. Restricted to the `AXDialog` subrole so it stays
-    /// consistent with the executor's verified `subrole is "AXDialog"` targeting
-    /// (an `AXSystemDialog` we could not dismiss is deliberately not claimed).
-    private static func topLevelAlertSignals(
+    /// A complete top-level scan can find an auto-acknowledgeable AXDialog, a
+    /// different blocking dialog (notably AXSystemDialog), no dialog, or fail.
+    /// The latter two must never be conflated: only `.none` participates in a
+    /// clean State-A observation.
+    private enum TopLevelDialogRead {
+        case none
+        case informational(AXLogicProElements.BlockingDialogTarget)
+        case blocking
+        case unreadable
+    }
+
+    /// Read every top-level window with a status-preserving subrole lookup. An
+    /// `AXSystemDialog` remains a blocker even though this reconciler has no
+    /// authorised action for it. An unreadable `AXWindows` list cannot be
+    /// replaced with focused/main-window best-effort discovery: that would
+    /// leave other top-level dialogs unexamined and falsely certify a clean
+    /// blocker set.
+    private static func topLevelDialogRead(
         runtime: AXLogicProElements.Runtime
-    ) -> (present: Bool, buttonCount: Int, primaryButton: String, target: AXLogicProElements.BlockingDialogTarget?) {
-        guard let target = AXLogicProElements.blockingDialogTarget(runtime: runtime),
-              target.info.role == (kAXDialogSubrole as String) else {
-            return (false, 0, "", nil)
+    ) -> TopLevelDialogRead {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else {
+            return .unreadable
         }
-        return (true, target.info.buttonTitles.count, target.info.buttonTitles.first ?? "", target)
+        switch AXHelpers.getAttributeResult(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax
+        ) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+        case .success(let windows):
+            return topLevelDialogRead(in: windows ?? [], runtime: runtime)
+        case .failure(let error) where error.raw == AXError.noValue.rawValue:
+            return .none
+        case .failure:
+            return .unreadable
+        }
+    }
+
+    private static func topLevelDialogRead(
+        in windows: [AXUIElement],
+        runtime: AXLogicProElements.Runtime
+    ) -> TopLevelDialogRead {
+        var firstDialog: (element: AXUIElement, subrole: String)?
+        for window in windows {
+            switch AXHelpers.getAttributeResult(
+                window, kAXSubroleAttribute as String, runtime: runtime.ax
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case .success(let subrole):
+                guard let subrole else { continue }
+                if subrole == (kAXDialogSubrole as String)
+                    || subrole == (kAXSystemDialogSubrole as String) {
+                    if firstDialog == nil {
+                        firstDialog = (window, subrole)
+                    }
+                }
+            case .failure(let error) where axStatusIsDefinitiveAbsence(error):
+                continue
+            case .failure:
+                return .unreadable
+            }
+        }
+        guard let firstDialog else { return .none }
+        guard firstDialog.subrole == (kAXDialogSubrole as String),
+              let target = AXLogicProElements.blockingDialogTarget(runtime: runtime),
+              target.info.role == (kAXDialogSubrole as String)
+        else {
+            // Includes AXSystemDialog and any dialog whose identity/buttons
+            // cannot be safely bound to the single-button acknowledge path.
+            return .blocking
+        }
+        return .informational(target)
     }
 
     private enum SheetLookup {
@@ -774,20 +937,11 @@ extension AccessibilityChannel {
             ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Best-effort detection of a menu bar menu left open: a menu bar item whose
-    /// menu is showing reports `AXSelected == true`. Conservative — only true on
-    /// a positively-observed selected item, so a spurious Escape is never sent.
-    private static func detectStrayMenuOpen(runtime: AXLogicProElements.Runtime) -> Bool {
-        guard let menuBar = AXLogicProElements.getMenuBar(runtime: runtime) else { return false }
-        return AXHelpers.getChildren(menuBar, runtime: runtime.ax).contains { item in
-            (AXHelpers.getAttribute(item, kAXSelectedAttribute, runtime: runtime.ax) as Bool?) == true
-        }
-    }
-
     // MARK: - Executor
 
     private struct ModalActionPerformResult {
         let performed: Bool
+        let actionAttempted: Bool
         let refusal: AlertAcknowledgeRefusal?
         let actionFailure: AXHelpers.AXActionError?
         let sheetWitness: [ModalSheetWitnessPoll]
@@ -807,7 +961,7 @@ extension AccessibilityChannel {
         switch decision {
         case .noAction, .failClosed:
             return ModalActionPerformResult(
-                performed: false, refusal: nil, actionFailure: nil, sheetWitness: [], witnessSummary: nil
+                performed: false, actionAttempted: false, refusal: nil, actionFailure: nil, sheetWitness: [], witnessSummary: nil
             )
         case .clickCreate:
             let action = clickNewTrackCreateButton(
@@ -827,7 +981,8 @@ extension AccessibilityChannel {
             }
             let summary = ModalReconcileWitnessSummary(sheetWitness: witness)
             return ModalActionPerformResult(
-                performed: action.accepted && summary.observedGone,
+                performed: action.accepted && summary.observedGone && freshCompleteModalReadIsClear(runtime: runtime),
+                actionAttempted: action.attempted,
                 refusal: nil,
                 actionFailure: action.failure,
                 sheetWitness: witness,
@@ -851,7 +1006,8 @@ extension AccessibilityChannel {
             }
             let summary = ModalReconcileWitnessSummary(sheetWitness: witness)
             return ModalActionPerformResult(
-                performed: action.accepted && summary.observedGone,
+                performed: action.accepted && summary.observedGone && freshCompleteModalReadIsClear(runtime: runtime),
+                actionAttempted: action.attempted,
                 refusal: nil,
                 actionFailure: action.failure,
                 sheetWitness: witness,
@@ -866,6 +1022,7 @@ extension AccessibilityChannel {
             )
             return ModalActionPerformResult(
                 performed: result.pressed && summary.observedGone,
+                actionAttempted: result.attempted,
                 refusal: result.refusal,
                 actionFailure: result.actionFailure,
                 sheetWitness: [],
@@ -880,12 +1037,24 @@ extension AccessibilityChannel {
             )
             return ModalActionPerformResult(
                 performed: actionAccepted && summary.observedGone,
+                actionAttempted: true,
                 refusal: nil,
                 actionFailure: nil,
                 sheetWitness: [],
                 witnessSummary: summary
             )
         }
+    }
+
+    /// An invalid reference says only that the captured AX object can no longer
+    /// be queried. Before that event can contribute to `performed`, reread the
+    /// entire current blocker set: normal closure is the one case where the
+    /// fresh, complete scan is clean. App termination, AX-tree regeneration,
+    /// and replacement by another sheet all remain non-clean.
+    private static func freshCompleteModalReadIsClear(
+        runtime: AXLogicProElements.Runtime
+    ) -> Bool {
+        ModalReconciliation.classify(readModalSignalsAndAlertTarget(runtime: runtime).signals) == .none
     }
 
     /// Press the mandatory New Track sheet's resolved `Create` / `생성` element.
@@ -895,13 +1064,13 @@ extension AccessibilityChannel {
     private static func clickNewTrackCreateButton(
         createButton: AXUIElement?,
         runtime: AXLogicProElements.Runtime
-    ) -> (accepted: Bool, failure: AXHelpers.AXActionError?) {
-        guard let createButton else { return (false, nil) }
+    ) -> (attempted: Bool, accepted: Bool, failure: AXHelpers.AXActionError?) {
+        guard let createButton else { return (false, false, nil) }
         switch AXHelpers.performActionResult(createButton, kAXPressAction as String, runtime: runtime.ax) {
         case .success:
-            return (true, nil)
+            return (true, true, nil)
         case .failure(let error):
-            return (false, error)
+            return (true, false, error)
         }
     }
 
@@ -911,13 +1080,13 @@ extension AccessibilityChannel {
     private static func confirmDeleteTracksSheet(
         deleteButton: AXUIElement?,
         runtime: AXLogicProElements.Runtime
-    ) -> (accepted: Bool, failure: AXHelpers.AXActionError?) {
-        guard let deleteButton else { return (false, nil) }
+    ) -> (attempted: Bool, accepted: Bool, failure: AXHelpers.AXActionError?) {
+        guard let deleteButton else { return (false, false, nil) }
         switch AXHelpers.performActionResult(deleteButton, kAXPressAction as String, runtime: runtime.ax) {
         case .success:
-            return (true, nil)
+            return (true, true, nil)
         case .failure(let error):
-            return (false, error)
+            return (true, false, error)
         }
     }
 
@@ -949,8 +1118,8 @@ extension AccessibilityChannel {
     private static func acknowledgeTopLevelAlert(
         target: AXLogicProElements.BlockingDialogTarget?,
         runtime: AXLogicProElements.Runtime
-    ) -> (pressed: Bool, refusal: AlertAcknowledgeRefusal?, actionFailure: AXHelpers.AXActionError?) {
-        guard let target else { return (false, .targetUnavailable, nil) }
+    ) -> (attempted: Bool, pressed: Bool, refusal: AlertAcknowledgeRefusal?, actionFailure: AXHelpers.AXActionError?) {
+        guard let target else { return (false, false, .targetUnavailable, nil) }
 
         // Re-resolve the app's current blocking dialog and require it to be the
         // SAME element. This is what makes "the dialog was replaced" and "several
@@ -958,24 +1127,24 @@ extension AccessibilityChannel {
         // returns the first blocking dialog, so a newly-frontmost one yields a
         // different element and fails the identity check below.
         guard let current = AXLogicProElements.blockingDialogTarget(runtime: runtime) else {
-            return (false, .targetGone, nil)
+            return (false, false, .targetGone, nil)
         }
         guard CFEqual(current.element, target.element) else {
-            return (false, .targetChanged, nil)
+            return (false, false, .targetChanged, nil)
         }
 
         // Re-read the count from the live element rather than trusting the count
         // captured at classification time.
         let buttons = AXLogicProElements.titledButtons(of: current.element, runtime: runtime.ax)
         guard buttons.count == 1, let only = buttons.first else {
-            return (false, .buttonCountChanged, nil)
+            return (false, false, .buttonCountChanged, nil)
         }
 
         switch AXHelpers.performActionResult(only.element, kAXPressAction as String, runtime: runtime.ax) {
         case .success:
-            return (true, nil, nil)
+            return (true, true, nil, nil)
         case .failure(let error):
-            return (false, .pressFailed, error)
+            return (true, false, .pressFailed, error)
         }
     }
 

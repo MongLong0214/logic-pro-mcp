@@ -1452,9 +1452,26 @@ extension AccessibilityChannel {
     /// its close witness concerns the action's target, while State A needs a
     /// fresh observation of the complete blocker set.
     static func deletionModalObservationIsSettledClean(
-        _ outcome: ModalReconcileOutcome
+        _ outcome: ModalReconcileOutcome,
+        arrangeWindowPresent: Bool
     ) -> Bool {
-        outcome.kind == .none
+        // The modal read answers "no blocker", which is truthful even when there is no main window
+        // to hold one — during `project.new` there genuinely is not one yet. A track deletion is
+        // different: the count it just read comes FROM the arrange window, so a decrement observed
+        // while that window cannot be resolved is a transient AX failure wearing the shape of a
+        // successful delete. Require the window here, where the requirement actually belongs,
+        // rather than making every caller of the modal read pretend absence is unreadable.
+        outcome.kind == .none && arrangeWindowPresent
+    }
+
+    /// Two complete clean reads make the delete State-A gate temporal rather
+    /// than a single racy snapshot. The delete poll cadence is one second, so
+    /// a decrement pays one additional ~1s observation interval before State A
+    /// can be certified.
+    static func deletionCleanObservationStreakIsSettled(
+        _ consecutiveCleanObservationCount: Int
+    ) -> Bool {
+        consecutiveCleanObservationCount >= 2
     }
 
     static func defaultDeleteTrack(
@@ -1488,21 +1505,25 @@ extension AccessibilityChannel {
         // #346: a channel-strip delete raises a "delete channel strips…" confirm
         // sheet, and a delete that empties the project raises the mandatory New
         // Track sheet (Cancel disabled, Escape inert) — both wedge Logic until
-        // reconciled. Each poll reads the modal state; after one blocker action it
-        // observes rather than repeats the action. Reconciliation is ADDITIVE:
+        // reconciled. Each sheet KIND receives at most one direct action while
+        // it remains visible; a sequential delete-confirm → mandatory-New-Track
+        // transition can therefore reconcile both without double-pressing either.
+        // Reconciliation is ADDITIVE:
         // State A below still requires a real decrement, so auto-Creating a
         // replacement track on delete-to-zero correctly stays an honest State B
         // rather than a fabricated success.
         var reconcileKind = ModalReconciliation.BlockingModalKind.none
         var reconcileAction = "none"
+        var reconcileActionKind = ModalReconciliation.BlockingModalKind.none
         // #453: an acknowledgement the executor declined must reach the envelope.
         // Kept beside kind/action so a refusal on any attempt survives to the
         // result, rather than being overwritten by a later clean pass.
         var reconcileRefusal: AlertAcknowledgeRefusal?
         var reconcileActionFailure: AXHelpers.AXActionError?
         var reconcileWitnessSummary: ModalReconcileWitnessSummary?
-        var blockingModalActionAttempted = false
+        var actionAttemptedModalKinds: Set<String> = []
         var mandatoryNewTrackReconciliationPerformed = false
+        var consecutiveCleanModalObservations = 0
 
         var lastObservedCount = beforeCount
         for attempt in 0..<4 {
@@ -1510,35 +1531,63 @@ extension AccessibilityChannel {
 
             let currentCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
             lastObservedCount = currentCount
-            // Read the count before reconciliation, then require the following
-            // observation to be clean. This catches the last-track New Track
-            // sheet that attaches after the count changes, and observing rather
-            // than re-pressing after a blocker avoids compounding an action whose
-            // effect was not witnessed.
+            // Observe first, then action only once for that visible sheet kind.
+            // This bounds a Create press without globally wedging a later,
+            // different blocker in the same delete operation.
+            let observed = observeModalAfterMutation(isDeleteContext: true, runtime: runtime)
             let outcome: ModalReconcileOutcome
-            if blockingModalActionAttempted {
-                outcome = observeModalAfterMutation(isDeleteContext: true, runtime: runtime)
-            } else {
+            if observed.kind != .none,
+               !actionAttemptedModalKinds.contains(reconcileKindLabel(observed.kind)) {
                 outcome = await reconcileAfterMutation(isDeleteContext: true, runtime: runtime)
+                if outcome.actionAttempted {
+                    actionAttemptedModalKinds.insert(reconcileKindLabel(outcome.kind))
+                }
+            } else {
+                outcome = observed
             }
             if outcome.kind != .none {
                 reconcileKind = outcome.kind
-                reconcileAction = reconcileActionLabel(outcome.decision)
+                // Never claim a decision label as an action when no direct
+                // press/key event was issued. If this is a later observation of
+                // the same sheet kind, retain its earlier actual action label;
+                // if it is a new unacted kind, clear the old kind's label.
+                if outcome.actionAttempted {
+                    reconcileAction = reconcileActionLabel(outcome.decision)
+                    reconcileActionKind = outcome.kind
+                } else if reconcileActionKind != outcome.kind {
+                    reconcileAction = "none"
+                    reconcileActionKind = .none
+                }
                 if let refusal = outcome.refusal { reconcileRefusal = refusal }
                 if let actionFailure = outcome.actionFailure { reconcileActionFailure = actionFailure }
-                if let witnessSummary = outcome.witnessSummary {
-                    reconcileWitnessSummary = witnessSummary
+                // A current unacted *new* blocker must not inherit a witness
+                // from a prior sheet. A repeated observation of the same kind
+                // retains its own prior direct-action witness.
+                if outcome.actionAttempted || reconcileActionKind != outcome.kind {
+                    reconcileWitnessSummary = outcome.witnessSummary
                 }
-                blockingModalActionAttempted = true
-                if outcome.kind == .mandatoryNewTrack {
+                if outcome.kind == .mandatoryNewTrack, outcome.actionAttempted {
                     mandatoryNewTrackReconciliationPerformed = outcome.performed
                 }
             } else {
-                blockingModalActionAttempted = false
+                // A complete clean pass proves the prior visible kinds closed,
+                // so a later instance is eligible for one fresh direct action.
+                actionAttemptedModalKinds.removeAll()
+            }
+            if currentCount < beforeCount,
+               deletionModalObservationIsSettledClean(
+                   outcome,
+                   arrangeWindowPresent: AXLogicProElements.mainWindow(runtime: runtime) != nil
+               ) {
+                consecutiveCleanModalObservations += 1
+            } else {
+                consecutiveCleanModalObservations = 0
             }
             if deletionCountCanCertifyStateA(
                 observedTrackCountDecreased: currentCount < beforeCount,
-                settledCleanModalObservation: deletionModalObservationIsSettledClean(outcome)
+                settledCleanModalObservation: deletionCleanObservationStreakIsSettled(
+                    consecutiveCleanModalObservations
+                )
             ) {
                 extras["track_count_after"] = currentCount
                 extras["observed_delta"] = currentCount - beforeCount

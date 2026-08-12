@@ -110,8 +110,9 @@ private struct AlertFixture {
     }
 }
 
-/// Build a Logic app root whose only windows are dialogs, so `mainWindow`
-/// resolves to nil and the reader takes the top-level-alert branch.
+/// Build a Logic app root with a readable sheet host plus a top-level dialog.
+/// A clean read now requires the main window even when the actionable blocker
+/// is an alert, so this fixture models the ordinary arrange+dialog topology.
 private func makeAlertFixture(
     initialButtonTitles: [String],
     laterButtonTitles: [String]? = nil,
@@ -125,7 +126,10 @@ private func makeAlertFixture(
     let app = builder.element(1)
     let dialog = builder.element(2)
     let otherDialog = builder.element(3)
+    let arrange = builder.element(4)
 
+    builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+    builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
     builder.setAttribute(dialog, kAXSubroleAttribute as String, kAXDialogSubrole as String)
     builder.setAttribute(otherDialog, kAXSubroleAttribute as String, kAXDialogSubrole as String)
 
@@ -149,13 +153,13 @@ private func makeAlertFixture(
 
     let laterWindows: [AXUIElement]
     if removeDialogAfterClassification {
-        laterWindows = []
+        laterWindows = [arrange]
     } else if replaceDialogAfterClassification {
-        laterWindows = [otherDialog]
+        laterWindows = [arrange, otherDialog]
     } else {
-        laterWindows = [dialog]
+        laterWindows = [arrange, dialog]
     }
-    let windows = PhasedValue(before: [dialog], after: laterWindows)
+    let windows = PhasedValue(before: [arrange, dialog], after: laterWindows)
     let dismissal = AlertDismissal()
     let dialogChildren = PhasedValue(
         before: initialButtons,
@@ -203,7 +207,10 @@ private func makeAlertFixture(
                 }
                 return accepted
             },
-            childCount: base.ax.childCount
+            childCount: base.ax.childCount,
+            childrenResult: base.ax.childrenResult,
+            attributeValueResult: base.ax.attributeValueResult,
+            performActionResult: base.ax.performActionResult
         ),
         executeAppleScript: base.executeAppleScript
     )

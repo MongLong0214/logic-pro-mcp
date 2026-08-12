@@ -6,30 +6,34 @@ private let systemEventsAutomationDeniedHint =
     "System Events Automation is denied for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). Grant it in System Settings > Privacy & Security > Automation, or run the server/harness under a responsible app that already has it (Terminal, iTerm, or your editor). Logic Pro automation being granted is separate and not sufficient."
 
 @Test func testSystemEventsAutomationDeniedClassifierMatchesKnownSignals() {
-    let cases: [(message: String, expected: Bool)] = [
-        ("execution error: osascript is not allowed to send Apple events to System Events. (-1743)", true),
-        ("Not authorized to send Apple events to System Events.", true),
-        ("errAEEventNotPermitted while talking to System Events", true),
+    let deniedMessages = [
+        "execution error: osascript is not allowed to send Apple events to System Events. (-1743)",
+        "Not authorized to send Apple events to System Events.",
+        "errAEEventNotPermitted while talking to System Events",
     ]
 
-    for testCase in cases {
-        let actual = AppleScriptErrorClassifier.isSystemEventsAutomationDenied(testCase.message)
-        #expect(actual == testCase.expected)
+    for message in deniedMessages {
+        let actual = AppleScriptErrorClassifier.isSystemEventsAutomationDenied(message)
+        // Mutation source: hard-code `isSystemEventsAutomationDenied` to false;
+        // each bare positive assertion fails.
+        #expect(actual)
     }
 }
 
 @Test func testSystemEventsAutomationDeniedClassifierRejectsUnrelatedErrors() {
-    let cases: [(message: String, expected: Bool)] = [
-        ("send Apple events to System Events", false),
-        ("Exported MIDI file take-1743.mid", false),
-        ("The operation could not be completed. -1743", false),
-        ("Logic Pro got an error: not authorized to send Apple events to Logic Pro. (-1743)", false),
-        ("System Events got an error: Can't get window 1. (-1728)", false),
+    let unrelatedMessages = [
+        "send Apple events to System Events",
+        "Exported MIDI file take-1743.mid",
+        "The operation could not be completed. -1743",
+        "Logic Pro got an error: not authorized to send Apple events to Logic Pro. (-1743)",
+        "System Events got an error: Can't get window 1. (-1728)",
     ]
 
-    for testCase in cases {
-        let actual = AppleScriptErrorClassifier.isSystemEventsAutomationDenied(testCase.message)
-        #expect(actual == testCase.expected)
+    for message in unrelatedMessages {
+        let actual = AppleScriptErrorClassifier.isSystemEventsAutomationDenied(message)
+        // Mutation source: hard-code `isSystemEventsAutomationDenied` to true;
+        // each bare negative assertion fails.
+        #expect(!actual)
     }
 }
 
