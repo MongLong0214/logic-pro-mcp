@@ -106,6 +106,7 @@ extension AccessibilityChannel {
         switch pickDeleteFromMarkerListEditMenu(
             in: window,
             runtime: runtime.ax,
+            mouse: mouse,
             menuCloseWasNotObserved: &menuCloseWasNotObserved
         ) {
         case .pickIssued:
@@ -334,6 +335,7 @@ extension AccessibilityChannel {
     private static func pickDeleteFromMarkerListEditMenu(
         in window: AXUIElement,
         runtime: AXHelpers.Runtime,
+        mouse: AXMouseHelper.Runtime,
         menuCloseWasNotObserved: inout Bool
     ) -> MarkerListEditMenuDeleteOutcome {
         let controls = AXHelpers.findAllDescendants(
@@ -365,24 +367,25 @@ extension AccessibilityChannel {
 
             guard let entry = markerListDeleteMenuItem(in: menu, runtime: runtime) else {
                 menuCloseWasNotObserved = !dismissMarkerListEditMenu(
-                    menu, from: control, runtime: runtime
+                    menu, from: control, runtime: runtime, mouse: mouse
                 )
                 return .exactEntryNotFound
             }
             guard markerListMenuItemEnabledForActuation(entry, runtime: runtime) else {
                 menuCloseWasNotObserved = !dismissMarkerListEditMenu(
-                    menu, from: control, runtime: runtime
+                    menu, from: control, runtime: runtime, mouse: mouse
                 )
                 return .entryNotActuable
             }
 
             // Do not use the return value to select another actuator. This one call is the write.
             _ = AXHelpers.performAction(entry, kAXPickAction as String, runtime: runtime)
-            // AXPick normally closes a menu itself. Observe that instead of assuming it did; if
-            // the menu remains, use its own AXCancel action and require the same observation.
-            if markerListEditMenu(under: control, runtime: runtime) != nil {
+            // AXPick normally closes a menu itself. Only a successful read that finds no menu is
+            // proof of that disappearance; an unreadable child list is still open/unknown and
+            // requires cleanup before this run can proceed.
+            if markerListEditMenuClosureState(under: control, runtime: runtime) != .closed {
                 menuCloseWasNotObserved = !dismissMarkerListEditMenu(
-                    menu, from: control, runtime: runtime
+                    menu, from: control, runtime: runtime, mouse: mouse
                 )
             }
             return .pickIssued
@@ -402,15 +405,51 @@ extension AccessibilityChannel {
         }
     }
 
-    /// Dismiss the exact menu this run observed, then read the opener's own child list again.
-    /// An AXCancel status is not proof of closure, just as AXPick status is not proof of selection.
+    /// The only state that authorises a fallthrough is an AX children read that succeeds and finds
+    /// no menu below the exact opener. A failed read is open-or-unknown, never closed.
+    private enum MarkerListEditMenuClosureState {
+        case closed
+        case openOrUnknown
+    }
+
+    /// This is deliberately separate from `markerListEditMenu`: ordinary menu discovery remains
+    /// best-effort, while a disappearance claim must preserve the AX read status.
+    private static func markerListEditMenuClosureState(
+        under control: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> MarkerListEditMenuClosureState {
+        switch AXHelpers.childrenResult(control, runtime: runtime) {
+        case .success(let children):
+            return children.contains {
+                (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
+            } ? .openOrUnknown : .closed
+        case .failure:
+            return .openOrUnknown
+        }
+    }
+
+    /// Dismiss the exact menu this run observed, then prove it disappeared from the opener's
+    /// child list. AXCancel is only the first mechanism: like transport's `dismissOpenMenu`, use
+    /// a bounded Escape escalation and observe after every attempt.
     private static func dismissMarkerListEditMenu(
         _ menu: AXUIElement,
         from control: AXUIElement,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        mouse: AXMouseHelper.Runtime
     ) -> Bool {
         _ = AXHelpers.performAction(menu, kAXCancelAction as String, runtime: runtime)
-        return markerListEditMenu(under: control, runtime: runtime) == nil
+        if markerListEditMenuClosureState(under: control, runtime: runtime) == .closed {
+            return true
+        }
+
+        for _ in 0..<3 {
+            AXMouseHelper.pressEscape(runtime: mouse)
+            mouse.sleepMicros(100_000)
+            if markerListEditMenuClosureState(under: control, runtime: runtime) == .closed {
+                return true
+            }
+        }
+        return false
     }
 
     /// Only direct entries of the observed Marker List Edit menu are candidates. In particular,
