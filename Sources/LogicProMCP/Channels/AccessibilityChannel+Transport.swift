@@ -1254,6 +1254,12 @@ extension AccessibilityChannel {
             // leaves the menu state UNKNOWN, and unknown is not safe: the slider would actuate into
             // whatever is on screen. Try once to observe and clear any open menu; only a state
             // observed CLOSED lets the fallback proceed.
+            // If Logic is not running at all, no menu of its can be open, and the script's death
+            // says nothing about menu state. Only when the app IS there does an unobservable menu
+            // become a reason to withhold the fallback.
+            guard ProcessUtils.logicProPID() != nil else {
+                return .failed(.failure(.executionFailed))
+            }
             switch await observeAndClearStrayMenu() {
             case .closed:
                 return .failed(.failure(.executionFailed))

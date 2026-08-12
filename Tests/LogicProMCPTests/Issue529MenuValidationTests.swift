@@ -445,7 +445,7 @@ func aDeadScriptMustNotAuthoriseTheSliderOnAnUnknownMenuState() throws {
         encoding: .utf8
     )
     let errorBranch = try #require(source.range(of: "case .error:"))
-    let tail = String(source[errorBranch.upperBound...].prefix(700))
+    let tail = String(source[errorBranch.upperBound...].prefix(1200))
 
     // The death path must consult an observation before classifying.
     #expect(tail.contains("observeAndClearStrayMenu"))
@@ -455,4 +455,7 @@ func aDeadScriptMustNotAuthoriseTheSliderOnAnUnknownMenuState() throws {
     #expect(safeAt.lowerBound < unsafeAt.lowerBound)
     #expect(tail.contains("case .closed:"))
     #expect(tail.contains("case .openOrUnknown:"))
+    // An app that is not running has no menu of its own open, so its absence must NOT be read as
+    // an unknown menu state — that is what made a Logic-less CI environment refuse the fallback.
+    #expect(tail.contains("ProcessUtils.logicProPID() != nil"))
 }
