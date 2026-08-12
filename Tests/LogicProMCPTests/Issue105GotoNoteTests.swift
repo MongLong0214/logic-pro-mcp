@@ -185,53 +185,71 @@ struct Issue105GotoNoteTests {
 
     @Test("unreadable six-level bar and beat sliders do not become observed zeroes")
     func unreadablePositionSlidersDoNotInventObservedComponents() throws {
-        // Source mutation: restore `extractSliderValue(slider, runtime: runtime) ?? 0` for either
-        // component. The missing Bar value and unparseable Beat value would then fabricate `0.0`
-        // and falsely mark both components observed.
-        let builder = FakeAXRuntimeBuilder()
-        let app = builder.element(1060)
-        let window = builder.element(1061)
-        let controlBar = builder.element(1062)
-        let positionOuter = builder.element(1063)
-        let positionMiddle = builder.element(1064)
-        let positionInner = builder.element(1065)
-        let playheadPosition = builder.element(1066)
-        let positionComponents = builder.element(1067)
-        let barSlider = builder.element(1068)
-        let beatSlider = builder.element(1069)
-        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
-        builder.setChildren(window, [controlBar])
-        builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
-        builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
-        builder.setChildren(controlBar, [positionOuter])
-        builder.setChildren(positionOuter, [positionMiddle])
-        builder.setChildren(positionMiddle, [positionInner])
-        builder.setChildren(positionInner, [playheadPosition])
-        builder.setAttribute(playheadPosition, kAXRoleAttribute as String, kAXGroupRole as String)
-        builder.setAttribute(playheadPosition, kAXDescriptionAttribute as String, "Playhead Position")
-        builder.setChildren(playheadPosition, [positionComponents])
-        builder.setChildren(positionComponents, [barSlider, beatSlider])
-        builder.setAttribute(barSlider, kAXRoleAttribute as String, kAXSliderRole as String)
-        builder.setAttribute(barSlider, kAXDescriptionAttribute as String, "Bar")
-        builder.setAttribute(beatSlider, kAXRoleAttribute as String, kAXSliderRole as String)
-        builder.setAttribute(beatSlider, kAXDescriptionAttribute as String, "Beat")
-        builder.setAttribute(beatSlider, kAXValueAttribute as String, "not-a-number")
+        // Mutations this rejects, independently:
+        // - restore `barValue = Int(extractSliderValue(slider, runtime: runtime) ?? 0)`: a missing
+        //   Bar paired with a readable Beat would fabricate `0.3`.
+        // - restore `beatValue = Int(extractSliderValue(slider, runtime: runtime) ?? 0)`: a
+        //   readable Bar paired with an invalid Beat would fabricate `37.0`.
+        func positionReadback(barValue: Any?, beatValue: Any?) throws -> TransportPositionReadback? {
+            let builder = FakeAXRuntimeBuilder()
+            let app = builder.element(1060)
+            let window = builder.element(1061)
+            let controlBar = builder.element(1062)
+            let positionOuter = builder.element(1063)
+            let positionMiddle = builder.element(1064)
+            let positionInner = builder.element(1065)
+            let playheadPosition = builder.element(1066)
+            let positionComponents = builder.element(1067)
+            let barSlider = builder.element(1068)
+            let beatSlider = builder.element(1069)
+            builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+            builder.setChildren(window, [controlBar])
+            builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+            builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
+            builder.setChildren(controlBar, [positionOuter])
+            builder.setChildren(positionOuter, [positionMiddle])
+            builder.setChildren(positionMiddle, [positionInner])
+            builder.setChildren(positionInner, [playheadPosition])
+            builder.setAttribute(playheadPosition, kAXRoleAttribute as String, kAXGroupRole as String)
+            builder.setAttribute(playheadPosition, kAXDescriptionAttribute as String, "Playhead Position")
+            builder.setChildren(playheadPosition, [positionComponents])
+            builder.setChildren(positionComponents, [barSlider, beatSlider])
+            builder.setAttribute(barSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+            builder.setAttribute(barSlider, kAXDescriptionAttribute as String, "Bar")
+            builder.setAttribute(beatSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+            builder.setAttribute(beatSlider, kAXDescriptionAttribute as String, "Beat")
+            if let barValue {
+                builder.setAttribute(barSlider, kAXValueAttribute as String, barValue)
+            }
+            if let beatValue {
+                builder.setAttribute(beatSlider, kAXValueAttribute as String, beatValue)
+            }
 
-        let extracted = AccessibilityChannel.defaultGetTransportState(
-            runtime: builder.makeLogicRuntime(appElement: app)
-        )
-        let payload: String
-        if case let .success(value) = extracted {
-            payload = value
-        } else {
-            Issue.record("expected transport state extraction to encode successfully")
-            return
+            let extracted = AccessibilityChannel.defaultGetTransportState(
+                runtime: builder.makeLogicRuntime(appElement: app)
+            )
+            let payload: String
+            if case let .success(value) = extracted {
+                payload = value
+            } else {
+                Issue.record("expected transport state extraction to encode successfully")
+                return nil
+            }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(
+                TransportState.self,
+                from: try #require(payload.data(using: .utf8))
+            ).positionReadback
         }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let state = try decoder.decode(TransportState.self, from: try #require(payload.data(using: .utf8)))
 
-        #expect(state.positionReadback == nil)
+        #expect(try positionReadback(barValue: nil, beatValue: NSNumber(value: 3)) == nil)
+        let unreadableBeatReadback = try positionReadback(
+            barValue: NSNumber(value: 37), beatValue: "not-a-number"
+        )
+        let readableBarOnly = try #require(unreadableBeatReadback)
+        #expect(readableBarOnly.value == "37")
+        #expect(readableBarOnly.observedComponents == [.bar])
     }
 
     @Test("the TransportState display default is never a goto_position observation")
