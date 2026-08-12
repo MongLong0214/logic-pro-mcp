@@ -223,6 +223,15 @@ extension AXLogicProElements {
         switch AXHelpers.getAttributeResult(table, "AXRows", runtime: runtime) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
         case .success(let observedRows?):
             rows = observedRows
+        case .failure(let error) where error.isDefinitiveAbsence:
+            // Not every marker table vends `AXRows`; that is an answer, so fall through to the
+            // structural row read rather than declaring the whole readback unreadable.
+            switch directChildren(of: table, withRole: kAXRowRole as String, runtime: runtime) {
+            case .success(let children):
+                rows = children
+            case .failure(let error):
+                return .failure(error)
+            }
         case .success(nil):
             switch directChildren(of: table, withRole: kAXRowRole as String, runtime: runtime) {
             case .success(let children):
@@ -283,6 +292,9 @@ extension AXLogicProElements {
                 switch AXHelpers.childrenResult(parent, runtime: runtime) {
                 case .success(let observedChildren):
                     children = observedChildren
+                case .failure(let error) where error.isDefinitiveAbsence:
+                    // A node that vends no children is an answer: nothing here, keep walking.
+                    children = []
                 case .failure(let error):
                     return .failure(error)
                 }
@@ -315,6 +327,8 @@ extension AXLogicProElements {
         switch AXHelpers.childrenResult(element, runtime: runtime) {
         case .success(let observedChildren):
             children = observedChildren
+        case .failure(let error) where error.isDefinitiveAbsence:
+            children = []
         case .failure(let error):
             return .failure(error)
         }
@@ -346,6 +360,8 @@ extension AXLogicProElements {
         switch AXHelpers.childrenResult(cell, runtime: runtime) {
         case .success(let observedChildren):
             children = observedChildren
+        case .failure(let error) where error.isDefinitiveAbsence:
+            children = []
         case .failure(let error):
             return .failure(error)
         }

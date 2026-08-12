@@ -26,6 +26,7 @@ private final class Issue523MenuState: @unchecked Sendable {
     var isOpen = false
     var childrenReadFails = false
     var discoveryReadFailsOnce = false
+    var discoveryReadAlwaysFails = false
     var controlDiscoveryReadFails = false
     var actionNamesReadFails = false
     var menuEntryChildrenReadFails = false
@@ -70,6 +71,7 @@ private func issue523MarkerDeleteFixture(
     menuBoundToToolbar: Bool = true,
     menuDismissesOnCancel: Bool = true,
     menuDiscoveryReadFails: Bool = false,
+    menuDiscoveryReadAlwaysFails: Bool = false,
     menuChildrenReadFailsAfterCancel: Bool = false,
     menuClosesAfterFirstSighting: Bool = false,
     menuChildrenAbsenceStatus: Int32? = nil,
@@ -192,6 +194,7 @@ private func issue523MarkerDeleteFixture(
                 menuState.toolbarMenuReadCount = 0
                 if menuEntryTitle != nil, menuBoundToToolbar {
                     menuState.discoveryReadFailsOnce = menuDiscoveryReadFails
+                    menuState.discoveryReadAlwaysFails = menuDiscoveryReadAlwaysFails
                     menuState.isOpen = true
                     builder.setChildren(toolbarEdit, menuState.isOpen ? [menu] : [])
                 }
@@ -269,6 +272,9 @@ private func issue523MarkerDeleteFixture(
                    menuState.showMenuWasRequested,
                    let menuChildrenAbsenceStatus {
                     return .failure(AXHelpers.AXStatusError(raw: menuChildrenAbsenceStatus))
+                }
+                if menuState.discoveryReadAlwaysFails, builder.elementID(element) == toolbarEditID {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.apiDisabled.rawValue))
                 }
                 if menuState.discoveryReadFailsOnce, builder.elementID(element) == toolbarEditID {
                     menuState.discoveryReadFailsOnce = false
@@ -759,9 +765,14 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
 }
 
 @Test func testIssue523UnreadableMenuDiscoveryRefusesAfterObservedDismissal() async throws {
+    // Every poll fails, not just the first. A single failed read is no longer final: measured on
+    // Logic 12.3 a scoped child read can answer -25200 on one poll and answer normally on the next
+    // while other reads in the same call succeed, so taking the first failure as the answer made
+    // this route refuse intermittently while the menu was open. Persistent unreadability is still
+    // unreadable, and must never be flattened into "the menu is absent".
     let fixture = issue523MarkerDeleteFixture(
         menuEntryTitle: "Copy",
-        menuDiscoveryReadFails: true
+        menuDiscoveryReadAlwaysFails: true
     )
     let result = await AccessibilityChannel.defaultDeleteMarker(
         index: 0, runtime: fixture.runtime, mouse: fixture.mouse
@@ -780,9 +791,12 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     #expect(fallbackUnsafe)
     #expect(envelope["edit_menu_route_state"] as? String == "menu_unreadable")
     #expect(try #require(envelope["hint"] as? String).contains("could not be read"))
+    // The menu element was never observed, so it cannot be the cancel target; cleanup is aimed at
+    // the control that was asked to show it. What must hold either way is that AXShowMenu is not
+    // left dangling and no key is posted.
     #expect(fixture.actions.actionCount(
-        elementID: fixture.menuID, action: kAXCancelAction as String
-    ) == 1)
+        elementID: fixture.toolbarEditID, action: kAXCancelAction as String
+    ) >= 1)
     #expect(fixture.actions.keyEventCount == 0)
 }
 

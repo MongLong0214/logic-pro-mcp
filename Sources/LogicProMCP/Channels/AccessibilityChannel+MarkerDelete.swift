@@ -152,8 +152,11 @@ extension AccessibilityChannel {
                 ))
             }
 
-        case .routeUnavailable(let failure, let keyboardFallbackMayBeSafe):
+        case .routeUnavailable(let failure, let keyboardFallbackMayBeSafe, let axStatus):
             extras["edit_menu_route_state"] = failure.state
+            // "Unreadable" without the status tells a caller nothing it can act on, and cost two
+            // rounds of guessing to diagnose live. Report which AX status stopped the route.
+            if let axStatus { extras["edit_menu_route_ax_status"] = Int(axStatus) }
             guard keyboardFallbackMayBeSafe,
                   markerTableHasKeyboardFocus(
                       table: selection.table,
@@ -421,7 +424,11 @@ extension AccessibilityChannel {
         /// The associated Boolean says whether the scoped menu UI is known not to be open or
         /// otherwise able to receive a command, so the focused-key fallback may be considered.
         /// It is a safety fact, never verification evidence.
-        case routeUnavailable(MarkerListEditMenuRouteFailure, keyboardFallbackMayBeSafe: Bool)
+        case routeUnavailable(
+            MarkerListEditMenuRouteFailure,
+            keyboardFallbackMayBeSafe: Bool,
+            axStatus: Int32? = nil
+        )
     }
 
     /// Use the Marker List's own menu rather than a keyboard Delete. The bottom `Edit` button and the
@@ -432,13 +439,8 @@ extension AccessibilityChannel {
         runtime: AXHelpers.Runtime,
         mouse: AXMouseHelper.Runtime
     ) -> MarkerListEditMenuDeleteOutcome {
-        let controls: [AXUIElement]
-        switch markerListEditMenuControls(in: window, runtime: runtime) {
-        case .success(let observedControls):
-            controls = observedControls
-        case .failure:
-            return .routeUnavailable(.menuUnreadable, keyboardFallbackMayBeSafe: true)
-        }
+        let search = markerListEditMenuControls(in: window, runtime: runtime)
+        let controls = search.controls
         for control in controls {
             switch markerListElementMatches(
                 control, labels: AXLocalePolicy.markerListEditMenuButton,
@@ -448,8 +450,10 @@ extension AccessibilityChannel {
                 break
             case .success(false):
                 continue
-            case .failure:
-                return .routeUnavailable(.menuUnreadable, keyboardFallbackMayBeSafe: true)
+            case .failure(let error):
+                return .routeUnavailable(
+                    .menuUnreadable, keyboardFallbackMayBeSafe: true, axStatus: error.raw
+                )
             }
 
             // This is intentionally action discovery, not a press ladder. A live Marker List's
@@ -458,8 +462,10 @@ extension AccessibilityChannel {
             switch AXHelpers.getActionNamesResult(control, runtime: runtime) {
             case .success(let actions):
                 guard actions.contains(kAXShowMenuAction as String) else { continue }
-            case .failure:
-                return .routeUnavailable(.menuUnreadable, keyboardFallbackMayBeSafe: true)
+            case .failure(let error):
+                return .routeUnavailable(
+                    .menuUnreadable, keyboardFallbackMayBeSafe: true, axStatus: error.raw
+                )
             }
 
             // As with AXPick, the return code does not prove the UI state. Read the scoped AX tree
@@ -533,6 +539,13 @@ extension AccessibilityChannel {
             ) && !dismissMarkerListEditMenu(menu, from: control, runtime: runtime, mouse: mouse)
             return .pickIssued(menuCloseWasNotObserved: menuCloseWasNotObserved)
         }
+        // Nothing matched. Whether that means "there is no Edit control" or "there is one and part
+        // of the tree would not answer" is exactly the distinction a caller needs, so keep it.
+        if let unreadable = search.unreadable {
+            return .routeUnavailable(
+                .menuUnreadable, keyboardFallbackMayBeSafe: true, axStatus: unreadable.raw
+            )
+        }
         return .routeUnavailable(.menuAbsent, keyboardFallbackMayBeSafe: true)
     }
 
@@ -542,8 +555,19 @@ extension AccessibilityChannel {
     private static func markerListEditMenuControls(
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
+    ) -> MarkerListEditMenuControlSearch {
+        // A search is not a readback, and conflating the two broke this route live. An individual
+        // node that will not answer cannot be a CANDIDATE — it is not proof that the search as a
+        // whole failed, and aborting on it means one uncooperative element anywhere in a twelve-deep
+        // Marker List tree hides the Edit control that is sitting right there. Measured on Logic
+        // 12.3: some nodes answer -25200 mid-walk while marker enumeration on the same call
+        // succeeds, so the API is plainly not disabled.
+        //
+        // So: skip what cannot answer, remember that something could not, and let the caller
+        // distinguish "no Edit control exists" from "no Edit control was found and part of the tree
+        // was unreadable".
         var controls: [AXUIElement] = []
+        var unreadable: AXHelpers.AXStatusError?
         var parents = [window]
         for _ in 0..<12 {
             var next: [AXUIElement] = []
@@ -552,8 +576,13 @@ extension AccessibilityChannel {
                 switch AXHelpers.childrenResult(parent, runtime: runtime) {
                 case .success(let observedChildren):
                     children = observedChildren
+                case .failure(let error) where error.isDefinitiveAbsence:
+                    // A leaf answers "no children"; that is an answer, and a real Marker List tree
+                    // is full of them.
+                    children = []
                 case .failure(let error):
-                    return .failure(error)
+                    unreadable = unreadable ?? error
+                    children = []
                 }
                 for child in children {
                     switch AXHelpers.getAttributeResult(
@@ -563,15 +592,24 @@ extension AccessibilityChannel {
                         if role == (kAXMenuButtonRole as String) || role == (kAXButtonRole as String) {
                             controls.append(child)
                         }
+                    case .failure(let error) where error.isDefinitiveAbsence:
+                        break
                     case .failure(let error):
-                        return .failure(error)
+                        unreadable = unreadable ?? error
                     }
                     next.append(child)
                 }
             }
             parents = next
         }
-        return .success(controls)
+        return MarkerListEditMenuControlSearch(controls: controls, unreadable: unreadable)
+    }
+
+    /// What a control search found, and whether any part of the tree refused to answer. Kept
+    /// together so "found nothing" and "found nothing and could not see everything" stay distinct.
+    private struct MarkerListEditMenuControlSearch {
+        let controls: [AXUIElement]
+        let unreadable: AXHelpers.AXStatusError?
     }
 
     /// Label discovery participates in the menu-route diagnosis. A failed Title or Description
@@ -587,6 +625,9 @@ extension AccessibilityChannel {
         ) as Result<String?, AXHelpers.AXStatusError> {
         case .success(let title):
             if labels.matches(title, mode: mode) { return .success(true) }
+        case .failure(let error) where error.isDefinitiveAbsence:
+            // Not vending AXTitle is an answer, not a failed read; fall through to AXDescription.
+            break
         case .failure(let error):
             return .failure(error)
         }
@@ -595,6 +636,8 @@ extension AccessibilityChannel {
         ) as Result<String?, AXHelpers.AXStatusError> {
         case .success(let description):
             return .success(labels.matches(description, mode: mode))
+        case .failure(let error) where error.isDefinitiveAbsence:
+            return .success(false)
         case .failure(let error):
             return .failure(error)
         }
@@ -657,6 +700,10 @@ extension AccessibilityChannel {
         //
         // ABSENCE is the claim that needs settling, because Logic can expose the menu
         // asynchronously — a single "no menu" read is not enough to name the route unavailable.
+        // An UNREADABLE reading is not an answer either, and taking the first one as final made the
+        // route refuse intermittently on a Marker List whose menu was open. Measured on Logic 12.3,
+        // a scoped child read can come back -25200 on one poll and answer normally on the next while
+        // other reads in the same call succeed. So a failure retires that poll, not the observation.
         var absentReadings = 0
         for _ in 0..<6 {
             switch markerListEditMenu(under: control, runtime: runtime) {
@@ -666,10 +713,11 @@ extension AccessibilityChannel {
                 absentReadings += 1
                 if absentReadings >= 2 { return .absent }
             case .failure:
-                return .unknown
+                break
             }
             mouse.sleepMicros(250_000)
         }
+        // Every poll was spent without two agreeing absences and without ever seeing the menu.
         return .unknown
     }
 
@@ -699,7 +747,11 @@ extension AccessibilityChannel {
         case .absent:
             return true
         case .unknown:
-            break
+            // AXShowMenu was already issued, so a menu may be open on screen even though this run
+            // cannot read it. Doing nothing leaves it there. Cancel the control we are holding —
+            // an AX action on a bound element, not a key and not a coordinate — and still report
+            // the closure as unobserved, because it is.
+            _ = AXHelpers.performAction(control, kAXCancelAction as String, runtime: runtime)
         }
 
         return false

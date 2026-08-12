@@ -167,6 +167,19 @@ enum AXHelpers {
         init(raw: Int32) {
             self.raw = raw
         }
+
+        /// Two AX statuses are ANSWERS, not failures. `attributeUnsupported` (-25205) means the
+        /// element does not vend that attribute at all, and `noValue` (-25212) means it has none —
+        /// which is exactly what a childless node or a table without `AXRows` reports. Measured on
+        /// Logic 12.3, treating either as a failed read makes a status-preserving traversal answer
+        /// "unreadable" for a tree it can plainly see, because a real AX tree is full of both.
+        /// Everything else — cannot-complete, invalid element, API disabled — really is a failure.
+        ///
+        /// This lives here, on the status itself, because the distinction was independently
+        /// rediscovered in two channels and got it wrong the second time.
+        var isDefinitiveAbsence: Bool {
+            raw == AXError.attributeUnsupported.rawValue || raw == AXError.noValue.rawValue
+        }
     }
 
     /// Pure projection of an AX read outcome into a typed result.
