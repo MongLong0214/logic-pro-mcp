@@ -40,6 +40,10 @@ struct Issue136GotoDriftHonestTests {
             case "transport.get_state":
                 var state = TransportState()
                 state.position = readbackPosition
+                state.positionReadback = TransportPositionReadback(
+                    value: readbackPosition,
+                    observedComponents: TransportPositionComponent.allCases
+                )
                 state.lastUpdated = Date(timeIntervalSince1970: 0)
                 let encoder = JSONEncoder()
                 encoder.dateEncodingStrategy = .iso8601

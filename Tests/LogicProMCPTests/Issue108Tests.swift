@@ -29,6 +29,10 @@ struct Issue108Tests {
                 // Foundation, making liveTransportState return nil.
                 var state = TransportState()
                 state.position = readbackPosition
+                state.positionReadback = TransportPositionReadback(
+                    value: readbackPosition,
+                    observedComponents: TransportPositionComponent.allCases
+                )
                 state.lastUpdated = Date(timeIntervalSince1970: 0)
                 let encoder = JSONEncoder()
                 encoder.dateEncodingStrategy = .iso8601

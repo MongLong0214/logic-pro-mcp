@@ -557,12 +557,39 @@ struct TransportDispatcher: OperationTraceDispatching {
         extras["observed"] = observedTransport.position
         extras["observed_time_position"] = observedTransport.timePosition
 
-        if !requestedPosition.contains(":"), observedTransport.position == requestedPosition {
+        let requestedMusicalComponents: [TransportPositionComponent] = requestedPosition.contains(":")
+            ? []
+            : TransportPositionComponent.allCases
+        let observedMusicalComponents = observedTransport.positionReadback?.observedComponents ?? []
+        let unobservedMusicalComponents = requestedMusicalComponents.filter {
+            !observedMusicalComponents.contains($0)
+        }
+        if !requestedPosition.contains(":") {
+            extras["observed_position_components"] = observedMusicalComponents.map(\.rawValue)
+            extras["unobserved_position_components"] = unobservedMusicalComponents.map(\.rawValue)
+        }
+
+        // A matching display string is insufficient: it may be the model default or a position
+        // synthesized from the Bar/Beat sliders. State A requires every component named by the
+        // request to have been read back from AX.
+        //
+        // The two conjuncts are redundant for every input reachable today, so NEITHER is
+        // individually mutation-detectable — removing one leaves the other covering the same
+        // cases. That is deliberate rather than accidental, and each covers a different way the
+        // other could be weakened: the component set stops a readback that never happened (the
+        // model's `"1.1.1.1"` default), and the readback value stops a partial read being
+        // compared as if it were whole. Do not delete either on the grounds that tests still
+        // pass without it.
+        if !requestedPosition.contains(":"),
+           unobservedMusicalComponents.isEmpty,
+           observedTransport.positionReadback?.value == requestedPosition {
             return toolTextResult(HonestContract.encodeStateA(extras: extras))
         }
 
         let reason: HonestContract.UncertainReason =
-            requestedPosition.contains(":") ? .readbackUnavailable : .readbackMismatch
+            requestedPosition.contains(":") || !unobservedMusicalComponents.isEmpty
+                ? .readbackUnavailable
+                : .readbackMismatch
         return toolTextResult(
             HonestContract.encodeStateB(reason: reason, extras: extras),
             isError: true

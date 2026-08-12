@@ -670,6 +670,10 @@ private func liveTransportJSON(
         transportStates: [
             TransportState(
                 position: "8.1.1.1",
+                positionReadback: TransportPositionReadback(
+                    value: "8.1.1.1",
+                    observedComponents: TransportPositionComponent.allCases
+                ),
                 timePosition: "00:00:08.000",
                 lastUpdated: Date()
             )
@@ -3239,6 +3243,10 @@ private actor SelectiveFailChannel: Channel {
         transportStates: [
             TransportState(
                 position: "17.1.1.1",
+                positionReadback: TransportPositionReadback(
+                    value: "17.1.1.1",
+                    observedComponents: TransportPositionComponent.allCases
+                ),
                 timePosition: "00:00:17.000",
                 lastUpdated: Date()
             )

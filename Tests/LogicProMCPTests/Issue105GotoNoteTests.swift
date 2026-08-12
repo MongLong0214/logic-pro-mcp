@@ -1,3 +1,4 @@
+import ApplicationServices
 import Foundation
 import MCP
 import Testing
@@ -14,9 +15,15 @@ struct Issue105GotoNoteTests {
         nonisolated let id: ChannelID = .accessibility
         let gotoResult: ChannelResult
         let readbackPosition: String
-        init(gotoResult: ChannelResult, readbackPosition: String) {
+        let readbackResult: ChannelResult?
+        init(
+            gotoResult: ChannelResult,
+            readbackPosition: String,
+            readbackResult: ChannelResult? = nil
+        ) {
             self.gotoResult = gotoResult
             self.readbackPosition = readbackPosition
+            self.readbackResult = readbackResult
         }
         func start() async throws {}
         func stop() async {}
@@ -25,6 +32,7 @@ struct Issue105GotoNoteTests {
             switch operation {
             case "transport.goto_position": return gotoResult
             case "transport.get_state":
+                if let readbackResult { return readbackResult }
                 // Encode a real TransportState with the SAME .iso8601 strategy
                 // the dispatcher decodes with. A hand-written date carrying
                 // fractional seconds (".000Z") fails strict .iso8601 decoding on
@@ -32,6 +40,10 @@ struct Issue105GotoNoteTests {
                 // and the verdict fall back to the un-stripped State B.
                 var state = TransportState()
                 state.position = readbackPosition
+                state.positionReadback = TransportPositionReadback(
+                    value: readbackPosition,
+                    observedComponents: TransportPositionComponent.allCases
+                )
                 state.lastUpdated = Date(timeIntervalSince1970: 0)
                 let encoder = JSONEncoder()
                 encoder.dateEncodingStrategy = .iso8601
@@ -104,5 +116,92 @@ struct Issue105GotoNoteTests {
         #expect(o["observed"] as? String == "1.2.1.1")
         let resultIsError = result.isError ?? false
         #expect(resultIsError)
+    }
+
+    @Test("an unreadable suffix from real AX extraction cannot verify a four-component request")
+    func partialAXPositionReadbackCannotReachStateA() async throws {
+        // Source mutation: restore the bar/beat synthesizer `"\(barValue).\(beatValue).1.1"`,
+        // or compare `TransportState.position` without its observed components in
+        // finalizeGotoPositionResult. Either turns this partial AX readback into false State A.
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(1050)
+        let window = builder.element(1051)
+        let controlBar = builder.element(1052)
+        let playheadPosition = builder.element(1053)
+        let barSlider = builder.element(1054)
+        let beatSlider = builder.element(1055)
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setChildren(window, [controlBar])
+        builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+        builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
+        builder.setChildren(controlBar, [playheadPosition])
+        builder.setAttribute(playheadPosition, kAXRoleAttribute as String, kAXGroupRole as String)
+        builder.setAttribute(playheadPosition, kAXDescriptionAttribute as String, "Playhead Position")
+        builder.setChildren(playheadPosition, [barSlider, beatSlider])
+        builder.setAttribute(barSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+        builder.setAttribute(barSlider, kAXDescriptionAttribute as String, "Bar")
+        builder.setAttribute(barSlider, kAXValueAttribute as String, NSNumber(value: 37))
+        builder.setAttribute(beatSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+        builder.setAttribute(beatSlider, kAXDescriptionAttribute as String, "Beat")
+        builder.setAttribute(beatSlider, kAXValueAttribute as String, NSNumber(value: 3))
+        let runtime = builder.makeLogicRuntime(appElement: app)
+        let extracted = AccessibilityChannel.defaultGetTransportState(runtime: runtime)
+
+        let router = ChannelRouter()
+        await router.register(StubTransportChannel(
+            gotoResult: notedDialogStateB(bar: 37),
+            readbackPosition: "37.3.1.1",
+            readbackResult: extracted
+        ))
+        let result = await TransportDispatcher.handle(
+            command: "goto_position",
+            params: ["position": .string("37.3.1.1")],
+            router: router,
+            cache: StateCache()
+        )
+
+        let envelope = try #require(obj(result))
+        #expect(!(try #require(envelope["verified"] as? Bool)))
+        #expect(try #require(envelope["state"] as? String) == "B")
+        #expect(try #require(envelope["reason"] as? String) == "readback_unavailable")
+        #expect(try #require(envelope["observed"] as? String) == "37.3")
+        let observed = try #require(envelope["observed_position_components"] as? [String])
+        let unobserved = try #require(envelope["unobserved_position_components"] as? [String])
+        #expect(observed == ["bar", "beat"])
+        #expect(unobserved == ["subdivision", "tick"])
+    }
+
+    @Test("the TransportState display default is never a goto_position observation")
+    func unreadablePositionDefaultCannotReachStateA() async throws {
+        // Source mutation: restore finalizeGotoPositionResult's old display-string equality check.
+        // The legacy `"1.1.1.1"` display default without any readable AX position control must
+        // never certify State A.
+        var unreadableState = TransportState()
+        unreadableState.lastUpdated = Date(timeIntervalSince1970: 0)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let unreadableResult = ChannelResult.success(
+            String(decoding: try encoder.encode(unreadableState), as: UTF8.self)
+        )
+        let router = ChannelRouter()
+        await router.register(StubTransportChannel(
+            gotoResult: notedDialogStateB(bar: 1),
+            readbackPosition: "",
+            readbackResult: unreadableResult
+        ))
+        let result = await TransportDispatcher.handle(
+            command: "goto_position",
+            params: ["position": .string("1.1.1.1")],
+            router: router,
+            cache: StateCache()
+        )
+
+        let envelope = try #require(obj(result))
+        #expect(!(try #require(envelope["verified"] as? Bool)))
+        #expect(try #require(envelope["state"] as? String) == "B")
+        #expect(try #require(envelope["reason"] as? String) == "readback_unavailable")
+        #expect(try #require(envelope["observed"] as? String) == "1.1.1.1")
+        let unobserved = try #require(envelope["unobserved_position_components"] as? [String])
+        #expect(unobserved == ["bar", "beat", "subdivision", "tick"])
     }
 }

@@ -427,10 +427,21 @@ enum AXValueExtractors {
                 if let tempo = Double(value.replacingOccurrences(of: " BPM", with: "")) {
                     state.tempo = tempo
                 }
-            } else if AXLocalePolicy.playheadPositionFieldLabel.containsAny(in: descLower) || value.contains(".") && value.contains(":") == false {
-                // Bar.Beat.Division.Tick format
-                if value.filter({ $0 == "." }).count >= 2 {
+            } else if AXLocalePolicy.playheadPositionFieldLabel.containsAny(in: descLower)
+                || value.contains(".") && value.contains(":") == false {
+                // Do not turn a partial display into an invented B.B.S.T position. A labelled
+                // playhead field may faithfully expose a prefix; an unlabelled numeric string is
+                // treated as a position only when it has the historical three-dot shape.
+                let isLabelledPosition = AXLocalePolicy.playheadPositionFieldLabel.containsAny(in: descLower)
+                if let components = observedPositionComponents(
+                    in: value,
+                    allowPartial: isLabelledPosition
+                ), components.count > (state.positionReadback?.observedComponents.count ?? 0) {
                     state.position = value
+                    state.positionReadback = TransportPositionReadback(
+                        value: value,
+                        observedComponents: components
+                    )
                 }
             } else if value.contains(":") {
                 // Time format HH:MM:SS
@@ -451,12 +462,47 @@ enum AXValueExtractors {
                 beatValue = Int(extractSliderValue(slider, runtime: runtime) ?? 0)
             }
         }
-        if let barValue, let beatValue {
-            state.position = "\(barValue).\(beatValue).1.1"
+        // The Control Bar exposes bar and beat independently. They are observations, but they
+        // say nothing about subdivision or tick; preserve that boundary instead of fabricating
+        // `.1.1` and letting a four-component request verify against it.
+        if let barValue, let beatValue,
+           (state.positionReadback?.observedComponents.count ?? 0) < 2 {
+            let value = "\(barValue).\(beatValue)"
+            state.position = value
+            state.positionReadback = TransportPositionReadback(
+                value: value,
+                observedComponents: [.bar, .beat]
+            )
+        } else if let barValue, (state.positionReadback?.observedComponents.count ?? 0) < 1 {
+            let value = "\(barValue)"
+            state.position = value
+            state.positionReadback = TransportPositionReadback(
+                value: value,
+                observedComponents: [.bar]
+            )
         }
 
         state.lastUpdated = Date()
         return state
+    }
+
+    /// Returns exactly the leading musical-position components represented by an AX text value.
+    /// This deliberately accepts partial labelled fields (`37.3`) while requiring the old
+    /// four-component-like shape for unlabelled text, which avoids classifying a tempo such as
+    /// `120.0` as a playhead observation.
+    private static func observedPositionComponents(
+        in value: String,
+        allowPartial: Bool
+    ) -> [TransportPositionComponent]? {
+        let parts = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: ".", omittingEmptySubsequences: false)
+        let minimumComponentCount = allowPartial ? 1 : 3
+        guard (minimumComponentCount...4).contains(parts.count),
+              parts.allSatisfy({ Int($0) != nil }) else {
+            return nil
+        }
+        return Array(TransportPositionComponent.allCases.prefix(parts.count))
     }
 
     // MARK: - Private helpers

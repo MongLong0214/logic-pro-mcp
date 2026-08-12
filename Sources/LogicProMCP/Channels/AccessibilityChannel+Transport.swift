@@ -1,5 +1,6 @@
 import ApplicationServices
 import AppKit
+import Darwin
 import Foundation
 
 /// Transport surface: play/stop/record, tempo, cycle range, playhead goto, zoom, and control-bar checkboxes (metronome/count-in).
@@ -777,9 +778,7 @@ extension AccessibilityChannel {
         activateLogic: @Sendable () -> Bool = ProcessUtils.Runtime.production.activateLogicPro,
         sleepMicros: @Sendable (UInt32) -> Void = { usleep($0) },
         executeDialogScript: (@Sendable (String) async -> ChannelResult)? = nil,
-        reconcileAfterDialogExecutionFailure: @escaping @Sendable () async -> Bool = {
-            await observeAndClearStrayGoToPositionUI() == .closed
-        }
+        reconcileAfterDialogExecutionFailure: (@Sendable () async -> Bool)? = nil
     ) async -> ChannelResult {
         var requestedPosition: String? = nil
         if let barStr = params["bar"], let b = Int(barStr) {
@@ -843,6 +842,28 @@ extension AccessibilityChannel {
         // cannot show that a successful run had to bring Logic forward first.
         baseExtras["frontmost_preparation"] = preparation.rawValue
 
+        // An absence/appearance transition can identify this run's modal only while another server
+        // process is not performing the same protocol. This advisory lock is released by the OS if
+        // its owner exits; a contender refuses before any leaf click rather than sharing a dialog.
+        // `executeDialogScript` is the unit-test-only protocol seam. Production callers use the
+        // runtime executor and therefore always take the cross-process ownership lock.
+        let dialogExecutionLock = executeDialogScript == nil
+            ? GoToPositionDialogExecutionLock.acquire()
+            : nil
+        guard executeDialogScript != nil || dialogExecutionLock != nil else {
+            return .error(HonestContract.encodeStateC(
+                error: .mutatingOperationInProgress,
+                hint: "Another Go To Position request is resolving Logic's modal dialog; retry after it completes.",
+                extras: baseExtras.merging([
+                    "operation": "transport.goto_position",
+                    "method": "dialog",
+                    "write_attempted": false,
+                    "safe_to_retry": true,
+                ]) { _, new in new }
+            ))
+        }
+        defer { dialogExecutionLock?.release() }
+
         // The AX runtime owns the script seam. Calling `AppleScriptChannel` here would make a
         // custom runtime only partially injectable and could run a real Logic dialog in a unit
         // test. Production retains this route's measured eight-second budget; a custom runtime
@@ -855,10 +876,25 @@ extension AccessibilityChannel {
                 await runtime.executeAppleScriptWithTimeout(script, 8.0)
             }
         }
+        // Reconciliation is part of the same injected runtime as dialog execution. Otherwise a
+        // fake runtime that omits this optional test seam can launch live osascript while cleaning
+        // up a deliberately failed fixture.
+        let dialogFailureReconciler: @Sendable () async -> Bool
+        if let reconcileAfterDialogExecutionFailure {
+            dialogFailureReconciler = reconcileAfterDialogExecutionFailure
+        } else {
+            dialogFailureReconciler = {
+                await observeAndClearStrayGoToPositionUI(
+                    executeScript: { script, timeout in
+                        await runtime.executeAppleScriptWithTimeout(script, timeout)
+                    }
+                ) == .closed
+            }
+        }
         let dialogResult = await gotoPositionViaDialog(
             position: requestedPosition,
             executeScript: dialogScriptExecutor,
-            reconcileAfterExecutionFailure: reconcileAfterDialogExecutionFailure
+            reconcileAfterExecutionFailure: dialogFailureReconciler
         )
         if case let .driven(payload) = dialogResult {
             // The dialog rung builds its own envelope, so without this the same operation reports
@@ -869,22 +905,25 @@ extension AccessibilityChannel {
             ))
         }
         if case let .failed(classification) = dialogResult,
-           classification.hasPotentialDialogSubmission {
-            // Return was sent normally, or the child died after its parent-owned issuance ledger
-            // recorded a dialog boundary. In either case a second position actuator is unsafe. The
-            // dead-child path deliberately records `write_attempted:true`: the parent cannot turn a
-            // missing process-local return value into a claim that no submission happened.
+           classification.requiresFallbackSuppression {
+            // A dead child after LEAF_ARMED/RETURN_ARMED leaves the UI boundary indeterminate, so
+            // another position actuator remains unsafe. That safety rule is not evidence that a
+            // Return was sent: only a normal script result can claim a position submission.
             let dialogState = classification.cleanupObservedClosed ? "closed" : "unobserved"
-            let extras = baseExtras.merging([
+            var extras = baseExtras.merging([
                 "operation": "transport.goto_position",
                 "method": "dialog",
                 "dialog_actuation_attempted": classification.dialogActuationMayHaveOccurred,
-                "dialog_submission_attempted": true,
                 "dialog_cleanup": dialogState,
-                "write_attempted": true,
                 "safe_to_retry": false,
                 "fallback_unsafe": true,
             ]) { _, new in new }
+            if classification.dialogSubmissionWasObserved {
+                extras["dialog_submission_attempted"] = true
+                extras["write_attempted"] = true
+            } else {
+                extras["dialog_submission_indeterminate"] = true
+            }
             return .success(HonestContract.encodeStateB(
                 reason: .readbackUnavailable,
                 extras: extras
@@ -922,18 +961,15 @@ extension AccessibilityChannel {
         }
 
         // Logic Pro 12.3 exposes the `bar` control as a relative increment, not an absolute musical
-        // bar number: setting AXValue to 37 advances one bar from both bar 1 and bar 3.  There is no
-        // measured conversion from the requested position to that control, so do not turn an unknown
-        // relative movement into a second position actuator by guessing a scale or issuing a write.
-        // A pre-write State C lets the router try its independently position-capable later channels.
+        // bar number. This route neither resolved nor wrote a position slider, so do not label this
+        // failure as a slider write. A non-terminal State C lets independently position-capable
+        // later channels run.
         return .error(HonestContract.encodeStateC(
-            error: .axWriteFailed,
-            hint: "The Control Bar bar slider is a relative increment, not an absolute position writer; no slider position write was issued.",
+            error: .notSupported,
+            hint: "The Go To Position dialog did not submit a position, and no alternative position route was taken.",
             extras: baseExtras.merging([
                 "operation": "transport.goto_position",
-                "via": "slider",
-                "slider_position_write_supported": false,
-                "slider_value_semantics": "relative_increment_not_absolute_position",
+                "position_route": "unavailable",
                 "unobserved_position_components": ["bar", "beat", "subdivision", "tick"],
                 "unexpressed_position_components": ["bar", "beat", "subdivision", "tick"],
                 "write_attempted": false,
@@ -957,6 +993,34 @@ extension AccessibilityChannel {
               let text = String(data: merged, encoding: .utf8)
         else { return payload }
         return text
+    }
+
+    /// Cross-process ownership for the absence → leaf → appearance transition. The advisory POSIX
+    /// lock cannot be re-entered by a second MCP server process and the kernel releases it if the
+    /// owner exits, so a dead server cannot leave a stale dialog-ownership claim behind.
+    private final class GoToPositionDialogExecutionLock {
+        private let fileDescriptor: Int32
+
+        private init(fileDescriptor: Int32) {
+            self.fileDescriptor = fileDescriptor
+        }
+
+        static func acquire() -> GoToPositionDialogExecutionLock? {
+            let path = FileManager.default.temporaryDirectory
+                .appendingPathComponent("logic-pro-mcp-goto-position-dialog.lock").path
+            let descriptor = open(path, O_CREAT | O_RDWR | O_CLOEXEC, S_IRUSR | S_IWUSR)
+            guard descriptor >= 0 else { return nil }
+            guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+                close(descriptor)
+                return nil
+            }
+            return GoToPositionDialogExecutionLock(fileDescriptor: descriptor)
+        }
+
+        func release() {
+            flock(fileDescriptor, LOCK_UN)
+            close(fileDescriptor)
+        }
     }
 
     /// The script is internal so the menu-validation regression tests can assert the
@@ -1043,27 +1107,60 @@ extension AccessibilityChannel {
             return ""
         end menuCleanupActuationContext
 
-        -- The Go To Position floating dialog has its own lifecycle; a menu-bar
-        -- observation says nothing about whether this modal is still blocking
-        -- the arrange area.  Keep unreadable distinct from closed, just as the
-        -- #529 menu cleanup does.
-        on goToPositionDialogState(theProcess)
+        -- Find only the modal Go To Position window. Title alone is not a dialog
+        -- identity: an ordinary same-titled window must not satisfy this run's
+        -- dialog poll.
+        on matchingGoToPositionDialog(theProcess)
             using terms from application "System Events"
                 tell theProcess
                     try
                         repeat with dialogWindow in every window
                             set dialogTitle to name of dialogWindow
-                            if dialogTitle is "위치로 이동" then return "OPEN"
-                            if dialogTitle is "Go To Position" then return "OPEN"
-                            if dialogTitle is "Go to Position" then return "OPEN"
+                            if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
+                                set dialogSubrole to subrole of dialogWindow
+                                if dialogSubrole is "AXDialog" or dialogSubrole is "AXSystemDialog" then return contents of dialogWindow
+                            end if
                         end repeat
-                        return "CLOSED"
+                        return missing value
                     on error
                         return "UNREADABLE"
                     end try
                 end tell
             end using terms from
+        end matchingGoToPositionDialog
+
+        -- The Go To Position floating dialog has its own lifecycle; a menu-bar
+        -- observation says nothing about whether this modal is still blocking
+        -- the arrange area. Keep unreadable distinct from closed, just as the
+        -- #529 menu cleanup does.
+        on goToPositionDialogState(theProcess)
+            set dialogWindow to my matchingGoToPositionDialog(theProcess)
+            if dialogWindow is "UNREADABLE" then return "UNREADABLE"
+            if dialogWindow is missing value then return "CLOSED"
+            return "OPEN"
         end goToPositionDialogState
+
+        -- System Events exposes keystroke only globally, not as an action on a
+        -- window/text element. Bind the exact AX window discovered after this
+        -- run's leaf click and refuse unless it remains the focused modal at the
+        -- instant before each global key sequence.
+        on observedGoToPositionDialogFocusState(theProcess, dialogWindow)
+            using terms from application "System Events"
+                tell theProcess
+                    try
+                        if not (exists dialogWindow) then return "MISSING"
+                        set dialogTitle to name of dialogWindow
+                        set dialogSubrole to subrole of dialogWindow
+                        if dialogTitle is not "위치로 이동" and dialogTitle is not "Go To Position" and dialogTitle is not "Go to Position" then return "MISSING"
+                        if dialogSubrole is not "AXDialog" and dialogSubrole is not "AXSystemDialog" then return "MISSING"
+                        if focused of dialogWindow then return "FOCUSED"
+                        return "NOT_FOCUSED"
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end tell
+            end using terms from
+        end observedGoToPositionDialogFocusState
 
         -- Prefer this modal's localized Cancel button.  Escape is only a
         -- fallback while this exact dialog is observed open, and every attempt
@@ -1179,24 +1276,34 @@ extension AccessibilityChannel {
                     end if
                 on error
                     -- An unreadable AXEnabled must not authorise the pick.
-                    set cleanupState to my dismissOpenMenu(logicProcess, true)
+                    set cleanupState to my dismissOpenMenu(logicProcess, false)
                     if cleanupState is not "CLOSED" then
                         return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
                     return "MENU_STATE_UNREADABLE"
                 end try
                 if not menuItemEnabled then
-                    set cleanupState to my dismissOpenMenu(logicProcess, true)
+                    set cleanupState to my dismissOpenMenu(logicProcess, false)
                     if cleanupState is not "CLOSED" then
                         return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
                     return "MENU_DISABLED"
                 end if
+                -- A same-titled dialog that was already present belongs to neither this leaf
+                -- actuation nor this request. Do not cancel or type into it; absence immediately
+                -- before the leaf is the first half of this run's dialog-appearance transition.
+                set preLeafGoToPositionDialog to my matchingGoToPositionDialog(logicProcess)
+                if preLeafGoToPositionDialog is "UNREADABLE" then
+                    return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position dialog state was unreadable before leaf click"
+                end if
+                if preLeafGoToPositionDialog is not missing value then
+                    return "DIALOG_PREEXISTING: Go To Position dialog was already present before leaf click"
+                end if
                 try
                     -- Persist before AXPress: if the child dies after the click, Swift still knows
                     -- that the dialog route may have become active and must not choose another route.
                     if not my recordDialogIssuance("LEAF_ARMED", "\(ledgerPath)") then
-                        set cleanupState to my dismissOpenMenu(logicProcess, true)
+                        set cleanupState to my dismissOpenMenu(logicProcess, false)
                         if cleanupState is not "CLOSED" then
                             return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
                         end if
@@ -1220,14 +1327,20 @@ extension AccessibilityChannel {
                     end if
                     return "DIALOG_ACTUATION_ISSUED: " & errMsg
                 end try
-                -- Wait up to 3s for the dialog window to appear before typing,
-                -- otherwise keystrokes would go to the arrange area and click
-                -- Cmd+A there — silently "Select All Regions".
+                -- Wait up to 3s for a new exact modal dialog to appear before typing. The
+                -- pre-leaf absence plus this observed element prevents a stale/concurrent
+                -- same-titled window from being accepted as this request's dialog.
                 set dialogReady to false
+                set dialogAppearanceUnreadable to false
+                set observedGoToPositionDialog to missing value
                 repeat 30 times
                     delay 0.1
-                    set dialogOpenState to my goToPositionDialogState(logicProcess)
-                    if dialogOpenState is "OPEN" then
+                    set observedGoToPositionDialog to my matchingGoToPositionDialog(logicProcess)
+                    if observedGoToPositionDialog is "UNREADABLE" then
+                        set dialogAppearanceUnreadable to true
+                        exit repeat
+                    end if
+                    if observedGoToPositionDialog is not missing value then
                         set dialogReady to true
                         exit repeat
                     end if
@@ -1241,15 +1354,54 @@ extension AccessibilityChannel {
                     if cleanupState is not "CLOSED" then
                         return "DIALOG_ACTUATION_ISSUED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
+                    if dialogAppearanceUnreadable then return "DIALOG_ACTUATION_ISSUED: dialog appearance became unreadable"
                     return "DIALOG_ACTUATION_ISSUED: dialog did not become ready"
                 end if
             end tell
             -- Everything in this block is provably before Return. A normal script result from
             -- here must therefore remain a non-submission failure, never State B-after-nothing.
+            set dialogFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)
+            if dialogFocusState is not "FOCUSED" then
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                if dialogCleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                end if
+                set cleanupState to my dismissOpenMenu(logicProcess, true)
+                if cleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_NOT_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
+                end if
+                return "DIALOG_SUBMISSION_NOT_ISSUED: observed Go To Position dialog was not focused before typing (" & dialogFocusState & ")"
+            end if
             try
-                delay 0.1
                 keystroke "a" using command down
                 delay 0.1
+            on error errMsg
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                if dialogCleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                end if
+                set cleanupState to my dismissOpenMenu(logicProcess, true)
+                if cleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_NOT_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
+                end if
+                return "DIALOG_SUBMISSION_NOT_ISSUED: dialog input failed before Return (" & errMsg & ")"
+            end try
+
+            -- Cmd+A is global too. Re-check the same observed window immediately before typing
+            -- the requested position; System Events has no element-targeted keystroke API.
+            set dialogTypingFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)
+            if dialogTypingFocusState is not "FOCUSED" then
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                if dialogCleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                end if
+                set cleanupState to my dismissOpenMenu(logicProcess, true)
+                if cleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_NOT_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
+                end if
+                return "DIALOG_SUBMISSION_NOT_ISSUED: observed Go To Position dialog was not focused before typing (" & dialogTypingFocusState & ")"
+            end if
+            try
                 keystroke "\(position)"
                 delay 0.1
             on error errMsg
@@ -1267,6 +1419,18 @@ extension AccessibilityChannel {
             -- This durable marker is the position-write boundary. It is written before Return so
             -- a timeout or nonzero child exit after this point is conservatively reported as a
             -- possibly-issued submission rather than releasing another actuator.
+            set dialogReturnFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)
+            if dialogReturnFocusState is not "FOCUSED" then
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                if dialogCleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                end if
+                set cleanupState to my dismissOpenMenu(logicProcess, true)
+                if cleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_NOT_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
+                end if
+                return "DIALOG_SUBMISSION_NOT_ISSUED: observed Go To Position dialog was not focused before Return (" & dialogReturnFocusState & ")"
+            end if
             if not my recordDialogIssuance("RETURN_ARMED", "\(ledgerPath)") then
                 set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
                 if dialogCleanupState is not "CLOSED" then
@@ -1354,6 +1518,8 @@ extension AccessibilityChannel {
             case menuDisabled
             case menuPickFailed
             case menuCouldNotBeClosed(writeAttempted: Bool)
+            case dialogPreexisting
+            case dialogPreexistenceUnreadable
             case dialogNotReady
             case dialogActuationIssued(cleanupObservedClosed: Bool)
             case dialogSubmissionNotIssued(cleanupObservedClosed: Bool)
@@ -1378,6 +1544,8 @@ extension AccessibilityChannel {
             case .failure(.menuPickFailed): return "menu_pick_failed"
             case let .failure(.menuCouldNotBeClosed(writeAttempted)):
                 return "menu_could_not_be_closed_write_attempted_\(writeAttempted)"
+            case .failure(.dialogPreexisting): return "dialog_preexisting"
+            case .failure(.dialogPreexistenceUnreadable): return "dialog_preexistence_unreadable"
             case .failure(.dialogNotReady): return "dialog_not_ready"
             case let .failure(.dialogActuationIssued(closed)):
                 return "dialog_actuation_issued_cleanup_closed_\(closed)"
@@ -1392,10 +1560,10 @@ extension AccessibilityChannel {
             }
         }
 
-        /// Any normal path that explicitly reached Return, plus a dead child that persisted a
-        /// pre-leaf/Return checkpoint. A leaf checkpoint is intentionally conservative after a
-        /// process death: the parent cannot prove the child did not advance to Return before dying.
-        var hasPotentialDialogSubmission: Bool {
+        /// A second position actuator is unsafe after a normal Return or a dead child that crossed
+        /// either durable UI boundary. LEAF_ARMED is a safety boundary only: it does not prove a
+        /// dialog actuation or position submission occurred.
+        var requiresFallbackSuppression: Bool {
             switch self {
             case .failure(.dialogSubmissionIssued),
                  .failure(.executionFailed(issuance: .leafArmed, cleanupObservedClosed: _)),
@@ -1407,12 +1575,23 @@ extension AccessibilityChannel {
             }
         }
 
+        /// The script itself reported that Return was sent or may have been sent. A parent-owned
+        /// ledger is intentionally not included: a child can die immediately after writing it.
+        var dialogSubmissionWasObserved: Bool {
+            if case .failure(.dialogSubmissionIssued) = self {
+                return true
+            }
+            return false
+        }
+
         /// A later position route is unsafe when a non-submission path cannot prove the menu/dialog UI is gone.
         /// A clean, normal leaf/input failure may fall through because the script proved no Return
         /// was sent *and* observed the relevant UI closed.
         var requiresUnsafeUIRefusal: Bool {
             switch self {
             case .failure(.menuCouldNotBeClosed),
+                 .failure(.dialogPreexisting),
+                 .failure(.dialogPreexistenceUnreadable),
                  .failure(.dialogActuationIssued(cleanupObservedClosed: false)),
                  .failure(.dialogSubmissionNotIssued(cleanupObservedClosed: false)),
                  .failure(.dialogNotReady),
@@ -1429,7 +1608,6 @@ extension AccessibilityChannel {
                  .failure(.dialogActuationIssued),
                  .failure(.dialogSubmissionNotIssued),
                  .failure(.dialogSubmissionIssued),
-                 .failure(.executionFailed(issuance: .leafArmed, cleanupObservedClosed: _)),
                  .failure(.executionFailed(issuance: .returnArmed, cleanupObservedClosed: _)),
                  .failure(.executionFailed(issuance: .unknown, cleanupObservedClosed: _)):
                 return true
@@ -1483,6 +1661,10 @@ extension AccessibilityChannel {
             return .failure(.menuStateUnreadable)
         case "MENU_DISABLED":
             return .failure(.menuDisabled)
+        case let value where value.hasPrefix("DIALOG_PREEXISTING"):
+            return .failure(.dialogPreexisting)
+        case let value where value.hasPrefix("DIALOG_PREEXISTENCE_UNREADABLE"):
+            return .failure(.dialogPreexistenceUnreadable)
         case let value where value.hasPrefix("MENU_PICK_FAILED"):
             if value.hasPrefix("MENU_PICK_FAILED: menu state was not observed closed at entry")
                 || value.hasPrefix("MENU_PICK_FAILED: menu cleanup was not observed") {
@@ -1580,7 +1762,9 @@ extension AccessibilityChannel {
     /// Reconcile the exact Go To Position modal before considering menu state. A menu-bar read does
     /// not describe a modal dialog, so a post-timeout `CLOSED` menu must never authorise another route
     /// while the dialog remains on screen.
-    private static func observeAndClearStrayGoToPositionUI() async -> StrayGoToPositionUIOutcome {
+    private static func observeAndClearStrayGoToPositionUI(
+        executeScript: @escaping @Sendable (String, TimeInterval) async -> ChannelResult
+    ) async -> StrayGoToPositionUIOutcome {
         let target = LogicProTarget.appleScriptTarget()
         let script = """
         on goToPositionDialogState(theProcess)
@@ -1658,7 +1842,7 @@ extension AccessibilityChannel {
             end tell
         end tell
         """
-        guard case let .success(payload) = await AppleScriptChannel.executeAppleScript(script, timeout: 4.0),
+        guard case let .success(payload) = await executeScript(script, 4.0),
               let data = payload.data(using: .utf8),
               let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               (obj["result"] as? String) == "CLOSED"

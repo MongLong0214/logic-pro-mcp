@@ -37,9 +37,41 @@ private final class Issue529Counter: @unchecked Sendable {
     }
 }
 
+private actor Issue529DialogLockGate {
+    private var started = false
+    private var startWaiter: CheckedContinuation<Void, Never>?
+    private var releaseRequested = false
+    private var releaseWaiter: CheckedContinuation<Void, Never>?
+
+    func entered() {
+        started = true
+        startWaiter?.resume()
+        startWaiter = nil
+    }
+
+    func waitUntilEntered() async {
+        guard !started else { return }
+        await withCheckedContinuation { startWaiter = $0 }
+    }
+
+    func waitForRelease() async {
+        guard !releaseRequested else { return }
+        await withCheckedContinuation { releaseWaiter = $0 }
+    }
+
+    func release() {
+        releaseRequested = true
+        releaseWaiter?.resume()
+        releaseWaiter = nil
+    }
+}
+
 private func issue529SliderRuntime(
     sliderWrites: Issue529Counter,
-    includeBeatSlider: Bool = false
+    includeBeatSlider: Bool = false,
+    executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = { _ in
+        .success(#"{"result":"MENU_NOT_FOUND"}"#)
+    }
 ) -> AXLogicProElements.Runtime {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(5290)
@@ -75,7 +107,8 @@ private func issue529SliderRuntime(
             builder.setAttribute(element, attribute, value)
             return true
         },
-        performActionHandler: { _, _ in true }
+        performActionHandler: { _, _ in true },
+        executeAppleScript: executeAppleScript
     )
 }
 
@@ -269,7 +302,7 @@ struct Issue529MenuValidationTests {
             of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
             in: script
         )
-        let leafErrorHandlerEnd = try issue529Position(of: "-- Wait up to 3s for the dialog window", in: script)
+        let leafErrorHandlerEnd = try issue529Position(of: "-- Wait up to 3s for a new exact modal dialog", in: script)
         let leafErrorHandler = String(script[leafClick..<leafErrorHandlerEnd])
         let cleanupAfterMenuItemClick = try issue529Position(
             of: "set cleanupState to my dismissOpenMenu(logicProcess, true)", in: leafErrorHandler
@@ -375,10 +408,10 @@ struct Issue529MenuValidationTests {
         #expect(sliderWrites.value == 0)
     }
 
-    @Test("a clean leaf-only failure does not turn the relative slider into a position write")
-    func cleanLeafActuationFailureDoesNotWriteRelativeSlider() async throws {
-        // Mutation this rejects: restore the AXValue write to the `bar` slider. Its measured value
-        // is a one-bar relative increment, so a clean dialog failure must leave it untouched.
+    @Test("a clean leaf-only failure does not invent an AX slider route")
+    func cleanLeafActuationFailureDoesNotInventSliderRoute() async throws {
+        // Source mutation: restore `via:"slider"` or `error:.axWriteFailed` in the no-route
+        // receipt. The dialog failure did not resolve or write a slider, so this must fail.
         let sliderWrites = Issue529Counter()
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "529"],
@@ -394,20 +427,21 @@ struct Issue529MenuValidationTests {
         let envelope = try #require(issue529Envelope(result))
         #expect(!result.isSuccess)
         #expect(try #require(envelope["state"] as? String) == "C")
-        #expect(try #require(envelope["via"] as? String) == "slider")
+        #expect(try #require(envelope["error"] as? String) == "not_supported")
+        #expect(try #require(envelope["position_route"] as? String) == "unavailable")
         let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
-        let positionWriteSupported = try #require(envelope["slider_position_write_supported"] as? Bool)
         #expect(!writeAttempted)
-        #expect(!positionWriteSupported)
+        #expect(envelope["via"] == nil)
         #expect(sliderWrites.value == 0)
     }
 
-    @Test("a dead child after the durable leaf checkpoint is State B and cannot select the slider")
-    func deadChildAfterLeafCheckpointDoesNotReleaseSlider() async throws {
+    @Test("a dead child after the durable leaf checkpoint is indeterminate and cannot select the slider")
+    func deadChildAfterLeafCheckpointDoesNotClaimSubmissionOrReleaseSlider() async throws {
         // Mutations this rejects:
         // 1. Remove the parent-owned `LEAF_ARMED` ledger checkpoint or ignore it in the `.error`
         //    branch — this clean-reconciliation fixture falls through to the slider.
-        // 2. Report `write_attempted:false` for the durable checkpoint — the receipt assertion fails.
+        // 2. Source mutation: set `dialog_submission_attempted:true` / `write_attempted:true`
+        //    for LEAF_ARMED. The marker precedes the leaf click, so it cannot prove submission.
         let sliderWrites = Issue529Counter()
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "529"],
@@ -426,9 +460,129 @@ struct Issue529MenuValidationTests {
         let envelope = try #require(issue529Envelope(result))
         #expect(result.isSuccess)
         #expect(try #require(envelope["state"] as? String) == "B")
-        #expect(try #require(envelope["write_attempted"] as? Bool))
-        #expect(try #require(envelope["dialog_submission_attempted"] as? Bool))
+        let writeAttempted = envelope["write_attempted"] as? Bool
+        let submissionAttempted = envelope["dialog_submission_attempted"] as? Bool
+        #expect(writeAttempted == nil)
+        #expect(submissionAttempted == nil)
+        #expect(try #require(envelope["dialog_submission_indeterminate"] as? Bool))
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         #expect(sliderWrites.value == 0)
+    }
+
+    @Test("default dead-child reconciliation stays on the injected runtime seam")
+    func defaultDeadChildReconciliationUsesInjectedRuntime() async throws {
+        // Source mutation: call `AppleScriptChannel.executeAppleScript` directly from
+        // `observeAndClearStrayGoToPositionUI`. This fake runtime would see no reconciliation
+        // script, proving the default failure path escaped the test/runtime seam.
+        let sliderWrites = Issue529Counter()
+        let reconciliationCalls = Issue529Counter()
+        let runtime = issue529SliderRuntime(
+            sliderWrites: sliderWrites,
+            executeAppleScript: { _ in
+                reconciliationCalls.bump()
+                return .success(#"{"result":"CLOSED"}"#)
+            }
+        )
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: runtime,
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in .error("osascript timed out before any ledger boundary") }
+        )
+
+        let envelope = try #require(issue529Envelope(result))
+        #expect(!result.isSuccess)
+        #expect(try #require(envelope["state"] as? String) == "C")
+        #expect(try #require(envelope["dialog_route_outcome"] as? String)
+            == "execution_failed_issuance_NOT_ISSUED_cleanup_closed_true")
+        #expect(reconciliationCalls.value == 1)
+        #expect(sliderWrites.value == 0)
+    }
+
+    @Test("an existing dialog or focus loss refuses before a position submission")
+    func preexistingDialogAndFocusLossDoNotSubmitPosition() async throws {
+        // Source mutations: classify DIALOG_PREEXISTING as a clean fallback, or classify
+        // DIALOG_SUBMISSION_NOT_ISSUED as issued. Either lets another run's dialog receive a
+        // position write or falsely reports that this focus-loss fixture submitted one.
+        let preexisting = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: Issue529Counter()),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                .success(#"{"result":"DIALOG_PREEXISTING: fixture dialog belongs to another request"}"#)
+            }
+        )
+        let preexistingEnvelope = try #require(issue529Envelope(preexisting))
+        #expect(!preexisting.isSuccess)
+        #expect(try #require(preexistingEnvelope["state"] as? String) == "C")
+        #expect(try #require(preexistingEnvelope["fallback_unsafe"] as? Bool))
+        let preexistingWrite = try #require(preexistingEnvelope["write_attempted"] as? Bool)
+        #expect(!preexistingWrite)
+
+        let focusLoss = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: Issue529Counter()),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                .success(#"{"result":"DIALOG_SUBMISSION_NOT_ISSUED: observed Go To Position dialog was not focused before typing (NOT_FOCUSED)"}"#)
+            }
+        )
+        let focusLossEnvelope = try #require(issue529Envelope(focusLoss))
+        #expect(!focusLoss.isSuccess)
+        #expect(try #require(focusLossEnvelope["state"] as? String) == "C")
+        let focusLossWrite = try #require(focusLossEnvelope["write_attempted"] as? Bool)
+        #expect(!focusLossWrite)
+        #expect(focusLossEnvelope["dialog_submission_attempted"] == nil)
+    }
+
+    @Test("a concurrent Go To Position request is refused before its leaf protocol begins")
+    func concurrentDialogRequestCannotShareTheObservedModal() async throws {
+        // Source mutation: remove GoToPositionDialogExecutionLock acquisition, or take it after
+        // executing the dialog script. The contender then reaches its injected script instead of
+        // refusing before any menu leaf can be issued.
+        let gate = Issue529DialogLockGate()
+        let firstScriptCalls = Issue529Counter()
+        let contenderScriptCalls = Issue529Counter()
+        let firstRuntime = issue529SliderRuntime(
+            sliderWrites: Issue529Counter(),
+            executeAppleScript: { _ in
+                firstScriptCalls.bump()
+                await gate.entered()
+                await gate.waitForRelease()
+                return .success(#"{"result":"MENU_NOT_FOUND"}"#)
+            }
+        )
+        let contenderRuntime = issue529SliderRuntime(
+            sliderWrites: Issue529Counter(),
+            executeAppleScript: { _ in
+                contenderScriptCalls.bump()
+                return .success(#"{"result":"MENU_NOT_FOUND"}"#)
+            }
+        )
+
+        async let first = AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"], runtime: firstRuntime,
+            isFrontmost: { true }, activateLogic: { true }, sleepMicros: { _ in }
+        )
+        await gate.waitUntilEntered()
+        let contender = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "530"], runtime: contenderRuntime,
+            isFrontmost: { true }, activateLogic: { true }, sleepMicros: { _ in }
+        )
+        await gate.release()
+        _ = await first
+
+        let contenderEnvelope = try #require(issue529Envelope(contender))
+        #expect(!contender.isSuccess)
+        #expect(try #require(contenderEnvelope["error"] as? String) == "mutating_operation_in_progress")
+        #expect(firstScriptCalls.value == 1)
+        #expect(contenderScriptCalls.value == 0)
     }
 
     @Test("only the post-Return branch is submission-issued")
@@ -465,7 +619,7 @@ struct Issue529MenuValidationTests {
         let preReturnEnvelope = try #require(issue529Envelope(preReturn))
         #expect(!preReturn.isSuccess)
         #expect(try #require(preReturnEnvelope["state"] as? String) == "C")
-        #expect(try #require(preReturnEnvelope["via"] as? String) == "slider")
+        #expect(try #require(preReturnEnvelope["position_route"] as? String) == "unavailable")
         let preReturnWriteAttempted = try #require(preReturnEnvelope["write_attempted"] as? Bool)
         #expect(!preReturnWriteAttempted)
         #expect(preReturnSliderWrites.value == 0)
@@ -514,7 +668,8 @@ struct Issue529MenuValidationTests {
         let envelope = try #require(issue529Envelope(result))
         #expect(!result.isSuccess)
         #expect(try #require(envelope["state"] as? String) == "C")
-        #expect(try #require(envelope["via"] as? String) == "slider")
+        #expect(try #require(envelope["error"] as? String) == "not_supported")
+        #expect(try #require(envelope["position_route"] as? String) == "unavailable")
         #expect(try #require(envelope["dialog_route_outcome"] as? String) == "menu_not_found")
         let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
         #expect(!writeAttempted)
@@ -546,7 +701,7 @@ struct Issue529MenuValidationTests {
         #expect(unexpressed == ["bar", "beat", "subdivision", "tick"])
         let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
         #expect(!writeAttempted)
-        #expect(try #require(envelope["slider_value_semantics"] as? String) == "relative_increment_not_absolute_position")
+        #expect(try #require(envelope["position_route"] as? String) == "unavailable")
         #expect(sliderWrites.value == 0)
     }
 
@@ -631,13 +786,15 @@ struct Issue529MenuValidationTests {
 /// than sending it into unknown focus. Locale discovery itself owns no menu actuation.
 @Test("locale discovery stays unowned until the resolved leaf issuance boundary")
 func dismissalContextKeepsLocaleReadsUnownedUntilResolvedLeafIssuance() throws {
-    // Mutation this rejects: change either locale-resolution cleanup call back to
-    // `dismissOpenMenu(logicProcess, true)`, which authorises Escape after an unreadable read.
+    // Source mutations: change any of the AXEnabled-read, disabled-entry, or LEAF_ARMED-write
+    // failure cleanups to `dismissOpenMenu(logicProcess, true)`. Each is before this run's leaf,
+    // so UNREADABLE must withhold Escape from unrelated focus.
     let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
 
-    // Entry plus the two locale-resolution exits are unowned reads.
+    // Entry, locale discovery, enabled/disabled handling, and a failed durable checkpoint are all
+    // unowned until the resolved leaf is actually issued.
     #expect(script.contains("my dismissOpenMenu(logicProcess, false)"))
-    #expect(issue529Positions(of: "my dismissOpenMenu(logicProcess, false)", in: script).count == 3)
+    #expect(issue529Positions(of: "my dismissOpenMenu(logicProcess, false)", in: script).count == 6)
 
     let leafCheckpoint = try issue529Position(
         of: "recordDialogIssuance(\"LEAF_ARMED\"",
@@ -648,11 +805,63 @@ func dismissalContextKeepsLocaleReadsUnownedUntilResolvedLeafIssuance() throws {
         in: script
     )
     #expect(leafCheckpoint < resolvedLeaf)
+    let preLeaf = String(script[..<resolvedLeaf])
+    #expect(!preLeaf.contains("my dismissOpenMenu(logicProcess, true)"))
     #expect(!script.contains("click selectedMenuBarItem"))
     #expect(!script.contains("click selectedSubmenuItem"))
 
     // The handler itself only skips Escape when no menu has been established as this run's.
     #expect(script.contains("if menuState is \"UNREADABLE\" and not knownOpen then return \"UNREADABLE\""))
+}
+
+@Test("the Go To Position dialog is a new focused AXDialog bound before global typing")
+func gotoPositionDialogRequiresAppearanceTransitionAndFocusedBinding() throws {
+    // Source mutations: remove the pre-leaf absence check, accept title without AXSubrole, or
+    // move either Cmd+A/position keystroke before the observed-dialog focus guard. Any one lets a
+    // stale/concurrent dialog or another frontmost app receive this request's input.
+    let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(position: "529.4.7.123")
+    let preLeafObservation = try issue529Position(
+        of: "set preLeafGoToPositionDialog to my matchingGoToPositionDialog(logicProcess)",
+        in: script
+    )
+    let preLeafAbsenceGuard = try issue529Position(
+        of: "if preLeafGoToPositionDialog is not missing value then",
+        in: script
+    )
+    let leafClick = try issue529Position(
+        of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
+        in: script
+    )
+    let observedDialog = try issue529Position(
+        of: "set observedGoToPositionDialog to my matchingGoToPositionDialog(logicProcess)",
+        in: script
+    )
+    let focusGuard = try issue529Position(
+        of: "set dialogFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)",
+        in: script
+    )
+    let focusRefusal = try issue529Position(
+        of: "observed Go To Position dialog was not focused before typing",
+        in: script
+    )
+    let selectAll = try issue529Position(of: "keystroke \"a\" using command down", in: script)
+    let typingFocusGuard = try issue529Position(
+        of: "set dialogTypingFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)",
+        in: script
+    )
+    let positionInput = try issue529Position(of: "keystroke \"529.4.7.123\"", in: script)
+
+    #expect(preLeafObservation < preLeafAbsenceGuard)
+    #expect(preLeafAbsenceGuard < leafClick)
+    #expect(leafClick < observedDialog)
+    #expect(observedDialog < focusGuard)
+    #expect(focusGuard < focusRefusal)
+    #expect(focusRefusal < selectAll)
+    #expect(selectAll < positionInput)
+    #expect(selectAll < typingFocusGuard)
+    #expect(typingFocusGuard < positionInput)
+    #expect(script.contains("set dialogSubrole to subrole of dialogWindow"))
+    #expect(script.contains("if focused of dialogWindow then return \"FOCUSED\""))
 }
 
 @Test("an unreadable Cancel result re-observes the dialog before Escape")
@@ -703,7 +912,7 @@ func aDeadScriptReconcilesDialogBeforeMenuState() throws {
         ),
         encoding: .utf8
     )
-    let helperStart = try #require(source.range(of: "private static func observeAndClearStrayGoToPositionUI()"))
+    let helperStart = try #require(source.range(of: "private static func observeAndClearStrayGoToPositionUI("))
     let helperEnd = try #require(source.range(of: "// MARK: - Control-bar checkbox helpers"))
     let helper = String(source[helperStart.lowerBound..<helperEnd.lowerBound])
     let dialogObservation = try issue529Position(of: "on goToPositionDialogState(theProcess)", in: helper)

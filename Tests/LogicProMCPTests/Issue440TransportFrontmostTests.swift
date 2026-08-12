@@ -131,16 +131,16 @@ struct Issue440TransportFrontmostTests {
         // The AX tree is empty, so this fails further along — but NOT at the gate, and without
         // having activated anything. A gate that refused here would block every legitimate call.
         let obj = try #require(envelope(result))
-        // The route gets past the gate and fails further along, at the Control Bar slider, which
-        // reports that it cannot express a position rather than issuing a write.
+        // The route gets past the gate and fails further along without resolving or writing an
+        // alternative position route. Source mutation: restore `via:"slider"` / `ax_write_failed`
+        // in that receipt; this exact-route assertion must fail.
         #expect(try #require(obj["frontmost_preparation"] as? String) == "already_frontmost")
         #expect(try #require(obj["state"] as? String) == "C")
-        #expect(try #require(obj["error"] as? String) == "ax_write_failed")
-        #expect(try #require(obj["via"] as? String) == "slider")
-        let sliderPositionWriteSupported = try #require(obj["slider_position_write_supported"] as? Bool)
+        #expect(try #require(obj["error"] as? String) == "not_supported")
+        #expect(try #require(obj["position_route"] as? String) == "unavailable")
         let writeAttempted = try #require(obj["write_attempted"] as? Bool)
-        #expect(!sliderPositionWriteSupported)
         #expect(!writeAttempted)
+        #expect(obj["via"] == nil)
         #expect(result.message.contains(#""write_attempted":false"#))
         #expect(activations.value == 0)
         #expect(frontmostReadings.value == FrontmostGate.requiredObservations)
