@@ -117,7 +117,9 @@ private func makeAlertFixture(
     laterButtonTitles: [String]? = nil,
     replaceDialogAfterClassification: Bool = false,
     removeDialogAfterClassification: Bool = false,
-    pressSucceeds: Bool = true
+    pressSucceeds: Bool = true,
+    dismissesWhenAccepted: Bool = true,
+    disappearsWhenRejected: Bool = false
 ) -> AlertFixture {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(1)
@@ -187,11 +189,16 @@ private func makeAlertFixture(
                 CFEqual(element, dialog) ? dialogChildren.next() : base.ax.children(element)
             },
             performAction: { element, action in
-                guard pressSucceeds else { return false }
+                let isClassifiedButton = action == (kAXPressAction as String)
+                    && initialButtons.contains(where: { CFEqual($0, element) })
+                guard pressSucceeds else {
+                    if isClassifiedButton, disappearsWhenRejected {
+                        dismissal.markDismissed()
+                    }
+                    return false
+                }
                 let accepted = base.ax.performAction(element, action)
-                if accepted,
-                   action == (kAXPressAction as String),
-                   initialButtons.contains(where: { CFEqual($0, element) }) {
+                if accepted, isClassifiedButton, dismissesWhenAccepted {
                     dismissal.markDismissed()
                 }
                 return accepted
@@ -238,6 +245,45 @@ struct Issue453AlertAcknowledgeBindingTests {
         #expect(
             fixture.pressedElementIDs.first == fixture.buttonIDs.first,
             "the press must land on the classified dialog's own button"
+        )
+    }
+
+    @Test("an accepted alert press with a persistent alert is not performed")
+    func acceptedPersistentAlertIsNotPerformed() async {
+        let fixture = makeAlertFixture(
+            initialButtonTitles: ["OK"],
+            dismissesWhenAccepted: false
+        )
+
+        let outcome = await AccessibilityChannel.reconcilePreflight(
+            runtime: fixture.runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        #expect(
+            !outcome.performed,
+            "Mutation caught: replace `result.pressed && summary.observedGone` with `result.pressed`; an accepted press while the alert persists would become performed."
+        )
+    }
+
+    @Test("a rejected alert press with a gone alert is not performed")
+    func rejectedGoneAlertIsNotPerformed() async {
+        let fixture = makeAlertFixture(
+            initialButtonTitles: ["OK"],
+            pressSucceeds: false,
+            disappearsWhenRejected: true
+        )
+
+        let outcome = await AccessibilityChannel.reconcilePreflight(
+            runtime: fixture.runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        #expect(
+            !outcome.performed,
+            "Mutation caught: remove `result.pressed &&` and use only `summary.observedGone`; a rejected press with an independently gone alert would become performed."
         )
     }
 

@@ -16,6 +16,10 @@ enum AXHelpers {
         /// Injectable status-preserving attribute seam. `nil` falls back to the ordinary
         /// attribute reader, whose historical `nil` result has no status information.
         let attributeValueResult: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXStatusError>)?
+        /// Injectable status-preserving action seam. `nil` retains the historical
+        /// Boolean action seam for existing test runtimes that cannot report an
+        /// AXError status.
+        let performActionResult: (@Sendable (AXUIElement, String) -> Result<Void, AXStatusError>)?
 
         /// Explicit memberwise initializer, replacing the compiler-synthesized one so
         /// `childrenResult` can default to `nil`. Every existing construction that omits
@@ -28,7 +32,8 @@ enum AXHelpers {
             performAction: @escaping @Sendable (AXUIElement, String) -> Bool,
             childCount: @escaping @Sendable (AXUIElement) -> Int?,
             childrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXStatusError>)? = nil,
-            attributeValueResult: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXStatusError>)? = nil
+            attributeValueResult: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXStatusError>)? = nil,
+            performActionResult: (@Sendable (AXUIElement, String) -> Result<Void, AXStatusError>)? = nil
         ) {
             self.axApp = axApp
             self.attributeValue = attributeValue
@@ -38,6 +43,7 @@ enum AXHelpers {
             self.childCount = childCount
             self.childrenResult = childrenResult
             self.attributeValueResult = attributeValueResult
+            self.performActionResult = performActionResult
         }
 
         static let production = Runtime(
@@ -83,6 +89,13 @@ enum AXHelpers {
                     return .failure(AXStatusError(raw: status.rawValue))
                 }
                 return .success(value)
+            },
+            performActionResult: { element, action in
+                let status = AXUIElementPerformAction(element, action as CFString)
+                guard status == .success else {
+                    return .failure(AXStatusError(raw: status.rawValue))
+                }
+                return .success(())
             }
         )
     }
@@ -109,9 +122,16 @@ enum AXHelpers {
         runtime: Runtime = .production
     ) -> Result<T?, AXStatusError> {
         if let read = runtime.attributeValueResult {
-            return read(element, attribute).map { $0 as? T }
+            // Cast only a value that is actually there. Casting `Optional.none` to `AnyObject`
+            // bridges it to NSNull, so an absent attribute would come back as a present-but-
+            // malformed value — and a reader that fails closed on malformed values would report a
+            // blocking sheet on a window that has none.
+            return read(element, attribute).map { value in
+                guard let value else { return nil }
+                return value as? T
+            }
         }
-        return .success(runtime.attributeValue(element, attribute) as? T)
+        return .success(runtime.attributeValue(element, attribute).flatMap { $0 as? T })
     }
 
     /// Set an attribute value on an AX element.
@@ -131,12 +151,57 @@ enum AXHelpers {
         runtime.children(element)
     }
 
-    /// Typed AX status error carrying the raw `AXError` rawValue.
+    /// Typed AX read failure. `raw` carries an `AXError` only when `source` is
+    /// `.axStatus`; callers that serialize diagnostics use `diagnosticLabel` so
+    /// malformed values are never presented as invented AX status codes.
     struct AXStatusError: Error, Sendable, Equatable {
+        enum Source: Sendable, Equatable {
+            case axStatus
+            case malformedChildren
+        }
+
         let raw: Int32
+        let source: Source
 
         init(raw: Int32) {
             self.raw = raw
+            self.source = .axStatus
+        }
+
+        private init(raw: Int32, source: Source) {
+            self.raw = raw
+            self.source = source
+        }
+
+        /// A successful `AXChildren` read with a non-array payload did not
+        /// establish that the element has no children. The private sentinel keeps
+        /// existing raw-status call sites source-compatible; diagnostics expose
+        /// `malformed_children`, never the sentinel value.
+        static let malformedChildren = AXStatusError(
+            raw: Int32.min,
+            source: .malformedChildren
+        )
+
+        var diagnosticLabel: String {
+            switch source {
+            case .axStatus: return "\(raw)"
+            case .malformedChildren: return "malformed_children"
+            }
+        }
+    }
+
+    /// Why a direct AX action was not accepted. Production preserves the raw
+    /// AXError; older Boolean-only test seams honestly report that no status was
+    /// available instead of inventing one.
+    enum AXActionError: Error, Sendable, Equatable {
+        case status(AXStatusError)
+        case statusUnavailable
+
+        var diagnosticLabel: String {
+            switch self {
+            case .status(let error): return "ax_\(error.diagnosticLabel)"
+            case .statusUnavailable: return "status_unavailable"
+            }
         }
     }
 
@@ -144,9 +209,9 @@ enum AXHelpers {
     ///
     /// Nothing is fabricated in either direction: a non-success status keeps its own raw
     /// value rather than collapsing to a single code, and a successful read never invents
-    /// a status. Absent children (`nil`) and a malformed non-`CFArray` value are both an
-    /// empty success, because neither is an AX error — the earlier defect here was a
-    /// synthesised `noValue` for the absent case.
+    /// a status. An absent children value (`nil`) is an empty success. A malformed
+    /// non-`CFArray` value is *not* empty: it is an unreadable tree, because callers
+    /// that prove absence must not treat an undecodable subtree as visited.
     static func projectChildrenStatus(
         _ status: AXError,
         _ value: AnyObject?
@@ -155,6 +220,9 @@ enum AXHelpers {
             return .failure(AXStatusError(raw: status.rawValue))
         }
         guard let value else { return .success([]) }
+        guard CFGetTypeID(value) == CFArrayGetTypeID() else {
+            return .failure(.malformedChildren)
+        }
         return .success(decodeChildrenArray(value))
     }
 
@@ -195,6 +263,23 @@ enum AXHelpers {
     @discardableResult
     static func performAction(_ element: AXUIElement, _ action: String, runtime: Runtime = .production) -> Bool {
         runtime.performAction(element, action)
+    }
+
+    /// Perform a named action without discarding the AXError reported by the
+    /// production API. This is deliberately separate from the legacy Boolean
+    /// wrapper so existing callers retain their behavior while safety-critical
+    /// reconciliation can surface element-staleness diagnostics.
+    static func performActionResult(
+        _ element: AXUIElement,
+        _ action: String,
+        runtime: Runtime = .production
+    ) -> Result<Void, AXActionError> {
+        if let perform = runtime.performActionResult {
+            return perform(element, action).mapError(AXActionError.status)
+        }
+        return runtime.performAction(element, action)
+            ? .success(())
+            : .failure(.statusUnavailable)
     }
 
     /// Get the role string of an element (e.g. "AXButton", "AXSlider").

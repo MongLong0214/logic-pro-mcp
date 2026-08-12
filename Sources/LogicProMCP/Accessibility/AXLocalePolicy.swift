@@ -272,12 +272,12 @@ enum AXLocalePolicy {
     /// #346/#350: primary destructive button on the "delete channel strips that
     /// are assigned to tracks!" confirm sheet. KO variant is UNVERIFIED (no live
     /// capture), so `variants` stays empty; KO detection degrades to the
-    /// structural `Delete `-prefix check plus the Return default-button fallback
-    /// (fail-closed — a wrong-title guess is never fabricated).
+    /// structural `Delete `-prefix check (fail-closed — a wrong-title guess or
+    /// keyboard fallback is never fabricated).
     static let deleteTracksPrimaryButton = LabelSet(
         canonical: "Delete Tracks and Content",
         variants: [],
-        rationale: "Primary destructive button on the delete-channel-strips confirm sheet; reconciler-clicked with a Return fallback. KO UNVERIFIED → variants empty (fail-closed structural + Return fallback)."
+        rationale: "Primary destructive button on the delete-channel-strips confirm sheet; reconciler presses only the classifier-bound AX element. KO UNVERIFIED → variants empty (fail-closed structural matching; no keyboard fallback)."
     )
 
     static let saveConfirmationButton = LabelSet(

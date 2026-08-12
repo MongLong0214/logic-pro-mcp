@@ -1302,8 +1302,8 @@ extension AccessibilityChannel {
 
     /// Send Return key via CGEvent — used to auto-confirm Logic 12's
     /// "New Track" dialog (which is sometimes opaque to AX tree).
-    // internal (not private): reused by the +ModalReconcile extension as the
-    // delete-confirm sheet's default-button fallback (#346).
+    // internal (not private): retained for the opaque New Track dialog paths
+    // in this channel; modal reconciliation never uses a keyboard fallback.
     static func sendReturnKey() {
         guard let src = CGEventSource(stateID: .hidSystemState) else { return }
         let returnVK: CGKeyCode = 0x24
@@ -1345,7 +1345,8 @@ extension AccessibilityChannel {
             action: reconcileActionLabel(reconcileOutcome.decision),
             newTrackAutoConfirmed: false,
             witnessSummary: reconcileOutcome.witnessSummary,
-            refusal: reconcileOutcome.refusal
+            refusal: reconcileOutcome.refusal,
+            actionFailure: reconcileOutcome.actionFailure
         )
 
         for attempt in 0..<4 {
@@ -1435,19 +1436,25 @@ extension AccessibilityChannel {
     /// State A on confirmed delta, State B `retry_exhausted` if AX poll never
     /// catches the decrement, State C if the menu click itself fails.
     ///
-    /// A mandatory New Track reconciliation changes the meaning of the count:
-    /// once that terminal sheet was observed, a deletion delta is State A only
-    /// if the sheet-close witness confirmed the reconciliation. Without that
-    /// confirmation, the operation has an unresolved blocker even when the
-    /// track list happens to show a decrement.
+    /// A deletion count is State A only after a *subsequent*, clean modal
+    /// observation. Every non-`none` reconcile kind is still a blocker here,
+    /// even if its action was accepted: a successful action is evidence of an
+    /// attempted recovery, not proof that the modal set is now settled clean.
     static func deletionCountCanCertifyStateA(
         observedTrackCountDecreased: Bool,
-        mandatoryNewTrackReconciliationObserved: Bool,
-        mandatoryNewTrackReconciliationPerformed: Bool
+        settledCleanModalObservation: Bool
     ) -> Bool {
-        observedTrackCountDecreased
-            && (!mandatoryNewTrackReconciliationObserved
-                || mandatoryNewTrackReconciliationPerformed)
+        observedTrackCountDecreased && settledCleanModalObservation
+    }
+
+    /// A reconciliation is settled clean only after a read that finds no
+    /// blocking modal at all. A witnessed action is deliberately insufficient:
+    /// its close witness concerns the action's target, while State A needs a
+    /// fresh observation of the complete blocker set.
+    static func deletionModalObservationIsSettledClean(
+        _ outcome: ModalReconcileOutcome
+    ) -> Bool {
+        outcome.kind == .none
     }
 
     static func defaultDeleteTrack(
@@ -1481,52 +1488,57 @@ extension AccessibilityChannel {
         // #346: a channel-strip delete raises a "delete channel strips…" confirm
         // sheet, and a delete that empties the project raises the mandatory New
         // Track sheet (Cancel disabled, Escape inert) — both wedge Logic until
-        // reconciled. Reconcile each poll round (a cheap AX read that no-ops when
-        // no sheet is up) and note the outcome. Reconciliation is ADDITIVE: State
-        // A below still requires a real decrement, so auto-Creating a replacement
-        // track on delete-to-zero correctly stays an honest State B rather than a
-        // fabricated success.
+        // reconciled. Each poll reads the modal state; after one blocker action it
+        // observes rather than repeats the action. Reconciliation is ADDITIVE:
+        // State A below still requires a real decrement, so auto-Creating a
+        // replacement track on delete-to-zero correctly stays an honest State B
+        // rather than a fabricated success.
         var reconcileKind = ModalReconciliation.BlockingModalKind.none
         var reconcileAction = "none"
         // #453: an acknowledgement the executor declined must reach the envelope.
         // Kept beside kind/action so a refusal on any attempt survives to the
         // result, rather than being overwritten by a later clean pass.
         var reconcileRefusal: AlertAcknowledgeRefusal?
+        var reconcileActionFailure: AXHelpers.AXActionError?
         var reconcileWitnessSummary: ModalReconcileWitnessSummary?
-        var mandatoryNewTrackReconciliationObserved = false
-        var mandatoryNewTrackReconciliationAttempted = false
+        var blockingModalActionAttempted = false
         var mandatoryNewTrackReconciliationPerformed = false
 
         var lastObservedCount = beforeCount
         for attempt in 0..<4 {
             try? await Task.sleep(nanoseconds: 250_000_000)
 
-            // Bound the mandatory-New-Track auto-Create to exactly once. If its
-            // close cannot be witnessed, retrying Create could compound an
-            // already-landed action, and its unconfirmed state must block State A.
-            if !mandatoryNewTrackReconciliationAttempted {
-                let outcome = await reconcileAfterMutation(isDeleteContext: true, runtime: runtime)
-                if outcome.kind != .none {
-                    reconcileKind = outcome.kind
-                    reconcileAction = reconcileActionLabel(outcome.decision)
-                    if let refusal = outcome.refusal { reconcileRefusal = refusal }
-                    if let witnessSummary = outcome.witnessSummary {
-                        reconcileWitnessSummary = witnessSummary
-                    }
-                    if outcome.kind == .mandatoryNewTrack {
-                        mandatoryNewTrackReconciliationObserved = true
-                        mandatoryNewTrackReconciliationAttempted = true
-                        mandatoryNewTrackReconciliationPerformed = outcome.performed
-                    }
-                }
-            }
-
             let currentCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
             lastObservedCount = currentCount
+            // Read the count before reconciliation, then require the following
+            // observation to be clean. This catches the last-track New Track
+            // sheet that attaches after the count changes, and observing rather
+            // than re-pressing after a blocker avoids compounding an action whose
+            // effect was not witnessed.
+            let outcome: ModalReconcileOutcome
+            if blockingModalActionAttempted {
+                outcome = observeModalAfterMutation(isDeleteContext: true, runtime: runtime)
+            } else {
+                outcome = await reconcileAfterMutation(isDeleteContext: true, runtime: runtime)
+            }
+            if outcome.kind != .none {
+                reconcileKind = outcome.kind
+                reconcileAction = reconcileActionLabel(outcome.decision)
+                if let refusal = outcome.refusal { reconcileRefusal = refusal }
+                if let actionFailure = outcome.actionFailure { reconcileActionFailure = actionFailure }
+                if let witnessSummary = outcome.witnessSummary {
+                    reconcileWitnessSummary = witnessSummary
+                }
+                blockingModalActionAttempted = true
+                if outcome.kind == .mandatoryNewTrack {
+                    mandatoryNewTrackReconciliationPerformed = outcome.performed
+                }
+            } else {
+                blockingModalActionAttempted = false
+            }
             if deletionCountCanCertifyStateA(
                 observedTrackCountDecreased: currentCount < beforeCount,
-                mandatoryNewTrackReconciliationObserved: mandatoryNewTrackReconciliationObserved,
-                mandatoryNewTrackReconciliationPerformed: mandatoryNewTrackReconciliationPerformed
+                settledCleanModalObservation: deletionModalObservationIsSettledClean(outcome)
             ) {
                 extras["track_count_after"] = currentCount
                 extras["observed_delta"] = currentCount - beforeCount
@@ -1536,7 +1548,8 @@ extension AccessibilityChannel {
                     action: reconcileAction,
                     newTrackAutoConfirmed: mandatoryNewTrackReconciliationPerformed,
                     witnessSummary: reconcileWitnessSummary,
-                    refusal: reconcileRefusal
+                    refusal: reconcileRefusal,
+                    actionFailure: reconcileActionFailure
                 )
                 return .success(HonestContract.encodeStateA(extras: extras))
             }
@@ -1547,7 +1560,7 @@ extension AccessibilityChannel {
 
         extras["track_count_after"] = lastObservedCount
         extras["observed_delta"] = lastObservedCount - beforeCount
-        if mandatoryNewTrackReconciliationObserved {
+        if reconcileKind == .mandatoryNewTrack {
             extras["mandatory_track_reconciliation_performed"] = mandatoryNewTrackReconciliationPerformed
         }
         mergeReconcileExtras(
@@ -1556,7 +1569,8 @@ extension AccessibilityChannel {
             action: reconcileAction,
             newTrackAutoConfirmed: mandatoryNewTrackReconciliationPerformed,
             witnessSummary: reconcileWitnessSummary,
-            refusal: reconcileRefusal
+            refusal: reconcileRefusal,
+            actionFailure: reconcileActionFailure
         )
         return .success(HonestContract.encodeStateB(
             reason: .retryExhausted,
