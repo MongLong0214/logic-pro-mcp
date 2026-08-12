@@ -13,6 +13,9 @@ enum AXHelpers {
         let childCount: @Sendable (AXUIElement) -> Int?
         /// Enumerates the actions an element advertises without attempting one.
         let actionNames: @Sendable (AXUIElement) -> [String]
+        /// Injectable status-preserving action-name seam. `nil` falls back to the ordinary
+        /// action reader, whose historical empty result has no status information.
+        let actionNamesResult: (@Sendable (AXUIElement) -> Result<[String], AXStatusError>)?
         /// Injectable typed-children seam. `nil` means "use the production read".
         let childrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXStatusError>)?
         /// Injectable status-preserving attribute seam. `nil` falls back to the ordinary
@@ -30,6 +33,7 @@ enum AXHelpers {
             performAction: @escaping @Sendable (AXUIElement, String) -> Bool,
             childCount: @escaping @Sendable (AXUIElement) -> Int?,
             actionNames: @escaping @Sendable (AXUIElement) -> [String] = { _ in [] },
+            actionNamesResult: (@Sendable (AXUIElement) -> Result<[String], AXStatusError>)? = nil,
             childrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXStatusError>)? = nil,
             attributeValueResult: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXStatusError>)? = nil
         ) {
@@ -40,6 +44,7 @@ enum AXHelpers {
             self.performAction = performAction
             self.childCount = childCount
             self.actionNames = actionNames
+            self.actionNamesResult = actionNamesResult
             self.childrenResult = childrenResult
             self.attributeValueResult = attributeValueResult
         }
@@ -88,6 +93,17 @@ enum AXHelpers {
                     return []
                 }
                 return actions
+            },
+            actionNamesResult: { element in
+                var names: CFArray?
+                let status = AXUIElementCopyActionNames(element, &names)
+                guard status == .success else {
+                    return .failure(AXStatusError(raw: status.rawValue))
+                }
+                guard let names, let actions = names as? [String] else {
+                    return .success([])
+                }
+                return .success(actions)
             },
             attributeValueResult: { element, attribute in
                 var value: AnyObject?
@@ -213,6 +229,17 @@ enum AXHelpers {
     /// Enumerate the named actions that an element currently advertises.
     static func getActionNames(_ element: AXUIElement, runtime: Runtime = .production) -> [String] {
         runtime.actionNames(element)
+    }
+
+    /// Enumerate action names without flattening an AX read failure into an empty action list.
+    static func getActionNamesResult(
+        _ element: AXUIElement,
+        runtime: Runtime = .production
+    ) -> Result<[String], AXStatusError> {
+        if let read = runtime.actionNamesResult {
+            return read(element)
+        }
+        return .success(runtime.actionNames(element))
     }
 
     /// Get the role string of an element (e.g. "AXButton", "AXSlider").

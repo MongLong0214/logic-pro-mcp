@@ -17,13 +17,15 @@ extension AccessibilityChannel {
     ///   * the Marker List toolbar's Edit menu exposes an exact enabled Delete entry that can receive
     ///     `AXPick`.
     ///
-    /// This operation uses only that scoped AX menu route. A global key cannot be authenticated to
-    /// the Marker List and can instead mutate whichever application owns the keyboard, so unavailable
-    /// menu routes refuse before a destructive write is attempted.
+    /// The scoped AX menu route is preferred because it names the exact destructive item. When it
+    /// is genuinely unavailable, this operation may use a focused Delete key only after proving the
+    /// exact selected table and its bound Marker List window still own focus, and Logic is frontmost.
+    /// The key's return is not evidence: only the settled survivor readback decides the outcome.
     static func defaultDeleteMarker(
         index: Int,
         runtime: AXLogicProElements.Runtime = .production,
-        mouse: AXMouseHelper.Runtime = .production
+        mouse: AXMouseHelper.Runtime = .production,
+        logicIsFrontmost: @escaping @Sendable () -> Bool = ProcessUtils.Runtime.production.logicIsFrontmost
     ) async -> ChannelResult {
         guard index >= 0 else {
             return .error(HonestContract.encodeStateC(
@@ -44,7 +46,19 @@ extension AccessibilityChannel {
             ))
         }
         let window = binding.window
-        let before = AXLogicProElements.enumerateMarkersFromListWindow(window, runtime: runtime.ax)
+        guard case .success(let before) = AXLogicProElements.enumerateMarkersFromListWindow(
+            window, runtime: runtime.ax
+        ) else {
+            return .error(HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: "Marker List rows could not be read before deleting a marker.",
+                extras: [
+                    "operation": "nav.delete_marker",
+                    "requested_index": index,
+                    "write_attempted": false,
+                ]
+            ))
+        }
         guard let target = before.first(where: { $0.id == index }) else {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
@@ -78,7 +92,8 @@ extension AccessibilityChannel {
         // A parse fallback manufactures `ordinal + 1.1.1.1`, which can happen to equal a
         // different marker's parsed position. Do not let a synthetic position participate in a
         // State-A identity proof, even if it happens not to collide in this particular reading.
-        let prewritePositionEvidenceCanonical = before.allSatisfy { $0.positionSource == .parser }
+        let prewritePositionEvidenceCanonical = !before.isEmpty
+            && before.allSatisfy { $0.positionSource == .parser }
         var extras: [String: Any] = [
             "operation": "nav.delete_marker",
             "requested_index": index,
@@ -90,8 +105,8 @@ extension AccessibilityChannel {
         ]
 
         guard let selection = selectMarkerRowForDeletion(index, in: window, runtime: runtime.ax) else {
-            // A weaker key-command channel cannot answer an indexed delete: it ignores `index`
-            // and fires CC 45 blindly, without proving which marker would be removed.
+            // Neither the scoped menu route nor the focused-key fallback may proceed until the
+            // selected row is confirmed in this exact Marker List table.
             extras["write_attempted"] = false
             extras["safe_to_retry"] = true
             extras["fallback_unsafe"] = true
@@ -137,18 +152,42 @@ extension AccessibilityChannel {
                 ))
             }
 
-        case .routeUnavailable(let failure):
-            // The only alternate route is an indexed-blind MIDI command, so preserve the router's
-            // fallback prohibition while making the no-delete outcome honestly retryable.
-            extras["write_attempted"] = false
-            extras["safe_to_retry"] = true
-            extras["fallback_unsafe"] = true
+        case .routeUnavailable(let failure, let keyboardFallbackMayBeSafe):
             extras["edit_menu_route_state"] = failure.state
-            return .error(HonestContract.encodeStateC(
-                error: .axWriteFailed,
-                hint: failure.hint,
-                extras: extras
-            ))
+            guard keyboardFallbackMayBeSafe,
+                  markerTableHasKeyboardFocus(
+                      table: selection.table,
+                      in: binding.window,
+                      runtime: runtime
+                  ) else {
+                // A failed menu read or dismissal leaves this route unavailable but does not make
+                // a global key safe. The selection write is disclosed above; Delete is not posted.
+                extras["write_attempted"] = false
+                extras["safe_to_retry"] = true
+                extras["fallback_unsafe"] = true
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: failure.hint + " Keyboard fallback was not posted because the bound Marker List did not hold focus.",
+                    extras: extras
+                ))
+            }
+            // Frontmost is a safety precondition that prevents a Delete intended for Logic from
+            // landing in another application. It is deliberately not included in verification
+            // evidence; survivor readback below remains the sole evidence of any deletion.
+            guard logicIsFrontmost() else {
+                extras["write_attempted"] = false
+                extras["safe_to_retry"] = true
+                extras["fallback_unsafe"] = true
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: failure.hint + " Keyboard fallback was not posted because Logic was not frontmost.",
+                    extras: extras
+                ))
+            }
+            extras["write_attempted"] = true
+            extras["actuation_route"] = "focused_delete_key"
+            _ = mouse.postKeyEvent(0x33)  // kVK_Delete; its return is not evidence.
+            mouse.sleepMicros(400_000)
         }
 
         guard let afterBinding = AXLogicProElements.markerListBinding(runtime: runtime),
@@ -164,21 +203,33 @@ extension AccessibilityChannel {
         var observedSurvivorPositions: [String] = []
         var observedSurvivors: [String] = []
         var observedPositionEvidenceCanonical = false
+        var observedEmptySurvivorSet = false
         var settled = false
         var previousPositions: [String]?
         for _ in 0..<6 {
-            let reading = AXLogicProElements.enumerateMarkersFromListWindow(
+            let reading: [MarkerState]
+            switch AXLogicProElements.enumerateMarkersFromListWindow(
                 afterBinding.window, runtime: runtime.ax
-            )
+            ) {
+            case .success(let observedMarkers):
+                reading = observedMarkers
+            case .failure:
+                extras["readback_settled"] = false
+                extras["readback_unreadable"] = true
+                return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+            }
             let positions = reading.map(\.position).map(canonicalMarkerPosition).sorted()
             if let previousPositions, previousPositions == positions {
                 observedSurvivorPositions = positions
                 observedSurvivors = reading
                     .map { canonicalMarkerIdentity(name: $0.name, position: $0.position) }
                     .sorted()
-                observedPositionEvidenceCanonical = reading.allSatisfy {
-                    $0.positionSource == .parser
-                }
+                // An empty successful survivor set has no observed positions to parse. Treat it
+                // explicitly as a successfully read empty set rather than accepting
+                // `[].allSatisfy` as canonical-position evidence.
+                observedEmptySurvivorSet = reading.isEmpty
+                observedPositionEvidenceCanonical = !reading.isEmpty
+                    && reading.allSatisfy { $0.positionSource == .parser }
                 settled = true
                 break
             }
@@ -192,8 +243,9 @@ extension AccessibilityChannel {
         extras["readback_settled"] = true
         extras["marker_count_after"] = observedSurvivorPositions.count
         extras["observed_position_evidence_canonical"] = observedPositionEvidenceCanonical
+        extras["observed_empty_survivor_set"] = observedEmptySurvivorSet
         extras["position_evidence_canonical"] = prewritePositionEvidenceCanonical
-            && observedPositionEvidenceCanonical
+            && (observedEmptySurvivorSet || observedPositionEvidenceCanonical)
 
         // This proves that precisely one position occurrence disappeared and that it was an
         // occurrence at the target's position. It cannot establish WHICH marker was removed when
@@ -217,7 +269,8 @@ extension AccessibilityChannel {
                 + "\(target.position), so this readback cannot establish which marker was deleted."
             return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
         }
-        guard prewritePositionEvidenceCanonical, observedPositionEvidenceCanonical else {
+        guard prewritePositionEvidenceCanonical,
+              observedEmptySurvivorSet || observedPositionEvidenceCanonical else {
             extras["reason_detail"] = "Delete was attempted and the marker count moved, but at "
                 + "least one marker position came from an ordinal parse fallback; synthetic "
                 + "positions cannot support a verified target identity."
@@ -244,6 +297,7 @@ extension AccessibilityChannel {
     }
 
     private struct MarkerRowSelection {
+        let table: AXUIElement
         let changedSelection: Bool?
     }
 
@@ -284,7 +338,52 @@ extension AccessibilityChannel {
             table, "AXSelectedRows", runtime: runtime
         ) ?? []
         guard selected.count == 1, CFEqual(selected[0], rows[index]) else { return nil }
-        return MarkerRowSelection(changedSelection: wasAlreadyExactlyTheTarget.map { !$0 })
+        return MarkerRowSelection(
+            table: table,
+            changedSelection: wasAlreadyExactlyTheTarget.map { !$0 }
+        )
+    }
+
+    /// True only when focus lives in the exact table selected above, in the exact Marker List
+    /// window bound to the active project. A role or label check is insufficient: another project
+    /// can expose an indistinguishable Marker List, while Delete acts on the surface with keyboard
+    /// focus. Both CFEqual comparisons are intentional and independently covered by #535.
+    private static func markerTableHasKeyboardFocus(
+        table: AXUIElement,
+        in window: AXUIElement,
+        runtime: AXLogicProElements.Runtime
+    ) -> Bool {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime),
+              let focused: AXUIElement = AXHelpers.getAttribute(
+                  app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax
+              ) else { return false }
+        var current: AXUIElement? = focused
+        var focusedTable: AXUIElement?
+        var hops = 0
+        while let element = current, hops < 12 {
+            if (AXHelpers.getRole(element, runtime: runtime.ax) ?? "") == (kAXTableRole as String) {
+                focusedTable = element
+                break
+            }
+            current = AXHelpers.getAttribute(
+                element, kAXParentAttribute as String, runtime: runtime.ax
+            )
+            hops += 1
+        }
+        guard let focusedTable, CFEqual(focusedTable, table) else { return false }
+
+        current = focusedTable
+        hops = 0
+        while let element = current, hops < 12 {
+            if (AXHelpers.getRole(element, runtime: runtime.ax) ?? "") == (kAXWindowRole as String) {
+                return CFEqual(element, window)
+            }
+            current = AXHelpers.getAttribute(
+                element, kAXParentAttribute as String, runtime: runtime.ax
+            )
+            hops += 1
+        }
+        return false
     }
 
     /// Whether attempting the Marker List's own Edit → Delete menu path reached a destructive
@@ -319,7 +418,10 @@ extension AccessibilityChannel {
         /// `AXPick` was sent to the exact enabled Delete menu item, whatever AX returned. The
         /// associated Boolean is true when this call could not prove the menu later closed.
         case pickIssued(menuCloseWasNotObserved: Bool)
-        case routeUnavailable(MarkerListEditMenuRouteFailure)
+        /// The associated Boolean says whether the scoped menu UI is known not to be open or
+        /// otherwise able to receive a command, so the focused-key fallback may be considered.
+        /// It is a safety fact, never verification evidence.
+        case routeUnavailable(MarkerListEditMenuRouteFailure, keyboardFallbackMayBeSafe: Bool)
     }
 
     /// Use the Marker List's own menu rather than a keyboard Delete. The bottom `Edit` button and the
@@ -330,22 +432,35 @@ extension AccessibilityChannel {
         runtime: AXHelpers.Runtime,
         mouse: AXMouseHelper.Runtime
     ) -> MarkerListEditMenuDeleteOutcome {
-        let controls = AXHelpers.findAllDescendants(
-            of: window, role: kAXMenuButtonRole as String, maxDepth: 12, runtime: runtime
-        ) + AXHelpers.findAllDescendants(
-            of: window, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime
-        )
+        let controls: [AXUIElement]
+        switch markerListEditMenuControls(in: window, runtime: runtime) {
+        case .success(let observedControls):
+            controls = observedControls
+        case .failure:
+            return .routeUnavailable(.menuUnreadable, keyboardFallbackMayBeSafe: true)
+        }
         for control in controls {
-            guard AXLocalePolicy.elementMatches(
-                control, AXLocalePolicy.markerListEditMenuButton,
+            switch markerListElementMatches(
+                control, labels: AXLocalePolicy.markerListEditMenuButton,
                 mode: .exactStrict, runtime: runtime
-            ) else { continue }
+            ) {
+            case .success(true):
+                break
+            case .success(false):
+                continue
+            case .failure:
+                return .routeUnavailable(.menuUnreadable, keyboardFallbackMayBeSafe: true)
+            }
 
             // This is intentionally action discovery, not a press ladder. A live Marker List's
             // bottom Edit AXButton offers AXPress only; pressing it is not a reliable route to its
             // menu. The toolbar AXMenuButton offers AXShowMenu.
-            guard AXHelpers.getActionNames(control, runtime: runtime).contains(kAXShowMenuAction as String)
-            else { continue }
+            switch AXHelpers.getActionNamesResult(control, runtime: runtime) {
+            case .success(let actions):
+                guard actions.contains(kAXShowMenuAction as String) else { continue }
+            case .failure:
+                return .routeUnavailable(.menuUnreadable, keyboardFallbackMayBeSafe: true)
+            }
 
             // As with AXPick, the return code does not prove the UI state. Read the scoped AX tree
             // after issuing AXShowMenu. Logic may expose that menu asynchronously, so settle
@@ -362,23 +477,50 @@ extension AccessibilityChannel {
             case .unknown:
                 // AXShowMenu may have succeeded even though its scoped child reads failed or
                 // disagreed. Attempt AX-only cleanup before honestly reporting unreadable state.
-                _ = dismissMarkerListEditMenuAfterUnknownDiscovery(
-                    from: control, runtime: runtime, mouse: mouse
+                return .routeUnavailable(
+                    .menuUnreadable,
+                    keyboardFallbackMayBeSafe: dismissMarkerListEditMenuAfterUnknownDiscovery(
+                        from: control, runtime: runtime, mouse: mouse
+                    )
                 )
-                return .routeUnavailable(.menuUnreadable)
             }
 
-            guard let entry = markerListDeleteMenuItem(in: menu, runtime: runtime) else {
-                _ = dismissMarkerListEditMenu(
-                    menu, from: control, runtime: runtime, mouse: mouse
+            let entry: AXUIElement
+            switch markerListDeleteMenuItem(in: menu, runtime: runtime) {
+            case .success(let observedEntry?):
+                entry = observedEntry
+            case .success(nil):
+                return .routeUnavailable(
+                    .exactDeleteEntryMissingOrDisabled,
+                    keyboardFallbackMayBeSafe: dismissMarkerListEditMenu(
+                        menu, from: control, runtime: runtime, mouse: mouse
+                    )
                 )
-                return .routeUnavailable(.exactDeleteEntryMissingOrDisabled)
+            case .failure:
+                return .routeUnavailable(
+                    .menuUnreadable,
+                    keyboardFallbackMayBeSafe: dismissMarkerListEditMenu(
+                        menu, from: control, runtime: runtime, mouse: mouse
+                    )
+                )
             }
-            guard markerListMenuItemEnabledForActuation(entry, runtime: runtime) else {
-                _ = dismissMarkerListEditMenu(
-                    menu, from: control, runtime: runtime, mouse: mouse
+            switch markerListMenuItemEnabledForActuation(entry, runtime: runtime) {
+            case .enabled:
+                break
+            case .disabled:
+                return .routeUnavailable(
+                    .exactDeleteEntryMissingOrDisabled,
+                    keyboardFallbackMayBeSafe: dismissMarkerListEditMenu(
+                        menu, from: control, runtime: runtime, mouse: mouse
+                    )
                 )
-                return .routeUnavailable(.exactDeleteEntryMissingOrDisabled)
+            case .unreadable:
+                return .routeUnavailable(
+                    .menuUnreadable,
+                    keyboardFallbackMayBeSafe: dismissMarkerListEditMenu(
+                        menu, from: control, runtime: runtime, mouse: mouse
+                    )
+                )
             }
 
             // Do not use the return value to select another actuator. This one call is the write.
@@ -391,7 +533,71 @@ extension AccessibilityChannel {
             ) && !dismissMarkerListEditMenu(menu, from: control, runtime: runtime, mouse: mouse)
             return .pickIssued(menuCloseWasNotObserved: menuCloseWasNotObserved)
         }
-        return .routeUnavailable(.menuAbsent)
+        return .routeUnavailable(.menuAbsent, keyboardFallbackMayBeSafe: true)
+    }
+
+    /// Finds candidate Edit controls without collapsing a failed child/tree read to no controls.
+    /// The result deliberately includes only controls whose role was read successfully; a failed
+    /// role observation makes the discovery unreadable rather than quietly declaring no menu route.
+    private static func markerListEditMenuControls(
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
+        var controls: [AXUIElement] = []
+        var parents = [window]
+        for _ in 0..<12 {
+            var next: [AXUIElement] = []
+            for parent in parents {
+                let children: [AXUIElement]
+                switch AXHelpers.childrenResult(parent, runtime: runtime) {
+                case .success(let observedChildren):
+                    children = observedChildren
+                case .failure(let error):
+                    return .failure(error)
+                }
+                for child in children {
+                    switch AXHelpers.getAttributeResult(
+                        child, kAXRoleAttribute as String, runtime: runtime
+                    ) as Result<String?, AXHelpers.AXStatusError> {
+                    case .success(let role):
+                        if role == (kAXMenuButtonRole as String) || role == (kAXButtonRole as String) {
+                            controls.append(child)
+                        }
+                    case .failure(let error):
+                        return .failure(error)
+                    }
+                    next.append(child)
+                }
+            }
+            parents = next
+        }
+        return .success(controls)
+    }
+
+    /// Label discovery participates in the menu-route diagnosis. A failed Title or Description
+    /// read is not proof that the control or menu item has a different localized label.
+    private static func markerListElementMatches(
+        _ element: AXUIElement,
+        labels: AXLocalePolicy.LabelSet,
+        mode: AXLocalePolicy.MatchMode,
+        runtime: AXHelpers.Runtime
+    ) -> Result<Bool, AXHelpers.AXStatusError> {
+        switch AXHelpers.getAttributeResult(
+            element, kAXTitleAttribute as String, runtime: runtime
+        ) as Result<String?, AXHelpers.AXStatusError> {
+        case .success(let title):
+            if labels.matches(title, mode: mode) { return .success(true) }
+        case .failure(let error):
+            return .failure(error)
+        }
+        switch AXHelpers.getAttributeResult(
+            element, kAXDescriptionAttribute as String, runtime: runtime
+        ) as Result<String?, AXHelpers.AXStatusError> {
+        case .success(let description):
+            return .success(labels.matches(description, mode: mode))
+        case .failure(let error):
+            return .failure(error)
+        }
     }
 
     /// An observed menu must belong to the exact Edit control that was asked to show it. A menu
@@ -403,9 +609,17 @@ extension AccessibilityChannel {
     ) -> Result<AXUIElement?, AXHelpers.AXStatusError> {
         switch AXHelpers.childrenResult(control, runtime: runtime) {
         case .success(let children):
-            return .success(children.first {
-                (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
-            })
+            for child in children {
+                switch AXHelpers.getAttributeResult(
+                    child, kAXRoleAttribute as String, runtime: runtime
+                ) as Result<String?, AXHelpers.AXStatusError> {
+                case .success(let role):
+                    if role == (kAXMenuRole as String) { return .success(child) }
+                case .failure(let error):
+                    return .failure(error)
+                }
+            }
+            return .success(nil)
         case .failure(let error) where markerListEditMenuAbsenceStatus(error):
             // AXChildren on an AXMenuButton may answer `attributeUnsupported` or `noValue`
             // instead of giving an empty child list. Both are a readable absence here, not an
@@ -473,7 +687,7 @@ extension AccessibilityChannel {
     }
 
     /// Discovery was unknown before it yielded an AXMenu that can receive AXCancel. Re-observe in
-    /// case the menu settles; otherwise leave the UI untouched rather than posting a global key.
+    /// case the menu settles; otherwise leave the UI untouched and prohibit a focused-key fallback.
     private static func dismissMarkerListEditMenuAfterUnknownDiscovery(
         from control: AXUIElement,
         runtime: AXHelpers.Runtime,
@@ -492,7 +706,7 @@ extension AccessibilityChannel {
     }
 
     /// Dismiss the exact menu this run observed, then prove it disappeared from the opener's
-    /// child list. This is deliberately AX-only: delete_marker never posts a global key.
+    /// child list before any focused-key fallback can be considered.
     private static func dismissMarkerListEditMenu(
         _ menu: AXUIElement,
         from control: AXUIElement,
@@ -509,14 +723,36 @@ extension AccessibilityChannel {
     private static func markerListDeleteMenuItem(
         in menu: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> AXUIElement? {
-        AXHelpers.getChildren(menu, runtime: runtime).first {
-            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuItemRole as String)
-                && AXLocalePolicy.elementMatches(
-                    $0, AXLocalePolicy.markerListDeleteMenuItem,
-                    mode: .exactStrict, runtime: runtime
-                )
+    ) -> Result<AXUIElement?, AXHelpers.AXStatusError> {
+        let children: [AXUIElement]
+        switch AXHelpers.childrenResult(menu, runtime: runtime) {
+        case .success(let observedChildren):
+            children = observedChildren
+        case .failure(let error):
+            return .failure(error)
         }
+        for child in children {
+            switch AXHelpers.getAttributeResult(
+                child, kAXRoleAttribute as String, runtime: runtime
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case .success(let role):
+                guard role == (kAXMenuItemRole as String) else { continue }
+            case .failure(let error):
+                return .failure(error)
+            }
+            switch markerListElementMatches(
+                child, labels: AXLocalePolicy.markerListDeleteMenuItem,
+                mode: .exactStrict, runtime: runtime
+            ) {
+            case .success(true):
+                return .success(child)
+            case .success(false):
+                continue
+            case .failure(let error):
+                return .failure(error)
+            }
+        }
+        return .success(nil)
     }
 
     /// A destructive menu pick needs a readable positive enablement signal. Live Logic 12.3
@@ -525,8 +761,22 @@ extension AccessibilityChannel {
     private static func markerListMenuItemEnabledForActuation(
         _ item: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> Bool {
-        let enabled: Bool? = AXHelpers.getAttribute(item, kAXEnabledAttribute as String, runtime: runtime)
-        return enabled == true
+    ) -> MarkerListMenuItemEnablement {
+        switch AXHelpers.getAttributeResult(
+            item, kAXEnabledAttribute as String, runtime: runtime
+        ) as Result<Bool?, AXHelpers.AXStatusError> {
+        case .success(.some(true)):
+            return .enabled
+        case .success:
+            return .disabled
+        case .failure:
+            return .unreadable
+        }
+    }
+
+    private enum MarkerListMenuItemEnablement {
+        case enabled
+        case disabled
+        case unreadable
     }
 }

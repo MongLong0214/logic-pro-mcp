@@ -771,7 +771,7 @@ enum WorkflowSkillCatalog {
             productionReady: false,
             dependsOn: [],
             limitations: [
-                "delete_marker and indexed goto_marker are keycmd-only on Logic 12.2 (manual MIDI Learn binding required; see SETUP §4.1) and are intentionally not part of this recipe.",
+                "delete_marker uses the Marker List's exact Edit > Delete menu when its localized controls are available; otherwise it may post one identity-bound Delete key only while Logic is frontmost, and reports success only from settled Marker List survivor readback. Indexed goto_marker remains keycmd-only (manual MIDI Learn required; see SETUP §4.1).",
             ],
             mutationKind: .guardedMutation
         )

@@ -103,8 +103,11 @@ extension AXLogicProElements {
     ) -> [MarkerState] {
         // Strategy 1 — Logic 12.2+: scrape the Marker List window's AXTable.
         if let listWindow = findMarkerListWindow(runtime: runtime) {
-            let listMarkers = enumerateMarkersFromListWindow(listWindow, runtime: runtime.ax)
-            if !listMarkers.isEmpty { return listMarkers }
+            if case .success(let listMarkers) = enumerateMarkersFromListWindow(
+                listWindow, runtime: runtime.ax
+            ), !listMarkers.isEmpty {
+                return listMarkers
+            }
         }
 
         // Strategy 2 — Logic 11.x: AXRuler-based.
@@ -205,34 +208,128 @@ extension AXLogicProElements {
     static func enumerateMarkersFromListWindow(
         _ window: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> [MarkerState] {
-        let tables = AXHelpers.findAllDescendants(
-            of: window, role: kAXTableRole, maxDepth: 8, runtime: runtime
-        )
-        guard let table = tables.first else { return [] }
+    ) -> Result<[MarkerState], AXHelpers.AXStatusError> {
+        let table: AXUIElement
+        switch markerListTable(in: window, runtime: runtime) {
+        case .success(let foundTable?):
+            table = foundTable
+        case .success(nil):
+            return .success([])
+        case .failure(let error):
+            return .failure(error)
+        }
 
-        let rows: [AXUIElement] = AXHelpers.getAttribute(
-            table, "AXRows", runtime: runtime
-        ) ?? AXHelpers.getChildren(table, runtime: runtime).filter {
-            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXRowRole as String)
+        let rows: [AXUIElement]
+        switch AXHelpers.getAttributeResult(table, "AXRows", runtime: runtime) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+        case .success(let observedRows?):
+            rows = observedRows
+        case .success(nil):
+            switch directChildren(of: table, withRole: kAXRowRole as String, runtime: runtime) {
+            case .success(let children):
+                rows = children
+            case .failure(let error):
+                return .failure(error)
+            }
+        case .failure(let error):
+            return .failure(error)
         }
 
         var markers: [MarkerState] = []
         markers.reserveCapacity(min(rows.count, markerLimit))
         for (index, row) in rows.prefix(markerLimit).enumerated() {
-            let cells = AXHelpers.getChildren(row, runtime: runtime).filter {
-                (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXCellRole as String)
+            let cells: [AXUIElement]
+            switch directChildren(of: row, withRole: kAXCellRole as String, runtime: runtime) {
+            case .success(let children):
+                cells = children
+            case .failure(let error):
+                return .failure(error)
             }
             // Need at least 3 cells: [Lock, Position, Name, ...].
             guard cells.count >= 3 else { continue }
-            let positionRaw = firstChildDescription(of: cells[1], runtime: runtime) ?? ""
-            let nameRaw = firstChildDescription(of: cells[2], runtime: runtime) ?? ""
+            let positionRaw: String
+            switch firstChildDescription(of: cells[1], runtime: runtime) {
+            case .success(let value):
+                positionRaw = value ?? ""
+            case .failure(let error):
+                return .failure(error)
+            }
+            let nameRaw: String
+            switch firstChildDescription(of: cells[2], runtime: runtime) {
+            case .success(let value):
+                nameRaw = value ?? ""
+            case .failure(let error):
+                return .failure(error)
+            }
             let name = nameRaw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { continue }
             let parsed = parseMarkerListPosition(positionRaw)
             markers.append(.fromParsed(parsed, ordinal: index, name: name))
         }
-        return markers
+        return .success(markers)
+    }
+
+    /// Finds the first Marker List table without turning a failed `AXChildren` read into an
+    /// empty tree. An empty successful traversal means no table was exposed; a failed traversal
+    /// remains unreadable for callers deciding whether a destructive write is verified.
+    private static func markerListTable(
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<AXUIElement?, AXHelpers.AXStatusError> {
+        var parents = [window]
+        for _ in 0..<8 {
+            var next: [AXUIElement] = []
+            for parent in parents {
+                let children: [AXUIElement]
+                switch AXHelpers.childrenResult(parent, runtime: runtime) {
+                case .success(let observedChildren):
+                    children = observedChildren
+                case .failure(let error):
+                    return .failure(error)
+                }
+                for child in children {
+                    switch AXHelpers.getAttributeResult(
+                        child, kAXRoleAttribute as String, runtime: runtime
+                    ) as Result<String?, AXHelpers.AXStatusError> {
+                    case .success(let role):
+                        if role == (kAXTableRole as String) { return .success(child) }
+                    case .failure(let error):
+                        return .failure(error)
+                    }
+                    next.append(child)
+                }
+            }
+            parents = next
+        }
+        return .success(nil)
+    }
+
+    /// Reads direct children with a role match while preserving child-read failures. Role
+    /// attributes are part of the structural reading too: treating an unreadable role as a
+    /// non-match could manufacture an empty Marker List.
+    private static func directChildren(
+        of element: AXUIElement,
+        withRole role: String,
+        runtime: AXHelpers.Runtime
+    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
+        let children: [AXUIElement]
+        switch AXHelpers.childrenResult(element, runtime: runtime) {
+        case .success(let observedChildren):
+            children = observedChildren
+        case .failure(let error):
+            return .failure(error)
+        }
+        var matches: [AXUIElement] = []
+        for child in children {
+            switch AXHelpers.getAttributeResult(
+                child, kAXRoleAttribute as String, runtime: runtime
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case .success(let observedRole):
+                if observedRole == role { matches.append(child) }
+            case .failure(let error):
+                return .failure(error)
+            }
+        }
+        return .success(matches)
     }
 
     /// First non-empty `AXDescription` in `cell`'s direct children, skipping
@@ -243,29 +340,58 @@ extension AXLogicProElements {
     private static func firstChildDescription(
         of cell: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> String? {
+    ) -> Result<String?, AXHelpers.AXStatusError> {
         let placeholder = AXLocalePolicy.markerCellPlaceholders
-        for child in AXHelpers.getChildren(cell, runtime: runtime) {
-            if let desc = AXHelpers.getDescription(child, runtime: runtime),
-               !desc.isEmpty,
-               !placeholder.contains(desc) {
-                return desc
+        let children: [AXUIElement]
+        switch AXHelpers.childrenResult(cell, runtime: runtime) {
+        case .success(let observedChildren):
+            children = observedChildren
+        case .failure(let error):
+            return .failure(error)
+        }
+        for child in children {
+            switch AXHelpers.getAttributeResult(
+                child, kAXDescriptionAttribute as String, runtime: runtime
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case .success(let description):
+                if let description, !description.isEmpty, !placeholder.contains(description) {
+                    return .success(description)
+                }
+            case .failure(let error):
+                return .failure(error)
             }
-            if let value = AXHelpers.getValue(child, runtime: runtime) as? String,
-               !value.isEmpty {
-                return value
+            switch AXHelpers.getAttributeResult(
+                child, kAXValueAttribute as String, runtime: runtime
+            ) as Result<AnyObject?, AXHelpers.AXStatusError> {
+            case .success(let value):
+                if let value = value as? String, !value.isEmpty {
+                    return .success(value)
+                }
+            case .failure(let error):
+                return .failure(error)
             }
         }
-        if let cellDesc = AXHelpers.getDescription(cell, runtime: runtime),
-           !cellDesc.isEmpty,
-           !placeholder.contains(cellDesc) {
-            return cellDesc
+        switch AXHelpers.getAttributeResult(
+            cell, kAXDescriptionAttribute as String, runtime: runtime
+        ) as Result<String?, AXHelpers.AXStatusError> {
+        case .success(let description):
+            if let description, !description.isEmpty, !placeholder.contains(description) {
+                return .success(description)
+            }
+        case .failure(let error):
+            return .failure(error)
         }
-        if let value = AXHelpers.getValue(cell, runtime: runtime) as? String,
-           !value.isEmpty {
-            return value
+        switch AXHelpers.getAttributeResult(
+            cell, kAXValueAttribute as String, runtime: runtime
+        ) as Result<AnyObject?, AXHelpers.AXStatusError> {
+        case .success(let value):
+            if let value = value as? String, !value.isEmpty {
+                return .success(value)
+            }
+        case .failure(let error):
+            return .failure(error)
         }
-        return nil
+        return .success(nil)
     }
 
     /// Logic Marker List 셀의 위치 문자열을 표준 "bar.beat.div.tick" 형태로 변환한다.

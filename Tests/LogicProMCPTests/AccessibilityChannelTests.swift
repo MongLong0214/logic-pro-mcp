@@ -1051,7 +1051,10 @@ private final class MarkerRenameSurface: @unchecked Sendable {
     }
 
     func markers(runtime: AXLogicProElements.Runtime) -> [MarkerState] {
-        AXLogicProElements.enumerateMarkersFromListWindow(window, runtime: runtime.ax)
+        switch AXLogicProElements.enumerateMarkersFromListWindow(window, runtime: runtime.ax) {
+        case .success(let markers): return markers
+        case .failure: return []
+        }
     }
 }
 

@@ -53,10 +53,15 @@ extension AccessibilityChannel {
             return openResult
         }
 
-        let before = AXLogicProElements.enumerateMarkersFromListWindow(
+        guard case .success(let before) = AXLogicProElements.enumerateMarkersFromListWindow(
             listWindow,
             runtime: runtime.ax
-        )
+        ) else {
+            return .error(HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: "Marker List rows could not be read before creating a marker."
+            ))
+        }
         guard focusArrangeWindow(runtime: runtime) else {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
@@ -77,10 +82,11 @@ extension AccessibilityChannel {
             guard let currentWindow = AXLogicProElements.findMarkerListWindow(runtime: runtime) else {
                 continue
             }
-            after = AXLogicProElements.enumerateMarkersFromListWindow(
+            guard case .success(let current) = AXLogicProElements.enumerateMarkersFromListWindow(
                 currentWindow,
                 runtime: runtime.ax
-            )
+            ) else { continue }
+            after = current
             if after.count > before.count {
                 break
             }
@@ -165,10 +171,16 @@ extension AccessibilityChannel {
             ))
         }
         let window = binding.window
-        let before = AXLogicProElements.enumerateMarkersFromListWindow(
+        guard case .success(let before) = AXLogicProElements.enumerateMarkersFromListWindow(
             window,
             runtime: runtime.ax
-        )
+        ) else {
+            return .error(HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: "Marker List rows could not be read before renaming a marker.",
+                extras: ["operation": "nav.rename_marker", "requested_index": index, "write_attempted": false]
+            ))
+        }
         guard let target = before.first(where: { $0.id == index }) else {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
@@ -229,10 +241,16 @@ extension AccessibilityChannel {
                 extras: extras
             ))
         }
-        let matches = AXLogicProElements.enumerateMarkersFromListWindow(
+        guard case .success(let after) = AXLogicProElements.enumerateMarkersFromListWindow(
             currentBinding.window,
             runtime: runtime.ax
-        ).filter { $0.positionSource == .parser && $0.position == stablePosition }
+        ) else {
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: extras
+            ))
+        }
+        let matches = after.filter { $0.positionSource == .parser && $0.position == stablePosition }
         guard matches.count == 1 else {
             return .success(HonestContract.encodeStateB(
                 reason: .readbackUnavailable,
