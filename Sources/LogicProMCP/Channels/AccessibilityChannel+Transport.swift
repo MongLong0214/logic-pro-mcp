@@ -947,14 +947,17 @@ extension AccessibilityChannel {
         -- Never claim that Escape cleaned up a menu until AXSelected says so.
         -- Three attempts are enough to cover a menu/submenu chain without
         -- turning a failed close into an unbounded retry.
-        on dismissOpenMenu(theProcess)
+        -- `knownOpen` says whether THIS run has already clicked a menu open. It changes what an
+        -- unreadable first read means. At entry nothing has been opened, so UNREADABLE is an absent
+        -- observation and returning it lets the run proceed — refusing there sent 5 of 8 fresh
+        -- processes to the slider route. After this run clicked, a menu IS open: an unreadable read
+        -- is not permission to skip the Escape, because skipping it can end the run with the menu
+        -- still up.
+        on dismissOpenMenu(theProcess, knownOpen)
             set menuState to my menuOpenState(theProcess)
             if menuState is "CLOSED" then return "CLOSED"
-            -- An unreadable state before this run has observed OPEN remains an
-            -- absent observation. The same state after Escape is different: we
-            -- know a menu was open and cannot prove the dismissal worked.
-            if menuState is "UNREADABLE" then return "UNREADABLE"
-            if menuState is not "OPEN" then return menuState
+            if menuState is "UNREADABLE" and not knownOpen then return "UNREADABLE"
+            if menuState is not "OPEN" and menuState is not "UNREADABLE" then return menuState
             repeat 3 times
                 using terms from application "System Events"
                     tell theProcess to key code 53
@@ -1000,7 +1003,7 @@ extension AccessibilityChannel {
                 -- A timed-out predecessor can leave a menu open. Clear and
                 -- observe that state before this run performs any menu read or
                 -- actuation, so a later fallback never inherits an open menu.
-                set entryMenuCleanup to my dismissOpenMenu(logicProcess)
+                set entryMenuCleanup to my dismissOpenMenu(logicProcess, false)
                 if entryMenuCleanup is "OPEN" or entryMenuCleanup is "OPEN_UNREADABLE" then
                     return "MENU_PICK_FAILED: a menu was open at entry and would not close (" & entryMenuCleanup & ")"
                 end if
@@ -1027,14 +1030,14 @@ extension AccessibilityChannel {
                         set selectedSubmenuItem to menu item "Go To" of menu 1 of selectedMenuBarItem
                         set mi to menu item "Position…" of menu 1 of selectedSubmenuItem
                     else
-                        set cleanupState to my dismissOpenMenu(logicProcess)
+                        set cleanupState to my dismissOpenMenu(logicProcess, true)
                         if cleanupState is not "CLOSED" then
                             return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                         end if
                         return "MENU_NOT_FOUND"
                     end if
                 on error errMsg
-                    set cleanupState to my dismissOpenMenu(logicProcess)
+                    set cleanupState to my dismissOpenMenu(logicProcess, true)
                     if cleanupState is not "CLOSED" then
                         return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
@@ -1047,7 +1050,7 @@ extension AccessibilityChannel {
                     click selectedMenuBarItem
                     set menuBarOpenState to my menuItemOpenedAfterClick(selectedMenuBarItem)
                     if menuBarOpenState is not "OPEN" then
-                        set cleanupState to my dismissOpenMenu(logicProcess)
+                        set cleanupState to my dismissOpenMenu(logicProcess, true)
                         if cleanupState is not "CLOSED" then
                             return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                         end if
@@ -1056,14 +1059,14 @@ extension AccessibilityChannel {
                     click selectedSubmenuItem
                     set submenuOpenState to my menuItemOpenedAfterClick(selectedSubmenuItem)
                     if submenuOpenState is not "OPEN" then
-                        set cleanupState to my dismissOpenMenu(logicProcess)
+                        set cleanupState to my dismissOpenMenu(logicProcess, true)
                         if cleanupState is not "CLOSED" then
                             return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                         end if
                         return "MENU_PICK_FAILED: selected submenu item did not open (" & submenuOpenState & ")"
                     end if
                 on error errMsg
-                    set cleanupState to my dismissOpenMenu(logicProcess)
+                    set cleanupState to my dismissOpenMenu(logicProcess, true)
                     if cleanupState is not "CLOSED" then
                         return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
@@ -1073,14 +1076,14 @@ extension AccessibilityChannel {
                     set menuItemEnabled to enabled of mi
                 on error
                     -- An unreadable AXEnabled must not authorise the pick.
-                    set cleanupState to my dismissOpenMenu(logicProcess)
+                    set cleanupState to my dismissOpenMenu(logicProcess, true)
                     if cleanupState is not "CLOSED" then
                         return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
                     return "MENU_STATE_UNREADABLE"
                 end try
                 if not menuItemEnabled then
-                    set cleanupState to my dismissOpenMenu(logicProcess)
+                    set cleanupState to my dismissOpenMenu(logicProcess, true)
                     if cleanupState is not "CLOSED" then
                         return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
@@ -1089,7 +1092,7 @@ extension AccessibilityChannel {
                 try
                     click mi
                 on error errMsg
-                    set cleanupState to my dismissOpenMenu(logicProcess)
+                    set cleanupState to my dismissOpenMenu(logicProcess, true)
                     if cleanupState is not "CLOSED" then
                         return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
@@ -1113,7 +1116,7 @@ extension AccessibilityChannel {
                     end try
                 end repeat
                 if not dialogReady then
-                    set cleanupState to my dismissOpenMenu(logicProcess)
+                    set cleanupState to my dismissOpenMenu(logicProcess, true)
                     if cleanupState is not "CLOSED" then
                         return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if

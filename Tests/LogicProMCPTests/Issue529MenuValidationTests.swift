@@ -167,7 +167,7 @@ struct Issue529MenuValidationTests {
     func entryTimeCleanupPrecedesMenuWork() throws {
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
         let entryCleanup = try issue529Position(
-            of: "set entryMenuCleanup to my dismissOpenMenu(logicProcess)",
+            of: "set entryMenuCleanup to my dismissOpenMenu(logicProcess, false)",
             in: script
         )
         let firstOperationalDelay = try issue529Position(of: "delay 0.2", in: script)
@@ -244,7 +244,7 @@ struct Issue529MenuValidationTests {
     func refusalPathsUseObservedMenuCleanup() throws {
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
         let entryCleanup = try issue529Position(
-            of: "set entryMenuCleanup to my dismissOpenMenu(logicProcess)",
+            of: "set entryMenuCleanup to my dismissOpenMenu(logicProcess, false)",
             in: script
         )
         let entryRefusal = try issue529Position(
@@ -268,7 +268,7 @@ struct Issue529MenuValidationTests {
         var previousRefusalReturn = entryRefusal
         for refusalReturn in cleanupRefusalReturns {
             let cleanupBetweenRefusals = issue529Positions(
-                of: "set cleanupState to my dismissOpenMenu(logicProcess)",
+                of: "set cleanupState to my dismissOpenMenu(logicProcess, true)",
                 in: script
             ).contains { previousRefusalReturn < $0 && $0 < refusalReturn }
             #expect(cleanupBetweenRefusals)
@@ -283,7 +283,7 @@ struct Issue529MenuValidationTests {
         let menuBarClick = try issue529Position(of: "click selectedMenuBarItem", in: script)
         let menuItemClick = try issue529Position(of: "click mi", in: script)
         let cleanupAfterMenuItemClick = try #require(
-            issue529Positions(of: "set cleanupState to my dismissOpenMenu(logicProcess)", in: script)
+            issue529Positions(of: "set cleanupState to my dismissOpenMenu(logicProcess, true)", in: script)
                 .last
         )
         let refusalContextAfterMenuItemClick = try #require(
@@ -409,4 +409,24 @@ struct Issue529MenuValidationTests {
 
         #expect(classification == .failure(.malformedPayload))
     }
+}
+
+/// The entry cleanup and the post-click cleanups must not treat an unreadable menu bar the same way.
+/// Before this run clicks anything, UNREADABLE is an absent observation and the run proceeds —
+/// refusing there sent 5 of 8 fresh server processes to the slider route. After this run has clicked
+/// a menu open, an unreadable read is NOT permission to skip the Escape: skipping it can end the run
+/// with the menu still up, which is the state this branch exists to prevent.
+@Test("an unreadable read skips Escape only before this run opened anything")
+func dismissalContextDecidesWhetherAnUnreadableReadSkipsEscape() throws {
+    let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+
+    // Entry: the one call that may skip.
+    #expect(script.contains("my dismissOpenMenu(logicProcess, false)"))
+    #expect(issue529Positions(of: "my dismissOpenMenu(logicProcess, false)", in: script).count == 1)
+
+    // Every other call knows a menu was opened by this run.
+    #expect(issue529Positions(of: "my dismissOpenMenu(logicProcess, true)", in: script).count > 1)
+
+    // And the handler must only take the skip when knownOpen is false.
+    #expect(script.contains("if menuState is \"UNREADABLE\" and not knownOpen then return \"UNREADABLE\""))
 }
