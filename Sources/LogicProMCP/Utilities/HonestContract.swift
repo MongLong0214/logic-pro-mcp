@@ -266,6 +266,10 @@ enum HonestContract {
         /// the problem (#5/#9). The key was never posted.
         case selectionNotExclusive = "selection_not_exclusive"
         case logicNotFrontmost = "logic_not_frontmost"
+        /// `nav.delete_marker` posted its fallback Delete key globally, then observed the Marker
+        /// List Edit menu open. The key may have been delivered into that menu rather than the
+        /// bound Marker List table, so the outcome cannot be certified as a delete.
+        case markerDeleteKeyDeliveryAmbiguous = "marker_delete_key_delivery_ambiguous"
         /// A mute/arm synthetic key was refused because Logic's keyboard focus is
         /// not known-safe (an editable text field/sheet/combo box is focused), so
         /// posting the key would corrupt text or hit the wrong command (#6). The
