@@ -89,7 +89,7 @@ extension AccessibilityChannel {
             "marker_count_before": before.count,
         ]
 
-        guard selectMarkerRowForDeletion(index, in: window, runtime: runtime.ax) else {
+        guard let selectedTable = selectMarkerRowForDeletion(index, in: window, runtime: runtime.ax) else {
             // A weaker key-command channel cannot answer an indexed delete: it ignores `index`
             // and fires CC 45 blindly, without proving which marker would be removed.
             extras["write_attempted"] = false
@@ -101,7 +101,15 @@ extension AccessibilityChannel {
             ))
         }
 
-        guard markerTableHasKeyboardFocus(runtime: runtime) else {
+        // Selecting a row is itself an AX write and moves the visible selection.  `write_attempted`
+        // remains scoped to the destructive Delete key, but a refusal after this point must disclose
+        // that the caller's selection was changed.
+        extras["selection_changed"] = true
+        guard markerTableHasKeyboardFocus(
+            table: selectedTable,
+            in: binding.window,
+            runtime: runtime
+        ) else {
             // Refusing here is the point: the same keystroke elsewhere deletes a region or a track.
             extras["write_attempted"] = false
             extras["fallback_unsafe"] = true
@@ -215,25 +223,30 @@ extension AccessibilityChannel {
         _ index: Int,
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> Bool {
+    ) -> AXUIElement? {
         guard let table = AXHelpers.findAllDescendants(
             of: window, role: kAXTableRole as String, maxDepth: 12, runtime: runtime
-        ).first else { return false }
+        ).first else { return nil }
         let rows = AXHelpers.findAllDescendants(
             of: table, role: kAXRowRole as String, maxDepth: 4, runtime: runtime
         )
-        guard index >= 0, index < rows.count else { return false }
+        guard index >= 0, index < rows.count else { return nil }
         _ = AXHelpers.setAttribute(
             rows[index], kAXSelectedAttribute as String, kCFBooleanTrue, runtime: runtime
         )
         let selected: [AXUIElement] = AXHelpers.getAttribute(
             table, "AXSelectedRows", runtime: runtime
         ) ?? []
-        return selected.count == 1 && CFEqual(selected[0], rows[index])
+        return selected.count == 1 && CFEqual(selected[0], rows[index]) ? table : nil
     }
 
-    /// True when the focused element is the Marker List's table, or lives inside it.
+    /// True only when focus lives in the exact table selected above, in the exact Marker List
+    /// window that was bound to the active project.  A label/type test is insufficient: two open
+    /// projects can both have a table that looks like a Marker List, while Delete acts on whichever
+    /// one actually owns keyboard focus.
     private static func markerTableHasKeyboardFocus(
+        table: AXUIElement,
+        in window: AXUIElement,
         runtime: AXLogicProElements.Runtime
     ) -> Bool {
         guard let app = AXLogicProElements.appRoot(runtime: runtime),
@@ -241,32 +254,29 @@ extension AccessibilityChannel {
                   app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax
               ) else { return false }
         var current: AXUIElement? = focused
+        var focusedTable: AXUIElement?
         var hops = 0
-        while let element = current, hops < 6 {
-            if (AXHelpers.getRole(element, runtime: runtime.ax) ?? "") == (kAXTableRole as String),
-               ancestryMentionsMarker(element, runtime: runtime.ax) {
-                return true
+        while let element = current, hops < 12 {
+            if (AXHelpers.getRole(element, runtime: runtime.ax) ?? "") == (kAXTableRole as String) {
+                focusedTable = element
+                break
             }
             current = AXHelpers.getAttribute(
                 element, kAXParentAttribute as String, runtime: runtime.ax
             )
             hops += 1
         }
-        return false
-    }
+        guard let focusedTable, CFEqual(focusedTable, table) else { return false }
 
-    private static func ancestryMentionsMarker(
-        _ element: AXUIElement,
-        runtime: AXHelpers.Runtime
-    ) -> Bool {
-        var current: AXUIElement? = element
-        var hops = 0
-        while let node = current, hops < 6 {
-            let description = AXHelpers.getAttribute(
-                node, kAXDescriptionAttribute as String, runtime: runtime
-            ) as String? ?? ""
-            if AXLocalePolicy.markerContainerKeywords.matches(description, mode: .contains) { return true }
-            current = AXHelpers.getAttribute(node, kAXParentAttribute as String, runtime: runtime)
+        current = focusedTable
+        hops = 0
+        while let element = current, hops < 12 {
+            if (AXHelpers.getRole(element, runtime: runtime.ax) ?? "") == (kAXWindowRole as String) {
+                return CFEqual(element, window)
+            }
+            current = AXHelpers.getAttribute(
+                element, kAXParentAttribute as String, runtime: runtime.ax
+            )
             hops += 1
         }
         return false

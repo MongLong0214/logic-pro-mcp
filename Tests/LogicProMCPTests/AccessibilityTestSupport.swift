@@ -23,8 +23,14 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         attributes[key(for: element), default: [:]][attribute] = value
     }
 
+    /// Wires AXParent on each child as well. A real AX tree always has it, and code that walks
+    /// upward from a focused element (identity checks, window binding) reads it — a fixture that
+    /// only sets children silently fails those walks and makes an identity guard look broken.
     func setChildren(_ element: AXUIElement, _ value: [AXUIElement]) {
         children[key(for: element)] = value
+        for child in value {
+            setAttribute(child, kAXParentAttribute as String, element)
+        }
     }
 
     func attributeValue(_ element: AXUIElement, _ attribute: String) -> Any? {
