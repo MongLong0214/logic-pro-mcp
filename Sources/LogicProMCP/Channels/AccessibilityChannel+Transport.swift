@@ -776,9 +776,7 @@ extension AccessibilityChannel {
         isFrontmost: @Sendable () -> Bool = ProcessUtils.Runtime.production.logicIsFrontmost,
         activateLogic: @Sendable () -> Bool = ProcessUtils.Runtime.production.activateLogicPro,
         sleepMicros: @Sendable (UInt32) -> Void = { usleep($0) },
-        executeDialogScript: @escaping @Sendable (String) async -> ChannelResult = { script in
-            await AppleScriptChannel.executeAppleScript(script, timeout: 8.0)
-        },
+        executeDialogScript: (@Sendable (String) async -> ChannelResult)? = nil,
         reconcileAfterDialogExecutionFailure: @escaping @Sendable () async -> Bool = {
             await observeAndClearStrayGoToPositionUI() == .closed
         }
@@ -845,9 +843,21 @@ extension AccessibilityChannel {
         // cannot show that a successful run had to bring Logic forward first.
         baseExtras["frontmost_preparation"] = preparation.rawValue
 
+        // The AX runtime owns the script seam. Calling `AppleScriptChannel` here would make a
+        // custom runtime only partially injectable and could run a real Logic dialog in a unit
+        // test. Production retains this route's measured eight-second budget; a custom runtime
+        // without a timeout-specific override delegates to its injected `executeAppleScript`.
+        let dialogScriptExecutor: @Sendable (String) async -> ChannelResult
+        if let executeDialogScript {
+            dialogScriptExecutor = executeDialogScript
+        } else {
+            dialogScriptExecutor = { script in
+                await runtime.executeAppleScriptWithTimeout(script, 8.0)
+            }
+        }
         let dialogResult = await gotoPositionViaDialog(
             position: requestedPosition,
-            executeScript: executeDialogScript,
+            executeScript: dialogScriptExecutor,
             reconcileAfterExecutionFailure: reconcileAfterDialogExecutionFailure
         )
         if case let .driven(payload) = dialogResult {
