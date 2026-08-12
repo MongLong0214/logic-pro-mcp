@@ -860,6 +860,36 @@ extension AccessibilityChannel {
                 ]) { _, new in new }
             ))
         }
+        if case let .failed(classification) = dialogResult,
+           classification.hasIssuedGoToPositionActuator {
+            // A leaf menu click, dialog input, or Return may take effect even when the AX / AppleScript
+            // invocation says it failed.  Once one of those has been issued, the slider is a *second*
+            // goto-position actuator, not a fallback-safe retry.  This deliberately keys off issuance,
+            // never the return code, following the Delete-key path's write-attempt boundary.
+            let submissionIssued = classification.hasIssuedDialogSubmission
+            let dialogState = classification.dialogCleanupObservedClosed ? "closed" : "unobserved"
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: submissionIssued
+                    ? "Go To Position dialog input or submission was issued but did not complete; "
+                        + "the slider fallback was not attempted."
+                    : "The Go To Position menu item was issued but reported an error; "
+                        + "the slider fallback was not attempted.",
+                extras: baseExtras.merging([
+                    "operation": "transport.goto_position",
+                    "method": "dialog",
+                    "dialog_actuation_attempted": true,
+                    "dialog_submission_attempted": submissionIssued,
+                    "dialog_cleanup": dialogState,
+                    // Opening the dialog is navigation, while a submitted Return may have moved the
+                    // playhead.  Keep that distinction explicit rather than using a false AX result to
+                    // say no position write was attempted.
+                    "write_attempted": submissionIssued,
+                    "safe_to_retry": false,
+                    "fallback_unsafe": true,
+                ]) { _, new in new }
+            ))
+        }
 
         guard let slider = AXLogicProElements.findControlBarBarSlider(runtime: runtime) else {
             return .error(HonestContract.encodeStateC(
@@ -868,36 +898,118 @@ extension AccessibilityChannel {
                 extras: baseExtras
             ))
         }
-        let setOK = AXHelpers.setAttribute(
+
+        // AX setters cannot establish either outcome: Logic has returned both failure after an
+        // effective write and success after no change.  The issued write is recorded below, then
+        // every subsequent action is authorised by a status-preserving observation instead.
+        func sliderValue(_ element: AXUIElement) -> Result<Int?, AXHelpers.AXStatusError> {
+            let value: Result<NSNumber?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                element, kAXValueAttribute as String, runtime: runtime.ax
+            )
+            return value.map { $0?.intValue }
+        }
+
+        func observedPosition(bar: Int, beat: Int?) -> String {
+            // These are slider readings, not a transport-state parse.  Do not append beat/subbeat/tick
+            // components that no AX reader supplied.
+            guard let beat else { return "\(bar)" }
+            return "\(bar).\(beat)"
+        }
+
+        func sliderExtras(observedBar: Int?, observedBeat: Int? = nil) -> [String: Any] {
+            baseExtras.merging([
+                "observed": observedBar.map { observedPosition(bar: $0, beat: observedBeat) } ?? NSNull(),
+                "via": "slider",
+                "write_attempted": true,
+            ]) { _, new in new }
+        }
+
+        _ = AXHelpers.setAttribute(
             slider, kAXValueAttribute, NSNumber(value: bar), runtime: runtime.ax
         )
-        if !setOK {
-            return .error(HonestContract.encodeStateC(
-                error: .axWriteFailed,
-                hint: "Failed to set 마디 slider value",
-                extras: baseExtras
+        let initialBar: Int?
+        switch sliderValue(slider) {
+        case .failure, .success(nil):
+            // The bar write was issued.  A failed read is not evidence that it was refused, so this
+            // must be uncertain State B rather than State C; neither beat nor Confirm is authorised.
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: sliderExtras(observedBar: nil)
+            ))
+        case let .success(value?):
+            initialBar = value
+        }
+        guard initialBar == bar else {
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackMismatch,
+                extras: sliderExtras(observedBar: initialBar)
             ))
         }
-        if let beatSlider = AXLogicProElements.findControlBarBeatSlider(runtime: runtime) {
+
+        let beatSlider = AXLogicProElements.findControlBarBeatSlider(runtime: runtime)
+        var initialBeat: Int?
+        if let beatSlider {
             _ = AXHelpers.setAttribute(
                 beatSlider, kAXValueAttribute, NSNumber(value: 1), runtime: runtime.ax
             )
+            switch sliderValue(beatSlider) {
+            case .failure, .success(nil):
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: sliderExtras(observedBar: initialBar)
+                ))
+            case let .success(value?):
+                initialBeat = value
+            }
+            guard initialBeat == 1 else {
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackMismatch,
+                    extras: sliderExtras(observedBar: initialBar, observedBeat: initialBeat)
+                ))
+            }
         }
-        _ = AXHelpers.performAction(slider, kAXConfirmAction, runtime: runtime.ax)
 
-        let observedBar = (AXHelpers.getValue(slider, runtime: runtime.ax) as? NSNumber)?.intValue
-        let observedPos = observedBar.map { "\($0).1.1.1" }
-        let extras = baseExtras.merging([
-            "observed": observedPos ?? NSNull(),
-            "via": "slider"
-        ]) { _, new in new }
-        if let observedBar, observedBar == bar {
-            return .success(HonestContract.encodeStateA(extras: extras))
+        // Confirm is also an AX actuation whose return code is not a trustworthy outcome.  Read the
+        // actual sliders again afterwards, and certify only the components those reads vended.
+        _ = AXHelpers.performAction(slider, kAXConfirmAction, runtime: runtime.ax)
+        let finalBar: Int?
+        switch sliderValue(slider) {
+        case .failure, .success(nil):
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: sliderExtras(observedBar: initialBar, observedBeat: initialBeat)
+            ))
+        case let .success(value?):
+            finalBar = value
         }
-        if observedBar != nil {
-            return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
+        guard finalBar == bar else {
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackMismatch,
+                extras: sliderExtras(observedBar: finalBar)
+            ))
         }
-        return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+
+        var finalBeat: Int?
+        if let beatSlider {
+            switch sliderValue(beatSlider) {
+            case .failure, .success(nil):
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: sliderExtras(observedBar: finalBar)
+                ))
+            case let .success(value?):
+                finalBeat = value
+            }
+            guard finalBeat == 1 else {
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackMismatch,
+                    extras: sliderExtras(observedBar: finalBar, observedBeat: finalBeat)
+                ))
+            }
+        }
+        return .success(HonestContract.encodeStateA(
+            extras: sliderExtras(observedBar: finalBar, observedBeat: finalBeat)
+        ))
     }
 
     /// Move the playhead to `bar` via Logic Pro 12's `탐색 → 이동 → 위치…`
@@ -996,6 +1108,82 @@ extension AccessibilityChannel {
             return "CLOSED"
         end menuItemOpenedAfterClick
 
+        -- The Go To Position floating dialog has its own lifecycle; a menu-bar
+        -- observation says nothing about whether this modal is still blocking
+        -- the arrange area.  Keep unreadable distinct from closed, just as the
+        -- #529 menu cleanup does.
+        on goToPositionDialogState(theProcess)
+            using terms from application "System Events"
+                tell theProcess
+                    try
+                        repeat with dialogWindow in every window
+                            set dialogTitle to name of dialogWindow
+                            if dialogTitle is "위치로 이동" then return "OPEN"
+                            if dialogTitle is "Go To Position" then return "OPEN"
+                            if dialogTitle is "Go to Position" then return "OPEN"
+                        end repeat
+                        return "CLOSED"
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end tell
+            end using terms from
+        end goToPositionDialogState
+
+        -- Prefer this modal's localized Cancel button.  Escape is only a
+        -- fallback while this exact dialog is observed open, and every attempt
+        -- must be followed by a new exact-dialog observation before it counts
+        -- as cleanup.
+        on pressGoToPositionDialogCancel(theProcess)
+            using terms from application "System Events"
+                tell theProcess
+                    try
+                        repeat with dialogWindow in every window
+                            set dialogTitle to name of dialogWindow
+                            if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
+                                if exists button "Cancel" of dialogWindow then
+                                    click button "Cancel" of dialogWindow
+                                    return "PRESSED"
+                                end if
+                                if exists button "취소" of dialogWindow then
+                                    click button "취소" of dialogWindow
+                                    return "PRESSED"
+                                end if
+                                if exists button "キャンセル" of dialogWindow then
+                                    click button "キャンセル" of dialogWindow
+                                    return "PRESSED"
+                                end if
+                                return "NO_BUTTON"
+                            end if
+                        end repeat
+                        return "NO_BUTTON"
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end tell
+            end using terms from
+        end pressGoToPositionDialogCancel
+
+        on dismissOpenGoToPositionDialog(theProcess)
+            set dialogState to my goToPositionDialogState(theProcess)
+            if dialogState is "CLOSED" then return "CLOSED"
+            if dialogState is not "OPEN" then return dialogState
+            repeat 3 times
+                set cancelOutcome to my pressGoToPositionDialogCancel(theProcess)
+                if cancelOutcome is "NO_BUTTON" or cancelOutcome is "UNREADABLE" then
+                    using terms from application "System Events"
+                        tell theProcess to key code 53
+                    end using terms from
+                end if
+                delay 0.1
+                set dialogState to my goToPositionDialogState(theProcess)
+                if dialogState is "CLOSED" then return "CLOSED"
+                if dialogState is "UNREADABLE" then return "OPEN_UNREADABLE"
+                if dialogState is not "OPEN" then return dialogState
+            end repeat
+            return "OPEN"
+        end dismissOpenGoToPositionDialog
+
         \(logicProAppleScript.activateByBundleID)
         tell application "System Events"
             set logicProcess to \(logicProAppleScript.systemEventsProcessTarget)
@@ -1015,6 +1203,10 @@ extension AccessibilityChannel {
                 -- this run opens a menu the same value IS a refusal, because then
                 -- there is something known to be open.
                 set menuActuationAttempted to false
+                -- This marks the write boundary for actuator selection.  The
+                -- leaf may succeed even if AX reports an error, so any result
+                -- after it becomes true must not release the slider route.
+                set dialogActuationIssued to false
                 delay 0.2
 
                 -- Locale selection is a read-only path-resolution step. It
@@ -1090,13 +1282,18 @@ extension AccessibilityChannel {
                     return "MENU_DISABLED"
                 end if
                 try
+                    set dialogActuationIssued to true
                     click mi
                 on error errMsg
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                    if dialogCleanupState is not "CLOSED" then
+                        return "DIALOG_ACTUATION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                    end if
                     set cleanupState to my dismissOpenMenu(logicProcess, true)
                     if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                        return "DIALOG_ACTUATION_ISSUED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
-                    return "MENU_PICK_FAILED: " & errMsg
+                    return "DIALOG_ACTUATION_ISSUED: " & errMsg
                 end try
                 -- Wait up to 3s for the dialog window to appear before typing,
                 -- otherwise keystrokes would go to the arrange area and click
@@ -1104,32 +1301,39 @@ extension AccessibilityChannel {
                 set dialogReady to false
                 repeat 30 times
                     delay 0.1
-                    try
-                        set _ to first window whose name is "위치로 이동"
+                    set dialogOpenState to my goToPositionDialogState(logicProcess)
+                    if dialogOpenState is "OPEN" then
                         set dialogReady to true
                         exit repeat
-                    end try
-                    try
-                        set _ to first window whose name is "Go to Position"
-                        set dialogReady to true
-                        exit repeat
-                    end try
+                    end if
                 end repeat
                 if not dialogReady then
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                    if dialogCleanupState is not "CLOSED" then
+                        return "DIALOG_ACTUATION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                    end if
                     set cleanupState to my dismissOpenMenu(logicProcess, true)
                     if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                        return "DIALOG_ACTUATION_ISSUED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
-                    return "DIALOG_NOT_READY"
+                    return "DIALOG_ACTUATION_ISSUED: dialog did not become ready"
                 end if
             end tell
-            delay 0.1
-            keystroke "a" using command down
-            delay 0.1
-            keystroke "\(bar)"
-            delay 0.1
-            keystroke return
-            delay 0.2
+            try
+                delay 0.1
+                keystroke "a" using command down
+                delay 0.1
+                keystroke "\(bar)"
+                delay 0.1
+                keystroke return
+                delay 0.2
+            on error errMsg
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                if dialogCleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_FAILED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                end if
+                return "DIALOG_SUBMISSION_FAILED: dialog input or Return failed after the dialog opened (" & errMsg & ")"
+            end try
         end tell
         return "OK"
         """
@@ -1137,9 +1341,9 @@ extension AccessibilityChannel {
 
     /// The successful AppleScript channel payload is a JSON object containing the
     /// script's return value in `result`. Only an exact `OK` means this route
-    /// reached the dialog and submitted it. Most failures may fall through to
-    /// the slider route, except a menu-close failure that leaves the UI unsafe
-    /// for further actuation.
+    /// reached the dialog and submitted it. Only failures before the position
+    /// menu leaf is issued may fall through to the slider route.  AX return
+    /// codes do not prove whether that leaf (or later dialog input) took effect.
     enum GotoPositionDialogResultClassification: Equatable {
         enum Failure: Equatable {
             case menuNotFound
@@ -1148,6 +1352,8 @@ extension AccessibilityChannel {
             case menuPickFailed
             case menuCouldNotBeClosed(writeAttempted: Bool)
             case dialogNotReady
+            case dialogActuationIssued(cleanupObservedClosed: Bool)
+            case dialogSubmissionIssued(cleanupObservedClosed: Bool)
             case malformedPayload
             case unexpectedResult
             case executionFailed
@@ -1161,6 +1367,41 @@ extension AccessibilityChannel {
                 return true
             }
             return false
+        }
+
+        /// A menu leaf click opens the Go To Position dialog, and keyboard input / Return can
+        /// commit it.  Their status returns are not a licence to choose the slider as another
+        /// position actuator.  `dialogNotReady` is included because the generated script can only
+        /// produce it after it has issued the leaf click.
+        var hasIssuedGoToPositionActuator: Bool {
+            switch self {
+            case .failure(.dialogNotReady),
+                 .failure(.dialogActuationIssued),
+                 .failure(.dialogSubmissionIssued):
+                return true
+            default:
+                return false
+            }
+        }
+
+        var hasIssuedDialogSubmission: Bool {
+            if case .failure(.dialogSubmissionIssued) = self {
+                return true
+            }
+            return false
+        }
+
+        /// Closed is an observed result from the dialog-specific cleanup, never an inference from
+        /// a setter or an Escape return.  A leaf error / not-ready outcome has no closed-dialog
+        /// proof, so the receipt keeps that absence visible.
+        var dialogCleanupObservedClosed: Bool {
+            switch self {
+            case let .failure(.dialogActuationIssued(cleanupObservedClosed)),
+                 let .failure(.dialogSubmissionIssued(cleanupObservedClosed)):
+                return cleanupObservedClosed
+            default:
+                return false
+            }
         }
 
         var menuActuationAttemptedBeforeUnsafeRefusal: Bool {
@@ -1208,6 +1449,14 @@ extension AccessibilityChannel {
             return .failure(.menuPickFailed)
         case "DIALOG_NOT_READY":
             return .failure(.dialogNotReady)
+        case let value where value.hasPrefix("DIALOG_ACTUATION_ISSUED"):
+            return .failure(.dialogActuationIssued(
+                cleanupObservedClosed: !value.contains("dialog cleanup was not observed")
+            ))
+        case let value where value.hasPrefix("DIALOG_SUBMISSION_FAILED"):
+            return .failure(.dialogSubmissionIssued(
+                cleanupObservedClosed: !value.contains("dialog cleanup was not observed")
+            ))
         default:
             return .failure(.unexpectedResult)
         }
