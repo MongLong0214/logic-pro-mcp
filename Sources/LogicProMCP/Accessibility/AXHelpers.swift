@@ -11,6 +11,8 @@ enum AXHelpers {
         let children: @Sendable (AXUIElement) -> [AXUIElement]
         let performAction: @Sendable (AXUIElement, String) -> Bool
         let childCount: @Sendable (AXUIElement) -> Int?
+        /// Enumerates the actions an element advertises without attempting one.
+        let actionNames: @Sendable (AXUIElement) -> [String]
         /// Injectable typed-children seam. `nil` means "use the production read".
         let childrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXStatusError>)?
 
@@ -24,6 +26,7 @@ enum AXHelpers {
             children: @escaping @Sendable (AXUIElement) -> [AXUIElement],
             performAction: @escaping @Sendable (AXUIElement, String) -> Bool,
             childCount: @escaping @Sendable (AXUIElement) -> Int?,
+            actionNames: @escaping @Sendable (AXUIElement) -> [String] = { _ in [] },
             childrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXStatusError>)? = nil
         ) {
             self.axApp = axApp
@@ -32,6 +35,7 @@ enum AXHelpers {
             self.children = children
             self.performAction = performAction
             self.childCount = childCount
+            self.actionNames = actionNames
             self.childrenResult = childrenResult
         }
 
@@ -70,6 +74,15 @@ enum AXHelpers {
                 let result = AXUIElementGetAttributeValueCount(element, kAXChildrenAttribute as CFString, &count)
                 guard result == .success else { return nil }
                 return count
+            },
+            actionNames: { element in
+                var names: CFArray?
+                guard AXUIElementCopyActionNames(element, &names) == .success,
+                      let names,
+                      let actions = names as? [String] else {
+                    return []
+                }
+                return actions
             }
         )
     }
@@ -166,6 +179,11 @@ enum AXHelpers {
     @discardableResult
     static func performAction(_ element: AXUIElement, _ action: String, runtime: Runtime = .production) -> Bool {
         runtime.performAction(element, action)
+    }
+
+    /// Enumerate the named actions that an element currently advertises.
+    static func getActionNames(_ element: AXUIElement, runtime: Runtime = .production) -> [String] {
+        runtime.actionNames(element)
     }
 
     /// Get the role string of an element (e.g. "AXButton", "AXSlider").

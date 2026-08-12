@@ -218,6 +218,20 @@ enum AXLocalePolicy {
         rationale: "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome."
     )
 
+    /// The Marker List toolbar's own Edit menu button, not the application menu bar.
+    static let markerListEditMenuButton = LabelSet(
+        canonical: "Edit",
+        variants: ["編集"],
+        rationale: "Live-confirmed on Logic 12.3: the Marker List toolbar AXMenuButton exposes the exact AXDescription `編集`; the bottom AXButton with the same label is deliberately rejected unless its actions advertise AXShowMenu."
+    )
+
+    /// The destructive Marker List Edit-menu command. This must always be whole-string matched.
+    static let markerListDeleteMenuItem = LabelSet(
+        canonical: "Delete",
+        variants: ["削除"],
+        rationale: "Live-confirmed on Logic 12.3: Marker List Delete is `削除`. It is used only with exactStrict because prefix matching also reaches `削除して移動`, while containment reaches `取り消し履歴を削除` (Delete Undo History)."
+    )
+
     static let undoMenuItemPrefix = LabelSet(
         canonical: "Undo",
         variants: ["실행 취소"],

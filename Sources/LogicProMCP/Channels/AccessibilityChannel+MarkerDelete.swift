@@ -93,6 +93,7 @@ extension AccessibilityChannel {
             // A weaker key-command channel cannot answer an indexed delete: it ignores `index`
             // and fires CC 45 blindly, without proving which marker would be removed.
             extras["write_attempted"] = false
+            extras["safe_to_retry"] = true
             extras["fallback_unsafe"] = true
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
@@ -101,21 +102,32 @@ extension AccessibilityChannel {
             ))
         }
 
-        guard markerTableHasKeyboardFocus(runtime: runtime) else {
-            // Refusing here is the point: the same keystroke elsewhere deletes a region or a track.
-            extras["write_attempted"] = false
-            extras["fallback_unsafe"] = true
-            return .error(HonestContract.encodeStateC(
-                error: .axWriteFailed,
-                hint: "The Marker List did not hold keyboard focus, so Delete was not pressed — "
-                    + "the same key deletes a region or a track when focus is in the arrange area.",
-                extras: extras
-            ))
-        }
+        switch pickDeleteFromMarkerListEditMenu(in: window, runtime: runtime.ax) {
+        case .pickIssued:
+            // `AXPick` status codes are not evidence of whether the menu action took effect. Once
+            // issued, a Delete key would be a second destructive actuator, so proceed directly to
+            // readback regardless of the return value.
+            extras["write_attempted"] = true
 
-        extras["write_attempted"] = true
-        _ = mouse.postKeyEvent(0x33)  // kVK_Delete
-        mouse.sleepMicros(400_000)
+        case .menuUnavailable, .exactEntryNotFound, .entryNotActuable:
+            guard markerTableHasKeyboardFocus(runtime: runtime) else {
+                // Refusing here is the point: the same keystroke elsewhere deletes a region or a track.
+                // Nothing was deleted, so a caller may retry after restoring Marker List focus.
+                extras["write_attempted"] = false
+                extras["safe_to_retry"] = true
+                extras["fallback_unsafe"] = true
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: "The Marker List did not hold keyboard focus, so Delete was not pressed — "
+                        + "the same key deletes a region or a track when focus is in the arrange area.",
+                    extras: extras
+                ))
+            }
+
+            extras["write_attempted"] = true
+            _ = mouse.postKeyEvent(0x33)  // kVK_Delete
+            mouse.sleepMicros(400_000)
+        }
 
         guard let afterBinding = AXLogicProElements.markerListBinding(runtime: runtime),
               afterBinding.projectDocument == binding.projectDocument,
@@ -270,5 +282,109 @@ extension AccessibilityChannel {
             hops += 1
         }
         return false
+    }
+
+    /// Whether attempting the Marker List's own Edit → Delete menu path reached a destructive
+    /// actuator. AX action status is deliberately absent from this outcome: an `AXPick` that
+    /// reports failure can still delete the marker, and a second actuator after it would be unsafe.
+    private enum MarkerListEditMenuDeleteOutcome {
+        /// `AXPick` was sent to the exact enabled Delete menu item, whatever AX returned.
+        case pickIssued
+        /// The Edit menu could not be observed after an eligible opener was asked to show it.
+        case menuUnavailable
+        /// An observed menu did not contain the exact Delete command.
+        case exactEntryNotFound
+        /// The exact command was present but cannot safely be picked.
+        case entryNotActuable
+    }
+
+    /// Prefer the Marker List's own menu over a keyboard Delete. The bottom `Edit` button and the
+    /// toolbar `Edit` menu button have the same localized label in Logic 12.3, but only the latter
+    /// advertises `AXShowMenu`; inspect action names before deciding which control may be actuated.
+    private static func pickDeleteFromMarkerListEditMenu(
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> MarkerListEditMenuDeleteOutcome {
+        let controls = AXHelpers.findAllDescendants(
+            of: window, role: kAXMenuButtonRole as String, maxDepth: 12, runtime: runtime
+        ) + AXHelpers.findAllDescendants(
+            of: window, role: kAXButtonRole as String, maxDepth: 12, runtime: runtime
+        )
+        var observedMenu = false
+
+        for control in controls {
+            guard AXLocalePolicy.elementMatches(
+                control, AXLocalePolicy.markerListEditMenuButton,
+                mode: .exactStrict, runtime: runtime
+            ) else { continue }
+
+            // This is intentionally action discovery, not a press ladder. A live Marker List's
+            // bottom Edit AXButton offers AXPress only; pressing it is not a reliable route to its
+            // menu. The toolbar AXMenuButton offers AXShowMenu.
+            guard AXHelpers.getActionNames(control, runtime: runtime).contains(kAXShowMenuAction as String)
+            else { continue }
+
+            // As with AXPick, the return code does not prove the UI state. Read the scoped AX tree
+            // after issuing AXShowMenu; without an observed menu, no deletion action has been sent.
+            _ = AXHelpers.performAction(control, kAXShowMenuAction as String, runtime: runtime)
+            guard let menu = markerListEditMenu(under: control, in: window, runtime: runtime) else {
+                continue
+            }
+            observedMenu = true
+
+            guard let entry = markerListDeleteMenuItem(in: menu, runtime: runtime) else {
+                return .exactEntryNotFound
+            }
+            guard markerListMenuItemEnabledForActuation(entry, runtime: runtime) else {
+                return .entryNotActuable
+            }
+
+            // Do not use the return value to select another actuator. This one call is the write.
+            _ = AXHelpers.performAction(entry, kAXPickAction as String, runtime: runtime)
+            return .pickIssued
+        }
+        return observedMenu ? .exactEntryNotFound : .menuUnavailable
+    }
+
+    /// The menu is normally a child of its toolbar control. Looking under the Marker List window
+    /// too accommodates Logic exposing the opened menu beside the control without widening to an
+    /// unrelated application menu.
+    private static func markerListEditMenu(
+        under control: AXUIElement,
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        AXHelpers.findAllDescendants(
+            of: control, role: kAXMenuRole as String, maxDepth: 4, runtime: runtime
+        ).first ?? AXHelpers.findAllDescendants(
+            of: window, role: kAXMenuRole as String, maxDepth: 12, runtime: runtime
+        ).first
+    }
+
+    /// Only direct entries of the observed Marker List Edit menu are candidates. In particular,
+    /// `Delete Undo History` and the Japanese undo-history entry must not be reached through a
+    /// prefix or containment search.
+    private static func markerListDeleteMenuItem(
+        in menu: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        AXHelpers.getChildren(menu, runtime: runtime).first {
+            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuItemRole as String)
+                && AXLocalePolicy.elementMatches(
+                    $0, AXLocalePolicy.markerListDeleteMenuItem,
+                    mode: .exactStrict, runtime: runtime
+                )
+        }
+    }
+
+    /// A destructive menu pick needs a readable positive enablement signal. Live Logic 12.3
+    /// exposes AXEnabled on every Marker List Edit-menu item, so an unreadable value is not a
+    /// reason to guess that a command will act.
+    private static func markerListMenuItemEnabledForActuation(
+        _ item: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        let enabled: Bool? = AXHelpers.getAttribute(item, kAXEnabledAttribute as String, runtime: runtime)
+        return enabled == true
     }
 }

@@ -6,6 +6,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
     private var elements: [Int: AXUIElement] = [:]
     private var attributes: [Int: [String: Any]] = [:]
     private var children: [Int: [AXUIElement]] = [:]
+    private var actionNames: [Int: [String]] = [:]
     private(set) var setCalls: [(elementID: Int, attribute: String)] = []
     private(set) var actionCalls: [(elementID: Int, action: String)] = []
 
@@ -25,6 +26,10 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
 
     func setChildren(_ element: AXUIElement, _ value: [AXUIElement]) {
         children[key(for: element)] = value
+    }
+
+    func setActionNames(_ element: AXUIElement, _ value: [String]) {
+        actionNames[key(for: element)] = value
     }
 
     func attributeValue(_ element: AXUIElement, _ attribute: String) -> Any? {
@@ -82,6 +87,9 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
             },
             childCount: { [self] element in
                 children[key(for: element)]?.count
+            },
+            actionNames: { [self] element in
+                actionNames[key(for: element)] ?? []
             }
         )
     }
