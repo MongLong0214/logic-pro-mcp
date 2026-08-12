@@ -106,6 +106,7 @@ extension AccessibilityChannel {
         guard let selection = selectMarkerRowForDeletion(index, in: window, runtime: runtime.ax) else {
             // The scoped menu route may proceed only when the selected row is confirmed in this
             // exact Marker List table.
+            extras["selection_write_attempted"] = false
             extras["write_attempted"] = false
             extras["safe_to_retry"] = true
             extras["fallback_unsafe"] = true
@@ -122,7 +123,20 @@ extension AccessibilityChannel {
         // `selection_write_attempted` is what this call did; `selection_changed` is what it
         // actually altered. A row that was already the sole selection is not a change, and saying
         // so would be the same over-claim this refusal exists to remove.
-        extras["selection_write_attempted"] = true
+        extras["selection_write_attempted"] = selection.writeAttempted
+        guard selection.confirmed else {
+            // The AXSelected write may have landed even though AXSelectedRows could not confirm
+            // it. The destructive menu route must not proceed, but the receipt must retain the
+            // write attempt rather than claiming the visible selection was untouched.
+            extras["write_attempted"] = false
+            extras["safe_to_retry"] = true
+            extras["fallback_unsafe"] = true
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "Marker index \(index) could not be selected, so nothing was pressed",
+                extras: extras
+            ))
+        }
         // An unreadable pre-write selection is not evidence of either a change or no change.
         // Omit the optional field rather than reporting a Boolean guess.
         if let changedSelection = selection.changedSelection {
@@ -292,6 +306,8 @@ extension AccessibilityChannel {
     }
 
     private struct MarkerRowSelection {
+        let writeAttempted: Bool
+        let confirmed: Bool
         let changedSelection: Bool?
     }
 
@@ -331,8 +347,12 @@ extension AccessibilityChannel {
         let selected: [AXUIElement] = AXHelpers.getAttribute(
             table, "AXSelectedRows", runtime: runtime
         ) ?? []
-        guard selected.count == 1, CFEqual(selected[0], rows[index]) else { return nil }
+        guard selected.count == 1, CFEqual(selected[0], rows[index]) else {
+            return MarkerRowSelection(writeAttempted: true, confirmed: false, changedSelection: nil)
+        }
         return MarkerRowSelection(
+            writeAttempted: true,
+            confirmed: true,
             changedSelection: wasAlreadyExactlyTheTarget.map { !$0 }
         )
     }
@@ -446,21 +466,43 @@ extension AccessibilityChannel {
             case .success(let observedEntry?):
                 entry = observedEntry
             case .success(nil):
-                _ = dismissMarkerListEditMenu(menu, from: control, runtime: runtime, mouse: mouse)
-                return .routeUnavailable(.exactDeleteEntryMissingOrDisabled)
+                let menuWasClosed = dismissMarkerListEditMenu(
+                    menu, from: control, runtime: runtime, mouse: mouse
+                )
+                return .routeUnavailable(
+                    .exactDeleteEntryMissingOrDisabled,
+                    menuState: menuWasClosed ? nil : "could_not_be_closed"
+                )
             case .failure(let error):
-                _ = dismissMarkerListEditMenu(menu, from: control, runtime: runtime, mouse: mouse)
-                return .routeUnavailable(.menuUnreadable, axStatus: error.raw)
+                let menuWasClosed = dismissMarkerListEditMenu(
+                    menu, from: control, runtime: runtime, mouse: mouse
+                )
+                return .routeUnavailable(
+                    .menuUnreadable,
+                    axStatus: error.raw,
+                    menuState: menuWasClosed ? nil : "could_not_be_closed"
+                )
             }
             switch markerListMenuItemEnabledForActuation(entry, runtime: runtime) {
             case .enabled:
                 break
             case .disabled:
-                _ = dismissMarkerListEditMenu(menu, from: control, runtime: runtime, mouse: mouse)
-                return .routeUnavailable(.exactDeleteEntryMissingOrDisabled)
+                let menuWasClosed = dismissMarkerListEditMenu(
+                    menu, from: control, runtime: runtime, mouse: mouse
+                )
+                return .routeUnavailable(
+                    .exactDeleteEntryMissingOrDisabled,
+                    menuState: menuWasClosed ? nil : "could_not_be_closed"
+                )
             case .unreadable(let error):
-                _ = dismissMarkerListEditMenu(menu, from: control, runtime: runtime, mouse: mouse)
-                return .routeUnavailable(.menuUnreadable, axStatus: error.raw)
+                let menuWasClosed = dismissMarkerListEditMenu(
+                    menu, from: control, runtime: runtime, mouse: mouse
+                )
+                return .routeUnavailable(
+                    .menuUnreadable,
+                    axStatus: error.raw,
+                    menuState: menuWasClosed ? nil : "could_not_be_closed"
+                )
             }
 
             // Do not use the return value to select another actuator. This one call is the write.
@@ -648,6 +690,9 @@ extension AccessibilityChannel {
                 absentReadings += 1
                 if absentReadings >= 2 { return .absent }
             case .failure(let error):
+                // A failed read retires this poll and breaks the consecutive-absence run. The
+                // next absence starts a fresh observation rather than completing an old one.
+                absentReadings = 0
                 unreadable = unreadable ?? error
                 break
             }
@@ -678,7 +723,7 @@ extension AccessibilityChannel {
 
     /// Discovery was unknown before it yielded an AXMenu. Re-observe in case the menu settles;
     /// otherwise only send AXCancel to the opener if it expressly advertises that action, then
-    /// require a settled closed observation before permitting a focused-key fallback.
+    /// require a settled closed observation before reporting that cleanup restored the UI state.
     private static func dismissMarkerListEditMenuAfterUnknownDiscovery(
         from control: AXUIElement,
         runtime: AXHelpers.Runtime,
@@ -726,7 +771,7 @@ extension AccessibilityChannel {
     }
 
     /// Dismiss the exact menu this run observed, then prove it disappeared from the opener's
-    /// child list before any focused-key fallback can be considered.
+    /// child list before treating cleanup as complete.
     private static func dismissMarkerListEditMenu(
         _ menu: AXUIElement,
         from control: AXUIElement,

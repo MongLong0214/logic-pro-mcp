@@ -773,6 +773,16 @@ struct SemanticOracleMutationTests {
             readbackData: Data("{}".utf8)
         ))
         #expect(!selfReportedMultisets, "delete_marker accepted equal multiset fields whose entry counts contradict the marker counts")
+
+        // Mutation applied once: remove `lengthPrefixedEntriesExclude` from the delete-marker
+        // oracle. This envelope passes every pre-existing State-A check — correct counts, settled
+        // canonical evidence, and equal valid expected/observed multisets — while describing the
+        // deletion of 1.1.1.1 and survival of the requested 5.1.1.1 target.
+        let targetSurvives = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:5.1.1.17:9.1.1.1","observed_survivor_position_multiset":"7:5.1.1.17:9.1.1.1"}"#.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!targetSurvives, "delete_marker accepted an internally consistent State A where the target position survived")
     }
 
     /// #373 B3 — project.save_as is envelope-only because its
@@ -1282,6 +1292,17 @@ enum JSONMutator {
                let count = JSONInspector.number(of: current) {
                 mutants.append(contentsOf: replacements(root, countKey, [
                     ("wrong entry count", count + 1),
+                ]))
+            }
+        case .lengthPrefixedEntriesExclude(let wireKey, let forbiddenEntryKey):
+            // Add the forbidden payload as another well-formed wire entry. The
+            // delete-marker regression below additionally proves this cannot be
+            // hidden by another count constraint.
+            if let forbidden = JSONPath.resolve(root, keyPath: forbiddenEntryKey) as? String,
+               let wire = JSONPath.resolve(root, keyPath: wireKey) as? String {
+                let forbiddenWire = "\(forbidden.lengthOfBytes(using: .utf8)):\(forbidden)"
+                mutants.append(contentsOf: replacements(root, wireKey, [
+                    ("contains forbidden entry", wire + forbiddenWire),
                 ]))
             }
         case .fieldsEqual(let keyA, let keyB):

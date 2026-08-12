@@ -200,7 +200,7 @@ private func issue526MarkerDeleteReadbackRuntime(
     let router = ChannelRouter()
     let envelope = HonestContract.encodeStateC(
         error: .axWriteFailed,
-        hint: "Delete is unsafe without Marker List keyboard focus",
+        hint: "Delete is unsafe without a confirmed Marker List menu route",
         extras: [
             "fallback_unsafe": true,
             "write_attempted": false,
@@ -213,7 +213,10 @@ private func issue526MarkerDeleteReadbackRuntime(
 
     let result = await router.route(operation: "nav.set_zoom_level", params: ["level": "50"])
 
+    // Mutation applied once: restore the removed keyboard-focus fallback wording. The receipt must
+    // describe the menu-only delete contract instead.
     #expect(!result.isSuccess)
+    #expect(!envelope.contains("keyboard"))
     #expect(result.message == envelope)
     #expect(HonestContract.isFallbackUnsafeStateC(result.message))
     #expect(await accessibility.executions() == 1)
@@ -288,13 +291,22 @@ private func issue526MarkerDeleteReadbackRuntime(
     #expect(!HonestContract.isFallbackUnsafeStateC(envelope))
 }
 
-@Test func testIssue526SelectionFailureRefusalIsFallbackUnsafeAndStopsChain() async {
+@Test func testIssue526SelectionFailureRefusalIsFallbackUnsafeAndStopsChain() async throws {
     let refusal = await AccessibilityChannel.defaultDeleteMarker(
         index: 0,
         runtime: issue526SelectionFailureRuntime(),
         mouse: issue526NoOpMouseRuntime
     )
+    let receipt = try #require(JSONSerialization.jsonObject(
+        with: Data(refusal.message.utf8)
+    ) as? [String: Any])
+    let selectionWriteAttempted = try #require(receipt["selection_write_attempted"] as? Bool)
+
+    // Mutation applied once: set `selection_write_attempted` false when AXSelectedRows cannot
+    // confirm the write. This fixture accepts AXSelected before that failed confirmation, so the
+    // false provenance claim fails here.
     #expect(!refusal.isSuccess)
+    #expect(selectionWriteAttempted)
     let router = ChannelRouter()
     let accessibility = Issue526ErrorChannel(id: .accessibility, envelope: refusal.message)
     let keyCommands = Issue526SuccessProbeChannel(id: .midiKeyCommands)

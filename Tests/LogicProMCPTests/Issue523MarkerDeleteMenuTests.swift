@@ -31,7 +31,9 @@ private final class Issue523MenuState: @unchecked Sendable {
     var showMenuWasRequested = false
     var menuWasDismissed = false
     var toolbarMenuReadCount = 0
+    var toolbarAbsenceObservationCount = 0
     var closesAfterFirstSighting = false
+    var menuChildrenReadFailsBetweenAbsences = false
 }
 
 private struct Issue523MarkerDeleteFixture {
@@ -70,6 +72,7 @@ private func issue523MarkerDeleteFixture(
     menuChildrenReadFailsAfterCancel: Bool = false,
     menuClosesAfterFirstSighting: Bool = false,
     menuChildrenAbsenceStatus: Int32? = nil,
+    menuChildrenReadFailsBetweenAbsences: Bool = false,
     editControlTitle: String = "編集",
     toolbarEditAdvertisesCancel: Bool = false,
     selectionConfirms: Bool = true,
@@ -95,6 +98,7 @@ private func issue523MarkerDeleteFixture(
     menuState.actionNamesReadFails = menuActionNamesReadFails
     menuState.menuEntryChildrenReadFails = menuEntryChildrenReadFails
     menuState.menuEntryEnabledReadFails = menuEntryEnabledReadFails
+    menuState.menuChildrenReadFailsBetweenAbsences = menuChildrenReadFailsBetweenAbsences
     let app = builder.element(52_300)
     let arrange = builder.element(52_301)
     let markerList = builder.element(52_302)
@@ -191,6 +195,7 @@ private func issue523MarkerDeleteFixture(
                 menuState.showMenuWasRequested = true
                 menuState.menuWasDismissed = false
                 menuState.toolbarMenuReadCount = 0
+                menuState.toolbarAbsenceObservationCount = 0
                 if menuEntryTitle != nil, menuBoundToToolbar {
                     menuState.discoveryReadFailsOnce = menuDiscoveryReadFails
                     menuState.discoveryReadAlwaysFails = menuDiscoveryReadAlwaysFails
@@ -281,6 +286,15 @@ private func issue523MarkerDeleteFixture(
                    menuState.showMenuWasRequested,
                    let menuChildrenAbsenceStatus {
                     return .failure(AXHelpers.AXStatusError(raw: menuChildrenAbsenceStatus))
+                }
+                if menuState.menuChildrenReadFailsBetweenAbsences,
+                   builder.elementID(element) == toolbarEditID,
+                   menuState.showMenuWasRequested,
+                   !menuState.isOpen {
+                    menuState.toolbarAbsenceObservationCount += 1
+                    if menuState.toolbarAbsenceObservationCount % 2 == 0 {
+                        return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                    }
                 }
                 if menuState.discoveryReadAlwaysFails, builder.elementID(element) == toolbarEditID {
                     return .failure(AXHelpers.AXStatusError(raw: AXError.apiDisabled.rawValue))
@@ -614,6 +628,29 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     }
 }
 
+@Test func testIssue523UnreadablePollResetsTheConsecutiveAbsenceRequirement() async throws {
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: nil,
+        menuChildrenReadFailsBetweenAbsences: true
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+    let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
+    let fallbackUnsafe = try #require(envelope["fallback_unsafe"] as? Bool)
+
+    // Mutation applied once: leave `absentReadings` unchanged in the failed-read branch. The
+    // alternating absence → unreadable observations then falsely settle the route as absent,
+    // rather than producing this unsafe-to-retry unreadable cleanup result.
+    #expect(!result.isSuccess)
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["edit_menu_route_state"] as? String == "menu_unreadable")
+    #expect(!safeToRetry)
+    #expect(fallbackUnsafe)
+    #expect(envelope["menu_state"] as? String == "could_not_be_closed")
+}
+
 @Test func testIssue523ExactDeleteMatchingRejectsUndoHistoryAndJapanesePrefixCollision() async throws {
     for title in ["Delete Undo History", "取り消し履歴を削除", "削除して移動", "실행 취소 기록 삭제"] {
         let fixture = issue523MarkerDeleteFixture(menuEntryTitle: title)
@@ -672,27 +709,41 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     #expect(!fixture.menuIsOpen)
 }
 
-@Test func testIssue523CancelFailureLeavesTheMenuOpenAndRefuses() async throws {
-    for (title, enabled) in [("Copy", true), ("Delete", false)] {
-        let fixture = issue523MarkerDeleteFixture(
-            menuEntryTitle: title,
-            menuEntryEnabled: enabled,
-            menuDismissesOnCancel: false
-        )
+@Test func testIssue523CleanupFailureMakesObservedMenuRefusalsUnsafeToRetry() async throws {
+    let fixtures = [
+        issue523MarkerDeleteFixture(menuEntryTitle: "Copy", menuDismissesOnCancel: false),
+        issue523MarkerDeleteFixture(
+            menuEntryTitle: "Delete", menuEntryEnabled: false, menuDismissesOnCancel: false
+        ),
+        issue523MarkerDeleteFixture(
+            menuEntryTitle: "Delete",
+            menuDismissesOnCancel: false,
+            menuEntryChildrenReadFails: true
+        ),
+        issue523MarkerDeleteFixture(
+            menuEntryTitle: "Delete",
+            menuDismissesOnCancel: false,
+            menuEntryEnabledReadFails: true
+        ),
+    ]
+    for fixture in fixtures {
         let result = await AccessibilityChannel.defaultDeleteMarker(
             index: 0, runtime: fixture.runtime, mouse: fixture.mouse
         )
         let envelope = try issue523Envelope(result)
         let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
         let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
+        let fallbackUnsafe = try #require(envelope["fallback_unsafe"] as? Bool)
 
-        // Source mutation applied once: replace this route-unavailable return with
-        // `.pickIssued(menuCloseWasNotObserved: false)`. The false write outcome fails the
-        // State-C/write assertions while the fixture preserves the failed cancellation state.
+        // Mutation applied once: remove `menuState: menuWasClosed ? nil : "could_not_be_closed"`
+        // from the four observed-menu refusal outcomes. Each fixture then misreports a retry into
+        // its still-open menu as safe and omits the menu-state receipt.
         #expect(!result.isSuccess)
         #expect(envelope["state"] as? String == "C")
         #expect(!writeAttempted)
-        #expect(safeToRetry)
+        #expect(!safeToRetry)
+        #expect(fallbackUnsafe)
+        #expect(envelope["menu_state"] as? String == "could_not_be_closed")
         #expect(fixture.menuIsOpen)
     }
 }
@@ -710,14 +761,14 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
     let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
 
-    // Source mutation applied once: replace this route-unavailable return with
-    // `.pickIssued(menuCloseWasNotObserved: false)`. That claims a delete was attempted and
-    // fails this refusal's State-C/write assertions.
+    // Mutation applied once: discard the observed-menu cleanup result in the unreadable-entry
+    // branch. This closure proof failure would then be reported as safely retryable.
     #expect(!result.isSuccess)
     #expect(envelope["state"] as? String == "C")
     #expect(!writeAttempted)
-    #expect(safeToRetry)
+    #expect(!safeToRetry)
     #expect(envelope["edit_menu_route_state"] as? String == "exact_delete_entry_missing_or_disabled")
+    #expect(envelope["menu_state"] as? String == "could_not_be_closed")
     #expect(fixture.actions.actionCount(
         elementID: fixture.menuID, action: kAXCancelAction as String
     ) == 1)
@@ -736,15 +787,15 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
     let fallbackUnsafe = try #require(envelope["fallback_unsafe"] as? Bool)
 
-    // Source mutation applied once: replace this route-unavailable return with
-    // `.pickIssued(menuCloseWasNotObserved: false)`. That claims a delete was attempted and
-    // fails this refusal's State-C/write assertions.
+    // Mutation applied once: discard the failed missing-entry cleanup result. The still-open menu
+    // would then be misreported as safely retryable without its `menu_state` receipt.
     #expect(!result.isSuccess)
     #expect(envelope["state"] as? String == "C")
     #expect(!writeAttempted)
-    #expect(safeToRetry)
+    #expect(!safeToRetry)
     #expect(fallbackUnsafe)
     #expect(envelope["edit_menu_route_state"] as? String == "exact_delete_entry_missing_or_disabled")
+    #expect(envelope["menu_state"] as? String == "could_not_be_closed")
     #expect(fixture.actions.actionCount(
         elementID: fixture.menuID, action: kAXCancelAction as String
     ) == 1)

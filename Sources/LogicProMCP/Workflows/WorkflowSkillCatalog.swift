@@ -771,7 +771,7 @@ enum WorkflowSkillCatalog {
             productionReady: false,
             dependsOn: [],
             limitations: [
-                "delete_marker uses the Marker List's exact Edit > Delete menu when its localized controls are available; otherwise it may post one identity-bound Delete key only while Logic is frontmost, and reports success only from settled Marker List survivor readback. Indexed goto_marker remains keycmd-only (manual MIDI Learn required; see the key-command section of SETUP.md).",
+                "delete_marker uses the Marker List's exact Edit > Delete menu when its localized controls are available; otherwise it refuses without issuing a deletion, and reports success only from settled Marker List survivor readback. Indexed goto_marker remains keycmd-only (manual MIDI Learn required; see the key-command section of SETUP.md).",
             ],
             mutationKind: .guardedMutation
         )

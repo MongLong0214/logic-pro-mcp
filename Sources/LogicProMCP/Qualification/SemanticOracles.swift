@@ -80,6 +80,10 @@ enum OracleConstraint: Sendable {
     /// The empty string is the canonical zero-entry encoding. Malformed prefixes,
     /// fractional/negative counts, and byte-length overruns fail closed.
     case lengthPrefixedEntryCountEquals(key: String, countKey: String, offset: Int)
+    /// A joined `<utf8-byte-count>:<entry>` wire field must not contain the exact
+    /// string named by another field. Both the wire and the comparison value must
+    /// be readable strings; malformed entries and missing values fail closed.
+    case lengthPrefixedEntriesExclude(key: String, forbiddenEntryKey: String)
     /// Two key paths WITHIN THE SAME payload resolve to equal leaf values. The
     /// load-bearing safe-mutation invariant: a verified write echoes what was
     /// requested as what was observed, so `requested == observed` proves the
@@ -131,6 +135,7 @@ enum OracleConstraint: Sendable {
              .nonEmptyArray(let key),
              .typedField(let key, _),
              .lengthPrefixedEntryCountEquals(let key, _, _),
+             .lengthPrefixedEntriesExclude(let key, _),
              .fieldsEqual(let key, _),
              .crossCheck(let key, _),
              .numericNear(let key, _, _),
@@ -148,6 +153,7 @@ enum OracleConstraint: Sendable {
     var isValueConstraint: Bool {
         switch self {
         case .valueEquals, .numericRange, .enumMember, .lengthPrefixedEntryCountEquals,
+             .lengthPrefixedEntriesExclude,
              .fieldsEqual, .crossCheck, .numericNear, .booleanFlipped:
             return true
         case .nonEmptyArray, .typedField, .emptyArray:
@@ -187,6 +193,11 @@ enum OracleConstraint: Sendable {
                   let entryCount = Self.lengthPrefixedEntryCount(in: wire) else { return false }
             let (expected, overflow) = Int(count).addingReportingOverflow(offset)
             return !overflow && expected >= 0 && entryCount == expected
+        case .lengthPrefixedEntriesExclude(let key, let forbiddenEntryKey):
+            guard let wire = JSONPath.resolve(root, keyPath: key) as? String,
+                  let forbidden = JSONPath.resolve(root, keyPath: forbiddenEntryKey) as? String,
+                  let entries = Self.lengthPrefixedEntries(in: wire) else { return false }
+            return entries.allSatisfy { $0 != forbidden }
         case .fieldsEqual(let keyA, let keyB):
             guard let a = JSONPath.resolve(root, keyPath: keyA),
                   let b = JSONPath.resolve(root, keyPath: keyB) else { return false }
@@ -237,9 +248,16 @@ enum OracleConstraint: Sendable {
     /// the entries themselves. That keeps the parser faithful to the wire rule:
     /// lengths measure UTF-8 bytes, rather than Swift character counts.
     private static func lengthPrefixedEntryCount(in wire: String) -> Int? {
+        lengthPrefixedEntries(in: wire)?.count
+    }
+
+    /// Decodes concatenated `<utf8-byte-count>:<entry>` records. Decoding every
+    /// entry (rather than merely skipping its bytes) lets exclusion constraints
+    /// compare exact UTF-8 payload strings without accepting split code points.
+    private static func lengthPrefixedEntries(in wire: String) -> [String]? {
         let bytes = Array(wire.utf8)
         var offset = 0
-        var entries = 0
+        var entries: [String] = []
         while offset < bytes.count {
             var length = 0
             let lengthStart = offset
@@ -255,8 +273,11 @@ enum OracleConstraint: Sendable {
                   length > 0 else { return nil }
             offset += 1
             guard length <= bytes.count - offset else { return nil }
+            guard let entry = String(bytes: bytes[offset..<(offset + length)], encoding: .utf8) else {
+                return nil
+            }
             offset += length
-            entries += 1
+            entries.append(entry)
         }
         return entries
     }

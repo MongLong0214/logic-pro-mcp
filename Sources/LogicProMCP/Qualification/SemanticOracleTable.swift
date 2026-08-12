@@ -1598,7 +1598,8 @@ enum SemanticOracleTable {
     // is length-prefixed before the entries are sorted and joined, so the envelope's
     // strings have unambiguous boundaries and can be checked against both counts.
     // The oracle binds that independently read-back multiset to the
-    // request-derived expectation. A shared or synthetic target position is State B:
+    // request-derived expectation and independently requires the observed survivors
+    // to exclude the target position. A shared or synthetic target position is State B:
     // a position occurrence can disappear without identifying which marker it was.
     // Marker names remain only State-B diagnostics because Logic can renumber
     // auto-generated names after deletion.
@@ -1623,6 +1624,10 @@ enum SemanticOracleTable {
                 key: "observed_survivor_position_multiset",
                 countKey: "marker_count_after",
                 offset: 0
+            ),
+            .lengthPrefixedEntriesExclude(
+                key: "observed_survivor_position_multiset",
+                forbiddenEntryKey: "target_position"
             ),
             .fieldsEqual(
                 keyA: "expected_survivor_position_multiset",
