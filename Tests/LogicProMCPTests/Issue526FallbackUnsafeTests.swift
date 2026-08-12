@@ -78,7 +78,6 @@ private func issue526SelectionFailureRuntime() -> AXLogicProElements.Runtime {
     builder.setAttribute(markerList, kAXDocumentAttribute as String, "/Issue526.logicx")
     builder.setAttribute(table, kAXRoleAttribute as String, kAXTableRole as String)
     builder.setAttribute(table, kAXDescriptionAttribute as String, "Marker Table")
-    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, table)
     builder.setAttribute(row, kAXRoleAttribute as String, kAXRowRole as String)
     for cell in [lockCell, positionCell, markerNameCell] {
         builder.setAttribute(cell, kAXRoleAttribute as String, kAXCellRole as String)
@@ -93,7 +92,7 @@ private func issue526SelectionFailureRuntime() -> AXLogicProElements.Runtime {
     builder.setChildren(markerList, [table])
 
     // The row's selected attribute may be set, but the table never confirms it in
-    // AXSelectedRows, which makes selectMarkerRowForDeletion refuse to press Delete.
+    // AXSelectedRows, which makes selectMarkerRowForDeletion refuse before any menu pick.
     return builder.makeLogicRuntime(appElement: app)
 }
 
@@ -104,9 +103,9 @@ private let issue526NoOpMouseRuntime = AXMouseHelper.Runtime(
     sleepMicros: { _ in }
 )
 
-/// Builds a Marker List whose Delete key removes `actualDeleteIndex`. Keeping that
-/// distinct from the requested index lets this fixture exercise the verification
-/// proof without using a coordinate click.
+/// Builds a Marker List whose exact Edit-menu Delete entry removes `actualDeleteIndex`. Keeping
+/// that distinct from the requested index lets this fixture exercise the verification proof without
+/// using a coordinate click or a synthetic key.
 private func issue526MarkerDeleteReadbackRuntime(
     markers: [(position: String, name: String)],
     actualDeleteIndex: Int
@@ -116,6 +115,9 @@ private func issue526MarkerDeleteReadbackRuntime(
     let arrange = builder.element(52_701)
     let markerList = builder.element(52_702)
     let table = builder.element(52_703)
+    let editMenu = builder.element(52_704)
+    let menu = builder.element(52_705)
+    let deleteEntry = builder.element(52_706)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
     builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, markerList])
@@ -125,9 +127,16 @@ private func issue526MarkerDeleteReadbackRuntime(
     builder.setAttribute(markerList, kAXRoleAttribute as String, kAXWindowRole as String)
     builder.setAttribute(markerList, kAXTitleAttribute as String, "Issue526 - Marker List")
     builder.setAttribute(markerList, kAXDocumentAttribute as String, "/Issue526.logicx")
+    builder.setAttribute(editMenu, kAXRoleAttribute as String, kAXMenuButtonRole as String)
+    builder.setAttribute(editMenu, kAXDescriptionAttribute as String, "Edit")
+    builder.setActionNames(editMenu, [kAXShowMenuAction as String])
+    builder.setAttribute(menu, kAXRoleAttribute as String, kAXMenuRole as String)
+    builder.setAttribute(deleteEntry, kAXRoleAttribute as String, kAXMenuItemRole as String)
+    builder.setAttribute(deleteEntry, kAXTitleAttribute as String, "Delete")
+    builder.setAttribute(deleteEntry, kAXEnabledAttribute as String, kCFBooleanTrue)
+    builder.setChildren(menu, [deleteEntry])
     builder.setAttribute(table, kAXRoleAttribute as String, kAXTableRole as String)
     builder.setAttribute(table, kAXDescriptionAttribute as String, "Marker Table")
-    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, table)
 
     let rows: [AXUIElement] = markers.enumerated().map { index, marker in
         let base = 52_710 + index * 10
@@ -150,7 +159,7 @@ private func issue526MarkerDeleteReadbackRuntime(
     }
     builder.setAttribute(table, "AXRows", rows)
     builder.setChildren(table, rows)
-    builder.setChildren(markerList, [table])
+    builder.setChildren(markerList, [editMenu, table])
 
     let runtime = builder.makeLogicRuntime(
         appElement: app,
@@ -160,19 +169,27 @@ private func issue526MarkerDeleteReadbackRuntime(
             }
             return true
         },
-        performActionHandler: nil
+        performActionHandler: { element, action in
+            if CFEqual(element, editMenu), action == (kAXShowMenuAction as String) {
+                builder.setChildren(editMenu, [menu])
+                return true
+            }
+            if CFEqual(element, deleteEntry), action == (kAXPickAction as String) {
+                let postDeleteRows = rows.enumerated()
+                    .filter { $0.offset != actualDeleteIndex }
+                    .map { $0.element }
+                builder.setAttribute(table, "AXRows", postDeleteRows)
+                builder.setChildren(table, postDeleteRows)
+                builder.setChildren(editMenu, [])
+                // Match the live anomaly: the AX action status is not proof of the observed write.
+                return false
+            }
+            return true
+        }
     )
     let mouse = AXMouseHelper.Runtime(
         postMouseEvent: { _, _, _ in false },
-        postKeyEvent: { keyCode in
-            guard keyCode == 0x33 else { return false }
-            let postDeleteRows = rows.enumerated()
-                .filter { $0.offset != actualDeleteIndex }
-                .map { $0.element }
-            builder.setAttribute(table, "AXRows", postDeleteRows)
-            builder.setChildren(table, postDeleteRows)
-            return true
-        },
+        postKeyEvent: { _ in false },
         postUnicodeScalar: { _ in false },
         sleepMicros: { _ in }
     )

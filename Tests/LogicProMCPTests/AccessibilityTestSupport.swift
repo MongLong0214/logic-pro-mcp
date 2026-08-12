@@ -126,7 +126,6 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
     func makeLogicRuntime(
         pid: pid_t? = 4242,
         appElement: AXUIElement? = nil,
-        logicIsFrontmost: @escaping @Sendable () -> Bool = { true },
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
         attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
@@ -137,7 +136,6 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
     ) -> AXLogicProElements.Runtime {
         AXLogicProElements.Runtime(
             logicProPID: { pid },
-            logicIsFrontmost: logicIsFrontmost,
             ax: makeAXRuntime(
                 appElement: appElement,
                 attributeValueHandler: attributeValueHandler,

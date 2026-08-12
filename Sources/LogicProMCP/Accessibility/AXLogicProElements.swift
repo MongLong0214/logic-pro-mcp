@@ -7,32 +7,23 @@ import Foundation
 enum AXLogicProElements {
     struct Runtime: @unchecked Sendable {
         let logicProPID: @Sendable () -> pid_t?
-        /// CGEvents are delivered globally, so an AX tree rooted at Logic is not evidence that
-        /// Logic will receive a subsequently posted key. Keep this question alongside the AX
-        /// runtime so UI operations can fail closed without activating Logic as a side effect.
-        let logicIsFrontmost: @Sendable () -> Bool
         let ax: AXHelpers.Runtime
         let executeAppleScript: @Sendable (String) async -> ChannelResult
 
         init(
             logicProPID: @escaping @Sendable () -> pid_t?,
-            logicIsFrontmost: @escaping @Sendable () -> Bool = {
-                ProcessUtils.Runtime.production.logicIsFrontmost()
-            },
             ax: AXHelpers.Runtime,
             executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
                 await AppleScriptChannel.executeAppleScript($0)
             }
         ) {
             self.logicProPID = logicProPID
-            self.logicIsFrontmost = logicIsFrontmost
             self.ax = ax
             self.executeAppleScript = executeAppleScript
         }
 
         static let production = Runtime(
             logicProPID: { ProcessUtils.logicProPID() },
-            logicIsFrontmost: { ProcessUtils.logicOwnsTheKeyboard() },
             ax: .production,
             executeAppleScript: { await AppleScriptChannel.executeAppleScript($0) }
         )

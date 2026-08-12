@@ -4,45 +4,22 @@ import Testing
 @testable import LogicProMCP
 
 private final class Issue523ActionLog: @unchecked Sendable {
-    private enum Event: Equatable {
-        case action(elementID: Int, action: String)
-        case key(CGKeyCode)
-    }
-
     private var actions: [(elementID: Int, action: String)] = []
-    private var deleteKeyEvents = 0
-    private var escapeKeyEvents = 0
-    private var events: [Event] = []
+    private var keyEvents = 0
 
     func recordAction(elementID: Int, action: String) {
         actions.append((elementID, action))
-        events.append(.action(elementID: elementID, action: action))
     }
 
-    func recordKeyEvent(_ keyCode: CGKeyCode) {
-        events.append(.key(keyCode))
-        if keyCode == 0x33 { deleteKeyEvents += 1 }
-        if keyCode == 0x35 { escapeKeyEvents += 1 }
+    func recordKeyEvent(_: CGKeyCode) {
+        keyEvents += 1
     }
 
     func actionCount(elementID: Int, action: String) -> Int {
         actions.filter { $0.elementID == elementID && $0.action == action }.count
     }
 
-    var keyEventCount: Int { deleteKeyEvents }
-
-    var escapeKeyEventCount: Int { escapeKeyEvents }
-
-    func actionOccursBeforeFirstKey(elementID: Int, action: String) -> Bool {
-        guard let actionIndex = events.firstIndex(of: .action(elementID: elementID, action: action)),
-              let keyIndex = events.firstIndex(where: { event in
-                  if case .key(0x33) = event { return true }
-                  return false
-              }) else {
-            return false
-        }
-        return actionIndex < keyIndex
-    }
+    var keyEventCount: Int { keyEvents }
 }
 
 private final class Issue523MenuState: @unchecked Sendable {
@@ -53,7 +30,6 @@ private final class Issue523MenuState: @unchecked Sendable {
     var menuWasDismissed = false
     var toolbarMenuReadCount = 0
     var closesAfterFirstSighting = false
-    var appearsBeforeFallbackDelete = false
 }
 
 private struct Issue523MarkerDeleteFixture {
@@ -80,29 +56,24 @@ private struct Issue523MarkerDeleteFixture {
 ///       └─ AXTable → selected marker rows
 ///
 /// An `AXPick` removes the selected row but returns `false`, matching the live AX anomaly. If the
-/// implementation consults that Boolean and posts Delete too, this fixture removes another row;
-/// readback changes from State A to State B and the test catches the destructive fallthrough.
+/// implementation consults that Boolean and treats the completed pick as a refusal, this fixture
+/// changes from State A to State C and the test catches the false-negative report.
 private func issue523MarkerDeleteFixture(
     menuEntryTitle: String?,
     menuEntryEnabled: Bool = true,
     menuBoundToToolbar: Bool = true,
     menuDismissesOnCancel: Bool = true,
-    menuDismissesOnEscape: Bool = true,
     menuDiscoveryReadFails: Bool = false,
     menuChildrenReadFailsAfterCancel: Bool = false,
-    menuAppearsAfterChildrenReads: Int = 0,
     menuClosesAfterFirstSighting: Bool = false,
-    menuAppearsBeforeFallbackDelete: Bool = false,
     menuChildrenAbsenceStatus: Int32? = nil,
     editControlTitle: String = "編集",
-    markerListHasFocus: Bool = true,
-    logicIsFrontmost: Bool = true
+    selectionConfirms: Bool = true
 ) -> Issue523MarkerDeleteFixture {
     let builder = FakeAXRuntimeBuilder()
     let actions = Issue523ActionLog()
     let menuState = Issue523MenuState()
     menuState.closesAfterFirstSighting = menuClosesAfterFirstSighting
-    menuState.appearsBeforeFallbackDelete = menuAppearsBeforeFallbackDelete
     let app = builder.element(52_300)
     let arrange = builder.element(52_301)
     let markerList = builder.element(52_302)
@@ -140,14 +111,6 @@ private func issue523MarkerDeleteFixture(
 
     builder.setAttribute(table, kAXRoleAttribute as String, kAXTableRole as String)
     builder.setAttribute(table, kAXDescriptionAttribute as String, "Marker Table")
-    if markerListHasFocus {
-        builder.setAttribute(app, kAXFocusedUIElementAttribute as String, table)
-    } else {
-        let arrangeFocus = builder.element(52_308)
-        builder.setAttribute(arrangeFocus, kAXRoleAttribute as String, kAXGroupRole as String)
-        builder.setAttribute(arrangeFocus, kAXDescriptionAttribute as String, "Arrange area")
-        builder.setAttribute(app, kAXFocusedUIElementAttribute as String, arrangeFocus)
-    }
 
     let rows: [AXUIElement] = [
         ("1 1 1 1", "Intro"),
@@ -179,10 +142,8 @@ private func issue523MarkerDeleteFixture(
         // This menu is deliberately unrelated to the toolbar Edit control. It is the stale-window
         // decoy that the old "first AXMenu anywhere" fallback mistook for the requested menu.
         //
-        // `menuState.isOpen` is NOT set: it means "the opener's own menu is open", which is what
-        // the post-key observation asks about and what would swallow a globally posted Delete.
-        // A leftover element in the window's child list is not an open menu, and conflating the
-        // two is precisely the mistake this fixture exists to catch.
+        // `menuState.isOpen` is NOT set: a leftover element in the window's child list is not the
+        // exact toolbar Edit menu this operation asked to open.
         markerListChildren.append(menu)
     }
     builder.setChildren(markerList, markerListChildren)
@@ -192,9 +153,8 @@ private func issue523MarkerDeleteFixture(
     let toolbarEditID = builder.elementID(toolbarEdit)
     let baseRuntime = builder.makeLogicRuntime(
         appElement: app,
-        logicIsFrontmost: { logicIsFrontmost },
         setAttributeHandler: { element, attribute, _ in
-            if attribute == kAXSelectedAttribute as String {
+            if selectionConfirms, attribute == kAXSelectedAttribute as String {
                 builder.setAttribute(table, "AXSelectedRows", [element])
             }
             return true
@@ -208,7 +168,7 @@ private func issue523MarkerDeleteFixture(
                 menuState.toolbarMenuReadCount = 0
                 if menuEntryTitle != nil, menuBoundToToolbar {
                     menuState.discoveryReadFailsOnce = menuDiscoveryReadFails
-                    menuState.isOpen = menuAppearsAfterChildrenReads == 0
+                    menuState.isOpen = true
                     builder.setChildren(toolbarEdit, menuState.isOpen ? [menu] : [])
                 }
                 return true
@@ -238,7 +198,6 @@ private func issue523MarkerDeleteFixture(
     )
     let runtime = AXLogicProElements.Runtime(
         logicProPID: baseRuntime.logicProPID,
-        logicIsFrontmost: baseRuntime.logicIsFrontmost,
         ax: AXHelpers.Runtime(
             axApp: baseRuntime.ax.axApp,
             attributeValue: baseRuntime.ax.attributeValue,
@@ -272,11 +231,6 @@ private func issue523MarkerDeleteFixture(
                    menuEntryTitle != nil,
                    menuBoundToToolbar {
                     menuState.toolbarMenuReadCount += 1
-                    if !menuState.isOpen,
-                       menuState.toolbarMenuReadCount > menuAppearsAfterChildrenReads {
-                        menuState.isOpen = true
-                        builder.setChildren(toolbarEdit, [menu])
-                    }
                 }
                 let children = baseRuntime.ax.children(element)
                 if builder.elementID(element) == toolbarEditID,
@@ -296,34 +250,7 @@ private func issue523MarkerDeleteFixture(
         postMouseEvent: { _, _, _ in false },
         postKeyEvent: { keyCode in
             actions.recordKeyEvent(keyCode)
-            if keyCode == 0x35 {
-                if menuState.showMenuWasRequested, menuDismissesOnEscape {
-                    menuState.isOpen = false
-                    menuState.menuWasDismissed = true
-                    builder.setChildren(toolbarEdit, [])
-                }
-                return true
-            }
-            guard keyCode == 0x33 else { return false }
-            if menuState.appearsBeforeFallbackDelete,
-               menuState.showMenuWasRequested,
-               menuState.toolbarMenuReadCount >= 2,
-               !menuState.menuWasDismissed,
-               !menuState.isOpen {
-                // The second absent observation has already returned. The menu materializes in
-                // the gap after the focus check and before this global Delete is delivered.
-                menuState.isOpen = true
-                builder.setChildren(toolbarEdit, [menu])
-            }
-            // A globally posted Delete goes to the menu when one appears in that gap, not to the
-            // Marker table. Keep the menu open so the required post-key observation can detect it.
-            guard !menuState.isOpen else { return true }
-            // Model the harm from treating the false AXPick result as permission to press Delete:
-            // the selected target is already gone, so this removes another survivor.
-            let afterKey = Array(AXHelpers.getChildren(table, runtime: builder.makeAXRuntime()).dropFirst())
-            builder.setAttribute(table, "AXRows", afterKey)
-            builder.setChildren(table, afterKey)
-            return true
+            return false
         },
         postUnicodeScalar: { _ in false },
         sleepMicros: { _ in }
@@ -360,8 +287,8 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
 
         // Mutation: return AXHelpers.performAction's Bool from the menu helper instead of
-        // `.pickIssued`. This fake AXPick returns false after deleting once, so the old fallthrough
-        // posts Delete, removes a second row, and these State-A/no-key assertions fail.
+        // `.pickIssued`. This fake AXPick returns false after deleting once, so the mutation
+        // misreports the completed menu delete as a route refusal and fails the State-A assertion.
         #expect(result.isSuccess)
         #expect(envelope["state"] as? String == "A")
         #expect(writeAttempted)
@@ -379,50 +306,50 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     }
 }
 
-@Test func testIssue523MenuAppearingAfterSecondAbsentObservationIsReportedAfterDelete() async throws {
-    let fixture = issue523MarkerDeleteFixture(
-        menuEntryTitle: "Delete",
-        menuAppearsAfterChildrenReads: 2,
-        menuAppearsBeforeFallbackDelete: true
-    )
-    let result = await AccessibilityChannel.defaultDeleteMarker(
-        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
-    )
-    let envelope = try issue523Envelope(result)
-    let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
-    let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
-    let fallbackUnsafe = try #require(envelope["fallback_unsafe"] as? Bool)
+@Test func testIssue523DeleteMarkerNeverPostsAKeyOnAnyPath() async {
+    let cases: [(index: Int, makeFixture: () -> Issue523MarkerDeleteFixture)] = [
+        (-1, { issue523MarkerDeleteFixture(menuEntryTitle: "Delete") }),
+        (3, { issue523MarkerDeleteFixture(menuEntryTitle: "Delete") }),
+        (0, { issue523MarkerDeleteFixture(menuEntryTitle: "Delete", selectionConfirms: false) }),
+        (0, { issue523MarkerDeleteFixture(menuEntryTitle: "Delete") }),
+        (0, { issue523MarkerDeleteFixture(menuEntryTitle: nil) }),
+        (0, { issue523MarkerDeleteFixture(menuEntryTitle: "Copy") }),
+        (0, { issue523MarkerDeleteFixture(menuEntryTitle: "Delete", menuEntryEnabled: false) }),
+        (0, { issue523MarkerDeleteFixture(menuEntryTitle: "Copy", menuDiscoveryReadFails: true) }),
+        (0, { issue523MarkerDeleteFixture(menuEntryTitle: "Copy", menuDismissesOnCancel: false) }),
+    ]
 
-    // Mutation: remove the post-key `markerListEditMenu` observation. This fixture opens its menu
-    // after both absent reads and immediately before the global key, so the mutation reaches State
-    // A despite delivery being ambiguous and fails the State-C/reason assertions below.
-    #expect(!result.isSuccess)
-    #expect(envelope["state"] as? String == "C")
-    #expect(envelope["error"] as? String == "marker_delete_key_delivery_ambiguous")
-    #expect(writeAttempted)
-    #expect(!safeToRetry)
-    #expect(fallbackUnsafe)
-    #expect(HonestContract.isFallbackUnsafeStateC(result.message))
-    #expect(fixture.actions.actionCount(elementID: fixture.menuEntryID, action: kAXPickAction as String) == 0)
-    #expect(fixture.actions.keyEventCount == 1)
-    #expect(fixture.menuIsOpen)
-    #expect(fixture.markerCount == 3)
+    // Mutation: add either the former global Delete fallback or its Escape cleanup to any tested
+    // path below. The fixture records every key code, so the invariant fails regardless of which
+    // path reached that post.
+    for testCase in cases {
+        let fixture = testCase.makeFixture()
+        _ = await AccessibilityChannel.defaultDeleteMarker(
+            index: testCase.index, runtime: fixture.runtime, mouse: fixture.mouse
+        )
+        #expect(fixture.actions.keyEventCount == 0)
+    }
 }
 
-@Test func testIssue523SettledAbsentMenuStillFallsThroughToFocusGuardedDelete() async throws {
+@Test func testIssue523AbsentEditMenuRefusesWithoutPostingAKey() async throws {
     let fixture = issue523MarkerDeleteFixture(menuEntryTitle: nil)
     let result = await AccessibilityChannel.defaultDeleteMarker(
         index: 0, runtime: fixture.runtime, mouse: fixture.mouse
     )
     let envelope = try issue523Envelope(result)
     let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
+    let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
 
-    // Mutation: classify a settled absent observation as unknown. The normal no-menu route would
-    // then refuse before reaching the established focus-guarded Delete fallback.
-    #expect(result.isSuccess)
-    #expect(envelope["state"] as? String == "A")
-    #expect(writeAttempted)
-    #expect(fixture.actions.keyEventCount == 1)
+    // Mutation: restore a global Delete after `.menuAbsent`. The mutation marks this path as a
+    // write and calls the key seam, so the State-C/write/key assertions fail.
+    #expect(!result.isSuccess)
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["edit_menu_route_state"] as? String == "menu_absent")
+    #expect(try #require(envelope["hint"] as? String).contains("not available"))
+    #expect(!writeAttempted)
+    #expect(safeToRetry)
+    #expect(HonestContract.isFallbackUnsafeStateC(result.message))
+    #expect(fixture.actions.keyEventCount == 0)
 }
 
 @Test func testIssue523MenuClosingAfterFirstSightingMakesAXPickANoOp() async throws {
@@ -463,13 +390,17 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         )
         let envelope = try issue523Envelope(result)
         let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
+        let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
 
         // Mutation: pass every non-success AXChildren status through as unreadable. These two
-        // documented absence answers would then refuse instead of settling the normal fallback.
-        #expect(result.isSuccess)
-        #expect(envelope["state"] as? String == "A")
-        #expect(writeAttempted)
-        #expect(fixture.actions.keyEventCount == 1)
+        // documented absence answers would be reported as `menu_unreadable`, so the route-state
+        // assertion fails.
+        #expect(!result.isSuccess)
+        #expect(envelope["state"] as? String == "C")
+        #expect(envelope["edit_menu_route_state"] as? String == "menu_absent")
+        #expect(!writeAttempted)
+        #expect(safeToRetry)
+        #expect(fixture.actions.keyEventCount == 0)
     }
 }
 
@@ -482,18 +413,19 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         let envelope = try issue523Envelope(result)
 
         // Mutation: replace `.exactStrict` with `.contains` (the undo-history labels) or `.prefix`
-        // (the Japanese move-and-delete label). That issues AXPick here, so the no-pick assertion
-        // fails instead of merely checking a LabelSet in isolation.
-        #expect(result.isSuccess)
-        #expect(envelope["state"] as? String == "A")
+        // (the Japanese move-and-delete label). That issues AXPick here, so the State-C/no-pick
+        // assertions fail instead of merely checking a LabelSet in isolation.
+        #expect(!result.isSuccess)
+        #expect(envelope["state"] as? String == "C")
+        #expect(envelope["edit_menu_route_state"] as? String == "exact_delete_entry_missing_or_disabled")
         #expect(fixture.actions.actionCount(
             elementID: fixture.menuEntryID, action: kAXPickAction as String
         ) == 0)
-        #expect(fixture.actions.keyEventCount == 1)
+        #expect(fixture.actions.keyEventCount == 0)
     }
 }
 
-@Test func testIssue523MissingDeleteEntryDismissesObservedMenuBeforeFocusGuardedDelete() async throws {
+@Test func testIssue523MissingDeleteEntryDismissesObservedMenuAndRefuses() async throws {
     let fixture = issue523MarkerDeleteFixture(menuEntryTitle: "Copy")
     let result = await AccessibilityChannel.defaultDeleteMarker(
         index: 0, runtime: fixture.runtime, mouse: fixture.mouse
@@ -501,20 +433,20 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     let envelope = try issue523Envelope(result)
 
     // Mutation: remove the `dismissMarkerListEditMenu` call from the missing-entry branch. The
-    // open-menu assertion and Cancel-before-key ordering both fail, catching the wedged fallback.
-    #expect(result.isSuccess)
-    #expect(envelope["state"] as? String == "A")
+    // AXCancel and closed-menu assertions fail, proving this no-write refusal restores the menu
+    // when AX can do so.
+    #expect(!result.isSuccess)
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["edit_menu_route_state"] as? String == "exact_delete_entry_missing_or_disabled")
+    #expect(try #require(envelope["hint"] as? String).contains("missing or disabled"))
     #expect(fixture.actions.actionCount(
         elementID: fixture.menuID, action: kAXCancelAction as String
     ) == 1)
-    #expect(fixture.actions.actionOccursBeforeFirstKey(
-        elementID: fixture.menuID, action: kAXCancelAction as String
-    ))
     #expect(!fixture.menuIsOpen)
-    #expect(fixture.actions.keyEventCount == 1)
+    #expect(fixture.actions.keyEventCount == 0)
 }
 
-@Test func testIssue523DisabledDeleteEntryDismissesObservedMenuBeforeFocusGuardedDelete() async throws {
+@Test func testIssue523DisabledDeleteEntryDismissesObservedMenuAndRefuses() async throws {
     let fixture = issue523MarkerDeleteFixture(menuEntryTitle: "Delete", menuEntryEnabled: false)
     let result = await AccessibilityChannel.defaultDeleteMarker(
         index: 0, runtime: fixture.runtime, mouse: fixture.mouse
@@ -522,20 +454,18 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     let envelope = try issue523Envelope(result)
 
     // Mutation: remove the `dismissMarkerListEditMenu` call from the disabled-entry branch. The
-    // open-menu assertion and Cancel-before-key ordering both fail, catching the wedged fallback.
-    #expect(result.isSuccess)
-    #expect(envelope["state"] as? String == "A")
+    // AXCancel and closed-menu assertions fail, proving a disabled entry is never picked.
+    #expect(!result.isSuccess)
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["edit_menu_route_state"] as? String == "exact_delete_entry_missing_or_disabled")
     #expect(fixture.actions.actionCount(
         elementID: fixture.menuID, action: kAXCancelAction as String
     ) == 1)
-    #expect(fixture.actions.actionOccursBeforeFirstKey(
-        elementID: fixture.menuID, action: kAXCancelAction as String
-    ))
     #expect(!fixture.menuIsOpen)
-    #expect(fixture.actions.keyEventCount == 1)
+    #expect(fixture.actions.keyEventCount == 0)
 }
 
-@Test func testIssue523CancelFailureEscalatesToEscapeAndObservedClosure() async throws {
+@Test func testIssue523CancelFailureNeverEscalatesToAGlobalKey() async throws {
     for (title, enabled) in [("Copy", true), ("Delete", false)] {
         let fixture = issue523MarkerDeleteFixture(
             menuEntryTitle: title,
@@ -547,24 +477,23 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         )
         let envelope = try issue523Envelope(result)
         let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
+        let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
 
-        // Mutation: return the wedged report immediately after a failed AXCancel. This fixture's
-        // first Escape closes the menu, so the result stays State C and the open-menu assertion
-        // fails instead of proving the escalation restored the UI before Delete was posted.
-        #expect(result.isSuccess)
-        #expect(envelope["state"] as? String == "A")
-        #expect(writeAttempted)
-        #expect(!fixture.menuIsOpen)
-        #expect(fixture.actions.escapeKeyEventCount == 1)
-        #expect(fixture.actions.keyEventCount == 1)
+        // Mutation: restore the former Escape cleanup after AXCancel fails. The fixture records
+        // that key post, so the no-key invariant fails.
+        #expect(!result.isSuccess)
+        #expect(envelope["state"] as? String == "C")
+        #expect(!writeAttempted)
+        #expect(safeToRetry)
+        #expect(fixture.menuIsOpen)
+        #expect(fixture.actions.keyEventCount == 0)
     }
 }
 
-@Test func testIssue523UnreadableMenuClosureForbidsFocusFallback() async throws {
+@Test func testIssue523UnreadableMenuClosureStillRefusesWithoutAKey() async throws {
     let fixture = issue523MarkerDeleteFixture(
         menuEntryTitle: "Copy",
         menuDismissesOnCancel: false,
-        menuDismissesOnEscape: false,
         menuChildrenReadFailsAfterCancel: true
     )
     let result = await AccessibilityChannel.defaultDeleteMarker(
@@ -574,26 +503,23 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
     let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
 
-    // Mutation: replace the closure observation with best-effort `getChildren`. After AXCancel,
-    // this fixture gives that API `[]` but gives `childrenResult` an AX failure. The mutation then
-    // treats the unreadable menu as closed and posts Delete; preserving the status keeps it wedged.
+    // Mutation: restore the former Escape cleanup after the unreadable AXCancel observation. The
+    // fixture records that post, so the no-key assertion fails.
     #expect(!result.isSuccess)
     #expect(envelope["state"] as? String == "C")
     #expect(!writeAttempted)
-    #expect(!safeToRetry)
-    #expect(envelope["menu_state"] as? String == "could_not_be_closed")
+    #expect(safeToRetry)
+    #expect(envelope["edit_menu_route_state"] as? String == "exact_delete_entry_missing_or_disabled")
     #expect(fixture.actions.actionCount(
         elementID: fixture.menuID, action: kAXCancelAction as String
     ) == 1)
-    #expect(fixture.actions.escapeKeyEventCount == 3)
     #expect(fixture.actions.keyEventCount == 0)
 }
 
-@Test func testIssue523MenuThatIgnoresEveryDismissalReportsWedgeWithoutDelete() async throws {
+@Test func testIssue523MenuThatIgnoresAXCancelStillRefusesWithoutDelete() async throws {
     let fixture = issue523MarkerDeleteFixture(
         menuEntryTitle: "Copy",
-        menuDismissesOnCancel: false,
-        menuDismissesOnEscape: false
+        menuDismissesOnCancel: false
     )
     let result = await AccessibilityChannel.defaultDeleteMarker(
         index: 0, runtime: fixture.runtime, mouse: fixture.mouse
@@ -603,19 +529,17 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
     let fallbackUnsafe = try #require(envelope["fallback_unsafe"] as? Bool)
 
-    // Mutation: make `dismissMarkerListEditMenu` claim success after its bounded dismissal tries.
-    // The still-open fixture would then use the focus fallback and post Delete rather than return
-    // the explicit wedged-menu refusal.
+    // Mutation: restore the former Escape cleanup after AXCancel fails. The fixture records that
+    // global key post, so the no-key assertion fails.
     #expect(!result.isSuccess)
     #expect(envelope["state"] as? String == "C")
     #expect(!writeAttempted)
-    #expect(!safeToRetry)
+    #expect(safeToRetry)
     #expect(fallbackUnsafe)
-    #expect(envelope["menu_state"] as? String == "could_not_be_closed")
+    #expect(envelope["edit_menu_route_state"] as? String == "exact_delete_entry_missing_or_disabled")
     #expect(fixture.actions.actionCount(
         elementID: fixture.menuID, action: kAXCancelAction as String
     ) == 1)
-    #expect(fixture.actions.escapeKeyEventCount == 3)
     #expect(fixture.actions.keyEventCount == 0)
 }
 
@@ -632,15 +556,15 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
     let fallbackUnsafe = try #require(envelope["fallback_unsafe"] as? Bool)
 
-    // Mutation: restore best-effort `getChildren` for discovery. This fixture returns a real menu
-    // from that flattened API but a failed status from `childrenResult`, so the mutation closes
-    // Copy's menu then posts Delete. Preserving the failure dismisses and refuses instead.
+    // Mutation: flatten the failed `childrenResult` into an empty child list. The mutation names
+    // this input `menu_absent`; preserving the read failure reports `menu_unreadable` instead.
     #expect(!result.isSuccess)
     #expect(envelope["state"] as? String == "C")
     #expect(!writeAttempted)
     #expect(safeToRetry)
     #expect(fallbackUnsafe)
-    #expect(envelope["menu_state"] as? String == "closed_after_unknown_discovery")
+    #expect(envelope["edit_menu_route_state"] as? String == "menu_unreadable")
+    #expect(try #require(envelope["hint"] as? String).contains("could not be read"))
     #expect(fixture.actions.actionCount(
         elementID: fixture.menuID, action: kAXCancelAction as String
     ) == 1)
@@ -655,58 +579,12 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     let envelope = try issue523Envelope(result)
 
     // Mutation: restore the window-wide AXMenu fallback. It AXPick's this unrelated Delete entry,
-    // so the exact-entry no-pick assertion and focus-guarded-key assertion both fail.
-    #expect(result.isSuccess)
-    #expect(envelope["state"] as? String == "A")
+    // so the route-refusal and exact-entry no-pick assertions both fail.
+    #expect(!result.isSuccess)
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["edit_menu_route_state"] as? String == "menu_absent")
     #expect(fixture.actions.actionCount(
         elementID: fixture.menuEntryID, action: kAXPickAction as String
     ) == 0)
-    #expect(fixture.actions.keyEventCount == 1)
-}
-
-@Test func testIssue523FocusRefusalRemainsFallbackUnsafeAndIsNotSafeToRetry() async throws {
-    let fixture = issue523MarkerDeleteFixture(menuEntryTitle: nil, markerListHasFocus: false)
-    let result = await AccessibilityChannel.defaultDeleteMarker(
-        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
-    )
-    let envelope = try issue523Envelope(result)
-    let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
-    let fallbackUnsafe = try #require(envelope["fallback_unsafe"] as? Bool)
-    let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
-
-    // Mutation: restore `safe_to_retry: true` on the focus refusal. AXShowMenu can still expose a
-    // menu after its two absent reads, so that mutation dishonestly advertises a clean retry and
-    // fails the assertion below.
-    #expect(!result.isSuccess)
-    #expect(!safeToRetry)
-    #expect(fallbackUnsafe)
-    #expect(!writeAttempted)
     #expect(fixture.actions.keyEventCount == 0)
-}
-
-@Test func testIssue523BackgroundedLogicRefusesBeforeGlobalDelete() async throws {
-    let fixture = issue523MarkerDeleteFixture(
-        menuEntryTitle: nil,
-        logicIsFrontmost: false
-    )
-    let result = await AccessibilityChannel.defaultDeleteMarker(
-        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
-    )
-    let envelope = try issue523Envelope(result)
-    let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
-    let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
-    let fallbackUnsafe = try #require(envelope["fallback_unsafe"] as? Bool)
-
-    // Mutation: remove the `runtime.logicIsFrontmost()` guard. The fixture's AX focus still names
-    // the bound Marker table, so the mutation posts global Delete and fails the no-key/error checks.
-    #expect(!result.isSuccess)
-    #expect(envelope["state"] as? String == "C")
-    #expect(envelope["error"] as? String == "logic_not_frontmost")
-    #expect(envelope["frontmost_state"] as? String == "logic_not_frontmost")
-    #expect(!writeAttempted)
-    #expect(!safeToRetry)
-    #expect(fallbackUnsafe)
-    #expect(HonestContract.isFallbackUnsafeStateC(result.message))
-    #expect(fixture.actions.keyEventCount == 0)
-    #expect(fixture.markerCount == 3)
 }
