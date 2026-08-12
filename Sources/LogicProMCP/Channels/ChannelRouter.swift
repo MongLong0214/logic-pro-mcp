@@ -195,6 +195,24 @@ actor ChannelRouter {
                 Log.debug("\(operation) succeeded via \(channelID.rawValue)", subsystem: "router")
                 return result
             case .error(let msg):
+                // A channel can deliberately refuse an operation when trying
+                // it through another channel would be unsafe (for example, a
+                // keystroke whose target focus cannot be proved). This is
+                // separate from terminal error-code classification and must
+                // preserve the original State C envelope verbatim.
+                // This check intentionally precedes terminal-State-C handling, so a marked
+                // terminal `element_not_found` would bypass `shouldContinueAfterTerminalStateC`.
+                // The two envelopes carrying the marker today — both marker-delete refusals — use
+                // `ax_write_failed`, which is NOT terminal, so the ordering changes no current
+                // behaviour. Do not reorder this, and do not put the marker on a terminal code,
+                // without revisiting that consequence.
+                if HonestContract.isFallbackUnsafeStateC(msg) {
+                    Log.debug(
+                        "\(operation) State C via \(channelID.rawValue) forbids fallback",
+                        subsystem: "router"
+                    )
+                    return result
+                }
                 // v3.1.2 (P1-1) — terminal State C means no other channel can
                 // improve on this answer (`element_not_found`, `invalid_params`,
                 // `not_implemented`). Falling through to the next channel

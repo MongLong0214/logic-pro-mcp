@@ -764,6 +764,23 @@ enum SemanticOracleFixtures {
                 "marker_count_after":3,"requested_name":"Chorus",\
                 "observed_marker_id":2,"observed_marker_name":"Chorus",\
                 "observed_marker_position":"12.1.1.1","observed_marker_position_source":"parser"}
+            """,
+            readback: "{}"
+        ),
+        // defaultDeleteMarker State A: the settled AX marker-list POSITION multiset
+        // exactly matched the pre-write positions with the target occurrence
+        // removed. Each sorted position entry is length-prefixed, then the entries
+        // join without an ambiguous delimiter.
+        .navigateDeleteMarker: SemanticOracleFixture(
+            response: """
+                {"success":true,"verified":true,"state":"A",\
+                "operation":"nav.delete_marker","requested_index":1,\
+                "target_name":"Verse","target_position":"5.1.1.1",\
+                "target_position_unique":true,"position_evidence_canonical":true,\
+                "marker_count_before":3,"write_attempted":true,\
+                "readback_settled":true,"marker_count_after":2,\
+                "expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1",\
+                "observed_survivor_position_multiset":"7:1.1.1.18:12.1.1.1"}
                 """,
             readback: "{}"
         ),

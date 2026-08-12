@@ -85,6 +85,23 @@ struct SemanticOracleEngineTests {
         #expect(!OracleConstraint.typedField(key: "missing", type: .string).isSatisfied(by: object))
     }
 
+    @Test func lengthPrefixedEntryCountChecksUTF8BoundariesAndNumericCount() {
+        let entryCount = OracleConstraint.lengthPrefixedEntryCountEquals(
+            key: "positions", countKey: "marker_count", offset: 0
+        )
+        #expect(entryCount.isSatisfied(by: root(#"{"positions":"7:1.1.1.18:12.1.1.1","marker_count":2}"#)))
+        #expect(entryCount.isSatisfied(by: root(#"{"positions":"2:é","marker_count":1}"#)))
+        #expect(!entryCount.isSatisfied(by: root(#"{"positions":"7:1.1.1.18:12.1.1.1","marker_count":3}"#)))
+        #expect(!entryCount.isSatisfied(by: root(#"{"positions":"8:5.1.1.1","marker_count":1}"#)))
+        #expect(!entryCount.isSatisfied(by: root(#"{"positions":"7:1.1.1.1","marker_count":1.5}"#)))
+
+        let survivors = OracleConstraint.lengthPrefixedEntryCountEquals(
+            key: "positions", countKey: "marker_count_before", offset: -1
+        )
+        #expect(survivors.isSatisfied(by: root(#"{"positions":"7:1.1.1.1","marker_count_before":2}"#)))
+        #expect(!survivors.isSatisfied(by: root(#"{"positions":"7:1.1.1.1","marker_count_before":3}"#)))
+    }
+
     // MARK: - relational constraints (Phase B0)
 
     @Test func fieldsEqualHoldsWhenTwoKeyPathsAgreeAndFailsWhenTheyDiverge() {
@@ -397,12 +414,15 @@ struct SemanticOracleCensusTests {
     /// a count) is what makes the increment a deliberate, reviewable diff. B1, B2,
     /// B3 and B4 are each pinned by count so a premature or miscounted oracle in any
     /// fails here.
+    /// B2 went 15 -> 16 and the total 48 -> 49 when `navigate.delete_marker` stopped being
+    /// structurally unverifiable: its chain is accessibility-only, and that path reads the
+    /// surviving marker set back, so it has a State A to pin and an oracle to pin it with.
     @Test func mutatingOraclesAreExactlyTheDeclaredIncrement() {
         let mutatingOracles = Set(SemanticOracleTable.byOperationID.keys)
             .intersection(SemanticOracleTable.mutatingSpecIDs)
         #expect(mutatingOracles == SemanticOracleTable.coveredMutatingOperationIDs)
         #expect(SemanticOracleTable.phaseB1MutatingOperationIDs.count == 12)
-        #expect(SemanticOracleTable.phaseB2MutatingOperationIDs.count == 15)
+        #expect(SemanticOracleTable.phaseB2MutatingOperationIDs.count == 16)
         #expect(SemanticOracleTable.phaseB3MutatingOperationIDs.count == 15)
         #expect(SemanticOracleTable.phaseB4MutatingOperationIDs.count == 6)
         // B1, B2, B3 and B4 are PAIRWISE-DISJOINT increments — no op claimed twice.
@@ -420,7 +440,7 @@ struct SemanticOracleCensusTests {
                 )
             }
         }
-        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 48)
+        #expect(SemanticOracleTable.coveredMutatingOperationIDs.count == 49)
     }
 
     /// #373 B4 — the mutating oracle inventory is CLOSED. Every supported
@@ -488,13 +508,15 @@ struct SemanticOracleCensusTests {
         let exclusions = SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs
         #expect(!exclusions.isEmpty)
         #expect(exclusions[.mixerSetPluginParam] != nil)
-        // The five B2 send-only ops that structurally cannot reach State A.
+        // The four B2 send-only ops that structurally cannot reach State A.
         for id in [
             OperationID.transportRewind, .transportFastForward,
-            .navigateZoomToFit, .navigateDeleteMarker, .navigateToggleView,
+            .navigateZoomToFit, .navigateToggleView,
         ] {
             #expect(exclusions[id] != nil, "\(id.rawValue) missing its send-only exclusion reason")
         }
+        #expect(exclusions[.navigateDeleteMarker] == nil)
+        #expect(SemanticOracleTable.coveredMutatingOperationIDs.contains(.navigateDeleteMarker))
         // The B3 audited exclusions: project lifecycle ops with no State A
         // (new/open/close State-B ceiling, launch/quit prose), the send-only
         // tracks.duplicate, and the send-only midi surface (a representative
@@ -701,6 +723,56 @@ struct SemanticOracleMutationTests {
             responseData: Data(#"{"success":false,"verified":false,"state":"C","error":"element_not_found"}"#.utf8),
             readbackData: Data("{}".utf8)) == true
         #expect(!failure, "metronome oracle accepted a State C failure")
+    }
+
+    /// `nav.delete_marker` reaches State A only after the settled marker-list
+    /// POSITION multiset equals the pre-write expectation with one instance of
+    /// the target position removed. The envelope must bind that equality:
+    /// otherwise stable reads, typed counts, and echoed target metadata can
+    /// falsely certify a no-op or the deletion of a marker at another position.
+    @Test func deleteMarkerOracleRequiresTheExactSettledPositionMultiset() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.navigateDeleteMarker])
+        let fixture = try #require(SemanticOracleFixtures.byOperationID[.navigateDeleteMarker])
+
+        let honest = try #require(oracle.evaluate(
+            responseData: fixture.responseData, readbackData: fixture.readbackData))
+        #expect(honest, "delete_marker rejected its honest settled position multiset")
+
+        // Mutation: put the target-position entry back into observed positions.
+        // A settled no-op must be rejected even though the rest of State-A's
+        // envelope shape is intact.
+        let noOp = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":3,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:5.1.1.18:12.1.1.1"}"#.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!noOp, "delete_marker accepted a settled State A whose position multiset lost no target occurrence")
+
+        // Mutation: replace the expected 12.1.1.1 survivor with the target's
+        // 5.1.1.1 position. Count-only validation would accept this wrong delete.
+        let wrongPositions = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:5.1.1.1"}"#.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!wrongPositions, "delete_marker accepted a settled readback with wrong positions")
+
+        // Mutation: every remaining default marker name shifted down by one after
+        // deleting index 0, but their positions are exactly right. State A does
+        // not normally carry these State-B diagnostic fields; including them here
+        // proves the oracle deliberately binds the position multiset, not names.
+        let namesShifted = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":0,"target_name":"Marker 1","target_position":"2.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":4,"write_attempted":true,"readback_settled":true,"marker_count_after":3,"expected_survivor_position_multiset":"7:1.1.1.17:1.1.1.17:5.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:1.1.1.17:5.1.1.1","expected_survivors":["8:Marker 27:1.1.1.1","8:Marker 37:1.1.1.1","8:Marker 47:5.1.1.1"],"observed_survivors":["8:Marker 17:1.1.1.1","8:Marker 27:1.1.1.1","8:Marker 37:5.1.1.1"]}"#.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(namesShifted, "delete_marker rejected correct positions solely because default names shifted")
+
+        // Mutation: both self-reported multisets carry the same valid wire value,
+        // but it contains only one entry while both counts require two. Equality
+        // alone would accept this shared arbitrary value.
+        let selfReportedMultisets = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:arbitrary","observed_survivor_position_multiset":"7:arbitrary"}"#.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!selfReportedMultisets, "delete_marker accepted equal multiset fields whose entry counts contradict the marker counts")
     }
 
     /// #373 B3 — project.save_as is envelope-only because its
@@ -1200,6 +1272,18 @@ enum JSONMutator {
             mutants.append(contentsOf: replacements(root, key, [("emptied", [Any]())]))
         case .typedField(_, let type):
             mutants.append(contentsOf: replacements(root, key, [("wrong type", wrongTyped(type))]))
+        case .lengthPrefixedEntryCountEquals(let wireKey, let countKey, _):
+            // Corrupt the self-describing wire field and independently make its
+            // declared numeric cardinality disagree. (`drop wireKey` is generic.)
+            mutants.append(contentsOf: replacements(root, wireKey, [
+                ("malformed length prefix", "not-a-length-prefixed-entry"),
+            ]))
+            if let current = JSONPath.resolve(root, keyPath: countKey),
+               let count = JSONInspector.number(of: current) {
+                mutants.append(contentsOf: replacements(root, countKey, [
+                    ("wrong entry count", count + 1),
+                ]))
+            }
         case .fieldsEqual(let keyA, let keyB):
             // Break the equality by diverging EITHER side; each must sink the
             // oracle. (`drop keyA` is already added generically via `key`.)

@@ -43,11 +43,11 @@ struct OperationRegistryTests {
     ]
 
     private static let unverifiedNavigateCommands: Set<String> = [
-        "delete_marker", "toggle_view",
+        "toggle_view",
     ]
 
     private static let navigateAvailabilityOverrides: [String: AvailabilityPolicy] = [
-        "delete_marker": .requiresKeyBinding,
+        "delete_marker": .defaultInstall,
     ]
 
     private static let smallToolCount = 19

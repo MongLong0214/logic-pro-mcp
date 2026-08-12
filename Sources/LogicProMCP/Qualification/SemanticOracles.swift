@@ -75,6 +75,11 @@ enum OracleConstraint: Sendable {
     case nonEmptyArray(key: String)
     /// Field must be present with the given JSON type.
     case typedField(key: String, type: JSONType)
+    /// A joined `<utf8-byte-count>:<entry>` wire field contains exactly the
+    /// number of entries declared by another numeric field, plus `offset`.
+    /// The empty string is the canonical zero-entry encoding. Malformed prefixes,
+    /// fractional/negative counts, and byte-length overruns fail closed.
+    case lengthPrefixedEntryCountEquals(key: String, countKey: String, offset: Int)
     /// Two key paths WITHIN THE SAME payload resolve to equal leaf values. The
     /// load-bearing safe-mutation invariant: a verified write echoes what was
     /// requested as what was observed, so `requested == observed` proves the
@@ -125,6 +130,7 @@ enum OracleConstraint: Sendable {
              .enumMember(let key, _),
              .nonEmptyArray(let key),
              .typedField(let key, _),
+             .lengthPrefixedEntryCountEquals(let key, _, _),
              .fieldsEqual(let key, _),
              .crossCheck(let key, _),
              .numericNear(let key, _, _),
@@ -141,8 +147,8 @@ enum OracleConstraint: Sendable {
     /// oracle carrying one is never a checkbox oracle.
     var isValueConstraint: Bool {
         switch self {
-        case .valueEquals, .numericRange, .enumMember, .fieldsEqual, .crossCheck, .numericNear,
-             .booleanFlipped:
+        case .valueEquals, .numericRange, .enumMember, .lengthPrefixedEntryCountEquals,
+             .fieldsEqual, .crossCheck, .numericNear, .booleanFlipped:
             return true
         case .nonEmptyArray, .typedField, .emptyArray:
             return false
@@ -171,6 +177,16 @@ enum OracleConstraint: Sendable {
         case .typedField(let key, let type):
             guard let value = JSONPath.resolve(root, keyPath: key) else { return false }
             return JSONInspector.type(of: value) == type
+        case .lengthPrefixedEntryCountEquals(let key, let countKey, let offset):
+            guard let wire = JSONPath.resolve(root, keyPath: key) as? String,
+                  let rawCount = JSONPath.resolve(root, keyPath: countKey),
+                  let count = JSONInspector.number(of: rawCount),
+                  count >= 0,
+                  count.rounded(.towardZero) == count,
+                  count <= Double(Int.max),
+                  let entryCount = Self.lengthPrefixedEntryCount(in: wire) else { return false }
+            let (expected, overflow) = Int(count).addingReportingOverflow(offset)
+            return !overflow && expected >= 0 && entryCount == expected
         case .fieldsEqual(let keyA, let keyB):
             guard let a = JSONPath.resolve(root, keyPath: keyA),
                   let b = JSONPath.resolve(root, keyPath: keyB) else { return false }
@@ -215,6 +231,34 @@ enum OracleConstraint: Sendable {
                   let b = (bValue as? NSNumber)?.boolValue else { return false }
             return a != b
         }
+    }
+
+    /// Counts concatenated `<utf8-byte-count>:<entry>` records without decoding
+    /// the entries themselves. That keeps the parser faithful to the wire rule:
+    /// lengths measure UTF-8 bytes, rather than Swift character counts.
+    private static func lengthPrefixedEntryCount(in wire: String) -> Int? {
+        let bytes = Array(wire.utf8)
+        var offset = 0
+        var entries = 0
+        while offset < bytes.count {
+            var length = 0
+            let lengthStart = offset
+            while offset < bytes.count, bytes[offset] >= 48, bytes[offset] <= 57 {
+                let digit = Int(bytes[offset] - 48)
+                guard length <= (Int.max - digit) / 10 else { return nil }
+                length = length * 10 + digit
+                offset += 1
+            }
+            guard offset > lengthStart,
+                  offset < bytes.count,
+                  bytes[offset] == 58,
+                  length > 0 else { return nil }
+            offset += 1
+            guard length <= bytes.count - offset else { return nil }
+            offset += length
+            entries += 1
+        }
+        return entries
     }
 }
 

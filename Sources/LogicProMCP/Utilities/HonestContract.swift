@@ -494,6 +494,28 @@ enum HonestContract {
         return obj["error"] as? String
     }
 
+    /// Returns true when a valid State C envelope explicitly forbids the
+    /// router from attempting the operation through another channel. This is
+    /// distinct from `safe_to_retry`: callers may safely retry after changing
+    /// state (for example, restoring keyboard focus) while a fallback channel
+    /// would still be unsafe to invoke.
+    static func isFallbackUnsafeStateC(_ message: String) -> Bool {
+        guard message.hasPrefix("{") else { return false }
+        guard let data = message.data(using: .utf8),
+              let raw = try? JSONSerialization.jsonObject(with: data),
+              let obj = raw as? [String: Any] else {
+            return false
+        }
+        // Encoders merge extras after their canonical fields, so `success:false` alone does not
+        // prove State C. Require the complete State C shape before honoring this router directive.
+        guard let success = obj["success"] as? Bool, success == false,
+              let state = obj["state"] as? String, state == "C",
+              obj["error"] as? String != nil else {
+            return false
+        }
+        return obj["fallback_unsafe"] as? Bool == true
+    }
+
     // MARK: - JSON serialization
 
     /// Serialize a dictionary deterministically (sorted keys) so snapshots

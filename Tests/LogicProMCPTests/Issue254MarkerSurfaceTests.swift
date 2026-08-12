@@ -115,14 +115,12 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
 /// operator installed the key-command preset and performed a manual MIDI Learn inside Logic. Until
 /// then the CC went out, Logic had nothing bound to it, the marker survived, and the caller was told
 /// `readback_unavailable` — a setup prerequisite reported as a readback problem.
-@Suite("nav.delete_marker has a route that needs no manual MIDI binding")
+@Suite("nav.delete_marker has a target-faithful route")
 struct MarkerDeleteRoutingTests {
-    @Test("the AX channel is the first rung, so a default install can delete a marker")
-    func deleteMarkerRoutesThroughAccessibilityFirst() throws {
+    @Test("only AX can delete the requested marker index")
+    func deleteMarkerRoutesOnlyThroughAccessibility() throws {
         let route = try #require(ChannelRouter.v2RoutingTable["nav.delete_marker"])
-        #expect(route.first == .accessibility)
-        // The keycmd rung stays as a fallback rather than being removed.
-        #expect(route.contains(.midiKeyCommands))
+        #expect(route == [.accessibility])
     }
 
     @Test("the marker-list rungs the AX path depends on are all AX-routed")
