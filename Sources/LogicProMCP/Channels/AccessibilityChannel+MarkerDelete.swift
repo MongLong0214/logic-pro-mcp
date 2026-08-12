@@ -102,14 +102,44 @@ extension AccessibilityChannel {
             ))
         }
 
-        switch pickDeleteFromMarkerListEditMenu(in: window, runtime: runtime.ax) {
+        var menuCloseWasNotObserved = false
+        switch pickDeleteFromMarkerListEditMenu(
+            in: window,
+            runtime: runtime.ax,
+            menuCloseWasNotObserved: &menuCloseWasNotObserved
+        ) {
         case .pickIssued:
             // `AXPick` status codes are not evidence of whether the menu action took effect. Once
             // issued, a Delete key would be a second destructive actuator, so proceed directly to
             // readback regardless of the return value.
             extras["write_attempted"] = true
+            guard !menuCloseWasNotObserved else {
+                // AXPick may already have deleted the marker, so this cannot be State C. But a
+                // menu that remains open means the UI was not restored to a state in which a
+                // verified result is safe to report or retry.
+                extras["safe_to_retry"] = false
+                extras["fallback_unsafe"] = true
+                extras["menu_state"] = "could_not_be_closed"
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: extras
+                ))
+            }
 
         case .menuUnavailable, .exactEntryNotFound, .entryNotActuable:
+            guard !menuCloseWasNotObserved else {
+                // No Delete actuator has been sent on this path, but a key fallback could land in
+                // the still-open menu. This is therefore not a clean, retryable focus refusal.
+                extras["write_attempted"] = false
+                extras["safe_to_retry"] = false
+                extras["fallback_unsafe"] = true
+                extras["menu_state"] = "could_not_be_closed"
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: "The Marker List Edit menu could not be closed, so Delete was not pressed.",
+                    extras: extras
+                ))
+            }
             guard markerTableHasKeyboardFocus(runtime: runtime) else {
                 // Refusing here is the point: the same keystroke elsewhere deletes a region or a track.
                 // Nothing was deleted, so a caller may retry after restoring Marker List focus.
@@ -303,7 +333,8 @@ extension AccessibilityChannel {
     /// advertises `AXShowMenu`; inspect action names before deciding which control may be actuated.
     private static func pickDeleteFromMarkerListEditMenu(
         in window: AXUIElement,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        menuCloseWasNotObserved: inout Bool
     ) -> MarkerListEditMenuDeleteOutcome {
         let controls = AXHelpers.findAllDescendants(
             of: window, role: kAXMenuButtonRole as String, maxDepth: 12, runtime: runtime
@@ -327,38 +358,59 @@ extension AccessibilityChannel {
             // As with AXPick, the return code does not prove the UI state. Read the scoped AX tree
             // after issuing AXShowMenu; without an observed menu, no deletion action has been sent.
             _ = AXHelpers.performAction(control, kAXShowMenuAction as String, runtime: runtime)
-            guard let menu = markerListEditMenu(under: control, in: window, runtime: runtime) else {
+            guard let menu = markerListEditMenu(under: control, runtime: runtime) else {
                 continue
             }
             observedMenu = true
 
             guard let entry = markerListDeleteMenuItem(in: menu, runtime: runtime) else {
+                menuCloseWasNotObserved = !dismissMarkerListEditMenu(
+                    menu, from: control, runtime: runtime
+                )
                 return .exactEntryNotFound
             }
             guard markerListMenuItemEnabledForActuation(entry, runtime: runtime) else {
+                menuCloseWasNotObserved = !dismissMarkerListEditMenu(
+                    menu, from: control, runtime: runtime
+                )
                 return .entryNotActuable
             }
 
             // Do not use the return value to select another actuator. This one call is the write.
             _ = AXHelpers.performAction(entry, kAXPickAction as String, runtime: runtime)
+            // AXPick normally closes a menu itself. Observe that instead of assuming it did; if
+            // the menu remains, use its own AXCancel action and require the same observation.
+            if markerListEditMenu(under: control, runtime: runtime) != nil {
+                menuCloseWasNotObserved = !dismissMarkerListEditMenu(
+                    menu, from: control, runtime: runtime
+                )
+            }
             return .pickIssued
         }
         return observedMenu ? .exactEntryNotFound : .menuUnavailable
     }
 
-    /// The menu is normally a child of its toolbar control. Looking under the Marker List window
-    /// too accommodates Logic exposing the opened menu beside the control without widening to an
-    /// unrelated application menu.
+    /// An observed menu must belong to the exact Edit control that was asked to show it. A menu
+    /// elsewhere in the window could be stale or belong to another control, so its presence cannot
+    /// authorise an AXPick here.
     private static func markerListEditMenu(
         under control: AXUIElement,
-        in window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> AXUIElement? {
-        AXHelpers.findAllDescendants(
-            of: control, role: kAXMenuRole as String, maxDepth: 4, runtime: runtime
-        ).first ?? AXHelpers.findAllDescendants(
-            of: window, role: kAXMenuRole as String, maxDepth: 12, runtime: runtime
-        ).first
+        AXHelpers.getChildren(control, runtime: runtime).first {
+            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
+        }
+    }
+
+    /// Dismiss the exact menu this run observed, then read the opener's own child list again.
+    /// An AXCancel status is not proof of closure, just as AXPick status is not proof of selection.
+    private static func dismissMarkerListEditMenu(
+        _ menu: AXUIElement,
+        from control: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        _ = AXHelpers.performAction(menu, kAXCancelAction as String, runtime: runtime)
+        return markerListEditMenu(under: control, runtime: runtime) == nil
     }
 
     /// Only direct entries of the observed Marker List Edit menu are candidates. In particular,
