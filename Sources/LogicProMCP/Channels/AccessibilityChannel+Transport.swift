@@ -776,7 +776,10 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime = .production,
         isFrontmost: @Sendable () -> Bool = ProcessUtils.Runtime.production.logicIsFrontmost,
         activateLogic: @Sendable () -> Bool = ProcessUtils.Runtime.production.activateLogicPro,
-        sleepMicros: @Sendable (UInt32) -> Void = { usleep($0) }
+        sleepMicros: @Sendable (UInt32) -> Void = { usleep($0) },
+        executeDialogScript: @escaping @Sendable (String) async -> ChannelResult = { script in
+            await AppleScriptChannel.executeAppleScript(script, timeout: 8.0)
+        }
     ) async -> ChannelResult {
         var targetBar: Int? = nil
         if let barStr = params["bar"], let b = Int(barStr) {
@@ -822,13 +825,39 @@ extension AccessibilityChannel {
         // cannot show that a successful run had to bring Logic forward first.
         baseExtras["frontmost_preparation"] = preparation.rawValue
 
-        let dialogResult = await gotoPositionViaDialog(bar: bar)
-        if case let .success(payload) = dialogResult {
+        let dialogResult = await gotoPositionViaDialog(
+            bar: bar, executeScript: executeDialogScript
+        )
+        if case let .driven(payload) = dialogResult {
             // The dialog rung builds its own envelope, so without this the same operation reports
             // the frontmost gate on one path and stays silent on the other — a receipt field you
             // cannot rely on is worse than none.
             return .success(mergingJSONField(
                 payload, key: "frontmost_preparation", value: preparation.rawValue
+            ))
+        }
+        if case let .failed(classification) = dialogResult,
+           classification.isUnsafeToActuateAgain {
+            // `dismissOpenMenu` could not prove that the menu closed. A slider write from this
+            // state can operate on the still-open menu, so this is terminal rather than fallback.
+            // This branch runs before the dialog input is typed and submitted. Opening the menu
+            // chain is UI navigation, not a `transport.goto_position` write, so this remains a
+            // State C refusal with `write_attempted:false`. Retain that the navigation click did
+            // happen separately for diagnosis.
+            return .error(HonestContract.encodeStateC(
+                error: .axWriteFailed,
+                hint: "The Go To Position menu could not be closed; the slider fallback was not attempted.",
+                extras: baseExtras.merging([
+                    "operation": "transport.goto_position",
+                    "method": "dialog",
+                    "menu_state": "could_not_be_closed",
+                    "menu_actuation_attempted": classification.menuActuationAttemptedBeforeUnsafeRefusal,
+                    "write_attempted": false,
+                    "safe_to_retry": false,
+                    // #530: even though ax_write_failed is normally non-terminal, a still-open
+                    // menu makes every weaker transport channel unsafe to invoke.
+                    "fallback_unsafe": true,
+                ]) { _, new in new }
             ))
         }
 
@@ -889,29 +918,186 @@ extension AccessibilityChannel {
         return text
     }
 
-    private static func gotoPositionViaDialog(bar: Int) async -> ChannelResult {
+    /// The script is internal so the menu-validation regression tests can assert the
+    /// exact generated AppleScript ordering without invoking Logic Pro.
+    static func gotoPositionViaDialogAppleScript(bar: Int) -> String {
         // Poll for the dialog's presence instead of relying on a fixed delay.
         // Without this guard, a slow machine (>500ms to render the dialog) would
         // send Cmd+A to the arrange area, selecting all regions unexpectedly.
         let logicProAppleScript = LogicProTarget.appleScriptTarget()
-        let script = """
-        \(logicProAppleScript.activateByBundleID)
-        delay 0.2
-        tell application "System Events"
-            tell \(logicProAppleScript.systemEventsProcessTarget)
-                try
-                    set mi to menu item "위치…" of menu 1 of menu item "이동" of menu 1 of menu bar item "탐색" of menu bar 1
-                on error errMsg
+        return """
+        -- A selected menu-bar item is the AX observation that one of Logic's
+        -- menus is currently open. Return UNREADABLE rather than treating a
+        -- failed read as a clean menu state.
+        on menuOpenState(theProcess)
+            using terms from application "System Events"
+                tell theProcess
                     try
-                        set mi to menu item "Position…" of menu 1 of menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1
-                    on error errMsg2
-                        return "MENU_NOT_FOUND: " & errMsg2
+                        repeat with menuBarItem in every menu bar item of menu bar 1
+                            if selected of menuBarItem then return "OPEN"
+                        end repeat
+                        return "CLOSED"
+                    on error
+                        return "UNREADABLE"
                     end try
+                end tell
+            end using terms from
+        end menuOpenState
+
+        -- Never claim that Escape cleaned up a menu until AXSelected says so.
+        -- Three attempts are enough to cover a menu/submenu chain without
+        -- turning a failed close into an unbounded retry.
+        -- `knownOpen` says whether THIS run has already clicked a menu open. It changes what an
+        -- unreadable first read means. At entry nothing has been opened, so UNREADABLE is an absent
+        -- observation and returning it lets the run proceed — refusing there sent 5 of 8 fresh
+        -- processes to the slider route. After this run clicked, a menu IS open: an unreadable read
+        -- is not permission to skip the Escape, because skipping it can end the run with the menu
+        -- still up.
+        on dismissOpenMenu(theProcess, knownOpen)
+            set menuState to my menuOpenState(theProcess)
+            if menuState is "CLOSED" then return "CLOSED"
+            if menuState is "UNREADABLE" and not knownOpen then return "UNREADABLE"
+            if menuState is not "OPEN" and menuState is not "UNREADABLE" then return menuState
+            repeat 3 times
+                using terms from application "System Events"
+                    tell theProcess to key code 53
+                end using terms from
+                delay 0.1
+                set menuState to my menuOpenState(theProcess)
+                if menuState is "CLOSED" then return "CLOSED"
+                if menuState is "UNREADABLE" then return "OPEN_UNREADABLE"
+                if menuState is not "OPEN" then return menuState
+            end repeat
+            return "OPEN"
+        end dismissOpenMenu
+
+        -- Appending this context lets the Swift receipt distinguish an unsafe
+        -- entry cleanup (no operation actuation) from an unsafe cleanup after a
+        -- menu click. It is deliberately attached only to refusal results.
+        on menuCleanupActuationContext(menuActuationAttempted)
+            if menuActuationAttempted then return " after menu actuation"
+            return ""
+        end menuCleanupActuationContext
+
+        -- AXPress can return before Logic has opened the clicked item's own menu.
+        -- AXSelected belongs to that exact item, so an unrelated open menu cannot
+        -- authorise the next click.
+        on menuItemOpenedAfterClick(theMenuItem)
+            repeat 3 times
+                using terms from application "System Events"
+                    try
+                        if selected of theMenuItem then return "OPEN"
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end using terms from
+                delay 0.1
+            end repeat
+            return "CLOSED"
+        end menuItemOpenedAfterClick
+
+        \(logicProAppleScript.activateByBundleID)
+        tell application "System Events"
+            set logicProcess to \(logicProAppleScript.systemEventsProcessTarget)
+            tell logicProcess
+                -- A timed-out predecessor can leave a menu open. Clear and
+                -- observe that state before this run performs any menu read or
+                -- actuation, so a later fallback never inherits an open menu.
+                set entryMenuCleanup to my dismissOpenMenu(logicProcess, false)
+                if entryMenuCleanup is "OPEN" or entryMenuCleanup is "OPEN_UNREADABLE" then
+                    return "MENU_PICK_FAILED: a menu was open at entry and would not close (" & entryMenuCleanup & ")"
+                end if
+                -- UNREADABLE is NOT a refusal here. Nothing has been opened by this
+                -- run yet, so an unreadable menu bar is an absent observation, not
+                -- evidence that something is open — and on a cold System Events
+                -- connection the first read frequently is unreadable. Refusing on it
+                -- sent 5 of 8 fresh processes to the slider route, measured. After
+                -- this run opens a menu the same value IS a refusal, because then
+                -- there is something known to be open.
+                set menuActuationAttempted to false
+                delay 0.2
+
+                -- Locale selection is a read-only path-resolution step. It
+                -- deliberately performs no click, so an AX error cannot turn a
+                -- Korean attempt into a second English menu actuation.
+                try
+                    if exists menu item "위치…" of menu 1 of menu item "이동" of menu 1 of menu bar item "탐색" of menu bar 1 then
+                        set selectedMenuBarItem to menu bar item "탐색" of menu bar 1
+                        set selectedSubmenuItem to menu item "이동" of menu 1 of selectedMenuBarItem
+                        set mi to menu item "위치…" of menu 1 of selectedSubmenuItem
+                    else if exists menu item "Position…" of menu 1 of menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1 then
+                        set selectedMenuBarItem to menu bar item "Navigate" of menu bar 1
+                        set selectedSubmenuItem to menu item "Go To" of menu 1 of selectedMenuBarItem
+                        set mi to menu item "Position…" of menu 1 of selectedSubmenuItem
+                    else
+                        set cleanupState to my dismissOpenMenu(logicProcess, true)
+                        if cleanupState is not "CLOSED" then
+                            return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                        end if
+                        return "MENU_NOT_FOUND"
+                    end if
+                on error errMsg
+                    set cleanupState to my dismissOpenMenu(logicProcess, true)
+                    if cleanupState is not "CLOSED" then
+                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                    end if
+                    return "MENU_NOT_FOUND: " & errMsg
                 end try
-                if not (enabled of mi) then
+                try
+                    -- Opening the selected chain refreshes AXEnabled. This is
+                    -- the only menu-bar chain that can be clicked in this run.
+                    set menuActuationAttempted to true
+                    click selectedMenuBarItem
+                    set menuBarOpenState to my menuItemOpenedAfterClick(selectedMenuBarItem)
+                    if menuBarOpenState is not "OPEN" then
+                        set cleanupState to my dismissOpenMenu(logicProcess, true)
+                        if cleanupState is not "CLOSED" then
+                            return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                        end if
+                        return "MENU_PICK_FAILED: selected menu bar item did not open (" & menuBarOpenState & ")"
+                    end if
+                    click selectedSubmenuItem
+                    set submenuOpenState to my menuItemOpenedAfterClick(selectedSubmenuItem)
+                    if submenuOpenState is not "OPEN" then
+                        set cleanupState to my dismissOpenMenu(logicProcess, true)
+                        if cleanupState is not "CLOSED" then
+                            return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                        end if
+                        return "MENU_PICK_FAILED: selected submenu item did not open (" & submenuOpenState & ")"
+                    end if
+                on error errMsg
+                    set cleanupState to my dismissOpenMenu(logicProcess, true)
+                    if cleanupState is not "CLOSED" then
+                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                    end if
+                    return "MENU_NOT_FOUND: " & errMsg
+                end try
+                try
+                    set menuItemEnabled to enabled of mi
+                on error
+                    -- An unreadable AXEnabled must not authorise the pick.
+                    set cleanupState to my dismissOpenMenu(logicProcess, true)
+                    if cleanupState is not "CLOSED" then
+                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                    end if
+                    return "MENU_STATE_UNREADABLE"
+                end try
+                if not menuItemEnabled then
+                    set cleanupState to my dismissOpenMenu(logicProcess, true)
+                    if cleanupState is not "CLOSED" then
+                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                    end if
                     return "MENU_DISABLED"
                 end if
-                click mi
+                try
+                    click mi
+                on error errMsg
+                    set cleanupState to my dismissOpenMenu(logicProcess, true)
+                    if cleanupState is not "CLOSED" then
+                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                    end if
+                    return "MENU_PICK_FAILED: " & errMsg
+                end try
                 -- Wait up to 3s for the dialog window to appear before typing,
                 -- otherwise keystrokes would go to the arrange area and click
                 -- Cmd+A there — silently "Select All Regions".
@@ -930,6 +1116,10 @@ extension AccessibilityChannel {
                     end try
                 end repeat
                 if not dialogReady then
+                    set cleanupState to my dismissOpenMenu(logicProcess, true)
+                    if cleanupState is not "CLOSED" then
+                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                    end if
                     return "DIALOG_NOT_READY"
                 end if
             end tell
@@ -943,38 +1133,177 @@ extension AccessibilityChannel {
         end tell
         return "OK"
         """
-        let result = await AppleScriptChannel.executeAppleScript(script)
+    }
+
+    /// The successful AppleScript channel payload is a JSON object containing the
+    /// script's return value in `result`. Only an exact `OK` means this route
+    /// reached the dialog and submitted it. Most failures may fall through to
+    /// the slider route, except a menu-close failure that leaves the UI unsafe
+    /// for further actuation.
+    enum GotoPositionDialogResultClassification: Equatable {
+        enum Failure: Equatable {
+            case menuNotFound
+            case menuStateUnreadable
+            case menuDisabled
+            case menuPickFailed
+            case menuCouldNotBeClosed(writeAttempted: Bool)
+            case dialogNotReady
+            case malformedPayload
+            case unexpectedResult
+            case executionFailed
+        }
+
+        case driven
+        case failure(Failure)
+
+        var isUnsafeToActuateAgain: Bool {
+            if case .failure(.menuCouldNotBeClosed) = self {
+                return true
+            }
+            return false
+        }
+
+        var menuActuationAttemptedBeforeUnsafeRefusal: Bool {
+            if case let .failure(.menuCouldNotBeClosed(writeAttempted)) = self {
+                return writeAttempted
+            }
+            return false
+        }
+    }
+
+    private struct GotoPositionDialogScriptPayload: Decodable {
+        let result: String
+    }
+
+    /// Kept internal for the menu-validation regression tests. This consumes
+    /// the JSON envelope produced by `AppleScriptChannel.channelResult` rather
+    /// than inspecting its serialized representation.
+    static func classifyGotoPositionDialogResult(
+        _ output: String
+    ) -> GotoPositionDialogResultClassification {
+        guard let data = output.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(GotoPositionDialogScriptPayload.self, from: data)
+        else {
+            return .failure(.malformedPayload)
+        }
+
+        switch payload.result {
+        case "OK":
+            return .driven
+        case let value where value.hasPrefix("MENU_NOT_FOUND"):
+            return .failure(.menuNotFound)
+        case "MENU_STATE_UNREADABLE":
+            return .failure(.menuStateUnreadable)
+        case "MENU_DISABLED":
+            return .failure(.menuDisabled)
+        case let value where value.hasPrefix("MENU_PICK_FAILED"):
+            if value.hasPrefix("MENU_PICK_FAILED: a menu was open at entry and would not close")
+                || value.hasPrefix("MENU_PICK_FAILED: menu cleanup was not observed") {
+                return .failure(.menuCouldNotBeClosed(
+                    writeAttempted: value.hasPrefix(
+                        "MENU_PICK_FAILED: menu cleanup was not observed after menu actuation"
+                    )
+                ))
+            }
+            return .failure(.menuPickFailed)
+        case "DIALOG_NOT_READY":
+            return .failure(.dialogNotReady)
+        default:
+            return .failure(.unexpectedResult)
+        }
+    }
+
+    private enum GotoPositionDialogRouteResult {
+        case driven(String)
+        case failed(GotoPositionDialogResultClassification)
+    }
+
+    private static func gotoPositionViaDialog(
+        bar: Int,
+        executeScript: @escaping @Sendable (String) async -> ChannelResult
+    ) async -> GotoPositionDialogRouteResult {
+        let script = gotoPositionViaDialogAppleScript(bar: bar)
+        let result = await executeScript(script)
         switch result {
         case .success(let output):
-            if output.contains("MENU_DISABLED") {
-                return .error("goto-position dialog disabled (project has no regions yet)")
+            let classification = classifyGotoPositionDialogResult(output)
+            switch classification {
+            case .driven:
+                // #105: this State B reports only that the Go-To-Position dialog
+                // keystroke was sent; the playhead is verified independently by
+                // `TransportDispatcher.finalizeGotoPositionResult` via a transport-
+                // state read-back. Earlier this carried a `note` claiming the
+                // playhead was "not read back" — which the finalize step then
+                // contradicted by reading it back and gating `verified` on it, so a
+                // verified State A shipped a self-contradictory note. The provenance
+                // (`via:"dialog"`) plus finalize's `verification_source` /
+                // `observed` / `verified` fields describe the outcome honestly
+                // without it.
+                return .driven(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: [
+                        "requested": "\(bar).1.1.1",
+                        "via": "dialog"
+                    ]
+                ))
+            case .failure:
+                return .failed(classification)
             }
-            if output.hasPrefix("MENU_NOT_FOUND") {
-                return .error("goto-position menu not found: \(output)")
+        case .error:
+            // The script died — timeout, TCC refusal, anything. It clicks menus open, so its death
+            // leaves the menu state UNKNOWN, and unknown is not safe: the slider would actuate into
+            // whatever is on screen. Try once to observe and clear any open menu; only a state
+            // observed CLOSED lets the fallback proceed.
+            // If Logic is not running at all, no menu of its can be open, and the script's death
+            // says nothing about menu state. Only when the app IS there does an unobservable menu
+            // become a reason to withhold the fallback.
+            guard ProcessUtils.logicProPID() != nil else {
+                return .failed(.failure(.executionFailed))
             }
-            if output.contains("DIALOG_NOT_READY") {
-                return .error("goto-position dialog did not appear within timeout")
+            switch await observeAndClearStrayMenu() {
+            case .closed:
+                return .failed(.failure(.executionFailed))
+            case .openOrUnknown:
+                return .failed(.failure(.menuCouldNotBeClosed(writeAttempted: false)))
             }
-            // #105: this State B reports only that the Go-To-Position dialog
-            // keystroke was sent; the playhead is verified independently by
-            // `TransportDispatcher.finalizeGotoPositionResult` via a transport-
-            // state read-back. Earlier this carried a `note` claiming the
-            // playhead was "not read back" — which the finalize step then
-            // contradicted by reading it back and gating `verified` on it, so a
-            // verified State A shipped a self-contradictory note. The provenance
-            // (`via:"dialog"`) plus finalize's `verification_source` /
-            // `observed` / `verified` fields describe the outcome honestly
-            // without it.
-            return .success(HonestContract.encodeStateB(
-                reason: .readbackUnavailable,
-                extras: [
-                    "requested": "\(bar).1.1.1",
-                    "via": "dialog"
-                ]
-            ))
-        case .error(let msg):
-            return .error("goto-position dialog failed: \(msg)")
         }
+    }
+
+
+    private enum StrayMenuOutcome { case closed, openOrUnknown }
+
+    /// Independent of the script that just died: ask System Events whether any menu bar item is
+    /// selected, send Escape if so, and observe again. Anything other than an observed CLOSED —
+    /// including an unreadable menu bar — is `openOrUnknown`, because a failed reading is not
+    /// evidence that nothing is open.
+    private static func observeAndClearStrayMenu() async -> StrayMenuOutcome {
+        let target = LogicProTarget.appleScriptTarget()
+        let script = """
+        tell application "System Events"
+            tell \(target.systemEventsProcessTarget)
+                try
+                    repeat 3 times
+                        set anyOpen to false
+                        repeat with menuBarItem in every menu bar item of menu bar 1
+                            if selected of menuBarItem then set anyOpen to true
+                        end repeat
+                        if not anyOpen then return "CLOSED"
+                        key code 53
+                        delay 0.1
+                    end repeat
+                    return "OPEN"
+                on error
+                    return "UNREADABLE"
+                end try
+            end tell
+        end tell
+        """
+        guard case let .success(payload) = await AppleScriptChannel.executeAppleScript(script, timeout: 4.0),
+              let data = payload.data(using: .utf8),
+              let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              (obj["result"] as? String) == "CLOSED"
+        else { return .openOrUnknown }
+        return .closed
     }
 
     // MARK: - Control-bar checkbox helpers (Logic Pro 12 transport)
