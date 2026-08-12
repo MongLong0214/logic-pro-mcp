@@ -976,17 +976,22 @@ extension AccessibilityChannel {
             return ""
         end menuCleanupActuationContext
 
-        -- AXPress can return before Logic has opened the menu. Wait for AXSelected
-        -- before clicking the submenu, or that second click can target a stale item.
-        on menuOpenedAfterClick(theProcess)
+        -- AXPress can return before Logic has opened the clicked item's own menu.
+        -- AXSelected belongs to that exact item, so an unrelated open menu cannot
+        -- authorise the next click.
+        on menuItemOpenedAfterClick(theMenuItem)
             repeat 3 times
-                set observedMenuState to my menuOpenState(theProcess)
-                if observedMenuState is "OPEN" then return "OPEN"
-                if observedMenuState is "UNREADABLE" then return "UNREADABLE"
+                using terms from application "System Events"
+                    try
+                        if selected of theMenuItem then return "OPEN"
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end using terms from
                 delay 0.1
             end repeat
             return "CLOSED"
-        end menuOpenedAfterClick
+        end menuItemOpenedAfterClick
 
         \(logicProAppleScript.activateByBundleID)
         tell application "System Events"
@@ -1040,7 +1045,7 @@ extension AccessibilityChannel {
                     -- the only menu-bar chain that can be clicked in this run.
                     set menuActuationAttempted to true
                     click selectedMenuBarItem
-                    set menuBarOpenState to my menuOpenedAfterClick(logicProcess)
+                    set menuBarOpenState to my menuItemOpenedAfterClick(selectedMenuBarItem)
                     if menuBarOpenState is not "OPEN" then
                         set cleanupState to my dismissOpenMenu(logicProcess)
                         if cleanupState is not "CLOSED" then
@@ -1049,6 +1054,14 @@ extension AccessibilityChannel {
                         return "MENU_PICK_FAILED: selected menu bar item did not open (" & menuBarOpenState & ")"
                     end if
                     click selectedSubmenuItem
+                    set submenuOpenState to my menuItemOpenedAfterClick(selectedSubmenuItem)
+                    if submenuOpenState is not "OPEN" then
+                        set cleanupState to my dismissOpenMenu(logicProcess)
+                        if cleanupState is not "CLOSED" then
+                            return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                        end if
+                        return "MENU_PICK_FAILED: selected submenu item did not open (" & submenuOpenState & ")"
+                    end if
                 on error errMsg
                     set cleanupState to my dismissOpenMenu(logicProcess)
                     if cleanupState is not "CLOSED" then

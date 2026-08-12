@@ -87,10 +87,14 @@ struct Issue529MenuValidationTests {
         )
         let menuBarOpen = try issue529Position(of: "click selectedMenuBarItem", in: script)
         let menuBarOpened = try issue529Position(
-            of: "set menuBarOpenState to my menuOpenedAfterClick(logicProcess)",
+            of: "set menuBarOpenState to my menuItemOpenedAfterClick(selectedMenuBarItem)",
             in: script
         )
         let submenuOpen = try issue529Position(of: "click selectedSubmenuItem", in: script)
+        let submenuOpened = try issue529Position(
+            of: "set submenuOpenState to my menuItemOpenedAfterClick(selectedSubmenuItem)",
+            in: script
+        )
         let enabledRead = try issue529Position(of: "enabled of mi", in: script)
 
         #expect(koreanDecision < englishDecision)
@@ -98,10 +102,65 @@ struct Issue529MenuValidationTests {
         #expect(menuBarOpen < menuBarOpened)
         #expect(menuBarOpened < submenuOpen)
         #expect(menuBarOpen < submenuOpen)
+        #expect(submenuOpen < submenuOpened)
+        #expect(submenuOpened < enabledRead)
         #expect(submenuOpen < enabledRead)
         #expect(!script.contains("click menu bar item"))
         #expect(issue529Positions(of: "click selectedMenuBarItem", in: script).count == 1)
         #expect(issue529Positions(of: "click selectedSubmenuItem", in: script).count == 1)
+    }
+
+    @Test("the leaf click requires the selected submenu's own open observation")
+    func leafClickRequiresSelectedSubmenuToOpen() throws {
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let submenuClick = try issue529Position(of: "click selectedSubmenuItem", in: script)
+        let submenuOpened = try issue529Position(
+            of: "set submenuOpenState to my menuItemOpenedAfterClick(selectedSubmenuItem)",
+            in: script
+        )
+        let submenuNotOpen = try issue529Position(
+            of: "if submenuOpenState is not \"OPEN\" then",
+            in: script
+        )
+        let submenuRefusal = try issue529Position(
+            of: "return \"MENU_PICK_FAILED: selected submenu item did not open (\"",
+            in: script
+        )
+        let leafClick = try issue529Position(of: "click mi", in: script)
+
+        #expect(submenuClick < submenuOpened)
+        #expect(submenuOpened < submenuNotOpen)
+        #expect(submenuNotOpen < submenuRefusal)
+        #expect(submenuRefusal < leafClick)
+    }
+
+    @Test("an unrelated open menu cannot satisfy the submenu observation")
+    func submenuObservationIsBoundToTheClickedItem() throws {
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let observationStart = try issue529Position(
+            of: "on menuItemOpenedAfterClick(theMenuItem)",
+            in: script
+        )
+        let observationEnd = try issue529Position(of: "end menuItemOpenedAfterClick", in: script)
+        let observation = String(script[observationStart..<observationEnd])
+        _ = try #require(
+            observation.range(of: "if selected of theMenuItem then return \"OPEN\"")
+        )
+
+        #expect(!observation.contains("menuOpenState("))
+        #expect(!observation.contains("theProcess"))
+    }
+
+    @Test("the healthy submenu path still clicks the leaf")
+    func healthySubmenuPathStillClicksLeaf() throws {
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let submenuOpened = try issue529Position(
+            of: "set submenuOpenState to my menuItemOpenedAfterClick(selectedSubmenuItem)",
+            in: script
+        )
+        let leafClick = try issue529Position(of: "click mi", in: script)
+
+        #expect(submenuOpened < leafClick)
     }
 
     @Test("entry cleanup runs before locale discovery or menu actuation")
