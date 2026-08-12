@@ -379,7 +379,12 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     #expect(fixture.actions.keyEventCount == 1)
 }
 
-@Test func testIssue523UnsettledMenuObservationRefusesWithoutDelete() async throws {
+@Test func testIssue523MenuThatClosesBetweenReadsIsStillUsedForTheDelete() async throws {
+    // This fixture alternates open/closed on successive child reads, which is what Logic 12.3
+    // actually does: a menu opened by AXShowMenu can close on its own inside the poll interval.
+    // Requiring two agreeing sightings before acting made every such delete refuse with
+    // `closed_after_unknown_discovery` while the menu was plainly there, so presence is now
+    // acted on the moment it is seen.
     let fixture = issue523MarkerDeleteFixture(
         menuEntryTitle: "Delete",
         menuObservationOscillates: true
@@ -389,20 +394,41 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     )
     let envelope = try issue523Envelope(result)
     let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
-    let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
 
-    // Mutation: return the last reading as the answer when the bounded poll expires. This fixture
-    // alternates menu/absence and ends its sixth read absent, so the mutation reaches the Delete
-    // fallback instead of performing cleanup and refusing.
-    #expect(!result.isSuccess)
-    #expect(envelope["state"] as? String == "C")
-    #expect(!writeAttempted)
-    #expect(safeToRetry)
-    #expect(envelope["menu_state"] as? String == "closed_after_unknown_discovery")
+    // Mutation: require two consecutive agreeing observations before acting. This fixture never
+    // produces two in a row, so that mutation refuses with State C and picks nothing.
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "A")
+    #expect(writeAttempted)
     #expect(fixture.actions.actionCount(
         elementID: fixture.menuEntryID, action: kAXPickAction as String
-    ) == 0)
-    #expect(fixture.actions.escapeKeyEventCount == 1)
+    ) == 1)
+    // The menu route was taken, so no blind Delete key may be posted.
+    #expect(fixture.actions.keyEventCount == 0)
+}
+
+@Test func testIssue523SingleAbsentReadIsNotYetAnAbsence() async throws {
+    // Absence is the claim that still needs settling: Logic can expose the menu asynchronously,
+    // and one "no menu" read is exactly the race that let a Delete key land in a menu that opened
+    // just after it. This fixture reveals the menu only on the second read.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        menuAppearsAfterChildrenReads: 1
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+    let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
+
+    // Mutation: treat the first absent read as a settled absence. The delete then falls through to
+    // the focus-guarded key route, posting a key instead of picking the menu entry.
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "A")
+    #expect(writeAttempted)
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuEntryID, action: kAXPickAction as String
+    ) == 1)
     #expect(fixture.actions.keyEventCount == 0)
 }
 

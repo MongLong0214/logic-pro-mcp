@@ -529,21 +529,27 @@ extension AccessibilityChannel {
         runtime: AXHelpers.Runtime,
         mouse: AXMouseHelper.Runtime
     ) -> MarkerListEditMenuObservation {
-        var previous: MarkerListEditMenuObservation?
+        // The two claims are not symmetric, and treating them the same broke the operation.
+        //
+        // PRESENCE is actionable the moment it is seen: the menu is open now, and an AXPick aimed at
+        // it is valid now. Measured on Logic 12.3, a menu opened by AXShowMenu can close on its own
+        // within 250 ms, so requiring two consecutive sightings made presence never settle and every
+        // delete refused while the menu was plainly there.
+        //
+        // ABSENCE is the claim that needs settling, because Logic can expose the menu
+        // asynchronously — a single "no menu" read is exactly the race that let a Delete key land in
+        // a menu that appeared just after it.
+        var absentReadings = 0
         for _ in 0..<6 {
-            let observation: MarkerListEditMenuObservation
             switch markerListEditMenu(under: control, runtime: runtime) {
             case .success(let menu?):
-                observation = .present(menu)
+                return .present(menu)
             case .success(nil):
-                observation = .absent
+                absentReadings += 1
+                if absentReadings >= 2 { return .absent }
             case .failure:
                 return .unknown
             }
-            if let previous, markerListEditMenuObservationsAgree(previous, observation) {
-                return observation
-            }
-            previous = observation
             mouse.sleepMicros(250_000)
         }
         return .unknown
@@ -556,8 +562,13 @@ extension AccessibilityChannel {
         switch (lhs, rhs) {
         case (.absent, .absent):
             return true
-        case (.present(let lhsMenu), .present(let rhsMenu)):
-            return CFEqual(lhsMenu, rhsMenu)
+        case (.present, .present):
+            // Presence, not object identity. The menu is already scoped to this control's own
+            // children, so "a menu is open under the opener" is the claim; two AX reads can vend
+            // different element references for it, and requiring CFEqual across reads made the
+            // observation never settle — measured live, every delete refused with
+            // `closed_after_unknown_discovery` while the menu was plainly there.
+            return true
         case (.unknown, _), (_, .unknown), (.absent, .present), (.present, .absent):
             return false
         }
