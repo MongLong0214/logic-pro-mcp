@@ -48,6 +48,7 @@ private final class Issue523ActionLog: @unchecked Sendable {
 private final class Issue523MenuState: @unchecked Sendable {
     var isOpen = false
     var childrenReadFails = false
+    var discoveryReadFailsOnce = false
 }
 
 private struct Issue523MarkerDeleteFixture {
@@ -80,6 +81,7 @@ private func issue523MarkerDeleteFixture(
     menuBoundToToolbar: Bool = true,
     menuDismissesOnCancel: Bool = true,
     menuDismissesOnEscape: Bool = true,
+    menuDiscoveryReadFails: Bool = false,
     menuChildrenReadFailsAfterCancel: Bool = false,
     editControlTitle: String = "編集",
     markerListHasFocus: Bool = true
@@ -184,6 +186,7 @@ private func issue523MarkerDeleteFixture(
             if action == (kAXShowMenuAction as String), elementID == builder.elementID(toolbarEdit) {
                 if menuEntryTitle != nil, menuBoundToToolbar {
                     menuState.isOpen = true
+                    menuState.discoveryReadFailsOnce = menuDiscoveryReadFails
                     builder.setChildren(toolbarEdit, [menu])
                 }
                 return true
@@ -224,6 +227,10 @@ private func issue523MarkerDeleteFixture(
             childCount: baseRuntime.ax.childCount,
             actionNames: baseRuntime.ax.actionNames,
             childrenResult: { element in
+                if menuState.discoveryReadFailsOnce, builder.elementID(element) == toolbarEditID {
+                    menuState.discoveryReadFailsOnce = false
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                }
                 if menuState.childrenReadFails, builder.elementID(element) == toolbarEditID {
                     return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
                 }
@@ -410,7 +417,10 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     #expect(envelope["state"] as? String == "C")
     #expect(!writeAttempted)
     #expect(!safeToRetry)
-    #expect(fixture.menuIsOpen)
+    #expect(envelope["menu_state"] as? String == "could_not_be_closed")
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuID, action: kAXCancelAction as String
+    ) == 1)
     #expect(fixture.actions.escapeKeyEventCount == 3)
     #expect(fixture.actions.keyEventCount == 0)
 }
@@ -437,8 +447,39 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     #expect(!writeAttempted)
     #expect(!safeToRetry)
     #expect(fallbackUnsafe)
-    #expect(fixture.menuIsOpen)
+    #expect(envelope["menu_state"] as? String == "could_not_be_closed")
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuID, action: kAXCancelAction as String
+    ) == 1)
     #expect(fixture.actions.escapeKeyEventCount == 3)
+    #expect(fixture.actions.keyEventCount == 0)
+}
+
+@Test func testIssue523UnreadableMenuDiscoveryRefusesAfterObservedDismissal() async throws {
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Copy",
+        menuDiscoveryReadFails: true
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+    let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
+    let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
+    let fallbackUnsafe = try #require(envelope["fallback_unsafe"] as? Bool)
+
+    // Mutation: restore best-effort `getChildren` for discovery. This fixture returns a real menu
+    // from that flattened API but a failed status from `childrenResult`, so the mutation closes
+    // Copy's menu then posts Delete. Preserving the failure dismisses and refuses instead.
+    #expect(!result.isSuccess)
+    #expect(envelope["state"] as? String == "C")
+    #expect(!writeAttempted)
+    #expect(safeToRetry)
+    #expect(fallbackUnsafe)
+    #expect(envelope["menu_state"] as? String == "closed_after_unreadable_discovery")
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuID, action: kAXCancelAction as String
+    ) == 1)
     #expect(fixture.actions.keyEventCount == 0)
 }
 

@@ -103,11 +103,13 @@ extension AccessibilityChannel {
         }
 
         var menuCloseWasNotObserved = false
+        var menuDiscoveryWasUnreadable = false
         switch pickDeleteFromMarkerListEditMenu(
             in: window,
             runtime: runtime.ax,
             mouse: mouse,
-            menuCloseWasNotObserved: &menuCloseWasNotObserved
+            menuCloseWasNotObserved: &menuCloseWasNotObserved,
+            menuDiscoveryWasUnreadable: &menuDiscoveryWasUnreadable
         ) {
         case .pickIssued:
             // `AXPick` status codes are not evidence of whether the menu action took effect. Once
@@ -128,6 +130,29 @@ extension AccessibilityChannel {
             }
 
         case .menuUnavailable, .exactEntryNotFound, .entryNotActuable:
+            guard !menuDiscoveryWasUnreadable else {
+                // AXShowMenu was issued, but the exact opener's child list could not be read.
+                // Even if cleanup subsequently observed closure, that failed discovery is not
+                // permission to aim a weaker Delete actuator at the UI that just held a menu.
+                extras["write_attempted"] = false
+                extras["fallback_unsafe"] = true
+                if menuCloseWasNotObserved {
+                    extras["safe_to_retry"] = false
+                    extras["menu_state"] = "could_not_be_closed"
+                    return .error(HonestContract.encodeStateC(
+                        error: .axWriteFailed,
+                        hint: "The Marker List Edit menu could not be closed, so Delete was not pressed.",
+                        extras: extras
+                    ))
+                }
+                extras["safe_to_retry"] = true
+                extras["menu_state"] = "closed_after_unreadable_discovery"
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: "The Marker List Edit menu could not be read after opening; it was dismissed and Delete was not pressed.",
+                    extras: extras
+                ))
+            }
             guard !menuCloseWasNotObserved else {
                 // No Delete actuator has been sent on this path, but a key fallback could land in
                 // the still-open menu. This is therefore not a clean, retryable focus refusal.
@@ -336,7 +361,8 @@ extension AccessibilityChannel {
         in window: AXUIElement,
         runtime: AXHelpers.Runtime,
         mouse: AXMouseHelper.Runtime,
-        menuCloseWasNotObserved: inout Bool
+        menuCloseWasNotObserved: inout Bool,
+        menuDiscoveryWasUnreadable: inout Bool
     ) -> MarkerListEditMenuDeleteOutcome {
         let controls = AXHelpers.findAllDescendants(
             of: window, role: kAXMenuButtonRole as String, maxDepth: 12, runtime: runtime
@@ -360,8 +386,20 @@ extension AccessibilityChannel {
             // As with AXPick, the return code does not prove the UI state. Read the scoped AX tree
             // after issuing AXShowMenu; without an observed menu, no deletion action has been sent.
             _ = AXHelpers.performAction(control, kAXShowMenuAction as String, runtime: runtime)
-            guard let menu = markerListEditMenu(under: control, runtime: runtime) else {
+            let menu: AXUIElement
+            switch markerListEditMenu(under: control, runtime: runtime) {
+            case .success(let observedMenu?):
+                menu = observedMenu
+            case .success(nil):
                 continue
+            case .failure:
+                // AXShowMenu may have succeeded even though its scoped child read failed. Clean
+                // up what may be open, but never let this unknown state reach the Delete fallback.
+                menuDiscoveryWasUnreadable = true
+                menuCloseWasNotObserved = !dismissMarkerListEditMenuAfterUnreadableDiscovery(
+                    from: control, runtime: runtime, mouse: mouse
+                )
+                return .menuUnavailable
             }
             observedMenu = true
 
@@ -399,9 +437,14 @@ extension AccessibilityChannel {
     private static func markerListEditMenu(
         under control: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> AXUIElement? {
-        AXHelpers.getChildren(control, runtime: runtime).first {
-            (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
+    ) -> Result<AXUIElement?, AXHelpers.AXStatusError> {
+        switch AXHelpers.childrenResult(control, runtime: runtime) {
+        case .success(let children):
+            return .success(children.first {
+                (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
+            })
+        case .failure(let error):
+            return .failure(error)
         }
     }
 
@@ -412,20 +455,49 @@ extension AccessibilityChannel {
         case openOrUnknown
     }
 
-    /// This is deliberately separate from `markerListEditMenu`: ordinary menu discovery remains
-    /// best-effort, while a disappearance claim must preserve the AX read status.
     private static func markerListEditMenuClosureState(
         under control: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> MarkerListEditMenuClosureState {
-        switch AXHelpers.childrenResult(control, runtime: runtime) {
-        case .success(let children):
-            return children.contains {
-                (AXHelpers.getRole($0, runtime: runtime) ?? "") == (kAXMenuRole as String)
-            } ? .openOrUnknown : .closed
+        switch markerListEditMenu(under: control, runtime: runtime) {
+        case .success(let menu):
+            return menu == nil ? .closed : .openOrUnknown
         case .failure:
             return .openOrUnknown
         }
+    }
+
+    /// Discovery failed before it yielded an AXMenu that can receive AXCancel. Re-read once in
+    /// case the failure was transient; if the menu becomes observable, dismiss it normally.
+    /// Otherwise, bounded Escape is the only available coordinate-free dismissal and every try is
+    /// followed by a status-preserving closure observation.
+    private static func dismissMarkerListEditMenuAfterUnreadableDiscovery(
+        from control: AXUIElement,
+        runtime: AXHelpers.Runtime,
+        mouse: AXMouseHelper.Runtime
+    ) -> Bool {
+        switch markerListEditMenu(under: control, runtime: runtime) {
+        case .success(let menu?):
+            return dismissMarkerListEditMenu(menu, from: control, runtime: runtime, mouse: mouse)
+        case .success(nil):
+            return true
+        case .failure:
+            break
+        }
+
+        for _ in 0..<3 {
+            AXMouseHelper.pressEscape(runtime: mouse)
+            mouse.sleepMicros(100_000)
+            switch markerListEditMenu(under: control, runtime: runtime) {
+            case .success(nil):
+                return true
+            case .success(let menu?):
+                return dismissMarkerListEditMenu(menu, from: control, runtime: runtime, mouse: mouse)
+            case .failure:
+                continue
+            }
+        }
+        return false
     }
 
     /// Dismiss the exact menu this run observed, then prove it disappeared from the opener's
