@@ -868,26 +868,34 @@ extension AccessibilityChannel {
             // never the return code, following the Delete-key path's write-attempt boundary.
             let submissionIssued = classification.hasIssuedDialogSubmission
             let dialogState = classification.dialogCleanupObservedClosed ? "closed" : "unobserved"
+            let extras = baseExtras.merging([
+                "operation": "transport.goto_position",
+                "method": "dialog",
+                "dialog_actuation_attempted": true,
+                "dialog_submission_attempted": submissionIssued,
+                "dialog_cleanup": dialogState,
+                // Opening the dialog is navigation, while a submitted Return may have moved the
+                // playhead. Keep that distinction explicit rather than using a false AX result to
+                // say no position write was attempted.
+                "write_attempted": submissionIssued,
+                "safe_to_retry": false,
+                "fallback_unsafe": true,
+            ]) { _, new in new }
+            if submissionIssued {
+                // Return was issued, so a position write may have landed. The result is uncertain
+                // rather than a known hard failure, but the slider remains unsafe as a second actuator.
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: extras
+                ))
+            }
+            // The issued leaf only navigates to the dialog. With no submission, no position write was
+            // attempted, so this remains the known State C navigation failure.
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: submissionIssued
-                    ? "Go To Position dialog input or submission was issued but did not complete; "
-                        + "the slider fallback was not attempted."
-                    : "The Go To Position menu item was issued but reported an error; "
-                        + "the slider fallback was not attempted.",
-                extras: baseExtras.merging([
-                    "operation": "transport.goto_position",
-                    "method": "dialog",
-                    "dialog_actuation_attempted": true,
-                    "dialog_submission_attempted": submissionIssued,
-                    "dialog_cleanup": dialogState,
-                    // Opening the dialog is navigation, while a submitted Return may have moved the
-                    // playhead.  Keep that distinction explicit rather than using a false AX result to
-                    // say no position write was attempted.
-                    "write_attempted": submissionIssued,
-                    "safe_to_retry": false,
-                    "fallback_unsafe": true,
-                ]) { _, new in new }
+                hint: "The Go To Position menu item was issued but reported an error; "
+                    + "the slider fallback was not attempted.",
+                extras: extras
             ))
         }
 
@@ -1171,6 +1179,13 @@ extension AccessibilityChannel {
             repeat 3 times
                 set cancelOutcome to my pressGoToPositionDialogCancel(theProcess)
                 if cancelOutcome is "NO_BUTTON" or cancelOutcome is "UNREADABLE" then
+                    -- The Cancel click may have landed even though AX reported failure. Re-observe
+                    -- this exact dialog before choosing Escape as a second actuator; unreadable is
+                    -- not permission to send a key into an unknown focus target.
+                    set dialogState to my goToPositionDialogState(theProcess)
+                    if dialogState is "CLOSED" then return "CLOSED"
+                    if dialogState is "UNREADABLE" then return "OPEN_UNREADABLE"
+                    if dialogState is not "OPEN" then return dialogState
                     using terms from application "System Events"
                         tell theProcess to key code 53
                     end using terms from
