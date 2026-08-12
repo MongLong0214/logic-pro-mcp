@@ -114,20 +114,50 @@ extension AXLogicProElements {
         )
     }
 
-    /// Find the 마디 (bar) slider in Logic Pro's control bar. Setting this
-    /// slider's value moves the playhead to the given bar.
+    /// Find the `bar` component of Logic Pro's Control Bar playhead-position
+    /// group. Its AX value is not assumed to be an absolute bar position.
     static func findControlBarBarSlider(runtime: Runtime = .production) -> AXUIElement? {
-        guard let controlBar = getControlBar(runtime: runtime) else { return nil }
-        let sliders = AXHelpers.findAllDescendants(
-            of: controlBar, role: kAXSliderRole, maxDepth: 4, runtime: runtime.ax
+        findControlBarPlayheadPositionSlider(
+            matching: AXLocalePolicy.barSliderLabel,
+            runtime: runtime
         )
-        for s in sliders {
-            let desc = AXHelpers.getDescription(s, runtime: runtime.ax) ?? ""
-            if AXLocalePolicy.barSliderLabel.matches(desc, mode: .exactStrict) {
-                return s
-            }
-        }
-        return nil
+    }
+
+    /// Locate a component slider below the named Playhead Position group. Logic
+    /// 12.3 nests `bar` and `beat` beneath that group more deeply than the
+    /// historical four-level control-bar scan, so resolve the structural owner
+    /// first and then traverse its complete descendant subtree.
+    private static func findControlBarPlayheadPositionSlider(
+        matching labels: AXLocalePolicy.LabelSet,
+        runtime: Runtime
+    ) -> AXUIElement? {
+        guard let controlBar = getControlBar(runtime: runtime) else { return nil }
+        let groups = AXHelpers.findAllDescendants(
+            of: controlBar, role: kAXGroupRole, maxDepth: 8, runtime: runtime.ax
+        )
+        guard let playheadPosition = groups.first(where: {
+            AXLocalePolicy.playheadPositionGroupLabel.matches(
+                AXHelpers.getDescription($0, runtime: runtime.ax), mode: .exactStrict
+            )
+        }) else { return nil }
+        let componentSliders = AXHelpers.findAllDescendants(
+            of: playheadPosition, role: kAXSliderRole, maxDepth: 8, runtime: runtime.ax
+        )
+        guard componentSliders.count == 2,
+              componentSliders.contains(where: {
+                  AXLocalePolicy.barSliderLabel.matches(
+                      AXHelpers.getDescription($0, runtime: runtime.ax), mode: .exactStrict
+                  )
+              }),
+              componentSliders.contains(where: {
+                  AXLocalePolicy.beatSliderLabel.matches(
+                      AXHelpers.getDescription($0, runtime: runtime.ax), mode: .exactStrict
+                  )
+              })
+        else { return nil }
+        return componentSliders.first(where: {
+            labels.matches(AXHelpers.getDescription($0, runtime: runtime.ax), mode: .exactStrict)
+        })
     }
 
     /// Find the 템포 / Tempo slider in Logic's control bar. Double-clicking
@@ -160,19 +190,12 @@ extension AXLogicProElements {
         return nil
     }
 
-    /// Find the 비트 (beat) slider in the control bar (optional — for sub-bar positioning).
+    /// Find the `beat` component below Logic Pro 12.3's Playhead Position group.
     static func findControlBarBeatSlider(runtime: Runtime = .production) -> AXUIElement? {
-        guard let controlBar = getControlBar(runtime: runtime) else { return nil }
-        let sliders = AXHelpers.findAllDescendants(
-            of: controlBar, role: kAXSliderRole, maxDepth: 4, runtime: runtime.ax
+        findControlBarPlayheadPositionSlider(
+            matching: AXLocalePolicy.beatSliderLabel,
+            runtime: runtime
         )
-        for s in sliders {
-            let desc = AXHelpers.getDescription(s, runtime: runtime.ax) ?? ""
-            if AXLocalePolicy.beatSliderLabel.matches(desc, mode: .exactStrict) {
-                return s
-            }
-        }
-        return nil
     }
 
     /// Read the current value (0/1) of a control-bar checkbox. Returns nil if

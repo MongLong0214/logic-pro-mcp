@@ -561,6 +561,12 @@ struct AXLocalePolicyTests {
         #expect(AXLocalePolicy.beatSliderLabel.matches("beat", mode: .exactStrict))
         #expect(AXLocalePolicy.beatSliderLabel.matches("비트", mode: .exactStrict))
         #expect(!AXLocalePolicy.beatSliderLabel.matches("bar", mode: .exactStrict))
+
+        // Mutation this rejects: change this exact group label to generic `position` (or add that
+        // token as a variant), which would make an unrelated AXGroup eligible as the owner.
+        #expect(AXLocalePolicy.playheadPositionGroupLabel.matches("Playhead Position", mode: .exactStrict))
+        #expect(AXLocalePolicy.playheadPositionGroupLabel.matches("재생헤드 위치", mode: .exactStrict))
+        #expect(!AXLocalePolicy.playheadPositionGroupLabel.matches("Position", mode: .exactStrict))
     }
 
     /// The metronome is the one Japanese transport label that is a compound word.

@@ -712,11 +712,10 @@ extension AccessibilityChannel {
 
     // MARK: - Control-bar playhead position helper
 
-    /// Set the playhead to a specific bar. Two paths:
-    /// 1) `탐색 → 이동 → 위치…` dialog (precise, auto-extends project, requires
-    ///    at least one region in arrange — menu item is disabled on empty project)
-    /// 2) Control-bar 마디 slider (clamps to project length; silently stops at
-    ///    end when requested bar exceeds length)
+    /// Set the playhead to a specific bar through Logic's `탐색 → 이동 → 위치…`
+    /// dialog. The Control Bar's `bar` slider is deliberately not used as a
+    /// fallback: in Logic 12.3 its AX value is a relative increment rather than
+    /// an absolute musical bar number.
     /// Accepts `{"bar": Int}` or `{"position": "B.B.S.S"}`.
     /// #109: set the arrange horizontal zoom to `level` (1...10) by writing the
     /// Horizontal-Zoom AXSlider (range 0...1, level 1 = fully out, 10 = fully
@@ -784,12 +783,14 @@ extension AccessibilityChannel {
             await observeAndClearStrayGoToPositionUI() == .closed
         }
     ) async -> ChannelResult {
-        var targetBar: Int? = nil
-        var targetBeat: Int? = nil
         var requestedPosition: String? = nil
         if let barStr = params["bar"], let b = Int(barStr) {
-            targetBar = b
-            targetBeat = 1
+            guard (1...9999).contains(b) else {
+                return .error(HonestContract.encodeStateC(
+                    error: .invalidParams,
+                    hint: "goto_position requires 'bar' (Int 1..9999) or 'position' (B.B.S.S)"
+                ))
+            }
             requestedPosition = "\(b).1.1.1"
         } else if let pos = params["position"] {
             if pos.contains(":") {
@@ -807,16 +808,11 @@ extension AccessibilityChannel {
                     hint: "goto_position requires 'bar' (Int 1..9999) or 'position' (B.B.S.S)"
                 ))
             }
-            targetBar = b
-            targetBeat = beat
-            // Keep the caller's complete request. The slider can only express a prefix of it, but
-            // must never silently replace beat/subdivision/tick with its own defaults.
+            // Keep the caller's complete request. The dialog must never silently replace its
+            // beat/subdivision/tick components with defaults.
             requestedPosition = "\(b).\(beat).\(subdivision).\(tick)"
         }
-        guard let bar = targetBar,
-              let beat = targetBeat,
-              let requestedPosition,
-              (1...9999).contains(bar)
+        guard let requestedPosition
         else {
             return .error(HonestContract.encodeStateC(
                 error: .invalidParams,
@@ -838,7 +834,7 @@ extension AccessibilityChannel {
                     + "to the wrong bar, so nothing was touched. Bring Logic Pro to the front and retry.",
                 extras: baseExtras.merging([
                     "operation": "transport.goto_position",
-                    "method": "ax_bar_slider",
+                    "method": "ax_goto_position_dialog",
                     "frontmost_preparation": preparation.rawValue,
                     "write_attempted": false,
                     "safe_to_retry": true,
@@ -887,10 +883,10 @@ extension AccessibilityChannel {
         if case let .failed(classification) = dialogResult,
            classification.requiresUnsafeUIRefusal {
             // The normal script proved no Return was sent, but could not prove that the menu or
-            // dialog closed. Do not let an unknown focus target receive a slider write.
+            // dialog closed. Do not let an unknown focus target receive any later position write.
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "The Go To Position menu or dialog was not observed closed; the slider fallback was not attempted.",
+                hint: "The Go To Position menu or dialog was not observed closed; no later position route was attempted.",
                 extras: baseExtras.merging([
                     "operation": "transport.goto_position",
                     "method": "dialog",
@@ -911,147 +907,35 @@ extension AccessibilityChannel {
             ))
         }
 
-        guard let slider = AXLogicProElements.findControlBarBarSlider(runtime: runtime) else {
-            return .error(HonestContract.encodeStateC(
-                error: .elementNotFound,
-                hint: "Neither goto-position dialog nor 마디 slider available",
-                extras: baseExtras
-            ))
+        if case let .failed(classification) = dialogResult {
+            baseExtras["dialog_route_outcome"] = classification.diagnosticLabel
         }
 
-        // AX setters cannot establish either outcome: Logic has returned both failure after an
-        // effective write and success after no change.  The issued write is recorded below, then
-        // every subsequent action is authorised by a status-preserving observation instead.
-        func sliderValue(_ element: AXUIElement) -> Result<Int?, AXHelpers.AXStatusError> {
-            let value: Result<NSNumber?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
-                element, kAXValueAttribute as String, runtime: runtime.ax
-            )
-            return value.map { $0?.intValue }
-        }
-
-        func observedPosition(bar: Int, beat: Int?) -> String {
-            // These are slider readings, not a transport-state parse.  Do not append beat/subbeat/tick
-            // components that no AX reader supplied.
-            guard let beat else { return "\(bar)" }
-            return "\(bar).\(beat)"
-        }
-
-        func sliderExtras(observedBar: Int?, observedBeat: Int? = nil) -> [String: Any] {
-            let unobservedComponents = observedBeat == nil
-                ? ["beat", "subdivision", "tick"]
-                : ["subdivision", "tick"]
-            return baseExtras.merging([
-                "observed": observedBar.map { observedPosition(bar: $0, beat: observedBeat) } ?? NSNull(),
+        // Logic Pro 12.3 exposes the `bar` control as a relative increment, not an absolute musical
+        // bar number: setting AXValue to 37 advances one bar from both bar 1 and bar 3.  There is no
+        // measured conversion from the requested position to that control, so do not turn an unknown
+        // relative movement into a second position actuator by guessing a scale or issuing a write.
+        // A pre-write State C lets the router try its independently position-capable later channels.
+        return .error(HonestContract.encodeStateC(
+            error: .axWriteFailed,
+            hint: "The Control Bar bar slider is a relative increment, not an absolute position writer; no slider position write was issued.",
+            extras: baseExtras.merging([
+                "operation": "transport.goto_position",
                 "via": "slider",
-                "write_attempted": true,
-                // The control-bar exposes only bar and, on some builds, beat. State A requires an
-                // independently observed complete request, so this route advertises the missing
-                // components instead of certifying the prefix as the requested position.
-                "unobserved_position_components": unobservedComponents,
-                // These fields are carried forward verbatim in `requested`, but the control-bar
-                // sliders have no actuator for them. Keep that loss of expression explicit rather
-                // than silently substituting `.1.1` or implying the prefix was the full request.
-                "unexpressed_position_components": unobservedComponents,
+                "slider_position_write_supported": false,
+                "slider_value_semantics": "relative_increment_not_absolute_position",
+                "unobserved_position_components": ["bar", "beat", "subdivision", "tick"],
+                "unexpressed_position_components": ["bar", "beat", "subdivision", "tick"],
+                "write_attempted": false,
+                "safe_to_retry": true,
             ]) { _, new in new }
-        }
-
-        _ = AXHelpers.setAttribute(
-            slider, kAXValueAttribute, NSNumber(value: bar), runtime: runtime.ax
-        )
-        let initialBar: Int?
-        switch sliderValue(slider) {
-        case .failure, .success(nil):
-            // The bar write was issued.  A failed read is not evidence that it was refused, so this
-            // must be uncertain State B rather than State C; neither beat nor Confirm is authorised.
-            return .success(HonestContract.encodeStateB(
-                reason: .readbackUnavailable,
-                extras: sliderExtras(observedBar: nil)
-            ))
-        case let .success(value?):
-            initialBar = value
-        }
-        guard initialBar == bar else {
-            return .success(HonestContract.encodeStateB(
-                reason: .readbackMismatch,
-                extras: sliderExtras(observedBar: initialBar)
-            ))
-        }
-
-        let beatSlider = AXLogicProElements.findControlBarBeatSlider(runtime: runtime)
-        var initialBeat: Int?
-        if let beatSlider {
-            _ = AXHelpers.setAttribute(
-                beatSlider, kAXValueAttribute, NSNumber(value: beat), runtime: runtime.ax
-            )
-            switch sliderValue(beatSlider) {
-            case .failure, .success(nil):
-                return .success(HonestContract.encodeStateB(
-                    reason: .readbackUnavailable,
-                    extras: sliderExtras(observedBar: initialBar)
-                ))
-            case let .success(value?):
-                initialBeat = value
-            }
-            guard initialBeat == beat else {
-                return .success(HonestContract.encodeStateB(
-                    reason: .readbackMismatch,
-                    extras: sliderExtras(observedBar: initialBar, observedBeat: initialBeat)
-                ))
-            }
-        }
-
-        // Confirm is also an AX actuation whose return code is not a trustworthy outcome.  Read the
-        // actual sliders again afterwards, and certify only the components those reads vended.
-        _ = AXHelpers.performAction(slider, kAXConfirmAction, runtime: runtime.ax)
-        let finalBar: Int?
-        switch sliderValue(slider) {
-        case .failure, .success(nil):
-            return .success(HonestContract.encodeStateB(
-                reason: .readbackUnavailable,
-                extras: sliderExtras(observedBar: initialBar, observedBeat: initialBeat)
-            ))
-        case let .success(value?):
-            finalBar = value
-        }
-        guard finalBar == bar else {
-            return .success(HonestContract.encodeStateB(
-                reason: .readbackMismatch,
-                extras: sliderExtras(observedBar: finalBar)
-            ))
-        }
-
-        var finalBeat: Int?
-        if let beatSlider {
-            switch sliderValue(beatSlider) {
-            case .failure, .success(nil):
-                return .success(HonestContract.encodeStateB(
-                    reason: .readbackUnavailable,
-                    extras: sliderExtras(observedBar: finalBar)
-                ))
-            case let .success(value?):
-                finalBeat = value
-            }
-            guard finalBeat == beat else {
-                return .success(HonestContract.encodeStateB(
-                    reason: .readbackMismatch,
-                    extras: sliderExtras(observedBar: finalBar, observedBeat: finalBeat)
-                ))
-            }
-        }
-        // A bar-only or bar+beat AX read cannot independently verify subdivision and tick. Keep
-        // this State B even when every exposed slider agrees; TransportDispatcher performs the
-        // authoritative full transport-state comparison before emitting State A.
-        return .success(HonestContract.encodeStateB(
-            reason: .readbackUnavailable,
-            extras: sliderExtras(observedBar: finalBar, observedBeat: finalBeat)
         ))
     }
 
     /// Move the playhead to `bar` via Logic Pro 12's `탐색 → 이동 → 위치…`
     /// (Navigate → Go To → Position) dialog. Reliable because the dialog auto-
     /// extends project length; however the menu item is disabled when no
-    /// regions exist yet, in which case this returns an error and callers
-    /// should try the slider fallback.
+    /// regions exist yet, in which case the caller may use another position-capable channel.
     /// Adds one field to an already-encoded JSON envelope, leaving it untouched if it cannot be
     /// parsed — a receipt is never worth corrupting to annotate.
     private static func mergingJSONField(_ payload: String, key: String, value: String) -> String {
@@ -1105,7 +989,7 @@ extension AccessibilityChannel {
         -- Never claim that Escape cleaned up a menu until AXSelected says so.
         -- Three attempts are enough to cover a menu/submenu chain without
         -- turning a failed close into an unbounded retry.
-        -- `knownOpen` says whether THIS run has already clicked a menu open. Before that boundary,
+        -- `knownOpen` says whether THIS run has issued its resolved leaf. Before that boundary,
         -- UNREADABLE returns without Escape because unknown focus might be an unrelated dialog/edit;
         -- the caller must refuse rather than treating the missing read as clean. After this run
         -- clicked, an unreadable read is not permission to skip Escape, because this run may leave
@@ -1148,23 +1032,6 @@ extension AccessibilityChannel {
             if menuActuationAttempted then return " after menu actuation"
             return ""
         end menuCleanupActuationContext
-
-        -- AXPress can return before Logic has opened the clicked item's own menu.
-        -- AXSelected belongs to that exact item, so an unrelated open menu cannot
-        -- authorise the next click.
-        on menuItemOpenedAfterClick(theMenuItem)
-            repeat 3 times
-                using terms from application "System Events"
-                    try
-                        if selected of theMenuItem then return "OPEN"
-                    on error
-                        return "UNREADABLE"
-                    end try
-                end using terms from
-                delay 0.1
-            end repeat
-            return "CLOSED"
-        end menuItemOpenedAfterClick
 
         -- The Go To Position floating dialog has its own lifecycle; a menu-bar
         -- observation says nothing about whether this modal is still blocking
@@ -1255,16 +1122,16 @@ extension AccessibilityChannel {
             tell logicProcess
                 -- A timed-out predecessor or user action can leave a menu open. An unreadable
                 -- entry read is not evidence that the menu is absent, so it must not release a
-                -- later slider actuation. `knownOpen:false` deliberately withholds Escape when
+                -- later position actuation. `knownOpen:false` deliberately withholds Escape when
                 -- focus is unknown.
                 set entryMenuCleanup to my dismissOpenMenu(logicProcess, false)
                 if entryMenuCleanup is not "CLOSED" then
                     return "MENU_PICK_FAILED: menu state was not observed closed at entry (" & entryMenuCleanup & ")"
                 end if
                 set menuActuationAttempted to false
-                -- This marks the write boundary for actuator selection.  The
+                -- This records whether the resolved leaf actuation was issued. The
                 -- leaf may succeed even if AX reports an error, so any result
-                -- after it becomes true must not release the slider route.
+                -- after it becomes true must not release another position route.
                 set dialogActuationIssued to false
                 delay 0.2
 
@@ -1273,13 +1140,9 @@ extension AccessibilityChannel {
                 -- Korean attempt into a second English menu actuation.
                 try
                     if exists menu item "위치…" of menu 1 of menu item "이동" of menu 1 of menu bar item "탐색" of menu bar 1 then
-                        set selectedMenuBarItem to menu bar item "탐색" of menu bar 1
-                        set selectedSubmenuItem to menu item "이동" of menu 1 of selectedMenuBarItem
-                        set mi to menu item "위치…" of menu 1 of selectedSubmenuItem
+                        set selectedLocaleChain to "KOREAN"
                     else if exists menu item "Position…" of menu 1 of menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1 then
-                        set selectedMenuBarItem to menu bar item "Navigate" of menu bar 1
-                        set selectedSubmenuItem to menu item "Go To" of menu 1 of selectedMenuBarItem
-                        set mi to menu item "Position…" of menu 1 of selectedSubmenuItem
+                        set selectedLocaleChain to "ENGLISH"
                     else
                         -- No menu has been opened by this run. If the read is unreadable,
                         -- `knownOpen:false` must not send Escape into an unrelated focus target.
@@ -1299,36 +1162,11 @@ extension AccessibilityChannel {
                     return "MENU_NOT_FOUND: " & errMsg
                 end try
                 try
-                    -- Opening the selected chain refreshes AXEnabled. This is
-                    -- the only menu-bar chain that can be clicked in this run.
-                    set menuActuationAttempted to true
-                    click selectedMenuBarItem
-                    set menuBarOpenState to my menuItemOpenedAfterClick(selectedMenuBarItem)
-                    if menuBarOpenState is not "OPEN" then
-                        set cleanupState to my dismissOpenMenu(logicProcess, true)
-                        if cleanupState is not "CLOSED" then
-                            return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
-                        end if
-                        return "MENU_PICK_FAILED: selected menu bar item did not open (" & menuBarOpenState & ")"
+                    if selectedLocaleChain is "KOREAN" then
+                        set menuItemEnabled to enabled of menu item "위치…" of menu 1 of menu item "이동" of menu 1 of menu bar item "탐색" of menu bar 1
+                    else
+                        set menuItemEnabled to enabled of menu item "Position…" of menu 1 of menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1
                     end if
-                    click selectedSubmenuItem
-                    set submenuOpenState to my menuItemOpenedAfterClick(selectedSubmenuItem)
-                    if submenuOpenState is not "OPEN" then
-                        set cleanupState to my dismissOpenMenu(logicProcess, true)
-                        if cleanupState is not "CLOSED" then
-                            return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
-                        end if
-                        return "MENU_PICK_FAILED: selected submenu item did not open (" & submenuOpenState & ")"
-                    end if
-                on error errMsg
-                    set cleanupState to my dismissOpenMenu(logicProcess, true)
-                    if cleanupState is not "CLOSED" then
-                        return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
-                    end if
-                    return "MENU_NOT_FOUND: " & errMsg
-                end try
-                try
-                    set menuItemEnabled to enabled of mi
                 on error
                     -- An unreadable AXEnabled must not authorise the pick.
                     set cleanupState to my dismissOpenMenu(logicProcess, true)
@@ -1346,7 +1184,7 @@ extension AccessibilityChannel {
                 end if
                 try
                     -- Persist before AXPress: if the child dies after the click, Swift still knows
-                    -- that the dialog route may have become active and must not choose the slider.
+                    -- that the dialog route may have become active and must not choose another route.
                     if not my recordDialogIssuance("LEAF_ARMED", "\(ledgerPath)") then
                         set cleanupState to my dismissOpenMenu(logicProcess, true)
                         if cleanupState is not "CLOSED" then
@@ -1354,8 +1192,13 @@ extension AccessibilityChannel {
                         end if
                         return "MENU_PICK_FAILED: could not persist dialog issuance before leaf click"
                     end if
+                    set menuActuationAttempted to true
                     set dialogActuationIssued to true
-                    click mi
+                    if selectedLocaleChain is "KOREAN" then
+                        click menu item "위치…" of menu 1 of menu item "이동" of menu 1 of menu bar item "탐색" of menu bar 1
+                    else
+                        click menu item "Position…" of menu 1 of menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1
+                    end if
                 on error errMsg
                     set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
                     if dialogCleanupState is not "CLOSED" then
@@ -1513,6 +1356,32 @@ extension AccessibilityChannel {
         case driven
         case failure(Failure)
 
+        /// Why the dialog route ended, as a fixed structural token. Without this a caller that
+        /// reaches the non-dialog route cannot tell whether the dialog route was tried and
+        /// abandoned or never reachable.
+        var diagnosticLabel: String {
+            switch self {
+            case .driven: return "driven"
+            case .failure(.menuNotFound): return "menu_not_found"
+            case .failure(.menuStateUnreadable): return "menu_state_unreadable"
+            case .failure(.menuDisabled): return "menu_disabled"
+            case .failure(.menuPickFailed): return "menu_pick_failed"
+            case let .failure(.menuCouldNotBeClosed(writeAttempted)):
+                return "menu_could_not_be_closed_write_attempted_\(writeAttempted)"
+            case .failure(.dialogNotReady): return "dialog_not_ready"
+            case let .failure(.dialogActuationIssued(closed)):
+                return "dialog_actuation_issued_cleanup_closed_\(closed)"
+            case let .failure(.dialogSubmissionNotIssued(closed)):
+                return "dialog_submission_not_issued_cleanup_closed_\(closed)"
+            case let .failure(.dialogSubmissionIssued(closed)):
+                return "dialog_submission_issued_cleanup_closed_\(closed)"
+            case let .failure(.executionFailed(issuance, closed)):
+                return "execution_failed_issuance_\(issuance.rawValue)_cleanup_closed_\(closed)"
+            case .failure(.malformedPayload): return "malformed_payload"
+            case .failure(.unexpectedResult): return "unexpected_result"
+            }
+        }
+
         /// Any normal path that explicitly reached Return, plus a dead child that persisted a
         /// pre-leaf/Return checkpoint. A leaf checkpoint is intentionally conservative after a
         /// process death: the parent cannot prove the child did not advance to Return before dying.
@@ -1528,7 +1397,7 @@ extension AccessibilityChannel {
             }
         }
 
-        /// A slider is unsafe when a non-submission path cannot prove the menu/dialog UI is gone.
+        /// A later position route is unsafe when a non-submission path cannot prove the menu/dialog UI is gone.
         /// A clean, normal leaf/input failure may fall through because the script proved no Return
         /// was sent *and* observed the relevant UI closed.
         var requiresUnsafeUIRefusal: Bool {
@@ -1620,7 +1489,7 @@ extension AccessibilityChannel {
             return .failure(.dialogActuationIssued(
                 // A closed dialog is insufficient if a menu cleanup remained unreadable. Both
                 // surfaces must be observed closed before this known pre-Return path can fall
-                // through to the slider.
+                // through to a later position route.
                 cleanupObservedClosed: !value.contains("cleanup was not observed")
             ))
         case let value where value.hasPrefix("DIALOG_SUBMISSION_NOT_ISSUED"):
@@ -1699,7 +1568,7 @@ extension AccessibilityChannel {
     private enum StrayGoToPositionUIOutcome: Equatable { case closed, openOrUnknown }
 
     /// Reconcile the exact Go To Position modal before considering menu state. A menu-bar read does
-    /// not describe a modal dialog, so a post-timeout `CLOSED` menu must never authorise the slider
+    /// not describe a modal dialog, so a post-timeout `CLOSED` menu must never authorise another route
     /// while the dialog remains on screen.
     private static func observeAndClearStrayGoToPositionUI() async -> StrayGoToPositionUIOutcome {
         let target = LogicProTarget.appleScriptTarget()

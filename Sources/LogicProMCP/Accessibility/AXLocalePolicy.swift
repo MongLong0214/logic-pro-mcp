@@ -360,6 +360,12 @@ enum AXLocalePolicy {
         rationale: "Identifies the playhead position text field description; read-only."
     )
 
+    static let playheadPositionGroupLabel = LabelSet(
+        canonical: "playhead position",
+        variants: ["재생헤드 위치", "再生ヘッド位置"],
+        rationale: "Identifies Logic 12.3's Playhead Position AXGroup before resolving its bar/beat component sliders."
+    )
+
     // --- Control-bar slider locators (read-only, verbatim `.exactStrict`) ---
 
     static let controlBarGroupLabel = LabelSet(
