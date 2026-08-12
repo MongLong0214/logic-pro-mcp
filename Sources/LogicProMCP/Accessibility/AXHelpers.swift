@@ -15,6 +15,9 @@ enum AXHelpers {
         let actionNames: @Sendable (AXUIElement) -> [String]
         /// Injectable typed-children seam. `nil` means "use the production read".
         let childrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXStatusError>)?
+        /// Injectable status-preserving attribute seam. `nil` falls back to the ordinary
+        /// attribute reader, whose historical `nil` result has no status information.
+        let attributeValueResult: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXStatusError>)?
 
         /// Explicit memberwise initializer, replacing the compiler-synthesized one so
         /// `childrenResult` can default to `nil`. Every existing construction that omits
@@ -27,7 +30,8 @@ enum AXHelpers {
             performAction: @escaping @Sendable (AXUIElement, String) -> Bool,
             childCount: @escaping @Sendable (AXUIElement) -> Int?,
             actionNames: @escaping @Sendable (AXUIElement) -> [String] = { _ in [] },
-            childrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXStatusError>)? = nil
+            childrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXStatusError>)? = nil,
+            attributeValueResult: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXStatusError>)? = nil
         ) {
             self.axApp = axApp
             self.attributeValue = attributeValue
@@ -37,6 +41,7 @@ enum AXHelpers {
             self.childCount = childCount
             self.actionNames = actionNames
             self.childrenResult = childrenResult
+            self.attributeValueResult = attributeValueResult
         }
 
         static let production = Runtime(
@@ -83,6 +88,14 @@ enum AXHelpers {
                     return []
                 }
                 return actions
+            },
+            attributeValueResult: { element, attribute in
+                var value: AnyObject?
+                let status = AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+                guard status == .success else {
+                    return .failure(AXStatusError(raw: status.rawValue))
+                }
+                return .success(value)
             }
         )
     }
@@ -96,6 +109,22 @@ enum AXHelpers {
     /// Returns nil on any error (element gone, attribute missing, type mismatch).
     static func getAttribute<T>(_ element: AXUIElement, _ attribute: String, runtime: Runtime = .production) -> T? {
         runtime.attributeValue(element, attribute) as? T
+    }
+
+    /// Get a typed attribute value without collapsing an AX read failure into `nil`.
+    ///
+    /// The optional success value still represents an absent or mismatched value. Callers that
+    /// need to distinguish a failed observation from an empty value can inspect the `Result`.
+    /// Runtimes built before this seam was introduced retain their ordinary best-effort behavior.
+    static func getAttributeResult<T>(
+        _ element: AXUIElement,
+        _ attribute: String,
+        runtime: Runtime = .production
+    ) -> Result<T?, AXStatusError> {
+        if let read = runtime.attributeValueResult {
+            return read(element, attribute).map { $0 as? T }
+        }
+        return .success(runtime.attributeValue(element, attribute) as? T)
     }
 
     /// Set an attribute value on an AX element.

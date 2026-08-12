@@ -24,8 +24,14 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         attributes[key(for: element), default: [:]][attribute] = value
     }
 
+    /// Wires AXParent on each child as well. A real AX tree always has it, and code that walks
+    /// upward from a focused element (identity checks, window binding) reads it — a fixture that
+    /// only sets children silently fails those walks and makes an identity guard look broken.
     func setChildren(_ element: AXUIElement, _ value: [AXUIElement]) {
         children[key(for: element)] = value
+        for child in value {
+            setAttribute(child, kAXParentAttribute as String, element)
+        }
     }
 
     func setActionNames(_ element: AXUIElement, _ value: [String]) {
@@ -47,6 +53,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
     func makeAXRuntime(
         appElement: AXUIElement? = nil,
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
+        attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
         executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
@@ -90,6 +97,19 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
             },
             actionNames: { [self] element in
                 actionNames[key(for: element)] ?? []
+            },
+            attributeValueResult: { [self] element, attribute in
+                if let handled = attributeValueResultHandler?(element, attribute) {
+                    return handled
+                }
+                if let handled = attributeValueHandler?(element, attribute) {
+                    return .success(handled)
+                }
+                if attribute == kAXWindowsAttribute as String,
+                   attributes[key(for: element)]?[attribute] == nil {
+                    return .success(NSArray())
+                }
+                return .success(bridge(attributes[key(for: element)]?[attribute]))
             }
         )
     }
@@ -107,6 +127,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         pid: pid_t? = 4242,
         appElement: AXUIElement? = nil,
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
+        attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
         executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
@@ -118,6 +139,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
             ax: makeAXRuntime(
                 appElement: appElement,
                 attributeValueHandler: attributeValueHandler,
+                attributeValueResultHandler: attributeValueResultHandler,
                 setAttributeHandler: setAttributeHandler,
                 performActionHandler: performActionHandler
             ),
