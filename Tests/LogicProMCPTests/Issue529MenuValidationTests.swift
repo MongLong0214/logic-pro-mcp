@@ -21,6 +21,14 @@ private func issue529Positions(of fragment: String, in script: String) -> [Strin
     return positions
 }
 
+private func issue529LedgerPath(from script: String, stage: String) throws -> String {
+    let prefix = "recordDialogIssuance(\"\(stage)\", \""
+    let start = try #require(script.range(of: prefix))
+    let tail = script[start.upperBound...]
+    let end = try #require(tail.firstIndex(of: "\""))
+    return String(tail[..<end])
+}
+
 private final class Issue529Counter: @unchecked Sendable {
     private(set) var value = 0
 
@@ -29,26 +37,35 @@ private final class Issue529Counter: @unchecked Sendable {
     }
 }
 
-private func issue529SliderRuntime(sliderWrites: Issue529Counter) -> AXLogicProElements.Runtime {
+private func issue529SliderRuntime(
+    sliderWrites: Issue529Counter,
+    includeBeatSlider: Bool = false
+) -> AXLogicProElements.Runtime {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(5290)
     let window = builder.element(5291)
     let controlBar = builder.element(5292)
     let barSlider = builder.element(5293)
+    let beatSlider = builder.element(5294)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setChildren(window, [controlBar])
     builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
     builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
-    builder.setChildren(controlBar, [barSlider])
+    builder.setChildren(controlBar, includeBeatSlider ? [barSlider, beatSlider] : [barSlider])
     builder.setAttribute(barSlider, kAXRoleAttribute as String, kAXSliderRole as String)
     builder.setAttribute(barSlider, kAXDescriptionAttribute as String, "Bar")
     builder.setAttribute(barSlider, kAXValueAttribute as String, NSNumber(value: 1))
+    if includeBeatSlider {
+        builder.setAttribute(beatSlider, kAXRoleAttribute as String, kAXSliderRole as String)
+        builder.setAttribute(beatSlider, kAXDescriptionAttribute as String, "Beat")
+        builder.setAttribute(beatSlider, kAXValueAttribute as String, NSNumber(value: 1))
+    }
 
     return builder.makeLogicRuntime(
         appElement: app,
         setAttributeHandler: { element, attribute, value in
-            if element == barSlider, attribute == kAXValueAttribute as String {
+            if (element == barSlider || element == beatSlider), attribute == kAXValueAttribute as String {
                 sliderWrites.bump()
             }
             builder.setAttribute(element, attribute, value)
@@ -179,48 +196,40 @@ struct Issue529MenuValidationTests {
         #expect(entryCleanup < menuBarOpen)
     }
 
-    /// Measured, not reasoned: refusing at entry on any non-CLOSED value sent 5 of 8 fresh server
-    /// processes to the slider route, because the first menu-bar read on a cold System Events
-    /// connection is frequently unreadable. Nothing has been opened at that point, so an unreadable
-    /// menu bar is an absent observation rather than evidence of an open menu. `OPEN_UNREADABLE`
-    /// is distinct: this run observed OPEN, sent Escape, and then could not observe closure.
-    @Test("entry permits a fresh unreadable menu bar")
-    func entryCleanupDoesNotRefuseOnAnUnreadableMenuBar() throws {
+    @Test("entry refuses an unreadable menu bar before any transport actuation")
+    func entryCleanupRefusesAnUnreadableMenuBar() throws {
+        // Mutation this rejects: restore the `OPEN || OPEN_UNREADABLE` guard, which treats an
+        // unreadable entry read as safe enough to start the menu/slider route.
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
         let entryGuard = try issue529Position(
-            of: "if entryMenuCleanup is \"OPEN\" or entryMenuCleanup is \"OPEN_UNREADABLE\" then",
+            of: "if entryMenuCleanup is not \"CLOSED\" then",
             in: script
         )
         let localeDecision = try issue529Position(of: "if exists menu item \"위치…\"", in: script)
 
         #expect(entryGuard < localeDecision)
-        #expect(!script.contains("if entryMenuCleanup is not \"CLOSED\" then"))
-        #expect(!script.contains("if entryMenuCleanup is \"OPEN\" then"))
-        // Post-actuation refusals still require a confirmed close, so the asymmetry is asserted
-        // rather than assumed.
-        #expect(script.contains("if cleanupState is not \"CLOSED\" then"))
+        #expect(script.contains("if menuState is \"UNREADABLE\" and not knownOpen then return \"UNREADABLE\""))
     }
 
-    /// Script fixture: `menuOpenState` returns OPEN, Escape is posted, and the next read is
-    /// UNREADABLE. The distinct `OPEN_UNREADABLE` outcome must be terminal at entry; changing the
-    /// entry guard back to `entryMenuCleanup is "OPEN"` makes this test fail.
-    @Test("OPEN then Escape then UNREADABLE refuses at entry")
+    /// Script fixture: the entry menu read is unreadable. Because this run has not opened a menu,
+    /// it must refuse without manufacturing an Escape into an unknown focus target.
+    @Test("unreadable entry state refuses without Escape")
     func entryCleanupRefusesUnreadableAfterObservedOpen() async throws {
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
-        let escape = try issue529Position(of: "key code 53", in: script)
-        let unreadableAfterEscape = try issue529Position(
-            of: "if menuState is \"UNREADABLE\" then return \"OPEN_UNREADABLE\"",
-            in: script
+        let dismissalStart = try issue529Position(of: "on dismissOpenMenu(theProcess, knownOpen)", in: script)
+        let dismissalEnd = try issue529Position(of: "end dismissOpenMenu", in: script)
+        let dismissal = String(script[dismissalStart..<dismissalEnd])
+        let unreadableGuard = try issue529Position(
+            of: "if menuState is \"UNREADABLE\" and not knownOpen then return \"UNREADABLE\"",
+            in: dismissal
         )
+        let escape = try issue529Position(of: "key code 53", in: dismissal)
         let entryGuard = try issue529Position(
-            of: "if entryMenuCleanup is \"OPEN\" or entryMenuCleanup is \"OPEN_UNREADABLE\" then",
+            of: "if entryMenuCleanup is not \"CLOSED\" then",
             in: script
         )
-        let localeDecision = try issue529Position(of: "if exists menu item \"위치…\"", in: script)
 
-        #expect(escape < unreadableAfterEscape)
-        #expect(unreadableAfterEscape < entryGuard)
-        #expect(entryGuard < localeDecision)
+        #expect(unreadableGuard < escape)
 
         let sliderWrites = Issue529Counter()
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
@@ -230,7 +239,7 @@ struct Issue529MenuValidationTests {
             activateLogic: { true },
             sleepMicros: { _ in },
             executeDialogScript: { _ in
-                .success(#"{"result":"MENU_PICK_FAILED: a menu was open at entry and would not close (OPEN_UNREADABLE)"}"#)
+                .success(#"{"result":"MENU_PICK_FAILED: menu state was not observed closed at entry (UNREADABLE)"}"#)
             }
         )
 
@@ -248,7 +257,7 @@ struct Issue529MenuValidationTests {
             in: script
         )
         let entryRefusal = try issue529Position(
-            of: "return \"MENU_PICK_FAILED: a menu was open at entry",
+            of: "return \"MENU_PICK_FAILED: menu state was not observed closed at entry",
             in: script
         )
         let cleanupRefusalReturns = issue529Positions(of: "return \"", in: script).filter { position in
@@ -268,7 +277,7 @@ struct Issue529MenuValidationTests {
         var previousRefusalReturn = entryRefusal
         for refusalReturn in cleanupRefusalReturns {
             let cleanupBetweenRefusals = issue529Positions(
-                of: "set cleanupState to my dismissOpenMenu(logicProcess, true)",
+                of: "set cleanupState to my dismissOpenMenu(logicProcess,",
                 in: script
             ).contains { previousRefusalReturn < $0 && $0 < refusalReturn }
             #expect(cleanupBetweenRefusals)
@@ -282,18 +291,18 @@ struct Issue529MenuValidationTests {
         let attempted = try issue529Position(of: "set menuActuationAttempted to true", in: script)
         let menuBarClick = try issue529Position(of: "click selectedMenuBarItem", in: script)
         let menuItemClick = try issue529Position(of: "click mi", in: script)
-        let cleanupAfterMenuItemClick = try #require(
-            issue529Positions(of: "set cleanupState to my dismissOpenMenu(logicProcess, true)", in: script)
-                .last
+        let leafErrorHandlerEnd = try issue529Position(of: "-- Wait up to 3s for the dialog window", in: script)
+        let leafErrorHandler = String(script[menuItemClick..<leafErrorHandlerEnd])
+        let cleanupAfterMenuItemClick = try issue529Position(
+            of: "set cleanupState to my dismissOpenMenu(logicProcess, true)", in: leafErrorHandler
         )
-        let refusalContextAfterMenuItemClick = try #require(
-            issue529Positions(of: "my menuCleanupActuationContext(menuActuationAttempted)", in: script)
-                .last
+        let refusalContextAfterMenuItemClick = try issue529Position(
+            of: "my menuCleanupActuationContext(menuActuationAttempted)", in: leafErrorHandler
         )
 
         #expect(attempted < menuBarClick)
         #expect(menuBarClick < menuItemClick)
-        #expect(menuItemClick < cleanupAfterMenuItemClick)
+        #expect(menuItemClick < leafErrorHandlerEnd)
         #expect(cleanupAfterMenuItemClick < refusalContextAfterMenuItemClick)
     }
 
@@ -333,7 +342,7 @@ struct Issue529MenuValidationTests {
         #expect(try #require(envelope["state"] as? String) == "C")
         #expect(try #require(envelope["menu_state"] as? String) == "could_not_be_closed")
         let hint = try #require(envelope["hint"] as? String)
-        #expect(hint.contains("could not be closed"))
+        #expect(hint.contains("not observed closed"))
         #expect(!(try #require(envelope["write_attempted"] as? Bool)))
         #expect(!(try #require(envelope["menu_actuation_attempted"] as? Bool)))
         #expect(HonestContract.isFallbackUnsafeStateC(result.message))
@@ -362,10 +371,10 @@ struct Issue529MenuValidationTests {
         #expect(sliderWrites.value == 0)
     }
 
-    @Test("an issued leaf AX failure stays State C and never selects the slider")
-    func issuedLeafActuationFailureDoesNotSelectSlider() async throws {
-        // Mutation this rejects: remove `.dialogActuationIssued` from
-        // `hasIssuedGoToPositionActuator`, letting this result fall through to the slider.
+    @Test("an issued leaf AX failure with unobserved cleanup stays State C and never selects the slider")
+    func issuedLeafActuationFailureWithUnobservedCleanupDoesNotSelectSlider() async throws {
+        // Mutation this rejects: treat a leaf failure with no cleanup observation as a clean
+        // navigation-only failure, letting this result fall through to the slider.
         let sliderWrites = Issue529Counter()
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "529"],
@@ -374,7 +383,7 @@ struct Issue529MenuValidationTests {
             activateLogic: { true },
             sleepMicros: { _ in },
             executeDialogScript: { _ in
-                .success(#"{"result":"DIALOG_ACTUATION_ISSUED: AXPress reported failure"}"#)
+                .success(#"{"result":"DIALOG_ACTUATION_ISSUED: dialog cleanup was not observed (OPEN_UNREADABLE)"}"#)
             }
         )
 
@@ -389,9 +398,10 @@ struct Issue529MenuValidationTests {
         #expect(sliderWrites.value == 0)
     }
 
-    @Test("an issued dialog submission is State B and never selects the slider")
-    func issuedSubmissionFailureIsUnverifiableStateB() async throws {
-        // Mutation this rejects: encode the submission-issued branch with `encodeStateC` again.
+    @Test("a clean leaf-only failure permits the slider fallback")
+    func cleanLeafActuationFailureAllowsSliderFallback() async throws {
+        // Mutation this rejects: make every `.dialogActuationIssued` result block the slider,
+        // even after the script observed dialog/menu cleanup and proved it never reached Return.
         let sliderWrites = Issue529Counter()
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "529"],
@@ -400,12 +410,93 @@ struct Issue529MenuValidationTests {
             activateLogic: { true },
             sleepMicros: { _ in },
             executeDialogScript: { _ in
-                .success(#"{"result":"DIALOG_SUBMISSION_FAILED: dialog cleanup was not observed (OPEN_UNREADABLE)"}"#)
+                .success(#"{"result":"DIALOG_ACTUATION_ISSUED: AXPress reported failure after observed cleanup"}"#)
             }
         )
 
         let envelope = try #require(issue529Envelope(result))
+        #expect(try #require(envelope["via"] as? String) == "slider")
+        #expect(sliderWrites.value > 0)
+    }
+
+    @Test("a dead child after the durable leaf checkpoint is State B and cannot select the slider")
+    func deadChildAfterLeafCheckpointDoesNotReleaseSlider() async throws {
+        // Mutations this rejects:
+        // 1. Remove the parent-owned `LEAF_ARMED` ledger checkpoint or ignore it in the `.error`
+        //    branch — this clean-reconciliation fixture falls through to the slider.
+        // 2. Report `write_attempted:false` for the durable checkpoint — the receipt assertion fails.
+        let sliderWrites = Issue529Counter()
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { script in
+                let ledgerPath = try! issue529LedgerPath(from: script, stage: "LEAF_ARMED")
+                try! "LEAF_ARMED".write(toFile: ledgerPath, atomically: true, encoding: .utf8)
+                return .error("osascript timed out after leaf click")
+            },
+            reconcileAfterDialogExecutionFailure: { true }
+        )
+
+        let envelope = try #require(issue529Envelope(result))
         #expect(result.isSuccess)
+        #expect(try #require(envelope["state"] as? String) == "B")
+        #expect(try #require(envelope["write_attempted"] as? Bool))
+        #expect(try #require(envelope["dialog_submission_attempted"] as? Bool))
+        #expect(sliderWrites.value == 0)
+    }
+
+    @Test("only the post-Return branch is submission-issued")
+    func preReturnFailuresFallThroughWhilePostReturnFailuresAreStateB() async throws {
+        // Mutations this rejects:
+        // 1. Move `keystroke return` into the pre-Return error scope or delete it — the generated
+        //    script ordering assertions fail.
+        // 2. Classify `DIALOG_SUBMISSION_NOT_ISSUED` as issued — the pre-Return run stops using the
+        //    slider and fails the first behavioral assertion.
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let inputFailure = try issue529Position(
+            of: "return \"DIALOG_SUBMISSION_NOT_ISSUED: dialog input failed before Return",
+            in: script
+        )
+        let returnLedger = try issue529Position(
+            of: "recordDialogIssuance(\"RETURN_ARMED\"",
+            in: script
+        )
+        let returnKey = try issue529Position(of: "keystroke return", in: script)
+        #expect(inputFailure < returnLedger)
+        #expect(returnLedger < returnKey)
+
+        let preReturnSliderWrites = Issue529Counter()
+        let preReturn = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: preReturnSliderWrites),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                .success(#"{"result":"DIALOG_SUBMISSION_NOT_ISSUED: dialog input failed before Return (AX error)"}"#)
+            }
+        )
+        let preReturnEnvelope = try #require(issue529Envelope(preReturn))
+        #expect(try #require(preReturnEnvelope["via"] as? String) == "slider")
+        #expect(preReturnSliderWrites.value > 0)
+
+        let postReturnSliderWrites = Issue529Counter()
+        let postReturn = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: postReturnSliderWrites),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                .success(#"{"result":"DIALOG_SUBMISSION_ISSUED: Return may have been sent (AX error)"}"#)
+            }
+        )
+
+        let envelope = try #require(issue529Envelope(postReturn))
+        #expect(postReturn.isSuccess)
         #expect(try #require(envelope["state"] as? String) == "B")
         let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
         let submissionAttempted = try #require(envelope["dialog_submission_attempted"] as? Bool)
@@ -413,7 +504,7 @@ struct Issue529MenuValidationTests {
         #expect(writeAttempted)
         #expect(submissionAttempted)
         #expect(fallbackUnsafe)
-        #expect(sliderWrites.value == 0)
+        #expect(postReturnSliderWrites.value == 0)
     }
 
     @Test("a menu-not-found dialog result still falls through to the slider")
@@ -435,14 +526,16 @@ struct Issue529MenuValidationTests {
         #expect(sliderWrites.value > 0)
     }
 
-    @Test("State A slider evidence includes only position components read back")
-    func stateASliderEvidenceOmitsUnreadPositionComponents() async throws {
-        // Mutation this rejects: make `observedPosition` append `.1.1.1` when no beat slider
-        // was read back, which would certify position components with no observation.
+    @Test("partial slider evidence for an explicit beat remains State B")
+    func partialSliderEvidenceDoesNotCertifyTheRequestedPosition() async throws {
+        // Mutations this rejects:
+        // 1. Return `encodeStateA` after bar/beat read-back — the State-B assertion fails.
+        // 2. Reset `targetBeat` to 1 or rebuild `requested` as `.1.1.1` — the exact request and
+        //    observed bar/beat assertions fail.
         let sliderWrites = Issue529Counter()
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
-            params: ["bar": "529"],
-            runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+            params: ["position": "529.4.1.1"],
+            runtime: issue529SliderRuntime(sliderWrites: sliderWrites, includeBeatSlider: true),
             isFrontmost: { true },
             activateLogic: { true },
             sleepMicros: { _ in },
@@ -450,11 +543,59 @@ struct Issue529MenuValidationTests {
         )
 
         let envelope = try #require(issue529Envelope(result))
-        #expect(try #require(envelope["state"] as? String) == "A")
+        #expect(try #require(envelope["state"] as? String) == "B")
+        #expect(try #require(envelope["requested"] as? String) == "529.4.1.1")
         let observed = try #require(envelope["observed"] as? String)
-        #expect(observed == "529")
-        #expect(!observed.contains("."))
+        #expect(observed == "529.4")
+        let unobserved = try #require(envelope["unobserved_position_components"] as? [String])
+        #expect(unobserved == ["subdivision", "tick"])
+        let unexpressed = try #require(envelope["unexpressed_position_components"] as? [String])
+        #expect(unexpressed == ["subdivision", "tick"])
         #expect(sliderWrites.value > 0)
+    }
+
+    @Test("the dialog receives the complete requested musical position")
+    func dialogTypesTheFullRequestedPosition() throws {
+        // Mutation this rejects: replace the dialog input with the bar number or reconstruct it as
+        // `.1.1.1`, silently discarding the request's beat/subdivision/tick components.
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(position: "529.4.7.123")
+        #expect(script.contains("keystroke \"529.4.7.123\""))
+    }
+
+    @Test("successful dialog submission observes modal closure before OK")
+    func successfulDialogSubmissionObservesClosureBeforeOK() throws {
+        // Mutation this rejects: return `OK` immediately after `keystroke return`, without reading
+        // `goToPositionDialogState` and handling a dialog Logic ignored.
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let returnKey = try issue529Position(of: "keystroke return", in: script)
+        let postReturnObservation = try issue529Position(
+            of: "set dialogPostReturnState to my goToPositionDialogState(logicProcess)", in: script
+        )
+        let ok = try issue529Position(of: "return \"OK\"", in: script)
+
+        #expect(returnKey < postReturnObservation)
+        #expect(postReturnObservation < ok)
+    }
+
+    @Test("durable issuance checkpoints precede the leaf and Return actuators")
+    func durableIssuanceCheckpointsPrecedeActuators() throws {
+        // Mutation this rejects: move either persistent checkpoint after its corresponding click or
+        // key event, recreating the timeout window in which osascript dies with no durable record.
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(
+            position: "529.4.1.1",
+            issuanceLedgerPath: "/private/tmp/issue529-ledger"
+        )
+        let leafCheckpoint = try issue529Position(
+            of: "recordDialogIssuance(\"LEAF_ARMED\"", in: script
+        )
+        let leafClick = try issue529Position(of: "click mi", in: script)
+        let returnCheckpoint = try issue529Position(
+            of: "recordDialogIssuance(\"RETURN_ARMED\"", in: script
+        )
+        let returnKey = try issue529Position(of: "keystroke return", in: script)
+
+        #expect(leafCheckpoint < leafClick)
+        #expect(returnCheckpoint < returnKey)
     }
 
     @Test("JSON-wrapped disabled and not-ready sentinels still refuse the dialog route")
@@ -487,23 +628,25 @@ struct Issue529MenuValidationTests {
     }
 }
 
-/// The entry cleanup and the post-click cleanups must not treat an unreadable menu bar the same way.
-/// Before this run clicks anything, UNREADABLE is an absent observation and the run proceeds —
-/// refusing there sent 5 of 8 fresh server processes to the slider route. After this run has clicked
-/// a menu open, an unreadable read is NOT permission to skip the Escape: skipping it can end the run
-/// with the menu still up, which is the state this branch exists to prevent.
-@Test("an unreadable read skips Escape only before this run opened anything")
-func dismissalContextDecidesWhetherAnUnreadableReadSkipsEscape() throws {
+/// Before this run opens its selected chain, an unreadable menu read must withhold Escape rather
+/// than sending it into unknown focus. Once the run has clicked that chain, cleanup can use Escape.
+@Test("unowned cleanup never marks a menu known-open before the selected chain click")
+func dismissalContextKeepsLocaleReadsUnownedUntilMenuActuation() throws {
+    // Mutation this rejects: change either locale-resolution cleanup call back to
+    // `dismissOpenMenu(logicProcess, true)`, which authorises Escape after an unreadable read.
     let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
 
-    // Entry: the one call that may skip.
+    // Entry plus the two locale-resolution exits are unowned reads.
     #expect(script.contains("my dismissOpenMenu(logicProcess, false)"))
-    #expect(issue529Positions(of: "my dismissOpenMenu(logicProcess, false)", in: script).count == 1)
+    #expect(issue529Positions(of: "my dismissOpenMenu(logicProcess, false)", in: script).count == 3)
 
-    // Every other call knows a menu was opened by this run.
-    #expect(issue529Positions(of: "my dismissOpenMenu(logicProcess, true)", in: script).count > 1)
+    let selectedChainClick = try issue529Position(of: "click selectedMenuBarItem", in: script)
+    let firstKnownOpenCleanup = try #require(
+        issue529Positions(of: "my dismissOpenMenu(logicProcess, true)", in: script).first
+    )
+    #expect(selectedChainClick < firstKnownOpenCleanup)
 
-    // And the handler must only take the skip when knownOpen is false.
+    // The handler itself only skips Escape when no menu has been established as this run's.
     #expect(script.contains("if menuState is \"UNREADABLE\" and not knownOpen then return \"UNREADABLE\""))
 }
 
@@ -517,41 +660,37 @@ func unreadableCancelDoesNotAuthoriseEscapeWithoutDialogObservation() throws {
     )
     let handlerEnd = try issue529Position(of: "end dismissOpenGoToPositionDialog", in: script)
     let handler = String(script[handlerStart..<handlerEnd])
-    let cancelOutcome = try issue529Position(
-        of: "set cancelOutcome to my pressGoToPositionDialogCancel(theProcess)", in: handler
+    let unreadableBranchStart = try issue529Position(
+        of: "if cancelOutcome is \"NO_BUTTON\" or cancelOutcome is \"UNREADABLE\" then", in: handler
     )
-    let escape = try issue529Position(of: "key code 53", in: handler)
-    let reobservation = try #require(
-        issue529Positions(
-            of: "set dialogState to my goToPositionDialogState(theProcess)", in: handler
-        ).first { cancelOutcome < $0 && $0 < escape }
+    let unreadableBranch = String(handler[unreadableBranchStart...])
+    // Every operand is the first occurrence in the same fixed branch slice. Unlike the former
+    // `.first { before < $0 && $0 < escape }` form, none is selected using the ordering asserted
+    // below, so moving Escape before a guard makes the test fail.
+    let reobservation = try issue529Position(
+        of: "set dialogState to my goToPositionDialogState(theProcess)", in: unreadableBranch
     )
-    let closedGuard = try #require(
-        issue529Positions(of: "if dialogState is \"CLOSED\" then return \"CLOSED\"", in: handler)
-            .first { reobservation < $0 && $0 < escape }
+    let closedGuard = try issue529Position(
+        of: "if dialogState is \"CLOSED\" then return \"CLOSED\"", in: unreadableBranch
     )
-    let unreadableGuard = try #require(
-        issue529Positions(of: "if dialogState is \"UNREADABLE\" then return \"OPEN_UNREADABLE\"", in: handler)
-            .first { reobservation < $0 && $0 < escape }
+    let unreadableGuard = try issue529Position(
+        of: "if dialogState is \"UNREADABLE\" then return \"OPEN_UNREADABLE\"", in: unreadableBranch
     )
-    let stillOpenGuard = try #require(
-        issue529Positions(of: "if dialogState is not \"OPEN\" then return dialogState", in: handler)
-            .first { reobservation < $0 && $0 < escape }
+    let stillOpenGuard = try issue529Position(
+        of: "if dialogState is not \"OPEN\" then return dialogState", in: unreadableBranch
     )
+    let escape = try issue529Position(of: "key code 53", in: unreadableBranch)
 
-    #expect(cancelOutcome < reobservation)
     #expect(reobservation < closedGuard)
     #expect(closedGuard < unreadableGuard)
     #expect(unreadableGuard < stillOpenGuard)
     #expect(stillOpenGuard < escape)
 }
 
-/// A dead script (timeout, TCC refusal, anything) leaves the menu state UNKNOWN, and this script
-/// clicks menus open. Unknown is not safe: the slider would actuate into whatever is on screen.
-/// Only a menu state observed CLOSED after the death may authorise the fallback.
-@Test("a dead script does not authorise the slider until the menu is observed closed")
-func aDeadScriptMustNotAuthoriseTheSliderOnAnUnknownMenuState() throws {
-    // Mutation that must fail this test: return `.executionFailed` directly on `.error` again.
+@Test("dead-child reconciliation observes the named dialog before menu state")
+func aDeadScriptReconcilesDialogBeforeMenuState() throws {
+    // Mutations this rejects: restore the PID bypass (which skips cleanup), or reduce the recovery
+    // helper to menu-only observation. Either source relationship below fails.
     let source = try String(
         contentsOfFile: #filePath.replacingOccurrences(
             of: "Tests/LogicProMCPTests/Issue529MenuValidationTests.swift",
@@ -559,18 +698,14 @@ func aDeadScriptMustNotAuthoriseTheSliderOnAnUnknownMenuState() throws {
         ),
         encoding: .utf8
     )
-    let errorBranch = try #require(source.range(of: "case .error:"))
-    let tail = String(source[errorBranch.upperBound...].prefix(1200))
+    let helperStart = try #require(source.range(of: "private static func observeAndClearStrayGoToPositionUI()"))
+    let helperEnd = try #require(source.range(of: "// MARK: - Control-bar checkbox helpers"))
+    let helper = String(source[helperStart.lowerBound..<helperEnd.lowerBound])
+    let dialogObservation = try issue529Position(of: "on goToPositionDialogState(theProcess)", in: helper)
+    let dialogCleanup = try issue529Position(of: "set dialogCleanupState to my dismissGoToPositionDialog(it)", in: helper)
+    let menuLoop = try issue529Position(of: "repeat with menuBarItem in every menu bar item", in: helper)
 
-    // The death path must consult an observation before classifying.
-    #expect(tail.contains("observeAndClearStrayMenu"))
-    // And an unobserved / open state must be the unsafe classification, not the fallback-safe one.
-    let unsafeAt = try #require(tail.range(of: "menuCouldNotBeClosed"))
-    let safeAt = try #require(tail.range(of: "executionFailed"))
-    #expect(safeAt.lowerBound < unsafeAt.lowerBound)
-    #expect(tail.contains("case .closed:"))
-    #expect(tail.contains("case .openOrUnknown:"))
-    // An app that is not running has no menu of its own open, so its absence must NOT be read as
-    // an unknown menu state — that is what made a Logic-less CI environment refuse the fallback.
-    #expect(tail.contains("ProcessUtils.logicProPID() != nil"))
+    #expect(dialogObservation < dialogCleanup)
+    #expect(dialogCleanup < menuLoop)
+    #expect(!helper.contains("ProcessUtils.logicProPID"))
 }

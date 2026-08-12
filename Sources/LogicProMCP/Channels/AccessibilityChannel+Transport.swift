@@ -779,28 +779,52 @@ extension AccessibilityChannel {
         sleepMicros: @Sendable (UInt32) -> Void = { usleep($0) },
         executeDialogScript: @escaping @Sendable (String) async -> ChannelResult = { script in
             await AppleScriptChannel.executeAppleScript(script, timeout: 8.0)
+        },
+        reconcileAfterDialogExecutionFailure: @escaping @Sendable () async -> Bool = {
+            await observeAndClearStrayGoToPositionUI() == .closed
         }
     ) async -> ChannelResult {
         var targetBar: Int? = nil
+        var targetBeat: Int? = nil
+        var requestedPosition: String? = nil
         if let barStr = params["bar"], let b = Int(barStr) {
             targetBar = b
+            targetBeat = 1
+            requestedPosition = "\(b).1.1.1"
         } else if let pos = params["position"] {
             if pos.contains(":") {
                 return .error("AX gotoPosition cannot handle timecode (use MCU mmc_locate)")
             }
-            let parts = pos.split(separator: ".")
-            if let first = parts.first, let b = Int(first) {
-                targetBar = b
+            let parts = pos.split(separator: ".", omittingEmptySubsequences: false)
+            guard parts.count == 4,
+                  let b = Int(parts[0]), (1...9999).contains(b),
+                  let beat = Int(parts[1]), (1...16).contains(beat),
+                  let subdivision = Int(parts[2]), (1...16).contains(subdivision),
+                  let tick = Int(parts[3]), (1...999).contains(tick)
+            else {
+                return .error(HonestContract.encodeStateC(
+                    error: .invalidParams,
+                    hint: "goto_position requires 'bar' (Int 1..9999) or 'position' (B.B.S.S)"
+                ))
             }
+            targetBar = b
+            targetBeat = beat
+            // Keep the caller's complete request. The slider can only express a prefix of it, but
+            // must never silently replace beat/subdivision/tick with its own defaults.
+            requestedPosition = "\(b).\(beat).\(subdivision).\(tick)"
         }
-        guard let bar = targetBar, (1...9999).contains(bar) else {
+        guard let bar = targetBar,
+              let beat = targetBeat,
+              let requestedPosition,
+              (1...9999).contains(bar)
+        else {
             return .error(HonestContract.encodeStateC(
                 error: .invalidParams,
                 hint: "goto_position requires 'bar' (Int 1..9999) or 'position' (B.B.S.S)"
             ))
         }
 
-        var baseExtras: [String: Any] = ["requested": "\(bar).1.1.1"]
+        var baseExtras: [String: Any] = ["requested": requestedPosition]
 
         // Refuse before touching anything: a non-ready result means nothing has been actuated, so
         // the caller can retry without wondering whether the playhead already moved.
@@ -826,7 +850,9 @@ extension AccessibilityChannel {
         baseExtras["frontmost_preparation"] = preparation.rawValue
 
         let dialogResult = await gotoPositionViaDialog(
-            bar: bar, executeScript: executeDialogScript
+            position: requestedPosition,
+            executeScript: executeDialogScript,
+            reconcileAfterExecutionFailure: reconcileAfterDialogExecutionFailure
         )
         if case let .driven(payload) = dialogResult {
             // The dialog rung builds its own envelope, so without this the same operation reports
@@ -837,65 +863,51 @@ extension AccessibilityChannel {
             ))
         }
         if case let .failed(classification) = dialogResult,
-           classification.isUnsafeToActuateAgain {
-            // `dismissOpenMenu` could not prove that the menu closed. A slider write from this
-            // state can operate on the still-open menu, so this is terminal rather than fallback.
-            // This branch runs before the dialog input is typed and submitted. Opening the menu
-            // chain is UI navigation, not a `transport.goto_position` write, so this remains a
-            // State C refusal with `write_attempted:false`. Retain that the navigation click did
-            // happen separately for diagnosis.
+           classification.hasPotentialDialogSubmission {
+            // Return was sent normally, or the child died after its parent-owned issuance ledger
+            // recorded a dialog boundary. In either case a second position actuator is unsafe. The
+            // dead-child path deliberately records `write_attempted:true`: the parent cannot turn a
+            // missing process-local return value into a claim that no submission happened.
+            let dialogState = classification.cleanupObservedClosed ? "closed" : "unobserved"
+            let extras = baseExtras.merging([
+                "operation": "transport.goto_position",
+                "method": "dialog",
+                "dialog_actuation_attempted": classification.dialogActuationMayHaveOccurred,
+                "dialog_submission_attempted": true,
+                "dialog_cleanup": dialogState,
+                "write_attempted": true,
+                "safe_to_retry": false,
+                "fallback_unsafe": true,
+            ]) { _, new in new }
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: extras
+            ))
+        }
+        if case let .failed(classification) = dialogResult,
+           classification.requiresUnsafeUIRefusal {
+            // The normal script proved no Return was sent, but could not prove that the menu or
+            // dialog closed. Do not let an unknown focus target receive a slider write.
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "The Go To Position menu could not be closed; the slider fallback was not attempted.",
+                hint: "The Go To Position menu or dialog was not observed closed; the slider fallback was not attempted.",
                 extras: baseExtras.merging([
                     "operation": "transport.goto_position",
                     "method": "dialog",
                     "menu_state": "could_not_be_closed",
                     "menu_actuation_attempted": classification.menuActuationAttemptedBeforeUnsafeRefusal,
+                    "dialog_actuation_attempted": classification.dialogActuationMayHaveOccurred,
+                    // Stated on this path too, and stated as false. The refusal above is about
+                    // cleanup, not about submission: a caller reading only `dialog_actuation_
+                    // attempted` cannot tell "we opened the dialog and never typed into it" from
+                    // "we typed and cannot confirm". A field that appears on one refusal and is
+                    // absent on the neighbouring one is not a contract.
+                    "dialog_submission_attempted": false,
+                    "dialog_cleanup": classification.cleanupObservedClosed ? "closed" : "unobserved",
                     "write_attempted": false,
                     "safe_to_retry": false,
-                    // #530: even though ax_write_failed is normally non-terminal, a still-open
-                    // menu makes every weaker transport channel unsafe to invoke.
                     "fallback_unsafe": true,
                 ]) { _, new in new }
-            ))
-        }
-        if case let .failed(classification) = dialogResult,
-           classification.hasIssuedGoToPositionActuator {
-            // A leaf menu click, dialog input, or Return may take effect even when the AX / AppleScript
-            // invocation says it failed.  Once one of those has been issued, the slider is a *second*
-            // goto-position actuator, not a fallback-safe retry.  This deliberately keys off issuance,
-            // never the return code, following the Delete-key path's write-attempt boundary.
-            let submissionIssued = classification.hasIssuedDialogSubmission
-            let dialogState = classification.dialogCleanupObservedClosed ? "closed" : "unobserved"
-            let extras = baseExtras.merging([
-                "operation": "transport.goto_position",
-                "method": "dialog",
-                "dialog_actuation_attempted": true,
-                "dialog_submission_attempted": submissionIssued,
-                "dialog_cleanup": dialogState,
-                // Opening the dialog is navigation, while a submitted Return may have moved the
-                // playhead. Keep that distinction explicit rather than using a false AX result to
-                // say no position write was attempted.
-                "write_attempted": submissionIssued,
-                "safe_to_retry": false,
-                "fallback_unsafe": true,
-            ]) { _, new in new }
-            if submissionIssued {
-                // Return was issued, so a position write may have landed. The result is uncertain
-                // rather than a known hard failure, but the slider remains unsafe as a second actuator.
-                return .success(HonestContract.encodeStateB(
-                    reason: .readbackUnavailable,
-                    extras: extras
-                ))
-            }
-            // The issued leaf only navigates to the dialog. With no submission, no position write was
-            // attempted, so this remains the known State C navigation failure.
-            return .error(HonestContract.encodeStateC(
-                error: .axWriteFailed,
-                hint: "The Go To Position menu item was issued but reported an error; "
-                    + "the slider fallback was not attempted.",
-                extras: extras
             ))
         }
 
@@ -925,10 +937,21 @@ extension AccessibilityChannel {
         }
 
         func sliderExtras(observedBar: Int?, observedBeat: Int? = nil) -> [String: Any] {
-            baseExtras.merging([
+            let unobservedComponents = observedBeat == nil
+                ? ["beat", "subdivision", "tick"]
+                : ["subdivision", "tick"]
+            return baseExtras.merging([
                 "observed": observedBar.map { observedPosition(bar: $0, beat: observedBeat) } ?? NSNull(),
                 "via": "slider",
                 "write_attempted": true,
+                // The control-bar exposes only bar and, on some builds, beat. State A requires an
+                // independently observed complete request, so this route advertises the missing
+                // components instead of certifying the prefix as the requested position.
+                "unobserved_position_components": unobservedComponents,
+                // These fields are carried forward verbatim in `requested`, but the control-bar
+                // sliders have no actuator for them. Keep that loss of expression explicit rather
+                // than silently substituting `.1.1` or implying the prefix was the full request.
+                "unexpressed_position_components": unobservedComponents,
             ]) { _, new in new }
         }
 
@@ -958,7 +981,7 @@ extension AccessibilityChannel {
         var initialBeat: Int?
         if let beatSlider {
             _ = AXHelpers.setAttribute(
-                beatSlider, kAXValueAttribute, NSNumber(value: 1), runtime: runtime.ax
+                beatSlider, kAXValueAttribute, NSNumber(value: beat), runtime: runtime.ax
             )
             switch sliderValue(beatSlider) {
             case .failure, .success(nil):
@@ -969,7 +992,7 @@ extension AccessibilityChannel {
             case let .success(value?):
                 initialBeat = value
             }
-            guard initialBeat == 1 else {
+            guard initialBeat == beat else {
                 return .success(HonestContract.encodeStateB(
                     reason: .readbackMismatch,
                     extras: sliderExtras(observedBar: initialBar, observedBeat: initialBeat)
@@ -1008,14 +1031,18 @@ extension AccessibilityChannel {
             case let .success(value?):
                 finalBeat = value
             }
-            guard finalBeat == 1 else {
+            guard finalBeat == beat else {
                 return .success(HonestContract.encodeStateB(
                     reason: .readbackMismatch,
                     extras: sliderExtras(observedBar: finalBar, observedBeat: finalBeat)
                 ))
             }
         }
-        return .success(HonestContract.encodeStateA(
+        // A bar-only or bar+beat AX read cannot independently verify subdivision and tick. Keep
+        // this State B even when every exposed slider agrees; TransportDispatcher performs the
+        // authoritative full transport-state comparison before emitting State A.
+        return .success(HonestContract.encodeStateB(
+            reason: .readbackUnavailable,
             extras: sliderExtras(observedBar: finalBar, observedBeat: finalBeat)
         ))
     }
@@ -1041,10 +1068,21 @@ extension AccessibilityChannel {
     /// The script is internal so the menu-validation regression tests can assert the
     /// exact generated AppleScript ordering without invoking Logic Pro.
     static func gotoPositionViaDialogAppleScript(bar: Int) -> String {
+        gotoPositionViaDialogAppleScript(position: "\(bar).1.1.1")
+    }
+
+    /// The optional ledger is owned by the Swift parent, not by `osascript`. The child advances it
+    /// immediately *before* each irreversible UI boundary so a timeout cannot erase the fact that
+    /// the child may already have issued it.
+    static func gotoPositionViaDialogAppleScript(
+        position: String,
+        issuanceLedgerPath: String? = nil
+    ) -> String {
         // Poll for the dialog's presence instead of relying on a fixed delay.
         // Without this guard, a slow machine (>500ms to render the dialog) would
         // send Cmd+A to the arrange area, selecting all regions unexpectedly.
         let logicProAppleScript = LogicProTarget.appleScriptTarget()
+        let ledgerPath = issuanceLedgerPath ?? ""
         return """
         -- A selected menu-bar item is the AX observation that one of Logic's
         -- menus is currently open. Return UNREADABLE rather than treating a
@@ -1067,12 +1105,11 @@ extension AccessibilityChannel {
         -- Never claim that Escape cleaned up a menu until AXSelected says so.
         -- Three attempts are enough to cover a menu/submenu chain without
         -- turning a failed close into an unbounded retry.
-        -- `knownOpen` says whether THIS run has already clicked a menu open. It changes what an
-        -- unreadable first read means. At entry nothing has been opened, so UNREADABLE is an absent
-        -- observation and returning it lets the run proceed — refusing there sent 5 of 8 fresh
-        -- processes to the slider route. After this run clicked, a menu IS open: an unreadable read
-        -- is not permission to skip the Escape, because skipping it can end the run with the menu
-        -- still up.
+        -- `knownOpen` says whether THIS run has already clicked a menu open. Before that boundary,
+        -- UNREADABLE returns without Escape because unknown focus might be an unrelated dialog/edit;
+        -- the caller must refuse rather than treating the missing read as clean. After this run
+        -- clicked, an unreadable read is not permission to skip Escape, because this run may leave
+        -- its own menu chain up.
         on dismissOpenMenu(theProcess, knownOpen)
             set menuState to my menuOpenState(theProcess)
             if menuState is "CLOSED" then return "CLOSED"
@@ -1090,6 +1127,19 @@ extension AccessibilityChannel {
             end repeat
             return "OPEN"
         end dismissOpenMenu
+
+        -- The parent creates this file before launching osascript and reads it after the child
+        -- exits or is killed. `do shell script` completes the file write before the next AX/key
+        -- actuation, so the marker survives the child process that could otherwise lose its state.
+        on recordDialogIssuance(stage, ledgerPath)
+            if ledgerPath is "" then return true
+            try
+                do shell script "/usr/bin/printf %s " & quoted form of stage & " > " & quoted form of ledgerPath
+                return true
+            on error
+                return false
+            end try
+        end recordDialogIssuance
 
         -- Appending this context lets the Swift receipt distinguish an unsafe
         -- entry cleanup (no operation actuation) from an unsafe cleanup after a
@@ -1203,20 +1253,14 @@ extension AccessibilityChannel {
         tell application "System Events"
             set logicProcess to \(logicProAppleScript.systemEventsProcessTarget)
             tell logicProcess
-                -- A timed-out predecessor can leave a menu open. Clear and
-                -- observe that state before this run performs any menu read or
-                -- actuation, so a later fallback never inherits an open menu.
+                -- A timed-out predecessor or user action can leave a menu open. An unreadable
+                -- entry read is not evidence that the menu is absent, so it must not release a
+                -- later slider actuation. `knownOpen:false` deliberately withholds Escape when
+                -- focus is unknown.
                 set entryMenuCleanup to my dismissOpenMenu(logicProcess, false)
-                if entryMenuCleanup is "OPEN" or entryMenuCleanup is "OPEN_UNREADABLE" then
-                    return "MENU_PICK_FAILED: a menu was open at entry and would not close (" & entryMenuCleanup & ")"
+                if entryMenuCleanup is not "CLOSED" then
+                    return "MENU_PICK_FAILED: menu state was not observed closed at entry (" & entryMenuCleanup & ")"
                 end if
-                -- UNREADABLE is NOT a refusal here. Nothing has been opened by this
-                -- run yet, so an unreadable menu bar is an absent observation, not
-                -- evidence that something is open — and on a cold System Events
-                -- connection the first read frequently is unreadable. Refusing on it
-                -- sent 5 of 8 fresh processes to the slider route, measured. After
-                -- this run opens a menu the same value IS a refusal, because then
-                -- there is something known to be open.
                 set menuActuationAttempted to false
                 -- This marks the write boundary for actuator selection.  The
                 -- leaf may succeed even if AX reports an error, so any result
@@ -1237,14 +1281,18 @@ extension AccessibilityChannel {
                         set selectedSubmenuItem to menu item "Go To" of menu 1 of selectedMenuBarItem
                         set mi to menu item "Position…" of menu 1 of selectedSubmenuItem
                     else
-                        set cleanupState to my dismissOpenMenu(logicProcess, true)
+                        -- No menu has been opened by this run. If the read is unreadable,
+                        -- `knownOpen:false` must not send Escape into an unrelated focus target.
+                        set cleanupState to my dismissOpenMenu(logicProcess, false)
                         if cleanupState is not "CLOSED" then
                             return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                         end if
                         return "MENU_NOT_FOUND"
                     end if
                 on error errMsg
-                    set cleanupState to my dismissOpenMenu(logicProcess, true)
+                    -- Locale discovery is read-only; do not claim an unknown menu belongs to
+                    -- this run and do not authorise Escape from an unreadable AX observation.
+                    set cleanupState to my dismissOpenMenu(logicProcess, false)
                     if cleanupState is not "CLOSED" then
                         return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
                     end if
@@ -1297,6 +1345,15 @@ extension AccessibilityChannel {
                     return "MENU_DISABLED"
                 end if
                 try
+                    -- Persist before AXPress: if the child dies after the click, Swift still knows
+                    -- that the dialog route may have become active and must not choose the slider.
+                    if not my recordDialogIssuance("LEAF_ARMED", "\(ledgerPath)") then
+                        set cleanupState to my dismissOpenMenu(logicProcess, true)
+                        if cleanupState is not "CLOSED" then
+                            return "MENU_PICK_FAILED: menu cleanup was not observed (" & cleanupState & ")"
+                        end if
+                        return "MENU_PICK_FAILED: could not persist dialog issuance before leaf click"
+                    end if
                     set dialogActuationIssued to true
                     click mi
                 on error errMsg
@@ -1334,31 +1391,109 @@ extension AccessibilityChannel {
                     return "DIALOG_ACTUATION_ISSUED: dialog did not become ready"
                 end if
             end tell
+            -- Everything in this block is provably before Return. A normal script result from
+            -- here must therefore remain a non-submission failure, never State B-after-nothing.
             try
                 delay 0.1
                 keystroke "a" using command down
                 delay 0.1
-                keystroke "\(bar)"
+                keystroke "\(position)"
                 delay 0.1
+            on error errMsg
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                if dialogCleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                end if
+                set cleanupState to my dismissOpenMenu(logicProcess, true)
+                if cleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_NOT_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
+                end if
+                return "DIALOG_SUBMISSION_NOT_ISSUED: dialog input failed before Return (" & errMsg & ")"
+            end try
+
+            -- This durable marker is the position-write boundary. It is written before Return so
+            -- a timeout or nonzero child exit after this point is conservatively reported as a
+            -- possibly-issued submission rather than releasing another actuator.
+            if not my recordDialogIssuance("RETURN_ARMED", "\(ledgerPath)") then
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                if dialogCleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                end if
+                set cleanupState to my dismissOpenMenu(logicProcess, true)
+                if cleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_NOT_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
+                end if
+                return "DIALOG_SUBMISSION_NOT_ISSUED: could not persist Return issuance"
+            end if
+            try
                 keystroke return
                 delay 0.2
             on error errMsg
                 set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
                 if dialogCleanupState is not "CLOSED" then
-                    return "DIALOG_SUBMISSION_FAILED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                    return "DIALOG_SUBMISSION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
-                return "DIALOG_SUBMISSION_FAILED: dialog input or Return failed after the dialog opened (" & errMsg & ")"
+                set cleanupState to my dismissOpenMenu(logicProcess, true)
+                if cleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
+                end if
+                return "DIALOG_SUBMISSION_ISSUED: Return may have been sent (" & errMsg & ")"
             end try
+            -- A normal Return reply is not proof Logic consumed it. Observe this exact modal before
+            -- returning OK; if it survived, clean it only after recording the submission boundary.
+            set dialogPostReturnState to my goToPositionDialogState(logicProcess)
+            if dialogPostReturnState is not "CLOSED" then
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                if dialogCleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
+                end if
+                set cleanupState to my dismissOpenMenu(logicProcess, true)
+                if cleanupState is not "CLOSED" then
+                    return "DIALOG_SUBMISSION_ISSUED: menu cleanup was not observed (" & cleanupState & ")"
+                end if
+                return "DIALOG_SUBMISSION_ISSUED: dialog was not observed closed after Return"
+            end if
         end tell
         return "OK"
         """
     }
 
-    /// The successful AppleScript channel payload is a JSON object containing the
-    /// script's return value in `result`. Only an exact `OK` means this route
-    /// reached the dialog and submitted it. Only failures before the position
-    /// menu leaf is issued may fall through to the slider route.  AX return
-    /// codes do not prove whether that leaf (or later dialog input) took effect.
+    /// State persisted by the parent-owned issuance ledger. `unknown` is deliberately unsafe: a
+    /// missing/corrupt ledger after a dead child is not evidence that the child failed before Return.
+    enum DialogIssuanceStage: String, Equatable {
+        case notIssued = "NOT_ISSUED"
+        case leafArmed = "LEAF_ARMED"
+        case returnArmed = "RETURN_ARMED"
+        case unknown
+    }
+
+    private struct DialogIssuanceLedger {
+        let url: URL
+
+        static func create() -> DialogIssuanceLedger? {
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("logic-pro-mcp-goto-position-\(UUID().uuidString)")
+            guard FileManager.default.createFile(
+                atPath: url.path,
+                contents: Data(DialogIssuanceStage.notIssued.rawValue.utf8)
+            ) else { return nil }
+            return DialogIssuanceLedger(url: url)
+        }
+
+        var stage: DialogIssuanceStage {
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { return .unknown }
+            return DialogIssuanceStage(rawValue: text.trimmingCharacters(in: .whitespacesAndNewlines))
+                ?? .unknown
+        }
+
+        func remove() {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
+    /// The successful AppleScript channel payload is a JSON object containing the script's return
+    /// value in `result`. Normal script replies distinguish failures before Return from a Return that
+    /// may have landed; execution failures use the parent-owned durable ledger instead.
     enum GotoPositionDialogResultClassification: Equatable {
         enum Failure: Equatable {
             case menuNotFound
@@ -1368,51 +1503,68 @@ extension AccessibilityChannel {
             case menuCouldNotBeClosed(writeAttempted: Bool)
             case dialogNotReady
             case dialogActuationIssued(cleanupObservedClosed: Bool)
+            case dialogSubmissionNotIssued(cleanupObservedClosed: Bool)
             case dialogSubmissionIssued(cleanupObservedClosed: Bool)
+            case executionFailed(issuance: DialogIssuanceStage, cleanupObservedClosed: Bool)
             case malformedPayload
             case unexpectedResult
-            case executionFailed
         }
 
         case driven
         case failure(Failure)
 
-        var isUnsafeToActuateAgain: Bool {
-            if case .failure(.menuCouldNotBeClosed) = self {
-                return true
-            }
-            return false
-        }
-
-        /// A menu leaf click opens the Go To Position dialog, and keyboard input / Return can
-        /// commit it.  Their status returns are not a licence to choose the slider as another
-        /// position actuator.  `dialogNotReady` is included because the generated script can only
-        /// produce it after it has issued the leaf click.
-        var hasIssuedGoToPositionActuator: Bool {
+        /// Any normal path that explicitly reached Return, plus a dead child that persisted a
+        /// pre-leaf/Return checkpoint. A leaf checkpoint is intentionally conservative after a
+        /// process death: the parent cannot prove the child did not advance to Return before dying.
+        var hasPotentialDialogSubmission: Bool {
             switch self {
-            case .failure(.dialogNotReady),
-                 .failure(.dialogActuationIssued),
-                 .failure(.dialogSubmissionIssued):
+            case .failure(.dialogSubmissionIssued),
+                 .failure(.executionFailed(issuance: .leafArmed, cleanupObservedClosed: _)),
+                 .failure(.executionFailed(issuance: .returnArmed, cleanupObservedClosed: _)),
+                 .failure(.executionFailed(issuance: .unknown, cleanupObservedClosed: _)):
                 return true
             default:
                 return false
             }
         }
 
-        var hasIssuedDialogSubmission: Bool {
-            if case .failure(.dialogSubmissionIssued) = self {
+        /// A slider is unsafe when a non-submission path cannot prove the menu/dialog UI is gone.
+        /// A clean, normal leaf/input failure may fall through because the script proved no Return
+        /// was sent *and* observed the relevant UI closed.
+        var requiresUnsafeUIRefusal: Bool {
+            switch self {
+            case .failure(.menuCouldNotBeClosed),
+                 .failure(.dialogActuationIssued(cleanupObservedClosed: false)),
+                 .failure(.dialogSubmissionNotIssued(cleanupObservedClosed: false)),
+                 .failure(.dialogNotReady),
+                 .failure(.executionFailed(issuance: .notIssued, cleanupObservedClosed: false)):
                 return true
+            default:
+                return false
             }
-            return false
         }
 
-        /// Closed is an observed result from the dialog-specific cleanup, never an inference from
-        /// a setter or an Escape return.  A leaf error / not-ready outcome has no closed-dialog
-        /// proof, so the receipt keeps that absence visible.
-        var dialogCleanupObservedClosed: Bool {
+        var dialogActuationMayHaveOccurred: Bool {
+            switch self {
+            case .failure(.dialogNotReady),
+                 .failure(.dialogActuationIssued),
+                 .failure(.dialogSubmissionNotIssued),
+                 .failure(.dialogSubmissionIssued),
+                 .failure(.executionFailed(issuance: .leafArmed, cleanupObservedClosed: _)),
+                 .failure(.executionFailed(issuance: .returnArmed, cleanupObservedClosed: _)),
+                 .failure(.executionFailed(issuance: .unknown, cleanupObservedClosed: _)):
+                return true
+            default:
+                return false
+            }
+        }
+
+        var cleanupObservedClosed: Bool {
             switch self {
             case let .failure(.dialogActuationIssued(cleanupObservedClosed)),
-                 let .failure(.dialogSubmissionIssued(cleanupObservedClosed)):
+                 let .failure(.dialogSubmissionNotIssued(cleanupObservedClosed)),
+                 let .failure(.dialogSubmissionIssued(cleanupObservedClosed)),
+                 let .failure(.executionFailed(issuance: _, cleanupObservedClosed)):
                 return cleanupObservedClosed
             default:
                 return false
@@ -1453,7 +1605,7 @@ extension AccessibilityChannel {
         case "MENU_DISABLED":
             return .failure(.menuDisabled)
         case let value where value.hasPrefix("MENU_PICK_FAILED"):
-            if value.hasPrefix("MENU_PICK_FAILED: a menu was open at entry and would not close")
+            if value.hasPrefix("MENU_PICK_FAILED: menu state was not observed closed at entry")
                 || value.hasPrefix("MENU_PICK_FAILED: menu cleanup was not observed") {
                 return .failure(.menuCouldNotBeClosed(
                     writeAttempted: value.hasPrefix(
@@ -1466,11 +1618,18 @@ extension AccessibilityChannel {
             return .failure(.dialogNotReady)
         case let value where value.hasPrefix("DIALOG_ACTUATION_ISSUED"):
             return .failure(.dialogActuationIssued(
-                cleanupObservedClosed: !value.contains("dialog cleanup was not observed")
+                // A closed dialog is insufficient if a menu cleanup remained unreadable. Both
+                // surfaces must be observed closed before this known pre-Return path can fall
+                // through to the slider.
+                cleanupObservedClosed: !value.contains("cleanup was not observed")
             ))
-        case let value where value.hasPrefix("DIALOG_SUBMISSION_FAILED"):
+        case let value where value.hasPrefix("DIALOG_SUBMISSION_NOT_ISSUED"):
+            return .failure(.dialogSubmissionNotIssued(
+                cleanupObservedClosed: !value.contains("cleanup was not observed")
+            ))
+        case let value where value.hasPrefix("DIALOG_SUBMISSION_ISSUED"):
             return .failure(.dialogSubmissionIssued(
-                cleanupObservedClosed: !value.contains("dialog cleanup was not observed")
+                cleanupObservedClosed: !value.contains("cleanup was not observed")
             ))
         default:
             return .failure(.unexpectedResult)
@@ -1483,10 +1642,16 @@ extension AccessibilityChannel {
     }
 
     private static func gotoPositionViaDialog(
-        bar: Int,
-        executeScript: @escaping @Sendable (String) async -> ChannelResult
+        position: String,
+        executeScript: @escaping @Sendable (String) async -> ChannelResult,
+        reconcileAfterExecutionFailure: @escaping @Sendable () async -> Bool
     ) async -> GotoPositionDialogRouteResult {
-        let script = gotoPositionViaDialogAppleScript(bar: bar)
+        let ledger = DialogIssuanceLedger.create()
+        defer { ledger?.remove() }
+        let script = gotoPositionViaDialogAppleScript(
+            position: position,
+            issuanceLedgerPath: ledger?.url.path
+        )
         let result = await executeScript(script)
         switch result {
         case .success(let output):
@@ -1506,46 +1671,98 @@ extension AccessibilityChannel {
                 return .driven(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
                     extras: [
-                        "requested": "\(bar).1.1.1",
-                        "via": "dialog"
+                        "requested": position,
+                        "via": "dialog",
+                        // `OK` is emitted only after the script independently observed the exact
+                        // Go To Position dialog closed following Return.
+                        "dialog_cleanup": "closed",
+                        "dialog_submission_attempted": true,
+                        "write_attempted": true,
                     ]
                 ))
             case .failure:
                 return .failed(classification)
             }
         case .error:
-            // The script died — timeout, TCC refusal, anything. It clicks menus open, so its death
-            // leaves the menu state UNKNOWN, and unknown is not safe: the slider would actuate into
-            // whatever is on screen. Try once to observe and clear any open menu; only a state
-            // observed CLOSED lets the fallback proceed.
-            // If Logic is not running at all, no menu of its can be open, and the script's death
-            // says nothing about menu state. Only when the app IS there does an unobservable menu
-            // become a reason to withhold the fallback.
-            guard ProcessUtils.logicProPID() != nil else {
-                return .failed(.failure(.executionFailed))
-            }
-            switch await observeAndClearStrayMenu() {
-            case .closed:
-                return .failed(.failure(.executionFailed))
-            case .openOrUnknown:
-                return .failed(.failure(.menuCouldNotBeClosed(writeAttempted: false)))
-            }
+            // Do this even when PID discovery fails. The durable checkpoint records whether the
+            // child may have crossed a UI boundary, and a failed reconciliation is never evidence
+            // that a dead child left no modal/menu behind.
+            let issuance = ledger?.stage ?? .unknown
+            let cleanupObservedClosed = await reconcileAfterExecutionFailure()
+            return .failed(.failure(.executionFailed(
+                issuance: issuance,
+                cleanupObservedClosed: cleanupObservedClosed
+            )))
         }
     }
 
+    private enum StrayGoToPositionUIOutcome: Equatable { case closed, openOrUnknown }
 
-    private enum StrayMenuOutcome { case closed, openOrUnknown }
-
-    /// Independent of the script that just died: ask System Events whether any menu bar item is
-    /// selected, send Escape if so, and observe again. Anything other than an observed CLOSED —
-    /// including an unreadable menu bar — is `openOrUnknown`, because a failed reading is not
-    /// evidence that nothing is open.
-    private static func observeAndClearStrayMenu() async -> StrayMenuOutcome {
+    /// Reconcile the exact Go To Position modal before considering menu state. A menu-bar read does
+    /// not describe a modal dialog, so a post-timeout `CLOSED` menu must never authorise the slider
+    /// while the dialog remains on screen.
+    private static func observeAndClearStrayGoToPositionUI() async -> StrayGoToPositionUIOutcome {
         let target = LogicProTarget.appleScriptTarget()
         let script = """
+        on goToPositionDialogState(theProcess)
+            using terms from application "System Events"
+                tell theProcess
+                    try
+                        repeat with dialogWindow in every window
+                            set dialogTitle to name of dialogWindow
+                            if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then return "OPEN"
+                        end repeat
+                        return "CLOSED"
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end tell
+            end using terms from
+        end goToPositionDialogState
+
+        on dismissGoToPositionDialog(theProcess)
+            set dialogState to my goToPositionDialogState(theProcess)
+            if dialogState is "CLOSED" then return "CLOSED"
+            if dialogState is not "OPEN" then return dialogState
+            repeat 3 times
+                set cancelPressed to false
+                using terms from application "System Events"
+                    tell theProcess
+                        try
+                            repeat with dialogWindow in every window
+                                set dialogTitle to name of dialogWindow
+                                if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
+                                    if exists button "Cancel" of dialogWindow then
+                                        click button "Cancel" of dialogWindow
+                                        set cancelPressed to true
+                                        exit repeat
+                                    end if
+                                    if exists button "취소" of dialogWindow then
+                                        click button "취소" of dialogWindow
+                                        set cancelPressed to true
+                                        exit repeat
+                                    end if
+                                end if
+                            end repeat
+                        on error
+                        end try
+                        -- Escape is permitted only because this exact dialog was observed OPEN above.
+                        if not cancelPressed then key code 53
+                    end tell
+                end using terms from
+                delay 0.1
+                set dialogState to my goToPositionDialogState(theProcess)
+                if dialogState is "CLOSED" then return "CLOSED"
+                if dialogState is not "OPEN" then return dialogState
+            end repeat
+            return "OPEN"
+        end dismissGoToPositionDialog
+
         tell application "System Events"
             tell \(target.systemEventsProcessTarget)
                 try
+                    set dialogCleanupState to my dismissGoToPositionDialog(it)
+                    if dialogCleanupState is not "CLOSED" then return "DIALOG_" & dialogCleanupState
                     repeat 3 times
                         set anyOpen to false
                         repeat with menuBarItem in every menu bar item of menu bar 1
