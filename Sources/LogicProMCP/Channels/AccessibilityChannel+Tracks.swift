@@ -1344,6 +1344,7 @@ extension AccessibilityChannel {
             kind: reconcileOutcome.kind,
             action: reconcileActionLabel(reconcileOutcome.decision),
             newTrackAutoConfirmed: false,
+            witnessSummary: reconcileOutcome.witnessSummary,
             refusal: reconcileOutcome.refusal
         )
 
@@ -1433,6 +1434,22 @@ extension AccessibilityChannel {
     /// verify the track count decremented by 1 within a 4×1s budget. Returns
     /// State A on confirmed delta, State B `retry_exhausted` if AX poll never
     /// catches the decrement, State C if the menu click itself fails.
+    ///
+    /// A mandatory New Track reconciliation changes the meaning of the count:
+    /// once that terminal sheet was observed, a deletion delta is State A only
+    /// if the sheet-close witness confirmed the reconciliation. Without that
+    /// confirmation, the operation has an unresolved blocker even when the
+    /// track list happens to show a decrement.
+    static func deletionCountCanCertifyStateA(
+        observedTrackCountDecreased: Bool,
+        mandatoryNewTrackReconciliationObserved: Bool,
+        mandatoryNewTrackReconciliationPerformed: Bool
+    ) -> Bool {
+        observedTrackCountDecreased
+            && (!mandatoryNewTrackReconciliationObserved
+                || mandatoryNewTrackReconciliationPerformed)
+    }
+
     static func defaultDeleteTrack(
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ChannelResult {
@@ -1475,36 +1492,50 @@ extension AccessibilityChannel {
         // Kept beside kind/action so a refusal on any attempt survives to the
         // result, rather than being overwritten by a later clean pass.
         var reconcileRefusal: AlertAcknowledgeRefusal?
-        var newTrackAutoConfirmed = false
+        var reconcileWitnessSummary: ModalReconcileWitnessSummary?
+        var mandatoryNewTrackReconciliationObserved = false
+        var mandatoryNewTrackReconciliationAttempted = false
+        var mandatoryNewTrackReconciliationPerformed = false
 
         var lastObservedCount = beforeCount
         for attempt in 0..<4 {
             try? await Task.sleep(nanoseconds: 250_000_000)
 
-            // Bound the mandatory-New-Track auto-Create to exactly once — it is
-            // the terminal sheet, so stop reconciling after it fires.
-            if !newTrackAutoConfirmed {
+            // Bound the mandatory-New-Track auto-Create to exactly once. If its
+            // close cannot be witnessed, retrying Create could compound an
+            // already-landed action, and its unconfirmed state must block State A.
+            if !mandatoryNewTrackReconciliationAttempted {
                 let outcome = await reconcileAfterMutation(isDeleteContext: true, runtime: runtime)
                 if outcome.kind != .none {
                     reconcileKind = outcome.kind
                     reconcileAction = reconcileActionLabel(outcome.decision)
                     if let refusal = outcome.refusal { reconcileRefusal = refusal }
-                    if outcome.kind == .mandatoryNewTrack && outcome.performed {
-                        newTrackAutoConfirmed = true
+                    if let witnessSummary = outcome.witnessSummary {
+                        reconcileWitnessSummary = witnessSummary
+                    }
+                    if outcome.kind == .mandatoryNewTrack {
+                        mandatoryNewTrackReconciliationObserved = true
+                        mandatoryNewTrackReconciliationAttempted = true
+                        mandatoryNewTrackReconciliationPerformed = outcome.performed
                     }
                 }
             }
 
             let currentCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
             lastObservedCount = currentCount
-            if currentCount < beforeCount {
+            if deletionCountCanCertifyStateA(
+                observedTrackCountDecreased: currentCount < beforeCount,
+                mandatoryNewTrackReconciliationObserved: mandatoryNewTrackReconciliationObserved,
+                mandatoryNewTrackReconciliationPerformed: mandatoryNewTrackReconciliationPerformed
+            ) {
                 extras["track_count_after"] = currentCount
                 extras["observed_delta"] = currentCount - beforeCount
                 mergeReconcileExtras(
                     &extras,
                     kind: reconcileKind,
                     action: reconcileAction,
-                    newTrackAutoConfirmed: newTrackAutoConfirmed,
+                    newTrackAutoConfirmed: mandatoryNewTrackReconciliationPerformed,
+                    witnessSummary: reconcileWitnessSummary,
                     refusal: reconcileRefusal
                 )
                 return .success(HonestContract.encodeStateA(extras: extras))
@@ -1516,11 +1547,15 @@ extension AccessibilityChannel {
 
         extras["track_count_after"] = lastObservedCount
         extras["observed_delta"] = lastObservedCount - beforeCount
+        if mandatoryNewTrackReconciliationObserved {
+            extras["mandatory_track_reconciliation_performed"] = mandatoryNewTrackReconciliationPerformed
+        }
         mergeReconcileExtras(
             &extras,
             kind: reconcileKind,
             action: reconcileAction,
-            newTrackAutoConfirmed: newTrackAutoConfirmed,
+            newTrackAutoConfirmed: mandatoryNewTrackReconciliationPerformed,
+            witnessSummary: reconcileWitnessSummary,
             refusal: reconcileRefusal
         )
         return .success(HonestContract.encodeStateB(

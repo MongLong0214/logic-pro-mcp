@@ -202,21 +202,26 @@ extension AccessibilityChannel {
     static func projectNewPendingReadbackEnvelope(
         mandatoryTrackCreated: Bool,
         observedWindowTitles: [String],
-        observationBudgetMs: Int
+        observationBudgetMs: Int,
+        witnessSummary: ModalReconcileWitnessSummary? = nil
     ) -> String {
-        HonestContract.encodeStateB(
+        var extras: [String: Any] = [
+            "operation": "project.new",
+            "method": "accessibility",
+            "selection": "Empty Project",
+            "phase": "created_project_window_pending",
+            "mandatory_track_created": mandatoryTrackCreated,
+            "observed_window_titles": observedWindowTitles,
+            "observation_budget_ms": observationBudgetMs,
+            "write_attempted": true,
+            "safe_to_retry": false,
+        ]
+        if let witnessSummary {
+            extras["modal_reconciliation_witness"] = witnessSummary.envelopeValue
+        }
+        return HonestContract.encodeStateB(
             reason: .readbackUnavailable,
-            extras: [
-                "operation": "project.new",
-                "method": "accessibility",
-                "selection": "Empty Project",
-                "phase": "created_project_window_pending",
-                "mandatory_track_created": mandatoryTrackCreated,
-                "observed_window_titles": observedWindowTitles,
-                "observation_budget_ms": observationBudgetMs,
-                "write_attempted": true,
-                "safe_to_retry": false,
-            ]
+            extras: extras
         )
     }
 
@@ -272,23 +277,29 @@ extension AccessibilityChannel {
         // The caller still performs independent Project-resource readback
         // before saving.
         var createdTrack = false
+        var witnessSummary: ModalReconcileWitnessSummary?
         let attempts = max(1, observationAttempts)
         for attempt in 0..<attempts {
             try? await Task.sleep(nanoseconds: observationDelayNanoseconds)
             let outcome = await reconcileAfterMutation(isDeleteContext: false, runtime: runtime)
             switch outcome.kind {
             case .mandatoryNewTrack:
+                witnessSummary = outcome.witnessSummary
                 guard outcome.performed else {
+                    var extras: [String: Any] = [
+                        "operation": "project.new",
+                        "method": "accessibility",
+                        "selection": selection,
+                        "phase": "mandatory_track_create_unconfirmed",
+                        "write_attempted": true,
+                        "safe_to_retry": false,
+                    ]
+                    if let witnessSummary {
+                        extras["modal_reconciliation_witness"] = witnessSummary.envelopeValue
+                    }
                     return .error(HonestContract.encodeStateB(
                         reason: .readbackUnavailable,
-                        extras: [
-                            "operation": "project.new",
-                            "method": "accessibility",
-                            "selection": selection,
-                            "phase": "mandatory_track_create_unconfirmed",
-                            "write_attempted": true,
-                            "safe_to_retry": false,
-                        ]
+                        extras: extras
                     ))
                 }
                 createdTrack = true
@@ -309,19 +320,23 @@ extension AccessibilityChannel {
                 break
             }
             if let current = exactCreatedProjectWindow(runtime: runtime) {
+                var extras: [String: Any] = [
+                    "operation": "project.new",
+                    "method": "accessibility",
+                    "selection": selection,
+                    "phase": "created_project_window_observed",
+                    "window_title": AXHelpers.getTitle(current, runtime: runtime.ax) ?? "",
+                    "mandatory_track_created": createdTrack,
+                    "observation_elapsed_ms": (attempt + 1) * Int(observationDelayNanoseconds / 1_000_000),
+                    "write_attempted": true,
+                    "safe_to_retry": false,
+                ]
+                if let witnessSummary {
+                    extras["modal_reconciliation_witness"] = witnessSummary.envelopeValue
+                }
                 return .success(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
-                    extras: [
-                        "operation": "project.new",
-                        "method": "accessibility",
-                        "selection": selection,
-                        "phase": "created_project_window_observed",
-                        "window_title": AXHelpers.getTitle(current, runtime: runtime.ax) ?? "",
-                        "mandatory_track_created": createdTrack,
-                        "observation_elapsed_ms": (attempt + 1) * Int(observationDelayNanoseconds / 1_000_000),
-                        "write_attempted": true,
-                        "safe_to_retry": false,
-                    ]
+                    extras: extras
                 ))
             }
         }
@@ -334,7 +349,8 @@ extension AccessibilityChannel {
         return .success(projectNewPendingReadbackEnvelope(
             mandatoryTrackCreated: createdTrack,
             observedWindowTitles: observedWindowTitles(runtime: runtime),
-            observationBudgetMs: attempts * Int(observationDelayNanoseconds / 1_000_000)
+            observationBudgetMs: attempts * Int(observationDelayNanoseconds / 1_000_000),
+            witnessSummary: witnessSummary
         ))
     }
 

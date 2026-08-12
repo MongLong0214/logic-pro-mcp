@@ -49,6 +49,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         appElement: AXUIElement? = nil,
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
         attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
+        childrenResultHandler: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXHelpers.AXStatusError>?)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
         executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
@@ -90,6 +91,12 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
             childCount: { [self] element in
                 children[key(for: element)]?.count
             },
+            childrenResult: { [self] element in
+                if let handled = childrenResultHandler?(element) {
+                    return handled
+                }
+                return .success(children[key(for: element)] ?? [])
+            },
             attributeValueResult: { [self] element, attribute in
                 if let handled = attributeValueResultHandler?(element, attribute) {
                     return handled
@@ -120,6 +127,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         appElement: AXUIElement? = nil,
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
         attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
+        childrenResultHandler: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXHelpers.AXStatusError>?)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
         executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
@@ -132,6 +140,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
                 appElement: appElement,
                 attributeValueHandler: attributeValueHandler,
                 attributeValueResultHandler: attributeValueResultHandler,
+                childrenResultHandler: childrenResultHandler,
                 setAttributeHandler: setAttributeHandler,
                 performActionHandler: performActionHandler
             ),

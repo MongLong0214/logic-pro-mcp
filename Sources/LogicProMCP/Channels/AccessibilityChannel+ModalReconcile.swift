@@ -34,6 +34,13 @@ extension AccessibilityChannel {
         let kind: ModalReconciliation.BlockingModalKind
         let decision: ModalReconciliation.ModalReconcileDecision
         let performed: Bool
+        /// Per-poll post-action sheet observations. These stay in-process for
+        /// debug logging and tests; response envelopes carry only
+        /// `witnessSummary`, never this trace.
+        let sheetWitness: [ModalSheetWitnessPoll]
+        /// Compact, response-safe observation summary for the action's witness.
+        /// `performed` is true only when this summary includes `gone`.
+        let witnessSummary: ModalReconcileWitnessSummary?
         /// Set only when an authorized action was declined at execution time.
         /// `performed == false` alone cannot distinguish "the decision was not to
         /// act" from "the decision was to act and the executor refused", and
@@ -44,15 +51,99 @@ extension AccessibilityChannel {
             kind: ModalReconciliation.BlockingModalKind,
             decision: ModalReconciliation.ModalReconcileDecision,
             performed: Bool,
+            sheetWitness: [ModalSheetWitnessPoll] = [],
+            witnessSummary: ModalReconcileWitnessSummary? = nil,
             refusal: AlertAcknowledgeRefusal? = nil
         ) {
             self.kind = kind
             self.decision = decision
             self.performed = performed
+            self.sheetWitness = sheetWitness
+            self.witnessSummary = witnessSummary
             self.refusal = refusal
         }
 
         static let none = ModalReconcileOutcome(kind: .none, decision: .noAction, performed: false)
+    }
+
+    /// The one thing a post-sheet-action poll is allowed to claim. An AX failure
+    /// is deliberately separate from `.gone`: it means the observation failed,
+    /// not that Logic closed the sheet.
+    enum ModalSheetWitnessObservation: Sendable, Equatable {
+        case present
+        case gone
+        case unreadable(ModalSheetWitnessReadFailure)
+
+        var diagnosticLabel: String {
+            switch self {
+            case .present:
+                return "present"
+            case .gone:
+                return "gone"
+            case .unreadable(let failure):
+                return "unreadable_\(failure.diagnosticLabel)"
+            }
+        }
+    }
+
+    /// The AX read that made a sheet witness unreadable. These fixed structural
+    /// tokens intentionally carry no window title, sheet text, or button label.
+    enum ModalSheetWitnessReadFailure: Sendable, Equatable {
+        case appRootUnavailable
+        case mainWindow(AXHelpers.AXStatusError)
+        case childrenOrSheets(AXHelpers.AXStatusError)
+
+        var diagnosticLabel: String {
+            switch self {
+            case .appRootUnavailable:
+                return "app_root"
+            case .mainWindow(let error):
+                return "main_window_\(error.raw)"
+            case .childrenOrSheets(let error):
+                return "children_sheets_\(error.raw)"
+            }
+        }
+    }
+
+    /// One ordered status-preserving observation after a sheet action.
+    struct ModalSheetWitnessPoll: Sendable, Equatable {
+        let index: Int
+        let observation: ModalSheetWitnessObservation
+
+        var diagnosticLabel: String {
+            observation.diagnosticLabel
+        }
+    }
+
+    /// The shipped form of a post-action witness. Keeping counts rather than
+    /// the ordered trace prevents a normal `project.new` envelope from carrying
+    /// up to 30 diagnostic entries while retaining the useful fact of what the
+    /// witness observed and how often.
+    struct ModalReconcileWitnessSummary: Sendable, Equatable {
+        let pollCount: Int
+        let observations: [String: Int]
+
+        init(labels: [String]) {
+            self.pollCount = labels.count
+            self.observations = labels.reduce(into: [:]) { counts, label in
+                counts[label, default: 0] += 1
+            }
+        }
+
+        init(sheetWitness: [ModalSheetWitnessPoll]) {
+            self.init(labels: sheetWitness.map(\.diagnosticLabel))
+        }
+
+        var observedGone: Bool {
+            observations["gone", default: 0] > 0
+        }
+
+        var envelopeValue: [String: Any] {
+            [
+                "polls": pollCount,
+                "observations": observations,
+            ]
+        }
     }
 
     // MARK: - Public entry points
@@ -63,13 +154,17 @@ extension AccessibilityChannel {
     /// confirming a delete-channel-strips sheet.
     static func reconcileAfterMutation(
         isDeleteContext: Bool,
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        witnessAttempts: Int = 30,
+        witnessDelayNanoseconds: UInt64 = 100_000_000
     ) async -> ModalReconcileOutcome {
         await reconcile(
             isDeleteContext: isDeleteContext,
             preflight: false,
             clearMandatoryNewTrack: true,
-            runtime: runtime
+            runtime: runtime,
+            witnessAttempts: witnessAttempts,
+            witnessDelayNanoseconds: witnessDelayNanoseconds
         )
     }
 
@@ -83,13 +178,17 @@ extension AccessibilityChannel {
     /// request, nor dismiss a sheet/dialog that could be a Save prompt).
     static func reconcilePreflight(
         clearMandatoryNewTrack: Bool = true,
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        witnessAttempts: Int = 30,
+        witnessDelayNanoseconds: UInt64 = 100_000_000
     ) async -> ModalReconcileOutcome {
         await reconcile(
             isDeleteContext: false,
             preflight: true,
             clearMandatoryNewTrack: clearMandatoryNewTrack,
-            runtime: runtime
+            runtime: runtime,
+            witnessAttempts: witnessAttempts,
+            witnessDelayNanoseconds: witnessDelayNanoseconds
         )
     }
 
@@ -97,7 +196,9 @@ extension AccessibilityChannel {
         isDeleteContext: Bool,
         preflight: Bool,
         clearMandatoryNewTrack: Bool,
-        runtime: AXLogicProElements.Runtime
+        runtime: AXLogicProElements.Runtime,
+        witnessAttempts: Int,
+        witnessDelayNanoseconds: UInt64
     ) async -> ModalReconcileOutcome {
         // #453: the alert ELEMENT is captured with the signals and carried to the
         // executor. `ModalSignals` is the pure core's input and stays string-only,
@@ -122,12 +223,16 @@ extension AccessibilityChannel {
             decision,
             signals: signals,
             alertTarget: read.alertTarget,
-            runtime: runtime
+            runtime: runtime,
+            witnessAttempts: witnessAttempts,
+            witnessDelayNanoseconds: witnessDelayNanoseconds
         )
         return ModalReconcileOutcome(
             kind: kind,
             decision: decision,
             performed: result.performed,
+            sheetWitness: result.sheetWitness,
+            witnessSummary: result.witnessSummary,
             refusal: result.refusal
         )
     }
@@ -174,8 +279,9 @@ extension AccessibilityChannel {
         let description = (AXHelpers.getAttribute(sheet, kAXDescriptionAttribute, runtime: runtime.ax) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         // #350: resolve each button's on-screen label ONCE, then match locale-
-        // aware against the AXLocalePolicy LabelSets (EN + KO) so Korean Logic's
-        // 생성 / 취소 / 새로운 트랙 sheet is recognized, not just the English literals.
+        // aware against the AXLocalePolicy LabelSets (EN + KO + JA) so Korean and
+        // Japanese Logic's localized New Track sheets are recognized, not just
+        // the English literals.
         // The captured labels are threaded to the executor so it clicks the REAL
         // localized title rather than a hardcoded English string.
         let labeled = AXHelpers.findAllDescendants(
@@ -253,6 +359,341 @@ extension AccessibilityChannel {
         )
     }
 
+    /// Status-preserving version of `firstSheet`. The ordinary reader above is
+    /// intentionally best-effort for classification; a close witness cannot use
+    /// it because `nil` there conflates a missing sheet with a failed AX read.
+    private static func firstSheetResult(
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<AXUIElement?, AXHelpers.AXStatusError> {
+        switch AXHelpers.getAttributeResult(window, "AXSheets", runtime: runtime) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+        case .failure(let error):
+            // `kAXErrorAttributeUnsupported` (-25205) is a definitive answer — this element does not
+            // vend AXSheets — not a failed reading. Measured on Logic 12.3: the arrange window never
+            // vends it, so every poll of the witness returned "unreadable" and the sheet's close
+            // could not be observed at all. That is why raising the bound from 250 ms to 2 s changed
+            // nothing: it was never a race. Fall through to the role traversal, which CAN see it.
+            // Any other status is a real read failure and stays unreadable.
+            guard axStatusIsDefinitiveAbsence(error) else {
+                return .failure(error)
+            }
+            return findSheetDescendantResult(in: window, maxDepth: 4, runtime: runtime)
+        case .success(let sheets):
+            if let sheet = sheets?.first {
+                return .success(sheet)
+            }
+            return findSheetDescendantResult(in: window, maxDepth: 4, runtime: runtime)
+        }
+    }
+
+
+    /// Two AX statuses are ANSWERS, not failures, and conflating them with a failed reading is what
+    /// made this witness unusable: `attributeUnsupported` (-25205) means the element does not vend
+    /// that attribute at all, and `noValue` (-25212) means it has none. Measured on Logic 12.3 the
+    /// arrange window returns -25205 for `AXSheets` and -25212 for a childless node, so treating
+    /// either as "could not read" made every poll unreadable and no close was ever observable.
+    /// Everything else — cannot-complete, invalid element, API disabled — really is a failed read.
+    private static func axStatusIsDefinitiveAbsence(_ error: AXHelpers.AXStatusError) -> Bool {
+        error.raw == AXError.attributeUnsupported.rawValue || error.raw == AXError.noValue.rawValue
+    }
+
+    /// Recurses through the fallback tree without flattening failed children or
+    /// role reads. Any unreadable node makes the whole no-sheet claim unreadable:
+    /// a partial tree cannot prove that a sheet is gone.
+    private static func findSheetDescendantResult(
+        in element: AXUIElement,
+        maxDepth: Int,
+        runtime: AXHelpers.Runtime
+    ) -> Result<AXUIElement?, AXHelpers.AXStatusError> {
+        guard maxDepth > 0 else { return .success(nil) }
+        switch AXHelpers.childrenResult(element, runtime: runtime) {
+        case .failure(let error):
+            // A node with no children is an answer: nothing here, keep looking elsewhere.
+            guard !axStatusIsDefinitiveAbsence(error) else { return .success(nil) }
+            return .failure(error)
+        case .success(let children):
+            for child in children {
+                switch AXHelpers.getAttributeResult(child, kAXRoleAttribute as String, runtime: runtime) as Result<String?, AXHelpers.AXStatusError> {
+                case .failure(let error):
+                    return .failure(error)
+                case .success(let role):
+                    if role == (kAXSheetRole as String) {
+                        return .success(child)
+                    }
+                }
+                switch findSheetDescendantResult(in: child, maxDepth: maxDepth - 1, runtime: runtime) {
+                case .failure(let error):
+                    return .failure(error)
+                case .success(let sheet):
+                    if let sheet { return .success(sheet) }
+                }
+            }
+            return .success(nil)
+        }
+    }
+
+    /// Snapshot the current app-root → main-window → sheets path. The main
+    /// window is resolved from the app root on *every* call so this trace can
+    /// show whether that path is readable during a project-window replacement;
+    /// it does not yet assume replacement explains any particular result.
+    static func mainWindowSheetWitnessObservation(
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ModalSheetWitnessObservation {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else {
+            return .unreadable(.appRootUnavailable)
+        }
+        switch AXHelpers.getAttributeResult(app, kAXMainWindowAttribute as String, runtime: runtime.ax) as Result<AXUIElement?, AXHelpers.AXStatusError> {
+        case .failure(let error):
+            return .unreadable(.mainWindow(error))
+        case .success(let window):
+            guard let window else { return .gone }
+            switch firstSheetResult(in: window, runtime: runtime.ax) {
+            case .success(.some):
+                return .present
+            case .success(.none):
+                return .gone
+            case .failure(let error):
+                return .unreadable(.childrenOrSheets(error))
+            }
+        }
+    }
+
+    /// Collect and log every post-action poll. This deliberately does not alter
+    /// `performed`: #538 needs this evidence before choosing an observation that
+    /// can truthfully replace an action-result acknowledgement.
+    static func pollMainWindowSheetWitness(
+        runtime: AXLogicProElements.Runtime = .production,
+        observationAttempts: Int = 30,
+        observationDelayNanoseconds: UInt64 = 100_000_000
+    ) async -> [ModalSheetWitnessPoll] {
+        let attempts = max(1, observationAttempts)
+        var polls: [ModalSheetWitnessPoll] = []
+        for index in 1...attempts {
+            let poll = ModalSheetWitnessPoll(
+                index: index,
+                observation: mainWindowSheetWitnessObservation(runtime: runtime)
+            )
+            polls.append(poll)
+            Log.info(
+                "modal_sheet_witness poll=\(poll.index) status=\(poll.diagnosticLabel)",
+                subsystem: .ax
+            )
+            if poll.observation == .gone { break }
+            if index < attempts {
+                try? await Task.sleep(nanoseconds: observationDelayNanoseconds)
+            }
+        }
+        return polls
+    }
+
+    /// A top-level-alert witness is separate from the reader used to classify
+    /// the alert: after pressing, it must positively observe that no AXDialog
+    /// remains. The status-preserving path matters here too. `noValue` means the
+    /// requested locator has no value; `attributeUnsupported` means that locator
+    /// is unavailable and we fall back from AXWindows to the focused/main-window
+    /// locators before deciding the alert is gone. Any other AX status is a real
+    /// failed read and is never treated as disappearance.
+    enum ModalTopLevelAlertWitnessObservation: Sendable, Equatable {
+        case present
+        case gone
+        case unreadable(ModalTopLevelAlertWitnessReadFailure)
+
+        var diagnosticLabel: String {
+            switch self {
+            case .present: return "present"
+            case .gone: return "gone"
+            case .unreadable(let failure): return "unreadable_\(failure.diagnosticLabel)"
+            }
+        }
+    }
+
+    enum ModalTopLevelAlertWitnessReadFailure: Sendable, Equatable {
+        case appRootUnavailable
+        case windows(AXHelpers.AXStatusError)
+        case fallbackWindow(AXHelpers.AXStatusError)
+        case windowSubrole(AXHelpers.AXStatusError)
+
+        var diagnosticLabel: String {
+            switch self {
+            case .appRootUnavailable: return "app_root"
+            case .windows(let error): return "windows_\(error.raw)"
+            case .fallbackWindow(let error): return "fallback_window_\(error.raw)"
+            case .windowSubrole(let error): return "window_subrole_\(error.raw)"
+            }
+        }
+    }
+
+    private static func topLevelAlertWitnessObservation(
+        runtime: AXLogicProElements.Runtime
+    ) -> ModalTopLevelAlertWitnessObservation {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else {
+            return .unreadable(.appRootUnavailable)
+        }
+        switch AXHelpers.getAttributeResult(app, kAXWindowsAttribute as String, runtime: runtime.ax) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+        case .success(let windows):
+            return topLevelAlertWitnessObservation(in: windows ?? [], runtime: runtime.ax)
+        case .failure(let error) where error.raw == AXError.noValue.rawValue:
+            return .gone
+        case .failure(let error) where error.raw == AXError.attributeUnsupported.rawValue:
+            return topLevelAlertFallbackWitnessObservation(app: app, runtime: runtime.ax)
+        case .failure(let error):
+            return .unreadable(.windows(error))
+        }
+    }
+
+    /// AXWindows is normally the complete top-level source. If Logic reports it
+    /// unsupported, use the two live window locators rather than converting that
+    /// answer into a read failure. A top-level blocking alert is frontmost, so a
+    /// dialog found by either locator is still a positive `present`; real read
+    /// errors remain unreadable.
+    private static func topLevelAlertFallbackWitnessObservation(
+        app: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> ModalTopLevelAlertWitnessObservation {
+        var candidates: [AXUIElement] = []
+        for attribute in [kAXFocusedWindowAttribute as String, kAXMainWindowAttribute as String] {
+            switch AXHelpers.getAttributeResult(app, attribute, runtime: runtime) as Result<AXUIElement?, AXHelpers.AXStatusError> {
+            case .success(let window):
+                if let window, !candidates.contains(where: { CFEqual($0, window) }) {
+                    candidates.append(window)
+                }
+            case .failure(let error) where axStatusIsDefinitiveAbsence(error):
+                continue
+            case .failure(let error):
+                return .unreadable(.fallbackWindow(error))
+            }
+        }
+        return topLevelAlertWitnessObservation(in: candidates, runtime: runtime)
+    }
+
+    private static func topLevelAlertWitnessObservation(
+        in windows: [AXUIElement],
+        runtime: AXHelpers.Runtime
+    ) -> ModalTopLevelAlertWitnessObservation {
+        for window in windows {
+            switch AXHelpers.getAttributeResult(window, kAXSubroleAttribute as String, runtime: runtime) as Result<String?, AXHelpers.AXStatusError> {
+            case .success(let subrole):
+                if subrole == (kAXDialogSubrole as String) {
+                    return .present
+                }
+            case .failure(let error) where axStatusIsDefinitiveAbsence(error):
+                // This window simply does not vend AXSubrole, so it cannot be
+                // a positively observed AXDialog for this witness.
+                continue
+            case .failure(let error):
+                return .unreadable(.windowSubrole(error))
+            }
+        }
+        return .gone
+    }
+
+    /// A menu witness uses AXMenuBar → children → AXSelected. Both an absent
+    /// menu-bar attribute and childless menu bar are structural answers: no menu
+    /// can be open there. A non-absence status on any required read is retained
+    /// as unreadable instead of being flattened to `gone`.
+    enum ModalStrayMenuWitnessObservation: Sendable, Equatable {
+        case present
+        case gone
+        case unreadable(ModalStrayMenuWitnessReadFailure)
+
+        var diagnosticLabel: String {
+            switch self {
+            case .present: return "present"
+            case .gone: return "gone"
+            case .unreadable(let failure): return "unreadable_\(failure.diagnosticLabel)"
+            }
+        }
+    }
+
+    enum ModalStrayMenuWitnessReadFailure: Sendable, Equatable {
+        case appRootUnavailable
+        case menuBar(AXHelpers.AXStatusError)
+        case menuChildren(AXHelpers.AXStatusError)
+        case menuItemSelected(AXHelpers.AXStatusError)
+
+        var diagnosticLabel: String {
+            switch self {
+            case .appRootUnavailable: return "app_root"
+            case .menuBar(let error): return "menu_bar_\(error.raw)"
+            case .menuChildren(let error): return "menu_children_\(error.raw)"
+            case .menuItemSelected(let error): return "menu_item_selected_\(error.raw)"
+            }
+        }
+    }
+
+    private static func strayMenuWitnessObservation(
+        runtime: AXLogicProElements.Runtime
+    ) -> ModalStrayMenuWitnessObservation {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else {
+            return .unreadable(.appRootUnavailable)
+        }
+        switch AXHelpers.getAttributeResult(app, kAXMenuBarAttribute as String, runtime: runtime.ax) as Result<AXUIElement?, AXHelpers.AXStatusError> {
+        case .success(.none):
+            return .gone
+        case .success(.some(let menuBar)):
+            switch AXHelpers.childrenResult(menuBar, runtime: runtime.ax) {
+            case .failure(let error) where axStatusIsDefinitiveAbsence(error):
+                return .gone
+            case .failure(let error):
+                return .unreadable(.menuChildren(error))
+            case .success(let items):
+                for item in items {
+                    switch AXHelpers.getAttributeResult(item, kAXSelectedAttribute as String, runtime: runtime.ax) as Result<Bool?, AXHelpers.AXStatusError> {
+                    case .success(let selected):
+                        if selected == true { return .present }
+                    case .failure(let error) where axStatusIsDefinitiveAbsence(error):
+                        continue
+                    case .failure(let error):
+                        return .unreadable(.menuItemSelected(error))
+                    }
+                }
+                return .gone
+            }
+        case .failure(let error) where axStatusIsDefinitiveAbsence(error):
+            return .gone
+        case .failure(let error):
+            return .unreadable(.menuBar(error))
+        }
+    }
+
+    private static func pollTopLevelAlertWitness(
+        runtime: AXLogicProElements.Runtime,
+        observationAttempts: Int,
+        observationDelayNanoseconds: UInt64
+    ) async -> ModalReconcileWitnessSummary {
+        let attempts = max(1, observationAttempts)
+        var labels: [String] = []
+        for index in 1...attempts {
+            let observation = topLevelAlertWitnessObservation(runtime: runtime)
+            labels.append(observation.diagnosticLabel)
+            Log.info("modal_alert_witness poll=\(index) status=\(observation.diagnosticLabel)", subsystem: .ax)
+            if observation == .gone { break }
+            if index < attempts {
+                try? await Task.sleep(nanoseconds: observationDelayNanoseconds)
+            }
+        }
+        return ModalReconcileWitnessSummary(labels: labels)
+    }
+
+    private static func pollStrayMenuWitness(
+        runtime: AXLogicProElements.Runtime,
+        observationAttempts: Int,
+        observationDelayNanoseconds: UInt64
+    ) async -> ModalReconcileWitnessSummary {
+        let attempts = max(1, observationAttempts)
+        var labels: [String] = []
+        for index in 1...attempts {
+            let observation = strayMenuWitnessObservation(runtime: runtime)
+            labels.append(observation.diagnosticLabel)
+            Log.info("modal_menu_witness poll=\(index) status=\(observation.diagnosticLabel)", subsystem: .ax)
+            if observation == .gone { break }
+            if index < attempts {
+                try? await Task.sleep(nanoseconds: observationDelayNanoseconds)
+            }
+        }
+        return ModalReconcileWitnessSummary(labels: labels)
+    }
+
     /// A button's visible label — `AXTitle` first (what AppleScript `button "X"`
     /// matches), falling back to `AXDescription` for buttons that only expose the
     /// description.
@@ -274,30 +715,96 @@ extension AccessibilityChannel {
 
     // MARK: - Executor
 
+    private struct ModalActionPerformResult {
+        let performed: Bool
+        let refusal: AlertAcknowledgeRefusal?
+        let sheetWitness: [ModalSheetWitnessPoll]
+        let witnessSummary: ModalReconcileWitnessSummary?
+    }
+
     private static func perform(
         _ decision: ModalReconciliation.ModalReconcileDecision,
         signals: ModalReconciliation.ModalSignals,
         alertTarget: AXLogicProElements.BlockingDialogTarget?,
-        runtime: AXLogicProElements.Runtime
-    ) async -> (performed: Bool, refusal: AlertAcknowledgeRefusal?) {
+        runtime: AXLogicProElements.Runtime,
+        witnessAttempts: Int,
+        witnessDelayNanoseconds: UInt64
+    ) async -> ModalActionPerformResult {
         switch decision {
         case .noAction, .failClosed:
-            return (false, nil)
+            return ModalActionPerformResult(
+                performed: false, refusal: nil, sheetWitness: [], witnessSummary: nil
+            )
         case .clickCreate:
-            return (await clickNewTrackCreateButton(createTitle: signals.createButtonTitle), nil)
+            let actionAccepted = await clickNewTrackCreateButton(
+                createTitle: signals.createButtonTitle,
+                runtime: runtime
+            )
+            let witness = await pollMainWindowSheetWitness(
+                runtime: runtime,
+                observationAttempts: witnessAttempts,
+                observationDelayNanoseconds: witnessDelayNanoseconds
+            )
+            let summary = ModalReconcileWitnessSummary(sheetWitness: witness)
+            return ModalActionPerformResult(
+                performed: actionAccepted && summary.observedGone,
+                refusal: nil,
+                sheetWitness: witness,
+                witnessSummary: summary
+            )
         case .confirmDelete:
-            return (await confirmDeleteTracksSheet(deleteTitle: signals.deletePrimaryTitle), nil)
+            let actionAccepted = await confirmDeleteTracksSheet(
+                deleteTitle: signals.deletePrimaryTitle,
+                runtime: runtime
+            )
+            let witness = await pollMainWindowSheetWitness(
+                runtime: runtime,
+                observationAttempts: witnessAttempts,
+                observationDelayNanoseconds: witnessDelayNanoseconds
+            )
+            let summary = ModalReconcileWitnessSummary(sheetWitness: witness)
+            return ModalActionPerformResult(
+                performed: actionAccepted && summary.observedGone,
+                refusal: nil,
+                sheetWitness: witness,
+                witnessSummary: summary
+            )
         case .acknowledgeAlert:
-            return acknowledgeTopLevelAlert(target: alertTarget, runtime: runtime)
+            let result = acknowledgeTopLevelAlert(target: alertTarget, runtime: runtime)
+            let summary = await pollTopLevelAlertWitness(
+                runtime: runtime,
+                observationAttempts: witnessAttempts,
+                observationDelayNanoseconds: witnessDelayNanoseconds
+            )
+            return ModalActionPerformResult(
+                performed: result.pressed && summary.observedGone,
+                refusal: result.refusal,
+                sheetWitness: [],
+                witnessSummary: summary
+            )
         case .escapeMenu:
-            return (await sendEscapeKey(), nil)
+            let actionAccepted = await sendEscapeKey(runtime: runtime)
+            let summary = await pollStrayMenuWitness(
+                runtime: runtime,
+                observationAttempts: witnessAttempts,
+                observationDelayNanoseconds: witnessDelayNanoseconds
+            )
+            return ModalActionPerformResult(
+                performed: actionAccepted && summary.observedGone,
+                refusal: nil,
+                sheetWitness: [],
+                witnessSummary: summary
+            )
         }
     }
 
     /// Click the mandatory New Track sheet's only exit (`Create` / `생성`). The
     /// title is the localized on-screen label the reader resolved (#350), so this
     /// works on Korean Logic; Escape/Cancel are inert on this sheet.
-    private static func clickNewTrackCreateButton(createTitle: String) async -> Bool {
+    private static func clickNewTrackCreateButton(
+        createTitle: String,
+        runtime: AXLogicProElements.Runtime
+    ) async -> Bool {
         let target = LogicProTarget.appleScriptTarget()
         let escapedTitle = AppleScriptSafety.escapeForScript(createTitle)
         let script = """
@@ -308,14 +815,17 @@ extension AccessibilityChannel {
         end tell
         return "clicked"
         """
-        return await AppleScriptChannel.executeAppleScript(script).isSuccess
+        return await runtime.executeAppleScript(script).isSuccess
     }
 
     /// Confirm the delete-channel-strips sheet by its primary destructive button,
     /// clicking the localized title the reader resolved (#350). Falls back to the
     /// sheet's default button (Return) when the title is absent/unmatched — which
     /// also covers the KO path (the KO delete title is unverified, so no variant).
-    private static func confirmDeleteTracksSheet(deleteTitle: String) async -> Bool {
+    private static func confirmDeleteTracksSheet(
+        deleteTitle: String,
+        runtime: AXLogicProElements.Runtime
+    ) async -> Bool {
         let target = LogicProTarget.appleScriptTarget()
         let escapedTitle = AppleScriptSafety.escapeForScript(deleteTitle)
         let script = """
@@ -327,7 +837,7 @@ extension AccessibilityChannel {
         return "clicked"
         """
         if !deleteTitle.isEmpty,
-           await AppleScriptChannel.executeAppleScript(script).isSuccess {
+           await runtime.executeAppleScript(script).isSuccess {
             return true
         }
         // Fall back to the default button — the primary delete action is the
@@ -364,7 +874,7 @@ extension AccessibilityChannel {
     private static func acknowledgeTopLevelAlert(
         target: AXLogicProElements.BlockingDialogTarget?,
         runtime: AXLogicProElements.Runtime
-    ) -> (performed: Bool, refusal: AlertAcknowledgeRefusal?) {
+    ) -> (pressed: Bool, refusal: AlertAcknowledgeRefusal?) {
         guard let target else { return (false, .targetUnavailable) }
 
         // Re-resolve the app's current blocking dialog and require it to be the
@@ -393,7 +903,7 @@ extension AccessibilityChannel {
     }
 
     /// Send Escape (key code 53) to close a stray open menu.
-    private static func sendEscapeKey() async -> Bool {
+    private static func sendEscapeKey(runtime: AXLogicProElements.Runtime) async -> Bool {
         let target = LogicProTarget.appleScriptTarget()
         let script = """
         tell application "System Events"
@@ -403,7 +913,7 @@ extension AccessibilityChannel {
         end tell
         return "escaped"
         """
-        return await AppleScriptChannel.executeAppleScript(script).isSuccess
+        return await runtime.executeAppleScript(script).isSuccess
     }
 
     // MARK: - Extras labels
@@ -441,6 +951,7 @@ extension AccessibilityChannel {
         kind: ModalReconciliation.BlockingModalKind,
         action: String,
         newTrackAutoConfirmed: Bool,
+        witnessSummary: ModalReconcileWitnessSummary? = nil,
         refusal: AlertAcknowledgeRefusal? = nil
     ) {
         guard kind != .none else { return }
@@ -448,6 +959,12 @@ extension AccessibilityChannel {
         extras["reconciled_action"] = action
         if newTrackAutoConfirmed {
             extras["new_track_dialog_auto_confirmed"] = true
+        }
+        if let witnessSummary {
+            // Per-poll traces are deliberately debug-log-only. Responses retain
+            // a compact count summary so callers can see whether the effect was
+            // observed without receiving a 30-entry diagnostic array.
+            extras["modal_reconciliation_witness"] = witnessSummary.envelopeValue
         }
         // #453: an authorized action the executor declined. Reported so a caller
         // can tell "we chose not to act" from "we tried and refused"; the value is

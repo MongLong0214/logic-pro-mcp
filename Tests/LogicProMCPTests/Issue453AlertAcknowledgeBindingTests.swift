@@ -81,6 +81,23 @@ private final class PhasedValue<T>: @unchecked Sendable {
     }
 }
 
+private final class AlertDismissal: @unchecked Sendable {
+    private let lock = NSLock()
+    private var dismissed = false
+
+    func markDismissed() {
+        lock.lock()
+        dismissed = true
+        lock.unlock()
+    }
+
+    func isDismissed() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return dismissed
+    }
+}
+
 private struct AlertFixture {
     let builder: FakeAXRuntimeBuilder
     let runtime: AXLogicProElements.Runtime
@@ -137,6 +154,7 @@ private func makeAlertFixture(
         laterWindows = [dialog]
     }
     let windows = PhasedValue(before: [dialog], after: laterWindows)
+    let dismissal = AlertDismissal()
     let dialogChildren = PhasedValue(
         before: initialButtons,
         after: laterButtonTitles.map { buttons($0, startingAt: 300) } ?? initialButtons
@@ -146,18 +164,18 @@ private func makeAlertFixture(
     // "handled, here is x" — the double optional is load-bearing.
     let windowsHandler: (@Sendable (AXUIElement, String) -> AnyObject??) = { element, attribute in
         guard attribute == (kAXWindowsAttribute as String), CFEqual(element, app) else { return nil }
+        if dismissal.isDismissed() {
+            return AnyObject??.some([] as NSArray)
+        }
         let list: [AXUIElement] = windows.next()
         return AnyObject??.some(list as AnyObject)
     }
-    let refusingPress: @Sendable (AXUIElement, String) -> Bool = { _, _ in false }
-    let pressHandler: (@Sendable (AXUIElement, String) -> Bool)? =
-        pressSucceeds ? nil : refusingPress
 
     let base = builder.makeLogicRuntime(
         appElement: app,
         attributeValueHandler: windowsHandler,
         setAttributeHandler: nil,
-        performActionHandler: pressHandler
+        performActionHandler: nil
     )
     let runtime = AXLogicProElements.Runtime(
         logicProPID: { 4242 },
@@ -168,7 +186,16 @@ private func makeAlertFixture(
             children: { element in
                 CFEqual(element, dialog) ? dialogChildren.next() : base.ax.children(element)
             },
-            performAction: base.ax.performAction,
+            performAction: { element, action in
+                guard pressSucceeds else { return false }
+                let accepted = base.ax.performAction(element, action)
+                if accepted,
+                   action == (kAXPressAction as String),
+                   initialButtons.contains(where: { CFEqual($0, element) }) {
+                    dismissal.markDismissed()
+                }
+                return accepted
+            },
             childCount: base.ax.childCount
         ),
         executeAppleScript: base.executeAppleScript
@@ -196,7 +223,11 @@ struct Issue453AlertAcknowledgeBindingTests {
     func stableSingleButtonAlertIsAcknowledged() async {
         let fixture = makeAlertFixture(initialButtonTitles: ["OK"])
 
-        let outcome = await AccessibilityChannel.reconcilePreflight(runtime: fixture.runtime)
+        let outcome = await AccessibilityChannel.reconcilePreflight(
+            runtime: fixture.runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
 
         #expect(outcome.kind == .informationalAlert)
         #expect(outcome.decision == .acknowledgeAlert)
@@ -220,7 +251,11 @@ struct Issue453AlertAcknowledgeBindingTests {
             replaceDialogAfterClassification: true
         )
 
-        let outcome = await AccessibilityChannel.reconcilePreflight(runtime: fixture.runtime)
+        let outcome = await AccessibilityChannel.reconcilePreflight(
+            runtime: fixture.runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
 
         #expect(outcome.decision == .acknowledgeAlert, "the classifier still authorized the action")
         #expect(!outcome.performed)
@@ -243,7 +278,11 @@ struct Issue453AlertAcknowledgeBindingTests {
             removeDialogAfterClassification: true
         )
 
-        let outcome = await AccessibilityChannel.reconcilePreflight(runtime: fixture.runtime)
+        let outcome = await AccessibilityChannel.reconcilePreflight(
+            runtime: fixture.runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
 
         #expect(!outcome.performed)
         #expect(outcome.refusal == .targetGone)
@@ -260,7 +299,11 @@ struct Issue453AlertAcknowledgeBindingTests {
             laterButtonTitles: ["Save", "Don't Save"]
         )
 
-        let outcome = await AccessibilityChannel.reconcilePreflight(runtime: fixture.runtime)
+        let outcome = await AccessibilityChannel.reconcilePreflight(
+            runtime: fixture.runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
 
         #expect(outcome.decision == .acknowledgeAlert)
         #expect(!outcome.performed)
@@ -280,7 +323,11 @@ struct Issue453AlertAcknowledgeBindingTests {
             laterButtonTitles: []
         )
 
-        let outcome = await AccessibilityChannel.reconcilePreflight(runtime: fixture.runtime)
+        let outcome = await AccessibilityChannel.reconcilePreflight(
+            runtime: fixture.runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
 
         #expect(!outcome.performed)
         #expect(outcome.refusal == .buttonCountChanged)
@@ -293,7 +340,11 @@ struct Issue453AlertAcknowledgeBindingTests {
     func failedPressIsReported() async {
         let fixture = makeAlertFixture(initialButtonTitles: ["OK"], pressSucceeds: false)
 
-        let outcome = await AccessibilityChannel.reconcilePreflight(runtime: fixture.runtime)
+        let outcome = await AccessibilityChannel.reconcilePreflight(
+            runtime: fixture.runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
 
         #expect(!outcome.performed)
         #expect(outcome.refusal == .pressFailed)

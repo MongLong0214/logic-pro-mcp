@@ -259,9 +259,10 @@ enum AXLocalePolicy {
     )
 
     /// #346/#350: `AXDescription` that identifies the mandatory New Track sheet.
-    /// One of two signals (with disabled-Cancel) the reconciler uses to classify
-    /// the sheet; read-only classifier. KO live-confirmed (Logic 12.3: `새로운 트랙`);
-    /// JA live-confirmed (Logic 12.3: `新規トラック`).
+    /// An independent signal the reconciler uses to classify the sheet; on
+    /// Japanese Logic 12.3 the Cancel button is enabled. Read-only classifier;
+    /// KO live-confirmed (Logic 12.3: `새로운 트랙`); JA live-confirmed (Logic 12.3:
+    /// `新規トラック`).
     static let newTrackSheetDescription = LabelSet(
         canonical: "New Track",
         variants: ["새로운 트랙", "新規トラック"],
