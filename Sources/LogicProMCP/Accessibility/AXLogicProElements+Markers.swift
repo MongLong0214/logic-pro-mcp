@@ -229,14 +229,20 @@ extension AXLogicProElements {
         case .failure(let error) where error.isDefinitiveAbsence:
             // Not every marker table vends `AXRows`; that is an answer, so fall through to the
             // structural row read rather than declaring the whole readback unreadable.
-            switch directChildren(of: table, withRole: kAXRowRole as String, runtime: runtime) {
+            switch directChildren(
+                of: table, withRole: kAXRowRole as String,
+                absenceIsEmpty: false, runtime: runtime
+            ) {
             case .success(let children):
                 rows = children
             case .failure(let error):
                 return .failure(error)
             }
         case .success(nil):
-            switch directChildren(of: table, withRole: kAXRowRole as String, runtime: runtime) {
+            switch directChildren(
+                of: table, withRole: kAXRowRole as String,
+                absenceIsEmpty: false, runtime: runtime
+            ) {
             case .success(let children):
                 rows = children
             case .failure(let error):
@@ -257,7 +263,10 @@ extension AXLogicProElements {
         markers.reserveCapacity(min(rows.count, markerLimit))
         for (index, row) in rows.enumerated() {
             let cells: [AXUIElement]
-            switch directChildren(of: row, withRole: kAXCellRole as String, runtime: runtime) {
+            switch directChildren(
+                of: row, withRole: kAXCellRole as String,
+                absenceIsEmpty: true, runtime: runtime
+            ) {
             case .success(let children):
                 cells = children
             case .failure(let error):
@@ -304,6 +313,7 @@ extension AXLogicProElements {
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Result<AXUIElement?, AXHelpers.AXStatusError> {
+        var unreadable: AXHelpers.AXStatusError?
         var parents = [window]
         for _ in 0..<8 {
             var next: [AXUIElement] = []
@@ -324,30 +334,46 @@ extension AXLogicProElements {
                     ) as Result<String?, AXHelpers.AXStatusError> {
                     case .success(let role):
                         if role == (kAXTableRole as String) { return .success(child) }
+                    case .failure(let error) where error.isDefinitiveAbsence:
+                        break
                     case .failure(let error):
-                        return .failure(error)
+                        // A node that will not answer is not a candidate. Measured on Logic 12.3,
+                        // nodes answer -25200 mid-walk while enumeration in the same call succeeds,
+                        // so aborting the SEARCH here refused every marker operation intermittently.
+                        // Remember it instead, so "no table" stays distinct from "not found and part
+                        // of the tree was unreadable".
+                        unreadable = unreadable ?? error
                     }
                     next.append(child)
                 }
             }
             parents = next
         }
+        if let unreadable { return .failure(unreadable) }
         return .success(nil)
     }
 
     /// Reads direct children with a role match while preserving child-read failures. Role
     /// attributes are part of the structural reading too: treating an unreadable role as a
     /// non-match could manufacture an empty Marker List.
+    /// `absenceIsEmpty` decides which QUESTION this read is answering, and the two are not
+    /// interchangeable. Asking a cell whether it has child elements that might carry a label, an
+    /// absent child list is an answer: the cell simply has none, and the caller falls back to the
+    /// cell's own description. Asking a TABLE for its rows, it is not: a container that must hold
+    /// the rows and will not vend them has not told us there are none, it has told us it cannot be
+    /// seen. Laundering that into `[]` produced a settled empty survivor set and certified State A
+    /// for a delete that may never have happened.
     private static func directChildren(
         of element: AXUIElement,
         withRole role: String,
+        absenceIsEmpty: Bool,
         runtime: AXHelpers.Runtime
     ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
         let children: [AXUIElement]
         switch AXHelpers.childrenResult(element, runtime: runtime) {
         case .success(let observedChildren):
             children = observedChildren
-        case .failure(let error) where error.isDefinitiveAbsence:
+        case .failure(let error) where absenceIsEmpty && error.isDefinitiveAbsence:
             children = []
         case .failure(let error):
             return .failure(error)

@@ -639,7 +639,7 @@ extension AccessibilityChannel {
                 }
             }
             return .success(nil)
-        case .failure(let error) where markerListEditMenuAbsenceStatus(error):
+        case .failure(let error) where error.isDefinitiveAbsence:
             // AXChildren on an AXMenuButton may answer `attributeUnsupported` or `noValue`
             // instead of giving an empty child list. Both are a readable absence here, not an
             // unreadable observation that could never settle.
@@ -647,10 +647,6 @@ extension AccessibilityChannel {
         case .failure(let error):
             return .failure(error)
         }
-    }
-
-    private static func markerListEditMenuAbsenceStatus(_ error: AXHelpers.AXStatusError) -> Bool {
-        error.raw == AXError.attributeUnsupported.rawValue || error.raw == AXError.noValue.rawValue
     }
 
     /// The Marker List can make an AXMenu visible after AXShowMenu returns. Require two absent
