@@ -189,6 +189,24 @@ extension AccessibilityChannel {
         return ModalReconcileOutcome(kind: kind, decision: decision, performed: false)
     }
 
+    /// As above, but carry the arrange-window answer captured by a mutation poll
+    /// into the sheet reader. The count and the clean-modal observation can then
+    /// only describe one AX window, rather than independently resolving
+    /// `AXMainWindow` and `AXWindows` after one another.
+    static func observeModalAfterMutation(
+        isDeleteContext: Bool,
+        arrangeWindow: AXLogicProElements.ArrangeWindowRead,
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> ModalReconcileOutcome {
+        let read = readModalSignalsAndAlertTarget(
+            runtime: runtime,
+            mainWindow: modalMainWindowLookup(from: arrangeWindow)
+        )
+        let kind = ModalReconciliation.classify(read.signals)
+        let decision = ModalReconciliation.decide(kind: kind, isDeleteContext: isDeleteContext)
+        return ModalReconcileOutcome(kind: kind, decision: decision, performed: false)
+    }
+
     /// Reconcile a blocking modal BEFORE starting an operation. Auto-clears a
     /// single-button informational alert and a stray open menu; the mandatory
     /// New Track sheet is auto-cleared ONLY when `clearMandatoryNewTrack` is true
@@ -288,8 +306,21 @@ extension AccessibilityChannel {
         createButton: AXUIElement?,
         deleteButton: AXUIElement?
     ) {
+        readModalSignalsAndAlertTarget(runtime: runtime, mainWindow: modalMainWindow(runtime: runtime))
+    }
+
+    private static func readModalSignalsAndAlertTarget(
+        runtime: AXLogicProElements.Runtime,
+        mainWindow: ModalMainWindowLookup
+    ) -> (
+        signals: ModalReconciliation.ModalSignals,
+        alertTarget: AXLogicProElements.BlockingDialogTarget?,
+        sheet: AXUIElement?,
+        createButton: AXUIElement?,
+        deleteButton: AXUIElement?
+    ) {
         let window: AXUIElement
-        switch modalMainWindow(runtime: runtime) {
+        switch mainWindow {
         case .found(let observed):
             window = observed
         case .absent:
@@ -388,6 +419,16 @@ extension AccessibilityChannel {
             return .absent
         case .failure:
             return .unreadable
+        }
+    }
+
+    private static func modalMainWindowLookup(
+        from arrangeWindow: AXLogicProElements.ArrangeWindowRead
+    ) -> ModalMainWindowLookup {
+        switch arrangeWindow {
+        case .found(let window): return .found(window)
+        case .absent: return .absent
+        case .unreadable: return .unreadable
         }
     }
 
@@ -560,7 +601,7 @@ extension AccessibilityChannel {
         in windows: [AXUIElement],
         runtime: AXLogicProElements.Runtime
     ) -> TopLevelDialogRead {
-        var firstDialog: (element: AXUIElement, subrole: String)?
+        var firstBlockingDialog: (element: AXUIElement, subrole: String)?
         for window in windows {
             switch AXHelpers.getAttributeResult(
                 window, kAXSubroleAttribute as String, runtime: runtime.ax
@@ -569,8 +610,16 @@ extension AccessibilityChannel {
                 guard let subrole else { continue }
                 if subrole == (kAXDialogSubrole as String)
                     || subrole == (kAXSystemDialogSubrole as String) {
-                    if firstDialog == nil {
-                        firstDialog = (window, subrole)
+                    // The complete scan must use the same exclusions as the
+                    // ordinary modal guard. Plug-in editors, Smart Controls and
+                    // the keyboard-layout overlay may report AXDialog but are
+                    // normal working UI, not blockers that should poison every
+                    // clean deletion poll.
+                    guard AXLogicProElements.isBlockingDialogWindow(window, runtime: runtime.ax) else {
+                        continue
+                    }
+                    if firstBlockingDialog == nil {
+                        firstBlockingDialog = (window, subrole)
                     }
                 }
             case .failure(let error) where axStatusIsDefinitiveAbsence(error):
@@ -579,9 +628,12 @@ extension AccessibilityChannel {
                 return .unreadable
             }
         }
-        guard let firstDialog else { return .none }
-        guard firstDialog.subrole == (kAXDialogSubrole as String),
-              let target = AXLogicProElements.blockingDialogTarget(runtime: runtime),
+        guard let firstBlockingDialog else { return .none }
+        guard firstBlockingDialog.subrole == (kAXDialogSubrole as String),
+              let target = AXLogicProElements.blockingDialogTarget(
+                firstBlockingDialog.element,
+                runtime: runtime
+              ),
               target.info.role == (kAXDialogSubrole as String)
         else {
             // Includes AXSystemDialog and any dialog whose identity/buttons
@@ -1186,6 +1238,13 @@ extension AccessibilityChannel {
         case .escapeMenu: return "escape_menu"
         case .failClosed: return "fail_closed"
         }
+    }
+
+    /// A reconciliation decision names a permitted action, not an action that
+    /// occurred. Response envelopes may carry that label only after the bound
+    /// executor actually issued its direct press/key event.
+    static func attemptedReconcileActionLabel(_ outcome: ModalReconcileOutcome) -> String {
+        outcome.actionAttempted ? reconcileActionLabel(outcome.decision) : "none"
     }
 
     /// Merge reconciliation provenance into an op's extras — only when a modal

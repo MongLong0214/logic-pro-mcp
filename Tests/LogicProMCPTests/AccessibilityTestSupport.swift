@@ -49,6 +49,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         appElement: AXUIElement? = nil,
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
         attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
+        childrenHandler: (@Sendable (AXUIElement) -> [AXUIElement]?)? = nil,
         childrenResultHandler: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXHelpers.AXStatusError>?)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
@@ -80,7 +81,10 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
                 return true
             },
             children: { [self] element in
-                children[key(for: element)] ?? []
+                if let handled = childrenHandler?(element) {
+                    return handled
+                }
+                return children[key(for: element)] ?? []
             },
             performAction: { [self] element, action in
                 if let performActionHandler {
@@ -129,6 +133,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         appElement: AXUIElement? = nil,
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
         attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
+        childrenHandler: (@Sendable (AXUIElement) -> [AXUIElement]?)? = nil,
         childrenResultHandler: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXHelpers.AXStatusError>?)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
@@ -143,6 +148,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
                 appElement: appElement,
                 attributeValueHandler: attributeValueHandler,
                 attributeValueResultHandler: attributeValueResultHandler,
+                childrenHandler: childrenHandler,
                 childrenResultHandler: childrenResultHandler,
                 setAttributeHandler: setAttributeHandler,
                 performActionHandler: performActionHandler,

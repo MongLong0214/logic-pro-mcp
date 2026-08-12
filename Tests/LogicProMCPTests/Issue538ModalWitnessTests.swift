@@ -519,7 +519,7 @@ struct Issue538ModalWitnessTests {
                 performed: testCase.performed
             )
             let actual = AccessibilityChannel.deletionModalObservationIsSettledClean(
-                outcome, arrangeWindowPresent: true
+                outcome, arrangeWindowWasRead: true
             )
             if testCase.expected {
                 #expect(actual)
@@ -531,10 +531,10 @@ struct Issue538ModalWitnessTests {
         // The arrange window is where the track count came from. A decrement observed while it
         // cannot be resolved is a transient AX failure shaped like a successful delete, so no
         // modal outcome may certify it clean.
-        // Mutation: drop `arrangeWindowPresent` from the conjunction; this assertion becomes true.
+        // Mutation: drop `arrangeWindowWasRead` from the conjunction; this assertion becomes true.
         #expect(!AccessibilityChannel.deletionModalObservationIsSettledClean(
             AccessibilityChannel.ModalReconcileOutcome(kind: .none, decision: .noAction, performed: false),
-            arrangeWindowPresent: false
+            arrangeWindowWasRead: false
         ))
     }
 
@@ -575,6 +575,210 @@ struct Issue538ModalWitnessTests {
         // first binding becomes true and exposes the single-snapshot race.
         #expect(!oneCleanObservation)
         #expect(twoCleanObservations)
+    }
+
+    @Test("a mandatory sheet on the AXWindows arrange target cannot be skipped by AXMainWindow absence")
+    func deleteBindsSheetReadToResolvedArrangeWindow() async throws {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(120)
+        let arrange = builder.element(121)
+        let menuBar = builder.element(122)
+        let trackMenu = builder.element(123)
+        let deleteItem = builder.element(124)
+        let headers = builder.element(125)
+        let header = builder.element(126)
+        let sheet = builder.element(127)
+        let create = builder.element(128)
+        let cancel = builder.element(129)
+
+        builder.setAttribute(app, kAXWindowsAttribute as String, [arrange])
+        builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+        builder.setChildren(arrange, [headers])
+        builder.setAttribute(headers, kAXRoleAttribute as String, kAXListRole as String)
+        builder.setAttribute(headers, kAXIdentifierAttribute as String, "Track Headers")
+        builder.setChildren(headers, [header])
+        builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        builder.setChildren(menuBar, [trackMenu])
+        builder.setAttribute(trackMenu, kAXTitleAttribute as String, "Track")
+        builder.setChildren(trackMenu, [deleteItem])
+        builder.setAttribute(deleteItem, kAXTitleAttribute as String, "Delete Track")
+        builder.setAttribute(arrange, "AXSheets", [sheet])
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+        builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+        builder.setChildren(sheet, [create, cancel])
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, app), attribute == (kAXMainWindowAttribute as String) else { return nil }
+                return .failure(AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard CFEqual(element, deleteItem), action == (kAXPressAction as String) else { return false }
+                builder.setChildren(headers, [])
+                return true
+            }
+        )
+
+        let result = await AccessibilityChannel.defaultDeleteTrack(runtime: runtime)
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+        let verified = try #require(envelope["verified"] as? Bool)
+
+        // Mutation: replace the poll's bound `arrangeWindow` modal read with the
+        // direct AXMainWindow read. It classifies -25205 as absent, skips this
+        // attached mandatory sheet, and incorrectly returns State A after two
+        // clean-looking count polls.
+        #expect(!verified)
+    }
+
+    @Test("a failed header traversal is not an observed zero count for delete verification")
+    func deleteDoesNotTreatUnreadableTrackTraversalAsEmptyRail() async throws {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(140)
+        let window = builder.element(141)
+        let menuBar = builder.element(142)
+        let trackMenu = builder.element(143)
+        let deleteItem = builder.element(144)
+        let headers = builder.element(145)
+        let header = builder.element(146)
+        let deleted = LockedFlag()
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        // Keep a normal non-dialog top-level window in the complete modal scan,
+        // so this fixture isolates the header traversal error from an unrelated
+        // empty-AXWindows read.
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+        builder.setChildren(window, [headers])
+        builder.setAttribute(headers, kAXRoleAttribute as String, kAXListRole as String)
+        builder.setAttribute(headers, kAXIdentifierAttribute as String, "Track Headers")
+        builder.setChildren(headers, [header])
+        builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        builder.setChildren(menuBar, [trackMenu])
+        builder.setAttribute(trackMenu, kAXTitleAttribute as String, "Track")
+        builder.setChildren(trackMenu, [deleteItem])
+        builder.setAttribute(deleteItem, kAXTitleAttribute as String, "Delete Track")
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            childrenHandler: { element in
+                CFEqual(element, headers) && deleted.get() ? [] : nil
+            },
+            childrenResultHandler: { element in
+                guard CFEqual(element, headers), deleted.get() else { return nil }
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard CFEqual(element, deleteItem), action == (kAXPressAction as String) else { return false }
+                deleted.set()
+                return true
+            }
+        )
+
+        let result = await AccessibilityChannel.defaultDeleteTrack(runtime: runtime)
+        let postDeleteHeaderRead = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+        let traversalWasUnreadable: Bool
+        if case .unreadable = postDeleteHeaderRead {
+            traversalWasUnreadable = true
+        } else {
+            traversalWasUnreadable = false
+        }
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+        let verified = try #require(envelope["verified"] as? Bool)
+
+        // Mutation: change allTrackHeadersRead's `TrackDescendantsRead.unresolved`
+        // arm to `.read([])`. The failed AXChildren traversal becomes a fictional
+        // zero-track count, and the explicit status assertion below fails.
+        #expect(traversalWasUnreadable)
+        #expect(!verified)
+    }
+
+    @Test("the complete modal scan ignores a plug-in editor AXDialog")
+    func pluginEditorDoesNotBlockCleanModalRead() {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(160)
+        let arrange = builder.element(161)
+        let editor = builder.element(162)
+        let close = builder.element(163)
+        let bypass = builder.element(164)
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [editor, arrange])
+        builder.setAttribute(editor, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+        builder.setAttribute(editor, kAXCloseButtonAttribute as String, close)
+        builder.setAttribute(bypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        builder.setAttribute(bypass, kAXDescriptionAttribute as String, "bypass")
+        builder.setChildren(editor, [bypass])
+
+        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(
+            runtime: builder.makeLogicRuntime(appElement: app)
+        ))
+
+        // Mutation: record the first AXDialog before applying
+        // `isBlockingDialogWindow`; this editor becomes unknownSheet and no
+        // successful delete can accumulate a clean streak.
+        #expect(kind == .none)
+    }
+
+    @Test("the complete modal scan ignores the Drummer Smart Controls AXDialog")
+    func smartControlsDoesNotBlockCleanModalRead() {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(170)
+        let arrange = builder.element(171)
+        let controls = builder.element(172)
+        let toggle = builder.element(173)
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [controls, arrange])
+        builder.setAttribute(controls, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+        builder.setAttribute(controls, kAXTitleAttribute as String, "")
+        builder.setAttribute(toggle, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(toggle, kAXDescriptionAttribute as String, "Smart Controls")
+        builder.setChildren(controls, [toggle])
+
+        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(
+            runtime: builder.makeLogicRuntime(appElement: app)
+        ))
+
+        // Mutation: bypass the shared Smart Controls exclusion in the complete
+        // scan. This ordinary pane is then promoted to unknownSheet.
+        #expect(kind == .none)
+    }
+
+    @Test("a refused reconciliation does not serialize an unattempted decision as an action")
+    func unattemptedReconcileDecisionUsesNoneActionLabel() {
+        let outcome = AccessibilityChannel.ModalReconcileOutcome(
+            kind: .informationalAlert,
+            decision: .acknowledgeAlert,
+            performed: false,
+            actionAttempted: false,
+            refusal: .targetGone
+        )
+        var extras: [String: Any] = [:]
+        AccessibilityChannel.mergeReconcileExtras(
+            &extras,
+            kind: outcome.kind,
+            action: AccessibilityChannel.attemptedReconcileActionLabel(outcome),
+            newTrackAutoConfirmed: false,
+            refusal: outcome.refusal
+        )
+
+        // Mutation: return `reconcileActionLabel(outcome.decision)` without the
+        // `actionAttempted` guard. A successful creation would then publish
+        // `acknowledge_alert` beside `alert_target_gone` despite no press.
+        #expect(extras["reconciled_action"] as? String == "none")
+        #expect(extras["reconcile_refused"] as? String == "alert_target_gone")
     }
 
     @Test("mandatory-track creation requires a positive post-action track count")

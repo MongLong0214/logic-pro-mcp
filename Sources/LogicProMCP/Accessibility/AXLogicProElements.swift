@@ -29,6 +29,20 @@ enum AXLogicProElements {
         )
     }
 
+    /// A status-preserving arrange-window resolution for safety-critical reads.
+    ///
+    /// `mainWindow()` intentionally remains a best-effort discovery helper for
+    /// ordinary UI work. A mutation verification, however, must distinguish an
+    /// actual absence from an AX failure and must carry the *same* element into
+    /// both its track and sheet reads. In particular, `AXMainWindow` reporting
+    /// -25205/-25212 is a structural answer, not permission to call a later,
+    /// unrelated `mainWindow()` lookup and combine its answer with this one.
+    enum ArrangeWindowRead {
+        case found(AXUIElement)
+        case absent
+        case unreadable
+    }
+
     /// Get the root AX element for Logic Pro. Returns nil if not running.
     static func appRoot(runtime: Runtime = .production) -> AXUIElement? {
         guard let pid = runtime.logicProPID() else { return nil }
@@ -86,6 +100,64 @@ enum AXLogicProElements {
         return nonDialogs.first
     }
 
+    /// Resolve the non-dialog arrange candidate once for a verification poll.
+    /// The caller carries the returned element to every dependent observation;
+    /// it must not re-run `mainWindow()` for a count, sheet scan, or presence
+    /// check and accidentally combine three different AX snapshots.
+    static func arrangeWindowRead(runtime: Runtime = .production) -> ArrangeWindowRead {
+        guard let app = appRoot(runtime: runtime) else { return .unreadable }
+
+        switch AXHelpers.getAttributeResult(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax
+        ) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+        case .success(.some(let windows)) where !windows.isEmpty:
+            let nonDialogs = windows.filter { !isDialogWindow($0, runtime: runtime.ax) }
+            guard !nonDialogs.isEmpty else {
+                // A dialog is not an arrange-window witness. Returning the raw
+                // main-window dialog here would let a zero count certify a
+                // deletion even though no arrange tree was read.
+                return .absent
+            }
+            if let arrange = nonDialogs.first(where: {
+                hasTrackHeadersGroup($0, runtime: runtime.ax)
+            }) {
+                return .found(arrange)
+            }
+            // Keep the established main-window selection order. The caller still
+            // requires a successful track-header enumeration below, so an
+            // auxiliary non-dialog window cannot supply a count by itself.
+            return .found(nonDialogs[0])
+        case .success:
+            return directArrangeWindowRead(app: app, runtime: runtime.ax)
+        case .failure(let error) where isDefinitiveAXAbsence(error):
+            return directArrangeWindowRead(app: app, runtime: runtime.ax)
+        case .failure:
+            return .unreadable
+        }
+    }
+
+    private static func directArrangeWindowRead(
+        app: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> ArrangeWindowRead {
+        switch AXHelpers.getAttributeResult(
+            app, kAXMainWindowAttribute as String, runtime: runtime
+        ) as Result<AXUIElement?, AXHelpers.AXStatusError> {
+        case .success(.some(let window)):
+            return .found(window)
+        case .success(.none):
+            return .absent
+        case .failure(let error) where isDefinitiveAXAbsence(error):
+            return .absent
+        case .failure:
+            return .unreadable
+        }
+    }
+
+    private static func isDefinitiveAXAbsence(_ error: AXHelpers.AXStatusError) -> Bool {
+        error.raw == AXError.attributeUnsupported.rawValue || error.raw == AXError.noValue.rawValue
+    }
+
     /// Returns true when at least one of Logic's windows is currently a modal
     /// dialog (subrole `AXDialog` / `AXSystemDialog`). v3.1.1 (P1-2) — used
     /// by `StatePoller` and any caller that wants to short-circuit cache
@@ -134,6 +206,18 @@ enum AXLogicProElements {
         guard let dialog = windows.first(where: { isBlockingDialogWindow($0, runtime: runtime.ax) }) else {
             return nil
         }
+        return blockingDialogTarget(dialog, runtime: runtime)
+    }
+
+    /// Build a target from the exact top-level dialog a caller already scanned.
+    /// This lets the complete modal reader reuse the normal non-blocking-dialog
+    /// exclusions without replacing its classified window with a fresh ordinal
+    /// search through `AXWindows`.
+    static func blockingDialogTarget(
+        _ dialog: AXUIElement,
+        runtime: Runtime = .production
+    ) -> BlockingDialogTarget? {
+        guard isBlockingDialogWindow(dialog, runtime: runtime.ax) else { return nil }
         let title = (AXHelpers.getAttribute(dialog, kAXTitleAttribute, runtime: runtime.ax) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let role = (AXHelpers.getAttribute(dialog, kAXSubroleAttribute, runtime: runtime.ax) ?? (kAXDialogSubrole as String))
@@ -209,7 +293,7 @@ enum AXLogicProElements {
             || subrole == (kAXSystemDialogSubrole as String)
     }
 
-    private static func isBlockingDialogWindow(
+    static func isBlockingDialogWindow(
         _ window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Bool {

@@ -1342,7 +1342,7 @@ extension AccessibilityChannel {
         mergeReconcileExtras(
             &extras,
             kind: reconcileOutcome.kind,
-            action: reconcileActionLabel(reconcileOutcome.decision),
+            action: attemptedReconcileActionLabel(reconcileOutcome),
             newTrackAutoConfirmed: false,
             witnessSummary: reconcileOutcome.witnessSummary,
             refusal: reconcileOutcome.refusal,
@@ -1453,7 +1453,7 @@ extension AccessibilityChannel {
     /// fresh observation of the complete blocker set.
     static func deletionModalObservationIsSettledClean(
         _ outcome: ModalReconcileOutcome,
-        arrangeWindowPresent: Bool
+        arrangeWindowWasRead: Bool
     ) -> Bool {
         // The modal read answers "no blocker", which is truthful even when there is no main window
         // to hold one — during `project.new` there genuinely is not one yet. A track deletion is
@@ -1461,7 +1461,7 @@ extension AccessibilityChannel {
         // while that window cannot be resolved is a transient AX failure wearing the shape of a
         // successful delete. Require the window here, where the requirement actually belongs,
         // rather than making every caller of the modal read pretend absence is unreadable.
-        outcome.kind == .none && arrangeWindowPresent
+        outcome.kind == .none && arrangeWindowWasRead
     }
 
     /// Two complete clean reads make the delete State-A gate temporal rather
@@ -1529,12 +1529,37 @@ extension AccessibilityChannel {
         for attempt in 0..<4 {
             try? await Task.sleep(nanoseconds: 250_000_000)
 
-            let currentCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
-            lastObservedCount = currentCount
+            // Resolve the arrange candidate ONCE, then carry that same element
+            // into the header enumeration and modal sheet scan below. A failed
+            // header traversal is deliberately not `0`: only `.read([])` is an
+            // observed empty rail, so a transient AX failure cannot resemble a
+            // successful delete.
+            let arrangeWindow = AXLogicProElements.arrangeWindowRead(runtime: runtime)
+            let currentTrackRead: AXLogicProElements.TrackHeaderRead
+            switch arrangeWindow {
+            case .found(let window):
+                currentTrackRead = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+            case .absent:
+                currentTrackRead = .unavailable
+            case .unreadable:
+                currentTrackRead = .unreadable
+            }
+            let currentCount: Int?
+            switch currentTrackRead {
+            case .read(let headers):
+                currentCount = headers.count
+                lastObservedCount = headers.count
+            case .unavailable, .unreadable:
+                currentCount = nil
+            }
             // Observe first, then action only once for that visible sheet kind.
             // This bounds a Create press without globally wedging a later,
             // different blocker in the same delete operation.
-            let observed = observeModalAfterMutation(isDeleteContext: true, runtime: runtime)
+            let observed = observeModalAfterMutation(
+                isDeleteContext: true,
+                arrangeWindow: arrangeWindow,
+                runtime: runtime
+            )
             let outcome: ModalReconcileOutcome
             if observed.kind != .none,
                !actionAttemptedModalKinds.contains(reconcileKindLabel(observed.kind)) {
@@ -1574,17 +1599,24 @@ extension AccessibilityChannel {
                 // so a later instance is eligible for one fresh direct action.
                 actionAttemptedModalKinds.removeAll()
             }
-            if currentCount < beforeCount,
+            let observedTrackCountDecreased = currentCount.map { $0 < beforeCount } ?? false
+            if observedTrackCountDecreased,
                deletionModalObservationIsSettledClean(
-                   outcome,
-                   arrangeWindowPresent: AXLogicProElements.mainWindow(runtime: runtime) != nil
+                   // The direct recovery path may perform a fresh read in
+                   // order to bind an action to its classifier. That later
+                   // read is not this poll's sheet observation, so it cannot
+                   // turn a sheet we just saw on `arrangeWindow` into clean.
+                   // Only `observed` shares the count's resolved window.
+                   observed,
+                   arrangeWindowWasRead: currentCount != nil
                ) {
                 consecutiveCleanModalObservations += 1
             } else {
                 consecutiveCleanModalObservations = 0
             }
-            if deletionCountCanCertifyStateA(
-                observedTrackCountDecreased: currentCount < beforeCount,
+            if let currentCount,
+               deletionCountCanCertifyStateA(
+                observedTrackCountDecreased: observedTrackCountDecreased,
                 settledCleanModalObservation: deletionCleanObservationStreakIsSettled(
                     consecutiveCleanModalObservations
                 )

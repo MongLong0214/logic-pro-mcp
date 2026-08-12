@@ -48,33 +48,33 @@ DEAD = re.compile(
     r'|==\s*(?:Optional\s*(?:<[^>]*>)?\s*)?\.some\s*\('
 )
 
-# swift-testing on this toolchain also fails to evaluate a labelled-tuple
-# field comparison inside a loop. In particular, this superficially sensible
-# table test passes even if `actual` is hard-coded:
+# swift-testing on this toolchain also fails to evaluate a Boolean
+# labelled-tuple `expected` comparison inside a loop. In particular, this
+# superficially sensible table test passes even if `actual` is hard-coded:
 #
 #     for testCase in cases { #expect(actual == testCase.expected) }
 #
-# Catch that shape at the file level (rather than in an individual macro call)
-# so the loop variable and its labelled field can be related. Keep the matcher
-# deliberately narrow: it targets a loop variable's field on one side of a
-# `#expect` equality, which is the measured dead form, not ordinary live
-# comparisons between independent values.
-LABELLED_TUPLE_LOOP_EXPECT = re.compile(
+# Catch both equality directions at the macro argument level, after relating a
+# loop variable to a Boolean tuple collection. The field is deliberately named
+# `expected`: matching any tuple field incorrectly flags ordinary tests such as
+# `#expect(actualName == testCase.name)`.
+LABELLED_TUPLE_LOOP = re.compile(
     r'\bfor\s+(?P<variable>[A-Za-z_]\w*)\s+in\s+(?P<collection>[A-Za-z_]\w*)\s*\{'
-    # Stay within a small, brace-free loop body. This is intentionally a
-    # detector for the measured table-test spelling, not a parser for every
-    # Swift loop: wandering past nested closures or the loop's closing brace
-    # would create false positives in unrelated tests.
-    r'(?:(?![{}])[^\n]*\n){0,20}?'
-    r'\s*#expect\s*\(\s*[A-Za-z_]\w*\s*==\s*(?P=variable)\.[A-Za-z_]\w*\s*\)',
 )
 
-# This compiler bug is specific to Bool expectations. Other labelled tuples
-# (for example, enum equality) remain ordinary live comparisons and must not
-# be swept into this Boolean-integrity lint.
+# This compiler bug is specific to Bool expectations. A collection can state
+# that type explicitly or infer it from a labelled `expected: true/false`
+# literal; both forms need coverage. Other labelled tuples (for example, enum
+# equality) remain ordinary live comparisons and must not be swept into this
+# Boolean-integrity lint.
 BOOL_LABELLED_TUPLE_COLLECTION = re.compile(
     r'\b(?:let|var)\s+(?P<collection>[A-Za-z_]\w*)\s*:\s*'
     r'\[\([^\]]*\bexpected\s*:\s*Bool\b[^\]]*\)\]'
+)
+INFERRED_BOOL_LABELLED_TUPLE_COLLECTION = re.compile(
+    r'\b(?:let|var)\s+(?P<collection>[A-Za-z_]\w*)\s*=\s*'
+    r'\[\s*\([^\]]*?\bexpected\s*:\s*(?:true|false)\b',
+    re.DOTALL,
 )
 
 def calls(text):
@@ -121,6 +121,52 @@ def drop_closures(s):
             out.append(c)
     return ''.join(out)
 
+def balanced_brace_end(s, opening):
+    """Return the matching `}` for a `{` at opening, or None when incomplete."""
+    depth = 0
+    for index in range(opening, len(s)):
+        if s[index] == '{':
+            depth += 1
+        elif s[index] == '}':
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+def top_level_equality_operands(call):
+    """Return the two sides of a top-level `==` in a macro call, if present."""
+    opening = call.find('(')
+    if opening < 0 or not call.endswith(')'):
+        return None
+    expression = call[opening + 1:-1]
+    depth, index = 0, 0
+    equality = None
+    while index < len(expression):
+        char = expression[index]
+        if char in '([{':
+            depth += 1
+        elif char in ')]}':
+            depth = max(0, depth - 1)
+        elif depth == 0 and expression.startswith('==', index):
+            if equality is not None:
+                return None
+            equality = index
+            index += 1
+        elif depth == 0 and char == ',':
+            break
+        index += 1
+    if equality is None:
+        return None
+    return expression[:equality], expression[equality + 2:index]
+
+def expected_tuple_field(operand, variable):
+    # Parenthesised operands are accepted, but the field itself must be exactly
+    # `<loop-variable>.expected`; `.name` and any other tuple member stay live.
+    return re.fullmatch(
+        rf'\s*(?:\(\s*)*{re.escape(variable)}\s*\.\s*expected(?:\s*\))*\s*',
+        operand,
+    ) is not None
+
 hits = []
 for f in sorted(glob.glob('Tests/**/*.swift', recursive=True)):
     lines = open(f, encoding='utf-8').read().split('\n')
@@ -138,20 +184,38 @@ for f in sorted(glob.glob('Tests/**/*.swift', recursive=True)):
         if DEAD.search(drop_closures(strip_comments(blank_strings(call)))):
             hits.append((f, lineno, raw.strip()[:110]))
     # The labelled-tuple loop form is dead independently of literal Bool
-    # comparisons, so scan the comment/string-stripped source after the macro
-    # pass above. Report the #expect line, not the loop line, for a direct fix.
+    # comparisons, so relate each loop to a Boolean collection and inspect
+    # `#expect` calls inside its balanced body. Report the #expect line, not
+    # the loop line, for a direct fix.
     cleaned = strip_comments(blank_strings(text))
     bool_labelled_tuple_collections = {
         match.group('collection')
         for match in BOOL_LABELLED_TUPLE_COLLECTION.finditer(cleaned)
     }
-    for match in LABELLED_TUPLE_LOOP_EXPECT.finditer(cleaned):
+    bool_labelled_tuple_collections.update(
+        match.group('collection')
+        for match in INFERRED_BOOL_LABELLED_TUPLE_COLLECTION.finditer(cleaned)
+    )
+    cleaned_calls = list(calls(cleaned))
+    for match in LABELLED_TUPLE_LOOP.finditer(cleaned):
         if match.group('collection') not in bool_labelled_tuple_collections:
             continue
-        expect_offset = cleaned.find('#expect', match.start(), match.end())
-        lineno = bisect.bisect_right(starts, expect_offset)
-        raw = lines[lineno - 1]
-        hits.append((f, lineno, raw.strip()[:110]))
+        closing = balanced_brace_end(cleaned, match.end() - 1)
+        if closing is None:
+            continue
+        for expect_offset, call in cleaned_calls:
+            if not (match.end() <= expect_offset < closing):
+                continue
+            lineno = bisect.bisect_right(starts, expect_offset)
+            raw = lines[lineno - 1]
+            if 'test-integrity:live' in call or 'test-integrity:live' in raw:
+                continue
+            operands = top_level_equality_operands(call)
+            if operands is None:
+                continue
+            lhs, rhs = operands
+            if expected_tuple_field(lhs, match.group('variable')) or expected_tuple_field(rhs, match.group('variable')):
+                hits.append((f, lineno, raw.strip()[:110]))
 
 if hits:
     print("::error::Dead swift-testing boolean expectations found (#393). These pass unconditionally.")
