@@ -1117,8 +1117,14 @@ extension AccessibilityChannel {
                         repeat with dialogWindow in every window
                             set dialogTitle to name of dialogWindow
                             if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
+                                -- Measured on Logic 12.3: this window's subrole is
+                                -- AXFloatingWindow, not AXDialog. Gating on the guessed subrole
+                                -- made every drive refuse with "dialog did not become ready"
+                                -- while the dialog was open on screen. Ownership comes from the
+                                -- appearance transition around the leaf click; the subrole only
+                                -- excludes an ordinary document window sharing the title.
                                 set dialogSubrole to subrole of dialogWindow
-                                if dialogSubrole is "AXDialog" or dialogSubrole is "AXSystemDialog" then return contents of dialogWindow
+                                if dialogSubrole is "AXFloatingWindow" or dialogSubrole is "AXDialog" or dialogSubrole is "AXSystemDialog" then return contents of dialogWindow
                             end if
                         end repeat
                         return missing value
