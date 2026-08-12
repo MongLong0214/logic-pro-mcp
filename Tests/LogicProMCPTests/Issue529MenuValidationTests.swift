@@ -86,11 +86,17 @@ struct Issue529MenuValidationTests {
             in: script
         )
         let menuBarOpen = try issue529Position(of: "click selectedMenuBarItem", in: script)
+        let menuBarOpened = try issue529Position(
+            of: "set menuBarOpenState to my menuOpenedAfterClick(logicProcess)",
+            in: script
+        )
         let submenuOpen = try issue529Position(of: "click selectedSubmenuItem", in: script)
         let enabledRead = try issue529Position(of: "enabled of mi", in: script)
 
         #expect(koreanDecision < englishDecision)
         #expect(englishDecision < menuBarOpen)
+        #expect(menuBarOpen < menuBarOpened)
+        #expect(menuBarOpened < submenuOpen)
         #expect(menuBarOpen < submenuOpen)
         #expect(submenuOpen < enabledRead)
         #expect(!script.contains("click menu bar item"))
@@ -219,11 +225,11 @@ struct Issue529MenuValidationTests {
         let menuItemClick = try issue529Position(of: "click mi", in: script)
         let cleanupAfterMenuItemClick = try #require(
             issue529Positions(of: "set cleanupState to my dismissOpenMenu(logicProcess)", in: script)
-                .first { $0 > menuItemClick }
+                .last
         )
         let refusalContextAfterMenuItemClick = try #require(
             issue529Positions(of: "my menuCleanupActuationContext(menuActuationAttempted)", in: script)
-                .first { $0 > cleanupAfterMenuItemClick }
+                .last
         )
 
         #expect(attempted < menuBarClick)
@@ -270,11 +276,13 @@ struct Issue529MenuValidationTests {
         let hint = try #require(envelope["hint"] as? String)
         #expect(hint.contains("could not be closed"))
         #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+        #expect(!(try #require(envelope["menu_actuation_attempted"] as? Bool)))
+        #expect(HonestContract.isFallbackUnsafeStateC(result.message))
         #expect(sliderWrites.value == 0)
     }
 
-    @Test("a post-click menu close failure reports the attempted write")
-    func postClickMenuCloseFailureReportsAttemptedWrite() async throws {
+    @Test("a post-click menu close failure records menu navigation, not a position write")
+    func postClickMenuCloseFailureRefusesBeforePositionWrite() async throws {
         let sliderWrites = Issue529Counter()
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "529"],
@@ -289,7 +297,9 @@ struct Issue529MenuValidationTests {
 
         let envelope = try #require(issue529Envelope(result))
         #expect(try #require(envelope["state"] as? String) == "C")
-        #expect((try #require(envelope["write_attempted"] as? Bool)))
+        #expect(try #require(envelope["menu_actuation_attempted"] as? Bool))
+        #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+        #expect(HonestContract.isFallbackUnsafeStateC(result.message))
         #expect(sliderWrites.value == 0)
     }
 

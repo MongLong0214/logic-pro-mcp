@@ -840,6 +840,10 @@ extension AccessibilityChannel {
            classification.isUnsafeToActuateAgain {
             // `dismissOpenMenu` could not prove that the menu closed. A slider write from this
             // state can operate on the still-open menu, so this is terminal rather than fallback.
+            // This branch runs before the dialog input is typed and submitted. Opening the menu
+            // chain is UI navigation, not a `transport.goto_position` write, so this remains a
+            // State C refusal with `write_attempted:false`. Retain that the navigation click did
+            // happen separately for diagnosis.
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: "The Go To Position menu could not be closed; the slider fallback was not attempted.",
@@ -847,12 +851,12 @@ extension AccessibilityChannel {
                     "operation": "transport.goto_position",
                     "method": "dialog",
                     "menu_state": "could_not_be_closed",
-                    // An entry-time close failure happens before this run has actuated anything;
-                    // after a menu click, however, the operation has already attempted a write.
-                    // Keep State C (the requested navigation did not land), but report that fact
-                    // honestly rather than presenting the latter as a pre-write refusal.
-                    "write_attempted": classification.writeAttemptedBeforeUnsafeRefusal,
+                    "menu_actuation_attempted": classification.menuActuationAttemptedBeforeUnsafeRefusal,
+                    "write_attempted": false,
                     "safe_to_retry": false,
+                    // #530: even though ax_write_failed is normally non-terminal, a still-open
+                    // menu makes every weaker transport channel unsafe to invoke.
+                    "fallback_unsafe": true,
                 ]) { _, new in new }
             ))
         }
@@ -972,6 +976,18 @@ extension AccessibilityChannel {
             return ""
         end menuCleanupActuationContext
 
+        -- AXPress can return before Logic has opened the menu. Wait for AXSelected
+        -- before clicking the submenu, or that second click can target a stale item.
+        on menuOpenedAfterClick(theProcess)
+            repeat 3 times
+                set observedMenuState to my menuOpenState(theProcess)
+                if observedMenuState is "OPEN" then return "OPEN"
+                if observedMenuState is "UNREADABLE" then return "UNREADABLE"
+                delay 0.1
+            end repeat
+            return "CLOSED"
+        end menuOpenedAfterClick
+
         \(logicProAppleScript.activateByBundleID)
         tell application "System Events"
             set logicProcess to \(logicProAppleScript.systemEventsProcessTarget)
@@ -1024,6 +1040,14 @@ extension AccessibilityChannel {
                     -- the only menu-bar chain that can be clicked in this run.
                     set menuActuationAttempted to true
                     click selectedMenuBarItem
+                    set menuBarOpenState to my menuOpenedAfterClick(logicProcess)
+                    if menuBarOpenState is not "OPEN" then
+                        set cleanupState to my dismissOpenMenu(logicProcess)
+                        if cleanupState is not "CLOSED" then
+                            return "MENU_PICK_FAILED: menu cleanup was not observed" & my menuCleanupActuationContext(menuActuationAttempted) & " (" & cleanupState & ")"
+                        end if
+                        return "MENU_PICK_FAILED: selected menu bar item did not open (" & menuBarOpenState & ")"
+                    end if
                     click selectedSubmenuItem
                 on error errMsg
                     set cleanupState to my dismissOpenMenu(logicProcess)
@@ -1123,7 +1147,7 @@ extension AccessibilityChannel {
             return false
         }
 
-        var writeAttemptedBeforeUnsafeRefusal: Bool {
+        var menuActuationAttemptedBeforeUnsafeRefusal: Bool {
             if case let .failure(.menuCouldNotBeClosed(writeAttempted)) = self {
                 return writeAttempted
             }
