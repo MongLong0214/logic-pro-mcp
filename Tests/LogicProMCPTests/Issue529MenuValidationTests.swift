@@ -430,3 +430,29 @@ func dismissalContextDecidesWhetherAnUnreadableReadSkipsEscape() throws {
     // And the handler must only take the skip when knownOpen is false.
     #expect(script.contains("if menuState is \"UNREADABLE\" and not knownOpen then return \"UNREADABLE\""))
 }
+
+/// A dead script (timeout, TCC refusal, anything) leaves the menu state UNKNOWN, and this script
+/// clicks menus open. Unknown is not safe: the slider would actuate into whatever is on screen.
+/// Only a menu state observed CLOSED after the death may authorise the fallback.
+@Test("a dead script does not authorise the slider until the menu is observed closed")
+func aDeadScriptMustNotAuthoriseTheSliderOnAnUnknownMenuState() throws {
+    // Mutation that must fail this test: return `.executionFailed` directly on `.error` again.
+    let source = try String(
+        contentsOfFile: #filePath.replacingOccurrences(
+            of: "Tests/LogicProMCPTests/Issue529MenuValidationTests.swift",
+            with: "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift"
+        ),
+        encoding: .utf8
+    )
+    let errorBranch = try #require(source.range(of: "case .error:"))
+    let tail = String(source[errorBranch.upperBound...].prefix(700))
+
+    // The death path must consult an observation before classifying.
+    #expect(tail.contains("observeAndClearStrayMenu"))
+    // And an unobserved / open state must be the unsafe classification, not the fallback-safe one.
+    let unsafeAt = try #require(tail.range(of: "menuCouldNotBeClosed"))
+    let safeAt = try #require(tail.range(of: "executionFailed"))
+    #expect(safeAt.lowerBound < unsafeAt.lowerBound)
+    #expect(tail.contains("case .closed:"))
+    #expect(tail.contains("case .openOrUnknown:"))
+}

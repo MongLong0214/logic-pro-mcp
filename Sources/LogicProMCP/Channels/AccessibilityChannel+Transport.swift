@@ -1250,8 +1250,54 @@ extension AccessibilityChannel {
                 return .failed(classification)
             }
         case .error:
-            return .failed(.failure(.executionFailed))
+            // The script died — timeout, TCC refusal, anything. It clicks menus open, so its death
+            // leaves the menu state UNKNOWN, and unknown is not safe: the slider would actuate into
+            // whatever is on screen. Try once to observe and clear any open menu; only a state
+            // observed CLOSED lets the fallback proceed.
+            switch await observeAndClearStrayMenu() {
+            case .closed:
+                return .failed(.failure(.executionFailed))
+            case .openOrUnknown:
+                return .failed(.failure(.menuCouldNotBeClosed(writeAttempted: false)))
+            }
         }
+    }
+
+
+    private enum StrayMenuOutcome { case closed, openOrUnknown }
+
+    /// Independent of the script that just died: ask System Events whether any menu bar item is
+    /// selected, send Escape if so, and observe again. Anything other than an observed CLOSED —
+    /// including an unreadable menu bar — is `openOrUnknown`, because a failed reading is not
+    /// evidence that nothing is open.
+    private static func observeAndClearStrayMenu() async -> StrayMenuOutcome {
+        let target = LogicProTarget.appleScriptTarget()
+        let script = """
+        tell application "System Events"
+            tell \(target.systemEventsProcessTarget)
+                try
+                    repeat 3 times
+                        set anyOpen to false
+                        repeat with menuBarItem in every menu bar item of menu bar 1
+                            if selected of menuBarItem then set anyOpen to true
+                        end repeat
+                        if not anyOpen then return "CLOSED"
+                        key code 53
+                        delay 0.1
+                    end repeat
+                    return "OPEN"
+                on error
+                    return "UNREADABLE"
+                end try
+            end tell
+        end tell
+        """
+        guard case let .success(payload) = await AppleScriptChannel.executeAppleScript(script, timeout: 4.0),
+              let data = payload.data(using: .utf8),
+              let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              (obj["result"] as? String) == "CLOSED"
+        else { return .openOrUnknown }
+        return .closed
     }
 
     // MARK: - Control-bar checkbox helpers (Logic Pro 12 transport)
