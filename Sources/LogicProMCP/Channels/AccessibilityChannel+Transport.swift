@@ -1158,7 +1158,20 @@ extension AccessibilityChannel {
                         set dialogTitle to name of dialogWindow
                         set dialogSubrole to subrole of dialogWindow
                         if dialogTitle is not "위치로 이동" and dialogTitle is not "Go To Position" and dialogTitle is not "Go to Position" then return "MISSING"
-                        if dialogSubrole is not "AXDialog" and dialogSubrole is not "AXSystemDialog" then return "MISSING"
+                        -- Same measured set as the discovery matcher. Fixing only that one left
+                        -- this check rejecting the window discovery had just accepted, so the
+                        -- route still closed the dialog and submitted nothing.
+                        if dialogSubrole is not "AXFloatingWindow" and dialogSubrole is not "AXDialog" and dialogSubrole is not "AXSystemDialog" then return "MISSING"
+                        -- Measured on Logic 12.3: this dialog reports AXFocused false and AXMain
+                        -- false while it is the window receiving keystrokes. The signal that is
+                        -- true there is the PROCESS's AXFocusedWindow, which names this dialog.
+                        -- Checking the window's own AXFocused refused every drive on a dialog that
+                        -- was plainly taking input.
+                        if (exists attribute "AXFocusedWindow") then
+                            set processFocusedWindow to value of attribute "AXFocusedWindow"
+                            if processFocusedWindow is dialogWindow then return "FOCUSED"
+                            if (name of processFocusedWindow as text) is dialogTitle then return "FOCUSED"
+                        end if
                         if focused of dialogWindow then return "FOCUSED"
                         return "NOT_FOCUSED"
                     on error
