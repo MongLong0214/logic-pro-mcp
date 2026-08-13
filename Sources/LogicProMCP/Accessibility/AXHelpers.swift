@@ -158,6 +158,7 @@ enum AXHelpers {
         enum Source: Sendable, Equatable {
             case axStatus
             case malformedChildren
+            case malformedAttribute
         }
 
         let raw: Int32
@@ -182,10 +183,19 @@ enum AXHelpers {
             source: .malformedChildren
         )
 
+        /// A successful attribute read whose value cannot establish the typed
+        /// fact the caller needs. This is deliberately distinct from an AX
+        /// status: a malformed `AXModal` payload has not said "false".
+        static let malformedAttribute = AXStatusError(
+            raw: Int32.min + 1,
+            source: .malformedAttribute
+        )
+
         var diagnosticLabel: String {
             switch source {
             case .axStatus: return "\(raw)"
             case .malformedChildren: return "malformed_children"
+            case .malformedAttribute: return "malformed_attribute"
             }
         }
     }

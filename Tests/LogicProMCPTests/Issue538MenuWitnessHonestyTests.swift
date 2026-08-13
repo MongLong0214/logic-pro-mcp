@@ -6,8 +6,8 @@ import Testing
 @Suite("Issue #538 — stray-menu witness honesty")
 struct Issue538MenuWitnessHonestyTests {
 
-    @Test("an accepted Escape with a gone menu is performed")
-    func acceptedEscapeGoneMenuIsPerformed() async {
+    @Test("an accepted Escape with a gone menu reports observations, not causation")
+    func acceptedEscapeGoneMenuIsNotPerformed() async {
         let fixture = makeMenuFixture(escapeAccepted: true, menuGoneAfterEscape: true)
 
         let outcome = await AccessibilityChannel.reconcilePreflight(
@@ -16,10 +16,11 @@ struct Issue538MenuWitnessHonestyTests {
             witnessDelayNanoseconds: 0
         )
 
-        #expect(
-            outcome.performed,
-            "Mutation caught: force `escapeMenu` performed false; an accepted Escape followed by a clean menu witness must remain reportable."
-        )
+        // Mutation `menu-close-causation`: restore the accepted-Escape plus
+        // gone-witness `performed` conjunction. Another actor can close the
+        // menu before the bound target is polled.
+        #expect(!outcome.performed)
+        #expect(outcome.actionAttempted)
     }
 
     @Test("an accepted Escape with a persistent menu is not performed")

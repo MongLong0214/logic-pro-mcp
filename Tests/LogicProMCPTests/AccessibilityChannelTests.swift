@@ -109,6 +109,9 @@ func creatorStudioChooserToCreatedProjectTransition() async throws {
     builder.setAttribute(choose, kAXEnabledAttribute as String, true)
     builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
     builder.setAttribute(arrange, kAXSubroleAttribute as String, kAXStandardWindowSubrole as String)
+    // This post-chooser top-level window has explicitly answered the AXModal
+    // question. Missing AXModal is intentionally no longer treated as false.
+    builder.setAttribute(arrange, kAXModalAttribute as String, false)
     builder.setAttribute(arrange, kAXTitleAttribute as String, "Untitled - Tracks")
 
     let runtime = builder.makeLogicRuntime(
@@ -129,6 +132,9 @@ func creatorStudioChooserToCreatedProjectTransition() async throws {
     )
     let body = decodeAccessibilityJSON(result.message)
 
+    // Mutation `creator-project-window-explicit-axmodal`: remove the explicit
+    // false above. The successor window must then be unreadable rather than
+    // silently certified as non-modal.
     #expect(result.isSuccess)
     #expect(body["state"] as? String == "B")
     #expect(body["phase"] as? String == "created_project_window_observed")
@@ -332,7 +338,14 @@ private func makeDeleteTrackFixture(
     let itemElements = itemTitles.indices.map { builder.element(390 + $0) }
     let session = DeleteTrackSession()
 
+    // Mutation `delete-track-clean-modal-fixture`: remove the complete clean
+    // top-level state below. The verified delete cases must then stay State B,
+    // because an omitted AXModal/selected/menu-window observation is not clean.
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+    // A clean top-level window must say it is non-modal; AXModal is recommended
+    // rather than required, so absent is deliberately not equivalent to false.
+    builder.setAttribute(window, kAXModalAttribute as String, false)
     builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
     builder.setChildren(window, [trackList])
     builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
@@ -341,6 +354,7 @@ private func makeDeleteTrackFixture(
     builder.setAttribute(trackHeader, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     builder.setChildren(menuBar, [trackMenu])
     builder.setAttribute(trackMenu, kAXTitleAttribute as String, menuTitle)
+    builder.setAttribute(trackMenu, kAXSelectedAttribute as String, false)
     builder.setChildren(trackMenu, itemElements)
     for (element, title) in zip(itemElements, itemTitles) {
         builder.setAttribute(element, kAXTitleAttribute as String, title)

@@ -164,14 +164,14 @@ extension AccessibilityChannel {
             && isCreatedProjectWindowTitle(windowTitle)
     }
 
-    /// A mandatory-sheet Create action is an input to verification, not a fact
+    /// A mandatory sheet disappearing is an input to verification, not a fact
     /// about the Project. Only a subsequent positive track-count observation
     /// permits the response to say that the mandatory track was created.
     static func mandatoryTrackCreationWasObserved(
-        createActionPerformed: Bool,
+        sheetGoneObserved: Bool,
         observedTrackCount: Int
     ) -> Bool {
-        createActionPerformed && observedTrackCount > 0
+        sheetGoneObserved && observedTrackCount > 0
     }
 
     private static func exactCreatedProjectWindow(
@@ -287,9 +287,9 @@ extension AccessibilityChannel {
         // The caller still performs independent Project-resource readback
         // before saving.
         // A stale bound-sheet reference does not establish project causation.
-        // Keep the accepted reconciliation separate until a subsequent AX track
-        // count positively observes the mandatory track.
-        var mandatoryTrackCreatePerformed = false
+        // Keep the sheet-disappearance observation separate until a subsequent
+        // AX track count positively observes the mandatory track.
+        var mandatoryTrackSheetGone = false
         var createdTrack = false
         var witnessSummary: ModalReconcileWitnessSummary?
         let attempts = max(1, observationAttempts)
@@ -299,7 +299,7 @@ extension AccessibilityChannel {
             switch outcome.kind {
             case .mandatoryNewTrack:
                 witnessSummary = outcome.witnessSummary
-                guard outcome.performed else {
+                guard outcome.witnessSummary?.observedGone == true else {
                     var extras: [String: Any] = [
                         "operation": "project.new",
                         "method": "accessibility",
@@ -319,7 +319,7 @@ extension AccessibilityChannel {
                         extras: extras
                     ))
                 }
-                mandatoryTrackCreatePerformed = true
+                mandatoryTrackSheetGone = true
             case .unknownSheet, .deleteConfirm:
                 return .error(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
@@ -339,11 +339,34 @@ extension AccessibilityChannel {
             // `allTrackHeaders` is the project-level fact we can safely report:
             // do not promote a successful Create request or a stale sheet alone
             // into `mandatory_track_created`.
+            let observedTrackCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
             if mandatoryTrackCreationWasObserved(
-                createActionPerformed: mandatoryTrackCreatePerformed,
-                observedTrackCount: AXLogicProElements.allTrackHeaders(runtime: runtime).count
+                sheetGoneObserved: mandatoryTrackSheetGone,
+                observedTrackCount: observedTrackCount
             ) {
                 createdTrack = true
+            }
+            // When this route exposed the mandatory sheet, the positive count
+            // is the observable gate for its track fact. Keep polling while it
+            // settles rather than turning the absence of `performed` into an
+            // immediate hard failure before the count can be read.
+            if mandatoryTrackSheetGone, !createdTrack {
+                guard attempt + 1 == attempts else { continue }
+                var extras: [String: Any] = [
+                    "operation": "project.new",
+                    "method": "accessibility",
+                    "selection": selection,
+                    "phase": "mandatory_track_count_unconfirmed",
+                    "write_attempted": true,
+                    "safe_to_retry": false,
+                ]
+                if let witnessSummary {
+                    extras["modal_reconciliation_witness"] = witnessSummary.envelopeValue
+                }
+                return .error(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: extras
+                ))
             }
             if let current = exactCreatedProjectWindow(runtime: runtime) {
                 var extras: [String: Any] = [

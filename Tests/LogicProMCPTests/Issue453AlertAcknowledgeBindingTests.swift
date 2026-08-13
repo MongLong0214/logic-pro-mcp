@@ -130,6 +130,7 @@ private func makeAlertFixture(
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
     builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(arrange, kAXModalAttribute as String, false)
     builder.setAttribute(dialog, kAXModalAttribute as String, true)
     builder.setAttribute(otherDialog, kAXModalAttribute as String, true)
     builder.setAttribute(dialog, kAXSubroleAttribute as String, kAXDialogSubrole as String)
@@ -211,7 +212,14 @@ private func makeAlertFixture(
             },
             childCount: base.ax.childCount,
             childrenResult: base.ax.childrenResult,
-            attributeValueResult: base.ax.attributeValueResult,
+            attributeValueResult: { element, attribute in
+                if dismissal.isDismissed(),
+                   CFEqual(element, dialog),
+                   attribute == (kAXModalAttribute as String) {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue))
+                }
+                return base.ax.attributeValueResult!(element, attribute)
+            },
             performActionResult: base.ax.performActionResult
         ),
         executeAppleScript: base.executeAppleScript
@@ -250,7 +258,11 @@ struct Issue453AlertAcknowledgeBindingTests {
         // its classifier-bound acknowledgement path.
         #expect(outcome.kind == .informationalAlert)
         #expect(outcome.decision == .acknowledgeAlert)
-        #expect(outcome.performed)
+        // Mutation `alert-close-causation`: restore the old accepted-press plus
+        // gone-witness `performed` conjunction. The bound alert may disappear
+        // because of another actor, so this receipt reports observations only.
+        #expect(!outcome.performed)
+        #expect(outcome.actionAttempted)
         #expect(outcome.refusal == nil)
 
         #expect(fixture.pressedElementIDs.count == 1, "exactly one control may be actuated")
