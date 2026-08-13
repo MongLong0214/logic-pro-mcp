@@ -237,7 +237,6 @@ private func issue523MarkerDeleteFixture(
                 // stale action as a no-op instead of manufacturing a successful deletion.
                 guard menuState.isOpen else {
                     menuState.postWriteRowsReadFails = postWriteRowsReadFails
-                menuState.postWriteRowsReadEmpty = postWriteRowsReadEmpty
                     menuState.postWriteRowsReadEmpty = postWriteRowsReadEmpty
                     menuState.postWriteRowCellsReadNoValue = postWriteRowCellsReadNoValue
                     return false
@@ -259,6 +258,7 @@ private func issue523MarkerDeleteFixture(
                     builder.setChildren(markerList, [unrelatedTable, bottomEdit, toolbarEdit, table])
                 }
                 menuState.postWriteRowsReadFails = postWriteRowsReadFails
+                menuState.postWriteRowsReadEmpty = postWriteRowsReadEmpty
                 menuState.postWriteRowCellsReadNoValue = postWriteRowCellsReadNoValue
                 return false
             }
@@ -714,11 +714,11 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     )
     let envelope = try issue523Envelope(result)
 
-    // Measured on this head: State B / readback_mismatch. An independent blind review predicted
-    // State A here, against a head that predates binding the post-write readback to the inventory
-    // the index came from. The prediction does not reproduce now; the test stays because the
-    // invariant it names — a successful empty `AXRows` is not the same claim as an empty table —
-    // is exactly the shape that produced a false State A twice before.
+    // Measured: with the flag armed on the live-pick path this returned State A before the fix —
+    // a verified delete of a marker still sitting in the table's children. An earlier version of
+    // this fixture set the flag only on the stale-pick branch, so it never armed, and the State B
+    // it produced came from an unrelated mismatch. That hole is why a first reading of this
+    // scenario was reported as "does not reproduce".
     let observedState: String = envelope["state"] as? String ?? "nil"
     #expect(observedState != "A")
     #expect(fixture.markerCount == 1)

@@ -268,8 +268,25 @@ extension AXLogicProElements {
     ) -> Result<MarkerListInventory, AXHelpers.AXStatusError> {
         let rows: [AXUIElement]
         switch AXHelpers.getAttributeResult(table, "AXRows", runtime: runtime) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
-        case .success(let observedRows?):
+        case .success(let observedRows?) where !observedRows.isEmpty:
             rows = observedRows
+        case .success(.some):
+            // An EMPTY `AXRows` is not the same claim as an empty table. Measured shape: the table
+            // rebuilds, `AXRows` answers success with `[]` for a moment, and its children still hold
+            // a well-formed row. Believing the empty array settles as an empty survivor set and
+            // certifies a delete of a marker that is still there. A table saying it has no rows must
+            // agree with its own children before that is treated as the last marker going.
+            switch directChildren(
+                of: table, withRole: kAXRowRole as String,
+                absenceIsEmpty: false, runtime: runtime
+            ) {
+            case .success(let children) where children.isEmpty:
+                rows = []
+            case .success:
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            case .failure(let error):
+                return .failure(error)
+            }
         case .failure(let error) where error.isDefinitiveAbsence:
             // Not every marker table vends `AXRows`; that is an answer, so fall through to the
             // structural row read rather than declaring the whole readback unreadable.
