@@ -8,6 +8,16 @@ extension AXLogicProElements {
         let projectDocument: String
     }
 
+    /// A complete Marker List reading, retaining the exact AX elements that supplied its order.
+    ///
+    /// The marker ordinal is meaningful only relative to `rows`: a destructive caller must select
+    /// `rows[ordinal]`, not rediscover an independently ordered structural descendant later.
+    struct MarkerListInventory {
+        let table: AXUIElement
+        let rows: [AXUIElement]
+        let markers: [MarkerState]
+    }
+
     static func markerListBinding(runtime: Runtime = .production) -> MarkerListBinding? {
         guard let app = appRoot(runtime: runtime),
               let mainWindow: AXUIElement = AXHelpers.getAttribute(
@@ -209,6 +219,19 @@ extension AXLogicProElements {
         _ window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Result<[MarkerState], AXHelpers.AXStatusError> {
+        switch markerListInventoryFromListWindow(window, runtime: runtime) {
+        case .success(let inventory):
+            return .success(inventory.markers)
+        case .failure(let error):
+            return .failure(error)
+        }
+    }
+
+    /// Resolves the Marker List table once and retains the rows whose order defines marker IDs.
+    static func markerListInventoryFromListWindow(
+        _ window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<MarkerListInventory, AXHelpers.AXStatusError> {
         let table: AXUIElement
         switch markerListTable(in: window, runtime: runtime) {
         case .success(let foundTable?):
@@ -222,6 +245,27 @@ extension AXLogicProElements {
             return .failure(error)
         }
 
+        return markerListInventory(from: table, runtime: runtime)
+    }
+
+    /// Re-reads the exact table element a caller already bound, without resolving another table
+    /// from the window. This is the only valid post-write marker read for a destructive caller.
+    static func enumerateMarkersFromListTable(
+        _ table: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<[MarkerState], AXHelpers.AXStatusError> {
+        switch markerListInventory(from: table, runtime: runtime) {
+        case .success(let inventory):
+            return .success(inventory.markers)
+        case .failure(let error):
+            return .failure(error)
+        }
+    }
+
+    private static func markerListInventory(
+        from table: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<MarkerListInventory, AXHelpers.AXStatusError> {
         let rows: [AXUIElement]
         switch AXHelpers.getAttributeResult(table, "AXRows", runtime: runtime) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
         case .success(let observedRows?):
@@ -303,7 +347,7 @@ extension AXLogicProElements {
             let parsed = parseMarkerListPosition(positionRaw)
             markers.append(.fromParsed(parsed, ordinal: index, name: name))
         }
-        return .success(markers)
+        return .success(MarkerListInventory(table: table, rows: rows, markers: markers))
     }
 
     /// Finds the first Marker List table without turning a failed `AXChildren` read into an
@@ -326,7 +370,11 @@ extension AXLogicProElements {
                     // A node that vends no children is an answer: nothing here, keep walking.
                     children = []
                 case .failure(let error):
-                    return .failure(error)
+                    // A sibling group can refuse an AXChildren read while the real table remains
+                    // reachable through another sibling. Skip it, remember the gap, and return the
+                    // gap only if no table is found anywhere else in the bounded search.
+                    unreadable = unreadable ?? error
+                    children = []
                 }
                 for child in children {
                     switch AXHelpers.getAttributeResult(
@@ -419,6 +467,9 @@ extension AXLogicProElements {
                 if let description, !description.isEmpty, !placeholder.contains(description) {
                     return .success(description)
                 }
+            case .failure(let error) where error.isDefinitiveAbsence:
+                // A child without AXDescription may still carry its label in AXValue.
+                break
             case .failure(let error):
                 return .failure(error)
             }
@@ -429,6 +480,9 @@ extension AXLogicProElements {
                 if let value = value as? String, !value.isEmpty {
                     return .success(value)
                 }
+            case .failure(let error) where error.isDefinitiveAbsence:
+                // This child vends neither label attribute; keep looking.
+                break
             case .failure(let error):
                 return .failure(error)
             }
@@ -440,6 +494,9 @@ extension AXLogicProElements {
             if let description, !description.isEmpty, !placeholder.contains(description) {
                 return .success(description)
             }
+        case .failure(let error) where error.isDefinitiveAbsence:
+            // The cell itself may still expose AXValue.
+            break
         case .failure(let error):
             return .failure(error)
         }
@@ -450,6 +507,8 @@ extension AXLogicProElements {
             if let value = value as? String, !value.isEmpty {
                 return .success(value)
             }
+        case .failure(let error) where error.isDefinitiveAbsence:
+            return .success(nil)
         case .failure(let error):
             return .failure(error)
         }

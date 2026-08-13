@@ -1599,8 +1599,11 @@ enum SemanticOracleTable {
     // strings have unambiguous boundaries and can be checked against both counts.
     // The oracle binds that independently read-back multiset to the
     // request-derived expectation and independently requires the observed survivors
-    // to exclude the target position. A shared or synthetic target position is State B:
-    // a position occurrence can disappear without identifying which marker it was.
+    // to exclude the target position. It ALSO cross-checks the reported multiset and
+    // canonicality flag against the independent `logic://markers` resource read: a
+    // self-consistent producer cannot substitute unrelated survivor fields. A shared
+    // or synthetic target position is State B: a position occurrence can disappear
+    // without identifying which marker it was.
     // Marker names remain only State-B diagnostics because Logic can renumber
     // auto-generated names after deletion.
     static let navigateDeleteMarker = SafeMutationOracle.oracle(
@@ -1632,6 +1635,14 @@ enum SemanticOracleTable {
             .fieldsEqual(
                 keyA: "expected_survivor_position_multiset",
                 keyB: "observed_survivor_position_multiset"
+            ),
+            .crossCheck(
+                responseKey: "observed_survivor_position_multiset",
+                readbackKey: "position_multiset"
+            ),
+            .crossCheck(
+                responseKey: "position_evidence_canonical",
+                readbackKey: "positions_canonical"
             ),
         ]
     )

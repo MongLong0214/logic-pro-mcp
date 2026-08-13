@@ -743,7 +743,7 @@ struct SemanticOracleMutationTests {
         // envelope shape is intact.
         let noOp = try #require(oracle.evaluate(
             responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":3,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:5.1.1.18:12.1.1.1"}"#.utf8),
-            readbackData: Data("{}".utf8)
+            readbackData: fixture.readbackData
         ))
         #expect(!noOp, "delete_marker accepted a settled State A whose position multiset lost no target occurrence")
 
@@ -751,7 +751,7 @@ struct SemanticOracleMutationTests {
         // 5.1.1.1 position. Count-only validation would accept this wrong delete.
         let wrongPositions = try #require(oracle.evaluate(
             responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:5.1.1.1"}"#.utf8),
-            readbackData: Data("{}".utf8)
+            readbackData: fixture.readbackData
         ))
         #expect(!wrongPositions, "delete_marker accepted a settled readback with wrong positions")
 
@@ -759,9 +759,10 @@ struct SemanticOracleMutationTests {
         // deleting index 0, but their positions are exactly right. State A does
         // not normally carry these State-B diagnostic fields; including them here
         // proves the oracle deliberately binds the position multiset, not names.
+        let namesShiftedReadback = Data(#"{"source":"ax_live","readable":true,"position_multiset":"7:1.1.1.17:1.1.1.17:5.1.1.1","positions_canonical":true,"data":[]}"#.utf8)
         let namesShifted = try #require(oracle.evaluate(
             responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":0,"target_name":"Marker 1","target_position":"2.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":4,"write_attempted":true,"readback_settled":true,"marker_count_after":3,"expected_survivor_position_multiset":"7:1.1.1.17:1.1.1.17:5.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:1.1.1.17:5.1.1.1","expected_survivors":["8:Marker 27:1.1.1.1","8:Marker 37:1.1.1.1","8:Marker 47:5.1.1.1"],"observed_survivors":["8:Marker 17:1.1.1.1","8:Marker 27:1.1.1.1","8:Marker 37:5.1.1.1"]}"#.utf8),
-            readbackData: Data("{}".utf8)
+            readbackData: namesShiftedReadback
         ))
         #expect(namesShifted, "delete_marker rejected correct positions solely because default names shifted")
 
@@ -770,19 +771,34 @@ struct SemanticOracleMutationTests {
         // alone would accept this shared arbitrary value.
         let selfReportedMultisets = try #require(oracle.evaluate(
             responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:arbitrary","observed_survivor_position_multiset":"7:arbitrary"}"#.utf8),
-            readbackData: Data("{}".utf8)
+            readbackData: fixture.readbackData
         ))
         #expect(!selfReportedMultisets, "delete_marker accepted equal multiset fields whose entry counts contradict the marker counts")
 
         // Mutation applied once: remove `lengthPrefixedEntriesExclude` from the delete-marker
-        // oracle. This envelope passes every pre-existing State-A check — correct counts, settled
-        // canonical evidence, and equal valid expected/observed multisets — while describing the
-        // deletion of 1.1.1.1 and survival of the requested 5.1.1.1 target.
+        // oracle. This envelope passes every other State-A check — including the independent
+        // resource cross-check — while describing the survival of the requested 1.1.1.1 target.
         let targetSurvives = try #require(oracle.evaluate(
-            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:5.1.1.17:9.1.1.1","observed_survivor_position_multiset":"7:5.1.1.17:9.1.1.1"}"#.utf8),
-            readbackData: Data("{}".utf8)
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":0,"target_name":"Intro","target_position":"1.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.18:12.1.1.1"}"#.utf8),
+            readbackData: fixture.readbackData
         ))
         #expect(!targetSurvives, "delete_marker accepted an internally consistent State A where the target position survived")
+
+        // Source mutation applied once: remove both `crossCheck` constraints from the
+        // delete-marker oracle. This response is internally consistent and contains no target
+        // position, but its reported survivor set is unrelated to the independent marker resource.
+        let substitutedSurvivors = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:2.1.1.17:3.1.1.1","observed_survivor_position_multiset":"7:2.1.1.17:3.1.1.1"}"#.utf8),
+            readbackData: fixture.readbackData
+        ))
+        #expect(!substitutedSurvivors, "delete_marker accepted a survivor multiset unrelated to its independent readback")
+
+        let nonCanonicalReadback = Data(#"{"source":"ax_live","readable":true,"position_multiset":"7:1.1.1.18:12.1.1.1","positions_canonical":false,"data":[]}"#.utf8)
+        let canonicalityWasOnlySelfReported = try #require(oracle.evaluate(
+            responseData: fixture.responseData,
+            readbackData: nonCanonicalReadback
+        ))
+        #expect(!canonicalityWasOnlySelfReported, "delete_marker accepted a self-reported canonicality flag contrary to readback")
     }
 
     /// #373 B3 — project.save_as is envelope-only because its

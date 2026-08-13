@@ -784,10 +784,21 @@ extension ResourceHandlers {
         let readable = await cache.getMarkersReadable()
         let body = encodeMarkersWire(markers)
         let source = readable ? "ax_live" : (markers.isEmpty ? "unreadable" : "cache")
+        // A stable, length-prefixed projection lets mutation oracles bind a reported survivor set
+        // to this independent marker-resource read without trusting a producer-supplied summary.
+        let positionMultiset = markers
+            .map(\.position)
+            .map { "\($0.lengthOfBytes(using: .utf8)):\($0)" }
+            .sorted()
+            .joined()
         var extras: [String: Any] = [
             "source": source,
             "readable": readable,
             "verified_empty": readable && markers.isEmpty,
+            "position_multiset": positionMultiset,
+            // `false` includes a cache/unreadable result. A cached marker list cannot provide an
+            // independent post-write canonicality proof, even if its stale rows happen to parse.
+            "positions_canonical": readable && markers.allSatisfy { $0.positionSource == .parser },
         ]
         if !readable {
             extras["reason"] = "marker_list_not_open"

@@ -782,7 +782,14 @@ enum SemanticOracleFixtures {
                 "expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1",\
                 "observed_survivor_position_multiset":"7:1.1.1.18:12.1.1.1"}
                 """,
-            readback: "{}"
+            readback: """
+                {"source":"ax_live","readable":true,"verified_empty":false,
+                "position_multiset":"7:1.1.1.18:12.1.1.1","positions_canonical":true,
+                "data":[
+                  {"id":0,"name":"Intro","position":"1.1.1.1","position_source":"parser","is_canonical":true},
+                  {"id":2,"name":"Chorus","position":"12.1.1.1","position_source":"parser","is_canonical":true}
+                ]}
+                """
         ),
         // defaultRenameMarker post-write path: observed_name == requested_name.
         .navigateRenameMarker: SemanticOracleFixture(

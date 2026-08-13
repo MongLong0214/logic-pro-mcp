@@ -155,6 +155,90 @@ func enumerateMarkers_missingTableIsUnavailableRatherThanEmpty() async {
 }
 
 @Test
+func enumerateMarkers_skipsUnreadableSiblingBeforeRealTable() async {
+    // Source mutation applied once: return the non-absence AXChildren failure directly from
+    // `markerListTable`. The first sibling then prevents the later real table from being reached,
+    // and this successful enumeration fails.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(7_160)
+    let arrange = builder.element(7_161)
+    let listWin = builder.element(7_162)
+    _ = makeMarkerListTree(
+        builder: builder,
+        appElement: app,
+        arrangeWindow: arrange,
+        markerListWindow: listWin,
+        rows: [(position: "5 1 1 1", name: "Reachable", length: "∞")]
+    )
+    let unreadableSibling = builder.element(7_163)
+    let tableGroup = builder.element(7_164)
+    let table = builder.element(8_000)
+    builder.setAttribute(unreadableSibling, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(tableGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setChildren(listWin, [unreadableSibling, tableGroup])
+    builder.setChildren(tableGroup, [table])
+
+    let runtime = builder.makeAXRuntime(
+        appElement: app,
+        childrenResultHandler: { element in
+            if CFEqual(element, unreadableSibling) {
+                return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+            }
+            return nil
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+    let result = AXLogicProElements.enumerateMarkersFromListWindow(listWin, runtime: runtime)
+
+    guard case .success(let markers) = result else {
+        #expect(false, "an unreadable unrelated sibling must not hide a readable Marker List table")
+        return
+    }
+    #expect(markers.map(\.name) == ["Reachable"])
+    #expect(markers.map(\.position) == ["5.1.1.1"])
+}
+
+@Test
+func enumerateMarkers_childValueSurvivesAbsentDescription() async {
+    // Source mutation applied once: return the child AXDescription absence as a failure instead of
+    // falling through to AXValue. The position child below then makes enumeration unavailable.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(7_170)
+    let arrange = builder.element(7_171)
+    let listWin = builder.element(7_172)
+    _ = makeMarkerListTree(
+        builder: builder,
+        appElement: app,
+        arrangeWindow: arrange,
+        markerListWindow: listWin,
+        rows: [(position: "unused", name: "AXValue Position", length: "∞")]
+    )
+    let positionChild = builder.element(8_105)
+    builder.setAttribute(positionChild, kAXValueAttribute as String, "5 1 1 1")
+    let runtime = builder.makeAXRuntime(
+        appElement: app,
+        attributeValueResultHandler: { element, attribute in
+            if CFEqual(element, positionChild), attribute == kAXDescriptionAttribute as String {
+                return .failure(AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue))
+            }
+            return nil
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+    let result = AXLogicProElements.enumerateMarkersFromListWindow(listWin, runtime: runtime)
+
+    guard case .success(let markers) = result else {
+        #expect(false, "an absent child description must fall through to its AXValue")
+        return
+    }
+    #expect(markers.count == 1)
+    #expect(markers[0].name == "AXValue Position")
+    #expect(markers[0].position == "5.1.1.1")
+}
+
+@Test
 func enumerateMarkers_listWindow_closed_fallsThroughToRulerStrategy() async {
     // No marker list window — only arrange window with the legacy AXRuler
     // ruler (Logic 11.x compat). The fallback strategy should still find it.

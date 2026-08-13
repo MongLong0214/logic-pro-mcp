@@ -45,7 +45,7 @@ extension AccessibilityChannel {
             ))
         }
         let window = binding.window
-        guard case .success(let before) = AXLogicProElements.enumerateMarkersFromListWindow(
+        guard case .success(let inventory) = AXLogicProElements.markerListInventoryFromListWindow(
             window, runtime: runtime.ax
         ) else {
             return .error(HonestContract.encodeStateC(
@@ -58,7 +58,10 @@ extension AccessibilityChannel {
                 ]
             ))
         }
-        guard let target = before.first(where: { $0.id == index }) else {
+        let before = inventory.markers
+        // `index` names an entry in the one pre-write inventory above. Carry that exact row element
+        // through selection; never map the ordinal onto a separately discovered row ordering.
+        guard index < before.count, index < inventory.rows.count else {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
                 hint: "Marker index \(index) was not found in the Marker List",
@@ -70,6 +73,8 @@ extension AccessibilityChannel {
                 ]
             ))
         }
+        let target = before[index]
+        let targetRow = inventory.rows[index]
 
         // Indices renumber when a row disappears, so comparing them after the write would prove
         // nothing. Instead, expect the pre-write POSITION multiset with exactly one instance of
@@ -103,7 +108,9 @@ extension AccessibilityChannel {
             "marker_count_before": before.count,
         ]
 
-        guard let selection = selectMarkerRowForDeletion(index, in: window, runtime: runtime.ax) else {
+        guard let selection = selectMarkerRowForDeletion(
+            targetRow, in: inventory.table, runtime: runtime.ax
+        ) else {
             // The scoped menu route may proceed only when the selected row is confirmed in this
             // exact Marker List table.
             extras["selection_write_attempted"] = false
@@ -199,11 +206,6 @@ extension AccessibilityChannel {
             ))
         }
 
-        guard let afterBinding = AXLogicProElements.markerListBinding(runtime: runtime),
-              afterBinding.projectDocument == binding.projectDocument,
-              CFEqual(afterBinding.window, binding.window) else {
-            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
-        }
         // The Marker List enumeration is not stable immediately after a write: measured live, two
         // reads taken back to back can disagree, and a blank row keeps rendering the previous row's
         // name. Verifying against a single read produced a State A for a marker that was still
@@ -217,8 +219,8 @@ extension AccessibilityChannel {
         var previousPositions: [String]?
         for _ in 0..<6 {
             let reading: [MarkerState]
-            switch AXLogicProElements.enumerateMarkersFromListWindow(
-                afterBinding.window, runtime: runtime.ax
+            switch AXLogicProElements.enumerateMarkersFromListTable(
+                inventory.table, runtime: runtime.ax
             ) {
             case .success(let observedMarkers):
                 reading = observedMarkers
@@ -314,17 +316,10 @@ extension AccessibilityChannel {
     /// Selects the row and confirms the table agrees, since a write that reports success without
     /// changing the selection would leave the Edit-menu Delete command pointed at whatever was selected before.
     private static func selectMarkerRowForDeletion(
-        _ index: Int,
-        in window: AXUIElement,
+        _ targetRow: AXUIElement,
+        in table: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> MarkerRowSelection? {
-        guard let table = AXHelpers.findAllDescendants(
-            of: window, role: kAXTableRole as String, maxDepth: 12, runtime: runtime
-        ).first else { return nil }
-        let rows = AXHelpers.findAllDescendants(
-            of: table, role: kAXRowRole as String, maxDepth: 4, runtime: runtime
-        )
-        guard index >= 0, index < rows.count else { return nil }
         // Read the selection BEFORE writing. A post-write read proves the target is selected NOW,
         // not that this call changed anything — if the row was already selected, reporting a
         // selection change would assert an effect that did not happen.
@@ -336,18 +331,18 @@ extension AccessibilityChannel {
         case .success(let selectedRows):
             let selectedRows = selectedRows ?? []
             wasAlreadyExactlyTheTarget = selectedRows.count == 1
-                && CFEqual(selectedRows[0], rows[index])
+                && CFEqual(selectedRows[0], targetRow)
         case .failure:
             // A failed read cannot establish whether selecting this row altered anything.
             wasAlreadyExactlyTheTarget = nil
         }
         _ = AXHelpers.setAttribute(
-            rows[index], kAXSelectedAttribute as String, kCFBooleanTrue, runtime: runtime
+            targetRow, kAXSelectedAttribute as String, kCFBooleanTrue, runtime: runtime
         )
         let selected: [AXUIElement] = AXHelpers.getAttribute(
             table, "AXSelectedRows", runtime: runtime
         ) ?? []
-        guard selected.count == 1, CFEqual(selected[0], rows[index]) else {
+        guard selected.count == 1, CFEqual(selected[0], targetRow) else {
             return MarkerRowSelection(writeAttempted: true, confirmed: false, changedSelection: nil)
         }
         return MarkerRowSelection(
@@ -441,7 +436,7 @@ extension AccessibilityChannel {
             _ = AXHelpers.performAction(control, kAXShowMenuAction as String, runtime: runtime)
             let menu: AXUIElement
             switch settledMarkerListEditMenuObservation(
-                under: control, runtime: runtime, mouse: mouse
+                under: control, question: .discovery, runtime: runtime, mouse: mouse
             ) {
             case .present(let observedMenu):
                 menu = observedMenu
@@ -511,7 +506,10 @@ extension AccessibilityChannel {
             // twice in a row is proof of that disappearance; a present, unstable, or unreadable
             // child list is still open/unknown and requires cleanup before this run can proceed.
             let menuCloseWasNotObserved = !markerListEditMenuIsSettledClosed(
-                under: control, runtime: runtime, mouse: mouse
+                under: control,
+                relationshipWasObserved: true,
+                runtime: runtime,
+                mouse: mouse
             ) && !dismissMarkerListEditMenu(menu, from: control, runtime: runtime, mouse: mouse)
             return .pickIssued(menuCloseWasNotObserved: menuCloseWasNotObserved)
         }
@@ -622,8 +620,16 @@ extension AccessibilityChannel {
     /// An observed menu must belong to the exact Edit control that was asked to show it. A menu
     /// elsewhere in the window could be stale or belong to another control, so its presence cannot
     /// authorise an AXPick here.
+    private enum MarkerListEditMenuQuestion {
+        /// Before any menu is observed, absence says the opener does not currently vend one.
+        case discovery
+        /// After an exact menu was observed, absence asks whether that relationship disappeared.
+        case observedMenuClosure
+    }
+
     private static func markerListEditMenu(
         under control: AXUIElement,
+        question: MarkerListEditMenuQuestion,
         runtime: AXHelpers.Runtime
     ) -> Result<AXUIElement?, AXHelpers.AXStatusError> {
         switch AXHelpers.childrenResult(control, runtime: runtime) {
@@ -640,10 +646,16 @@ extension AccessibilityChannel {
             }
             return .success(nil)
         case .failure(let error) where error.isDefinitiveAbsence:
-            // AXChildren on an AXMenuButton may answer `attributeUnsupported` or `noValue`
-            // instead of giving an empty child list. Both are a readable absence here, not an
-            // unreadable observation that could never settle.
-            return .success(nil)
+            switch question {
+            case .discovery:
+                // Before a menu was seen, AXChildren absence answers the opener question: it has
+                // no menu exposed on this poll.
+                return .success(nil)
+            case .observedMenuClosure:
+                // Once this run saw a specific menu, an absent AXChildren attribute cannot prove
+                // that menu disappeared. It only says the opener→menu relationship is unreadable.
+                return .failure(error)
+            }
         case .failure(let error):
             return .failure(error)
         }
@@ -660,6 +672,7 @@ extension AccessibilityChannel {
 
     private static func settledMarkerListEditMenuObservation(
         under control: AXUIElement,
+        question: MarkerListEditMenuQuestion,
         runtime: AXHelpers.Runtime,
         mouse: AXMouseHelper.Runtime
     ) -> MarkerListEditMenuObservation {
@@ -679,7 +692,7 @@ extension AccessibilityChannel {
         var absentReadings = 0
         var unreadable: AXHelpers.AXStatusError?
         for _ in 0..<6 {
-            switch markerListEditMenu(under: control, runtime: runtime) {
+            switch markerListEditMenu(under: control, question: question, runtime: runtime) {
             case .success(let menu?):
                 return .present(menu)
             case .success(nil):
@@ -700,11 +713,15 @@ extension AccessibilityChannel {
 
     private static func markerListEditMenuIsSettledClosed(
         under control: AXUIElement,
+        relationshipWasObserved: Bool,
         runtime: AXHelpers.Runtime,
         mouse: AXMouseHelper.Runtime
     ) -> Bool {
         if case .absent = settledMarkerListEditMenuObservation(
-            under: control, runtime: runtime, mouse: mouse
+            under: control,
+            question: relationshipWasObserved ? .observedMenuClosure : .discovery,
+            runtime: runtime,
+            mouse: mouse
         ) {
             return true
         }
@@ -725,7 +742,9 @@ extension AccessibilityChannel {
         runtime: AXHelpers.Runtime,
         mouse: AXMouseHelper.Runtime
     ) -> MarkerListEditMenuUnknownDiscoveryCleanup {
-        switch settledMarkerListEditMenuObservation(under: control, runtime: runtime, mouse: mouse) {
+        switch settledMarkerListEditMenuObservation(
+            under: control, question: .discovery, runtime: runtime, mouse: mouse
+        ) {
         case .present(let menu):
             return MarkerListEditMenuUnknownDiscoveryCleanup(
                 wasClosed: dismissMarkerListEditMenu(menu, from: control, runtime: runtime, mouse: mouse),
@@ -745,7 +764,10 @@ extension AccessibilityChannel {
                 _ = AXHelpers.performAction(control, kAXCancelAction as String, runtime: runtime)
                 return MarkerListEditMenuUnknownDiscoveryCleanup(
                     wasClosed: markerListEditMenuIsSettledClosed(
-                        under: control, runtime: runtime, mouse: mouse
+                        under: control,
+                        relationshipWasObserved: false,
+                        runtime: runtime,
+                        mouse: mouse
                     ),
                     cancelActionState: "advertised_and_issued",
                     axStatus: nil
@@ -775,7 +797,12 @@ extension AccessibilityChannel {
         mouse: AXMouseHelper.Runtime
     ) -> Bool {
         _ = AXHelpers.performAction(menu, kAXCancelAction as String, runtime: runtime)
-        return markerListEditMenuIsSettledClosed(under: control, runtime: runtime, mouse: mouse)
+        return markerListEditMenuIsSettledClosed(
+            under: control,
+            relationshipWasObserved: true,
+            runtime: runtime,
+            mouse: mouse
+        )
     }
 
     /// Only direct entries of the observed Marker List Edit menu are candidates. In particular,
@@ -792,14 +819,21 @@ extension AccessibilityChannel {
         case .failure(let error):
             return .failure(error)
         }
+        var unreadable: AXHelpers.AXStatusError?
         for child in children {
             switch AXHelpers.getAttributeResult(
                 child, kAXRoleAttribute as String, runtime: runtime
             ) as Result<String?, AXHelpers.AXStatusError> {
             case .success(let role):
                 guard role == (kAXMenuItemRole as String) else { continue }
+            case .failure(let error) where error.isDefinitiveAbsence:
+                continue
             case .failure(let error):
-                return .failure(error)
+                // An unrelated separator or transient entry can fail its role read while a later
+                // exact Delete item remains fully readable. Keep searching, but do not turn an
+                // exhausted unreadable search into a definitive "missing" answer.
+                unreadable = unreadable ?? error
+                continue
             }
             switch markerListElementMatches(
                 child, labels: AXLocalePolicy.markerListDeleteMenuItem,
@@ -810,9 +844,11 @@ extension AccessibilityChannel {
             case .success(false):
                 continue
             case .failure(let error):
-                return .failure(error)
+                unreadable = unreadable ?? error
+                continue
             }
         }
+        if let unreadable { return .failure(unreadable) }
         return .success(nil)
     }
 

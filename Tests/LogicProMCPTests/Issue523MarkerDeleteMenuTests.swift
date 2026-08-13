@@ -26,10 +26,13 @@ private final class Issue523MenuState: @unchecked Sendable {
     var menuEntryChildrenReadFails = false
     var menuEntryEnabledReadFails = false
     var postWriteRowsReadFails = false
+    var postWriteRowsReadEmpty = false
     var postWriteRowCellsReadNoValue = false
     var rowSelectionWasWritten = false
+    var selectedRowID: Int?
     var showMenuWasRequested = false
     var menuWasDismissed = false
+    var menuCancelWasIssued = false
     var toolbarMenuReadCount = 0
     var toolbarAbsenceObservationCount = 0
     var closesAfterFirstSighting = false
@@ -46,9 +49,11 @@ private struct Issue523MarkerDeleteFixture {
     let menuEntryID: Int
     let menuState: Issue523MenuState
     let readMarkerCount: () -> Int
+    let readSelectedMarkerName: () -> String?
 
     var menuIsOpen: Bool { menuState.isOpen }
     var markerCount: Int { readMarkerCount() }
+    var selectedMarkerName: String? { readSelectedMarkerName() }
 }
 
 /// Builds the part of the live Marker List tree that matters to delete:
@@ -78,12 +83,17 @@ private func issue523MarkerDeleteFixture(
     selectionConfirms: Bool = true,
     pickDeletesSelectedRow: Bool = true,
     postWriteRowsReadFails: Bool = false,
+    postWriteRowsReadEmpty: Bool = false,
     postWriteRowCellsReadNoValue: Bool = false,
     menuControlDiscoveryReadFails: Bool = false,
     menuActionNamesReadFails: Bool = false,
     bottomEditActionNamesReadFails: Bool = false,
     menuEntryChildrenReadFails: Bool = false,
     menuEntryEnabledReadFails: Bool = false,
+    menuChildrenAbsenceStatusAfterCancel: Int32? = nil,
+    menuUnrelatedEntryRoleReadFails: Bool = false,
+    structuralRowOrder: [Int]? = nil,
+    unrelatedEmptyTableBecomesFirstAfterPick: Bool = false,
     markers: [(position: String, name: String)] = [
         ("1 1 1 1", "Intro"),
         ("5 1 1 1", "Verse"),
@@ -107,6 +117,8 @@ private func issue523MarkerDeleteFixture(
     let menu = builder.element(52_305)
     let menuEntry = builder.element(52_306)
     let table = builder.element(52_307)
+    let unrelatedTable = builder.element(52_308)
+    let unreadableMenuSeparator = builder.element(52_309)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
     builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, markerList])
@@ -136,11 +148,14 @@ private func issue523MarkerDeleteFixture(
         builder.setAttribute(menuEntry, kAXRoleAttribute as String, kAXMenuItemRole as String)
         builder.setAttribute(menuEntry, kAXTitleAttribute as String, menuEntryTitle)
         builder.setAttribute(menuEntry, kAXEnabledAttribute as String, menuEntryEnabled as CFTypeRef)
-        builder.setChildren(menu, [menuEntry])
+        builder.setChildren(menu, menuUnrelatedEntryRoleReadFails ? [unreadableMenuSeparator, menuEntry] : [menuEntry])
     }
 
     builder.setAttribute(table, kAXRoleAttribute as String, kAXTableRole as String)
     builder.setAttribute(table, kAXDescriptionAttribute as String, "Marker Table")
+    builder.setAttribute(unrelatedTable, kAXRoleAttribute as String, kAXTableRole as String)
+    builder.setAttribute(unrelatedTable, "AXRows", [AXUIElement]())
+    builder.setChildren(unrelatedTable, [])
 
     let rows: [AXUIElement] = markers.enumerated().map { offset, marker in
         let base = 52_310 + offset * 10
@@ -162,7 +177,8 @@ private func issue523MarkerDeleteFixture(
         return row
     }
     builder.setAttribute(table, "AXRows", rows)
-    builder.setChildren(table, rows)
+    let structuralRows = structuralRowOrder.map { $0.map { rows[$0] } } ?? rows
+    builder.setChildren(table, structuralRows)
     var markerListChildren = [bottomEdit, toolbarEdit, table]
     if menuEntryTitle != nil, !menuBoundToToolbar {
         // This menu is deliberately unrelated to the toolbar Edit control. It is the stale-window
@@ -182,6 +198,7 @@ private func issue523MarkerDeleteFixture(
         setAttributeHandler: { element, attribute, _ in
             if attribute == kAXSelectedAttribute as String {
                 menuState.rowSelectionWasWritten = true
+                menuState.selectedRowID = builder.elementID(element)
             }
             if selectionConfirms, attribute == kAXSelectedAttribute as String {
                 builder.setAttribute(table, "AXSelectedRows", [element])
@@ -205,6 +222,7 @@ private func issue523MarkerDeleteFixture(
                 return true
             }
             if action == (kAXCancelAction as String), elementID == menuID {
+                menuState.menuCancelWasIssued = true
                 if menuDismissesOnCancel {
                     menuState.isOpen = false
                     menuState.menuWasDismissed = true
@@ -219,14 +237,26 @@ private func issue523MarkerDeleteFixture(
                 // stale action as a no-op instead of manufacturing a successful deletion.
                 guard menuState.isOpen else {
                     menuState.postWriteRowsReadFails = postWriteRowsReadFails
+                menuState.postWriteRowsReadEmpty = postWriteRowsReadEmpty
+                    menuState.postWriteRowsReadEmpty = postWriteRowsReadEmpty
                     menuState.postWriteRowCellsReadNoValue = postWriteRowCellsReadNoValue
                     return false
                 }
-                // The first row is the selected target. AX reports failure despite delivering it.
-                if pickDeletesSelectedRow {
-                    let afterPick = Array(AXHelpers.getChildren(table, runtime: builder.makeAXRuntime()).dropFirst())
+                // AX reports failure despite delivering it. Delete exactly the AXSelected row so
+                // fixtures can distinguish AXRows order from structural-descendant order.
+                if pickDeletesSelectedRow,
+                   let selectedRow = (AXHelpers.getAttribute(
+                       table, "AXSelectedRows", runtime: builder.makeAXRuntime()
+                   ) as [AXUIElement]?)?.first {
+                    let currentRows: [AXUIElement] = AXHelpers.getAttribute(
+                        table, "AXRows", runtime: builder.makeAXRuntime()
+                    ) ?? []
+                    let afterPick = currentRows.filter { !CFEqual($0, selectedRow) }
                     builder.setAttribute(table, "AXRows", afterPick)
                     builder.setChildren(table, afterPick)
+                }
+                if unrelatedEmptyTableBecomesFirstAfterPick {
+                    builder.setChildren(markerList, [unrelatedTable, bottomEdit, toolbarEdit, table])
                 }
                 menuState.postWriteRowsReadFails = postWriteRowsReadFails
                 menuState.postWriteRowCellsReadNoValue = postWriteRowCellsReadNoValue
@@ -282,6 +312,11 @@ private func issue523MarkerDeleteFixture(
                    rows.contains(where: { CFEqual(element, $0) }) {
                     return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
                 }
+                if let menuChildrenAbsenceStatusAfterCancel,
+                   menuState.menuCancelWasIssued,
+                   builder.elementID(element) == toolbarEditID {
+                    return .failure(AXHelpers.AXStatusError(raw: menuChildrenAbsenceStatusAfterCancel))
+                }
                 if builder.elementID(element) == toolbarEditID,
                    menuState.showMenuWasRequested,
                    let menuChildrenAbsenceStatus {
@@ -330,9 +365,20 @@ private func issue523MarkerDeleteFixture(
                    attribute == "AXRows" {
                     return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
                 }
+                if menuState.postWriteRowsReadEmpty,
+                   builder.elementID(element) == builder.elementID(table),
+                   attribute == "AXRows" {
+                    // A SUCCESSFUL empty array while the table's children still hold the row.
+                    return .success([] as NSArray)
+                }
                 if menuState.menuEntryEnabledReadFails,
                    builder.elementID(element) == entryID,
                    attribute == kAXEnabledAttribute as String {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                }
+                if menuUnrelatedEntryRoleReadFails,
+                   builder.elementID(element) == builder.elementID(unreadableMenuSeparator),
+                   attribute == kAXRoleAttribute as String {
                     return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
                 }
                 return baseRuntime.ax.attributeValueResult?(element, attribute)
@@ -358,12 +404,63 @@ private func issue523MarkerDeleteFixture(
         menuState: menuState,
         readMarkerCount: {
             AXHelpers.getChildren(table, runtime: builder.makeAXRuntime()).count
+        },
+        readSelectedMarkerName: {
+            guard let selectedRowID = menuState.selectedRowID,
+                  let selectedIndex = rows.firstIndex(where: {
+                      builder.elementID($0) == selectedRowID
+                  }) else { return nil }
+            return markers[selectedIndex].name
         }
     )
 }
 
 private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     try #require(JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any])
+}
+
+@Test func testIssue523AXRowsInventorySelectsTheMarkerNamedByRequestedIndex() async throws {
+    // Source mutation applied once: replace the carried `inventory.rows[index]` target with the
+    // reverse structural order. This fixture then selects Other instead of Target and fails the
+    // target-selection and State-A proof below.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        structuralRowOrder: [1, 0],
+        markers: [
+            ("1 1 1 1", "Target"),
+            ("9 1 1 1", "Other"),
+        ]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "A")
+    #expect(fixture.selectedMarkerName == "Target")
+    #expect(fixture.markerCount == 1)
+}
+
+@Test func testIssue523PostWriteReadbackStaysBoundToPrewriteTable() async throws {
+    // Source mutation applied once: replace the table-bound post-write reader with
+    // `enumerateMarkersFromListWindow(window, ...)`. The new first empty table then fabricates
+    // this State A even though the original marker table still contains Target.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        unrelatedEmptyTableBecomesFirstAfterPick: true,
+        markers: [("1 1 1 1", "Target")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "B")
+    #expect(envelope["reason"] as? String == "readback_mismatch")
+    #expect(fixture.markerCount == 1)
 }
 
 @Test func testIssue523ExactDeleteMenuPickDoesNotFallThroughWhenAXPickReportsFailure() async throws {
@@ -395,6 +492,50 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         ) == 0)
         #expect(!fixture.menuIsOpen)
     }
+}
+
+@Test func testIssue523ObservedMenuWithAbsentChildrenAfterCancelIsNotConfirmedClosed() async throws {
+    // Source mutation applied once: in the `observedMenuClosure` branch, return `.success(nil)`
+    // for attributeUnsupported/noValue. The ignored AXCancel then falsely reports this open menu
+    // as closed and fails the unsafe-retry/menu-state assertions.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Copy",
+        menuDismissesOnCancel: false,
+        menuChildrenAbsenceStatusAfterCancel: AXError.attributeUnsupported.rawValue
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+    let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
+    let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
+
+    #expect(!result.isSuccess)
+    #expect(envelope["state"] as? String == "C")
+    #expect(!writeAttempted)
+    #expect(!safeToRetry)
+    #expect(envelope["menu_state"] as? String == "could_not_be_closed")
+    #expect(fixture.menuIsOpen)
+}
+
+@Test func testIssue523UnreadableUnrelatedMenuEntryDoesNotHideDelete() async throws {
+    // Source mutation applied once: return the separator role-read failure directly from
+    // `markerListDeleteMenuItem`. That stops before the valid Delete item and fails this
+    // State-A/AXPick proof.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        menuUnrelatedEntryRoleReadFails: true
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "A")
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuEntryID, action: kAXPickAction as String
+    ) == 1)
 }
 
 @Test func testIssue523UnlocalizedEditMenuRefusesWithoutAnotherDestructiveActuator() async throws {
@@ -549,6 +690,37 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     #expect(fixture.actions.actionCount(
         elementID: fixture.menuEntryID, action: kAXPickAction as String
     ) == 1)
+    #expect(fixture.markerCount == 1)
+}
+
+@Test func testIssue523EmptyAXRowsWithSurvivingChildRowCannotReachStateA() async throws {
+    // A SUCCESSFUL empty `AXRows` is not the same claim as an empty table. Concrete state: one
+    // marker, the AXPick is a no-op, and the next reads return `success([])` for `AXRows` while the
+    // table's children still hold the well-formed row. Two identical empty readings then settle,
+    // the expected survivor set is also empty, the counts agree, and the uniqueness and canonical
+    // gates pass — so the operation certifies a delete of a marker that is still there.
+    //
+    // Source mutation: take `case .success(let observedRows?)` as the complete row list without
+    // corroborating an EMPTY one against the structural rows. That is the code as it stood, and it
+    // returns State A here.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteRowsReadEmpty: true,
+        markers: [("1 1 1 1", "Only Marker")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    // Measured on this head: State B / readback_mismatch. An independent blind review predicted
+    // State A here, against a head that predates binding the post-write readback to the inventory
+    // the index came from. The prediction does not reproduce now; the test stays because the
+    // invariant it names — a successful empty `AXRows` is not the same claim as an empty table —
+    // is exactly the shape that produced a false State A twice before.
+    let observedState: String = envelope["state"] as? String ?? "nil"
+    #expect(observedState != "A")
     #expect(fixture.markerCount == 1)
 }
 
