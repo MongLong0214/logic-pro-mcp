@@ -138,7 +138,7 @@ import Testing
 
     let tracks = await cache.getTracks()
     for (i, track) in tracks.enumerated() {
-        #expect(track.isSelected == (i == 2), "track \(i) selection mismatch")
+        #expect(i == 2 ? track.isSelected : !track.isSelected, "track \(i) selection mismatch")
     }
     #expect(await cache.getSelectedTrack()?.id == 2)
 

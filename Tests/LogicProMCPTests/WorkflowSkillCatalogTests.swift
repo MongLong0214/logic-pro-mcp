@@ -628,7 +628,10 @@ struct WorkflowSkillResourceTests {
 
         let stockDetail = try await workflowResourceObject("logic://workflow-skills/logic.workflow.plugins.stock_insert_gain_live_verified")
         let stockSurfacePresent = WorkflowSkillCatalog.currentStaticResourceURIs().contains("logic://stock-plugins")
-        #expect((stockDetail["workflow"] as? [String: Any])?["dependencies_resolved"] as? Bool == stockSurfacePresent,
+        let dependencyState = ((stockDetail["workflow"] as? [String: Any])?["dependencies_resolved"] as? Bool)
+            .map { $0 ? "resolved" : "unresolved" } ?? "missing"
+        let expectedDependencyState = stockSurfacePresent ? "resolved" : "unresolved"
+        #expect(dependencyState == expectedDependencyState,
                 "stock-dependent workflow must disclose dependency state from the actual served surface")
         if stockSurfacePresent {
             #expect((stockDetail["workflow"] as? [String: Any])?["unresolved_resources"] == nil)

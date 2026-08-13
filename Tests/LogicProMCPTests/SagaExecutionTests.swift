@@ -398,7 +398,10 @@ struct SagaExecutionTests {
 
                 let result = await fixture.executor.run(sagaStep)
                 #expect(result.state == .stateC, "\(errorCode)")
-                #expect(result.writeBoundaryCrossed == expectedBoundary, "\(errorCode)")
+                #expect(
+                    expectedBoundary ? result.writeBoundaryCrossed : !result.writeBoundaryCrossed,
+                    "\(errorCode)"
+                )
                 if errorCode == "future_error" {
                     #expect(result.detail.contains("error=unknown"))
                     #expect(!result.detail.contains(errorCode))

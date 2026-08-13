@@ -112,7 +112,7 @@ func mergeMarkerUncertainty_invalidJSON_returnsRaw() {
         (PositionSource.unknown, false),
       ])
 func positionSource_isCanonical(source: PositionSource, expected: Bool) {
-    #expect(source.isCanonical == expected)
+    #expect(expected ? source.isCanonical : !source.isCanonical)
 }
 
 // MARK: - MarkerState.fromParsed factory (양쪽 fallback site dedup 회귀 보호)
