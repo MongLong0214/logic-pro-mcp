@@ -778,7 +778,8 @@ extension AccessibilityChannel {
         activateLogic: @Sendable () -> Bool = ProcessUtils.Runtime.production.activateLogicPro,
         sleepMicros: @Sendable (UInt32) -> Void = { usleep($0) },
         executeDialogScript: (@Sendable (String) async -> ChannelResult)? = nil,
-        reconcileAfterDialogExecutionFailure: (@Sendable () async -> Bool)? = nil
+        reconcileAfterDialogExecutionFailure: (@Sendable () async -> Bool)? = nil,
+        createDialogIssuanceLedger: @escaping @Sendable () -> DialogIssuanceLedger? = DialogIssuanceLedger.create
     ) async -> ChannelResult {
         var requestedPosition: String? = nil
         if let barStr = params["bar"], let b = Int(barStr) {
@@ -894,7 +895,8 @@ extension AccessibilityChannel {
         let dialogResult = await gotoPositionViaDialog(
             position: requestedPosition,
             executeScript: dialogScriptExecutor,
-            reconcileAfterExecutionFailure: dialogFailureReconciler
+            reconcileAfterExecutionFailure: dialogFailureReconciler,
+            createIssuanceLedger: createDialogIssuanceLedger
         )
         if case let .driven(payload) = dialogResult {
             // The dialog rung builds its own envelope, so without this the same operation reports
@@ -919,7 +921,8 @@ extension AccessibilityChannel {
                 "safe_to_retry": false,
                 "fallback_unsafe": true,
             ]) { _, new in new }
-            if classification.globalInputMayHaveOccurred {
+            switch classification.globalInputEvidence {
+            case .attempted:
                 extras["dialog_input_attempted"] = true
                 if let inputBoundary = classification.globalInputBoundary {
                     extras["dialog_input_boundary"] = inputBoundary.rawValue
@@ -929,17 +932,31 @@ extension AccessibilityChannel {
                 // afterwards, so this is deliberately conservative rather than a claim that the
                 // observed Go To Position window consumed the input.
                 extras["write_attempted"] = true
+            case .indeterminate:
+                // A durable marker is written before a global key, not after it. A dead child
+                // can leave that marker without ever reaching the key (including when no child
+                // spawned), so preserve the uncertainty instead of calling it an attempt.
+                extras["dialog_input_indeterminate"] = true
+                if let inputBoundary = classification.globalInputBoundary {
+                    extras["dialog_input_boundary"] = inputBoundary.rawValue
+                }
+                extras["dialog_input_target"] = "unknown"
+                extras["write_attempted_indeterminate"] = true
+            case .notAttempted:
+                break
             }
-            if classification.dialogSubmissionWasObserved {
+            switch classification.dialogSubmissionEvidence {
+            case .attempted:
                 extras["dialog_submission_attempted"] = true
                 extras["write_attempted"] = true
-            } else if classification.dialogSubmissionMayHaveOccurred {
+            case .indeterminate:
                 extras["dialog_submission_indeterminate"] = true
-            } else if classification.globalInputMayHaveOccurred {
+            case .notAttempted where classification.globalInputEvidence
+                != GotoPositionDialogResultClassification.DialogInputEvidence.notAttempted:
                 // The completed script proved it did not advance to RETURN_ARMED, but an earlier
                 // global key may already have changed whichever target owned focus.
                 extras["dialog_submission_attempted"] = false
-            } else {
+            case .notAttempted:
                 extras["dialog_submission_indeterminate"] = true
             }
             return .success(HonestContract.encodeStateB(
@@ -1079,6 +1096,28 @@ extension AccessibilityChannel {
             end using terms from
         end menuOpenState
 
+        -- Check the global owner on both sides of the menu observation immediately before
+        -- Escape. System Events cannot make those reads atomic with the global key, but this
+        -- bracket rejects a handoff that happens while resolving the menu and leaves only the
+        -- irreducible interval after the final read.
+        on menuEscapeFocusState(theProcess)
+            using terms from application "System Events"
+                tell theProcess
+                    try
+                        set logicWasFrontmost to frontmost
+                        if logicWasFrontmost is not true then return "NOT_FRONTMOST"
+                        set menuState to my menuOpenState(theProcess)
+                        if menuState is not "OPEN" then return menuState
+                        set logicIsStillFrontmost to frontmost
+                        if logicIsStillFrontmost is not true then return "NOT_FRONTMOST"
+                        return "FOCUSED"
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end tell
+            end using terms from
+        end menuEscapeFocusState
+
         -- Never claim that Escape cleaned up a menu until AXSelected says so.
         -- Three attempts are enough to cover a menu/submenu chain without
         -- turning a failed close into an unbounded retry.
@@ -1093,12 +1132,8 @@ extension AccessibilityChannel {
             if menuState is "UNREADABLE" and not knownOpen then return "UNREADABLE"
             if menuState is not "OPEN" and menuState is not "UNREADABLE" then return menuState
             repeat 3 times
-                try
-                    set logicIsFrontmost to frontmost of theProcess
-                on error
-                    return "UNREADABLE"
-                end try
-                if logicIsFrontmost is not true then return "NOT_FRONTMOST"
+                set menuFocusState to my menuEscapeFocusState(theProcess)
+                if menuFocusState is not "FOCUSED" then return menuFocusState
                 using terms from application "System Events"
                     tell theProcess to key code 53
                 end using terms from
@@ -1117,11 +1152,17 @@ extension AccessibilityChannel {
         -- marker intact, never truncate the ledger to an empty/unknown value.
         on recordDialogIssuance(stage, ledgerPath)
             if ledgerPath is "" then return true
+            set temporaryLedgerPath to ""
             try
                 set temporaryLedgerPath to do shell script "/usr/bin/mktemp " & quoted form of (ledgerPath & ".tmp.XXXXXX")
                 do shell script "/usr/bin/printf %s " & quoted form of stage & " > " & quoted form of temporaryLedgerPath & " && /bin/mv -f " & quoted form of temporaryLedgerPath & " " & quoted form of ledgerPath
                 return true
             on error
+                if temporaryLedgerPath is not "" then
+                    try
+                        do shell script "/bin/rm -f " & quoted form of temporaryLedgerPath
+                    end try
+                end if
                 return false
             end try
         end recordDialogIssuance
@@ -1143,19 +1184,49 @@ extension AccessibilityChannel {
             return false
         end knownGoToPositionDialogSubrole
 
-        -- Find only an operable, modal Go To Position window. Title alone is not a dialog
-        -- identity: an ordinary same-titled window must not satisfy this run's input poll.
-        on matchingGoToPositionDialog(theProcess)
+        -- Capture every pre-leaf window by element identity. A track or plug-in editor can be
+        -- titled "Go To Position", so title/subrole/modality alone cannot say that a window belongs
+        -- to this request. The input target must be a matching window that appeared after this
+        -- run's resolved leaf click.
+        on goToPositionWindowSnapshot(theProcess)
+            using terms from application "System Events"
+                tell theProcess
+                    try
+                        return every window
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end tell
+            end using terms from
+        end goToPositionWindowSnapshot
+
+        on windowWasPresentBefore(dialogWindow, preLeafWindows)
+            repeat with preLeafWindow in preLeafWindows
+                try
+                    if contents of preLeafWindow is dialogWindow then return true
+                end try
+            end repeat
+            return false
+        end windowWasPresentBefore
+
+        -- Find only an operable, modal Go To Position window that this leaf could have opened.
+        -- Pre-existing same-titled windows are skipped before reading their subrole or AXModal, so
+        -- an unrelated plug-in editor with an unreadable modality cannot block this request.
+        on matchingGoToPositionDialog(theProcess, preLeafWindows)
+            if preLeafWindows is "UNREADABLE" then return "UNREADABLE"
             using terms from application "System Events"
                 tell theProcess
                     try
                         repeat with dialogWindow in every window
+                            set candidateWindow to contents of dialogWindow
                             set dialogTitle to name of dialogWindow
                             if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
-                                set dialogSubrole to subrole of dialogWindow
-                                if my knownGoToPositionDialogSubrole(dialogSubrole) then
-                                    set dialogIsModal to value of attribute "AXModal" of dialogWindow
-                                    if dialogIsModal is true then return contents of dialogWindow
+                                if not my windowWasPresentBefore(candidateWindow, preLeafWindows) then
+                                    set dialogSubrole to subrole of dialogWindow
+                                    if my knownGoToPositionDialogSubrole(dialogSubrole) then
+                                        set dialogIsModal to value of attribute "AXModal" of dialogWindow
+                                        if dialogIsModal is true then return candidateWindow
+                                    end if
                                 end if
                             end if
                         end repeat
@@ -1169,28 +1240,26 @@ extension AccessibilityChannel {
 
         -- The Go To Position dialog has its own lifecycle; a menu-bar observation says nothing
         -- about whether a titled modal is still blocking the arrange area. `AXModal` answers
-        -- whether the measured known class is modal; subrole only classifies that class. An exact
-        -- title with an unknown subrole must remain non-CLOSED, so a future Logic build cannot
-        -- release another route while its modal is still present.
-        on goToPositionDialogState(theProcess)
+        -- whether the measured known class is modal; subrole only classifies that class. This
+        -- state is intentionally about the exact element newly observed for this run, never a
+        -- title-only scan that can confuse an unrelated same-titled plug-in window for our dialog.
+        on goToPositionDialogState(theProcess, dialogWindow)
             using terms from application "System Events"
                 tell theProcess
                     try
-                        repeat with dialogWindow in every window
-                            set dialogTitle to name of dialogWindow
-                            if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
-                                set dialogSubrole to subrole of dialogWindow
-                                if not my knownGoToPositionDialogSubrole(dialogSubrole) then return "OPEN_UNKNOWN_SUBROLE"
-                                try
-                                    set dialogIsModal to value of attribute "AXModal" of dialogWindow
-                                on error
-                                    return "OPEN_UNREADABLE"
-                                end try
-                                if dialogIsModal is true then return "OPEN"
-                                return "OPEN_UNVERIFIED_MODALITY"
-                            end if
-                        end repeat
-                        return "CLOSED"
+                        if dialogWindow is missing value then return "CLOSED"
+                        if not (exists dialogWindow) then return "CLOSED"
+                        set dialogTitle to name of dialogWindow
+                        if dialogTitle is not "위치로 이동" and dialogTitle is not "Go To Position" and dialogTitle is not "Go to Position" then return "CLOSED"
+                        set dialogSubrole to subrole of dialogWindow
+                        if not my knownGoToPositionDialogSubrole(dialogSubrole) then return "OPEN_UNKNOWN_SUBROLE"
+                        try
+                            set dialogIsModal to value of attribute "AXModal" of dialogWindow
+                        on error
+                            return "OPEN_UNREADABLE"
+                        end try
+                        if dialogIsModal is true then return "OPEN"
+                        return "OPEN_UNVERIFIED_MODALITY"
                     on error
                         return "UNREADABLE"
                     end try
@@ -1199,14 +1268,15 @@ extension AccessibilityChannel {
         end goToPositionDialogState
 
         -- System Events exposes keystroke only globally, not as an action on a
-        -- window/text element. Re-read the global application owner and the exact
-        -- process-local AXFocusedWindow together immediately before each key sequence.
+        -- window/text element. Bracket the exact process-local AXFocusedWindow read with global
+        -- frontmost checks immediately before each key sequence. The second read catches a
+        -- handoff during element resolution; only the unavoidable interval after it remains.
         on observedGoToPositionDialogFocusState(theProcess, dialogWindow)
             using terms from application "System Events"
                 tell theProcess
                     try
-                        set logicIsFrontmost to frontmost
-                        if logicIsFrontmost is not true then return "NOT_FRONTMOST"
+                        set logicWasFrontmost to frontmost
+                        if logicWasFrontmost is not true then return "NOT_FRONTMOST"
                         if not (exists dialogWindow) then return "MISSING"
                         set dialogTitle to name of dialogWindow
                         set dialogSubrole to subrole of dialogWindow
@@ -1216,8 +1286,10 @@ extension AccessibilityChannel {
                         if dialogIsModal is not true then return "NOT_MODAL"
                         if not (exists attribute "AXFocusedWindow") then return "UNREADABLE"
                         set processFocusedWindow to value of attribute "AXFocusedWindow"
-                        if processFocusedWindow is dialogWindow then return "FOCUSED"
-                        return "NOT_FOCUSED"
+                        if processFocusedWindow is not dialogWindow then return "NOT_FOCUSED"
+                        set logicIsStillFrontmost to frontmost
+                        if logicIsStillFrontmost is not true then return "NOT_FRONTMOST"
+                        return "FOCUSED"
                     on error
                         return "UNREADABLE"
                     end try
@@ -1229,28 +1301,24 @@ extension AccessibilityChannel {
         -- fallback while this exact dialog is observed open, and every attempt
         -- must be followed by a new exact-dialog observation before it counts
         -- as cleanup.
-        on pressGoToPositionDialogCancel(theProcess)
+        on pressGoToPositionDialogCancel(theProcess, dialogWindow)
             using terms from application "System Events"
                 tell theProcess
                     try
-                        repeat with dialogWindow in every window
-                            set dialogTitle to name of dialogWindow
-                            if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
-                                if exists button "Cancel" of dialogWindow then
-                                    click button "Cancel" of dialogWindow
-                                    return "PRESSED"
-                                end if
-                                if exists button "취소" of dialogWindow then
-                                    click button "취소" of dialogWindow
-                                    return "PRESSED"
-                                end if
-                                if exists button "キャンセル" of dialogWindow then
-                                    click button "キャンセル" of dialogWindow
-                                    return "PRESSED"
-                                end if
-                                return "NO_BUTTON"
-                            end if
-                        end repeat
+                        set dialogState to my goToPositionDialogState(theProcess, dialogWindow)
+                        if dialogState is not "OPEN" then return dialogState
+                        if exists button "Cancel" of dialogWindow then
+                            click button "Cancel" of dialogWindow
+                            return "PRESSED"
+                        end if
+                        if exists button "취소" of dialogWindow then
+                            click button "취소" of dialogWindow
+                            return "PRESSED"
+                        end if
+                        if exists button "キャンセル" of dialogWindow then
+                            click button "キャンセル" of dialogWindow
+                            return "PRESSED"
+                        end if
                         return "NO_BUTTON"
                     on error
                         return "UNREADABLE"
@@ -1259,32 +1327,28 @@ extension AccessibilityChannel {
             end using terms from
         end pressGoToPositionDialogCancel
 
-        on dismissOpenGoToPositionDialog(theProcess)
-            set dialogState to my goToPositionDialogState(theProcess)
+        on dismissOpenGoToPositionDialog(theProcess, dialogWindow)
+            set dialogState to my goToPositionDialogState(theProcess, dialogWindow)
             if dialogState is "CLOSED" then return "CLOSED"
             if dialogState is not "OPEN" then return dialogState
             repeat 3 times
-                set cancelOutcome to my pressGoToPositionDialogCancel(theProcess)
+                set cancelOutcome to my pressGoToPositionDialogCancel(theProcess, dialogWindow)
                 if cancelOutcome is "NO_BUTTON" or cancelOutcome is "UNREADABLE" then
                     -- The Cancel click may have landed even though AX reported failure. Re-observe
                     -- this exact dialog before choosing Escape as a second actuator; unreadable is
                     -- not permission to send a key into an unknown focus target.
-                    set dialogState to my goToPositionDialogState(theProcess)
+                    set dialogState to my goToPositionDialogState(theProcess, dialogWindow)
                     if dialogState is "CLOSED" then return "CLOSED"
                     if dialogState is "UNREADABLE" then return "OPEN_UNREADABLE"
                     if dialogState is not "OPEN" then return dialogState
-                    set cleanupDialogWindow to my matchingGoToPositionDialog(theProcess)
-                    if cleanupDialogWindow is "UNREADABLE" or cleanupDialogWindow is missing value then
-                        return "OPEN_UNREADABLE"
-                    end if
-                    set cleanupDialogFocusState to my observedGoToPositionDialogFocusState(theProcess, cleanupDialogWindow)
+                    set cleanupDialogFocusState to my observedGoToPositionDialogFocusState(theProcess, dialogWindow)
                     if cleanupDialogFocusState is not "FOCUSED" then return cleanupDialogFocusState
                     using terms from application "System Events"
                         tell theProcess to key code 53
                     end using terms from
                 end if
                 delay 0.1
-                set dialogState to my goToPositionDialogState(theProcess)
+                set dialogState to my goToPositionDialogState(theProcess, dialogWindow)
                 if dialogState is "CLOSED" then return "CLOSED"
                 if dialogState is "UNREADABLE" then return "OPEN_UNREADABLE"
                 if dialogState is not "OPEN" then return dialogState
@@ -1358,17 +1422,13 @@ extension AccessibilityChannel {
                     end if
                     return "MENU_DISABLED"
                 end if
-                -- A same-titled window that was already present belongs to neither this leaf
-                -- actuation nor this request. This includes an unknown future subrole: do not
-                -- dismiss it as absent simply because it is outside the measured input class.
-                -- Absence immediately before the leaf is the first half of this run's dialog-
-                -- appearance transition.
-                set preLeafGoToPositionDialogState to my goToPositionDialogState(logicProcess)
-                if preLeafGoToPositionDialogState is "UNREADABLE" then
-                    return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position dialog state was unreadable before leaf click"
-                end if
-                if preLeafGoToPositionDialogState is not "CLOSED" then
-                    return "DIALOG_PREEXISTING: Go To Position dialog was already present before leaf click (" & preLeafGoToPositionDialogState & ")"
+                -- The window identity snapshot, not its title, is the first half of this run's
+                -- absence → leaf → appearance transition. A pre-existing plug-in editor may use
+                -- the same title (and even AXDialog), but can never become this run's input target.
+                set observedGoToPositionDialog to missing value
+                set preLeafGoToPositionWindows to my goToPositionWindowSnapshot(logicProcess)
+                if preLeafGoToPositionWindows is "UNREADABLE" then
+                    return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window snapshot was unreadable before leaf click"
                 end if
                 try
                     -- Persist before AXPress: if the child dies after the click, Swift still knows
@@ -1388,7 +1448,7 @@ extension AccessibilityChannel {
                         click menu item "Position…" of menu 1 of menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1
                     end if
                 on error errMsg
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog)
                     if dialogCleanupState is not "CLOSED" then
                         return "DIALOG_ACTUATION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                     end if
@@ -1406,7 +1466,7 @@ extension AccessibilityChannel {
                 set observedGoToPositionDialog to missing value
                 repeat 30 times
                     delay 0.1
-                    set observedGoToPositionDialog to my matchingGoToPositionDialog(logicProcess)
+                    set observedGoToPositionDialog to my matchingGoToPositionDialog(logicProcess, preLeafGoToPositionWindows)
                     if observedGoToPositionDialog is "UNREADABLE" then
                         set dialogAppearanceUnreadable to true
                         exit repeat
@@ -1417,7 +1477,7 @@ extension AccessibilityChannel {
                     end if
                 end repeat
                 if not dialogReady then
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog)
                     if dialogCleanupState is not "CLOSED" then
                         return "DIALOG_ACTUATION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                     end if
@@ -1434,7 +1494,7 @@ extension AccessibilityChannel {
             -- it may have reached an unknown target rather than advertising a clean retry.
             try
                 if not my recordDialogIssuance("SELECT_ALL_ARMED", "\(ledgerPath)") then
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog)
                     if dialogCleanupState is not "CLOSED" then
                         return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                     end if
@@ -1449,7 +1509,7 @@ extension AccessibilityChannel {
                 -- frontmost while this run was preparing the receipt.
                 set dialogFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)
                 if dialogFocusState is not "FOCUSED" then
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog)
                     if dialogCleanupState is not "CLOSED" then
                         return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                     end if
@@ -1462,7 +1522,7 @@ extension AccessibilityChannel {
                 keystroke "a" using command down
                 delay 0.1
             on error errMsg
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog)
                 if dialogCleanupState is not "CLOSED" then
                     return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
@@ -1475,7 +1535,7 @@ extension AccessibilityChannel {
 
             try
                 if not my recordDialogIssuance("POSITION_INPUT_ARMED", "\(ledgerPath)") then
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog)
                     if dialogCleanupState is not "CLOSED" then
                         return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                     end if
@@ -1489,7 +1549,7 @@ extension AccessibilityChannel {
                 -- global position text, not merely after the preceding Cmd+A.
                 set dialogTypingFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)
                 if dialogTypingFocusState is not "FOCUSED" then
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog)
                     if dialogCleanupState is not "CLOSED" then
                         return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                     end if
@@ -1502,7 +1562,7 @@ extension AccessibilityChannel {
                 keystroke "\(position)"
                 delay 0.1
             on error errMsg
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog)
                 if dialogCleanupState is not "CLOSED" then
                     return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
@@ -1517,7 +1577,7 @@ extension AccessibilityChannel {
             -- Return submission boundary, so a timeout or nonzero child exit after either point is
             -- conservatively reported rather than releasing another actuator.
             if not my recordDialogIssuance("RETURN_ARMED", "\(ledgerPath)") then
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog)
                 if dialogCleanupState is not "CLOSED" then
                     return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
@@ -1531,7 +1591,7 @@ extension AccessibilityChannel {
             -- owner after its durable marker is written and immediately before submission.
             set dialogReturnFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)
             if dialogReturnFocusState is not "FOCUSED" then
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog)
                 if dialogCleanupState is not "CLOSED" then
                     return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
@@ -1545,7 +1605,7 @@ extension AccessibilityChannel {
                 keystroke return
                 delay 0.2
             on error errMsg
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog)
                 if dialogCleanupState is not "CLOSED" then
                     return "DIALOG_SUBMISSION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
@@ -1557,9 +1617,9 @@ extension AccessibilityChannel {
             end try
             -- A normal Return reply is not proof Logic consumed it. Observe this exact modal before
             -- returning OK; if it survived, clean it only after recording the submission boundary.
-            set dialogPostReturnState to my goToPositionDialogState(logicProcess)
+            set dialogPostReturnState to my goToPositionDialogState(logicProcess, observedGoToPositionDialog)
             if dialogPostReturnState is not "CLOSED" then
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess)
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog)
                 if dialogCleanupState is not "CLOSED" then
                     return "DIALOG_SUBMISSION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
@@ -1576,7 +1636,7 @@ extension AccessibilityChannel {
 
     /// State persisted by the parent-owned issuance ledger. `unknown` is deliberately unsafe: a
     /// missing/corrupt ledger after a dead child is not evidence that the child failed before Return.
-    enum DialogIssuanceStage: String, Equatable {
+    enum DialogIssuanceStage: String, Equatable, Sendable {
         case notIssued = "NOT_ISSUED"
         case leafArmed = "LEAF_ARMED"
         case selectAllArmed = "SELECT_ALL_ARMED"
@@ -1585,7 +1645,7 @@ extension AccessibilityChannel {
         case unknown
     }
 
-    private struct DialogIssuanceLedger {
+    struct DialogIssuanceLedger: Sendable {
         let url: URL
 
         static func create() -> DialogIssuanceLedger? {
@@ -1605,6 +1665,19 @@ extension AccessibilityChannel {
         }
 
         func remove() {
+            // The child may be killed after `mktemp` and before it can rename or clean its sibling.
+            // This run's UUID makes the prefix exclusive, so the parent can safely collect those
+            // orphaned staging files as well as the canonical ledger.
+            let directory = url.deletingLastPathComponent()
+            let temporaryPrefix = url.lastPathComponent + ".tmp."
+            if let siblings = try? FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil
+            ) {
+                for sibling in siblings where sibling.lastPathComponent.hasPrefix(temporaryPrefix) {
+                    try? FileManager.default.removeItem(at: sibling)
+                }
+            }
             try? FileManager.default.removeItem(at: url)
         }
     }
@@ -1613,6 +1686,12 @@ extension AccessibilityChannel {
     /// value in `result`. Normal script replies distinguish failures before Return from a Return that
     /// may have landed; execution failures use the parent-owned durable ledger instead.
     enum GotoPositionDialogResultClassification: Equatable {
+        enum DialogInputEvidence: Equatable {
+            case notAttempted
+            case attempted
+            case indeterminate
+        }
+
         enum Failure: Equatable {
             case menuNotFound
             case menuStateUnreadable
@@ -1682,30 +1761,22 @@ extension AccessibilityChannel {
             }
         }
 
-        /// The script itself reported that Return was sent or may have been sent. A parent-owned
-        /// ledger is intentionally not included: a child can die immediately after writing it.
-        var dialogSubmissionWasObserved: Bool {
-            if case .failure(.dialogSubmissionIssued) = self {
-                return true
-            }
-            return false
-        }
-
-        /// True once the script reported a global key may have been issued, or a dead child
-        /// crossed the corresponding durable marker. This protects the receipt from claiming
-        /// `write_attempted:false` after Cmd+A, text entry, or Return could have reached another
-        /// focused target.
-        var globalInputMayHaveOccurred: Bool {
+        /// A normal script reply reached its key actuation statement. A durable ledger marker is
+        /// earlier than that statement, so a dead child leaves the input outcome indeterminate —
+        /// including the `unknown` case where ledger creation or reading failed before a spawn
+        /// failure proves whether a child ever existed.
+        var globalInputEvidence: DialogInputEvidence {
             switch self {
             case .failure(.dialogInputIssued),
-                 .failure(.dialogSubmissionIssued),
-                 .failure(.executionFailed(issuance: .selectAllArmed, cleanupObservedClosed: _)),
+                 .failure(.dialogSubmissionIssued):
+                return .attempted
+            case .failure(.executionFailed(issuance: .selectAllArmed, cleanupObservedClosed: _)),
                  .failure(.executionFailed(issuance: .positionInputArmed, cleanupObservedClosed: _)),
                  .failure(.executionFailed(issuance: .returnArmed, cleanupObservedClosed: _)),
                  .failure(.executionFailed(issuance: .unknown, cleanupObservedClosed: _)):
-                return true
+                return .indeterminate
             default:
-                return false
+                return .notAttempted
             }
         }
 
@@ -1726,16 +1797,18 @@ extension AccessibilityChannel {
             }
         }
 
-        /// A normal input result before Return proves no submission was attempted. A dead child
-        /// after RETURN_ARMED, or with no readable ledger, cannot make that same claim.
-        var dialogSubmissionMayHaveOccurred: Bool {
+        /// A normal script reply reached Return's actuation statement. A parent-owned marker is
+        /// deliberately weaker: it precedes Return and therefore represents uncertainty, not an
+        /// asserted submission attempt.
+        var dialogSubmissionEvidence: DialogInputEvidence {
             switch self {
-            case .failure(.dialogSubmissionIssued),
-                 .failure(.executionFailed(issuance: .returnArmed, cleanupObservedClosed: _)),
+            case .failure(.dialogSubmissionIssued):
+                return .attempted
+            case .failure(.executionFailed(issuance: .returnArmed, cleanupObservedClosed: _)),
                  .failure(.executionFailed(issuance: .unknown, cleanupObservedClosed: _)):
-                return true
+                return .indeterminate
             default:
-                return false
+                return .notAttempted
             }
         }
 
@@ -1874,9 +1947,10 @@ extension AccessibilityChannel {
     private static func gotoPositionViaDialog(
         position: String,
         executeScript: @escaping @Sendable (String) async -> ChannelResult,
-        reconcileAfterExecutionFailure: @escaping @Sendable () async -> Bool
+        reconcileAfterExecutionFailure: @escaping @Sendable () async -> Bool,
+        createIssuanceLedger: @escaping @Sendable () -> DialogIssuanceLedger?
     ) async -> GotoPositionDialogRouteResult {
-        let ledger = DialogIssuanceLedger.create()
+        let ledger = createIssuanceLedger()
         defer { ledger?.remove() }
         let script = gotoPositionViaDialogAppleScript(
             position: position,
@@ -1936,56 +2010,120 @@ extension AccessibilityChannel {
     ) async -> StrayGoToPositionUIOutcome {
         let target = LogicProTarget.appleScriptTarget()
         let script = """
-        on goToPositionDialogState(theProcess)
+        on knownGoToPositionDialogSubrole(dialogSubrole)
+            if dialogSubrole is "AXFloatingWindow" or dialogSubrole is "AXDialog" or dialogSubrole is "AXSystemDialog" then return true
+            return false
+        end knownGoToPositionDialogSubrole
+
+        -- Reconciliation has no live AX element from the killed child, so it can only match the
+        -- measured modal class. It must never turn a same-titled normal/editor window into a
+        -- cleanup target merely because its title collides with the dialog.
+        on matchingGoToPositionDialog(theProcess)
             using terms from application "System Events"
                 tell theProcess
                     try
                         repeat with dialogWindow in every window
                             set dialogTitle to name of dialogWindow
-                            if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then return "OPEN"
+                            if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
+                                set dialogSubrole to subrole of dialogWindow
+                                if my knownGoToPositionDialogSubrole(dialogSubrole) then
+                                    set dialogIsModal to value of attribute "AXModal" of dialogWindow
+                                    if dialogIsModal is true then return contents of dialogWindow
+                                end if
+                            end if
                         end repeat
-                        return "CLOSED"
+                        return missing value
                     on error
                         return "UNREADABLE"
                     end try
                 end tell
             end using terms from
+        end matchingGoToPositionDialog
+
+        on goToPositionDialogState(theProcess)
+            set dialogWindow to my matchingGoToPositionDialog(theProcess)
+            if dialogWindow is "UNREADABLE" then return "UNREADABLE"
+            if dialogWindow is missing value then return "CLOSED"
+            return "OPEN"
         end goToPositionDialogState
+
+        -- System Events keystrokes are global. Re-check frontmost after proving the exact modal
+        -- is Logic's AXFocusedWindow so a handoff during AX resolution cannot authorise Escape.
+        on observedGoToPositionDialogFocusState(theProcess, dialogWindow)
+            using terms from application "System Events"
+                tell theProcess
+                    try
+                        set logicWasFrontmost to frontmost
+                        if logicWasFrontmost is not true then return "NOT_FRONTMOST"
+                        if not (exists dialogWindow) then return "MISSING"
+                        set dialogTitle to name of dialogWindow
+                        if dialogTitle is not "위치로 이동" and dialogTitle is not "Go To Position" and dialogTitle is not "Go to Position" then return "MISSING"
+                        set dialogSubrole to subrole of dialogWindow
+                        if not my knownGoToPositionDialogSubrole(dialogSubrole) then return "MISSING"
+                        set dialogIsModal to value of attribute "AXModal" of dialogWindow
+                        if dialogIsModal is not true then return "NOT_MODAL"
+                        if not (exists attribute "AXFocusedWindow") then return "UNREADABLE"
+                        set processFocusedWindow to value of attribute "AXFocusedWindow"
+                        if processFocusedWindow is not dialogWindow then return "NOT_FOCUSED"
+                        set logicIsStillFrontmost to frontmost
+                        if logicIsStillFrontmost is not true then return "NOT_FRONTMOST"
+                        return "FOCUSED"
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end tell
+            end using terms from
+        end observedGoToPositionDialogFocusState
+
+        on menuEscapeFocusState(theProcess)
+            using terms from application "System Events"
+                tell theProcess
+                    try
+                        set logicWasFrontmost to frontmost
+                        if logicWasFrontmost is not true then return "NOT_FRONTMOST"
+                        set anyOpen to false
+                        repeat with menuBarItem in every menu bar item of menu bar 1
+                            if selected of menuBarItem then set anyOpen to true
+                        end repeat
+                        if not anyOpen then return "CLOSED"
+                        set logicIsStillFrontmost to frontmost
+                        if logicIsStillFrontmost is not true then return "NOT_FRONTMOST"
+                        return "FOCUSED"
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end tell
+            end using terms from
+        end menuEscapeFocusState
 
         on dismissGoToPositionDialog(theProcess)
             set dialogState to my goToPositionDialogState(theProcess)
             if dialogState is "CLOSED" then return "CLOSED"
             if dialogState is not "OPEN" then return dialogState
             repeat 3 times
+                set dialogWindow to my matchingGoToPositionDialog(theProcess)
+                if dialogWindow is "UNREADABLE" then return "UNREADABLE"
+                if dialogWindow is missing value then return "CLOSED"
                 set cancelPressed to false
                 using terms from application "System Events"
                     tell theProcess
                         try
-                            repeat with dialogWindow in every window
-                                set dialogTitle to name of dialogWindow
-                                if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
-                                    if exists button "Cancel" of dialogWindow then
-                                        click button "Cancel" of dialogWindow
-                                        set cancelPressed to true
-                                        exit repeat
-                                    end if
-                                    if exists button "취소" of dialogWindow then
-                                        click button "취소" of dialogWindow
-                                        set cancelPressed to true
-                                        exit repeat
-                                    end if
-                                end if
-                            end repeat
+                            if exists button "Cancel" of dialogWindow then
+                                click button "Cancel" of dialogWindow
+                                set cancelPressed to true
+                            else if exists button "취소" of dialogWindow then
+                                click button "취소" of dialogWindow
+                                set cancelPressed to true
+                            else if exists button "キャンセル" of dialogWindow then
+                                click button "キャンセル" of dialogWindow
+                                set cancelPressed to true
+                            end if
                         on error
                         end try
-                        -- Escape is permitted only because this exact dialog was observed OPEN
-                        -- above and Logic still owns the global keyboard at this instant.
                         if not cancelPressed then
-                            if frontmost then
-                                key code 53
-                            else
-                                return "NOT_FRONTMOST"
-                            end if
+                            set cleanupFocusState to my observedGoToPositionDialogFocusState(theProcess, dialogWindow)
+                            if cleanupFocusState is not "FOCUSED" then return cleanupFocusState
+                            key code 53
                         end if
                     end tell
                 end using terms from
@@ -2003,12 +2141,9 @@ extension AccessibilityChannel {
                     set dialogCleanupState to my dismissGoToPositionDialog(it)
                     if dialogCleanupState is not "CLOSED" then return "DIALOG_" & dialogCleanupState
                     repeat 3 times
-                        set anyOpen to false
-                        repeat with menuBarItem in every menu bar item of menu bar 1
-                            if selected of menuBarItem then set anyOpen to true
-                        end repeat
-                        if not anyOpen then return "CLOSED"
-                        if not frontmost then return "NOT_FRONTMOST"
+                        set menuFocusState to my menuEscapeFocusState(it)
+                        if menuFocusState is "CLOSED" then return "CLOSED"
+                        if menuFocusState is not "FOCUSED" then return menuFocusState
                         key code 53
                         delay 0.1
                     end repeat

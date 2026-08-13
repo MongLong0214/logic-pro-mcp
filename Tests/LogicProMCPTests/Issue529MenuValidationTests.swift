@@ -37,6 +37,14 @@ private final class Issue529Counter: @unchecked Sendable {
     }
 }
 
+private final class Issue529StringBox: @unchecked Sendable {
+    private(set) var value: String?
+
+    func set(_ value: String) {
+        self.value = value
+    }
+}
+
 private actor Issue529DialogLockGate {
     private var started = false
     private var startWaiter: CheckedContinuation<Void, Never>?
@@ -463,18 +471,19 @@ struct Issue529MenuValidationTests {
         #expect(try #require(envelope["state"] as? String) == "B")
         let writeAttempted = envelope["write_attempted"] as? Bool
         let submissionAttempted = envelope["dialog_submission_attempted"] as? Bool
-        #expect(writeAttempted == nil)
-        #expect(submissionAttempted == nil)
+        #expect(writeAttempted.map { $0 ? "true" : "false" } == nil)
+        #expect(submissionAttempted.map { $0 ? "true" : "false" } == nil)
         #expect(try #require(envelope["dialog_submission_indeterminate"] as? Bool))
         #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         #expect(sliderWrites.value == 0)
     }
 
-    @Test("a dead child with a corrupt dialog ledger reports possible global input")
-    func deadChildWithUnknownLedgerDoesNotOmitGlobalInputReceipt() async throws {
-        // Mutation this rejects: remove `.executionFailed(issuance: .unknown, ...)` from
-        // `globalInputMayHaveOccurred`. A corrupt/truncated ledger cannot prove that Cmd+A or
-        // position text was not sent, so its receipt must not claim `write_attempted:false`.
+    @Test("a spawn failure without a ledger reports global input as indeterminate")
+    func spawnFailureWithoutLedgerDoesNotOverclaimAGlobalInputAttempt() async throws {
+        // Mutation this rejects: return `.attempted` rather than `.indeterminate` for
+        // `.executionFailed(issuance: .unknown, ...)`. With ledger creation intentionally failed,
+        // this fixture's `spawnFailed` result proves no child or key event existed; uncertainty
+        // still suppresses fallback, but must not be serialized as an asserted attempt.
         let sliderWrites = Issue529Counter()
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "529"],
@@ -482,16 +491,9 @@ struct Issue529MenuValidationTests {
             isFrontmost: { true },
             activateLogic: { true },
             sleepMicros: { _ in },
-            executeDialogScript: { script in
-                let ledgerPath = try! issue529LedgerPath(from: script, stage: "LEAF_ARMED")
-                try! "truncated-before-replacement".write(
-                    toFile: ledgerPath,
-                    atomically: false,
-                    encoding: .utf8
-                )
-                return .error("osascript was killed while updating the issuance ledger")
-            },
-            reconcileAfterDialogExecutionFailure: { true }
+            executeDialogScript: { _ in .error("osascript spawnFailed") },
+            reconcileAfterDialogExecutionFailure: { true },
+            createDialogIssuanceLedger: { nil }
         )
 
         let envelope = try #require(issue529Envelope(result))
@@ -499,13 +501,42 @@ struct Issue529MenuValidationTests {
         #expect(try #require(envelope["state"] as? String) == "B")
         #expect(try #require(envelope["dialog_route_outcome"] as? String)
             == "execution_failed_issuance_unknown_cleanup_closed_true")
-        #expect(try #require(envelope["dialog_input_attempted"] as? Bool))
+        #expect(try #require(envelope["dialog_input_indeterminate"] as? Bool))
         #expect(try #require(envelope["dialog_input_boundary"] as? String) == "unknown")
         #expect(try #require(envelope["dialog_input_target"] as? String) == "unknown")
-        #expect(try #require(envelope["write_attempted"] as? Bool))
+        #expect(try #require(envelope["write_attempted_indeterminate"] as? Bool))
+        #expect(envelope["dialog_input_attempted"] == nil)
+        #expect(envelope["write_attempted"] == nil)
         #expect(try #require(envelope["dialog_submission_indeterminate"] as? Bool))
         #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         #expect(sliderWrites.value == 0)
+    }
+
+    @Test("parent ledger cleanup removes an orphaned randomized staging file")
+    func parentLedgerCleanupRemovesOrphanedTemporaryFile() async throws {
+        // Mutation this rejects: remove the sibling-prefix cleanup from
+        // `DialogIssuanceLedger.remove()`. This fixture leaves a `.tmp.*` file behind exactly as a
+        // killed child can after `mktemp`; the parent must remove it before returning.
+        let orphanedTemporaryPath = Issue529StringBox()
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: Issue529Counter()),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { script in
+                let ledgerPath = try! issue529LedgerPath(from: script, stage: "LEAF_ARMED")
+                let temporaryPath = ledgerPath + ".tmp.orphaned-test"
+                try! Data("orphaned".utf8).write(to: URL(fileURLWithPath: temporaryPath))
+                orphanedTemporaryPath.set(temporaryPath)
+                return .error("osascript terminated after mktemp")
+            },
+            reconcileAfterDialogExecutionFailure: { true }
+        )
+
+        _ = result
+        let temporaryPath = try #require(orphanedTemporaryPath.value)
+        #expect(!FileManager.default.fileExists(atPath: temporaryPath))
     }
 
     @Test("default dead-child reconciliation stays on the injected runtime seam")
@@ -789,7 +820,8 @@ struct Issue529MenuValidationTests {
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
         let returnKey = try issue529Position(of: "keystroke return", in: script)
         let postReturnObservation = try issue529Position(
-            of: "set dialogPostReturnState to my goToPositionDialogState(logicProcess)", in: script
+            of: "set dialogPostReturnState to my goToPositionDialogState(logicProcess, observedGoToPositionDialog)",
+            in: script
         )
         let ok = try issue529Position(of: "return \"OK\"", in: script)
 
@@ -800,9 +832,9 @@ struct Issue529MenuValidationTests {
     @Test("durable issuance checkpoints precede the leaf and Return actuators")
     func durableIssuanceCheckpointsPrecedeActuators() throws {
         // Mutations this rejects: move either persistent checkpoint after its corresponding click
-        // or key event, or restore a direct `printf > ledgerPath` replacement. The former recreates
-        // a no-record timeout window; the latter can truncate the prior conservative marker before
-        // the replacement becomes durable.
+        // or key event, restore a direct `printf > ledgerPath` replacement, or omit cleanup after
+        // a post-`mktemp` failure. The former recreates a no-record timeout window; the latter two
+        // can respectively truncate the prior marker or leak a randomized staging file.
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(
             position: "529.4.1.1",
             issuanceLedgerPath: "/private/tmp/issue529-ledger"
@@ -828,11 +860,17 @@ struct Issue529MenuValidationTests {
         let temporaryLedger = try issue529Position(of: "set temporaryLedgerPath to do shell script", in: ledgerHandler)
         let stagedWrite = try issue529Position(of: "quoted form of temporaryLedgerPath", in: ledgerHandler)
         let atomicRename = try issue529Position(of: "&& /bin/mv -f", in: ledgerHandler)
+        let cleanupGuard = try issue529Position(
+            of: "if temporaryLedgerPath is not \"\" then", in: ledgerHandler
+        )
+        let temporaryCleanup = try issue529Position(of: "/bin/rm -f", in: ledgerHandler)
 
         #expect(leafCheckpoint < leafClick)
         #expect(returnCheckpoint < returnKey)
         #expect(temporaryLedger < stagedWrite)
         #expect(stagedWrite < atomicRename)
+        #expect(atomicRename < cleanupGuard)
+        #expect(cleanupGuard < temporaryCleanup)
         #expect(ledgerHandler.contains("ledgerPath & \".tmp.XXXXXX\""))
     }
 
@@ -897,20 +935,20 @@ func dismissalContextKeepsLocaleReadsUnownedUntilResolvedLeafIssuance() throws {
     #expect(script.contains("if menuState is \"UNREADABLE\" and not knownOpen then return \"UNREADABLE\""))
 }
 
-@Test("the Go To Position dialog is newly observed and focus-bound before global typing")
-func gotoPositionDialogRequiresAppearanceTransitionAndFocusedBinding() throws {
-    // Mutations this rejects: remove AXFloatingWindow or AXModal from the known input class,
-    // collapse OPEN_UNKNOWN_SUBROLE to CLOSED, remove the global `frontmost` recheck, restore a
-    // title/AXFocused fallback for AXFocusedWindow identity, or move any global key before its
-    // post-marker focus guard. Any one either rejects the measured dialog or lets a stale,
-    // non-modal, or newly frontmost application receive this request's input.
+@Test("the newly opened Go To Position dialog is bracket-focus-bound before global typing")
+func gotoPositionDialogRequiresNewIdentityAndBracketedFocusedBinding() throws {
+    // Mutations this rejects: remove AXFloatingWindow or AXModal from the known input class;
+    // delete the pre-leaf identity snapshot or its new-window predicate; remove the second
+    // frontmost read after AXFocusedWindow; restore a title/AXFocused fallback; or move a global
+    // key before its post-marker focus guard. Any one can select a same-titled plug-in window or
+    // let a handoff during AX resolution authorise input for another application.
     let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(position: "529.4.7.123")
-    let preLeafObservation = try issue529Position(
-        of: "set preLeafGoToPositionDialogState to my goToPositionDialogState(logicProcess)",
+    let preLeafSnapshot = try issue529Position(
+        of: "set preLeafGoToPositionWindows to my goToPositionWindowSnapshot(logicProcess)",
         in: script
     )
-    let preLeafAbsenceGuard = try issue529Position(
-        of: "if preLeafGoToPositionDialogState is not \"CLOSED\" then",
+    let preLeafSnapshotGuard = try issue529Position(
+        of: "if preLeafGoToPositionWindows is \"UNREADABLE\" then",
         in: script
     )
     let leafClick = try issue529Position(
@@ -918,7 +956,7 @@ func gotoPositionDialogRequiresAppearanceTransitionAndFocusedBinding() throws {
         in: script
     )
     let observedDialog = try issue529Position(
-        of: "set observedGoToPositionDialog to my matchingGoToPositionDialog(logicProcess)",
+        of: "set observedGoToPositionDialog to my matchingGoToPositionDialog(logicProcess, preLeafGoToPositionWindows)",
         in: script
     )
     let selectAllLedger = try issue529Position(
@@ -954,16 +992,19 @@ func gotoPositionDialogRequiresAppearanceTransitionAndFocusedBinding() throws {
         of: "end observedGoToPositionDialogFocusState", in: script
     )
     let focusHandler = String(script[focusHandlerStart..<focusHandlerEnd])
-    let globalFocusRead = try issue529Position(of: "set logicIsFrontmost to frontmost", in: focusHandler)
+    let firstFrontmostRead = try issue529Position(of: "set logicWasFrontmost to frontmost", in: focusHandler)
     let focusedWindowRead = try issue529Position(
         of: "set processFocusedWindow to value of attribute \"AXFocusedWindow\"", in: focusHandler
     )
-    let dialogStateHandlerStart = try issue529Position(of: "on goToPositionDialogState(theProcess)", in: script)
+    let finalFrontmostRead = try issue529Position(
+        of: "set logicIsStillFrontmost to frontmost", in: focusHandler
+    )
+    let dialogStateHandlerStart = try issue529Position(of: "on goToPositionDialogState(theProcess, dialogWindow)", in: script)
     let dialogStateHandlerEnd = try issue529Position(of: "end goToPositionDialogState", in: script)
     let dialogStateHandler = String(script[dialogStateHandlerStart..<dialogStateHandlerEnd])
 
-    #expect(preLeafObservation < preLeafAbsenceGuard)
-    #expect(preLeafAbsenceGuard < leafClick)
+    #expect(preLeafSnapshot < preLeafSnapshotGuard)
+    #expect(preLeafSnapshotGuard < leafClick)
     #expect(leafClick < observedDialog)
     #expect(observedDialog < selectAllLedger)
     #expect(selectAllLedger < focusGuard)
@@ -975,10 +1016,12 @@ func gotoPositionDialogRequiresAppearanceTransitionAndFocusedBinding() throws {
     #expect(positionInput < returnLedger)
     #expect(returnLedger < returnFocusGuard)
     #expect(returnFocusGuard < returnKey)
-    #expect(globalFocusRead < focusedWindowRead)
-    #expect(focusHandler.contains("if logicIsFrontmost is not true then return \"NOT_FRONTMOST\""))
+    #expect(firstFrontmostRead < focusedWindowRead)
+    #expect(focusedWindowRead < finalFrontmostRead)
+    #expect(focusHandler.contains("if logicWasFrontmost is not true then return \"NOT_FRONTMOST\""))
+    #expect(focusHandler.contains("if logicIsStillFrontmost is not true then return \"NOT_FRONTMOST\""))
     #expect(focusHandler.contains("set dialogIsModal to value of attribute \"AXModal\" of dialogWindow"))
-    #expect(focusHandler.contains("if processFocusedWindow is dialogWindow then return \"FOCUSED\""))
+    #expect(focusHandler.contains("if processFocusedWindow is not dialogWindow then return \"NOT_FOCUSED\""))
     #expect(!focusHandler.contains("name of processFocusedWindow"))
     #expect(!focusHandler.contains("if focused of dialogWindow"))
     #expect(dialogStateHandler.contains("if not my knownGoToPositionDialogSubrole(dialogSubrole) then return \"OPEN_UNKNOWN_SUBROLE\""))
@@ -986,14 +1029,41 @@ func gotoPositionDialogRequiresAppearanceTransitionAndFocusedBinding() throws {
     #expect(dialogStateHandler.contains("return \"OPEN_UNVERIFIED_MODALITY\""))
 }
 
+@Test("a pre-existing same-titled window cannot become this run's dialog target")
+func gotoPositionDialogIgnoresSameTitledPreLeafWindows() throws {
+    // Mutation this rejects: delete `windowWasPresentBefore` from the dialog matcher. Without that
+    // identity predicate, a track-named plug-in editor can satisfy a title-based Go To Position
+    // poll despite existing before this run's only leaf click.
+    let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+    let snapshot = try issue529Position(
+        of: "set preLeafGoToPositionWindows to my goToPositionWindowSnapshot(logicProcess)", in: script
+    )
+    let leaf = try issue529Position(
+        of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
+        in: script
+    )
+    let matcherStart = try issue529Position(
+        of: "on matchingGoToPositionDialog(theProcess, preLeafWindows)", in: script
+    )
+    let matcherEnd = try issue529Position(of: "end matchingGoToPositionDialog", in: script)
+    let matcher = String(script[matcherStart..<matcherEnd])
+    let priorWindowGuard = try issue529Position(
+        of: "if not my windowWasPresentBefore(candidateWindow, preLeafWindows) then", in: matcher
+    )
+    let subroleRead = try issue529Position(of: "set dialogSubrole to subrole of dialogWindow", in: matcher)
+
+    #expect(snapshot < leaf)
+    #expect(priorWindowGuard < subroleRead)
+}
+
 @Test("an unreadable Cancel result re-observes the dialog before Escape")
 func unreadableCancelDoesNotAuthoriseEscapeWithoutDialogObservation() throws {
     // Mutation this rejects: move `key code 53` directly after an `UNREADABLE` Cancel result,
-    // bypassing either the fresh `goToPositionDialogState` observation or the immediate
-    // frontmost-plus-AXFocusedWindow guard for the exact dialog.
+    // bypassing either the fresh exact-dialog state observation or the bracketed
+    // frontmost-plus-AXFocusedWindow guard for that exact dialog.
     let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
     let handlerStart = try issue529Position(
-        of: "on dismissOpenGoToPositionDialog(theProcess)", in: script
+        of: "on dismissOpenGoToPositionDialog(theProcess, dialogWindow)", in: script
     )
     let handlerEnd = try issue529Position(of: "end dismissOpenGoToPositionDialog", in: script)
     let handler = String(script[handlerStart..<handlerEnd])
@@ -1005,7 +1075,7 @@ func unreadableCancelDoesNotAuthoriseEscapeWithoutDialogObservation() throws {
     // `.first { before < $0 && $0 < escape }` form, none is selected using the ordering asserted
     // below, so moving Escape before a guard makes the test fail.
     let reobservation = try issue529Position(
-        of: "set dialogState to my goToPositionDialogState(theProcess)", in: unreadableBranch
+        of: "set dialogState to my goToPositionDialogState(theProcess, dialogWindow)", in: unreadableBranch
     )
     let closedGuard = try issue529Position(
         of: "if dialogState is \"CLOSED\" then return \"CLOSED\"", in: unreadableBranch
@@ -1016,11 +1086,8 @@ func unreadableCancelDoesNotAuthoriseEscapeWithoutDialogObservation() throws {
     let stillOpenGuard = try issue529Position(
         of: "if dialogState is not \"OPEN\" then return dialogState", in: unreadableBranch
     )
-    let cleanupDialogBinding = try issue529Position(
-        of: "set cleanupDialogWindow to my matchingGoToPositionDialog(theProcess)", in: unreadableBranch
-    )
     let cleanupFocusGuard = try issue529Position(
-        of: "set cleanupDialogFocusState to my observedGoToPositionDialogFocusState(theProcess, cleanupDialogWindow)",
+        of: "set cleanupDialogFocusState to my observedGoToPositionDialogFocusState(theProcess, dialogWindow)",
         in: unreadableBranch
     )
     let escape = try issue529Position(of: "key code 53", in: unreadableBranch)
@@ -1028,15 +1095,15 @@ func unreadableCancelDoesNotAuthoriseEscapeWithoutDialogObservation() throws {
     #expect(reobservation < closedGuard)
     #expect(closedGuard < unreadableGuard)
     #expect(unreadableGuard < stillOpenGuard)
-    #expect(stillOpenGuard < cleanupDialogBinding)
-    #expect(cleanupDialogBinding < cleanupFocusGuard)
+    #expect(stillOpenGuard < cleanupFocusGuard)
     #expect(cleanupFocusGuard < escape)
 }
 
-@Test("dead-child reconciliation observes the named dialog before menu state")
+@Test("dead-child reconciliation targets the measured dialog before menu state")
 func aDeadScriptReconcilesDialogBeforeMenuState() throws {
-    // Mutations this rejects: restore the PID bypass (which skips cleanup), or reduce the recovery
-    // helper to menu-only observation. Either source relationship below fails.
+    // Mutations this rejects: restore the PID bypass, match a dialog by title alone, remove the
+    // final frontmost read after AXFocusedWindow, or send menu Escape after a single frontmost
+    // read. Each would either skip cleanup or let Escape reach a different focused modal/app.
     let source = try String(
         contentsOfFile: #filePath.replacingOccurrences(
             of: "Tests/LogicProMCPTests/Issue529MenuValidationTests.swift",
@@ -1047,11 +1114,24 @@ func aDeadScriptReconcilesDialogBeforeMenuState() throws {
     let helperStart = try #require(source.range(of: "private static func observeAndClearStrayGoToPositionUI("))
     let helperEnd = try #require(source.range(of: "// MARK: - Control-bar checkbox helpers"))
     let helper = String(source[helperStart.lowerBound..<helperEnd.lowerBound])
-    let dialogObservation = try issue529Position(of: "on goToPositionDialogState(theProcess)", in: helper)
+    let measuredSubrole = try issue529Position(of: "on knownGoToPositionDialogSubrole(dialogSubrole)", in: helper)
+    let dialogObservation = try issue529Position(of: "on matchingGoToPositionDialog(theProcess)", in: helper)
     let dialogCleanup = try issue529Position(of: "set dialogCleanupState to my dismissGoToPositionDialog(it)", in: helper)
-    let menuLoop = try issue529Position(of: "repeat with menuBarItem in every menu bar item", in: helper)
+    let focusedWindowRead = try issue529Position(
+        of: "set processFocusedWindow to value of attribute \"AXFocusedWindow\"", in: helper
+    )
+    let finalFrontmostRead = try issue529Position(of: "set logicIsStillFrontmost to frontmost", in: helper)
+    let menuFocus = try issue529Position(of: "set menuFocusState to my menuEscapeFocusState(it)", in: helper)
+    let menuCleanupTail = String(helper[menuFocus...])
+    let menuEscape = try issue529Position(of: "key code 53", in: menuCleanupTail)
 
+    #expect(measuredSubrole < dialogObservation)
     #expect(dialogObservation < dialogCleanup)
-    #expect(dialogCleanup < menuLoop)
+    #expect(focusedWindowRead < finalFrontmostRead)
+    #expect(dialogCleanup < menuFocus)
+    #expect(menuCleanupTail.startIndex < menuEscape)
+    #expect(helper.contains("set dialogIsModal to value of attribute \"AXModal\" of dialogWindow"))
+    #expect(helper.contains("if processFocusedWindow is not dialogWindow then return \"NOT_FOCUSED\""))
+    #expect(!helper.contains("if frontmost then"))
     #expect(!helper.contains("ProcessUtils.logicProPID"))
 }
