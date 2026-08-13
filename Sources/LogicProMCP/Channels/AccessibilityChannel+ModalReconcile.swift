@@ -347,8 +347,20 @@ extension AccessibilityChannel {
         case .found(let observed):
             window = observed
         case .absent:
-            // No main window means no main-window sheet. The other two blocker kinds are still
-            // read below, so this stays a complete observation rather than an unknown one.
+            // No main window is not the same as no sheet. A sheet lives in its parent's `AXSheets`,
+            // and that parent is an ordinary window reporting `AXModal == false` — the modality
+            // belongs to the sheet, not to the window holding it. Asking only "is this window
+            // modal" therefore walks straight past a mandatory New Track sheet, which is exactly
+            // the state `project.new` is in between choosing a template and Logic publishing the
+            // arrange window. Look for the sheet on the windows that ARE present first.
+            switch anyWindowSheetLookup(runtime: runtime) {
+            case .found(let sheet):
+                return readModalSignals(from: sheet, runtime: runtime)
+            case .incomplete, .unreadable:
+                return unreadableModalSignals()
+            case .absent:
+                break
+            }
             switch topLevelDialogRead(runtime: runtime) {
             case .unreadable, .blocking:
                 return unreadableModalSignals()
@@ -693,6 +705,41 @@ extension AccessibilityChannel {
     /// State-A gate. `attributeUnsupported` and `noValue` are structural answers
     /// and fall through to the role traversal; a malformed successful payload,
     /// a failed read, or a reached depth cap is *not* absence.
+    /// Every window the app currently vends, asked for a sheet. Used when `AXMainWindow` is absent:
+    /// the sheet is still attached to one of them, and its host is not itself modal.
+    private static func anyWindowSheetLookup(
+        runtime: AXLogicProElements.Runtime
+    ) -> SheetLookup {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return .unreadable(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)) }
+        let windows: [AXUIElement]
+        switch AXHelpers.getAttributeResult(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax
+        ) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+        case .success(let observed?):
+            windows = observed
+        case .success(nil):
+            return .absent
+        case .failure(let error) where axStatusIsDefinitiveAbsence(error):
+            return .absent
+        case .failure(let error):
+            return .unreadable(error)
+        }
+        var sawIncomplete = false
+        for window in windows {
+            switch firstSheetLookup(in: window, maxDepth: 32, runtime: runtime.ax) {
+            case .found(let sheet):
+                return .found(sheet)
+            case .unreadable(let error):
+                return .unreadable(error)
+            case .incomplete:
+                sawIncomplete = true
+            case .absent:
+                continue
+            }
+        }
+        return sawIncomplete ? .incomplete : .absent
+    }
+
     private static func firstSheetLookup(
         in window: AXUIElement,
         maxDepth: Int,

@@ -224,6 +224,35 @@ struct Issue538ModalWitnessTests {
         )
     }
 
+    @Test("a sheet on a non-modal window is seen even when AXMainWindow is absent")
+    func sheetOnAXWindowsIsSeenWithoutAMainWindow() {
+        // A sheet lives in its parent's `AXSheets`; the parent is an ordinary window and reports
+        // `AXModal == false`, because the modality belongs to the sheet. Routing an absent
+        // `AXMainWindow` to a scan that only asks each window "are you modal?" therefore walks past
+        // the mandatory New Track sheet entirely and calls the observation clean.
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(70)
+        let window = builder.element(71)
+        let sheet = builder.element(72)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+        builder.setAttribute(window, kAXSubroleAttribute as String, kAXStandardWindowSubrole as String)
+        builder.setAttribute(window, kAXTitleAttribute as String, "Untitled 1 - Tracks")
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        builder.setAttribute(window, "AXSheets", [sheet])
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+        let runtime = builder.makeLogicRuntime(
+            appElement: app, setAttributeHandler: nil, performActionHandler: nil
+        )
+
+        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+
+        // Mutation: route an absent `AXMainWindow` straight to the top-level modal scan without
+        // looking for sheets on the windows that are present; this becomes `.none`.
+        #expect(kind != ModalReconciliation.BlockingModalKind.none)
+    }
+
     @Test("an absent main window is an answer for the modal read, not an unknown blocker")
     func absentMainWindowIsAnAnswer() {
         // There is no main-window sheet when there is no main window, and during `project.new`
@@ -819,6 +848,10 @@ struct Issue538ModalWitnessTests {
         builder.setAttribute(trackMenu, kAXTitleAttribute as String, "Track")
         builder.setChildren(trackMenu, [deleteItem])
         builder.setAttribute(deleteItem, kAXTitleAttribute as String, "Delete Track")
+        // Production shape: the sheet is modal, its HOST window is not. Leaving AXModal unset made
+        // the fake answer success(nil), which classifies as unreadable — a state the real app does
+        // not produce, and one that hides whether the act path can see the sheet at all.
+        builder.setAttribute(arrange, kAXModalAttribute as String, false)
         builder.setAttribute(arrange, "AXSheets", [sheet])
         builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
         builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
@@ -853,6 +886,14 @@ struct Issue538ModalWitnessTests {
         // direct AXMainWindow read. It classifies -25205 as absent, skips this
         // attached mandatory sheet, and incorrectly returns State A after two
         // clean-looking count polls.
+        // The ACT path must see the same sheet the observation did. It goes through
+        // `reconcileAfterMutation`, which resolves the host itself — so before the any-window sheet
+        // lookup existed, the observation blocked State A while the action never pressed Create and
+        // the envelope named no modal at all. Logic was left on a sheet whose Cancel is disabled.
+        let reconciledKind: String = envelope["reconciled_modal_kind"] as? String ?? "ABSENT"
+        let reconciledAction: String = envelope["reconciled_action"] as? String ?? "ABSENT"
+        #expect(reconciledKind == "mandatory_new_track")
+        #expect(reconciledAction == "click_create")
         #expect(!verified)
     }
 
