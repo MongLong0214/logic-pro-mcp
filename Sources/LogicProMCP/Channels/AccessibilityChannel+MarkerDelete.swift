@@ -245,13 +245,19 @@ extension AccessibilityChannel {
         var observedSurvivors: [String] = []
         var observedPositionEvidenceCanonical = false
         var observedEmptySurvivorSet = false
+        var observedTargetRowStillSelected = false
         var settled = false
-        var previousPositions: [String]?
+        var previousObservation: (positions: [String], targetRowStillSelected: Bool)?
         // A genuine AX rebuild failure voids the entire observation, regardless of whether it
         // arose from AXRows, structural corroboration, or a row cell. Keep the last one only so,
         // if it is still the final poll when the existing budget expires, State B reports that
         // exact site and status without re-resolving the already-bound table.
         var finalTransientReadbackFailure: AXLogicProElements.MarkerListReadFailure?
+        // AXRows and AXChildren are both projections of the same table and can omit the same row
+        // during one rebuild. The table's selected-row relation is a separate observed effect of
+        // the exact target we selected for the menu actuator. A failure to read it retires this
+        // whole poll; it never becomes an answer that the target left the selection.
+        var finalTargetSelectionReadbackFailure: AXHelpers.AXStatusError?
         for _ in 0..<6 {
             let reading: [MarkerState]
             switch AXLogicProElements.enumerateMarkersFromListTableWithReadFailure(
@@ -265,7 +271,8 @@ extension AccessibilityChannel {
                 // the already-bound table. Retiring this turn also retires the prior successful
                 // reading, so a later State A still requires two fresh agreeing observations.
                 finalTransientReadbackFailure = failure
-                previousPositions = nil
+                finalTargetSelectionReadbackFailure = nil
+                previousObservation = nil
                 mouse.sleepMicros(250_000)
                 continue
             case .failure(let failure):
@@ -274,8 +281,26 @@ extension AccessibilityChannel {
                 addMarkerDeleteReadbackFailure(failure, to: &extras)
                 return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
             }
+
+            let targetRowStillSelected: Bool
+            switch markerListTargetRowIsSelected(targetRow, in: inventory.table, runtime: runtime.ax) {
+            case .success(let selected):
+                targetRowStillSelected = selected
+                finalTargetSelectionReadbackFailure = nil
+            case .failure(let error):
+                // A selection read that did not answer cannot be turned into evidence that the
+                // deletion changed the selection. Discard the inventory reading too, so the next
+                // State A still needs two complete, fresh, agreeing observations.
+                finalTargetSelectionReadbackFailure = error
+                previousObservation = nil
+                mouse.sleepMicros(250_000)
+                continue
+            }
+
             let positions = reading.map(\.position).map(canonicalMarkerPosition).sorted()
-            if let previousPositions, previousPositions == positions {
+            if let previousObservation,
+               previousObservation.positions == positions,
+               previousObservation.targetRowStillSelected == targetRowStillSelected {
                 observedSurvivorPositions = positions
                 observedSurvivors = reading
                     .map { canonicalMarkerIdentity(name: $0.name, position: $0.position) }
@@ -286,10 +311,11 @@ extension AccessibilityChannel {
                 observedEmptySurvivorSet = reading.isEmpty
                 observedPositionEvidenceCanonical = !reading.isEmpty
                     && reading.allSatisfy { $0.positionSource == .parser }
+                observedTargetRowStillSelected = targetRowStillSelected
                 settled = true
                 break
             }
-            previousPositions = positions
+            previousObservation = (positions, targetRowStillSelected)
             mouse.sleepMicros(250_000)
         }
         guard settled else {
@@ -297,6 +323,15 @@ extension AccessibilityChannel {
             if let finalTransientReadbackFailure {
                 extras["readback_unreadable"] = true
                 addMarkerDeleteReadbackFailure(finalTransientReadbackFailure, to: &extras)
+                return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+            }
+            if let finalTargetSelectionReadbackFailure {
+                extras["readback_unreadable"] = true
+                extras["readback_failure_site"] = "selected_rows"
+                extras["readback_ax_status"] = Int(finalTargetSelectionReadbackFailure.raw)
+                if let symbolicName = finalTargetSelectionReadbackFailure.symbolicName {
+                    extras["readback_ax_status_name"] = symbolicName
+                }
                 return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
             }
             // All six inventory reads answered successfully. Do not invent an AX status for a
@@ -312,6 +347,17 @@ extension AccessibilityChannel {
         extras["observed_empty_survivor_set"] = observedEmptySurvivorSet
         extras["position_evidence_canonical"] = prewritePositionEvidenceCanonical
             && (observedEmptySurvivorSet || observedPositionEvidenceCanonical)
+        extras["target_row_still_selected_after_pick"] = observedTargetRowStillSelected
+
+        // A surviving target selection is a direct observed no-op, even if AXRows and AXChildren
+        // happened to agree on an omitted row. The two table projections are corroboration, not
+        // independent effects; never certify the deletion while the exact row selected for Delete
+        // remains selected. This guard follows the two-reading settle so it is based on a complete
+        // agreeing observation rather than one unstable poll.
+        guard !observedTargetRowStillSelected else {
+            extras["reason_detail"] = "The exact target row remained selected after the Delete pick, so the settled row omission is not sufficient evidence of deletion."
+            return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
+        }
 
         // This proves that precisely one position occurrence disappeared and that it was an
         // occurrence at the target's position. It cannot establish WHICH marker was removed when

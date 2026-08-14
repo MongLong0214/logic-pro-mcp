@@ -403,25 +403,23 @@ extension AXLogicProElements {
                 return .failure(MarkerListReadFailure(site: .structuralChildren, status: error))
             }
         case .failure(let error) where error.isDefinitiveAbsence:
-            // Not every marker table vends `AXRows`; that is an answer, so fall through to the
-            // structural row read rather than declaring the whole readback unreadable.
-            switch directChildren(
-                of: table, withRole: kAXRowRole as String,
-                absenceIsEmpty: false, runtime: runtime
-            ) {
-            case .success(let children):
-                rows = children
+            // `AXRows` unavailable is an answer about that attribute, not evidence that a
+            // role-filtered structural `[]` is a complete Marker List. Use the same structural
+            // reader as the AXRows-corrobation path: present children that temporarily cease to
+            // report AXRow make this poll unreadable rather than a false empty survivor set.
+            switch markerListStructuralRows(from: table, runtime: runtime) {
+            case .success(let structuralRows):
+                rows = structuralRows
                 rowSource = .structuralChildren
             case .failure(let error):
                 return .failure(MarkerListReadFailure(site: .structuralChildren, status: error))
             }
         case .success(nil):
-            switch directChildren(
-                of: table, withRole: kAXRowRole as String,
-                absenceIsEmpty: false, runtime: runtime
-            ) {
-            case .success(let children):
-                rows = children
+            // A successful nil carries the same attribute-absence answer as a definitive
+            // AXRows failure, so it must take the same guarded structural route.
+            switch markerListStructuralRows(from: table, runtime: runtime) {
+            case .success(let structuralRows):
+                rows = structuralRows
                 rowSource = .structuralChildren
             case .failure(let error):
                 return .failure(MarkerListReadFailure(site: .structuralChildren, status: error))

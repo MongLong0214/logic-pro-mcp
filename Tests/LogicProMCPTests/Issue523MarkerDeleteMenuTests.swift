@@ -34,6 +34,9 @@ private final class Issue523MenuState: @unchecked Sendable {
     var postWriteAXRowsReadFailureWasObserved = false
     var postWriteAXRowsReadRecoveredAfterFailure = false
     var postWriteAXRowsRecoveredReadCount = 0
+    var postWriteAXRowsReadNil = false
+    var postWriteAXRowsNilReadWasObserved = false
+    var postWriteAXRowsNilReadCount = 0
     var postWriteRowsReadEmpty = false
     var postWriteRowsDropIndex: Int?
     var postWriteRowsSubstituteIndex: Int?
@@ -46,6 +49,8 @@ private final class Issue523MenuState: @unchecked Sendable {
     var postWriteStructuralChildrenReadFailureWasObserved = false
     var postWriteStructuralChildrenReadRecoveredAfterFailure = false
     var postWriteStructuralChildrenRecoveredReadCount = 0
+    var postWriteStructuralRowsDropIndex: Int?
+    var postWriteStructuralRowsDropReadWasObserved = false
     var postWriteRowsDropReadWasObserved = false
     var postWriteRowsSubstituteReadWasObserved = false
     var postWriteRowRolesBecomeNonRows = false
@@ -132,6 +137,7 @@ private func issue523MarkerDeleteFixture(
     postWriteAXRowsReadFailures: Int = 0,
     postWriteAXRowsReadFailureStatus: Int32 = AXError.cannotComplete.rawValue,
     postWriteAXRowsReadFailurePersists: Bool = false,
+    postWriteAXRowsReadNil: Bool = false,
     postWriteRowsReadEmpty: Bool = false,
     postWriteRowsDropIndex: Int? = nil,
     postWriteRowsSubstituteIndex: Int? = nil,
@@ -139,6 +145,7 @@ private func issue523MarkerDeleteFixture(
     postWriteStructuralChildrenReadFailures: Int = 0,
     postWriteStructuralChildrenReadFailureStatus: Int32 = AXError.cannotComplete.rawValue,
     postWriteStructuralChildrenReadFailurePersists: Bool = false,
+    postWriteStructuralRowsDropIndex: Int? = nil,
     postWriteRowCellsReadNoValue: Bool = false,
     postWriteRowCellsInvalidReadFailures: Int = 0,
     postWriteRowCellsInvalidReadPersists: Bool = false,
@@ -335,6 +342,7 @@ private func issue523MarkerDeleteFixture(
                     menuState.postWriteAXRowsReadFailuresRemaining = postWriteAXRowsReadFailures
                     menuState.postWriteAXRowsReadFailureStatus = postWriteAXRowsReadFailureStatus
                     menuState.postWriteAXRowsReadFailurePersists = postWriteAXRowsReadFailurePersists
+                    menuState.postWriteAXRowsReadNil = postWriteAXRowsReadNil
                     menuState.postWriteRowsReadEmpty = postWriteRowsReadEmpty
                     menuState.postWriteRowsDropIndex = postWriteRowsDropIndex
                     menuState.postWriteRowsSubstituteIndex = postWriteRowsSubstituteIndex
@@ -342,6 +350,7 @@ private func issue523MarkerDeleteFixture(
                     menuState.postWriteStructuralChildrenReadFailuresRemaining = postWriteStructuralChildrenReadFailures
                     menuState.postWriteStructuralChildrenReadFailureStatus = postWriteStructuralChildrenReadFailureStatus
                     menuState.postWriteStructuralChildrenReadFailurePersists = postWriteStructuralChildrenReadFailurePersists
+                    menuState.postWriteStructuralRowsDropIndex = postWriteStructuralRowsDropIndex
                     menuState.postWriteRowCellsReadNoValue = postWriteRowCellsReadNoValue
                     menuState.postWriteRowCellsInvalidReadFailuresRemaining = postWriteRowCellsInvalidReadFailures
                     menuState.postWriteRowCellsInvalidReadPersists = postWriteRowCellsInvalidReadPersists
@@ -369,6 +378,10 @@ private func issue523MarkerDeleteFixture(
                     let afterPick = currentRows.filter { !CFEqual($0, selectedRow) }
                     builder.setAttribute(table, "AXRows", afterPick)
                     builder.setChildren(table, afterPick)
+                    // A real Delete no longer leaves the removed element as the table's current
+                    // selection. Keep the operation's pre-pick diagnostic ID separately so the
+                    // target-fidelity test can still identify which row AXPick acted on.
+                    builder.setAttribute(table, "AXSelectedRows", [AXUIElement]())
                 }
                 if let substituteIndex = postWriteRowsSubstituteIndex,
                    let currentRows: [AXUIElement] = AXHelpers.getAttribute(
@@ -384,6 +397,7 @@ private func issue523MarkerDeleteFixture(
                 menuState.postWriteAXRowsReadFailuresRemaining = postWriteAXRowsReadFailures
                 menuState.postWriteAXRowsReadFailureStatus = postWriteAXRowsReadFailureStatus
                 menuState.postWriteAXRowsReadFailurePersists = postWriteAXRowsReadFailurePersists
+                menuState.postWriteAXRowsReadNil = postWriteAXRowsReadNil
                 menuState.postWriteRowsReadEmpty = postWriteRowsReadEmpty
                 menuState.postWriteRowsDropIndex = postWriteRowsDropIndex
                 menuState.postWriteRowsSubstituteIndex = postWriteRowsSubstituteIndex
@@ -391,6 +405,7 @@ private func issue523MarkerDeleteFixture(
                 menuState.postWriteStructuralChildrenReadFailuresRemaining = postWriteStructuralChildrenReadFailures
                 menuState.postWriteStructuralChildrenReadFailureStatus = postWriteStructuralChildrenReadFailureStatus
                 menuState.postWriteStructuralChildrenReadFailurePersists = postWriteStructuralChildrenReadFailurePersists
+                menuState.postWriteStructuralRowsDropIndex = postWriteStructuralRowsDropIndex
                 menuState.postWriteRowCellsReadNoValue = postWriteRowCellsReadNoValue
                 menuState.postWriteRowCellsInvalidReadFailuresRemaining = postWriteRowCellsInvalidReadFailures
                 menuState.postWriteRowCellsInvalidReadPersists = postWriteRowCellsInvalidReadPersists
@@ -459,6 +474,20 @@ private func issue523MarkerDeleteFixture(
                 if menuState.postWriteRowsReadFails,
                    builder.elementID(element) == builder.elementID(table) {
                     return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                }
+                if let dropIndex = menuState.postWriteStructuralRowsDropIndex,
+                   builder.elementID(element) == builder.elementID(table) {
+                    // Deliberately leave the table's real children alone. This is the common-mode
+                    // rebuild lie: AXChildren reports the same target omission as AXRows while
+                    // the bound table still owns all original rows.
+                    let currentChildren = baseRuntime.ax.children(element)
+                    guard currentChildren.indices.contains(dropIndex) else {
+                        return .success(currentChildren)
+                    }
+                    menuState.postWriteStructuralRowsDropReadWasObserved = true
+                    var truncated = currentChildren
+                    truncated.remove(at: dropIndex)
+                    return .success(truncated)
                 }
                 if menuState.postWriteRowCellsReadNoValue,
                    rows.contains(where: { CFEqual(element, $0) }) {
@@ -580,6 +609,16 @@ private func issue523MarkerDeleteFixture(
                    attribute == "AXRows" {
                     menuState.postWriteRowsReadFailureWasObserved = true
                     return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                }
+                if menuState.postWriteAXRowsReadNil,
+                   builder.elementID(element) == builder.elementID(table),
+                   attribute == "AXRows" {
+                    // A successful nil is an answer that AXRows has no value, not an AX failure.
+                    // The composite rebuild regression verifies it takes the same guarded
+                    // structural path as attributeUnsupported.
+                    menuState.postWriteAXRowsNilReadWasObserved = true
+                    menuState.postWriteAXRowsNilReadCount += 1
+                    return .success(nil)
                 }
                 if menuState.postWriteRowsNeverSettle,
                    builder.elementID(element) == builder.elementID(table),
@@ -1460,8 +1499,7 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     // this fixture set the flag only on the stale-pick branch, so it never armed, and the State B
     // it produced came from an unrelated mismatch. That hole is why a first reading of this
     // scenario was reported as "does not reproduce".
-    let observedState: String = envelope["state"] as? String ?? "nil"
-    #expect(observedState != "A")
+    #expect(try #require(envelope["state"] as? String) == "B")
     #expect(fixture.menuState.postWriteRowsEmptyReadWasObserved)
     #expect(fixture.markerCount == 1)
 }
@@ -1488,6 +1526,56 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     #expect(fixture.menuState.postWriteRowsEmptyReadWasObserved)
     #expect(fixture.menuState.postWriteRowRoleChangeWasObserved)
     #expect(fixture.markerCount == 1)
+}
+
+@Test func testIssue523AXRowsAbsenceOrNilWithNonRowChildrenCannotManufactureEmptyReadback() async throws {
+    // Mutation proven: in `markerListInventoryWithReadFailure`, replace the
+    // `markerListStructuralRows(from: table, runtime: runtime)` call in the success(nil) branch
+    // with the old role-filtered `directChildren` call. That branch bypasses the
+    // present-child/non-row guard and fails its exact `readback_unavailable` expectation below
+    // (the later selection-effect guard can still keep the result out of State A, which is why
+    // this test pins the unavailable diagnosis too). The paired attributeUnsupported fixture
+    // covers the distinct definitive-absence entry into the same property.
+    let absenceFixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteAXRowsReadFailureStatus: AXError.attributeUnsupported.rawValue,
+        postWriteAXRowsReadFailurePersists: true,
+        postWriteRowRolesBecomeNonRows: true,
+        markers: [("1 1 1 1", "Only Marker")]
+    )
+    let absenceResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: absenceFixture.runtime, mouse: absenceFixture.mouse
+    )
+    let absenceEnvelope = try issue523Envelope(absenceResult)
+
+    #expect(absenceResult.isSuccess)
+    #expect(try #require(absenceEnvelope["state"] as? String) == "B")
+    #expect(absenceEnvelope["reason"] as? String == "readback_unavailable")
+    #expect(absenceFixture.menuState.postWriteAXRowsReadFailureWasObserved)
+    #expect(absenceFixture.menuState.postWriteAXRowsReadFailureCount == 1)
+    #expect(absenceFixture.menuState.postWriteRowRoleChangeWasObserved)
+    #expect(absenceFixture.markerCount == 1)
+
+    let nilFixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteAXRowsReadNil: true,
+        postWriteRowRolesBecomeNonRows: true,
+        markers: [("1 1 1 1", "Only Marker")]
+    )
+    let nilResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: nilFixture.runtime, mouse: nilFixture.mouse
+    )
+    let nilEnvelope = try issue523Envelope(nilResult)
+
+    #expect(nilResult.isSuccess)
+    #expect(try #require(nilEnvelope["state"] as? String) == "B")
+    #expect(nilEnvelope["reason"] as? String == "readback_unavailable")
+    #expect(nilFixture.menuState.postWriteAXRowsNilReadWasObserved)
+    #expect(nilFixture.menuState.postWriteAXRowsNilReadCount == 1)
+    #expect(nilFixture.menuState.postWriteRowRoleChangeWasObserved)
+    #expect(nilFixture.markerCount == 1)
 }
 
 @Test func testIssue523PostWriteUnreadableRowCellsCannotManufactureAnEmptyStateA() async throws {
@@ -1845,10 +1933,43 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     )
     let envelope = try issue523Envelope(result)
 
-    let observedState: String = envelope["state"] as? String ?? "nil"
-    #expect(observedState != "A")
+    #expect(try #require(envelope["state"] as? String) == "B")
     #expect(fixture.menuState.postWriteRowsDropReadWasObserved)
     // The row is still a child of the bound table: nothing was deleted.
+    #expect(fixture.markerCount == 3)
+}
+
+@Test func testIssue523SharedAXRowsAndChildrenTargetOmissionCannotReachStateA() async throws {
+    // AXRows and AXChildren are two properties of the same AXTable, not independent witness
+    // processes. Model the real common-mode rebuild case: both successfully omit Verse on every
+    // post-pick poll while the actual table keeps all three rows and Delete was a no-op. The
+    // original target remains selected, which is a separate observed no-op effect and must join
+    // the two-reading settle before State A can be certified.
+    //
+    // Mutation proven: replace `guard !observedTargetRowStillSelected` in
+    // `defaultDeleteMarker` with `guard true`. The two lying inventories then settle on the exact
+    // expected survivor multiset and this test's explicit State-B expectation fails as State A.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteRowsDropIndex: 1,
+        postWriteStructuralRowsDropIndex: 1,
+        markers: [("1 1 1 1", "Intro"), ("5 1 1 1", "Verse"), ("12 1 1 1", "Chorus")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(try #require(envelope["state"] as? String) == "B")
+    #expect(envelope["reason"] as? String == "readback_mismatch")
+    #expect(try #require(envelope["readback_settled"] as? Bool))
+    #expect(envelope["marker_count_after"] as? Int == 2)
+    #expect(try #require(envelope["target_row_still_selected_after_pick"] as? Bool))
+    #expect(fixture.menuState.postWriteRowsDropReadWasObserved)
+    #expect(fixture.menuState.postWriteStructuralRowsDropReadWasObserved)
+    // The table's actual children are untouched by both seams: no marker was deleted.
     #expect(fixture.markerCount == 3)
 }
 
@@ -1864,8 +1985,7 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     )
     let envelope = try issue523Envelope(result)
 
-    let observedState: String = envelope["state"] as? String ?? "nil"
-    #expect(observedState != "A")
+    #expect(try #require(envelope["state"] as? String) == "B")
     #expect(fixture.markerCount == 3)
     #expect(fixture.menuState.postWriteRowsSubstituteReadWasObserved)
 }

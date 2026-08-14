@@ -90,6 +90,18 @@ enum OracleConstraint: Sendable {
     case lengthPrefixedIdentityAtIndexEquals(
         entriesKey: String, indexKey: String, nameKey: String, positionKey: String
     )
+    /// The independent readback array must NOT still contain the exact target identity claimed by
+    /// the response. Both the name and index are checked together: marker ordinals and generated
+    /// names can renumber after a delete, but an entry retaining both the claimed name and claimed
+    /// pre-write index is direct evidence that this claimed target survived. Missing or malformed
+    /// identities fail closed rather than becoming an answer of absence.
+    case readbackArrayExcludesResponseIdentity(
+        responseNameKey: String,
+        responseIndexKey: String,
+        readbackArrayKey: String,
+        readbackNameKey: String,
+        readbackIndexKey: String
+    )
     /// Two key paths WITHIN THE SAME payload resolve to equal leaf values. The
     /// load-bearing safe-mutation invariant: a verified write echoes what was
     /// requested as what was observed, so `requested == observed` proves the
@@ -143,6 +155,7 @@ enum OracleConstraint: Sendable {
              .lengthPrefixedEntryCountEquals(let key, _, _),
              .lengthPrefixedEntriesExclude(let key, _),
              .lengthPrefixedIdentityAtIndexEquals(let key, _, _, _),
+             .readbackArrayExcludesResponseIdentity(let key, _, _, _, _),
              .fieldsEqual(let key, _),
              .crossCheck(let key, _),
              .numericNear(let key, _, _),
@@ -161,15 +174,16 @@ enum OracleConstraint: Sendable {
         switch self {
         case .valueEquals, .numericRange, .enumMember, .lengthPrefixedEntryCountEquals,
              .lengthPrefixedEntriesExclude, .lengthPrefixedIdentityAtIndexEquals,
-             .fieldsEqual, .crossCheck, .numericNear, .booleanFlipped:
+             .readbackArrayExcludesResponseIdentity, .fieldsEqual, .crossCheck, .numericNear,
+             .booleanFlipped:
             return true
         case .nonEmptyArray, .typedField, .emptyArray:
             return false
         }
     }
 
-    /// `readback` is the parsed INDEPENDENT readback payload, read only by
-    /// `.crossCheck`; every other case ignores it. Defaulting it to nil keeps the
+    /// `readback` is the parsed INDEPENDENT readback payload, read only by the
+    /// response↔readback constraints; every other case ignores it. Defaulting it to nil keeps the
     /// single-payload call sites (and the engine unit tests) unchanged.
     func isSatisfied(by root: Any, readback: Any? = nil) -> Bool {
         switch self {
@@ -218,6 +232,35 @@ enum OracleConstraint: Sendable {
                   let position = JSONPath.resolve(root, keyPath: positionKey) as? String,
                   let identityEntries = Self.lengthPrefixedEntries(in: identity) else { return false }
             return identityEntries == [name, position]
+        case .readbackArrayExcludesResponseIdentity(
+            let responseNameKey,
+            let responseIndexKey,
+            let readbackArrayKey,
+            let readbackNameKey,
+            let readbackIndexKey
+        ):
+            // Envelope-provided target metadata cannot corroborate itself. The post-write marker
+            // records must be readable enough to tell whether that claimed target remains.
+            guard let targetName = JSONPath.resolve(root, keyPath: responseNameKey) as? String,
+                  let rawTargetIndex = JSONPath.resolve(root, keyPath: responseIndexKey),
+                  let targetIndex = JSONInspector.number(of: rawTargetIndex),
+                  targetIndex >= 0,
+                  targetIndex.rounded(.towardZero) == targetIndex,
+                  let readback,
+                  let entries = JSONPath.resolve(readback, keyPath: readbackArrayKey) as? [Any] else {
+                return false
+            }
+            for entry in entries {
+                guard let entryName = JSONPath.resolve(entry, keyPath: readbackNameKey) as? String,
+                      let rawEntryIndex = JSONPath.resolve(entry, keyPath: readbackIndexKey),
+                      let entryIndex = JSONInspector.number(of: rawEntryIndex),
+                      entryIndex >= 0,
+                      entryIndex.rounded(.towardZero) == entryIndex else {
+                    return false
+                }
+                if entryName == targetName, entryIndex == targetIndex { return false }
+            }
+            return true
         case .fieldsEqual(let keyA, let keyB):
             guard let a = JSONPath.resolve(root, keyPath: keyA),
                   let b = JSONPath.resolve(root, keyPath: keyB) else { return false }
@@ -364,9 +407,9 @@ struct OperationOracle: Sendable {
             return custom(responseData, readbackData)
         }
         guard let root = JSONInspector.parse(responseData) else { return false }
-        // A missing/unparseable readback is nil; only `.crossCheck` reads it (and
-        // it fails closed on nil). Every non-relational constraint ignores the
-        // readback, so their verdicts are byte-for-byte unchanged.
+        // A missing/unparseable readback is nil; every response↔readback constraint fails closed
+        // on nil. Every non-relational constraint ignores the readback, so their verdicts are
+        // byte-for-byte unchanged.
         let readback = JSONInspector.parse(readbackData)
         return constraints.allSatisfy { $0.isSatisfied(by: root, readback: readback) }
     }

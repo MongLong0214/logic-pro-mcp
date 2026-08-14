@@ -1601,9 +1601,11 @@ enum SemanticOracleTable {
     // request-derived expectation and independently requires the observed survivors
     // to exclude the target position. It ALSO cross-checks the reported multiset and
     // canonicality flag against the independent `logic://markers` resource read: a
-    // self-consistent producer cannot substitute unrelated survivor fields. A shared
-    // or synthetic target position is State B: a position occurrence can disappear
-    // without identifying which marker it was.
+    // self-consistent producer cannot substitute unrelated survivor fields. It also
+    // rejects a claimed target identity that still appears as the same name/index
+    // entry in that independent `data[]` readback. A shared or synthetic target
+    // position is State B: a position occurrence can disappear without identifying
+    // which marker it was.
     // Marker names remain only State-B diagnostics because Logic can renumber
     // auto-generated names after deletion.
     static let navigateDeleteMarker = SafeMutationOracle.oracle(
@@ -1614,6 +1616,13 @@ enum SemanticOracleTable {
             .typedField(key: "target_name", type: .string),
             .typedField(key: "target_position", type: .string),
             .lengthPrefixedIdentityAtIndexEquals(entriesKey: "prewrite_marker_identities", indexKey: "requested_index", nameKey: "target_name", positionKey: "target_position"),
+            .readbackArrayExcludesResponseIdentity(
+                responseNameKey: "target_name",
+                responseIndexKey: "requested_index",
+                readbackArrayKey: "data",
+                readbackNameKey: "name",
+                readbackIndexKey: "id"
+            ),
             .valueEquals(key: "target_position_unique", expected: .bool(true)),
             .valueEquals(key: "position_evidence_canonical", expected: .bool(true)),
             .typedField(key: "marker_count_before", type: .number),

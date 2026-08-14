@@ -113,6 +113,26 @@ struct SemanticOracleEngineTests {
         #expect(!OracleConstraint.fieldsEqual(keyA: "absent", keyB: "observed").isSatisfied(by: object))
     }
 
+    @Test func readbackArrayExcludesResponseIdentityRequiresAReadableIndependentAbsence() {
+        let constraint = OracleConstraint.readbackArrayExcludesResponseIdentity(
+            responseNameKey: "target_name",
+            responseIndexKey: "requested_index",
+            readbackArrayKey: "data",
+            readbackNameKey: "name",
+            readbackIndexKey: "id"
+        )
+        let response = root(#"{"target_name":"Verse","requested_index":1}"#)
+        let deleted = root(#"{"data":[{"id":0,"name":"Intro"},{"id":2,"name":"Chorus"}]}"#)
+        let survives = root(#"{"data":[{"id":1,"name":"Verse"}]}"#)
+
+        #expect(constraint.isSatisfied(by: response, readback: deleted))
+        #expect(!constraint.isSatisfied(by: response, readback: survives))
+        // A response claim cannot prove its own absence when the independent data records do not
+        // answer both identity fields.
+        #expect(!constraint.isSatisfied(by: response, readback: root(#"{"data":[{"id":1}]}"#)))
+        #expect(!constraint.isSatisfied(by: response, readback: nil))
+    }
+
     /// The same bool-vs-number discipline valueEquals enforces: a requested
     /// boolean `true` must not be satisfied by an observed numeric `1`, or a
     /// mute/arm write's `requested == observed` invariant becomes forgeable.
@@ -793,6 +813,18 @@ struct SemanticOracleMutationTests {
         ))
         #expect(!wrongClaimedIdentity, "delete_marker accepted a position deletion attributed to a different requested marker")
 
+        // Mutation proven: remove `.readbackArrayExcludesResponseIdentity(...)` from the
+        // delete-marker oracle. Every other field below is self-consistent: its forged pre-write
+        // identity says Intro was at Verse's disappearing position, and the survivor multiset
+        // correctly excludes that position. Only the independent logic://markers `data[]` read
+        // still sees `{ id: 0, name: "Intro" }`, so the restored cross-check rejects this
+        // envelope-only wrong target. Without that one oracle line it evaluates true.
+        let wrongEnvelopeOnlyIdentity = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":0,"target_name":"Intro","target_position":"5.1.1.1","prewrite_marker_identities":["5:Intro7:5.1.1.1","5:Verse7:5.1.1.1","6:Chorus8:12.1.1.1"],"target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.18:12.1.1.1"}"#.utf8),
+            readbackData: fixture.readbackData
+        ))
+        #expect(!wrongEnvelopeOnlyIdentity, "delete_marker accepted a target identity supplied only by its own envelope")
+
         // Source mutation applied once: remove both `crossCheck` constraints from the
         // delete-marker oracle. This response is internally consistent and contains no target
         // position, but its reported survivor set is unrelated to the independent marker resource.
@@ -1352,6 +1384,21 @@ enum JSONMutator {
             if let entries = JSONPath.resolve(root, keyPath: entriesKey) as? [Any], !entries.isEmpty {
                 mutants.append(contentsOf: replacements(root, entriesKey, [
                     ("malformed identity entry", ["not-a-length-prefixed-identity"] as [Any]),
+                ]))
+            }
+        case .readbackArrayExcludesResponseIdentity(let responseNameKey, let responseIndexKey, _, _, _):
+            // Response-side mutations cannot be mistaken for corroboration: removing or
+            // diverging either claimed identity component must fail closed. The meaningful
+            // readback-side survivor mutation is exercised directly by the delete-marker oracle
+            // regression, where the forged pre-write envelope keeps every other gate satisfied.
+            if let name = JSONPath.resolve(root, keyPath: responseNameKey) {
+                mutants.append(contentsOf: replacements(root, responseNameKey, [
+                    ("different readback identity name", divergent(from: name)),
+                ]))
+            }
+            if let index = JSONPath.resolve(root, keyPath: responseIndexKey) {
+                mutants.append(contentsOf: replacements(root, responseIndexKey, [
+                    ("different readback identity index", divergent(from: index)),
                 ]))
             }
         case .fieldsEqual(let keyA, let keyB):
