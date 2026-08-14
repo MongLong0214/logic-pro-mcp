@@ -134,6 +134,42 @@ enum AXHelpers {
         return .success(runtime.attributeValue(element, attribute).flatMap { $0 as? T })
     }
 
+    /// The raw shape of an AX attribute that vends a collection of UI elements.
+    ///
+    /// `AXWindows` is a Core Foundation array at the AX boundary. Asking the
+    /// generic typed helper for `[AXUIElement]` makes a second Swift-bridging
+    /// assertion after the AX API has already returned a successful CFArray.
+    /// Keep that representation boundary explicit for safety-critical scans:
+    /// an absent payload, a non-array payload, and a decodable element list are
+    /// three different observations.
+    enum AXUIElementArrayRead {
+        case elements([AXUIElement])
+        case absent
+        case malformed
+    }
+
+    /// Read a CFArray-backed AX attribute without requiring Swift to bridge it
+    /// through `as? [AXUIElement]`. This deliberately reads the raw optional
+    /// first, so the `Optional.none as AnyObject == NSNull` trap cannot turn an
+    /// absent attribute into a present malformed value.
+    static func getAXUIElementArrayRead(
+        _ element: AXUIElement,
+        _ attribute: String,
+        runtime: Runtime = .production
+    ) -> Result<AXUIElementArrayRead, AXStatusError> {
+        let raw: Result<AnyObject?, AXStatusError>
+        if let read = runtime.attributeValueResult {
+            raw = read(element, attribute)
+        } else {
+            raw = .success(runtime.attributeValue(element, attribute))
+        }
+        return raw.map { value in
+            guard let value else { return .absent }
+            guard CFGetTypeID(value) == CFArrayGetTypeID() else { return .malformed }
+            return .elements(decodeChildrenArray(value))
+        }
+    }
+
     /// Set an attribute value on an AX element.
     /// Returns true on success, false on error.
     @discardableResult
@@ -196,6 +232,32 @@ enum AXHelpers {
             case .axStatus: return "\(raw)"
             case .malformedChildren: return "malformed_children"
             case .malformedAttribute: return "malformed_attribute"
+            }
+        }
+
+        /// Stable symbolic spelling for an AX status carried in an operator
+        /// receipt. The malformed sentinels intentionally have no status code
+        /// and therefore no symbolic AX name.
+        var symbolicName: String? {
+            guard source == .axStatus else { return nil }
+            switch raw {
+            case 0: return "success"
+            case -25200: return "failure"
+            case -25201: return "illegal_argument"
+            case -25202: return "invalid_ui_element"
+            case -25203: return "invalid_ui_element_observer"
+            case -25204: return "cannot_complete"
+            case -25205: return "attribute_unsupported"
+            case -25206: return "action_unsupported"
+            case -25207: return "notification_unsupported"
+            case -25208: return "not_implemented"
+            case -25209: return "notification_already_registered"
+            case -25210: return "notification_not_registered"
+            case -25211: return "api_disabled"
+            case -25212: return "no_value"
+            case -25213: return "parameterized_attribute_unsupported"
+            case -25214: return "not_enough_precision"
+            default: return "unknown"
             }
         }
     }

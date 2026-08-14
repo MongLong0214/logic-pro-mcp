@@ -213,7 +213,8 @@ extension AccessibilityChannel {
         mandatoryTrackCreated: Bool,
         observedWindowTitles: [String],
         observationBudgetMs: Int,
-        witnessSummary: ModalReconcileWitnessSummary? = nil
+        witnessSummary: ModalReconcileWitnessSummary? = nil,
+        modalUnreadableReason: ModalReadFailure? = nil
     ) -> String {
         var extras: [String: Any] = [
             "operation": "project.new",
@@ -228,6 +229,16 @@ extension AccessibilityChannel {
         ]
         if let witnessSummary {
             extras["modal_reconciliation_witness"] = witnessSummary.envelopeValue
+        }
+        if let modalUnreadableReason {
+            // This is an incomplete observation, not a discovered unknown
+            // sheet. Reissuing project.new remains unsafe after its write
+            // boundary, but the bounded observer retried this read throughout
+            // its budget.
+            extras["modal_observation"] = "incomplete"
+            for (key, value) in modalUnreadableReason.envelopeExtras {
+                extras[key] = value
+            }
         }
         return HonestContract.encodeStateB(
             reason: .readbackUnavailable,
@@ -300,6 +311,7 @@ extension AccessibilityChannel {
         // a chance to become actionable.
         var mandatoryTrackCreateActionAttempted = false
         var mandatoryTrackCreateActionFailure: AXHelpers.AXActionError?
+        var lastModalUnreadableReason: ModalReadFailure?
         let attempts = max(1, observationAttempts)
         for attempt in 0..<attempts {
             try? await Task.sleep(nanoseconds: observationDelayNanoseconds)
@@ -309,6 +321,21 @@ extension AccessibilityChannel {
             } else {
                 outcome = await reconcileAfterMutation(isDeleteContext: false, runtime: runtime)
             }
+
+            // A no-modal classifier result is clean only when all modal sources
+            // were readable. In particular, a failed auxiliary sheet-host scan
+            // must poll again rather than becoming an invented `unknownSheet` or
+            // allowing the project-window path to certify a clean blocker set.
+            if !outcome.modalObservationIsComplete {
+                if let unreadableReason = outcome.unreadableReason {
+                    lastModalUnreadableReason = unreadableReason
+                }
+                continue
+            }
+            // Do not carry a transient, already-resolved scan failure into a
+            // later complete observation's final envelope.
+            lastModalUnreadableReason = nil
+
             switch outcome.kind {
             case .mandatoryNewTrack:
                 if let observedWitnessSummary = outcome.witnessSummary {
@@ -350,7 +377,35 @@ extension AccessibilityChannel {
                     // exactly once.
                     continue
                 }
-            case .unknownSheet, .deleteConfirm:
+            case .unknownSheet:
+                // A fail-closed modal read with an unreadable cause must not
+                // certify the project as clean, but it is also not evidence
+                // that a future poll cannot identify the mandatory sheet.
+                // Keep the bounded observer alive; a persistent unknown sheet
+                // still ends in State B below without any unchecked action.
+                if let unreadableReason = outcome.unreadableReason {
+                    lastModalUnreadableReason = unreadableReason
+                }
+                guard attempt + 1 == attempts else { continue }
+                var extras: [String: Any] = [
+                    "operation": "project.new",
+                    "method": "accessibility",
+                    "selection": selection,
+                    "phase": "unexpected_blocking_sheet",
+                    "sheet_kind": String(describing: outcome.kind),
+                    "write_attempted": true,
+                    "safe_to_retry": false,
+                ]
+                if let lastModalUnreadableReason {
+                    for (key, value) in lastModalUnreadableReason.envelopeExtras {
+                        extras[key] = value
+                    }
+                }
+                return .error(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: extras
+                ))
+            case .deleteConfirm:
                 return .error(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
                     extras: [
@@ -429,7 +484,8 @@ extension AccessibilityChannel {
             mandatoryTrackCreated: createdTrack,
             observedWindowTitles: observedWindowTitles(runtime: runtime),
             observationBudgetMs: attempts * Int(observationDelayNanoseconds / 1_000_000),
-            witnessSummary: witnessSummary
+            witnessSummary: witnessSummary,
+            modalUnreadableReason: lastModalUnreadableReason
         ))
     }
 

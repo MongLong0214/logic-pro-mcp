@@ -1296,6 +1296,7 @@ extension AccessibilityChannel {
         )
         let dialogConfirmationAttempted = dialogReconcileOutcome.actionAttempted
         let verificationReconcileOutcome = dialogReconcileOutcome.kind == .none
+            && dialogReconcileOutcome.modalObservationIsComplete
             ? reconcileOutcome
             : dialogReconcileOutcome
 
@@ -1355,7 +1356,8 @@ extension AccessibilityChannel {
             newTrackAutoConfirmed: reconcileOutcome.kind == .mandatoryNewTrack && reconcileOutcome.actionAttempted,
             witnessSummary: reconcileOutcome.witnessSummary,
             refusal: reconcileOutcome.refusal,
-            actionFailure: reconcileOutcome.actionFailure
+            actionFailure: reconcileOutcome.actionFailure,
+            unreadableReason: reconcileOutcome.unreadableReason
         )
 
         for attempt in 0..<4 {
@@ -1491,7 +1493,9 @@ extension AccessibilityChannel {
         // while that window cannot be resolved is a transient AX failure wearing the shape of a
         // successful delete. Require the window here, where the requirement actually belongs,
         // rather than making every caller of the modal read pretend absence is unreadable.
-        outcome.kind == .none && arrangeWindowWasRead
+        outcome.kind == .none
+            && outcome.modalObservationIsComplete
+            && arrangeWindowWasRead
     }
 
     /// Two complete clean reads make the delete State-A gate temporal rather
@@ -1571,6 +1575,7 @@ extension AccessibilityChannel {
         var reconcileRefusal: AlertAcknowledgeRefusal?
         var reconcileActionFailure: AXHelpers.AXActionError?
         var reconcileWitnessSummary: ModalReconcileWitnessSummary?
+        var reconcileUnreadableReason: ModalReadFailure?
         var actionAttemptedModalKinds: Set<String> = []
         var mandatoryNewTrackReconciliationPerformed = false
         var consecutiveCleanModalObservations = 0
@@ -1637,6 +1642,9 @@ extension AccessibilityChannel {
                 }
                 if let refusal = outcome.refusal { reconcileRefusal = refusal }
                 if let actionFailure = outcome.actionFailure { reconcileActionFailure = actionFailure }
+                if let unreadableReason = outcome.unreadableReason {
+                    reconcileUnreadableReason = unreadableReason
+                }
                 // A current unacted *new* blocker must not inherit a witness
                 // from a prior sheet. A repeated observation of the same kind
                 // retains its own prior direct-action witness.
@@ -1646,10 +1654,16 @@ extension AccessibilityChannel {
                 if outcome.kind == .mandatoryNewTrack, outcome.actionAttempted {
                     mandatoryNewTrackReconciliationPerformed = true
                 }
-            } else {
+            } else if outcome.modalObservationIsComplete {
                 // A complete clean pass proves the prior visible kinds closed,
                 // so a later instance is eligible for one fresh direct action.
                 actionAttemptedModalKinds.removeAll()
+                reconcileUnreadableReason = nil
+            } else if let unreadableReason = outcome.unreadableReason {
+                // An incomplete no-modal answer is neither a blocker nor a
+                // clean pass. Preserve its diagnostic and leave the action
+                // latch intact until a later complete observation settles it.
+                reconcileUnreadableReason = unreadableReason
             }
             let observedTrackCountDecreased = beforeCount.flatMap { beforeCount in
                 currentCount.map { $0 < beforeCount }
@@ -1685,7 +1699,8 @@ extension AccessibilityChannel {
                     newTrackAutoConfirmed: mandatoryNewTrackReconciliationPerformed,
                     witnessSummary: reconcileWitnessSummary,
                     refusal: reconcileRefusal,
-                    actionFailure: reconcileActionFailure
+                    actionFailure: reconcileActionFailure,
+                    unreadableReason: reconcileUnreadableReason
                 )
                 return .success(HonestContract.encodeStateA(extras: extras))
             }
@@ -1710,7 +1725,8 @@ extension AccessibilityChannel {
             newTrackAutoConfirmed: mandatoryNewTrackReconciliationPerformed,
             witnessSummary: reconcileWitnessSummary,
             refusal: reconcileRefusal,
-            actionFailure: reconcileActionFailure
+            actionFailure: reconcileActionFailure,
+            unreadableReason: reconcileUnreadableReason
         )
         return .success(HonestContract.encodeStateB(
             reason: .retryExhausted,

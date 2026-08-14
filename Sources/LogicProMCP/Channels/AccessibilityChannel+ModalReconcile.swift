@@ -29,6 +29,59 @@ extension AccessibilityChannel {
         case pressFailed = "alert_press_failed"
     }
 
+    /// A fixed, content-free reason why the complete modal observation could
+    /// not establish its blocker set. These values name an observation failure;
+    /// none authorizes an action or relaxes the clean-State-A gate.
+    enum ModalReadFailure: Sendable, Equatable {
+        case appRootUnavailable
+        case mainWindowReadFailed(AXHelpers.AXStatusError)
+        case axWindowsPayloadUninterpretable
+        case axWindowsReadFailed(AXHelpers.AXStatusError)
+        case windowSheetReadFailed(AXHelpers.AXStatusError)
+        case descendantTraversalDepthCap
+        case topLevelWindowModalReadFailed(AXHelpers.AXStatusError)
+        case strayMenuReadFailed
+
+        var wireReason: String {
+            switch self {
+            case .appRootUnavailable: return "app_root_unavailable"
+            case .mainWindowReadFailed: return "main_window_read_failed"
+            case .axWindowsPayloadUninterpretable: return "axwindows_payload_uninterpretable"
+            case .axWindowsReadFailed: return "axwindows_read_failed"
+            case .windowSheetReadFailed: return "window_sheet_read_failed"
+            case .descendantTraversalDepthCap: return "descendant_traversal_depth_cap"
+            case .topLevelWindowModalReadFailed: return "top_level_window_modal_read_failed"
+            case .strayMenuReadFailed: return "stray_menu_read_failed"
+            }
+        }
+
+        private var status: AXHelpers.AXStatusError? {
+            switch self {
+            case .mainWindowReadFailed(let error),
+                 .axWindowsReadFailed(let error),
+                 .windowSheetReadFailed(let error),
+                 .topLevelWindowModalReadFailed(let error):
+                return error
+            case .appRootUnavailable,
+                 .axWindowsPayloadUninterpretable,
+                 .descendantTraversalDepthCap,
+                 .strayMenuReadFailed:
+                return nil
+            }
+        }
+
+        var envelopeExtras: [String: Any] {
+            var extras: [String: Any] = [
+                "reconciled_modal_unreadable_reason": wireReason
+            ]
+            if let status, let symbolicName = status.symbolicName {
+                extras["reconciled_modal_unreadable_ax_status"] = Int(status.raw)
+                extras["reconciled_modal_unreadable_ax_status_name"] = symbolicName
+            }
+            return extras
+        }
+    }
+
     /// Outcome of one reconciliation pass, surfaced as honest extras by callers.
     struct ModalReconcileOutcome: Sendable, Equatable {
         let kind: ModalReconciliation.BlockingModalKind
@@ -55,6 +108,18 @@ extension AccessibilityChannel {
         /// element) when the runtime could provide one. This says only that AX
         /// rejected the press; it never attributes a later close to that press.
         let actionFailure: AXHelpers.AXActionError?
+        /// Present only when the read was fail-closed because a required modal
+        /// source could not establish its answer. This is diagnostic provenance,
+        /// not a separate classifier state.
+        let unreadableReason: ModalReadFailure?
+
+        /// `kind == .none` names the positive modal facts that were found; it
+        /// does not by itself certify that every source was readable. A
+        /// no-modal result carrying this false is retryable, not an unknown
+        /// sheet and not a clean State-A witness.
+        var modalObservationIsComplete: Bool {
+            unreadableReason == nil
+        }
 
         init(
             kind: ModalReconciliation.BlockingModalKind,
@@ -64,7 +129,8 @@ extension AccessibilityChannel {
             sheetWitness: [ModalSheetWitnessPoll] = [],
             witnessSummary: ModalReconcileWitnessSummary? = nil,
             refusal: AlertAcknowledgeRefusal? = nil,
-            actionFailure: AXHelpers.AXActionError? = nil
+            actionFailure: AXHelpers.AXActionError? = nil,
+            unreadableReason: ModalReadFailure? = nil
         ) {
             self.kind = kind
             self.decision = decision
@@ -74,6 +140,7 @@ extension AccessibilityChannel {
             self.witnessSummary = witnessSummary
             self.refusal = refusal
             self.actionFailure = actionFailure
+            self.unreadableReason = unreadableReason
         }
 
         static let none = ModalReconcileOutcome(kind: .none, decision: .noAction, performed: false)
@@ -209,7 +276,12 @@ extension AccessibilityChannel {
         let read = readModalSignalsAndAlertTarget(runtime: runtime)
         let kind = ModalReconciliation.classify(read.signals)
         let decision = ModalReconciliation.decide(kind: kind, isDeleteContext: isDeleteContext)
-        return ModalReconcileOutcome(kind: kind, decision: decision, performed: false)
+        return ModalReconcileOutcome(
+            kind: kind,
+            decision: decision,
+            performed: false,
+            unreadableReason: read.unreadableReason
+        )
     }
 
     /// As above, but carry the arrange-window answer captured by a mutation poll
@@ -227,7 +299,12 @@ extension AccessibilityChannel {
         )
         let kind = ModalReconciliation.classify(read.signals)
         let decision = ModalReconciliation.decide(kind: kind, isDeleteContext: isDeleteContext)
-        return ModalReconcileOutcome(kind: kind, decision: decision, performed: false)
+        return ModalReconcileOutcome(
+            kind: kind,
+            decision: decision,
+            performed: false,
+            unreadableReason: read.unreadableReason
+        )
     }
 
     /// Reconcile a blocking modal BEFORE starting an operation. Auto-clears a
@@ -282,7 +359,12 @@ extension AccessibilityChannel {
                 kind: kind,
                 clearMandatoryNewTrack: clearMandatoryNewTrack
            ) {
-            return ModalReconcileOutcome(kind: kind, decision: decision, performed: false)
+            return ModalReconcileOutcome(
+                kind: kind,
+                decision: decision,
+                performed: false,
+                unreadableReason: read.unreadableReason
+            )
         }
 
         let result = await perform(
@@ -305,7 +387,8 @@ extension AccessibilityChannel {
             sheetWitness: result.sheetWitness,
             witnessSummary: result.witnessSummary,
             refusal: result.refusal,
-            actionFailure: result.actionFailure
+            actionFailure: result.actionFailure,
+            unreadableReason: read.unreadableReason
         )
     }
 
@@ -318,12 +401,20 @@ extension AccessibilityChannel {
         let sheet: AXUIElement?
         let createButton: AXUIElement?
         let deleteButton: AXUIElement?
+        let unreadableReason: ModalReadFailure?
+
+        /// A content classifier may say `.none` while an independent host scan
+        /// remains unreadable. Consumers that need a clean observation must use
+        /// this alongside the classifier kind.
+        var modalObservationIsComplete: Bool {
+            unreadableReason == nil
+        }
     }
 
-    /// Read the complete blocker set into `ModalSignals`. `.none` is emitted
-    /// only after the main-window sheet, every top-level dialog, and the menu
-    /// bar each produced a successful absent read; an unavailable source is an
-    /// unknown blocking sheet, never an empty answer.
+    /// Read the content signals for the current blocker set. Callers that need
+    /// to certify a clean observation must use
+    /// `readModalSignalsAndAlertTarget`: a content-level `.none` can carry an
+    /// unreadable reason when an independent sheet-host scan was incomplete.
     static func readModalSignals(
         runtime: AXLogicProElements.Runtime = .production
     ) -> ModalReconciliation.ModalSignals {
@@ -343,10 +434,7 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime,
         mainWindow: ModalMainWindowLookup
     ) -> ModalSignalRead {
-        let window: AXUIElement
         switch mainWindow {
-        case .found(let observed):
-            window = observed
         case .absent:
             // No main window is not the same as no sheet. A sheet lives in its parent's `AXSheets`,
             // and that parent is an ordinary window reporting `AXModal == false` — the modality
@@ -357,90 +445,52 @@ extension AccessibilityChannel {
             switch anyWindowSheetLookup(runtime: runtime) {
             case .found(let sheet):
                 return readModalSignals(from: sheet, runtime: runtime)
-            case .incomplete, .unreadable:
-                return unreadableModalSignals()
+            case .incomplete(let reason), .unreadable(let reason):
+                // An unavailable host only retires the clean answer. Keep
+                // reading independent blocker sources: an identified dialog or
+                // menu is still actionable, and the next outer poll may read
+                // this host successfully.
+                return readRemainingModalSignals(
+                    runtime: runtime,
+                    sheetScanFailure: reason
+                )
+            case .absent:
+                return readRemainingModalSignals(runtime: runtime, sheetScanFailure: nil)
+            }
+        case .unreadable(let reason):
+            return unreadableModalSignals(reason: reason)
+        case .found(let window):
+            let primarySheetScanFailure: ModalReadFailure?
+            switch firstSheetLookup(in: window, maxDepth: 32, runtime: runtime.ax) {
+            case .found(let sheet):
+                // A sheet already proves this is not a clean pass. It outranks
+                // the other blocker kinds, so no action target from another
+                // window is carried into this classification.
+                return readModalSignals(from: sheet, runtime: runtime)
+            case .incomplete(let reason), .unreadable(let reason):
+                primarySheetScanFailure = reason
+            case .absent:
+                primarySheetScanFailure = nil
+            }
+
+            // `AXMainWindow` identifies the arrange window, not the only
+            // possible sheet host. Scan every other window even when the main
+            // window's own answer was unavailable: an unreadable search branch
+            // may withhold CLEAN, but it must not hide a positively identified
+            // New Track sheet on another host.
+            var sheetScanFailure = primarySheetScanFailure
+            switch anyWindowSheetLookup(runtime: runtime, excluding: window) {
+            case .found(let sheet):
+                return readModalSignals(from: sheet, runtime: runtime)
+            case .incomplete(let reason), .unreadable(let reason):
+                sheetScanFailure = sheetScanFailure ?? reason
             case .absent:
                 break
             }
-            switch topLevelDialogRead(runtime: runtime) {
-            case .unreadable, .blocking:
-                return unreadableModalSignals()
-            case .mandatoryNewTrack(let read):
-                return read
-            case .informational(let target):
-                return noSheetModalSignals(
-                    strayMenuOpen: false,
-                    topLevelAlertPresent: true,
-                    topLevelAlertButtonCount: target.info.buttonTitles.count,
-                    topLevelAlertPrimaryButton: target.info.buttonTitles.first ?? "",
-                    alertTarget: target
-                )
-            case .none:
-                switch strayMenuTargetRead(runtime: runtime) {
-                case .selected(let target):
-                    return noSheetModalSignals(strayMenuOpen: true, strayMenuTarget: target)
-                case .none:
-                    return noSheetModalSignals(strayMenuOpen: false)
-                case .unreadable:
-                    return unreadableModalSignals()
-                }
-            }
-        case .unreadable:
-            return unreadableModalSignals()
-        }
-
-        switch firstSheetLookup(in: window, maxDepth: 32, runtime: runtime.ax) {
-        case .found(let sheet):
-            // A sheet already proves this is not a clean pass. It outranks the
-            // other blocker kinds, so no action target from another window is
-            // carried into this classification.
-            return readModalSignals(from: sheet, runtime: runtime)
-        case .incomplete, .unreadable(_):
-            return unreadableModalSignals()
-        case .absent:
-            break
-        }
-
-        // `AXMainWindow` identifies the arrange window, not the only possible
-        // sheet host. A complete clean answer also needs every *other* window
-        // to answer that it has no sheet. In particular, Logic may leave a
-        // mandatory sheet attached to an auxiliary non-modal host while the
-        // arrange window remains the main window.
-        switch anyWindowSheetLookup(runtime: runtime, excluding: window) {
-        case .found(let sheet):
-            return readModalSignals(from: sheet, runtime: runtime)
-        case .incomplete, .unreadable:
-            return unreadableModalSignals()
-        case .absent:
-            break
-        }
-
-        // A sheet is absent only after the status-preserving traversal above.
-        // To return `.none`, the other two blocker kinds must now also be read
-        // completely. A present dialog/menu is already sufficient to block; a
-        // failed read is represented as an unknown sheet and cannot certify A.
-        switch topLevelDialogRead(runtime: runtime) {
-        case .unreadable, .blocking:
-            return unreadableModalSignals()
-        case .mandatoryNewTrack(let read):
-            return read
-        case .informational(let target):
-            return noSheetModalSignals(
-                strayMenuOpen: false,
-                topLevelAlertPresent: true,
-                topLevelAlertButtonCount: target.info.buttonTitles.count,
-                topLevelAlertPrimaryButton: target.info.buttonTitles.first ?? "",
-                alertTarget: target
+            return readRemainingModalSignals(
+                runtime: runtime,
+                sheetScanFailure: sheetScanFailure
             )
-        case .none:
-            switch strayMenuTargetRead(runtime: runtime) {
-            case .selected(let target):
-                return noSheetModalSignals(strayMenuOpen: true, strayMenuTarget: target)
-            case .none:
-                return noSheetModalSignals(strayMenuOpen: false)
-            case .unreadable:
-                return unreadableModalSignals()
-            }
         }
     }
 
@@ -455,13 +505,15 @@ extension AccessibilityChannel {
     private enum ModalMainWindowLookup {
         case found(AXUIElement)
         case absent
-        case unreadable
+        case unreadable(ModalReadFailure)
     }
 
     private static func modalMainWindow(
         runtime: AXLogicProElements.Runtime
     ) -> ModalMainWindowLookup {
-        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return .unreadable }
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else {
+            return .unreadable(.appRootUnavailable)
+        }
         switch AXHelpers.getAttributeResult(
             app, kAXMainWindowAttribute as String, runtime: runtime.ax
         ) as Result<AXUIElement?, AXHelpers.AXStatusError> {
@@ -471,8 +523,8 @@ extension AccessibilityChannel {
             return .absent
         case .failure(let error) where axStatusIsDefinitiveAbsence(error):
             return .absent
-        case .failure:
-            return .unreadable
+        case .failure(let error):
+            return .unreadable(.mainWindowReadFailed(error))
         }
     }
 
@@ -482,7 +534,7 @@ extension AccessibilityChannel {
         switch arrangeWindow {
         case .found(let window): return .found(window)
         case .absent: return .absent
-        case .unreadable: return .unreadable
+        case .unreadable: return .unreadable(.mainWindowReadFailed(.malformedAttribute))
         }
     }
 
@@ -492,7 +544,8 @@ extension AccessibilityChannel {
         topLevelAlertButtonCount: Int = 0,
         topLevelAlertPrimaryButton: String = "",
         alertTarget: AXLogicProElements.BlockingDialogTarget? = nil,
-        strayMenuTarget: AXUIElement? = nil
+        strayMenuTarget: AXUIElement? = nil,
+        unreadableReason: ModalReadFailure? = nil
     ) -> ModalSignalRead {
         ModalSignalRead(
             signals: ModalReconciliation.ModalSignals(
@@ -514,7 +567,8 @@ extension AccessibilityChannel {
             strayMenuTarget: strayMenuTarget,
             sheet: nil,
             createButton: nil,
-            deleteButton: nil
+            deleteButton: nil,
+            unreadableReason: unreadableReason
         )
     }
 
@@ -522,7 +576,9 @@ extension AccessibilityChannel {
     /// `unknownSheet` is the pure classifier's established representation for
     /// an unknown blocker, including an unreadable source rather than a literal
     /// sheet node.
-    private static func unreadableModalSignals() -> ModalSignalRead {
+    private static func unreadableModalSignals(
+        reason: ModalReadFailure? = nil
+    ) -> ModalSignalRead {
         ModalSignalRead(
             signals: ModalReconciliation.ModalSignals(
                 sheetPresent: true,
@@ -543,8 +599,54 @@ extension AccessibilityChannel {
             strayMenuTarget: nil,
             sheet: nil,
             createButton: nil,
-            deleteButton: nil
+            deleteButton: nil,
+            unreadableReason: reason
         )
+    }
+
+    /// Read blockers independent of the sheet-host scan. A failed sheet-host
+    /// answer prevents only the terminal clean conclusion: a positively
+    /// identified dialog or stray menu remains actionable, and a later outer
+    /// poll may make the unavailable window readable again.
+    private static func readRemainingModalSignals(
+        runtime: AXLogicProElements.Runtime,
+        sheetScanFailure: ModalReadFailure?
+    ) -> ModalSignalRead {
+        switch topLevelDialogRead(runtime: runtime) {
+        case .unreadable(let reason):
+            return unreadableModalSignals(reason: reason)
+        case .blocking:
+            return unreadableModalSignals()
+        case .mandatoryNewTrack(let read):
+            return read
+        case .informational(let target):
+            return noSheetModalSignals(
+                strayMenuOpen: false,
+                topLevelAlertPresent: true,
+                topLevelAlertButtonCount: target.info.buttonTitles.count,
+                topLevelAlertPrimaryButton: target.info.buttonTitles.first ?? "",
+                alertTarget: target
+            )
+        case .none:
+            switch strayMenuTargetRead(runtime: runtime) {
+            case .selected(let target):
+                return noSheetModalSignals(strayMenuOpen: true, strayMenuTarget: target)
+            case .none:
+                if let sheetScanFailure {
+                    // No sheet was observed. A failed host scan with no positive
+                    // finding is incomplete, not an `unknownSheet` blocker.
+                    // Preserve its provenance so callers retry and keep it out
+                    // of every clean-observation gate.
+                    return noSheetModalSignals(
+                        strayMenuOpen: false,
+                        unreadableReason: sheetScanFailure
+                    )
+                }
+                return noSheetModalSignals(strayMenuOpen: false)
+            case .unreadable:
+                return unreadableModalSignals(reason: .strayMenuReadFailed)
+            }
+        }
     }
 
     private static func readModalSignals(
@@ -603,7 +705,8 @@ extension AccessibilityChannel {
         strayMenuTarget: nil,
         sheet: sheet,
         createButton: createButton?.element,
-        deleteButton: deleteButton?.element)
+        deleteButton: deleteButton?.element,
+        unreadableReason: nil)
     }
 
     /// A complete top-level scan can find an auto-acknowledgeable AXDialog, a
@@ -618,7 +721,7 @@ extension AccessibilityChannel {
         case mandatoryNewTrack(ModalSignalRead)
         case informational(AXLogicProElements.BlockingDialogTarget)
         case blocking
-        case unreadable
+        case unreadable(ModalReadFailure)
     }
 
     /// Read every top-level window with a status-preserving `AXModal` lookup.
@@ -632,22 +735,22 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime
     ) -> TopLevelDialogRead {
         guard let app = AXLogicProElements.appRoot(runtime: runtime) else {
-            return .unreadable
+            return .unreadable(.appRootUnavailable)
         }
-        switch AXHelpers.getAttributeResult(
+        switch AXHelpers.getAXUIElementArrayRead(
             app, kAXWindowsAttribute as String, runtime: runtime.ax
-        ) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
-        case .success(.some(let windows)):
+        ) {
+        case .success(.elements(let windows)):
             return topLevelDialogRead(in: windows, runtime: runtime)
-        case .success(.none):
-            // The typed helper also turns a successfully returned payload of
-            // the wrong shape into nil. That is not an answer that there are
-            // no windows, so it cannot participate in a clean observation.
-            return .unreadable
+        case .success(.absent), .success(.malformed):
+            // AXWindows does not use an absent or non-array success value to
+            // establish an empty search space. The raw decoder distinguishes
+            // this from a CFArray whose Swift `[AXUIElement]` bridge failed.
+            return .unreadable(.axWindowsPayloadUninterpretable)
         case .failure(let error) where error.raw == AXError.noValue.rawValue:
             return .none
-        case .failure:
-            return .unreadable
+        case .failure(let error):
+            return .unreadable(.axWindowsReadFailed(error))
         }
     }
 
@@ -666,13 +769,13 @@ extension AccessibilityChannel {
                 // `AXModal` is recommended rather than required. A successful
                 // nil is also what the typed helper produces for a malformed
                 // payload, so neither establishes that this window is non-modal.
-                return .unreadable
-            case .failure:
+                return .unreadable(.topLevelWindowModalReadFailed(.malformedAttribute))
+            case .failure(let error):
                 // Missing `AXModal` is likewise not an explicit false. Unlike
                 // AXSheets, -25205/-25212 cannot be treated as structural
                 // absence here without guessing that an unobservable window is
                 // non-modal and letting it certify State A.
-                return .unreadable
+                return .unreadable(.topLevelWindowModalReadFailed(error))
             case .success(.some(true)):
                 break
             }
@@ -735,8 +838,8 @@ extension AccessibilityChannel {
     private enum SheetLookup {
         case found(AXUIElement)
         case absent
-        case incomplete
-        case unreadable(AXHelpers.AXStatusError)
+        case incomplete(ModalReadFailure)
+        case unreadable(ModalReadFailure)
     }
 
     /// Status-preserving sheet lookup used for classification and for a clean
@@ -750,38 +853,45 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime,
         excluding excludedWindow: AXUIElement? = nil
     ) -> SheetLookup {
-        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return .unreadable(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)) }
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else {
+            return .unreadable(.appRootUnavailable)
+        }
         let windows: [AXUIElement]
-        switch AXHelpers.getAttributeResult(
+        switch AXHelpers.getAXUIElementArrayRead(
             app, kAXWindowsAttribute as String, runtime: runtime.ax
-        ) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
-        case .success(let observed?):
+        ) {
+        case .success(.elements(let observed)):
             windows = observed
-        case .success(nil):
-            // `getAttributeResult` uses a typed cast, so nil also represents a
-            // successful malformed `AXWindows` payload. Do not flatten an
-            // unreadable search space into a claim that no host has a sheet.
-            return .unreadable(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+        case .success(.absent), .success(.malformed):
+            // A raw absent/non-array AXWindows result cannot prove no other
+            // sheet host exists. Keep its distinct diagnostic cause instead of
+            // laundering it into a clean empty list.
+            return .unreadable(.axWindowsPayloadUninterpretable)
         case .failure(let error) where axStatusIsDefinitiveAbsence(error):
             return .absent
         case .failure(let error):
-            return .unreadable(error)
+            return .unreadable(.axWindowsReadFailed(error))
         }
-        var sawIncomplete = false
+        var incompleteReason: ModalReadFailure?
+        var unreadableReason: ModalReadFailure?
         for window in windows {
             guard excludedWindow.map({ !CFEqual(window, $0) }) ?? true else { continue }
             switch firstSheetLookup(in: window, maxDepth: 32, runtime: runtime.ax) {
             case .found(let sheet):
                 return .found(sheet)
-            case .unreadable(let error):
-                return .unreadable(error)
-            case .incomplete:
-                sawIncomplete = true
+            case .unreadable(let reason):
+                // This window cannot contribute to a clean scan, but it must
+                // not stop a later window from contributing a real sheet.
+                // Preserve the first unavailable answer for the no-sheet exit.
+                unreadableReason = unreadableReason ?? reason
+            case .incomplete(let reason):
+                incompleteReason = incompleteReason ?? reason
             case .absent:
                 continue
             }
         }
-        return sawIncomplete ? .incomplete : .absent
+        if let unreadableReason { return .unreadable(unreadableReason) }
+        return incompleteReason.map(SheetLookup.incomplete) ?? .absent
     }
 
     private static func firstSheetLookup(
@@ -789,71 +899,94 @@ extension AccessibilityChannel {
         maxDepth: Int,
         runtime: AXHelpers.Runtime
     ) -> SheetLookup {
+        // Live measurement on Logic shows `AXSheets` is unsupported (-25205,
+        // zero elements) both while idle and while the mandatory New Track
+        // sheet is visible; that sheet appears beneath the Tracks window's
+        // `AXChildren` instead. Keep a valid non-empty AXSheets value as a
+        // cheap positive for AX variants that do vend it, but never let this
+        // non-authoritative read veto the descendant traversal.
         switch AXHelpers.getAttributeResult(window, "AXSheets", runtime: runtime) as Result<AnyObject?, AXHelpers.AXStatusError> {
-        case .failure(let error):
-            guard axStatusIsDefinitiveAbsence(error) else {
-                return .unreadable(error)
-            }
         case .success(.some(let value)):
-            guard CFGetTypeID(value) == CFArrayGetTypeID() else {
-                return .unreadable(.malformedChildren)
+            if CFGetTypeID(value) == CFArrayGetTypeID(),
+               let sheet = AXHelpers.decodeChildrenArray(value).first {
+                return .found(sheet)
             }
-            let sheets = AXHelpers.decodeChildrenArray(value)
-            if let sheet = sheets.first { return .found(sheet) }
-        case .success(.none):
+        case .failure, .success(.none):
             break
         }
         return findSheetDescendantLookup(in: window, maxDepth: maxDepth, runtime: runtime)
     }
 
 
-    /// Two AX statuses are ANSWERS, not failures, and conflating them with a failed reading is what
-    /// made this witness unusable: `attributeUnsupported` (-25205) means the element does not vend
-    /// that attribute at all, and `noValue` (-25212) means it has none. Measured on Logic 12.3 the
-    /// arrange window returns -25205 for `AXSheets` and -25212 for a childless node, so treating
-    /// either as "could not read" made every poll unreadable and no close was ever observable.
-    /// Everything else — cannot-complete, invalid element, API disabled — really is a failed read.
+    /// Two AX statuses are structural absence answers for the calls that use
+    /// them: `attributeUnsupported` (-25205) means an element does not vend an
+    /// attribute, and `noValue` (-25212) means it has none. Other statuses
+    /// leave that particular observation unreadable. `AXSheets` deliberately
+    /// does not use this distinction: its result is never authoritative and
+    /// always falls through to the descendant traversal above.
     private static func axStatusIsDefinitiveAbsence(_ error: AXHelpers.AXStatusError) -> Bool {
         error.raw == AXError.attributeUnsupported.rawValue || error.raw == AXError.noValue.rawValue
     }
 
-    /// Recurses through the fallback tree without flattening failed children or
-    /// role reads. Any unreadable or unvisited node makes the whole no-sheet
-    /// claim indeterminate: a partial tree cannot prove that a sheet is absent.
+    /// Searches one level before descending through the fallback tree. A sheet
+    /// is normally a direct `AXChildren` child of its host, so inspecting the
+    /// direct roles first avoids spending the scan inside unrelated siblings
+    /// before reaching it. An unreadable branch retires only that branch: later
+    /// siblings can still positively identify a sheet. If none do, retain the
+    /// first failure so a partial tree cannot prove that a sheet is absent.
     private static func findSheetDescendantLookup(
         in element: AXUIElement,
         maxDepth: Int,
         runtime: AXHelpers.Runtime
     ) -> SheetLookup {
-        guard maxDepth > 0 else { return .incomplete }
+        guard maxDepth > 0 else { return .incomplete(.descendantTraversalDepthCap) }
         switch AXHelpers.childrenResult(element, runtime: runtime) {
         case .failure(let error):
             // A node with no children is an answer: nothing here, keep looking elsewhere.
             guard !axStatusIsDefinitiveAbsence(error) else { return .absent }
-            return .unreadable(error)
+            return .unreadable(.windowSheetReadFailed(error))
         case .success(let children):
-            var sawIncomplete = false
+            var incompleteReason: ModalReadFailure?
+            var unreadableReason: ModalReadFailure?
+            var nonSheetChildren: [AXUIElement] = []
+
+            // The measured New Track sheet is a direct child of the arrange
+            // window. Give each direct child a chance to identify itself before
+            // walking below a readable sibling; several unrelated direct nodes
+            // can reject `AXRole` with -25200.
             for child in children {
                 switch AXHelpers.getAttributeResult(child, kAXRoleAttribute as String, runtime: runtime) as Result<String?, AXHelpers.AXStatusError> {
                 case .failure(let error):
-                    return .unreadable(error)
+                    // A failed role read makes this child an unreadable
+                    // candidate, not a verdict on its siblings. Preserve the
+                    // first status for the no-sheet exit, then keep scanning.
+                    unreadableReason = unreadableReason ?? .windowSheetReadFailed(error)
+                    continue
                 case .success(let role):
                     if role == (kAXSheetRole as String) {
                         return .found(child)
                     }
+                    nonSheetChildren.append(child)
                 }
+            }
+
+            // Only descend after the direct-child pass did not find a sheet.
+            for child in nonSheetChildren {
                 switch findSheetDescendantLookup(in: child, maxDepth: maxDepth - 1, runtime: runtime) {
                 case .found(let sheet):
                     return .found(sheet)
-                case .unreadable(let error):
-                    return .unreadable(error)
-                case .incomplete:
-                    sawIncomplete = true
+                case .unreadable(let reason):
+                    // This sub-branch was not fully searchable, but another
+                    // sibling can still carry the sheet we need to classify.
+                    unreadableReason = unreadableReason ?? reason
+                case .incomplete(let reason):
+                    incompleteReason = incompleteReason ?? reason
                 case .absent:
                     continue
                 }
             }
-            return sawIncomplete ? .incomplete : .absent
+            if let unreadableReason { return .unreadable(unreadableReason) }
+            return incompleteReason.map(SheetLookup.incomplete) ?? .absent
         }
     }
 
@@ -1371,7 +1504,7 @@ extension AccessibilityChannel {
             current = observed
         case .none:
             return (false, false, .targetGone, nil)
-        case .mandatoryNewTrack, .blocking, .unreadable:
+        case .mandatoryNewTrack, .blocking, .unreadable(_):
             return (false, false, .targetChanged, nil)
         }
         guard CFEqual(current.element, target.element) else {
@@ -1451,7 +1584,8 @@ extension AccessibilityChannel {
     }
 
     /// Merge reconciliation provenance into an op's extras — only when a modal
-    /// was actually observed, so the common (no-sheet) path stays noise-free.
+    /// was actually observed or the no-modal pass was incomplete, so the common
+    /// complete no-sheet path stays noise-free.
     /// `new_track_dialog_auto_confirmed` is present only when the mandatory New
     /// Track sheet's "Create" was auto-clicked.
     static func mergeReconcileExtras(
@@ -1461,13 +1595,20 @@ extension AccessibilityChannel {
         newTrackAutoConfirmed: Bool,
         witnessSummary: ModalReconcileWitnessSummary? = nil,
         refusal: AlertAcknowledgeRefusal? = nil,
-        actionFailure: AXHelpers.AXActionError? = nil
+        actionFailure: AXHelpers.AXActionError? = nil,
+        unreadableReason: ModalReadFailure? = nil
     ) {
-        guard kind != .none else { return }
-        extras["reconciled_modal_kind"] = reconcileKindLabel(kind)
-        extras["reconciled_action"] = action
-        if newTrackAutoConfirmed {
-            extras["new_track_dialog_auto_confirmed"] = true
+        guard kind != .none || unreadableReason != nil else { return }
+        if kind != .none {
+            extras["reconciled_modal_kind"] = reconcileKindLabel(kind)
+            extras["reconciled_action"] = action
+            if newTrackAutoConfirmed {
+                extras["new_track_dialog_auto_confirmed"] = true
+            }
+        } else {
+            // Do not serialize a partial no-modal scan as either certified
+            // `none` or a discovered `unknown_sheet`.
+            extras["reconciled_modal_observation"] = "incomplete"
         }
         if let witnessSummary {
             // Per-poll traces are deliberately debug-log-only. Responses retain
@@ -1486,6 +1627,14 @@ extension AccessibilityChannel {
             // a stale element), not an assertion about whether another actor
             // subsequently closed the modal.
             extras["reconcile_action_error"] = actionFailure.diagnosticLabel
+        }
+        if let unreadableReason {
+            // The classifier kind alone does not explain whether a discovered
+            // blocker was unknown or a no-modal observation was incomplete.
+            // This fixed diagnostic provenance carries that distinction.
+            for (key, value) in unreadableReason.envelopeExtras {
+                extras[key] = value
+            }
         }
     }
 }

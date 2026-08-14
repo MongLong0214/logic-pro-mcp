@@ -3,6 +3,19 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
+private enum AuxiliarySheetScanMode: CaseIterable, Equatable {
+    case incomplete
+    case unreadable
+}
+
+private enum AXSheetsNonPositiveRead: CaseIterable {
+    case absent
+    case empty
+    case unsupported
+    case genericFailure
+    case malformed
+}
+
 @Suite("Issue #538 — identity-bound modal witness")
 struct Issue538ModalWitnessTests {
 
@@ -126,6 +139,464 @@ struct Issue538ModalWitnessTests {
         )
     }
 
+    @Test("every uninformative AXSheets outcome falls through to its AXChildren sheet")
+    func uninformativeAXSheetsOutcomesReachDescendantSheet() {
+        for outcome in AXSheetsNonPositiveRead.allCases {
+            let builder = FakeAXRuntimeBuilder()
+            let app = builder.element(1_000)
+            let window = builder.element(1_001)
+            let sheet = builder.element(1_002)
+            let sheetReads = LockedCounter()
+            let childrenReads = LockedCounter()
+
+            builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+            builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+            builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+            builder.setChildren(window, [sheet])
+
+            let runtime = builder.makeLogicRuntime(
+                appElement: app,
+                attributeValueResultHandler: { element, attribute in
+                    guard CFEqual(element, window), attribute == "AXSheets" else { return nil }
+                    _ = sheetReads.next()
+                    switch outcome {
+                    case .absent:
+                        return .success(nil)
+                    case .empty:
+                        return .success([] as NSArray)
+                    case .unsupported:
+                        return .failure(AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue))
+                    case .genericFailure:
+                        return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                    case .malformed:
+                        return .success("not an AX element array" as NSString)
+                    }
+                },
+                childrenResultHandler: { element in
+                    guard CFEqual(element, window) else { return nil }
+                    _ = childrenReads.next()
+                    return .success([sheet])
+                },
+                setAttributeHandler: nil,
+                performActionHandler: nil
+            )
+
+            let kind = ModalReconciliation.classify(
+                AccessibilityChannel.readModalSignals(runtime: runtime)
+            )
+
+            // Mutation `axsheet-nonpositive-veto`: restore the old failure or
+            // malformed payload return from `firstSheetLookup`. The
+            // unsupported, generic-failure, and malformed cases stop before
+            // this descendant seam; this shared assertion fails for each.
+            #expect(kind == .mandatoryNewTrack)
+            #expect(sheetReads.current() == 1, "each AXSheets noise seam must fire")
+            #expect(childrenReads.current() == 1, "each AXSheets noise value must reach AXChildren")
+        }
+    }
+
+    @Test("a generic AXSheets failure still discovers the measured AXChildren New Track sheet and binds Create")
+    func genericAXSheetsFailureChildSheetBindsCreate() async {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(12)
+        let markerWindow = builder.element(13)
+        let tracksWindow = builder.element(14)
+        let markerGroup = builder.element(15)
+        let sheet = builder.element(16)
+        let buttonGroup = builder.element(17)
+        let create = builder.element(18)
+        let cancel = builder.element(19)
+        let markerSheetReads = LockedCounter()
+        let tracksSheetReads = LockedCounter()
+        let tracksChildrenReads = LockedCounter()
+        let buttonGroupChildrenReads = LockedCounter()
+        let createPresses = LockedCounter()
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, markerWindow)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [markerWindow, tracksWindow])
+        builder.setAttribute(markerWindow, kAXModalAttribute as String, false)
+        builder.setAttribute(tracksWindow, kAXModalAttribute as String, false)
+        builder.setAttribute(markerGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+        builder.setChildren(markerWindow, [markerGroup])
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+        builder.setAttribute(buttonGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+        builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+        builder.setAttribute(create, kAXEnabledAttribute as String, true)
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+        builder.setChildren(tracksWindow, [sheet])
+        builder.setChildren(sheet, [buttonGroup])
+        builder.setChildren(buttonGroup, [create, cancel])
+
+        let genericFailure = AXHelpers.AXStatusError(raw: AXError.failure.rawValue)
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                guard attribute == "AXSheets" else { return nil }
+                if CFEqual(element, markerWindow) {
+                    _ = markerSheetReads.next()
+                    return .failure(genericFailure)
+                }
+                if CFEqual(element, tracksWindow) {
+                    _ = tracksSheetReads.next()
+                    return .failure(genericFailure)
+                }
+                return nil
+            },
+            childrenHandler: { element in
+                guard CFEqual(element, buttonGroup) else { return nil }
+                _ = buttonGroupChildrenReads.next()
+                return [create, cancel]
+            },
+            childrenResultHandler: { element in
+                if CFEqual(element, tracksWindow) {
+                    _ = tracksChildrenReads.next()
+                    return .success([sheet])
+                }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard CFEqual(element, create), action == (kAXPressAction as String) else { return false }
+                _ = createPresses.next()
+                return true
+            }
+        )
+
+        let outcome = await AccessibilityChannel.reconcileAfterMutation(
+            isDeleteContext: false,
+            runtime: runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        // Mutation `axsheet-failure-veto`: restore
+        // `guard axStatusIsDefinitiveAbsence(error) else { return
+        // .unreadable(.windowSheetReadFailed(error)) }` in
+        // `firstSheetLookup`. The Tracks host is then never traversed, so this
+        // positive classification and bound Create expectation fail:
+        #expect(outcome.kind == .mandatoryNewTrack)
+        #expect(outcome.decision == .clickCreate)
+        #expect(outcome.actionAttempted)
+        #expect(markerSheetReads.current() > 0, "the Marker List AXSheets -25200 seam must fire")
+        #expect(tracksSheetReads.current() > 0, "the Tracks AXSheets -25200 seam must fire")
+        #expect(tracksChildrenReads.current() > 0, "the Tracks AXChildren sheet seam must fire")
+        #expect(buttonGroupChildrenReads.current() > 0, "the AXGroup button-child seam must fire")
+        #expect(createPresses.current() == 1, "the classified Create element must be pressed exactly once")
+    }
+
+    @Test("the measured eleven-child arrange window finds its direct New Track sheet before sibling descent")
+    func measuredDirectChildSheetWithFailingSiblingsBindsCreate() async {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(30)
+        let window = builder.element(31)
+        let unreadableNodes = (0..<5).map { builder.element(32 + $0) }
+        let readableSiblingGroups = (0..<5).map { builder.element(37 + $0) }
+        let sheet = builder.element(42)
+        let group = builder.element(43)
+        let create = builder.element(44)
+        let cancel = builder.element(45)
+        let sheetReads = LockedCounter()
+        let windowChildrenReads = LockedCounter()
+        let roleReadFailures = LockedCounter()
+        let readableSiblingDescents = LockedCounter()
+        let createPresses = LockedCounter()
+        let genericFailure = AXHelpers.AXStatusError(raw: AXError.failure.rawValue)
+        let unsupported = AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue)
+
+        // Measured live shape: AXSheets is unsupported (-25205), AXChildren
+        // has eleven direct children, several siblings reject AXRole (-25200),
+        // and exactly one direct child is the New Track AXSheet.
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        builder.setChildren(window, readableSiblingGroups + unreadableNodes + [sheet])
+        for sibling in readableSiblingGroups {
+            builder.setAttribute(sibling, kAXRoleAttribute as String, kAXGroupRole as String)
+        }
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+        builder.setAttribute(group, kAXRoleAttribute as String, kAXGroupRole as String)
+        builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+        builder.setAttribute(create, kAXEnabledAttribute as String, true)
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+        builder.setChildren(sheet, [group])
+        builder.setChildren(group, [create, cancel])
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                if CFEqual(element, window), attribute == "AXSheets" {
+                    _ = sheetReads.next()
+                    return .failure(unsupported)
+                }
+                if attribute == (kAXRoleAttribute as String),
+                   unreadableNodes.contains(where: { CFEqual(element, $0) }) {
+                    _ = roleReadFailures.next()
+                    return .failure(genericFailure)
+                }
+                return nil
+            },
+            childrenResultHandler: { element in
+                if CFEqual(element, window) {
+                    _ = windowChildrenReads.next()
+                    return .success(readableSiblingGroups + unreadableNodes + [sheet])
+                }
+                if readableSiblingGroups.contains(where: { CFEqual(element, $0) }) {
+                    _ = readableSiblingDescents.next()
+                    return .failure(genericFailure)
+                }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard CFEqual(element, create), action == (kAXPressAction as String) else { return false }
+                _ = createPresses.next()
+                return true
+            }
+        )
+
+        let outcome = await AccessibilityChannel.reconcileAfterMutation(
+            isDeleteContext: false,
+            runtime: runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        // Mutation `direct-children-after-descend`: restore the former DFS that
+        // descends below each readable sibling before inspecting later direct
+        // children. The opaque sibling descent seam fires before the direct
+        // AXSheet is considered; this fixture catches the traversal order even
+        // though the sheet is only one level below its host.
+        #expect(outcome.kind == .mandatoryNewTrack)
+        #expect(outcome.decision == .clickCreate)
+        #expect(outcome.actionAttempted)
+        #expect(sheetReads.current() == 1, "the measured AXSheets -25205 seam must fire")
+        #expect(windowChildrenReads.current() == 1, "the eleven-child AXChildren seam must fire exactly once")
+        #expect(roleReadFailures.current() == 5, "every failing direct sibling role must be visited before the sheet")
+        #expect(readableSiblingDescents.current() == 0, "a direct AXSheet must win before any sibling subtree is traversed")
+        #expect(createPresses.current() == 1, "the classifier-bound Create element must be pressed exactly once")
+    }
+
+    @Test("the measured no-sheet sibling failure is incomplete and retries without becoming unknown_sheet")
+    func measuredNoSheetSiblingFailureRetriesWithoutInventingBlocker() async throws {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(39)
+        let window = builder.element(40)
+        let unreadableNodes = (0..<5).map { builder.element(41 + $0) }
+        let readableSiblingGroups = (0..<6).map { builder.element(46 + $0) }
+        let sheetReads = LockedCounter()
+        let windowChildrenReads = LockedCounter()
+        let roleReadFailures = LockedCounter()
+        let readableSiblingDescents = LockedCounter()
+        let presses = LockedCounter()
+        let genericFailure = AXHelpers.AXStatusError(raw: AXError.failure.rawValue)
+        let unsupported = AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue)
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        builder.setChildren(window, unreadableNodes + readableSiblingGroups)
+        for sibling in readableSiblingGroups {
+            builder.setAttribute(sibling, kAXRoleAttribute as String, kAXGroupRole as String)
+        }
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                if CFEqual(element, window), attribute == "AXSheets" {
+                    _ = sheetReads.next()
+                    return .failure(unsupported)
+                }
+                if attribute == (kAXRoleAttribute as String),
+                   unreadableNodes.contains(where: { CFEqual(element, $0) }) {
+                    _ = roleReadFailures.next()
+                    return .failure(genericFailure)
+                }
+                return nil
+            },
+            childrenResultHandler: { element in
+                if CFEqual(element, window) {
+                    _ = windowChildrenReads.next()
+                    return .success(unreadableNodes + readableSiblingGroups)
+                }
+                if readableSiblingGroups.contains(where: { CFEqual(element, $0) }) {
+                    _ = readableSiblingDescents.next()
+                    return .failure(genericFailure)
+                }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { _, _ in
+                _ = presses.next()
+                return true
+            }
+        )
+
+        let immediate = AccessibilityChannel.observeModalAfterMutation(
+            isDeleteContext: false,
+            runtime: runtime
+        )
+
+        let result = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: runtime,
+            selection: "Empty Project",
+            observationAttempts: 2,
+            observationDelayNanoseconds: 0
+        )
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+
+        // Mutation `partial-sheet-scan-as-unknown`: restore
+        // `unreadableModalSignals(reason: sheetScanFailure)`. The direct
+        // observation becomes unknownSheet and the project observer exits via
+        // `unexpected_blocking_sheet` instead of consuming its full polling
+        // budget. This locks the distinction between incomplete and blocking.
+        #expect(immediate.kind == .none)
+        #expect(!immediate.modalObservationIsComplete)
+        #expect(immediate.unreadableReason == .windowSheetReadFailed(genericFailure))
+        #expect(!immediate.actionAttempted)
+        #expect(result.isSuccess)
+        #expect(envelope["state"] as? String == "B")
+        #expect(envelope["phase"] as? String == "created_project_window_pending")
+        #expect(envelope["modal_observation"] as? String == "incomplete")
+        #expect(envelope["sheet_kind"] == nil)
+        #expect(envelope["reconciled_modal_kind"] == nil)
+        #expect(envelope["reconciled_modal_unreadable_reason"] as? String == "window_sheet_read_failed")
+        #expect(envelope["reconciled_modal_unreadable_ax_status"] as? Int == Int(genericFailure.raw))
+        #expect(sheetReads.current() == 3, "the direct read plus every bounded retry must consume AXSheets -25205")
+        #expect(windowChildrenReads.current() == 3, "the eleven-child AXChildren seam must fire on every poll")
+        #expect(roleReadFailures.current() == 15, "every poll must visit all five failing sibling roles")
+        #expect(readableSiblingDescents.current() == 18, "no-sheet polls must retain the unreadable descendant evidence")
+        #expect(presses.current() == 0, "an incomplete no-sheet search must not authorize an action")
+    }
+
+    @Test("an AXSheets-unsupported host with no AXSheet child is absent, not unreadable")
+    func measuredAXSheetsUnsupportedWithoutChildSheetIsAbsent() {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(20)
+        let window = builder.element(21)
+        let group = builder.element(22)
+        let sheetReads = LockedCounter()
+        let childrenReads = LockedCounter()
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        builder.setAttribute(group, kAXRoleAttribute as String, kAXGroupRole as String)
+        builder.setChildren(window, [group])
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, window), attribute == "AXSheets" else { return nil }
+                _ = sheetReads.next()
+                return .failure(AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue))
+            },
+            childrenResultHandler: { element in
+                guard CFEqual(element, window) else { return nil }
+                _ = childrenReads.next()
+                return .success([group])
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+
+        #expect(ModalReconciliation.classify(read.signals) == .none)
+        #expect(read.unreadableReason == nil)
+        #expect(sheetReads.current() > 0, "the AXSheets -25205 seam must fire")
+        #expect(childrenReads.current() > 0, "the AXChildren no-sheet seam must fire")
+    }
+
+    @Test("an unavailable AXChildren branch does not hide a later AXSheets-unsupported sheet host")
+    func unavailableWindowDoesNotHideLaterChildSheet() async {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(23)
+        let unreadableHost = builder.element(24)
+        let unreadableChild = builder.element(25)
+        let sheetHost = builder.element(26)
+        let sheet = builder.element(27)
+        let create = builder.element(28)
+        let cancel = builder.element(29)
+        let unreadableChildRoleReads = LockedCounter()
+        let laterHostChildrenReads = LockedCounter()
+        let createPresses = LockedCounter()
+        let unsupported = AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue)
+        let cannotComplete = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+
+        // No AXMainWindow deliberately routes this through the all-window
+        // scanner. The first host proves that -25205 fell through to AXChildren
+        // by failing only on a descendant role read; the second exposes New
+        // Track through the same -25205 → AXChildren route.
+        builder.setAttribute(app, kAXWindowsAttribute as String, [unreadableHost, sheetHost])
+        builder.setAttribute(unreadableHost, kAXModalAttribute as String, false)
+        builder.setAttribute(sheetHost, kAXModalAttribute as String, false)
+        builder.setChildren(unreadableHost, [unreadableChild])
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+        builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+        builder.setChildren(sheetHost, [sheet])
+        builder.setChildren(sheet, [create, cancel])
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                if (CFEqual(element, unreadableHost) || CFEqual(element, sheetHost)),
+                   attribute == "AXSheets" {
+                    return .failure(unsupported)
+                }
+                if CFEqual(element, unreadableChild), attribute == (kAXRoleAttribute as String) {
+                    _ = unreadableChildRoleReads.next()
+                    return .failure(cannotComplete)
+                }
+                return nil
+            },
+            childrenResultHandler: { element in
+                if CFEqual(element, sheetHost) {
+                    _ = laterHostChildrenReads.next()
+                    return .success([sheet])
+                }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard CFEqual(element, create), action == (kAXPressAction as String) else { return false }
+                _ = createPresses.next()
+                return true
+            }
+        )
+
+        let outcome = await AccessibilityChannel.reconcileAfterMutation(
+            isDeleteContext: false,
+            runtime: runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        // Mutation `unavailable-window-stops-scan`: revert the single
+        // `unreadableReason = unreadableReason ?? reason` line in
+        // `anyWindowSheetLookup` to `return .unreadable(reason)`. The first
+        // host then blocks the second host and this expectation fails:
+        #expect(outcome.kind == .mandatoryNewTrack)
+        #expect(outcome.actionAttempted)
+        #expect(unreadableChildRoleReads.current() > 0, "the first host must fall through -25205 into AXChildren")
+        #expect(laterHostChildrenReads.current() > 0, "the later host AXChildren sheet seam must fire")
+        #expect(createPresses.current() == 1)
+    }
+
     @Test("a sheet deeper than the old bound is classified, not treated as clean")
     func deepSheetIsClassified() {
         let builder = FakeAXRuntimeBuilder()
@@ -159,7 +630,8 @@ struct Issue538ModalWitnessTests {
             performActionHandler: nil
         )
 
-        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+        let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+        let kind = ModalReconciliation.classify(read.signals)
 
         #expect(
             kind == .mandatoryNewTrack,
@@ -188,11 +660,17 @@ struct Issue538ModalWitnessTests {
             performActionHandler: nil
         )
 
-        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+        let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+        let kind = ModalReconciliation.classify(read.signals)
 
+        #expect(kind == .none)
         #expect(
-            kind == .unknownSheet,
-            "Mutation caught: change the `maxDepth == 0` branch from incomplete to absent; an unvisited subtree would falsely certify a clean modal observation."
+            !read.modalObservationIsComplete,
+            "Mutation caught: treat the capped tree as clean; an unvisited subtree must remain a retryable incomplete observation."
+        )
+        #expect(
+            read.unreadableReason == .descendantTraversalDepthCap,
+            "Mutation `depth-cap-reason-flattened`: replace the capped traversal reason with a generic sheet failure; the receipt must identify the depth cap."
         )
     }
 
@@ -216,11 +694,13 @@ struct Issue538ModalWitnessTests {
             performActionHandler: nil
         )
 
-        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+        let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+        let kind = ModalReconciliation.classify(read.signals)
 
+        #expect(kind == .none)
         #expect(
-            kind == .unknownSheet,
-            "Mutation caught: flatten malformed AXChildren to an empty success; an undecodable subtree must block a clean modal observation."
+            !read.modalObservationIsComplete,
+            "Mutation caught: flatten malformed AXChildren to an empty success; an undecodable subtree must remain incomplete."
         )
     }
 
@@ -323,14 +803,117 @@ struct Issue538ModalWitnessTests {
         )
         let verified = try #require(envelope["verified"] as? Bool)
 
-        // Mutation `main-window-only-sheet-scan`: remove the other-window scan
-        // after the bound arrange-window sheet lookup. Two decrement polls then
-        // look clean and this fixture incorrectly encodes State A.
+        // Mutation `auxiliary-found-as-clean`: replace the `.found` branch's
+        // `return readModalSignals(from: sheet, runtime: runtime)` with
+        // `auxiliarySheetScanIsClean = true`. The non-main host sheet then
+        // disappears, two decrement polls look clean, and this fixture
+        // incorrectly encodes State A.
         #expect(!verified)
         let reconciledKind = try #require(envelope["reconciled_modal_kind"] as? String)
         #expect(reconciledKind == "mandatory_new_track")
         #expect(otherHostSheetReads.current() > 0, "the non-main host seam must be queried")
         #expect(createPresses.current() == 1, "the classified host sheet must reach its direct Create action")
+    }
+
+    @Test("an unclean auxiliary sheet scan gates only the no-blocker conclusion")
+    func incompleteOrUnreadableAuxiliarySheetScanDoesNotPreemptPositiveBlocker() async {
+        for mode in AuxiliarySheetScanMode.allCases {
+            let builder = FakeAXRuntimeBuilder()
+            let app = builder.element(450)
+            let arrange = builder.element(451)
+            let auxiliaryHost = builder.element(452)
+            let topLevelNewTrack = builder.element(453)
+            let create = builder.element(454)
+            let cancel = builder.element(455)
+            let auxiliaryGroups = (0..<32).map { builder.element(456 + $0) }
+            let auxiliarySheetReads = LockedCounter()
+            let auxiliaryTraversalReads = LockedCounter()
+            let createPresses = LockedCounter()
+            let auxiliaryGroupIDs = Set(auxiliaryGroups.map(builder.elementID))
+
+            builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+            builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, auxiliaryHost, topLevelNewTrack])
+            builder.setAttribute(arrange, kAXModalAttribute as String, false)
+            builder.setAttribute(auxiliaryHost, kAXModalAttribute as String, false)
+            builder.setAttribute(topLevelNewTrack, kAXRoleAttribute as String, kAXWindowRole as String)
+            builder.setAttribute(topLevelNewTrack, kAXModalAttribute as String, false)
+            builder.setAttribute(topLevelNewTrack, kAXDescriptionAttribute as String, "New Track")
+            builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+            builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+            builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+            builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+            builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+            builder.setChildren(topLevelNewTrack, [create, cancel])
+
+            if mode == .incomplete {
+                builder.setChildren(auxiliaryHost, [auxiliaryGroups[0]])
+                for index in 0..<(auxiliaryGroups.count - 1) {
+                    builder.setAttribute(auxiliaryGroups[index], kAXRoleAttribute as String, kAXGroupRole as String)
+                    builder.setChildren(auxiliaryGroups[index], [auxiliaryGroups[index + 1]])
+                }
+                builder.setAttribute(auxiliaryGroups[auxiliaryGroups.count - 1], kAXRoleAttribute as String, kAXGroupRole as String)
+            }
+
+            let runtime = builder.makeLogicRuntime(
+                appElement: app,
+                attributeValueResultHandler: { element, attribute in
+                    if CFEqual(element, auxiliaryHost), attribute == "AXSheets" {
+                        _ = auxiliarySheetReads.next()
+                        switch mode {
+                        case .incomplete:
+                            return .failure(AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue))
+                        case .unreadable:
+                            return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                        }
+                    }
+                    if mode == .incomplete,
+                       auxiliaryGroupIDs.contains(builder.elementID(element)),
+                       attribute == (kAXRoleAttribute as String) {
+                        _ = auxiliaryTraversalReads.next()
+                    }
+                    return nil
+                },
+                childrenResultHandler: { element in
+                    guard mode == .unreadable, CFEqual(element, auxiliaryHost) else { return nil }
+                    _ = auxiliaryTraversalReads.next()
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                },
+                setAttributeHandler: nil,
+                performActionHandler: { element, action in
+                    guard CFEqual(element, create), action == (kAXPressAction as String) else { return false }
+                    _ = createPresses.next()
+                    return true
+                }
+            )
+
+            let uncleanRead = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+            let uncleanKind = ModalReconciliation.classify(uncleanRead.signals)
+            builder.setAttribute(topLevelNewTrack, kAXModalAttribute as String, true)
+            let outcome = await AccessibilityChannel.reconcileAfterMutation(
+                isDeleteContext: false,
+                runtime: runtime,
+                witnessAttempts: 1,
+                witnessDelayNanoseconds: 0
+            )
+
+            // Mutation `auxiliary-sheet-failure-preempts-read`: replace
+            // `auxiliarySheetScanIsClean = false` with a clean no-modal
+            // return. The unclean empty pass would then certify a blocker set
+            // it did not fully read; the positive New Track pass still proves
+            // that independent discovery and its bound Create action survive.
+            #expect(uncleanKind == .none)
+            #expect(!uncleanRead.modalObservationIsComplete)
+            #expect(outcome.kind == .mandatoryNewTrack)
+            #expect(outcome.decision == .clickCreate)
+            #expect(outcome.actionAttempted)
+            #expect(createPresses.current() == 1)
+            #expect(auxiliarySheetReads.current() > 0, "the auxiliary AXSheets failure seam must fire")
+            if mode == .incomplete {
+                #expect(auxiliaryTraversalReads.current() > 0, "the incomplete auxiliary descendant traversal must reach the depth cap")
+            } else {
+                #expect(auxiliaryTraversalReads.current() > 0, "the unreadable auxiliary AXChildren traversal seam must fire")
+            }
+        }
     }
 
     @Test("an absent main window is an answer for the modal read, not an unknown blocker")
@@ -372,11 +955,16 @@ struct Issue538ModalWitnessTests {
                 performActionHandler: nil
             )
 
-            let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+            let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+            let kind = ModalReconciliation.classify(read.signals)
 
             // Mutation source: flatten a failed AXWindows list (including
             // -25205) to an empty list; that would incorrectly produce `.none`.
             #expect(kind == .unknownSheet)
+            #expect(
+                read.unreadableReason == .axWindowsReadFailed(AXHelpers.AXStatusError(raw: status)),
+                "the exact AXWindows failure status must survive the modal read"
+            )
         }
     }
 
@@ -404,12 +992,15 @@ struct Issue538ModalWitnessTests {
                 performActionHandler: nil
             )
 
-            let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+            let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+            let kind = ModalReconciliation.classify(read.signals)
 
             // Mutation `malformed-axwindows-as-absent`: restore
             // `.success(nil) -> .absent` in `anyWindowSheetLookup`. A typed
             // successful nil / NSString payload then becomes a clean pass.
-            #expect(kind == .unknownSheet)
+            #expect(kind == .none)
+            #expect(!read.modalObservationIsComplete)
+            #expect(read.unreadableReason == .axWindowsPayloadUninterpretable)
             #expect(windowsReads.current() > 0, "the malformed AXWindows seam must be read")
         }
     }
@@ -433,13 +1024,327 @@ struct Issue538ModalWitnessTests {
             performActionHandler: nil
         )
 
-        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+        let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+        let kind = ModalReconciliation.classify(read.signals)
 
         // Mutation `top-level-malformed-axwindows-empty-list`: restore
         // `windows ?? []` in `topLevelDialogRead`. The second, malformed
         // successful payload is flattened to an empty dialog list.
         #expect(kind == .unknownSheet)
+        #expect(read.unreadableReason == .axWindowsPayloadUninterpretable)
         #expect(windowsReads.current() > 1, "the top-level AXWindows seam must be reached after the sheet scan")
+    }
+
+    @Test("a raw AXWindows CFArray reaches a positively identified New Track modal")
+    func rawAXWindowsArrayStillAllowsBoundCreate() async {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(445)
+        let arrange = builder.element(446)
+        let modal = builder.element(447)
+        let create = builder.element(448)
+        let cancel = builder.element(449)
+        let windowsReads = LockedCounter()
+        let createPresses = LockedCounter()
+        builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+        builder.setAttribute(arrange, kAXModalAttribute as String, false)
+        builder.setAttribute(modal, kAXRoleAttribute as String, kAXWindowRole as String)
+        builder.setAttribute(modal, kAXModalAttribute as String, true)
+        builder.setAttribute(modal, kAXDescriptionAttribute as String, "New Track")
+        builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+        builder.setChildren(modal, [create, cancel])
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, app), attribute == (kAXWindowsAttribute as String) else { return nil }
+                _ = windowsReads.next()
+                return .success([arrange, modal] as NSArray)
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard CFEqual(element, create), action == (kAXPressAction as String) else { return false }
+                _ = createPresses.next()
+                return true
+            }
+        )
+
+        let outcome = await AccessibilityChannel.reconcileAfterMutation(
+            isDeleteContext: false,
+            runtime: runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        // Mutation `raw-axwindows-array-as-uninterpretable`: return
+        // `.malformed` instead of `.elements` from the raw array decoder. This
+        // positively identified modal becomes unknown and its bound Create is
+        // never pressed.
+        #expect(outcome.kind == .mandatoryNewTrack)
+        #expect(outcome.decision == .clickCreate)
+        #expect(outcome.actionAttempted)
+        #expect(outcome.unreadableReason == nil)
+        #expect(windowsReads.current() >= 2, "both the sheet and top-level scans must consume the raw AXWindows seam")
+        #expect(createPresses.current() == 1)
+    }
+
+    @Test("a generic AXSheets failure defers to an unreadable descendant traversal")
+    func genericWindowSheetFailureUsesTraversalFailure() async {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(450)
+        let window = builder.element(451)
+        let sheetReads = LockedCounter()
+        let childrenReads = LockedCounter()
+        let presses = LockedCounter()
+        let genericFailure = AXHelpers.AXStatusError(raw: AXError.failure.rawValue)
+        let traversalFailure = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, window), attribute == "AXSheets" else { return nil }
+                _ = sheetReads.next()
+                return .failure(genericFailure)
+            },
+            childrenResultHandler: { element in
+                guard CFEqual(element, window) else { return nil }
+                _ = childrenReads.next()
+                return .failure(traversalFailure)
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { _, _ in
+                _ = presses.next()
+                return true
+            }
+        )
+
+        let outcome = await AccessibilityChannel.reconcileAfterMutation(
+            isDeleteContext: false,
+            runtime: runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        // Mutation `axsheet-failure-veto`: restore the AXSheets failure guard.
+        // The descendant seam does not fire and the receipt reports
+        // `genericFailure` rather than the traversal's cannot-complete status.
+        #expect(outcome.kind == .none)
+        #expect(!outcome.modalObservationIsComplete)
+        #expect(outcome.unreadableReason == .windowSheetReadFailed(traversalFailure))
+        #expect(!outcome.actionAttempted)
+        #expect(sheetReads.current() == 1, "the AXSheets -25200 seam must fire")
+        #expect(childrenReads.current() == 1, "the failed AXChildren traversal seam must fire")
+        #expect(presses.current() == 0, "an unreadable traversal must not authorize any action")
+    }
+
+    @Test("a missing Logic app root names its receipt cause")
+    func appRootFailureIsObservable() {
+        let builder = FakeAXRuntimeBuilder()
+        let runtime = builder.makeLogicRuntime(
+            pid: nil,
+            appElement: builder.element(452),
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+
+        #expect(ModalReconciliation.classify(read.signals) == .unknownSheet)
+        #expect(read.unreadableReason == .appRootUnavailable)
+    }
+
+    @Test("unreadable modal receipt reasons are stable and status-bearing")
+    func unreadableModalReasonsReachReceiptExtras() {
+        let status = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        let cases: [(AccessibilityChannel.ModalReadFailure, String, Int?)] = [
+            (.appRootUnavailable, "app_root_unavailable", nil),
+            (.axWindowsPayloadUninterpretable, "axwindows_payload_uninterpretable", nil),
+            (.axWindowsReadFailed(status), "axwindows_read_failed", Int(status.raw)),
+            (.windowSheetReadFailed(status), "window_sheet_read_failed", Int(status.raw)),
+            (.descendantTraversalDepthCap, "descendant_traversal_depth_cap", nil),
+        ]
+
+        for (failure, expectedReason, expectedStatus) in cases {
+            var extras: [String: Any] = [:]
+            AccessibilityChannel.mergeReconcileExtras(
+                &extras,
+                kind: .unknownSheet,
+                action: "none",
+                newTrackAutoConfirmed: false,
+                unreadableReason: failure
+            )
+
+            // Mutation `modal-unreadable-reason-flattened`: emit a generic
+            // `unknown_sheet` reason for every failure. These distinct expected
+            // values make a wrong diagnostic cause externally detectable.
+            #expect(extras["reconciled_modal_unreadable_reason"] as? String == expectedReason)
+            if let expectedStatus {
+                #expect(extras["reconciled_modal_unreadable_ax_status"] as? Int == expectedStatus)
+                #expect(extras["reconciled_modal_unreadable_ax_status_name"] as? String == "cannot_complete")
+            } else {
+                #expect(extras["reconciled_modal_unreadable_ax_status"] == nil)
+                #expect(extras["reconciled_modal_unreadable_ax_status_name"] == nil)
+            }
+        }
+    }
+
+    @Test("project creation retries an unreadable AXWindows pass until New Track is readable")
+    func projectCreationRetriesUnreadableModalObservation() async {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(453)
+        let window = builder.element(454)
+        let sheet = builder.element(455)
+        let create = builder.element(456)
+        let cancel = builder.element(457)
+        let windowsReads = LockedCounter()
+        let sheetReads = LockedCounter()
+        let createPresses = LockedCounter()
+        let createWasPressed = LockedFlag()
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        builder.setAttribute(window, kAXTitleAttribute as String, "Untitled 55 - Tracks")
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+        builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+        builder.setChildren(sheet, [create, cancel])
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueHandler: { element, attribute in
+                guard CFEqual(element, window), attribute == "AXSheets" else { return nil }
+                let read = sheetReads.next()
+                if createWasPressed.get() { return .some([] as NSArray) }
+                return read == 1 ? .some([] as NSArray) : .some([sheet] as NSArray)
+            },
+            attributeValueResultHandler: { element, attribute in
+                if CFEqual(element, sheet),
+                   attribute == (kAXRoleAttribute as String),
+                   createWasPressed.get() {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue))
+                }
+                guard CFEqual(element, app), attribute == (kAXWindowsAttribute as String) else { return nil }
+                return windowsReads.next() == 1
+                    ? .success("not-an-array" as NSString)
+                    : .success([window] as NSArray)
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard CFEqual(element, create), action == (kAXPressAction as String) else { return false }
+                _ = createPresses.next()
+                createWasPressed.set()
+                return true
+            }
+        )
+
+        _ = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: runtime,
+            selection: "Empty Project",
+            observationAttempts: 3,
+            observationDelayNanoseconds: 0
+        )
+
+        // Mutation `project-new-unreadable-terminal`: restore the former
+        // immediate State-B return for `.unknownSheet`. The second poll never
+        // reads this mandatory sheet and the bound Create seam stays at zero.
+        #expect(windowsReads.current() >= 2, "the unreadable AXWindows fixture must be retried")
+        #expect(sheetReads.current() >= 2, "the later mandatory-sheet fixture must be reached")
+        #expect(createPresses.current() == 1)
+    }
+
+    @Test("generic AXSheets failures retire only polls when descendant traversal is temporarily unreadable")
+    func projectCreationRetriesGenericAXSheetsFailureTraversal() async {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(458)
+        let window = builder.element(459)
+        let sheet = builder.element(460)
+        let group = builder.element(461)
+        let create = builder.element(462)
+        let cancel = builder.element(463)
+        let sheetReads = LockedCounter()
+        let traversalReads = LockedCounter()
+        let failedPolls = LockedCounter()
+        let failedPollsBeforeAnyAction = LockedCounter()
+        let createPresses = LockedCounter()
+        let createWasPressed = LockedFlag()
+        let cannotComplete = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        let genericFailure = AXHelpers.AXStatusError(raw: AXError.failure.rawValue)
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+        builder.setAttribute(group, kAXRoleAttribute as String, kAXGroupRole as String)
+        builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+        builder.setAttribute(create, kAXEnabledAttribute as String, true)
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+        builder.setChildren(window, [sheet])
+        builder.setChildren(sheet, [group])
+        builder.setChildren(group, [create, cancel])
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                if CFEqual(element, window), attribute == "AXSheets" {
+                    _ = sheetReads.next()
+                    return .failure(genericFailure)
+                }
+                if CFEqual(element, sheet),
+                   attribute == (kAXRoleAttribute as String),
+                   createWasPressed.get() {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue))
+                }
+                return nil
+            },
+            childrenResultHandler: { element in
+                guard CFEqual(element, window) else { return nil }
+                let read = traversalReads.next()
+                if read <= 3 {
+                    _ = failedPolls.next()
+                    if createPresses.current() == 0 {
+                        _ = failedPollsBeforeAnyAction.next()
+                    }
+                    return .failure(cannotComplete)
+                }
+                return .success([sheet])
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard CFEqual(element, create), action == (kAXPressAction as String) else { return false }
+                _ = createPresses.next()
+                createWasPressed.set()
+                return true
+            }
+        )
+
+        _ = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: runtime,
+            selection: "Empty Project",
+            observationAttempts: 4,
+            observationDelayNanoseconds: 0
+        )
+
+        // Mutation `axsheet-failure-veto`: restore the former AXSheets
+        // failure return in `firstSheetLookup`. AXChildren never fires, so the
+        // positive sheet cannot be found on the fourth poll and these
+        // expectations fail. This also proves the first three unreadable
+        // traversal polls did not authorize an action or terminate the
+        // operation.
+        #expect(createPresses.current() == 1)
+        #expect(failedPolls.current() == 3, "all three unreadable AXChildren polls must retire only their polls")
+        #expect(failedPollsBeforeAnyAction.current() == 3, "an unreadable traversal must not press before it becomes readable")
+        #expect(sheetReads.current() > 3, "each retry must consume the AXSheets -25200 seam")
+        #expect(traversalReads.current() > 3, "the fourth poll must reach the readable AXChildren fallback")
     }
 
     @Test("an AXSystemDialog remains a blocker instead of becoming no alert")
