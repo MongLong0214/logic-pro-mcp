@@ -180,6 +180,43 @@ enum AXHelpers {
         var isDefinitiveAbsence: Bool {
             raw == AXError.attributeUnsupported.rawValue || raw == AXError.noValue.rawValue
         }
+
+        /// AX can return either of these while Logic is rebuilding an otherwise still-bound
+        /// element tree. A post-write settle poll must discard the entire observation and try a
+        /// fresh one within its existing budget. This deliberately excludes `apiDisabled`: that
+        /// reports a disabled accessibility API, not a short-lived rebuild state, so retrying it
+        /// would only obscure the real failure.
+        var isTransientDuringRebuild: Bool {
+            raw == AXError.cannotComplete.rawValue
+                || raw == AXError.invalidUIElement.rawValue
+        }
+
+        /// The spelling of an AXError constant, when `raw` is one of Apple's defined values.
+        /// Keep the raw number alongside this label at an exposure boundary: the number is the
+        /// actual status returned by AX, while the label makes a live receipt actionable without
+        /// asking the caller to reverse-map the code.
+        var symbolicName: String? {
+            switch raw {
+            case AXError.success.rawValue: return "success"
+            case AXError.failure.rawValue: return "failure"
+            case AXError.illegalArgument.rawValue: return "illegalArgument"
+            case AXError.invalidUIElement.rawValue: return "invalidUIElement"
+            case AXError.invalidUIElementObserver.rawValue: return "invalidUIElementObserver"
+            case AXError.cannotComplete.rawValue: return "cannotComplete"
+            case AXError.attributeUnsupported.rawValue: return "attributeUnsupported"
+            case AXError.actionUnsupported.rawValue: return "actionUnsupported"
+            case AXError.notificationUnsupported.rawValue: return "notificationUnsupported"
+            case AXError.notImplemented.rawValue: return "notImplemented"
+            case AXError.notificationAlreadyRegistered.rawValue: return "notificationAlreadyRegistered"
+            case AXError.notificationNotRegistered.rawValue: return "notificationNotRegistered"
+            case AXError.apiDisabled.rawValue: return "apiDisabled"
+            case AXError.noValue.rawValue: return "noValue"
+            case AXError.parameterizedAttributeUnsupported.rawValue:
+                return "parameterizedAttributeUnsupported"
+            case AXError.notEnoughPrecision.rawValue: return "notEnoughPrecision"
+            default: return nil
+            }
+        }
     }
 
     /// Pure projection of an AX read outcome into a typed result.

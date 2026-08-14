@@ -26,15 +26,42 @@ private final class Issue523MenuState: @unchecked Sendable {
     var menuEntryChildrenReadFails = false
     var menuEntryEnabledReadFails = false
     var postWriteRowsReadFails = false
+    var postWriteRowsReadFailureWasObserved = false
+    var postWriteAXRowsReadFailuresRemaining = 0
+    var postWriteAXRowsReadFailureStatus = AXError.cannotComplete.rawValue
+    var postWriteAXRowsReadFailurePersists = false
+    var postWriteAXRowsReadFailureCount = 0
+    var postWriteAXRowsReadFailureWasObserved = false
+    var postWriteAXRowsReadRecoveredAfterFailure = false
+    var postWriteAXRowsRecoveredReadCount = 0
     var postWriteRowsReadEmpty = false
     var postWriteRowsDropIndex: Int?
     var postWriteRowsSubstituteIndex: Int?
     var postWriteRowsEmptyReadWasObserved = false
+    var postWriteStructuralCorroborationWasObserved = false
+    var postWriteStructuralChildrenReadFailuresRemaining = 0
+    var postWriteStructuralChildrenReadFailureStatus = AXError.cannotComplete.rawValue
+    var postWriteStructuralChildrenReadFailurePersists = false
+    var postWriteStructuralChildrenReadFailureCount = 0
+    var postWriteStructuralChildrenReadFailureWasObserved = false
+    var postWriteStructuralChildrenReadRecoveredAfterFailure = false
+    var postWriteStructuralChildrenRecoveredReadCount = 0
     var postWriteRowsDropReadWasObserved = false
     var postWriteRowsSubstituteReadWasObserved = false
     var postWriteRowRolesBecomeNonRows = false
     var postWriteRowRoleChangeWasObserved = false
     var postWriteRowCellsReadNoValue = false
+    var postWriteRowCellsFailureWasObserved = false
+    var postWriteRowCellsNoValueReadCount = 0
+    var postWriteRowCellsInvalidReadFailuresRemaining = 0
+    var postWriteRowCellsInvalidReadFailureCount = 0
+    var postWriteRowCellsInvalidReadWasObserved = false
+    var postWriteRowCellsReadRecoveredAfterInvalid = false
+    var postWriteRowCellsRecoveredReadCount = 0
+    var postWriteRowCellsInvalidReadPersists = false
+    var postWriteRowsNeverSettle = false
+    var postWriteRowsNeverSettleReadCount = 0
+    var postWriteRowsNeverSettleWasObserved = false
     var rowSelectionWasWritten = false
     var selectedRowsReadFailsAfterSelection = false
     var selectionChangesAfterSelectWrite = false
@@ -102,11 +129,20 @@ private func issue523MarkerDeleteFixture(
     selectionUnreadableBeforePick: Bool = false,
     pickDeletesSelectedRow: Bool = true,
     postWriteRowsReadFails: Bool = false,
+    postWriteAXRowsReadFailures: Int = 0,
+    postWriteAXRowsReadFailureStatus: Int32 = AXError.cannotComplete.rawValue,
+    postWriteAXRowsReadFailurePersists: Bool = false,
     postWriteRowsReadEmpty: Bool = false,
     postWriteRowsDropIndex: Int? = nil,
     postWriteRowsSubstituteIndex: Int? = nil,
     postWriteRowRolesBecomeNonRows: Bool = false,
+    postWriteStructuralChildrenReadFailures: Int = 0,
+    postWriteStructuralChildrenReadFailureStatus: Int32 = AXError.cannotComplete.rawValue,
+    postWriteStructuralChildrenReadFailurePersists: Bool = false,
     postWriteRowCellsReadNoValue: Bool = false,
+    postWriteRowCellsInvalidReadFailures: Int = 0,
+    postWriteRowCellsInvalidReadPersists: Bool = false,
+    postWriteRowsNeverSettle: Bool = false,
     menuControlDiscoveryReadFails: Bool = false,
     menuActionNamesReadFails: Bool = false,
     bottomEditActionNamesReadFails: Bool = false,
@@ -296,11 +332,20 @@ private func issue523MarkerDeleteFixture(
                 // stale action as a no-op instead of manufacturing a successful deletion.
                 guard menuState.isOpen else {
                     menuState.postWriteRowsReadFails = postWriteRowsReadFails
+                    menuState.postWriteAXRowsReadFailuresRemaining = postWriteAXRowsReadFailures
+                    menuState.postWriteAXRowsReadFailureStatus = postWriteAXRowsReadFailureStatus
+                    menuState.postWriteAXRowsReadFailurePersists = postWriteAXRowsReadFailurePersists
                     menuState.postWriteRowsReadEmpty = postWriteRowsReadEmpty
                     menuState.postWriteRowsDropIndex = postWriteRowsDropIndex
                     menuState.postWriteRowsSubstituteIndex = postWriteRowsSubstituteIndex
                     menuState.postWriteRowRolesBecomeNonRows = postWriteRowRolesBecomeNonRows
+                    menuState.postWriteStructuralChildrenReadFailuresRemaining = postWriteStructuralChildrenReadFailures
+                    menuState.postWriteStructuralChildrenReadFailureStatus = postWriteStructuralChildrenReadFailureStatus
+                    menuState.postWriteStructuralChildrenReadFailurePersists = postWriteStructuralChildrenReadFailurePersists
                     menuState.postWriteRowCellsReadNoValue = postWriteRowCellsReadNoValue
+                    menuState.postWriteRowCellsInvalidReadFailuresRemaining = postWriteRowCellsInvalidReadFailures
+                    menuState.postWriteRowCellsInvalidReadPersists = postWriteRowCellsInvalidReadPersists
+                    menuState.postWriteRowsNeverSettle = postWriteRowsNeverSettle
                     return false
                 }
                 if menuState.selectionChangesAfterFinalSelectionCheckBeforePick,
@@ -336,11 +381,20 @@ private func issue523MarkerDeleteFixture(
                     builder.setChildren(markerList, [unrelatedTable, bottomEdit, toolbarEdit, table])
                 }
                 menuState.postWriteRowsReadFails = postWriteRowsReadFails
+                menuState.postWriteAXRowsReadFailuresRemaining = postWriteAXRowsReadFailures
+                menuState.postWriteAXRowsReadFailureStatus = postWriteAXRowsReadFailureStatus
+                menuState.postWriteAXRowsReadFailurePersists = postWriteAXRowsReadFailurePersists
                 menuState.postWriteRowsReadEmpty = postWriteRowsReadEmpty
                 menuState.postWriteRowsDropIndex = postWriteRowsDropIndex
                 menuState.postWriteRowsSubstituteIndex = postWriteRowsSubstituteIndex
                 menuState.postWriteRowRolesBecomeNonRows = postWriteRowRolesBecomeNonRows
+                menuState.postWriteStructuralChildrenReadFailuresRemaining = postWriteStructuralChildrenReadFailures
+                menuState.postWriteStructuralChildrenReadFailureStatus = postWriteStructuralChildrenReadFailureStatus
+                menuState.postWriteStructuralChildrenReadFailurePersists = postWriteStructuralChildrenReadFailurePersists
                 menuState.postWriteRowCellsReadNoValue = postWriteRowCellsReadNoValue
+                menuState.postWriteRowCellsInvalidReadFailuresRemaining = postWriteRowCellsInvalidReadFailures
+                menuState.postWriteRowCellsInvalidReadPersists = postWriteRowCellsInvalidReadPersists
+                menuState.postWriteRowsNeverSettle = postWriteRowsNeverSettle
                 return false
             }
             return true
@@ -385,13 +439,63 @@ private func issue523MarkerDeleteFixture(
                    builder.elementID(element) == menuID {
                     return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
                 }
+                if (menuState.postWriteStructuralChildrenReadFailuresRemaining > 0
+                    || menuState.postWriteStructuralChildrenReadFailurePersists),
+                   builder.elementID(element) == builder.elementID(table) {
+                    menuState.postWriteStructuralChildrenReadFailureWasObserved = true
+                    menuState.postWriteStructuralChildrenReadFailureCount += 1
+                    if menuState.postWriteStructuralChildrenReadFailuresRemaining > 0 {
+                        menuState.postWriteStructuralChildrenReadFailuresRemaining -= 1
+                    }
+                    return .failure(AXHelpers.AXStatusError(
+                        raw: menuState.postWriteStructuralChildrenReadFailureStatus
+                    ))
+                }
+                if menuState.postWriteStructuralChildrenReadFailureCount > 0,
+                   builder.elementID(element) == builder.elementID(table) {
+                    menuState.postWriteStructuralChildrenReadRecoveredAfterFailure = true
+                    menuState.postWriteStructuralChildrenRecoveredReadCount += 1
+                }
                 if menuState.postWriteRowsReadFails,
                    builder.elementID(element) == builder.elementID(table) {
                     return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
                 }
                 if menuState.postWriteRowCellsReadNoValue,
                    rows.contains(where: { CFEqual(element, $0) }) {
+                    menuState.postWriteRowCellsFailureWasObserved = true
+                    menuState.postWriteRowCellsNoValueReadCount += 1
                     return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+                }
+                if (menuState.postWriteRowCellsInvalidReadFailuresRemaining > 0
+                    || menuState.postWriteRowCellsInvalidReadPersists),
+                   rows.contains(where: { CFEqual(element, $0) }) {
+                    menuState.postWriteRowCellsInvalidReadWasObserved = true
+                    menuState.postWriteRowCellsInvalidReadFailureCount += 1
+                    if menuState.postWriteRowCellsInvalidReadFailuresRemaining > 0 {
+                        menuState.postWriteRowCellsInvalidReadFailuresRemaining -= 1
+                    }
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue))
+                }
+                if menuState.postWriteRowCellsInvalidReadFailureCount > 0,
+                   rows.contains(where: { CFEqual(element, $0) }) {
+                    menuState.postWriteRowCellsReadRecoveredAfterInvalid = true
+                    menuState.postWriteRowCellsRecoveredReadCount += 1
+                }
+                if menuState.postWriteRowsReadEmpty,
+                   builder.elementID(element) == builder.elementID(table) {
+                    menuState.postWriteStructuralCorroborationWasObserved = true
+                }
+                if menuState.postWriteRowsNeverSettle,
+                   builder.elementID(element) == builder.elementID(table) {
+                    // Match the AXRows value from this loop turn, but alternate it on every
+                    // turn. Both inventory sources answer successfully, so the production loop
+                    // must report its real non-convergence instead of inventing an AX status.
+                    let currentRows = (baseRuntime.ax.attributeValue(table, "AXRows")
+                        as? [AXUIElement]) ?? []
+                    let alternatingRows = menuState.postWriteRowsNeverSettleReadCount.isMultiple(of: 2)
+                        ? Array(currentRows.dropLast())
+                        : currentRows
+                    return .success(alternatingRows)
                 }
                 if let menuChildrenAbsenceStatusAfterCancel,
                    menuState.menuCancelWasIssued,
@@ -452,10 +556,42 @@ private func issue523MarkerDeleteFixture(
                    attribute == "AXSelectedRows" {
                     return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
                 }
+                if (menuState.postWriteAXRowsReadFailuresRemaining > 0
+                    || menuState.postWriteAXRowsReadFailurePersists),
+                   builder.elementID(element) == builder.elementID(table),
+                   attribute == "AXRows" {
+                    menuState.postWriteAXRowsReadFailureWasObserved = true
+                    menuState.postWriteAXRowsReadFailureCount += 1
+                    if menuState.postWriteAXRowsReadFailuresRemaining > 0 {
+                        menuState.postWriteAXRowsReadFailuresRemaining -= 1
+                    }
+                    return .failure(AXHelpers.AXStatusError(
+                        raw: menuState.postWriteAXRowsReadFailureStatus
+                    ))
+                }
+                if menuState.postWriteAXRowsReadFailureCount > 0,
+                   builder.elementID(element) == builder.elementID(table),
+                   attribute == "AXRows" {
+                    menuState.postWriteAXRowsReadRecoveredAfterFailure = true
+                    menuState.postWriteAXRowsRecoveredReadCount += 1
+                }
                 if menuState.postWriteRowsReadFails,
                    builder.elementID(element) == builder.elementID(table),
                    attribute == "AXRows" {
+                    menuState.postWriteRowsReadFailureWasObserved = true
                     return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                }
+                if menuState.postWriteRowsNeverSettle,
+                   builder.elementID(element) == builder.elementID(table),
+                   attribute == "AXRows" {
+                    menuState.postWriteRowsNeverSettleWasObserved = true
+                    menuState.postWriteRowsNeverSettleReadCount += 1
+                    let currentRows = (baseRuntime.ax.attributeValue(table, "AXRows")
+                        as? [AXUIElement]) ?? []
+                    let alternatingRows = menuState.postWriteRowsNeverSettleReadCount.isMultiple(of: 2)
+                        ? Array(currentRows.dropLast())
+                        : currentRows
+                    return .success(alternatingRows as NSArray)
                 }
                 if menuState.postWriteRowsReadEmpty,
                    builder.elementID(element) == builder.elementID(table),
@@ -944,32 +1080,358 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     ) == 1)
 }
 
-@Test func testIssue523FailedPostWriteMarkerReadsCannotManufactureAnEmptyStateA() async throws {
-    // Source mutation applied once: in the settled survivor loop, replace the post-write
-    // `case .failure` State-B return with `reading = []`. This fixture's stale AXPick leaves the
-    // only marker in place; the mutation settles the fabricated empty set and returns State A.
-    let fixture = issue523MarkerDeleteFixture(
+@Test func testIssue523PostWriteReadbackFailureReceiptNamesTheActualSiteAndStatus() async throws {
+    // Mutation A: replace the `ax_rows` receipt binding with `structural_children`. This first
+    // fixture still returns State B, but it must fail the exact-site assertion below. The boolean
+    // proves the fixture fired on the live AXRows call rather than a later structural read.
+    let axRowsFixture = issue523MarkerDeleteFixture(
         menuEntryTitle: "Delete",
         pickDeletesSelectedRow: false,
         postWriteRowsReadFails: true,
         markers: [("1 1 1 1", "Only Marker")]
     )
+    let axRowsResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: axRowsFixture.runtime, mouse: axRowsFixture.mouse
+    )
+    let axRowsEnvelope = try issue523Envelope(axRowsResult)
+
+    #expect(axRowsResult.isSuccess)
+    #expect(axRowsEnvelope["state"] as? String == "B")
+    #expect(axRowsEnvelope["reason"] as? String == "readback_unavailable")
+    #expect(axRowsEnvelope["readback_failure_site"] as? String == "ax_rows")
+    #expect(axRowsEnvelope["readback_ax_status"] as? Int == Int(AXError.failure.rawValue))
+    #expect(axRowsEnvelope["readback_ax_status_name"] as? String == "failure")
+    #expect(try #require(axRowsEnvelope["readback_unreadable"] as? Bool))
+    #expect(axRowsFixture.menuState.postWriteRowsReadFailureWasObserved)
+    #expect(axRowsFixture.actions.actionCount(
+        elementID: axRowsFixture.menuEntryID, action: kAXPickAction as String
+    ) == 1)
+    #expect(axRowsFixture.markerCount == 1)
+
+    // Mutation B: bind a successful AXRows-vs-structural mismatch to `ax_rows` instead. The
+    // numeric AX status and the two counts remain plausible, so only their precise association
+    // catches that wrong binding. The reader itself creates cannotComplete for this failed
+    // corroboration; it is not substituted from any other AX call.
+    let structuralFixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteRowsReadEmpty: true,
+        markers: [("1 1 1 1", "Only Marker")]
+    )
+    let structuralResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: structuralFixture.runtime, mouse: structuralFixture.mouse
+    )
+    let structuralEnvelope = try issue523Envelope(structuralResult)
+
+    #expect(structuralResult.isSuccess)
+    #expect(structuralEnvelope["state"] as? String == "B")
+    #expect(structuralEnvelope["readback_failure_site"] as? String == "structural_children")
+    #expect(structuralEnvelope["readback_ax_status"] as? Int == Int(AXError.cannotComplete.rawValue))
+    #expect(structuralEnvelope["readback_ax_status_name"] as? String == "cannotComplete")
+    #expect(structuralEnvelope["readback_ax_rows_count"] as? Int == 0)
+    #expect(structuralEnvelope["readback_structural_children_count"] as? Int == 1)
+    #expect(structuralFixture.menuState.postWriteRowsEmptyReadWasObserved)
+    #expect(structuralFixture.menuState.postWriteStructuralCorroborationWasObserved)
+
+    let cellFixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteRowCellsReadNoValue: true,
+        markers: [("1 1 1 1", "Only Marker")]
+    )
+    let cellResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: cellFixture.runtime, mouse: cellFixture.mouse
+    )
+    let cellEnvelope = try issue523Envelope(cellResult)
+
+    #expect(cellResult.isSuccess)
+    #expect(cellEnvelope["state"] as? String == "B")
+    #expect(cellEnvelope["readback_failure_site"] as? String == "cell")
+    #expect(cellEnvelope["readback_ax_status"] as? Int == Int(AXError.noValue.rawValue))
+    #expect(cellEnvelope["readback_ax_status_name"] as? String == "noValue")
+    #expect(cellFixture.menuState.postWriteRowCellsFailureWasObserved)
+    // `noValue` is an answer, not a rebuild failure. A terminal State B after the first cell
+    // read proves it was not silently retried until the settle budget expired.
+    #expect(cellFixture.menuState.postWriteRowCellsNoValueReadCount == 1)
+
+    let settleFixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteRowsNeverSettle: true,
+        markers: [("1 1 1 1", "Target"), ("5 1 1 1", "Other")]
+    )
+    let settleResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: settleFixture.runtime, mouse: settleFixture.mouse
+    )
+    let settleEnvelope = try issue523Envelope(settleResult)
+
+    #expect(settleResult.isSuccess)
+    #expect(settleEnvelope["state"] as? String == "B")
+    #expect(settleEnvelope["readback_failure_site"] as? String == "settle_loop")
+    // Every AXRows and structural-children read succeeded. An AX-status field here would be a
+    // fabrication, so it must be absent rather than borrowed from any prior successful read.
+    #expect(settleEnvelope["readback_ax_status"] == nil)
+    #expect(settleEnvelope["readback_ax_status_name"] == nil)
+    #expect(settleFixture.menuState.postWriteRowsNeverSettleWasObserved)
+    #expect(settleFixture.menuState.postWriteRowsNeverSettleReadCount == 6)
+}
+
+@Test func testIssue523TransientInvalidMarkerRowCellReadRetiresPollThenSettles() async throws {
+    // Mutation proven: make `isTransientMarkerReadbackFailure` return false for `.cell`. The
+    // first -25202 then returns State B and fails the State-A expectation below. The cell seam
+    // records every injected failure and every later successful row read, so a passing test
+    // cannot be a fixture that never reached the live post-write reader.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        postWriteRowCellsInvalidReadFailures: 2,
+        markers: [("1 1 1 1", "Target"), ("5 1 1 1", "Survivor")]
+    )
     let result = await AccessibilityChannel.defaultDeleteMarker(
         index: 0, runtime: fixture.runtime, mouse: fixture.mouse
     )
     let envelope = try issue523Envelope(result)
-    let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
 
     #expect(result.isSuccess)
-    #expect(envelope["state"] as? String == "B")
-    #expect(envelope["reason"] as? String == "readback_unavailable")
-    #expect(writeAttempted)
-    let unreadable = try #require(envelope["readback_unreadable"] as? Bool)
-    #expect(unreadable)
+    #expect(envelope["state"] as? String == "A")
+    #expect(try #require(envelope["readback_settled"] as? Bool))
+    #expect(envelope["marker_count_after"] as? Int == 1)
+    #expect(envelope["expected_survivor_position_multiset"] as? String == "7:5.1.1.1")
+    #expect(envelope["observed_survivor_position_multiset"] as? String == "7:5.1.1.1")
+    #expect(try #require(envelope["position_evidence_canonical"] as? Bool))
+    #expect(fixture.menuState.postWriteRowCellsInvalidReadWasObserved)
+    #expect(fixture.menuState.postWriteRowCellsInvalidReadFailureCount == 2)
+    #expect(fixture.menuState.postWriteRowCellsReadRecoveredAfterInvalid)
+    // The stale observations cannot combine with the later read: State A still needs two fresh,
+    // agreeing successful survivor readings from the bound table.
+    #expect(fixture.menuState.postWriteRowCellsRecoveredReadCount == 2)
     #expect(fixture.actions.actionCount(
         elementID: fixture.menuEntryID, action: kAXPickAction as String
     ) == 1)
     #expect(fixture.markerCount == 1)
+    #expect(fixture.markerNames == ["Survivor"])
+}
+
+@Test func testIssue523TransientAXRowsReadFailureRetiresPollThenSettles() async throws {
+    // Mutation proven: make `isTransientMarkerReadbackFailure` return false for `.axRows`.
+    // The first genuine AXRows failure then exits as State B and fails the State-A expectation.
+    // Counters prove this seam was armed only after the live AXPick and that two fresh survivor
+    // observations, rather than the failed turns, performed the settle.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        postWriteAXRowsReadFailures: 2,
+        postWriteAXRowsReadFailureStatus: AXError.cannotComplete.rawValue,
+        markers: [("1 1 1 1", "Target"), ("5 1 1 1", "Survivor")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "A")
+    #expect(try #require(envelope["readback_settled"] as? Bool))
+    #expect(envelope["marker_count_after"] as? Int == 1)
+    #expect(envelope["expected_survivor_position_multiset"] as? String == "7:5.1.1.1")
+    #expect(envelope["observed_survivor_position_multiset"] as? String == "7:5.1.1.1")
+    #expect(fixture.menuState.postWriteAXRowsReadFailureWasObserved)
+    #expect(fixture.menuState.postWriteAXRowsReadFailureCount == 2)
+    #expect(fixture.menuState.postWriteAXRowsReadRecoveredAfterFailure)
+    #expect(fixture.menuState.postWriteAXRowsRecoveredReadCount == 2)
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuEntryID, action: kAXPickAction as String
+    ) == 1)
+    #expect(fixture.markerCount == 1)
+    #expect(fixture.markerNames == ["Survivor"])
+}
+
+@Test func testIssue523TransientStructuralChildrenReadFailureRetiresPollThenSettles() async throws {
+    // Mutation proven: make `isTransientMarkerReadbackFailure` return false for
+    // `.structuralChildren`. The first genuine structural AX failure then exits as State B and
+    // fails the State-A expectation. This seam is on the table's live AXChildren call, so it
+    // cannot be satisfied by bypassing identity corroboration.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        postWriteStructuralChildrenReadFailures: 2,
+        postWriteStructuralChildrenReadFailureStatus: AXError.invalidUIElement.rawValue,
+        markers: [("1 1 1 1", "Target"), ("5 1 1 1", "Survivor")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "A")
+    #expect(try #require(envelope["readback_settled"] as? Bool))
+    #expect(envelope["marker_count_after"] as? Int == 1)
+    #expect(envelope["expected_survivor_position_multiset"] as? String == "7:5.1.1.1")
+    #expect(envelope["observed_survivor_position_multiset"] as? String == "7:5.1.1.1")
+    #expect(fixture.menuState.postWriteStructuralChildrenReadFailureWasObserved)
+    #expect(fixture.menuState.postWriteStructuralChildrenReadFailureCount == 2)
+    #expect(fixture.menuState.postWriteStructuralChildrenReadRecoveredAfterFailure)
+    #expect(fixture.menuState.postWriteStructuralChildrenRecoveredReadCount == 2)
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuEntryID, action: kAXPickAction as String
+    ) == 1)
+    #expect(fixture.markerCount == 1)
+    #expect(fixture.markerNames == ["Survivor"])
+}
+
+@Test func testIssue523AXAnswersAndAPIDisabledAreNotRetriedByPostWriteSettle() async throws {
+    // Mutation proven: add either answer status or `apiDisabled` to
+    // `AXStatusError.isTransientDuringRebuild`. Each corresponding exact-count expectation
+    // below fails: answers must keep their semantics, while a disabled API is terminal rather
+    // than a rebuild artefact.
+    let axRowsAnswerFixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        postWriteAXRowsReadFailureStatus: AXError.attributeUnsupported.rawValue,
+        postWriteAXRowsReadFailurePersists: true,
+        markers: [("1 1 1 1", "Target"), ("5 1 1 1", "Survivor")]
+    )
+    let axRowsAnswerResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: axRowsAnswerFixture.runtime, mouse: axRowsAnswerFixture.mouse
+    )
+    let axRowsAnswerEnvelope = try issue523Envelope(axRowsAnswerResult)
+
+    // `attributeUnsupported` is the table's true answer that AXRows is unavailable. The reader
+    // uses its existing structural route for each of the two genuine settle observations.
+    #expect(axRowsAnswerResult.isSuccess)
+    #expect(axRowsAnswerEnvelope["state"] as? String == "A")
+    #expect(try #require(axRowsAnswerEnvelope["readback_settled"] as? Bool))
+    #expect(axRowsAnswerFixture.menuState.postWriteAXRowsReadFailureWasObserved)
+    #expect(axRowsAnswerFixture.menuState.postWriteAXRowsReadFailureCount == 2)
+    #expect(axRowsAnswerFixture.markerNames == ["Survivor"])
+
+    let structuralAnswerFixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        postWriteStructuralChildrenReadFailureStatus: AXError.noValue.rawValue,
+        postWriteStructuralChildrenReadFailurePersists: true,
+        markers: [("1 1 1 1", "Target"), ("5 1 1 1", "Survivor")]
+    )
+    let structuralAnswerResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: structuralAnswerFixture.runtime, mouse: structuralAnswerFixture.mouse
+    )
+    let structuralAnswerEnvelope = try issue523Envelope(structuralAnswerResult)
+
+    #expect(structuralAnswerResult.isSuccess)
+    #expect(structuralAnswerEnvelope["state"] as? String == "B")
+    #expect(structuralAnswerEnvelope["readback_failure_site"] as? String == "structural_children")
+    #expect(structuralAnswerEnvelope["readback_ax_status"] as? Int == Int(AXError.noValue.rawValue))
+    #expect(structuralAnswerFixture.menuState.postWriteStructuralChildrenReadFailureWasObserved)
+    #expect(structuralAnswerFixture.menuState.postWriteStructuralChildrenReadFailureCount == 1)
+
+    let cellAnswerFixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        postWriteRowCellsReadNoValue: true,
+        markers: [("1 1 1 1", "Target"), ("5 1 1 1", "Survivor")]
+    )
+    let cellAnswerResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: cellAnswerFixture.runtime, mouse: cellAnswerFixture.mouse
+    )
+    let cellAnswerEnvelope = try issue523Envelope(cellAnswerResult)
+
+    #expect(cellAnswerResult.isSuccess)
+    #expect(cellAnswerEnvelope["state"] as? String == "B")
+    #expect(cellAnswerEnvelope["readback_failure_site"] as? String == "cell")
+    #expect(cellAnswerEnvelope["readback_ax_status"] as? Int == Int(AXError.noValue.rawValue))
+    #expect(cellAnswerFixture.menuState.postWriteRowCellsFailureWasObserved)
+    #expect(cellAnswerFixture.menuState.postWriteRowCellsNoValueReadCount == 1)
+
+    let apiDisabledFixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        postWriteAXRowsReadFailureStatus: AXError.apiDisabled.rawValue,
+        postWriteAXRowsReadFailurePersists: true,
+        markers: [("1 1 1 1", "Target"), ("5 1 1 1", "Survivor")]
+    )
+    let apiDisabledResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: apiDisabledFixture.runtime, mouse: apiDisabledFixture.mouse
+    )
+    let apiDisabledEnvelope = try issue523Envelope(apiDisabledResult)
+
+    #expect(apiDisabledResult.isSuccess)
+    #expect(apiDisabledEnvelope["state"] as? String == "B")
+    #expect(apiDisabledEnvelope["readback_failure_site"] as? String == "ax_rows")
+    #expect(apiDisabledEnvelope["readback_ax_status"] as? Int == Int(AXError.apiDisabled.rawValue))
+    #expect(apiDisabledFixture.menuState.postWriteAXRowsReadFailureWasObserved)
+    #expect(apiDisabledFixture.menuState.postWriteAXRowsReadFailureCount == 1)
+}
+
+@Test func testIssue523PersistentInvalidMarkerRowCellReadKeepsCellDiagnosticAtBudgetExpiry() async throws {
+    // Mutation proven: clear `finalTransientReadbackFailure` in the retry branch. The sixth
+    // invalid cell read then reaches the settle-loop fallback and fails the exact-site
+    // expectation below. The count proves this fixture consumed, but did not extend, the
+    // existing six-poll settle budget.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        postWriteRowCellsInvalidReadPersists: true,
+        markers: [("1 1 1 1", "Target"), ("5 1 1 1", "Survivor")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "B")
+    #expect(envelope["reason"] as? String == "readback_unavailable")
+    #expect(!(try #require(envelope["readback_settled"] as? Bool)))
+    #expect(envelope["readback_failure_site"] as? String == "cell")
+    #expect(envelope["readback_ax_status"] as? Int == Int(AXError.invalidUIElement.rawValue))
+    #expect(envelope["readback_ax_status_name"] as? String == "invalidUIElement")
+    #expect(try #require(envelope["readback_unreadable"] as? Bool))
+    #expect(fixture.menuState.postWriteRowCellsInvalidReadWasObserved)
+    #expect(fixture.menuState.postWriteRowCellsInvalidReadFailureCount == 6)
+    #expect(!fixture.menuState.postWriteRowCellsReadRecoveredAfterInvalid)
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuEntryID, action: kAXPickAction as String
+    ) == 1)
+    #expect(fixture.markerCount == 1)
+    #expect(fixture.markerNames == ["Survivor"])
+}
+
+@Test func testIssue523PersistentAXRowsAndStructuralFailuresKeepLastDiagnosticAtBudgetExpiry() async throws {
+    // Mutation proven: clear `finalTransientReadbackFailure` in the retry branch. Both fixtures
+    // would then publish `settle_loop` instead of the final genuine AX-failure site below. Six
+    // exact injected failures prove the normal budget was consumed rather than extended.
+    let axRowsFixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        postWriteAXRowsReadFailureStatus: AXError.cannotComplete.rawValue,
+        postWriteAXRowsReadFailurePersists: true,
+        markers: [("1 1 1 1", "Target"), ("5 1 1 1", "Survivor")]
+    )
+    let axRowsResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: axRowsFixture.runtime, mouse: axRowsFixture.mouse
+    )
+    let axRowsEnvelope = try issue523Envelope(axRowsResult)
+
+    #expect(axRowsResult.isSuccess)
+    #expect(axRowsEnvelope["state"] as? String == "B")
+    #expect(!(try #require(axRowsEnvelope["readback_settled"] as? Bool)))
+    #expect(axRowsEnvelope["readback_failure_site"] as? String == "ax_rows")
+    #expect(axRowsEnvelope["readback_ax_status"] as? Int == Int(AXError.cannotComplete.rawValue))
+    #expect(axRowsFixture.menuState.postWriteAXRowsReadFailureWasObserved)
+    #expect(axRowsFixture.menuState.postWriteAXRowsReadFailureCount == 6)
+    #expect(!axRowsFixture.menuState.postWriteAXRowsReadRecoveredAfterFailure)
+
+    let structuralFixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        postWriteStructuralChildrenReadFailureStatus: AXError.invalidUIElement.rawValue,
+        postWriteStructuralChildrenReadFailurePersists: true,
+        markers: [("1 1 1 1", "Target"), ("5 1 1 1", "Survivor")]
+    )
+    let structuralResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: structuralFixture.runtime, mouse: structuralFixture.mouse
+    )
+    let structuralEnvelope = try issue523Envelope(structuralResult)
+
+    #expect(structuralResult.isSuccess)
+    #expect(structuralEnvelope["state"] as? String == "B")
+    #expect(!(try #require(structuralEnvelope["readback_settled"] as? Bool)))
+    #expect(structuralEnvelope["readback_failure_site"] as? String == "structural_children")
+    #expect(structuralEnvelope["readback_ax_status"] as? Int == Int(AXError.invalidUIElement.rawValue))
+    #expect(structuralFixture.menuState.postWriteStructuralChildrenReadFailureWasObserved)
+    #expect(structuralFixture.menuState.postWriteStructuralChildrenReadFailureCount == 6)
+    #expect(!structuralFixture.menuState.postWriteStructuralChildrenReadRecoveredAfterFailure)
 }
 
 @Test func testIssue523EmptyAXRowsWithSurvivingChildRowCannotReachStateA() async throws {

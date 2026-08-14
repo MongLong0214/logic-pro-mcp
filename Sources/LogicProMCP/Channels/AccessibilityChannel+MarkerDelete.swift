@@ -247,16 +247,31 @@ extension AccessibilityChannel {
         var observedEmptySurvivorSet = false
         var settled = false
         var previousPositions: [String]?
+        // A genuine AX rebuild failure voids the entire observation, regardless of whether it
+        // arose from AXRows, structural corroboration, or a row cell. Keep the last one only so,
+        // if it is still the final poll when the existing budget expires, State B reports that
+        // exact site and status without re-resolving the already-bound table.
+        var finalTransientReadbackFailure: AXLogicProElements.MarkerListReadFailure?
         for _ in 0..<6 {
             let reading: [MarkerState]
-            switch AXLogicProElements.enumerateMarkersFromListTable(
+            switch AXLogicProElements.enumerateMarkersFromListTableWithReadFailure(
                 inventory.table, runtime: runtime.ax
             ) {
             case .success(let observedMarkers):
                 reading = observedMarkers
-            case .failure:
+                finalTransientReadbackFailure = nil
+            case .failure(let failure) where isTransientMarkerReadbackFailure(failure):
+                // Every loop turn reads AXRows, structural children, and row cells afresh from
+                // the already-bound table. Retiring this turn also retires the prior successful
+                // reading, so a later State A still requires two fresh agreeing observations.
+                finalTransientReadbackFailure = failure
+                previousPositions = nil
+                mouse.sleepMicros(250_000)
+                continue
+            case .failure(let failure):
                 extras["readback_settled"] = false
                 extras["readback_unreadable"] = true
+                addMarkerDeleteReadbackFailure(failure, to: &extras)
                 return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
             }
             let positions = reading.map(\.position).map(canonicalMarkerPosition).sorted()
@@ -279,6 +294,16 @@ extension AccessibilityChannel {
         }
         guard settled else {
             extras["readback_settled"] = false
+            if let finalTransientReadbackFailure {
+                extras["readback_unreadable"] = true
+                addMarkerDeleteReadbackFailure(finalTransientReadbackFailure, to: &extras)
+                return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+            }
+            // All six inventory reads answered successfully. Do not invent an AX status for a
+            // convergence failure: publishing one here would falsely attribute a status that no
+            // AX read returned.
+            extras["readback_failure_site"] = AXLogicProElements.MarkerListReadFailureSite
+                .settleLoop.rawValue
             return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
         }
         extras["readback_settled"] = true
@@ -319,6 +344,34 @@ extension AccessibilityChannel {
             return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
         }
         return .success(HonestContract.encodeStateA(extras: extras))
+    }
+
+    /// A real AX failure during a rebuild makes this complete poll unreadable; the next poll must
+    /// start over from the same bound table. The status classification intentionally lives on the
+    /// AX result, not on a named marker-list site. A reader-created corroboration mismatch uses
+    /// the same diagnostic status but is a failed observation, not an AX failure to retry.
+    private static func isTransientMarkerReadbackFailure(
+        _ failure: AXLogicProElements.MarkerListReadFailure
+    ) -> Bool {
+        failure.origin == .axRead && failure.status.isTransientDuringRebuild
+    }
+
+    /// Adds diagnostic-only detail to a post-write State-B receipt. Every value comes from the
+    /// failed read that already determined the State-B outcome; no additional AX read is made.
+    private static func addMarkerDeleteReadbackFailure(
+        _ failure: AXLogicProElements.MarkerListReadFailure,
+        to extras: inout [String: Any]
+    ) {
+        extras["readback_failure_site"] = failure.site.rawValue
+        extras["readback_ax_status"] = Int(failure.status.raw)
+        if let symbolicName = failure.status.symbolicName {
+            extras["readback_ax_status_name"] = symbolicName
+        }
+        if let axRowsCount = failure.axRowsCount,
+           let structuralChildrenCount = failure.structuralChildrenCount {
+            extras["readback_ax_rows_count"] = axRowsCount
+            extras["readback_structural_children_count"] = structuralChildrenCount
+        }
     }
 
     /// An unambiguous element of a position multiset.

@@ -18,6 +18,50 @@ extension AXLogicProElements {
         let markers: [MarkerState]
     }
 
+    /// Stable source of an unreadable Marker List inventory result. The delete path reads the
+    /// table bound before its write, so `tableLookup` is used by the window-based reader but is
+    /// intentionally not reachable from its post-write readback.
+    enum MarkerListReadFailureSite: String, Sendable {
+        case tableLookup = "table_lookup"
+        case axRows = "ax_rows"
+        case structuralChildren = "structural_children"
+        case cell = "cell"
+        case settleLoop = "settle_loop"
+    }
+
+    /// Whether a marker-list failure came from an AX operation or from this reader's own
+    /// corroboration guard. A synthetic `cannotComplete` for disagreeing row collections is not
+    /// an AX failure and must not be mistaken for a rebuild-transient response.
+    enum MarkerListReadFailureOrigin: Sendable, Equatable {
+        case axRead
+        case corroboration
+    }
+
+    /// Preserves both the exact AX status and the stage that consumed it. Corroboration counts are
+    /// present only when both independently read row collections were actually available to
+    /// compare; they never stand in for a failed AX read.
+    struct MarkerListReadFailure: Error, Sendable, Equatable {
+        let site: MarkerListReadFailureSite
+        let status: AXHelpers.AXStatusError
+        let origin: MarkerListReadFailureOrigin
+        let axRowsCount: Int?
+        let structuralChildrenCount: Int?
+
+        init(
+            site: MarkerListReadFailureSite,
+            status: AXHelpers.AXStatusError,
+            origin: MarkerListReadFailureOrigin = .axRead,
+            axRowsCount: Int? = nil,
+            structuralChildrenCount: Int? = nil
+        ) {
+            self.site = site
+            self.status = status
+            self.origin = origin
+            self.axRowsCount = axRowsCount
+            self.structuralChildrenCount = structuralChildrenCount
+        }
+    }
+
     static func markerListBinding(runtime: Runtime = .production) -> MarkerListBinding? {
         guard let app = appRoot(runtime: runtime),
               let mainWindow: AXUIElement = AXHelpers.getAttribute(
@@ -237,6 +281,22 @@ extension AXLogicProElements {
         _ window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Result<MarkerListInventory, AXHelpers.AXStatusError> {
+        switch markerListInventoryFromListWindowWithReadFailure(window, runtime: runtime) {
+        case .success(let inventory):
+            return .success(inventory)
+        case .failure(let failure):
+            return .failure(failure.status)
+        }
+    }
+
+    /// Window-based inventory variant that retains a table-discovery failure. The destructive
+    /// delete flow uses the already-bound-table variant below after its write, but keeping this
+    /// source explicit prevents the diagnostic vocabulary from silently conflating discovery
+    /// with row enumeration elsewhere.
+    static func markerListInventoryFromListWindowWithReadFailure(
+        _ window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<MarkerListInventory, MarkerListReadFailure> {
         let table: AXUIElement
         switch markerListTable(in: window, runtime: runtime) {
         case .success(let foundTable?):
@@ -245,12 +305,15 @@ extension AXLogicProElements {
             // An open Marker List without its table is not an empty Marker List. The caller
             // asked to enumerate the table's rows; with no table exposed it cannot establish that
             // every row was read (and a destructive caller must treat the readback as unavailable).
-            return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+            return .failure(MarkerListReadFailure(
+                site: .tableLookup,
+                status: AXHelpers.AXStatusError(raw: AXError.noValue.rawValue)
+            ))
         case .failure(let error):
-            return .failure(error)
+            return .failure(MarkerListReadFailure(site: .tableLookup, status: error))
         }
 
-        return markerListInventory(from: table, runtime: runtime)
+        return markerListInventoryWithReadFailure(from: table, runtime: runtime)
     }
 
     /// Re-reads the exact table element a caller already bound, without resolving another table
@@ -267,11 +330,54 @@ extension AXLogicProElements {
         }
     }
 
+    /// As `enumerateMarkersFromListTable`, but retains the exact post-write read site for the
+    /// destructive marker-delete receipt. The table is supplied by the pre-write inventory, so
+    /// this method never re-discovers a table from the window.
+    static func enumerateMarkersFromListTableWithReadFailure(
+        _ table: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<[MarkerState], MarkerListReadFailure> {
+        switch markerListInventoryWithReadFailure(from: table, runtime: runtime) {
+        case .success(let inventory):
+            return .success(inventory.markers)
+        case .failure(let failure):
+            return .failure(failure)
+        }
+    }
+
     private static func markerListInventory(
         from table: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Result<MarkerListInventory, AXHelpers.AXStatusError> {
+        switch markerListInventoryWithReadFailure(from: table, runtime: runtime) {
+        case .success(let inventory):
+            return .success(inventory)
+        case .failure(let failure):
+            return .failure(failure.status)
+        }
+    }
+
+    /// Mirrors the inventory reader's existing read/guard flow exactly, retaining where its
+    /// existing `AXStatusError` arose instead of flattening it before the delete receipt can
+    /// expose the result.
+    private static func markerListInventoryWithReadFailure(
+        from table: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<MarkerListInventory, MarkerListReadFailure> {
+        enum RowSource {
+            case axRows
+            case structuralChildren
+
+            var failureSite: MarkerListReadFailureSite {
+                switch self {
+                case .axRows: return .axRows
+                case .structuralChildren: return .structuralChildren
+                }
+            }
+        }
+
         let rows: [AXUIElement]
+        let rowSource: RowSource
         switch AXHelpers.getAttributeResult(table, "AXRows", runtime: runtime) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
         case .success(let observedRows?):
             // `AXRows` is never evidence that it is the complete row list. Logic can answer
@@ -283,11 +389,18 @@ extension AXLogicProElements {
             switch markerListStructuralRows(from: table, runtime: runtime) {
             case .success(let structuralRows):
                 guard sameElementMultiset(observedRows, structuralRows) else {
-                    return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                    return .failure(MarkerListReadFailure(
+                        site: .structuralChildren,
+                        status: AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue),
+                        origin: .corroboration,
+                        axRowsCount: observedRows.count,
+                        structuralChildrenCount: structuralRows.count
+                    ))
                 }
                 rows = observedRows
+                rowSource = .axRows
             case .failure(let error):
-                return .failure(error)
+                return .failure(MarkerListReadFailure(site: .structuralChildren, status: error))
             }
         case .failure(let error) where error.isDefinitiveAbsence:
             // Not every marker table vends `AXRows`; that is an answer, so fall through to the
@@ -298,8 +411,9 @@ extension AXLogicProElements {
             ) {
             case .success(let children):
                 rows = children
+                rowSource = .structuralChildren
             case .failure(let error):
-                return .failure(error)
+                return .failure(MarkerListReadFailure(site: .structuralChildren, status: error))
             }
         case .success(nil):
             switch directChildren(
@@ -308,18 +422,22 @@ extension AXLogicProElements {
             ) {
             case .success(let children):
                 rows = children
+                rowSource = .structuralChildren
             case .failure(let error):
-                return .failure(error)
+                return .failure(MarkerListReadFailure(site: .structuralChildren, status: error))
             }
         case .failure(let error):
-            return .failure(error)
+            return .failure(MarkerListReadFailure(site: .axRows, status: error))
         }
 
         // The cap prevents unbounded AX work, but it must not turn a partial traversal into a
         // complete marker list. A caller that needs a complete list has to receive an unavailable
         // result rather than an apparently valid prefix.
         guard rows.count <= markerLimit else {
-            return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+            return .failure(MarkerListReadFailure(
+                site: rowSource.failureSite,
+                status: AXHelpers.AXStatusError(raw: AXError.noValue.rawValue)
+            ))
         }
 
         var markers: [MarkerState] = []
@@ -333,35 +451,47 @@ extension AXLogicProElements {
             case .success(let children):
                 cells = children
             case .failure(let error):
-                return .failure(error)
+                return .failure(MarkerListReadFailure(site: .cell, status: error))
             }
             // Need at least 3 cells: [Lock, Position, Name, ...].
             // A present row whose required cells are absent is an incomplete row read, not proof
             // that the row does not represent a marker.
             guard cells.count >= 3 else {
-                return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+                return .failure(MarkerListReadFailure(
+                    site: .cell,
+                    status: AXHelpers.AXStatusError(raw: AXError.noValue.rawValue)
+                ))
             }
             let positionRaw: String
             switch firstChildDescription(of: cells[1], runtime: runtime) {
             case .success(let value?):
                 positionRaw = value
             case .success(nil):
-                return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+                return .failure(MarkerListReadFailure(
+                    site: .cell,
+                    status: AXHelpers.AXStatusError(raw: AXError.noValue.rawValue)
+                ))
             case .failure(let error):
-                return .failure(error)
+                return .failure(MarkerListReadFailure(site: .cell, status: error))
             }
             let nameRaw: String
             switch firstChildDescription(of: cells[2], runtime: runtime) {
             case .success(let value?):
                 nameRaw = value
             case .success(nil):
-                return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+                return .failure(MarkerListReadFailure(
+                    site: .cell,
+                    status: AXHelpers.AXStatusError(raw: AXError.noValue.rawValue)
+                ))
             case .failure(let error):
-                return .failure(error)
+                return .failure(MarkerListReadFailure(site: .cell, status: error))
             }
             let name = nameRaw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else {
-                return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+                return .failure(MarkerListReadFailure(
+                    site: .cell,
+                    status: AXHelpers.AXStatusError(raw: AXError.noValue.rawValue)
+                ))
             }
             let parsed = parseMarkerListPosition(positionRaw)
             markers.append(.fromParsed(parsed, ordinal: index, name: name))
