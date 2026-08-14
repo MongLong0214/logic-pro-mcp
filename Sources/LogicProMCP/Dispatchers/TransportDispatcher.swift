@@ -554,8 +554,25 @@ struct TransportDispatcher: OperationTraceDispatching {
         extras.removeValue(forKey: "note")
         extras["verification_source"] = "transport_state"
         extras["requested"] = requestedPosition
-        extras["observed"] = observedTransport.position
-        extras["observed_time_position"] = observedTransport.timePosition
+        // `position` and `timePosition` have display defaults. Only a position readback may name
+        // an observed landing in this receipt; otherwise `observed` would falsely report the
+        // model's `1.1.1.1` default as an AX read.
+        if let positionReadback = observedTransport.positionReadback {
+            extras["observed"] = positionReadback.value
+            extras["observed_time_position"] = observedTransport.timePosition
+        }
+
+        // A matching playhead cannot independently verify this request when the dialog channel
+        // says its global input target or write boundary was indeterminate. The position remains
+        // useful readback evidence, but it is not proof that this call performed the write.
+        let verificationWithheld: String? =
+            (extras["dialog_input_target"] as? String) == "unknown" ? "dialog_input_target" :
+            (extras["fallback_unsafe"] as? Bool) == true ? "fallback_unsafe" :
+            (extras["write_attempted_indeterminate"] as? Bool) == true
+                ? "write_attempted_indeterminate" : nil
+        if let verificationWithheld {
+            extras["verification_withheld"] = verificationWithheld
+        }
 
         let requestedMusicalComponents: [TransportPositionComponent] = requestedPosition.contains(":")
             ? []
@@ -581,6 +598,7 @@ struct TransportDispatcher: OperationTraceDispatching {
         // never happened (the model's `"1.1.1.1"` default), while value equality rejects a
         // genuinely different complete readback.
         if !requestedPosition.contains(":"),
+           verificationWithheld == nil,
            unobservedMusicalComponents.isEmpty,
            observedTransport.positionReadback?.value == requestedPosition {
             return toolTextResult(HonestContract.encodeStateA(extras: extras))

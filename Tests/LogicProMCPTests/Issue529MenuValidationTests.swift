@@ -134,6 +134,37 @@ private func issue529Envelope(_ result: ChannelResult) -> [String: Any]? {
     return envelope
 }
 
+private func issue529PreexistingDialogRuntime(
+    reconciliationCalls: Issue529Counter
+) -> (builder: FakeAXRuntimeBuilder, runtime: AXLogicProElements.Runtime, cancel: AXUIElement) {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(52_901)
+    let projectWindow = builder.element(52_902)
+    let dialogWindow = builder.element(52_903)
+    let cancel = builder.element(52_904)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, projectWindow)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [projectWindow, dialogWindow])
+    builder.setAttribute(projectWindow, kAXModalAttribute as String, false)
+    builder.setAttribute(dialogWindow, kAXTitleAttribute as String, "Go To Position")
+    builder.setAttribute(dialogWindow, kAXSubroleAttribute as String, kAXFloatingWindowSubrole as String)
+    builder.setAttribute(dialogWindow, kAXModalAttribute as String, true)
+    builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+    builder.setChildren(dialogWindow, [cancel])
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: nil,
+        executeAppleScript: { _ in
+            reconciliationCalls.bump()
+            return .success(#"{"result":"CLOSED"}"#)
+        }
+    )
+    return (builder, runtime, cancel)
+}
+
 @Suite("Issue #529 — Go To Position menu validation")
 struct Issue529MenuValidationTests {
     @Test("locale is decided by non-actuating reads before one resolved leaf is issued")
@@ -417,6 +448,60 @@ struct Issue529MenuValidationTests {
         #expect(sliderWrites.value == 0)
     }
 
+    @Test("an unidentified new window is terminal and cannot release another position route")
+    func unidentifiedNewWindowDoesNotProduceRouterContinuableResult() async throws {
+        // Mutation this rejects: restore the old `dialog did not become ready` result for an
+        // unmatched post-leaf window, or remove this classification from the unsafe-UI refusal.
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        #expect(script.contains("on newWindowAppearedSince(theProcess, preLeafWindows)"))
+        #expect(script.contains("return \"DIALOG_UNIDENTIFIED_NEW_WINDOW\""))
+
+        let sliderWrites = Issue529Counter()
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                .success(#"{"result":"DIALOG_UNIDENTIFIED_NEW_WINDOW"}"#)
+            }
+        )
+
+        let envelope = try #require(issue529Envelope(result))
+        #expect(!result.isSuccess)
+        #expect(try #require(envelope["state"] as? String) == "C")
+        #expect(try #require(envelope["dialog_route_outcome"] as? String)
+            == "dialog_unidentified_new_window")
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+        #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+        #expect(HonestContract.isFallbackUnsafeStateC(result.message))
+        #expect(sliderWrites.value == 0)
+    }
+
+    @Test("an absent new window retains the clean pre-input State C")
+    func noNewWindowStillProducesExistingCleanStateC() async throws {
+        let sliderWrites = Issue529Counter()
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                .success(#"{"result":"DIALOG_ACTUATION_ISSUED: dialog did not become ready"}"#)
+            }
+        )
+
+        let envelope = try #require(issue529Envelope(result))
+        #expect(!result.isSuccess)
+        #expect(try #require(envelope["state"] as? String) == "C")
+        #expect(try #require(envelope["error"] as? String) == "not_supported")
+        #expect(try #require(envelope["safe_to_retry"] as? Bool))
+        #expect(envelope["fallback_unsafe"] == nil)
+        #expect(sliderWrites.value == 0)
+    }
+
     @Test("a clean leaf-only failure does not invent an AX slider route")
     func cleanLeafActuationFailureDoesNotInventSliderRoute() async throws {
         // Source mutation: restore `via:"slider"` or `error:.axWriteFailed` in the no-route
@@ -539,11 +624,11 @@ struct Issue529MenuValidationTests {
         #expect(!FileManager.default.fileExists(atPath: temporaryPath))
     }
 
-    @Test("default dead-child reconciliation stays on the injected runtime seam")
-    func defaultDeadChildReconciliationUsesInjectedRuntime() async throws {
-        // Source mutation: call `AppleScriptChannel.executeAppleScript` directly from
-        // `observeAndClearStrayGoToPositionUI`. This fake runtime would see no reconciliation
-        // script, proving the default failure path escaped the test/runtime seam.
+    @Test("a timeout without a pre-leaf snapshot does not run reconciliation")
+    func unavailablePreLeafSnapshotDoesNotRunDefaultReconciliation() async throws {
+        // Mutation this rejects: remove the `preLeafWindowSnapshotPath` guard in the default
+        // reconciler. A killed child with no durable ownership snapshot must not run a cleanup
+        // script whose Cancel branch could target another run's matching dialog.
         let sliderWrites = Issue529Counter()
         let reconciliationCalls = Issue529Counter()
         let runtime = issue529SliderRuntime(
@@ -566,9 +651,37 @@ struct Issue529MenuValidationTests {
         #expect(!result.isSuccess)
         #expect(try #require(envelope["state"] as? String) == "C")
         #expect(try #require(envelope["dialog_route_outcome"] as? String)
-            == "execution_failed_issuance_NOT_ISSUED_cleanup_closed_true")
-        #expect(reconciliationCalls.value == 1)
+            == "execution_failed_issuance_NOT_ISSUED_cleanup_closed_false")
+        #expect(reconciliationCalls.value == 0)
         #expect(sliderWrites.value == 0)
+    }
+
+    @Test("the default reconciler never cancels a pre-existing dialog after LEAF_ARMED")
+    func defaultReconcilerLeavesPreexistingDialogUntouchedAfterLeafTimeout() async throws {
+        // Mutation this rejects: pass the ledger path through without requiring its READY
+        // pre-leaf snapshot. The default reconciliation script would then be launched after this
+        // LEAF_ARMED timeout and could press Cancel on the fixture's already-open dialog.
+        let reconciliationCalls = Issue529Counter()
+        let fixture = issue529PreexistingDialogRuntime(reconciliationCalls: reconciliationCalls)
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: fixture.runtime,
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { script in
+                let ledgerPath = try! issue529LedgerPath(from: script, stage: "LEAF_ARMED")
+                try! "LEAF_ARMED".write(toFile: ledgerPath, atomically: true, encoding: .utf8)
+                return .error("osascript timed out after leaf click")
+            }
+        )
+
+        let envelope = try #require(issue529Envelope(result))
+        #expect(result.isSuccess)
+        #expect(try #require(envelope["state"] as? String) == "B")
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+        #expect(reconciliationCalls.value == 0)
+        #expect(fixture.builder.actionCalls.isEmpty)
     }
 
     @Test("an existing dialog or focus loss refuses before a position submission")
@@ -1101,9 +1214,10 @@ func unreadableCancelDoesNotAuthoriseEscapeWithoutDialogObservation() throws {
 
 @Test("dead-child reconciliation targets the measured dialog before menu state")
 func aDeadScriptReconcilesDialogBeforeMenuState() throws {
-    // Mutations this rejects: restore the PID bypass, match a dialog by title alone, remove the
-    // final frontmost read after AXFocusedWindow, or send menu Escape after a single frontmost
-    // read. Each would either skip cleanup or let Escape reach a different focused modal/app.
+    // Mutations this rejects: restore the PID bypass, drop the durable pre-leaf identity filter,
+    // remove the final frontmost read after AXFocusedWindow, or send menu Escape after a single
+    // frontmost read. Each would either cancel another run's dialog or let Escape reach a
+    // different focused modal/app.
     let source = try String(
         contentsOfFile: #filePath.replacingOccurrences(
             of: "Tests/LogicProMCPTests/Issue529MenuValidationTests.swift",
@@ -1115,8 +1229,16 @@ func aDeadScriptReconcilesDialogBeforeMenuState() throws {
     let helperEnd = try #require(source.range(of: "// MARK: - Control-bar checkbox helpers"))
     let helper = String(source[helperStart.lowerBound..<helperEnd.lowerBound])
     let measuredSubrole = try issue529Position(of: "on knownGoToPositionDialogSubrole(dialogSubrole)", in: helper)
-    let dialogObservation = try issue529Position(of: "on matchingGoToPositionDialog(theProcess)", in: helper)
-    let dialogCleanup = try issue529Position(of: "set dialogCleanupState to my dismissGoToPositionDialog(it)", in: helper)
+    let dialogObservation = try issue529Position(
+        of: "on matchingGoToPositionDialog(theProcess, preLeafWindowIdentifiers)", in: helper
+    )
+    let snapshotRead = try issue529Position(
+        of: "on preLeafGoToPositionWindowIdentifiers(snapshotPath)", in: helper
+    )
+    let dialogCleanup = try issue529Position(
+        of: "set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafWindowIdentifiers)",
+        in: helper
+    )
     let focusedWindowRead = try issue529Position(
         of: "set processFocusedWindow to value of attribute \"AXFocusedWindow\"", in: helper
     )
@@ -1125,7 +1247,8 @@ func aDeadScriptReconcilesDialogBeforeMenuState() throws {
     let menuCleanupTail = String(helper[menuFocus...])
     let menuEscape = try issue529Position(of: "key code 53", in: menuCleanupTail)
 
-    #expect(measuredSubrole < dialogObservation)
+    #expect(measuredSubrole < snapshotRead)
+    #expect(snapshotRead < dialogObservation)
     #expect(dialogObservation < dialogCleanup)
     #expect(focusedWindowRead < finalFrontmostRead)
     #expect(dialogCleanup < menuFocus)
@@ -1134,4 +1257,37 @@ func aDeadScriptReconcilesDialogBeforeMenuState() throws {
     #expect(helper.contains("if processFocusedWindow is not dialogWindow then return \"NOT_FOCUSED\""))
     #expect(!helper.contains("if frontmost then"))
     #expect(!helper.contains("ProcessUtils.logicProPID"))
+}
+
+@Test("the write script emits the unidentified-window refusal, and emits it before any dismissal")
+func writeScriptRefusesAnUnidentifiedNewWindowBeforeDismissingAnything() throws {
+    // The whole unidentified-new-window refusal rests on this one AppleScript return. Every Swift-side
+    // test downstream of it starts from a reply string, so deleting this line leaves the parser, the
+    // classifier and the envelope tests all green while the defect returns: a window this run opened but
+    // could not name would again be reported CLOSED, the result would be router-continuable, and CGEvent
+    // would type the position into the live dialog.
+    //
+    // Order is part of the contract, not decoration. The refusal must come BEFORE
+    // `dismissOpenGoToPositionDialog`, or the script would cancel the window it just declined to identify
+    // — which is the same wrong-target cancellation the reconciler was fixed to avoid.
+    let source = try String(
+        contentsOfFile: #filePath.replacingOccurrences(
+            of: "Tests/LogicProMCPTests/Issue529MenuValidationTests.swift",
+            with: "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift"
+        ),
+        encoding: .utf8
+    )
+    // Scope to the not-ready block. An earlier dismissal exists in the leaf-click `on error` handler,
+    // which is a different case and legitimately dismisses first.
+    let scriptStart = try #require(source.range(of: "                if not dialogReady then"))
+    let scriptEnd = try #require(source.range(of: "    struct DialogIssuanceLedger"))
+    let script = String(source[scriptStart.lowerBound..<scriptEnd.lowerBound])
+
+    let unidentifiedRefusal = try issue529Position(
+        of: "if dialogAppearanceUnidentified then return \"DIALOG_UNIDENTIFIED_NEW_WINDOW\"", in: script
+    )
+    let dialogDismissal = try issue529Position(
+        of: "set dialogCleanupState to my dismissOpenGoToPositionDialog(", in: script
+    )
+    #expect(unidentifiedRefusal < dialogDismissal)
 }

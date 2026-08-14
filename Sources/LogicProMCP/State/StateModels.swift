@@ -34,6 +34,7 @@ struct TransportState: Sendable, Codable {
     /// Which components of `position` came from an AX read. Optional preserves decoding of
     /// historical state payloads, whose `position` string had no observation provenance.
     var positionReadback: TransportPositionReadback? = nil
+    /// A display value only. It has no independent readback provenance in the transport model.
     var timePosition: String = "00:00:00.000"
     var sampleRate: Int = 44100
     var lastUpdated: Date = .distantPast

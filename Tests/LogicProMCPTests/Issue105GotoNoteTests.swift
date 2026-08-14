@@ -252,6 +252,139 @@ struct Issue105GotoNoteTests {
         #expect(readableBarOnly.observedComponents == [.bar])
     }
 
+    @Test("an unknown-target write is never promoted to verified by a matching playhead")
+    func unknownInputTargetCannotBeVerifiedByACoincidentPlayhead() async throws {
+        // The channel is honest when a global key may have gone elsewhere: State B with
+        // `dialog_input_target: "unknown"` and `fallback_unsafe: true`. Finalize must not treat that
+        // as "the write landed, now read it back" — if the playhead ALREADY showed the requested
+        // position, a matching read proves nothing about this call.
+        //
+        // Concrete state: playhead already at 5.1.1.1, request 5.1.1.1, Cmd+A went to another
+        // application, child killed at the budget.
+        let unknownTargetEnvelope = HonestContract.encodeStateB(
+            reason: .readbackUnavailable,
+            extras: [
+                "operation": "transport.goto_position",
+                "method": "dialog",
+                "requested": "5.1.1.1",
+                "dialog_input_target": "unknown",
+                "dialog_input_attempted": true,
+                "write_attempted": true,
+                "fallback_unsafe": true,
+                "safe_to_retry": false,
+            ]
+        )
+        let router = ChannelRouter()
+        await router.register(StubTransportChannel(
+            gotoResult: .success(unknownTargetEnvelope),
+            readbackPosition: "5.1.1.1"
+        ))
+        let result = await TransportDispatcher.handle(
+            command: "goto_position",
+            params: ["position": .string("5.1.1.1")],
+            router: router,
+            cache: StateCache()
+        )
+        let envelope = try #require(obj(result))
+        #expect(try #require(envelope["state"] as? String) == "B")
+        #expect(!(try #require(envelope["verified"] as? Bool)))
+        #expect(try #require(envelope["verification_withheld"] as? String) == "dialog_input_target")
+        #expect(try #require(envelope["observed"] as? String) == "5.1.1.1")
+    }
+
+    // Locks the `fallback_unsafe` arm: a coincidentally matching playhead is not proof this call performed the write.
+    @Test("an unsafe fallback write is never promoted to verified by a matching playhead")
+    func fallbackUnsafeCannotBeVerifiedByACoincidentPlayhead() async throws {
+        let fallbackUnsafeEnvelope = HonestContract.encodeStateB(
+            reason: .readbackUnavailable,
+            extras: [
+                "operation": "transport.goto_position",
+                "method": "dialog",
+                "requested": "5.1.1.1",
+                "dialog_input_attempted": true,
+                "write_attempted": true,
+                "fallback_unsafe": true,
+                "safe_to_retry": false,
+            ]
+        )
+        let router = ChannelRouter()
+        await router.register(StubTransportChannel(
+            gotoResult: .success(fallbackUnsafeEnvelope),
+            readbackPosition: "5.1.1.1"
+        ))
+        let result = await TransportDispatcher.handle(
+            command: "goto_position",
+            params: ["position": .string("5.1.1.1")],
+            router: router,
+            cache: StateCache()
+        )
+        let envelope = try #require(obj(result))
+        let observedState: String = envelope["state"] as? String ?? "nil"
+        #expect(observedState != "A")
+    }
+
+    // Locks the `write_attempted_indeterminate` arm: a coincidentally matching playhead is not proof this call performed the write.
+    @Test("an indeterminate write boundary is never promoted to verified by a matching playhead")
+    func indeterminateWriteBoundaryCannotBeVerifiedByACoincidentPlayhead() async throws {
+        let indeterminateWriteBoundaryEnvelope = HonestContract.encodeStateB(
+            reason: .readbackUnavailable,
+            extras: [
+                "operation": "transport.goto_position",
+                "method": "dialog",
+                "requested": "5.1.1.1",
+                "dialog_input_attempted": true,
+                "write_attempted": true,
+                "write_attempted_indeterminate": true,
+                "safe_to_retry": false,
+            ]
+        )
+        let router = ChannelRouter()
+        await router.register(StubTransportChannel(
+            gotoResult: .success(indeterminateWriteBoundaryEnvelope),
+            readbackPosition: "5.1.1.1"
+        ))
+        let result = await TransportDispatcher.handle(
+            command: "goto_position",
+            params: ["position": .string("5.1.1.1")],
+            router: router,
+            cache: StateCache()
+        )
+        let envelope = try #require(obj(result))
+        let observedState: String = envelope["state"] as? String ?? "nil"
+        #expect(observedState != "A")
+    }
+
+    @Test("a matching playhead still verifies an otherwise ordinary dialog envelope")
+    func establishedInputTargetCanBeVerifiedByAMatchingPlayhead() async throws {
+        let establishedTargetEnvelope = HonestContract.encodeStateB(
+            reason: .readbackUnavailable,
+            extras: [
+                "operation": "transport.goto_position",
+                "method": "dialog",
+                "requested": "5.1.1.1",
+                "dialog_input_attempted": true,
+                "write_attempted": true,
+                "safe_to_retry": false,
+            ]
+        )
+        let router = ChannelRouter()
+        await router.register(StubTransportChannel(
+            gotoResult: .success(establishedTargetEnvelope),
+            readbackPosition: "5.1.1.1"
+        ))
+        let result = await TransportDispatcher.handle(
+            command: "goto_position",
+            params: ["position": .string("5.1.1.1")],
+            router: router,
+            cache: StateCache()
+        )
+
+        let envelope = try #require(obj(result))
+        #expect(try #require(envelope["state"] as? String) == "A")
+        #expect(try #require(envelope["verified"] as? Bool))
+        #expect(envelope["verification_withheld"] == nil)
+    }
+
     @Test("the TransportState display default is never a goto_position observation")
     func unreadablePositionDefaultCannotReachStateA() async throws {
         // Source mutation: restore finalizeGotoPositionResult's old display-string equality check.
@@ -281,7 +414,8 @@ struct Issue105GotoNoteTests {
         #expect(!(try #require(envelope["verified"] as? Bool)))
         #expect(try #require(envelope["state"] as? String) == "B")
         #expect(try #require(envelope["reason"] as? String) == "readback_unavailable")
-        #expect(try #require(envelope["observed"] as? String) == "1.1.1.1")
+        #expect(envelope["observed"] == nil)
+        #expect(envelope["observed_time_position"] == nil)
         let unobserved = try #require(envelope["unobserved_position_components"] as? [String])
         #expect(unobserved == ["bar", "beat", "subdivision", "tick"])
     }

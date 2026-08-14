@@ -880,12 +880,17 @@ extension AccessibilityChannel {
         // Reconciliation is part of the same injected runtime as dialog execution. Otherwise a
         // fake runtime that omits this optional test seam can launch live osascript while cleaning
         // up a deliberately failed fixture.
-        let dialogFailureReconciler: @Sendable () async -> Bool
+        let dialogFailureReconciler: @Sendable (String?) async -> Bool
         if let reconcileAfterDialogExecutionFailure {
-            dialogFailureReconciler = reconcileAfterDialogExecutionFailure
+            dialogFailureReconciler = { _ in await reconcileAfterDialogExecutionFailure() }
         } else {
-            dialogFailureReconciler = {
-                await observeAndClearStrayGoToPositionUI(
+            dialogFailureReconciler = { preLeafWindowSnapshotPath in
+                // A timeout without the child-written pre-leaf snapshot cannot establish that any
+                // currently matching modal belongs to this run. Do not launch a cleanup script
+                // that could cancel a user's already-open dialog.
+                guard let preLeafWindowSnapshotPath else { return false }
+                return await observeAndClearStrayGoToPositionUI(
+                    preLeafWindowSnapshotPath: preLeafWindowSnapshotPath,
                     executeScript: { script, timeout in
                         await runtime.executeAppleScriptWithTimeout(script, timeout)
                     }
@@ -1070,13 +1075,15 @@ extension AccessibilityChannel {
     /// the child may already have issued it.
     static func gotoPositionViaDialogAppleScript(
         position: String,
-        issuanceLedgerPath: String? = nil
+        issuanceLedgerPath: String? = nil,
+        preLeafWindowSnapshotPath: String? = nil
     ) -> String {
         // Poll for the dialog's presence instead of relying on a fixed delay.
         // Without this guard, a slow machine (>500ms to render the dialog) would
         // send Cmd+A to the arrange area, selecting all regions unexpectedly.
         let logicProAppleScript = LogicProTarget.appleScriptTarget()
         let ledgerPath = issuanceLedgerPath ?? ""
+        let snapshotPath = preLeafWindowSnapshotPath ?? ""
         return """
         -- A selected menu-bar item is the AX observation that one of Logic's
         -- menus is currently open. Return UNREADABLE rather than treating a
@@ -1167,6 +1174,42 @@ extension AccessibilityChannel {
             end try
         end recordDialogIssuance
 
+        -- The timeout reconciler runs in a fresh osascript process. Persist the exact pre-leaf
+        -- window identities before the leaf click so that process can exclude any dialog this run
+        -- did not open. An unavailable snapshot is intentionally not a clean empty snapshot.
+        on goToPositionWindowIdentifiers(preLeafWindows)
+            set windowIdentifiers to {}
+            try
+                repeat with preLeafWindow in preLeafWindows
+                    set end of windowIdentifiers to (id of contents of preLeafWindow as text)
+                end repeat
+                return windowIdentifiers
+            on error
+                return "UNREADABLE"
+            end try
+        end goToPositionWindowIdentifiers
+
+        on recordPreLeafGoToPositionWindowSnapshot(windowIdentifiers, snapshotPath)
+            if snapshotPath is "" then return true
+            set temporarySnapshotPath to ""
+            try
+                set snapshotText to "READY"
+                repeat with windowIdentifier in windowIdentifiers
+                    set snapshotText to snapshotText & linefeed & (contents of windowIdentifier as text)
+                end repeat
+                set temporarySnapshotPath to do shell script "/usr/bin/mktemp " & quoted form of (snapshotPath & ".tmp.XXXXXX")
+                do shell script "/usr/bin/printf %s " & quoted form of snapshotText & " > " & quoted form of temporarySnapshotPath & " && /bin/mv -f " & quoted form of temporarySnapshotPath & " " & quoted form of snapshotPath
+                return true
+            on error
+                if temporarySnapshotPath is not "" then
+                    try
+                        do shell script "/bin/rm -f " & quoted form of temporarySnapshotPath
+                    end try
+                end if
+                return false
+            end try
+        end recordPreLeafGoToPositionWindowSnapshot
+
         -- Appending this context lets the Swift receipt distinguish an unsafe
         -- entry cleanup (no operation actuation) from an unsafe cleanup after a
         -- menu click. It is deliberately attached only to refusal results.
@@ -1237,6 +1280,28 @@ extension AccessibilityChannel {
                 end tell
             end using terms from
         end matchingGoToPositionDialog
+
+        -- The three exact titles and measured modal class are an input-target predicate, not an
+        -- absence predicate. A newly opened localized or otherwise unfamiliar window may be this
+        -- run's dialog, but must never receive global typing.
+        on newWindowAppearedSince(theProcess, preLeafWindows)
+            if preLeafWindows is "UNREADABLE" then return "UNREADABLE"
+            using terms from application "System Events"
+                tell theProcess
+                    try
+                        repeat with dialogWindow in every window
+                            set candidateWindow to contents of dialogWindow
+                            if not my windowWasPresentBefore(candidateWindow, preLeafWindows) then
+                                return "APPEARED"
+                            end if
+                        end repeat
+                        return "ABSENT"
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end tell
+            end using terms from
+        end newWindowAppearedSince
 
         -- The Go To Position dialog has its own lifecycle; a menu-bar observation says nothing
         -- about whether a titled modal is still blocking the arrange area. `AXModal` answers
@@ -1430,6 +1495,13 @@ extension AccessibilityChannel {
                 if preLeafGoToPositionWindows is "UNREADABLE" then
                     return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window snapshot was unreadable before leaf click"
                 end if
+                set preLeafGoToPositionWindowIdentifiers to my goToPositionWindowIdentifiers(preLeafGoToPositionWindows)
+                if preLeafGoToPositionWindowIdentifiers is "UNREADABLE" then
+                    return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window identities were unreadable before leaf click"
+                end if
+                if not my recordPreLeafGoToPositionWindowSnapshot(preLeafGoToPositionWindowIdentifiers, "\(snapshotPath)") then
+                    return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window snapshot could not be persisted before leaf click"
+                end if
                 try
                     -- Persist before AXPress: if the child dies after the click, Swift still knows
                     -- that the dialog route may have become active and must not choose another route.
@@ -1463,6 +1535,7 @@ extension AccessibilityChannel {
                 -- same-titled window from being accepted as this request's dialog.
                 set dialogReady to false
                 set dialogAppearanceUnreadable to false
+                set dialogAppearanceUnidentified to false
                 set observedGoToPositionDialog to missing value
                 repeat 30 times
                     delay 0.1
@@ -1475,8 +1548,18 @@ extension AccessibilityChannel {
                         set dialogReady to true
                         exit repeat
                     end if
+                    set newWindowState to my newWindowAppearedSince(logicProcess, preLeafGoToPositionWindows)
+                    if newWindowState is "UNREADABLE" then
+                        set dialogAppearanceUnreadable to true
+                        exit repeat
+                    end if
+                    if newWindowState is "APPEARED" then
+                        set dialogAppearanceUnidentified to true
+                        exit repeat
+                    end if
                 end repeat
                 if not dialogReady then
+                    if dialogAppearanceUnidentified then return "DIALOG_UNIDENTIFIED_NEW_WINDOW"
                     set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog)
                     if dialogCleanupState is not "CLOSED" then
                         return "DIALOG_ACTUATION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
@@ -1647,15 +1730,23 @@ extension AccessibilityChannel {
 
     struct DialogIssuanceLedger: Sendable {
         let url: URL
+        let preLeafWindowSnapshotURL: URL
 
         static func create() -> DialogIssuanceLedger? {
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent("logic-pro-mcp-goto-position-\(UUID().uuidString)")
+            let preLeafWindowSnapshotURL = url.appendingPathExtension("preleaf-windows")
             guard FileManager.default.createFile(
                 atPath: url.path,
                 contents: Data(DialogIssuanceStage.notIssued.rawValue.utf8)
-            ) else { return nil }
-            return DialogIssuanceLedger(url: url)
+            ), FileManager.default.createFile(
+                atPath: preLeafWindowSnapshotURL.path,
+                contents: Data("UNAVAILABLE".utf8)
+            ) else {
+                try? FileManager.default.removeItem(at: url)
+                return nil
+            }
+            return DialogIssuanceLedger(url: url, preLeafWindowSnapshotURL: preLeafWindowSnapshotURL)
         }
 
         var stage: DialogIssuanceStage {
@@ -1664,21 +1755,36 @@ extension AccessibilityChannel {
                 ?? .unknown
         }
 
+        /// `READY` is written atomically by the child immediately before the leaf click. Anything
+        /// else — including a killed child or a partial write — withholds reconciliation action.
+        var preLeafWindowSnapshotPath: String? {
+            guard let text = try? String(contentsOf: preLeafWindowSnapshotURL, encoding: .utf8),
+                  text.split(separator: "\n", omittingEmptySubsequences: false).first == "READY"
+            else { return nil }
+            return preLeafWindowSnapshotURL.path
+        }
+
         func remove() {
             // The child may be killed after `mktemp` and before it can rename or clean its sibling.
             // This run's UUID makes the prefix exclusive, so the parent can safely collect those
             // orphaned staging files as well as the canonical ledger.
             let directory = url.deletingLastPathComponent()
-            let temporaryPrefix = url.lastPathComponent + ".tmp."
+            let temporaryPrefixes = [
+                url.lastPathComponent + ".tmp.",
+                preLeafWindowSnapshotURL.lastPathComponent + ".tmp.",
+            ]
             if let siblings = try? FileManager.default.contentsOfDirectory(
                 at: directory,
                 includingPropertiesForKeys: nil
             ) {
-                for sibling in siblings where sibling.lastPathComponent.hasPrefix(temporaryPrefix) {
+                for sibling in siblings where temporaryPrefixes.contains(where: {
+                    sibling.lastPathComponent.hasPrefix($0)
+                }) {
                     try? FileManager.default.removeItem(at: sibling)
                 }
             }
             try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: preLeafWindowSnapshotURL)
         }
     }
 
@@ -1701,6 +1807,7 @@ extension AccessibilityChannel {
             case dialogPreexisting
             case dialogPreexistenceUnreadable
             case dialogNotReady
+            case dialogUnidentifiedNewWindow
             case dialogActuationIssued(cleanupObservedClosed: Bool)
             case dialogSubmissionNotIssued(cleanupObservedClosed: Bool)
             case dialogInputIssued(issuance: DialogIssuanceStage, cleanupObservedClosed: Bool)
@@ -1728,6 +1835,7 @@ extension AccessibilityChannel {
             case .failure(.dialogPreexisting): return "dialog_preexisting"
             case .failure(.dialogPreexistenceUnreadable): return "dialog_preexistence_unreadable"
             case .failure(.dialogNotReady): return "dialog_not_ready"
+            case .failure(.dialogUnidentifiedNewWindow): return "dialog_unidentified_new_window"
             case let .failure(.dialogActuationIssued(closed)):
                 return "dialog_actuation_issued_cleanup_closed_\(closed)"
             case let .failure(.dialogSubmissionNotIssued(closed)):
@@ -1820,6 +1928,7 @@ extension AccessibilityChannel {
             case .failure(.menuCouldNotBeClosed),
                  .failure(.dialogPreexisting),
                  .failure(.dialogPreexistenceUnreadable),
+                 .failure(.dialogUnidentifiedNewWindow),
                  .failure(.dialogActuationIssued(cleanupObservedClosed: false)),
                  .failure(.dialogSubmissionNotIssued(cleanupObservedClosed: false)),
                  .failure(.dialogNotReady),
@@ -1833,6 +1942,7 @@ extension AccessibilityChannel {
         var dialogActuationMayHaveOccurred: Bool {
             switch self {
             case .failure(.dialogNotReady),
+                 .failure(.dialogUnidentifiedNewWindow),
                  .failure(.dialogActuationIssued),
                  .failure(.dialogSubmissionNotIssued),
                  .failure(.dialogInputIssued),
@@ -1909,6 +2019,8 @@ extension AccessibilityChannel {
             return .failure(.menuPickFailed)
         case "DIALOG_NOT_READY":
             return .failure(.dialogNotReady)
+        case "DIALOG_UNIDENTIFIED_NEW_WINDOW":
+            return .failure(.dialogUnidentifiedNewWindow)
         case let value where value.hasPrefix("DIALOG_ACTUATION_ISSUED"):
             return .failure(.dialogActuationIssued(
                 // A closed dialog is insufficient if a menu cleanup remained unreadable. Both
@@ -1947,14 +2059,15 @@ extension AccessibilityChannel {
     private static func gotoPositionViaDialog(
         position: String,
         executeScript: @escaping @Sendable (String) async -> ChannelResult,
-        reconcileAfterExecutionFailure: @escaping @Sendable () async -> Bool,
+        reconcileAfterExecutionFailure: @escaping @Sendable (String?) async -> Bool,
         createIssuanceLedger: @escaping @Sendable () -> DialogIssuanceLedger?
     ) async -> GotoPositionDialogRouteResult {
         let ledger = createIssuanceLedger()
         defer { ledger?.remove() }
         let script = gotoPositionViaDialogAppleScript(
             position: position,
-            issuanceLedgerPath: ledger?.url.path
+            issuanceLedgerPath: ledger?.url.path,
+            preLeafWindowSnapshotPath: ledger?.preLeafWindowSnapshotURL.path
         )
         let result = await executeScript(script)
         switch result {
@@ -1992,7 +2105,9 @@ extension AccessibilityChannel {
             // child may have crossed a UI boundary, and a failed reconciliation is never evidence
             // that a dead child left no modal/menu behind.
             let issuance = ledger?.stage ?? .unknown
-            let cleanupObservedClosed = await reconcileAfterExecutionFailure()
+            let cleanupObservedClosed = await reconcileAfterExecutionFailure(
+                ledger?.preLeafWindowSnapshotPath
+            )
             return .failed(.failure(.executionFailed(
                 issuance: issuance,
                 cleanupObservedClosed: cleanupObservedClosed
@@ -2006,6 +2121,7 @@ extension AccessibilityChannel {
     /// not describe a modal dialog, so a post-timeout `CLOSED` menu must never authorise another route
     /// while the dialog remains on screen.
     private static func observeAndClearStrayGoToPositionUI(
+        preLeafWindowSnapshotPath: String,
         executeScript: @escaping @Sendable (String, TimeInterval) async -> ChannelResult
     ) async -> StrayGoToPositionUIOutcome {
         let target = LogicProTarget.appleScriptTarget()
@@ -2015,20 +2131,58 @@ extension AccessibilityChannel {
             return false
         end knownGoToPositionDialogSubrole
 
-        -- Reconciliation has no live AX element from the killed child, so it can only match the
-        -- measured modal class. It must never turn a same-titled normal/editor window into a
-        -- cleanup target merely because its title collides with the dialog.
-        on matchingGoToPositionDialog(theProcess)
+        -- The timeout process must not infer ownership from a title. The child persisted these IDs
+        -- immediately before its leaf click; failure to read that snapshot is unsafe, not empty.
+        on preLeafGoToPositionWindowIdentifiers(snapshotPath)
+            try
+                set snapshotText to do shell script "/bin/cat " & (quoted form of snapshotPath)
+                set originalTextItemDelimiters to AppleScript's text item delimiters
+                set AppleScript's text item delimiters to linefeed
+                set snapshotItems to text items of snapshotText
+                set AppleScript's text item delimiters to originalTextItemDelimiters
+                if (count of snapshotItems) is 0 then return "UNREADABLE"
+                if item 1 of snapshotItems is not "READY" then return "UNREADABLE"
+                set windowIdentifiers to {}
+                if (count of snapshotItems) is greater than 1 then
+                    repeat with snapshotItem from 2 to (count of snapshotItems)
+                        set windowIdentifier to item snapshotItem of snapshotItems
+                        if windowIdentifier is not "" then
+                            set end of windowIdentifiers to windowIdentifier
+                        end if
+                    end repeat
+                end if
+                return windowIdentifiers
+            on error
+                try
+                    set AppleScript's text item delimiters to originalTextItemDelimiters
+                end try
+                return "UNREADABLE"
+            end try
+        end preLeafGoToPositionWindowIdentifiers
+
+        on windowWasPresentBefore(windowIdentifier, preLeafWindowIdentifiers)
+            repeat with preLeafWindowIdentifier in preLeafWindowIdentifiers
+                if contents of preLeafWindowIdentifier is windowIdentifier then return true
+            end repeat
+            return false
+        end windowWasPresentBefore
+
+        -- Reconciliation can only act on a measured dialog that was absent from this run's durable
+        -- pre-leaf snapshot. A same-titled modal from before the click is reported, never cancelled.
+        on matchingGoToPositionDialog(theProcess, preLeafWindowIdentifiers)
             using terms from application "System Events"
                 tell theProcess
                     try
                         repeat with dialogWindow in every window
                             set dialogTitle to name of dialogWindow
                             if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
-                                set dialogSubrole to subrole of dialogWindow
-                                if my knownGoToPositionDialogSubrole(dialogSubrole) then
-                                    set dialogIsModal to value of attribute "AXModal" of dialogWindow
-                                    if dialogIsModal is true then return contents of dialogWindow
+                                set windowIdentifier to id of dialogWindow as text
+                                if not my windowWasPresentBefore(windowIdentifier, preLeafWindowIdentifiers) then
+                                    set dialogSubrole to subrole of dialogWindow
+                                    if my knownGoToPositionDialogSubrole(dialogSubrole) then
+                                        set dialogIsModal to value of attribute "AXModal" of dialogWindow
+                                        if dialogIsModal is true then return contents of dialogWindow
+                                    end if
                                 end if
                             end if
                         end repeat
@@ -2040,11 +2194,39 @@ extension AccessibilityChannel {
             end using terms from
         end matchingGoToPositionDialog
 
-        on goToPositionDialogState(theProcess)
-            set dialogWindow to my matchingGoToPositionDialog(theProcess)
+        on preexistingGoToPositionDialog(theProcess, preLeafWindowIdentifiers)
+            using terms from application "System Events"
+                tell theProcess
+                    try
+                        repeat with dialogWindow in every window
+                            set dialogTitle to name of dialogWindow
+                            if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
+                                set windowIdentifier to id of dialogWindow as text
+                                if my windowWasPresentBefore(windowIdentifier, preLeafWindowIdentifiers) then
+                                    set dialogSubrole to subrole of dialogWindow
+                                    if my knownGoToPositionDialogSubrole(dialogSubrole) then
+                                        set dialogIsModal to value of attribute "AXModal" of dialogWindow
+                                        if dialogIsModal is true then return contents of dialogWindow
+                                    end if
+                                end if
+                            end if
+                        end repeat
+                        return missing value
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end tell
+            end using terms from
+        end preexistingGoToPositionDialog
+
+        on goToPositionDialogState(theProcess, preLeafWindowIdentifiers)
+            set dialogWindow to my matchingGoToPositionDialog(theProcess, preLeafWindowIdentifiers)
             if dialogWindow is "UNREADABLE" then return "UNREADABLE"
-            if dialogWindow is missing value then return "CLOSED"
-            return "OPEN"
+            if dialogWindow is not missing value then return "OPEN"
+            set preexistingDialogWindow to my preexistingGoToPositionDialog(theProcess, preLeafWindowIdentifiers)
+            if preexistingDialogWindow is "UNREADABLE" then return "UNREADABLE"
+            if preexistingDialogWindow is not missing value then return "PREEXISTING"
+            return "CLOSED"
         end goToPositionDialogState
 
         -- System Events keystrokes are global. Re-check frontmost after proving the exact modal
@@ -2096,14 +2278,14 @@ extension AccessibilityChannel {
             end using terms from
         end menuEscapeFocusState
 
-        on dismissGoToPositionDialog(theProcess)
-            set dialogState to my goToPositionDialogState(theProcess)
+        on dismissGoToPositionDialog(theProcess, preLeafWindowIdentifiers)
+            set dialogState to my goToPositionDialogState(theProcess, preLeafWindowIdentifiers)
             if dialogState is "CLOSED" then return "CLOSED"
             if dialogState is not "OPEN" then return dialogState
             repeat 3 times
-                set dialogWindow to my matchingGoToPositionDialog(theProcess)
+                set dialogWindow to my matchingGoToPositionDialog(theProcess, preLeafWindowIdentifiers)
                 if dialogWindow is "UNREADABLE" then return "UNREADABLE"
-                if dialogWindow is missing value then return "CLOSED"
+                if dialogWindow is missing value then return my goToPositionDialogState(theProcess, preLeafWindowIdentifiers)
                 set cancelPressed to false
                 using terms from application "System Events"
                     tell theProcess
@@ -2128,7 +2310,7 @@ extension AccessibilityChannel {
                     end tell
                 end using terms from
                 delay 0.1
-                set dialogState to my goToPositionDialogState(theProcess)
+                set dialogState to my goToPositionDialogState(theProcess, preLeafWindowIdentifiers)
                 if dialogState is "CLOSED" then return "CLOSED"
                 if dialogState is not "OPEN" then return dialogState
             end repeat
@@ -2138,7 +2320,9 @@ extension AccessibilityChannel {
         tell application "System Events"
             tell \(target.systemEventsProcessTarget)
                 try
-                    set dialogCleanupState to my dismissGoToPositionDialog(it)
+                    set preLeafWindowIdentifiers to my preLeafGoToPositionWindowIdentifiers("\(preLeafWindowSnapshotPath)")
+                    if preLeafWindowIdentifiers is "UNREADABLE" then return "DIALOG_UNREADABLE"
+                    set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafWindowIdentifiers)
                     if dialogCleanupState is not "CLOSED" then return "DIALOG_" & dialogCleanupState
                     repeat 3 times
                         set menuFocusState to my menuEscapeFocusState(it)
