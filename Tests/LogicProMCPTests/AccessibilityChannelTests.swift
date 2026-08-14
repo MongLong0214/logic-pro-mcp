@@ -2771,7 +2771,7 @@ private func makeTempoSliderFixture(
     #expect(fixture.session.pressedTitles.isEmpty)
 }
 
-@Test func testAccessibilityChannelCreateInstrumentFailsWhenTrackCountDoesNotIncrease() async {
+@Test func testAccessibilityChannelCreateInstrumentFailsWhenTrackCountDoesNotIncrease() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(190)
     let window = builder.element(191)
@@ -2808,14 +2808,20 @@ private func makeTempoSliderFixture(
 
     let result = await channel.execute(operation: "track.create_instrument", params: [:])
 
-    #expect(confirmation.value)
+    let receipt = decodeAccessibilityJSON(result.message)
+    // This fixture exposes only the Track menu and track rail: it contains no
+    // AXSheet/AXDialog descendant with a readable Create button. The injected
+    // closure represents the legacy unchecked Return seam, which must remain
+    // untouched when no AX-bound confirmation target was read.
+    #expect(!confirmation.value)
+    #expect(!(try #require(receipt["dialog_confirmation_attempted"] as? Bool)))
     #expect(!result.isSuccess)
     #expect(result.message.contains("\"error\":\"ax_write_failed\""))
     #expect(result.message.contains("track count did not increase"))
     #expect(result.message.contains("\"observed_delta\":0"))
 }
 
-@Test func testAccessibilityChannelCreateInstrumentReportsDialogPendingWhenModalPersists() async {
+@Test func testAccessibilityChannelCreateInstrumentReportsDialogPendingWhenModalPersists() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(280)
     let window = builder.element(281)
@@ -2857,7 +2863,13 @@ private func makeTempoSliderFixture(
 
     let result = await channel.execute(operation: "track.create_instrument", params: [:])
 
-    #expect(confirmation.value)
+    let receipt = decodeAccessibilityJSON(result.message)
+    // This fixture's top-level AXDialog has no children and therefore exposes
+    // no readable Create button. It must remain pending rather than triggering
+    // the injected legacy Return seam; the receipt makes that non-confirmation
+    // explicit for the caller.
+    #expect(!confirmation.value)
+    #expect(!(try #require(receipt["dialog_confirmation_attempted"] as? Bool)))
     #expect(result.isSuccess)
     #expect(result.message.contains("\"verified\":false"))
     #expect(result.message.contains("\"reason\":\"retry_exhausted\""))
