@@ -1174,29 +1174,15 @@ extension AccessibilityChannel {
             end try
         end recordDialogIssuance
 
-        -- The timeout reconciler runs in a fresh osascript process. Persist the exact pre-leaf
-        -- window identities before the leaf click so that process can exclude any dialog this run
-        -- did not open. An unavailable snapshot is intentionally not a clean empty snapshot.
-        on goToPositionWindowIdentifiers(preLeafWindows)
-            set windowIdentifiers to {}
-            try
-                repeat with preLeafWindow in preLeafWindows
-                    set end of windowIdentifiers to (id of contents of preLeafWindow as text)
-                end repeat
-                return windowIdentifiers
-            on error
-                return "UNREADABLE"
-            end try
-        end goToPositionWindowIdentifiers
-
-        on recordPreLeafGoToPositionWindowSnapshot(windowIdentifiers, snapshotPath)
+        -- The timeout reconciler runs in a fresh osascript process. Persist only the readable
+        -- count of exact Go To Position dialogs immediately before the leaf click. Window IDs are
+        -- not readable in Logic Pro, and names/geometry are neither stable identities nor safe
+        -- serialized data. An unavailable snapshot is intentionally not a clean empty snapshot.
+        on recordPreLeafGoToPositionWindowSnapshot(matchingGoToPositionDialogCount, snapshotPath)
             if snapshotPath is "" then return true
             set temporarySnapshotPath to ""
             try
-                set snapshotText to "READY"
-                repeat with windowIdentifier in windowIdentifiers
-                    set snapshotText to snapshotText & linefeed & (contents of windowIdentifier as text)
-                end repeat
+                set snapshotText to "READY" & linefeed & (matchingGoToPositionDialogCount as text)
                 set temporarySnapshotPath to do shell script "/usr/bin/mktemp " & quoted form of (snapshotPath & ".tmp.XXXXXX")
                 do shell script "/usr/bin/printf %s " & quoted form of snapshotText & " > " & quoted form of temporarySnapshotPath & " && /bin/mv -f " & quoted form of temporarySnapshotPath & " " & quoted form of snapshotPath
                 return true
@@ -1227,53 +1213,82 @@ extension AccessibilityChannel {
             return false
         end knownGoToPositionDialogSubrole
 
-        -- Capture every pre-leaf window by element identity. A track or plug-in editor can be
-        -- titled "Go To Position", so title/subrole/modality alone cannot say that a window belongs
-        -- to this request. The input target must be a matching window that appeared after this
-        -- run's resolved leaf click.
-        on goToPositionWindowSnapshot(theProcess)
+        -- Count only windows that satisfy the measured input-target predicate. All properties used
+        -- here are readable from Logic Pro; errors are intentionally fail-closed. This numeric
+        -- observation is stable when a window moves and cannot embed a project/window title.
+        on goToPositionDialogCount(theProcess)
             using terms from application "System Events"
                 tell theProcess
                     try
-                        return every window
+                        set matchingWindowCount to 0
+                        repeat with dialogWindow in every window
+                            set dialogTitle to name of dialogWindow
+                            if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
+                                set dialogSubrole to subrole of dialogWindow
+                                if my knownGoToPositionDialogSubrole(dialogSubrole) then
+                                    set dialogIsModal to value of attribute "AXModal" of dialogWindow
+                                    if dialogIsModal is true then set matchingWindowCount to matchingWindowCount + 1
+                                end if
+                            end if
+                        end repeat
+                        return matchingWindowCount
                     on error
                         return "UNREADABLE"
                     end try
                 end tell
             end using terms from
-        end goToPositionWindowSnapshot
+        end goToPositionDialogCount
 
-        on windowWasPresentBefore(dialogWindow, preLeafWindows)
-            repeat with preLeafWindow in preLeafWindows
-                try
-                    if contents of preLeafWindow is dialogWindow then return true
-                end try
-            end repeat
+        -- This count-based relation replaces unreadable per-window IDs. Equality or a decrease
+        -- means no matching dialog has appeared since the pre-leaf observation; only an increase
+        -- can establish a new matching dialog.
+        on windowWasPresentBefore(currentGoToPositionDialogCount, preLeafGoToPositionDialogCount)
+            if currentGoToPositionDialogCount is "UNREADABLE" then return "UNREADABLE"
+            if preLeafGoToPositionDialogCount is "UNREADABLE" then return "UNREADABLE"
+            if currentGoToPositionDialogCount is less than or equal to preLeafGoToPositionDialogCount then return true
             return false
         end windowWasPresentBefore
 
-        -- Find only an operable, modal Go To Position window that this leaf could have opened.
-        -- Pre-existing same-titled windows are skipped before reading their subrole or AXModal, so
-        -- an unrelated plug-in editor with an unreadable modality cannot block this request.
-        on matchingGoToPositionDialog(theProcess, preLeafWindows)
-            if preLeafWindows is "UNREADABLE" then return "UNREADABLE"
+        -- Keep this in-process count only to preserve the terminal outcome for a newly opened
+        -- window that is not an operable Go To Position dialog. It is never serialized or treated
+        -- as an identity: a count increase merely refuses input rather than naming a target.
+        on goToPositionWindowCount(theProcess)
             using terms from application "System Events"
                 tell theProcess
                     try
+                        return count of every window
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end tell
+            end using terms from
+        end goToPositionWindowCount
+
+        -- Find only an operable, modal Go To Position window that this leaf could have opened.
+        -- A target requires exactly one post-leaf match beyond the readable pre-leaf count; any
+        -- pre-existing matching dialog or non-unique increase withholds global typing.
+        on matchingGoToPositionDialog(theProcess, preLeafGoToPositionDialogCount)
+            if preLeafGoToPositionDialogCount is "UNREADABLE" then return "UNREADABLE"
+            using terms from application "System Events"
+                tell theProcess
+                    try
+                        set matchingDialogWindows to {}
                         repeat with dialogWindow in every window
-                            set candidateWindow to contents of dialogWindow
                             set dialogTitle to name of dialogWindow
                             if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
-                                if not my windowWasPresentBefore(candidateWindow, preLeafWindows) then
-                                    set dialogSubrole to subrole of dialogWindow
-                                    if my knownGoToPositionDialogSubrole(dialogSubrole) then
-                                        set dialogIsModal to value of attribute "AXModal" of dialogWindow
-                                        if dialogIsModal is true then return candidateWindow
-                                    end if
+                                set dialogSubrole to subrole of dialogWindow
+                                if my knownGoToPositionDialogSubrole(dialogSubrole) then
+                                    set dialogIsModal to value of attribute "AXModal" of dialogWindow
+                                    if dialogIsModal is true then set end of matchingDialogWindows to contents of dialogWindow
                                 end if
                             end if
                         end repeat
-                        return missing value
+                        set currentGoToPositionDialogCount to count of matchingDialogWindows
+                        set wasPresentBefore to my windowWasPresentBefore(currentGoToPositionDialogCount, preLeafGoToPositionDialogCount)
+                        if wasPresentBefore is "UNREADABLE" then return "UNREADABLE"
+                        if wasPresentBefore then return missing value
+                        if currentGoToPositionDialogCount is not (preLeafGoToPositionDialogCount + 1) then return missing value
+                        return item 1 of matchingDialogWindows
                     on error
                         return "UNREADABLE"
                     end try
@@ -1284,23 +1299,12 @@ extension AccessibilityChannel {
         -- The three exact titles and measured modal class are an input-target predicate, not an
         -- absence predicate. A newly opened localized or otherwise unfamiliar window may be this
         -- run's dialog, but must never receive global typing.
-        on newWindowAppearedSince(theProcess, preLeafWindows)
-            if preLeafWindows is "UNREADABLE" then return "UNREADABLE"
-            using terms from application "System Events"
-                tell theProcess
-                    try
-                        repeat with dialogWindow in every window
-                            set candidateWindow to contents of dialogWindow
-                            if not my windowWasPresentBefore(candidateWindow, preLeafWindows) then
-                                return "APPEARED"
-                            end if
-                        end repeat
-                        return "ABSENT"
-                    on error
-                        return "UNREADABLE"
-                    end try
-                end tell
-            end using terms from
+        on newWindowAppearedSince(theProcess, preLeafGoToPositionWindowCount)
+            if preLeafGoToPositionWindowCount is "UNREADABLE" then return "UNREADABLE"
+            set currentGoToPositionWindowCount to my goToPositionWindowCount(theProcess)
+            if currentGoToPositionWindowCount is "UNREADABLE" then return "UNREADABLE"
+            if currentGoToPositionWindowCount is greater than preLeafGoToPositionWindowCount then return "APPEARED"
+            return "ABSENT"
         end newWindowAppearedSince
 
         -- The Go To Position dialog has its own lifecycle; a menu-bar observation says nothing
@@ -1487,19 +1491,22 @@ extension AccessibilityChannel {
                     end if
                     return "MENU_DISABLED"
                 end if
-                -- The window identity snapshot, not its title, is the first half of this run's
-                -- absence → leaf → appearance transition. A pre-existing plug-in editor may use
-                -- the same title (and even AXDialog), but can never become this run's input target.
+                -- A readable count of the exact dialog predicate is the first half of this run's
+                -- absence → leaf → appearance transition. It records no user-controlled title or
+                -- geometry. A pre-existing matching dialog is never an input target for this run.
                 set observedGoToPositionDialog to missing value
-                set preLeafGoToPositionWindows to my goToPositionWindowSnapshot(logicProcess)
-                if preLeafGoToPositionWindows is "UNREADABLE" then
+                set preLeafGoToPositionDialogCount to my goToPositionDialogCount(logicProcess)
+                if preLeafGoToPositionDialogCount is "UNREADABLE" then
                     return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window snapshot was unreadable before leaf click"
                 end if
-                set preLeafGoToPositionWindowIdentifiers to my goToPositionWindowIdentifiers(preLeafGoToPositionWindows)
-                if preLeafGoToPositionWindowIdentifiers is "UNREADABLE" then
-                    return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window identities were unreadable before leaf click"
+                if preLeafGoToPositionDialogCount is greater than 0 then
+                    return "DIALOG_PREEXISTING: Go To Position dialog was already present before leaf click"
                 end if
-                if not my recordPreLeafGoToPositionWindowSnapshot(preLeafGoToPositionWindowIdentifiers, "\(snapshotPath)") then
+                set preLeafGoToPositionWindowCount to my goToPositionWindowCount(logicProcess)
+                if preLeafGoToPositionWindowCount is "UNREADABLE" then
+                    return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window count was unreadable before leaf click"
+                end if
+                if not my recordPreLeafGoToPositionWindowSnapshot(preLeafGoToPositionDialogCount, "\(snapshotPath)") then
                     return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window snapshot could not be persisted before leaf click"
                 end if
                 try
@@ -1539,7 +1546,7 @@ extension AccessibilityChannel {
                 set observedGoToPositionDialog to missing value
                 repeat 30 times
                     delay 0.1
-                    set observedGoToPositionDialog to my matchingGoToPositionDialog(logicProcess, preLeafGoToPositionWindows)
+                    set observedGoToPositionDialog to my matchingGoToPositionDialog(logicProcess, preLeafGoToPositionDialogCount)
                     if observedGoToPositionDialog is "UNREADABLE" then
                         set dialogAppearanceUnreadable to true
                         exit repeat
@@ -1548,7 +1555,7 @@ extension AccessibilityChannel {
                         set dialogReady to true
                         exit repeat
                     end if
-                    set newWindowState to my newWindowAppearedSince(logicProcess, preLeafGoToPositionWindows)
+                    set newWindowState to my newWindowAppearedSince(logicProcess, preLeafGoToPositionWindowCount)
                     if newWindowState is "UNREADABLE" then
                         set dialogAppearanceUnreadable to true
                         exit repeat
@@ -1755,11 +1762,19 @@ extension AccessibilityChannel {
                 ?? .unknown
         }
 
-        /// `READY` is written atomically by the child immediately before the leaf click. Anything
-        /// else — including a killed child or a partial write — withholds reconciliation action.
+        /// `READY` plus one canonical decimal count is written atomically by the child immediately
+        /// before the leaf click. Anything else — including a killed child, a partial write, or an
+        /// ambiguous count — withholds reconciliation action.
         var preLeafWindowSnapshotPath: String? {
-            guard let text = try? String(contentsOf: preLeafWindowSnapshotURL, encoding: .utf8),
-                  text.split(separator: "\n", omittingEmptySubsequences: false).first == "READY"
+            guard let text = try? String(contentsOf: preLeafWindowSnapshotURL, encoding: .utf8) else {
+                return nil
+            }
+            let snapshotItems = text.split(separator: "\n", omittingEmptySubsequences: false)
+            guard snapshotItems.count == 2,
+                  snapshotItems[0] == "READY",
+                  let matchingDialogCount = Int(snapshotItems[1]),
+                  matchingDialogCount >= 0,
+                  String(matchingDialogCount) == snapshotItems[1]
             else { return nil }
             return preLeafWindowSnapshotURL.path
         }
@@ -2131,62 +2146,91 @@ extension AccessibilityChannel {
             return false
         end knownGoToPositionDialogSubrole
 
-        -- The timeout process must not infer ownership from a title. The child persisted these IDs
-        -- immediately before its leaf click; failure to read that snapshot is unsafe, not empty.
-        on preLeafGoToPositionWindowIdentifiers(snapshotPath)
+        -- The timeout process must not infer ownership from a title. The child persisted one
+        -- canonical, readable count immediately before its leaf click; failure to read exactly
+        -- that two-line format is unsafe, not empty.
+        on preLeafGoToPositionDialogCount(snapshotPath)
             try
                 set snapshotText to do shell script "/bin/cat " & (quoted form of snapshotPath)
                 set originalTextItemDelimiters to AppleScript's text item delimiters
                 set AppleScript's text item delimiters to linefeed
                 set snapshotItems to text items of snapshotText
                 set AppleScript's text item delimiters to originalTextItemDelimiters
-                if (count of snapshotItems) is 0 then return "UNREADABLE"
+                if (count of snapshotItems) is not 2 then return "UNREADABLE"
                 if item 1 of snapshotItems is not "READY" then return "UNREADABLE"
-                set windowIdentifiers to {}
-                if (count of snapshotItems) is greater than 1 then
-                    repeat with snapshotItem from 2 to (count of snapshotItems)
-                        set windowIdentifier to item snapshotItem of snapshotItems
-                        if windowIdentifier is not "" then
-                            set end of windowIdentifiers to windowIdentifier
-                        end if
-                    end repeat
-                end if
-                return windowIdentifiers
+                set matchingDialogCountText to item 2 of snapshotItems
+                if matchingDialogCountText is "" then return "UNREADABLE"
+                if matchingDialogCountText is not "0" and character 1 of matchingDialogCountText is "0" then return "UNREADABLE"
+                repeat with countCharacter in characters of matchingDialogCountText
+                    set countCharacterText to contents of countCharacter
+                    if countCharacterText is not in "0123456789" then return "UNREADABLE"
+                end repeat
+                set matchingDialogCount to matchingDialogCountText as integer
+                if matchingDialogCount is less than 0 then return "UNREADABLE"
+                return matchingDialogCount
             on error
                 try
                     set AppleScript's text item delimiters to originalTextItemDelimiters
                 end try
                 return "UNREADABLE"
             end try
-        end preLeafGoToPositionWindowIdentifiers
+        end preLeafGoToPositionDialogCount
 
-        on windowWasPresentBefore(windowIdentifier, preLeafWindowIdentifiers)
-            repeat with preLeafWindowIdentifier in preLeafWindowIdentifiers
-                if contents of preLeafWindowIdentifier is windowIdentifier then return true
-            end repeat
+        on windowWasPresentBefore(currentGoToPositionDialogCount, preLeafGoToPositionDialogCount)
+            if currentGoToPositionDialogCount is "UNREADABLE" then return "UNREADABLE"
+            if preLeafGoToPositionDialogCount is "UNREADABLE" then return "UNREADABLE"
+            if currentGoToPositionDialogCount is less than or equal to preLeafGoToPositionDialogCount then return true
             return false
         end windowWasPresentBefore
 
-        -- Reconciliation can only act on a measured dialog that was absent from this run's durable
-        -- pre-leaf snapshot. A same-titled modal from before the click is reported, never cancelled.
-        on matchingGoToPositionDialog(theProcess, preLeafWindowIdentifiers)
+        on goToPositionDialogCount(theProcess)
             using terms from application "System Events"
                 tell theProcess
                     try
+                        set matchingWindowCount to 0
                         repeat with dialogWindow in every window
                             set dialogTitle to name of dialogWindow
                             if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
-                                set windowIdentifier to id of dialogWindow as text
-                                if not my windowWasPresentBefore(windowIdentifier, preLeafWindowIdentifiers) then
-                                    set dialogSubrole to subrole of dialogWindow
-                                    if my knownGoToPositionDialogSubrole(dialogSubrole) then
-                                        set dialogIsModal to value of attribute "AXModal" of dialogWindow
-                                        if dialogIsModal is true then return contents of dialogWindow
-                                    end if
+                                set dialogSubrole to subrole of dialogWindow
+                                if my knownGoToPositionDialogSubrole(dialogSubrole) then
+                                    set dialogIsModal to value of attribute "AXModal" of dialogWindow
+                                    if dialogIsModal is true then set matchingWindowCount to matchingWindowCount + 1
                                 end if
                             end if
                         end repeat
-                        return missing value
+                        return matchingWindowCount
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end tell
+            end using terms from
+        end goToPositionDialogCount
+
+        -- Reconciliation may act only when the pre-leaf count was zero and exactly one matching
+        -- dialog exists now. A nonzero pre-leaf count is reported without scanning for a target.
+        on matchingGoToPositionDialog(theProcess, preLeafGoToPositionDialogCount)
+            if preLeafGoToPositionDialogCount is "UNREADABLE" then return "UNREADABLE"
+            if preLeafGoToPositionDialogCount is greater than 0 then return missing value
+            using terms from application "System Events"
+                tell theProcess
+                    try
+                        set matchingDialogWindows to {}
+                        repeat with dialogWindow in every window
+                            set dialogTitle to name of dialogWindow
+                            if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
+                                set dialogSubrole to subrole of dialogWindow
+                                if my knownGoToPositionDialogSubrole(dialogSubrole) then
+                                    set dialogIsModal to value of attribute "AXModal" of dialogWindow
+                                    if dialogIsModal is true then set end of matchingDialogWindows to contents of dialogWindow
+                                end if
+                            end if
+                        end repeat
+                        set currentGoToPositionDialogCount to count of matchingDialogWindows
+                        set wasPresentBefore to my windowWasPresentBefore(currentGoToPositionDialogCount, preLeafGoToPositionDialogCount)
+                        if wasPresentBefore is "UNREADABLE" then return "UNREADABLE"
+                        if wasPresentBefore then return missing value
+                        if currentGoToPositionDialogCount is not (preLeafGoToPositionDialogCount + 1) then return missing value
+                        return item 1 of matchingDialogWindows
                     on error
                         return "UNREADABLE"
                     end try
@@ -2194,38 +2238,15 @@ extension AccessibilityChannel {
             end using terms from
         end matchingGoToPositionDialog
 
-        on preexistingGoToPositionDialog(theProcess, preLeafWindowIdentifiers)
-            using terms from application "System Events"
-                tell theProcess
-                    try
-                        repeat with dialogWindow in every window
-                            set dialogTitle to name of dialogWindow
-                            if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then
-                                set windowIdentifier to id of dialogWindow as text
-                                if my windowWasPresentBefore(windowIdentifier, preLeafWindowIdentifiers) then
-                                    set dialogSubrole to subrole of dialogWindow
-                                    if my knownGoToPositionDialogSubrole(dialogSubrole) then
-                                        set dialogIsModal to value of attribute "AXModal" of dialogWindow
-                                        if dialogIsModal is true then return contents of dialogWindow
-                                    end if
-                                end if
-                            end if
-                        end repeat
-                        return missing value
-                    on error
-                        return "UNREADABLE"
-                    end try
-                end tell
-            end using terms from
-        end preexistingGoToPositionDialog
-
-        on goToPositionDialogState(theProcess, preLeafWindowIdentifiers)
-            set dialogWindow to my matchingGoToPositionDialog(theProcess, preLeafWindowIdentifiers)
+        on goToPositionDialogState(theProcess, preLeafGoToPositionDialogCount)
+            if preLeafGoToPositionDialogCount is "UNREADABLE" then return "UNREADABLE"
+            if preLeafGoToPositionDialogCount is greater than 0 then return "PREEXISTING"
+            set dialogWindow to my matchingGoToPositionDialog(theProcess, preLeafGoToPositionDialogCount)
             if dialogWindow is "UNREADABLE" then return "UNREADABLE"
             if dialogWindow is not missing value then return "OPEN"
-            set preexistingDialogWindow to my preexistingGoToPositionDialog(theProcess, preLeafWindowIdentifiers)
-            if preexistingDialogWindow is "UNREADABLE" then return "UNREADABLE"
-            if preexistingDialogWindow is not missing value then return "PREEXISTING"
+            set currentGoToPositionDialogCount to my goToPositionDialogCount(theProcess)
+            if currentGoToPositionDialogCount is "UNREADABLE" then return "UNREADABLE"
+            if currentGoToPositionDialogCount is greater than preLeafGoToPositionDialogCount then return "UNIDENTIFIED"
             return "CLOSED"
         end goToPositionDialogState
 
@@ -2278,14 +2299,14 @@ extension AccessibilityChannel {
             end using terms from
         end menuEscapeFocusState
 
-        on dismissGoToPositionDialog(theProcess, preLeafWindowIdentifiers)
-            set dialogState to my goToPositionDialogState(theProcess, preLeafWindowIdentifiers)
+        on dismissGoToPositionDialog(theProcess, preLeafGoToPositionDialogCount)
+            set dialogState to my goToPositionDialogState(theProcess, preLeafGoToPositionDialogCount)
             if dialogState is "CLOSED" then return "CLOSED"
             if dialogState is not "OPEN" then return dialogState
             repeat 3 times
-                set dialogWindow to my matchingGoToPositionDialog(theProcess, preLeafWindowIdentifiers)
+                set dialogWindow to my matchingGoToPositionDialog(theProcess, preLeafGoToPositionDialogCount)
                 if dialogWindow is "UNREADABLE" then return "UNREADABLE"
-                if dialogWindow is missing value then return my goToPositionDialogState(theProcess, preLeafWindowIdentifiers)
+                if dialogWindow is missing value then return my goToPositionDialogState(theProcess, preLeafGoToPositionDialogCount)
                 set cancelPressed to false
                 using terms from application "System Events"
                     tell theProcess
@@ -2310,7 +2331,7 @@ extension AccessibilityChannel {
                     end tell
                 end using terms from
                 delay 0.1
-                set dialogState to my goToPositionDialogState(theProcess, preLeafWindowIdentifiers)
+                set dialogState to my goToPositionDialogState(theProcess, preLeafGoToPositionDialogCount)
                 if dialogState is "CLOSED" then return "CLOSED"
                 if dialogState is not "OPEN" then return dialogState
             end repeat
@@ -2320,9 +2341,9 @@ extension AccessibilityChannel {
         tell application "System Events"
             tell \(target.systemEventsProcessTarget)
                 try
-                    set preLeafWindowIdentifiers to my preLeafGoToPositionWindowIdentifiers("\(preLeafWindowSnapshotPath)")
-                    if preLeafWindowIdentifiers is "UNREADABLE" then return "DIALOG_UNREADABLE"
-                    set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafWindowIdentifiers)
+                    set preLeafGoToPositionDialogCount to my preLeafGoToPositionDialogCount("\(preLeafWindowSnapshotPath)")
+                    if preLeafGoToPositionDialogCount is "UNREADABLE" then return "DIALOG_UNREADABLE"
+                    set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafGoToPositionDialogCount)
                     if dialogCleanupState is not "CLOSED" then return "DIALOG_" & dialogCleanupState
                     repeat 3 times
                         set menuFocusState to my menuEscapeFocusState(it)

@@ -453,7 +453,7 @@ struct Issue529MenuValidationTests {
         // Mutation this rejects: restore the old `dialog did not become ready` result for an
         // unmatched post-leaf window, or remove this classification from the unsafe-UI refusal.
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
-        #expect(script.contains("on newWindowAppearedSince(theProcess, preLeafWindows)"))
+        #expect(script.contains("on newWindowAppearedSince(theProcess, preLeafGoToPositionWindowCount)"))
         #expect(script.contains("return \"DIALOG_UNIDENTIFIED_NEW_WINDOW\""))
 
         let sliderWrites = Issue529Counter()
@@ -1048,20 +1048,25 @@ func dismissalContextKeepsLocaleReadsUnownedUntilResolvedLeafIssuance() throws {
     #expect(script.contains("if menuState is \"UNREADABLE\" and not knownOpen then return \"UNREADABLE\""))
 }
 
-@Test("the newly opened Go To Position dialog is bracket-focus-bound before global typing")
-func gotoPositionDialogRequiresNewIdentityAndBracketedFocusedBinding() throws {
+@Test("the newly opened Go To Position dialog is count-bound and bracket-focus-bound before global typing")
+func gotoPositionDialogRequiresNewCountAndBracketedFocusedBinding() throws {
     // Mutations this rejects: remove AXFloatingWindow or AXModal from the known input class;
-    // delete the pre-leaf identity snapshot or its new-window predicate; remove the second
+    // delete the pre-leaf readable count snapshot or its new-window predicate; remove the second
     // frontmost read after AXFocusedWindow; restore a title/AXFocused fallback; or move a global
     // key before its post-marker focus guard. Any one can select a same-titled plug-in window or
     // let a handoff during AX resolution authorise input for another application.
     let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(position: "529.4.7.123")
-    let preLeafSnapshot = try issue529Position(
-        of: "set preLeafGoToPositionWindows to my goToPositionWindowSnapshot(logicProcess)",
-        in: script
-    )
-    let preLeafSnapshotGuard = try issue529Position(
-        of: "if preLeafGoToPositionWindows is \"UNREADABLE\" then",
+    let preLeafSnapshot = try #require(
+        script.range(
+            of: "set preLeafGoToPositionDialogCount to my goToPositionDialogCount(logicProcess)",
+            options: .backwards
+        )
+    ).lowerBound
+    let preLeafSnapshotGuard = try #require(
+        script.range(of: "if preLeafGoToPositionDialogCount is \"UNREADABLE\" then", options: .backwards)
+    ).lowerBound
+    let preexistingDialogGuard = try issue529Position(
+        of: "if preLeafGoToPositionDialogCount is greater than 0 then",
         in: script
     )
     let leafClick = try issue529Position(
@@ -1069,7 +1074,7 @@ func gotoPositionDialogRequiresNewIdentityAndBracketedFocusedBinding() throws {
         in: script
     )
     let observedDialog = try issue529Position(
-        of: "set observedGoToPositionDialog to my matchingGoToPositionDialog(logicProcess, preLeafGoToPositionWindows)",
+        of: "set observedGoToPositionDialog to my matchingGoToPositionDialog(logicProcess, preLeafGoToPositionDialogCount)",
         in: script
     )
     let selectAllLedger = try issue529Position(
@@ -1117,7 +1122,8 @@ func gotoPositionDialogRequiresNewIdentityAndBracketedFocusedBinding() throws {
     let dialogStateHandler = String(script[dialogStateHandlerStart..<dialogStateHandlerEnd])
 
     #expect(preLeafSnapshot < preLeafSnapshotGuard)
-    #expect(preLeafSnapshotGuard < leafClick)
+    #expect(preLeafSnapshotGuard < preexistingDialogGuard)
+    #expect(preexistingDialogGuard < leafClick)
     #expect(leafClick < observedDialog)
     #expect(observedDialog < selectAllLedger)
     #expect(selectAllLedger < focusGuard)
@@ -1142,31 +1148,38 @@ func gotoPositionDialogRequiresNewIdentityAndBracketedFocusedBinding() throws {
     #expect(dialogStateHandler.contains("return \"OPEN_UNVERIFIED_MODALITY\""))
 }
 
-@Test("a pre-existing same-titled window cannot become this run's dialog target")
-func gotoPositionDialogIgnoresSameTitledPreLeafWindows() throws {
-    // Mutation this rejects: delete `windowWasPresentBefore` from the dialog matcher. Without that
-    // identity predicate, a track-named plug-in editor can satisfy a title-based Go To Position
-    // poll despite existing before this run's only leaf click.
+@Test("a pre-existing matching dialog refuses before this run's leaf click")
+func gotoPositionDialogRefusesPreexistingMatchingDialogBeforeLeaf() throws {
+    // Mutation this rejects: remove the readable count guard. Without it, an already-open matching
+    // dialog could be used as the target of this run's global keystrokes.
     let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
     let snapshot = try issue529Position(
-        of: "set preLeafGoToPositionWindows to my goToPositionWindowSnapshot(logicProcess)", in: script
+        of: "set preLeafGoToPositionDialogCount to my goToPositionDialogCount(logicProcess)", in: script
+    )
+    let preexistingGuard = try issue529Position(
+        of: "if preLeafGoToPositionDialogCount is greater than 0 then", in: script
     )
     let leaf = try issue529Position(
         of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
         in: script
     )
     let matcherStart = try issue529Position(
-        of: "on matchingGoToPositionDialog(theProcess, preLeafWindows)", in: script
+        of: "on matchingGoToPositionDialog(theProcess, preLeafGoToPositionDialogCount)", in: script
     )
     let matcherEnd = try issue529Position(of: "end matchingGoToPositionDialog", in: script)
     let matcher = String(script[matcherStart..<matcherEnd])
-    let priorWindowGuard = try issue529Position(
-        of: "if not my windowWasPresentBefore(candidateWindow, preLeafWindows) then", in: matcher
+    let countBasedPriorWindowGuard = try issue529Position(
+        of: "set wasPresentBefore to my windowWasPresentBefore(currentGoToPositionDialogCount, preLeafGoToPositionDialogCount)",
+        in: matcher
     )
-    let subroleRead = try issue529Position(of: "set dialogSubrole to subrole of dialogWindow", in: matcher)
+    let exactNewCountGuard = try issue529Position(
+        of: "if currentGoToPositionDialogCount is not (preLeafGoToPositionDialogCount + 1) then return missing value",
+        in: matcher
+    )
 
-    #expect(snapshot < leaf)
-    #expect(priorWindowGuard < subroleRead)
+    #expect(snapshot < preexistingGuard)
+    #expect(preexistingGuard < leaf)
+    #expect(countBasedPriorWindowGuard < exactNewCountGuard)
 }
 
 @Test("an unreadable Cancel result re-observes the dialog before Escape")
@@ -1214,7 +1227,7 @@ func unreadableCancelDoesNotAuthoriseEscapeWithoutDialogObservation() throws {
 
 @Test("dead-child reconciliation targets the measured dialog before menu state")
 func aDeadScriptReconcilesDialogBeforeMenuState() throws {
-    // Mutations this rejects: restore the PID bypass, drop the durable pre-leaf identity filter,
+    // Mutations this rejects: restore the PID bypass, drop the durable pre-leaf count filter,
     // remove the final frontmost read after AXFocusedWindow, or send menu Escape after a single
     // frontmost read. Each would either cancel another run's dialog or let Escape reach a
     // different focused modal/app.
@@ -1230,15 +1243,36 @@ func aDeadScriptReconcilesDialogBeforeMenuState() throws {
     let helper = String(source[helperStart.lowerBound..<helperEnd.lowerBound])
     let measuredSubrole = try issue529Position(of: "on knownGoToPositionDialogSubrole(dialogSubrole)", in: helper)
     let dialogObservation = try issue529Position(
-        of: "on matchingGoToPositionDialog(theProcess, preLeafWindowIdentifiers)", in: helper
+        of: "on matchingGoToPositionDialog(theProcess, preLeafGoToPositionDialogCount)", in: helper
     )
     let snapshotRead = try issue529Position(
-        of: "on preLeafGoToPositionWindowIdentifiers(snapshotPath)", in: helper
+        of: "on preLeafGoToPositionDialogCount(snapshotPath)", in: helper
     )
     let dialogCleanup = try issue529Position(
-        of: "set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafWindowIdentifiers)",
+        of: "set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafGoToPositionDialogCount)",
         in: helper
     )
+    let dialogStateStart = try issue529Position(
+        of: "on goToPositionDialogState(theProcess, preLeafGoToPositionDialogCount)", in: helper
+    )
+    let dialogStateEnd = try issue529Position(of: "end goToPositionDialogState", in: helper)
+    let dialogState = String(helper[dialogStateStart..<dialogStateEnd])
+    let preexistingCountRefusal = try issue529Position(
+        of: "if preLeafGoToPositionDialogCount is greater than 0 then return \"PREEXISTING\"", in: dialogState
+    )
+    let targetMatch = try issue529Position(
+        of: "set dialogWindow to my matchingGoToPositionDialog(theProcess, preLeafGoToPositionDialogCount)",
+        in: dialogState
+    )
+    let dismissHandlerStart = try issue529Position(
+        of: "on dismissGoToPositionDialog(theProcess, preLeafGoToPositionDialogCount)", in: helper
+    )
+    let dismissHandlerEnd = try issue529Position(of: "end dismissGoToPositionDialog", in: helper)
+    let dismissHandler = String(helper[dismissHandlerStart..<dismissHandlerEnd])
+    let nonOpenRefusal = try issue529Position(
+        of: "if dialogState is not \"OPEN\" then return dialogState", in: dismissHandler
+    )
+    let cancelAttempt = try issue529Position(of: "if exists button \"Cancel\" of dialogWindow then", in: dismissHandler)
     let focusedWindowRead = try issue529Position(
         of: "set processFocusedWindow to value of attribute \"AXFocusedWindow\"", in: helper
     )
@@ -1250,6 +1284,8 @@ func aDeadScriptReconcilesDialogBeforeMenuState() throws {
     #expect(measuredSubrole < snapshotRead)
     #expect(snapshotRead < dialogObservation)
     #expect(dialogObservation < dialogCleanup)
+    #expect(preexistingCountRefusal < targetMatch)
+    #expect(nonOpenRefusal < cancelAttempt)
     #expect(focusedWindowRead < finalFrontmostRead)
     #expect(dialogCleanup < menuFocus)
     #expect(menuCleanupTail.startIndex < menuEscape)
@@ -1257,6 +1293,38 @@ func aDeadScriptReconcilesDialogBeforeMenuState() throws {
     #expect(helper.contains("if processFocusedWindow is not dialogWindow then return \"NOT_FOCUSED\""))
     #expect(!helper.contains("if frontmost then"))
     #expect(!helper.contains("ProcessUtils.logicProPID"))
+}
+
+@Test("the pre-leaf snapshot accepts only a readiness marker and a canonical decimal count")
+func preLeafGoToPositionSnapshotIsUnambiguousAndNonInjectable() throws {
+    // Mutation this rejects: weaken the count-format guard so a stale/truncated snapshot or a
+    // title-shaped delimiter payload can reach timeout reconciliation as if it named this run.
+    let ledger = try #require(AccessibilityChannel.DialogIssuanceLedger.create())
+    defer { ledger.remove() }
+
+    let snapshotURL = ledger.preLeafWindowSnapshotURL
+    #expect(ledger.preLeafWindowSnapshotPath == nil)
+
+    try "READY\n0".write(to: snapshotURL, atomically: true, encoding: .utf8)
+    #expect(ledger.preLeafWindowSnapshotPath == snapshotURL.path)
+
+    for malformedSnapshot in [
+        "READY",
+        "READY\n",
+        "READY\n01",
+        "READY\n-1",
+        "READY\n1|title=forged",
+        "READY\n1\nextra",
+        "UNAVAILABLE",
+    ] {
+        try malformedSnapshot.write(to: snapshotURL, atomically: true, encoding: .utf8)
+        #expect(ledger.preLeafWindowSnapshotPath == nil)
+    }
+
+    let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+    #expect(script.contains("set snapshotText to \"READY\" & linefeed & (matchingGoToPositionDialogCount as text)"))
+    #expect(!script.contains("id of contents of preLeafWindow"))
+    #expect(!script.contains("AXIdentifier"))
 }
 
 @Test("the write script emits the unidentified-window refusal, and emits it before any dismissal")
