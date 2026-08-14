@@ -177,17 +177,11 @@ struct TransportDispatcher: OperationTraceDispatching {
                     )
                 }
                 let traceID = await startTraceIfEnabled(command: command)
-                let result = await withWriteBoundaryArmed(traceID) {
-                    await router.route(
-                        operation: "transport.goto_position",
-                        params: ["position": "\(bar).1.1.1"]
-                    )
-                }
-                let finalized = await finalizeGotoPositionResult(
-                    result,
+                let finalized = await handleGotoPosition(
                     requestedPosition: "\(bar).1.1.1",
                     router: router,
-                    cache: cache
+                    cache: cache,
+                    traceID: traceID
                 )
                 return await finalizeTrace(finalized, traceID: traceID)
             }
@@ -201,17 +195,11 @@ struct TransportDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
-            let result = await withWriteBoundaryArmed(traceID) {
-                await router.route(
-                    operation: "transport.goto_position",
-                    params: ["position": time]
-                )
-            }
-            let finalized = await finalizeGotoPositionResult(
-                result,
+            let finalized = await handleGotoPosition(
                 requestedPosition: time,
                 router: router,
-                cache: cache
+                cache: cache,
+                traceID: traceID
             )
             return await finalizeTrace(finalized, traceID: traceID)
 
@@ -525,16 +513,102 @@ struct TransportDispatcher: OperationTraceDispatching {
         return false
     }
 
+    /// A Go To Position receipt has two distinct truthful success shapes:
+    ///
+    /// * a no-op, where a complete pre-write AX read already matched the request and no global
+    ///   dialog/input path was entered; or
+    /// * an observed movement, where complete pre- and post-write AX reads differ and the latter
+    ///   lands on the request.
+    ///
+    /// A post-write match alone is never enough: it can predate this request.
+    private static func handleGotoPosition(
+        requestedPosition: String,
+        router: ChannelRouter,
+        cache: StateCache,
+        traceID: TraceID?
+    ) async -> CallTool.Result {
+        let beforeTransport = await liveTransportState(router: router, cache: cache)
+        if let unchanged = gotoPositionUnchangedResult(
+            requestedPosition: requestedPosition,
+            beforeTransport: beforeTransport
+        ) { return unchanged }
+
+        // A failed or partial pre-read is not evidence of absence. It only removes the option to
+        // certify a later matching read as this call's effect; the requested operation still runs.
+        let result = await withWriteBoundaryArmed(traceID) {
+            await router.route(
+                operation: "transport.goto_position",
+                params: ["position": requestedPosition]
+            )
+        }
+        return await finalizeGotoPositionResult(
+            result,
+            requestedPosition: requestedPosition,
+            beforeTransport: beforeTransport,
+            router: router,
+            cache: cache
+        )
+    }
+
+    static func gotoPositionUnchangedResult(
+        requestedPosition: String,
+        beforeTransport: TransportState?
+    ) -> CallTool.Result? {
+        guard let beforePosition = completeObservedMusicalPosition(
+            from: beforeTransport,
+            matching: requestedPosition
+        ) else { return nil }
+
+        // This is deliberately an idempotent State A, not a claimed write effect. The complete AX
+        // pre-read established that the requested state already held, so callers avoid opening a
+        // global-input dialog and see the no-write boundary explicitly.
+        return toolTextResult(HonestContract.encodeStateA(extras: [
+            "operation": "transport.goto_position",
+            "requested": requestedPosition,
+            "observed": beforePosition.value,
+            "observed_position_components": beforePosition.observedComponents.map(\.rawValue),
+            "unobserved_position_components": [],
+            "verification_source": "transport_state",
+            "write_attempted": false,
+            "unchanged": true,
+        ]))
+    }
+
+    static func completeObservedMusicalPosition(
+        from transport: TransportState?,
+        matching requestedPosition: String
+    ) -> TransportPositionReadback? {
+        guard !requestedPosition.contains(":"),
+              let readback = transport?.positionReadback,
+              Set(readback.observedComponents) == Set(TransportPositionComponent.allCases),
+              readback.value == requestedPosition
+        else { return nil }
+        return readback
+    }
+
+    static func completeObservedMusicalPosition(
+        _ transport: TransportState?
+    ) -> TransportPositionReadback? {
+        guard let readback = transport?.positionReadback,
+              Set(readback.observedComponents) == Set(TransportPositionComponent.allCases)
+        else { return nil }
+        return readback
+    }
+
     static func finalizeGotoPositionResult(
         _ result: ChannelResult,
         requestedPosition: String,
+        beforeTransport: TransportState?,
         router: ChannelRouter,
         cache: StateCache
     ) async -> CallTool.Result {
         guard result.isSuccess else {
             return toolTextResult(result)
         }
-        guard channelResultIsUnverified(result) else {
+        // No route-level State A is sufficient by itself for a seek. A future channel may observe
+        // its own actuator, but its receipt can still coincide with a playhead that was already at
+        // the requested position; this common finalizer owns the cross-route effect requirement.
+        guard channelResultIsUnverified(result) || channelResultIsVerified(result) else {
             return toolTextResult(result)
         }
         guard let observedTransport = await liveTransportState(router: router, cache: cache) else {
@@ -561,18 +635,19 @@ struct TransportDispatcher: OperationTraceDispatching {
             extras["observed"] = positionReadback.value
             extras["observed_time_position"] = observedTransport.timePosition
         }
+        if let beforePositionReadback = beforeTransport?.positionReadback {
+            extras["observed_before"] = beforePositionReadback.value
+            extras["observed_before_position_components"] = beforePositionReadback.observedComponents.map(\.rawValue)
+        }
 
         // A matching playhead cannot independently verify this request when the dialog channel
         // says its global input target or write boundary was indeterminate. The position remains
         // useful readback evidence, but it is not proof that this call performed the write.
-        let verificationWithheld: String? =
+        let channelVerificationWithheld: String? =
             (extras["dialog_input_target"] as? String) == "unknown" ? "dialog_input_target" :
             (extras["fallback_unsafe"] as? Bool) == true ? "fallback_unsafe" :
             (extras["write_attempted_indeterminate"] as? Bool) == true
                 ? "write_attempted_indeterminate" : nil
-        if let verificationWithheld {
-            extras["verification_withheld"] = verificationWithheld
-        }
 
         let requestedMusicalComponents: [TransportPositionComponent] = requestedPosition.contains(":")
             ? []
@@ -586,26 +661,35 @@ struct TransportDispatcher: OperationTraceDispatching {
             extras["unobserved_position_components"] = unobservedMusicalComponents.map(\.rawValue)
         }
 
-        // A matching display string is insufficient: it may be the model default or a position
-        // synthesized from the Bar/Beat sliders. State A requires every component named by the
-        // request to have been read back from AX.
-        //
-        // Value equality is individually covered by the existing mismatch tests: a request for
-        // `9.1.1.1` with a full readback of `8.1.1.1` must not reach State A. The component-set
-        // conjunct has no individual coverage yet. Its separating input is representable
-        // (`"9.1.1.1"` paired with only `.bar`/`.beat` observations), but the current extractor
-        // does not emit that shape. Keep both checks: the component set stops a readback that
-        // never happened (the model's `"1.1.1.1"` default), while value equality rejects a
-        // genuinely different complete readback.
+        let beforePosition = completeObservedMusicalPosition(beforeTransport)
+        let afterPosition = completeObservedMusicalPosition(observedTransport)
+        let observedEffect: Bool
         if !requestedPosition.contains(":"),
-           verificationWithheld == nil,
-           unobservedMusicalComponents.isEmpty,
-           observedTransport.positionReadback?.value == requestedPosition {
+           let beforePosition,
+           let afterPosition,
+           beforePosition.value != requestedPosition,
+           afterPosition.value == requestedPosition {
+            observedEffect = true
+        } else {
+            observedEffect = false
+        }
+        let verificationWithheld = channelVerificationWithheld
+            ?? (afterPosition?.value == requestedPosition && !observedEffect
+                ? "observed_effect_unavailable" : nil)
+        if let verificationWithheld {
+            extras["verification_withheld"] = verificationWithheld
+        }
+
+        // A matching post-write value is a landing observation, not evidence that this invocation
+        // moved the playhead. State A needs a complete AX reading on each side of the write boundary
+        // and the observed transition must end at the requested value.
+        if verificationWithheld == nil, observedEffect {
             return toolTextResult(HonestContract.encodeStateA(extras: extras))
         }
 
         let reason: HonestContract.UncertainReason =
-            requestedPosition.contains(":") || !unobservedMusicalComponents.isEmpty
+            verificationWithheld != nil || requestedPosition.contains(":")
+                || !unobservedMusicalComponents.isEmpty || beforePosition == nil
                 ? .readbackUnavailable
                 : .readbackMismatch
         return toolTextResult(
@@ -653,7 +737,7 @@ struct TransportDispatcher: OperationTraceDispatching {
         )
     }
 
-    private static func liveTransportState(
+    static func liveTransportState(
         router: ChannelRouter,
         cache: StateCache
     ) async -> TransportState? {

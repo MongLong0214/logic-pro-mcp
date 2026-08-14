@@ -11,46 +11,69 @@ import Testing
 /// verdict. Also locks the faithful verified-vs-mismatch behavior.
 @Suite("Issue105 goto note + verification")
 struct Issue105GotoNoteTests {
+    private static func transportState(_ position: String) -> TransportState {
+        // Encode a real TransportState with the SAME .iso8601 strategy the dispatcher decodes
+        // with. A hand-written fractional-seconds (".000Z") date fails strict .iso8601 decoding
+        // on the CI Foundation and would turn a readable fixture into a fake failed read.
+        var state = TransportState()
+        state.position = position
+        state.positionReadback = TransportPositionReadback(
+            value: position,
+            observedComponents: TransportPositionComponent.allCases
+        )
+        state.lastUpdated = Date(timeIntervalSince1970: 0)
+        return state
+    }
+
+    private static func encodedTransportState(_ position: String) -> ChannelResult {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return .success(String(decoding: (try? encoder.encode(transportState(position))) ?? Data(), as: UTF8.self))
+    }
+
     private actor StubTransportChannel: Channel {
         nonisolated let id: ChannelID = .accessibility
         let gotoResult: ChannelResult
         let readbackPosition: String
         let readbackResult: ChannelResult?
+        let readbackPositions: [String]?
+        let readbackResults: [ChannelResult]?
+        private var readbackIndex = 0
+        private var gotoExecutions = 0
         init(
             gotoResult: ChannelResult,
             readbackPosition: String,
-            readbackResult: ChannelResult? = nil
+            readbackResult: ChannelResult? = nil,
+            readbackPositions: [String]? = nil,
+            readbackResults: [ChannelResult]? = nil
         ) {
             self.gotoResult = gotoResult
             self.readbackPosition = readbackPosition
             self.readbackResult = readbackResult
+            self.readbackPositions = readbackPositions
+            self.readbackResults = readbackResults
         }
         func start() async throws {}
         func stop() async {}
         func healthCheck() async -> ChannelHealth { .healthy(detail: "stub") }
         func execute(operation: String, params: [String: String]) async -> ChannelResult {
             switch operation {
-            case "transport.goto_position": return gotoResult
+            case "transport.goto_position":
+                gotoExecutions += 1
+                return gotoResult
             case "transport.get_state":
+                let index = min(readbackIndex, max(0, (readbackResults?.count ?? readbackPositions?.count ?? 1) - 1))
+                readbackIndex += 1
+                if let readbackResults { return readbackResults[index] }
                 if let readbackResult { return readbackResult }
-                // Encode a real TransportState with the SAME .iso8601 strategy
-                // the dispatcher decodes with. A hand-written date carrying
-                // fractional seconds (".000Z") fails strict .iso8601 decoding on
-                // the CI Foundation, which made `liveTransportState` return nil
-                // and the verdict fall back to the un-stripped State B.
-                var state = TransportState()
-                state.position = readbackPosition
-                state.positionReadback = TransportPositionReadback(
-                    value: readbackPosition,
-                    observedComponents: TransportPositionComponent.allCases
+                return Issue105GotoNoteTests.encodedTransportState(
+                    readbackPositions?[index] ?? readbackPosition
                 )
-                state.lastUpdated = Date(timeIntervalSince1970: 0)
-                let encoder = JSONEncoder()
-                encoder.dateEncodingStrategy = .iso8601
-                return .success(String(decoding: (try? encoder.encode(state)) ?? Data(), as: UTF8.self))
             default: return .error("unexpected: \(operation)")
             }
         }
+
+        func gotoExecutionCount() -> Int { gotoExecutions }
     }
 
     private func text(_ r: CallTool.Result) -> String {
@@ -75,7 +98,11 @@ struct Issue105GotoNoteTests {
     @Test("verified goto_position drops the contradictory readback note")
     func verifiedHasNoStaleNote() async throws {
         let router = ChannelRouter()
-        await router.register(StubTransportChannel(gotoResult: notedDialogStateB(bar: 1), readbackPosition: "1.1.1.1"))
+        await router.register(StubTransportChannel(
+            gotoResult: notedDialogStateB(bar: 1),
+            readbackPosition: "1.1.1.1",
+            readbackPositions: ["2.1.1.1", "1.1.1.1"]
+        ))
         let result = await TransportDispatcher.handle(
             command: "goto_position", params: ["bar": .int(1)], router: router, cache: StateCache()
         )
@@ -92,7 +119,11 @@ struct Issue105GotoNoteTests {
     @Test("goto_bar shares the same verified, note-free contract")
     func gotoBarNoteFree() async throws {
         let router = ChannelRouter()
-        await router.register(StubTransportChannel(gotoResult: notedDialogStateB(bar: 17), readbackPosition: "17.1.1.1"))
+        await router.register(StubTransportChannel(
+            gotoResult: notedDialogStateB(bar: 17),
+            readbackPosition: "17.1.1.1",
+            readbackPositions: ["1.1.1.1", "17.1.1.1"]
+        ))
         let result = await NavigateDispatcher.handle(
             command: "goto_bar", params: ["bar": .int(17)], router: router, cache: StateCache()
         )
@@ -107,7 +138,11 @@ struct Issue105GotoNoteTests {
     func mismatchFailsClosed() async throws {
         let router = ChannelRouter()
         // Requested bar 1 but the playhead landed at 1.2.1.1 (the #105 symptom).
-        await router.register(StubTransportChannel(gotoResult: notedDialogStateB(bar: 1), readbackPosition: "1.2.1.1"))
+        await router.register(StubTransportChannel(
+            gotoResult: notedDialogStateB(bar: 1),
+            readbackPosition: "1.2.1.1",
+            readbackPositions: ["2.1.1.1", "1.2.1.1"]
+        ))
         let result = await TransportDispatcher.handle(
             command: "goto_position", params: ["bar": .int(1)], router: router, cache: StateCache()
         )
@@ -259,8 +294,9 @@ struct Issue105GotoNoteTests {
         // as "the write landed, now read it back" — if the playhead ALREADY showed the requested
         // position, a matching read proves nothing about this call.
         //
-        // Concrete state: playhead already at 5.1.1.1, request 5.1.1.1, Cmd+A went to another
-        // application, child killed at the budget.
+        // Concrete state: the read changed from 4.1.1.1 to 5.1.1.1, but Cmd+A may have gone to
+        // another application before the child was killed. That transition is still insufficient
+        // while the channel says the global input target was unknown.
         let unknownTargetEnvelope = HonestContract.encodeStateB(
             reason: .readbackUnavailable,
             extras: [
@@ -277,7 +313,8 @@ struct Issue105GotoNoteTests {
         let router = ChannelRouter()
         await router.register(StubTransportChannel(
             gotoResult: .success(unknownTargetEnvelope),
-            readbackPosition: "5.1.1.1"
+            readbackPosition: "5.1.1.1",
+            readbackPositions: ["4.1.1.1", "5.1.1.1"]
         ))
         let result = await TransportDispatcher.handle(
             command: "goto_position",
@@ -314,7 +351,8 @@ struct Issue105GotoNoteTests {
         let router = ChannelRouter()
         await router.register(StubTransportChannel(
             gotoResult: .success(fallbackUnsafeEnvelope),
-            readbackPosition: "5.1.1.1"
+            readbackPosition: "5.1.1.1",
+            readbackPositions: ["4.1.1.1", "5.1.1.1"]
         ))
         let result = await TransportDispatcher.handle(
             command: "goto_position",
@@ -328,7 +366,8 @@ struct Issue105GotoNoteTests {
         #expect(try #require(envelope["verification_withheld"] as? String) == "fallback_unsafe")
     }
 
-    // Locks the `write_attempted_indeterminate` arm: a coincidentally matching playhead is not proof this call performed the write.
+    // Locks the `write_attempted_indeterminate` arm: even a measured pre/post transition is not
+    // proof this call performed the write when the durable boundary itself was indeterminate.
     @Test("an indeterminate write boundary is never promoted to verified by a matching playhead")
     func indeterminateWriteBoundaryCannotBeVerifiedByACoincidentPlayhead() async throws {
         let indeterminateWriteBoundaryEnvelope = HonestContract.encodeStateB(
@@ -346,7 +385,8 @@ struct Issue105GotoNoteTests {
         let router = ChannelRouter()
         await router.register(StubTransportChannel(
             gotoResult: .success(indeterminateWriteBoundaryEnvelope),
-            readbackPosition: "5.1.1.1"
+            readbackPosition: "5.1.1.1",
+            readbackPositions: ["4.1.1.1", "5.1.1.1"]
         ))
         let result = await TransportDispatcher.handle(
             command: "goto_position",
@@ -356,10 +396,13 @@ struct Issue105GotoNoteTests {
         )
         let envelope = try #require(obj(result))
         #expect(try #require(envelope["state"] as? String) == "B")
+        #expect(!(try #require(envelope["verified"] as? Bool)))
+        #expect(try #require(envelope["verification_withheld"] as? String)
+            == "write_attempted_indeterminate")
     }
 
-    @Test("a matching playhead still verifies an otherwise ordinary dialog envelope")
-    func establishedInputTargetCanBeVerifiedByAMatchingPlayhead() async throws {
+    @Test("a complete pre/post playhead transition verifies an ordinary dialog envelope")
+    func establishedInputTargetCanBeVerifiedByAnObservedPlayheadTransition() async throws {
         let establishedTargetEnvelope = HonestContract.encodeStateB(
             reason: .readbackUnavailable,
             extras: [
@@ -374,7 +417,8 @@ struct Issue105GotoNoteTests {
         let router = ChannelRouter()
         await router.register(StubTransportChannel(
             gotoResult: .success(establishedTargetEnvelope),
-            readbackPosition: "5.1.1.1"
+            readbackPosition: "5.1.1.1",
+            readbackPositions: ["4.1.1.1", "5.1.1.1"]
         ))
         let result = await TransportDispatcher.handle(
             command: "goto_position",
@@ -387,6 +431,109 @@ struct Issue105GotoNoteTests {
         #expect(try #require(envelope["state"] as? String) == "A")
         #expect(try #require(envelope["verified"] as? Bool))
         #expect(envelope["verification_withheld"] == nil)
+        #expect(try #require(envelope["observed_before"] as? String) == "4.1.1.1")
+    }
+
+    @Test("a coincident complete pre/post reading is not a write-effect verification")
+    func coincidentPreAndPostReadbacksCannotVerifyWriteEffect() async throws {
+        // Exercise the finalization property below the explicit dispatcher no-op.  A caller may
+        // reach finalization after issuing a write even when both authoritative readings happen to
+        // equal the request; that coincidence does not establish that this call moved anything.
+        let ordinaryDialogEnvelope = HonestContract.encodeStateA(
+            extras: [
+                "operation": "transport.goto_position",
+                "requested": "5.1.1.1",
+                "write_attempted": true,
+            ]
+        )
+        let router = ChannelRouter()
+        await router.register(StubTransportChannel(
+            gotoResult: .success(ordinaryDialogEnvelope),
+            readbackPosition: "5.1.1.1"
+        ))
+
+        let result = await TransportDispatcher.finalizeGotoPositionResult(
+            .success(ordinaryDialogEnvelope),
+            requestedPosition: "5.1.1.1",
+            beforeTransport: Self.transportState("5.1.1.1"),
+            router: router,
+            cache: StateCache()
+        )
+
+        let envelope = try #require(obj(result))
+        #expect(try #require(envelope["state"] as? String) == "B")
+        #expect(!(try #require(envelope["verified"] as? Bool)))
+        #expect(try #require(envelope["verification_withheld"] as? String)
+            == "observed_effect_unavailable")
+    }
+
+    @Test("a matching post-read without a readable pre-write read never reaches State A")
+    func missingPreWriteReadbackWithholdsEffectVerification() async throws {
+        // Mutation this rejects: restore State A's old post-read equality condition. The post read
+        // reaches 5.1.1.1, but the pre-write transport read failed, so the matching value could
+        // have predated this invocation. The fixture's two distinct state replies prove the
+        // pre-read did not silently become an answer of absence.
+        let establishedTargetEnvelope = HonestContract.encodeStateB(
+            reason: .readbackUnavailable,
+            extras: [
+                "operation": "transport.goto_position",
+                "method": "dialog",
+                "requested": "5.1.1.1",
+                "dialog_input_attempted": true,
+                "write_attempted": true,
+                "safe_to_retry": false,
+            ]
+        )
+        let channel = StubTransportChannel(
+            gotoResult: .success(establishedTargetEnvelope),
+            readbackPosition: "",
+            readbackResults: [
+                .error("pre-write transport read failed"),
+                Self.encodedTransportState("5.1.1.1"),
+            ]
+        )
+        let router = ChannelRouter()
+        await router.register(channel)
+        let result = await TransportDispatcher.handle(
+            command: "goto_position",
+            params: ["position": .string("5.1.1.1")],
+            router: router,
+            cache: StateCache()
+        )
+
+        let envelope = try #require(obj(result))
+        #expect(try #require(envelope["state"] as? String) == "B")
+        #expect(!(try #require(envelope["verified"] as? Bool)))
+        #expect(try #require(envelope["verification_withheld"] as? String)
+            == "observed_effect_unavailable")
+        #expect(try #require(envelope["observed"] as? String) == "5.1.1.1")
+        #expect(await channel.gotoExecutionCount() == 1, "the failed pre-read must not retire the operation")
+    }
+
+    @Test("an already-observed requested position is an explicit no-write result")
+    func alreadyAtRequestedPositionReturnsUnchangedWithoutOpeningTheDialog() async throws {
+        // Mutation this rejects: remove the complete pre-read no-op branch. A post-read matching
+        // the target after a dialog write would be coincidental; the honest shape is instead an
+        // explicit observed no-op with no route execution.
+        let channel = StubTransportChannel(
+            gotoResult: .error("the dialog route must not run for an observed no-op"),
+            readbackPosition: "5.1.1.1"
+        )
+        let router = ChannelRouter()
+        await router.register(channel)
+        let result = await TransportDispatcher.handle(
+            command: "goto_position",
+            params: ["position": .string("5.1.1.1")],
+            router: router,
+            cache: StateCache()
+        )
+
+        let envelope = try #require(obj(result))
+        #expect(try #require(envelope["state"] as? String) == "A")
+        #expect(try #require(envelope["verified"] as? Bool))
+        #expect(try #require(envelope["unchanged"] as? Bool))
+        #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+        #expect(await channel.gotoExecutionCount() == 0, "the no-op branch must not open the dialog")
     }
 
     @Test("the TransportState display default is never a goto_position observation")

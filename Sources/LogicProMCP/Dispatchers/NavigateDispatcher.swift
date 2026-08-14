@@ -35,15 +35,24 @@ struct NavigateDispatcher: OperationTraceDispatching {
                 )
             }
             let traceID = await startTraceIfEnabled(command: command)
+            let requestedPosition = "\(bar).1.1.1"
+            let beforeTransport = await TransportDispatcher.liveTransportState(router: router, cache: cache)
+            if let unchanged = TransportDispatcher.gotoPositionUnchangedResult(
+                requestedPosition: requestedPosition,
+                beforeTransport: beforeTransport
+            ) {
+                return await finalizeTrace(unchanged, traceID: traceID)
+            }
             let result = await withWriteBoundaryArmed(traceID) {
                 await router.route(
                     operation: "transport.goto_position",
-                    params: ["position": "\(bar).1.1.1"]
+                    params: ["position": requestedPosition]
                 )
             }
             let finalized = await TransportDispatcher.finalizeGotoPositionResult(
                 result,
-                requestedPosition: "\(bar).1.1.1",
+                requestedPosition: requestedPosition,
+                beforeTransport: beforeTransport,
                 router: router,
                 cache: cache
             )
@@ -61,6 +70,13 @@ struct NavigateDispatcher: OperationTraceDispatching {
             let markers = await cache.getMarkers()
             func routeMarkerTarget(_ target: MarkerState) async -> CallTool.Result {
                 let traceID = await startTraceIfEnabled(command: command)
+                let beforeTransport = await TransportDispatcher.liveTransportState(router: router, cache: cache)
+                if let unchanged = TransportDispatcher.gotoPositionUnchangedResult(
+                    requestedPosition: target.position,
+                    beforeTransport: beforeTransport
+                ) {
+                    return await finalizeTrace(unchanged, traceID: traceID)
+                }
                 var result = await withWriteBoundaryArmed(traceID) {
                     await router.route(
                         operation: "transport.goto_position",
@@ -78,6 +94,7 @@ struct NavigateDispatcher: OperationTraceDispatching {
                 let finalized = await TransportDispatcher.finalizeGotoPositionResult(
                     result,
                     requestedPosition: target.position,
+                    beforeTransport: beforeTransport,
                     router: router,
                     cache: cache
                 )

@@ -294,6 +294,13 @@ struct MIDIDispatcher: OperationTraceDispatching {
                 // `verified:false` — it never confirmed the playhead landed.
                 let position = "\(bar).1.1.1"
                 let traceID = await startTraceIfEnabled(command: command)
+                let beforeTransport = await TransportDispatcher.liveTransportState(router: router, cache: cache)
+                if let unchanged = TransportDispatcher.gotoPositionUnchangedResult(
+                    requestedPosition: position,
+                    beforeTransport: beforeTransport
+                ) {
+                    return await finalizeTrace(unchanged, traceID: traceID)
+                }
                 let result = await withWriteBoundaryArmed(traceID) {
                     await router.route(
                         operation: "transport.goto_position",
@@ -303,6 +310,7 @@ struct MIDIDispatcher: OperationTraceDispatching {
                 let finalized = await TransportDispatcher.finalizeGotoPositionResult(
                     result,
                     requestedPosition: position,
+                    beforeTransport: beforeTransport,
                     router: router,
                     cache: cache
                 )

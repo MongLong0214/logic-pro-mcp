@@ -228,13 +228,14 @@ struct AXLocalePolicyTests {
     // MARK: - Go-to-Position dialog dismissal (.contains mode)
 
     /// The stale Go-to-Position dialog dismissal matches the window title with
-    /// `.contains`. Pin that the live-verified real titles ("Go to Position",
-    /// "위치로 이동") match even when wrapped in a window title, and that an
+    /// `.contains`. Pin that the reviewed exact titles ("Go to Position",
+    /// "위치로 이동", "位置の移動") match even when wrapped in a window title, and that an
     /// unrelated window is rejected.
     @Test("go-to-position dialog title matches in contains mode")
     func goToPositionContainsMode() {
         #expect(AXLocalePolicy.goToPositionDialogTitle.matches("Go to Position", mode: .contains))
         #expect(AXLocalePolicy.goToPositionDialogTitle.matches("위치로 이동", mode: .contains))
+        #expect(AXLocalePolicy.goToPositionDialogTitle.matches("位置の移動", mode: .contains))
         // Windowed title containing the phrase still matches.
         #expect(AXLocalePolicy.goToPositionDialogTitle.matches("Untitled — 위치로 이동", mode: .contains))
         #expect(AXLocalePolicy.goToPositionDialogTitle.matches("go to position", mode: .contains))

@@ -1216,9 +1216,10 @@ extension AccessibilityChannel {
         end knownGoToPositionDialogSubrole
 
         -- These are the measured, operable titles, not an absence policy. Locale expansion is
-        -- tracked in #519; until then an unrecognised title must be withheld as unidentified.
+        -- tracked in #519; the reviewed JA title is covered here, while all other unrecognised
+        -- titles must still be withheld as unidentified.
         on knownGoToPositionDialogTitle(dialogTitle)
-            if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then return true
+            if dialogTitle is "위치로 이동" or dialogTitle is "位置の移動" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then return true
             return false
         end knownGoToPositionDialogTitle
 
@@ -1273,6 +1274,38 @@ extension AccessibilityChannel {
             end using terms from
         end goToPositionWindowCount
 
+        -- A count cannot preserve window identity: one old window can disappear while an
+        -- unidentified dialog appears and leave the total unchanged. Keep the in-process pre-leaf
+        -- references only long enough to prove that every old window survived this run. They are
+        -- never serialized or used to name a dialog across the timeout process boundary.
+        on preLeafGoToPositionWindowsState(theProcess, preLeafGoToPositionWindows)
+            using terms from application "System Events"
+                tell theProcess
+                    try
+                        repeat with preLeafWindow in preLeafGoToPositionWindows
+                            if not (exists (contents of preLeafWindow)) then return "CHANGED"
+                        end repeat
+                        return "UNCHANGED"
+                    on error
+                        return "UNREADABLE"
+                    end try
+                end tell
+            end using terms from
+        end preLeafGoToPositionWindowsState
+
+        -- `CLOSED` is an observed lifecycle result, not a coincidental total-window equality. The
+        -- known dialog reference must have disappeared before this handler is called; this checks
+        -- that every pre-leaf reference remains and that no replacement/unknown window is left.
+        on observedGoToPositionDialogClosure(theProcess, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
+            set preLeafWindowsState to my preLeafGoToPositionWindowsState(theProcess, preLeafGoToPositionWindows)
+            if preLeafWindowsState is "UNREADABLE" then return "UNREADABLE"
+            if preLeafWindowsState is not "UNCHANGED" then return "UNIDENTIFIED"
+            set currentGoToPositionWindowCount to my goToPositionWindowCount(theProcess)
+            if currentGoToPositionWindowCount is "UNREADABLE" then return "UNREADABLE"
+            if currentGoToPositionWindowCount is not preLeafGoToPositionWindowCount then return "UNIDENTIFIED"
+            return "CLOSED"
+        end observedGoToPositionDialogClosure
+
         -- Find only an operable, modal Go To Position window that this leaf could have opened.
         -- A target requires exactly one post-leaf match beyond the readable pre-leaf count; any
         -- pre-existing matching dialog or non-unique increase withholds global typing.
@@ -1305,7 +1338,7 @@ extension AccessibilityChannel {
             end using terms from
         end matchingGoToPositionDialog
 
-        -- The three exact titles and measured modal class are an input-target predicate, not an
+        -- The reviewed exact titles and measured modal class are an input-target predicate, not an
         -- absence predicate. A newly opened localized or otherwise unfamiliar window may be this
         -- run's dialog, but must never receive global typing.
         on newWindowAppearedSince(theProcess, preLeafGoToPositionWindowCount)
@@ -1319,23 +1352,17 @@ extension AccessibilityChannel {
 
         -- The Go To Position dialog has its own lifecycle; a menu-bar observation says nothing
         -- about whether a titled modal is still blocking the arrange area. `CLOSED` is reserved
-        -- for a readable total-window observation returning to this run's pre-leaf baseline. A
+        -- for the observed disappearance of the target plus preserved pre-leaf references. A
         -- missing reference, title drift, or failed read is not evidence of absence.
-        on goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindowCount)
+        on goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
             if dialogWindow is missing value then
-                set newWindowState to my newWindowAppearedSince(theProcess, preLeafGoToPositionWindowCount)
-                if newWindowState is "ABSENT" then return "CLOSED"
-                if newWindowState is "APPEARED" or newWindowState is "UNIDENTIFIED" then return "UNIDENTIFIED"
-                return "UNREADABLE"
+                return my observedGoToPositionDialogClosure(theProcess, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
             end if
             using terms from application "System Events"
                 tell theProcess
                     try
                         if not (exists dialogWindow) then
-                            set newWindowState to my newWindowAppearedSince(theProcess, preLeafGoToPositionWindowCount)
-                            if newWindowState is "ABSENT" then return "CLOSED"
-                            if newWindowState is "APPEARED" or newWindowState is "UNIDENTIFIED" then return "UNIDENTIFIED"
-                            return "UNREADABLE"
+                            return my observedGoToPositionDialogClosure(theProcess, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                         end if
                         set dialogTitle to name of dialogWindow
                         if not my knownGoToPositionDialogTitle(dialogTitle) then return "UNIDENTIFIED"
@@ -1389,11 +1416,11 @@ extension AccessibilityChannel {
         -- fallback while this exact dialog is observed open, and every attempt
         -- must be followed by a new exact-dialog observation before it counts
         -- as cleanup.
-        on pressGoToPositionDialogCancel(theProcess, dialogWindow, preLeafGoToPositionWindowCount)
+        on pressGoToPositionDialogCancel(theProcess, dialogWindow, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
             using terms from application "System Events"
                 tell theProcess
                     try
-                        set dialogState to my goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindowCount)
+                        set dialogState to my goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                         if dialogState is not "OPEN" then return dialogState
                         if exists button "Cancel" of dialogWindow then
                             click button "Cancel" of dialogWindow
@@ -1415,17 +1442,17 @@ extension AccessibilityChannel {
             end using terms from
         end pressGoToPositionDialogCancel
 
-        on dismissOpenGoToPositionDialog(theProcess, dialogWindow, preLeafGoToPositionWindowCount)
-            set dialogState to my goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindowCount)
+        on dismissOpenGoToPositionDialog(theProcess, dialogWindow, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
+            set dialogState to my goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
             if dialogState is "CLOSED" then return "CLOSED"
             if dialogState is not "OPEN" then return dialogState
             repeat 3 times
-                set cancelOutcome to my pressGoToPositionDialogCancel(theProcess, dialogWindow, preLeafGoToPositionWindowCount)
+                set cancelOutcome to my pressGoToPositionDialogCancel(theProcess, dialogWindow, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                 if cancelOutcome is "NO_BUTTON" or cancelOutcome is "UNREADABLE" then
                     -- The Cancel click may have landed even though AX reported failure. Re-observe
                     -- this exact dialog before choosing Escape as a second actuator; unreadable is
                     -- not permission to send a key into an unknown focus target.
-                    set dialogState to my goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindowCount)
+                    set dialogState to my goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                     if dialogState is "CLOSED" then return "CLOSED"
                     if dialogState is "UNREADABLE" then return "OPEN_UNREADABLE"
                     if dialogState is not "OPEN" then return dialogState
@@ -1436,7 +1463,7 @@ extension AccessibilityChannel {
                     end using terms from
                 end if
                 delay 0.1
-                set dialogState to my goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindowCount)
+                set dialogState to my goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                 if dialogState is "CLOSED" then return "CLOSED"
                 if dialogState is "UNREADABLE" then return "OPEN_UNREADABLE"
                 if dialogState is not "OPEN" then return dialogState
@@ -1521,7 +1548,16 @@ extension AccessibilityChannel {
                 if preLeafGoToPositionDialogCount is greater than 0 then
                     return "DIALOG_PREEXISTING: Go To Position dialog was already present before leaf click"
                 end if
-                set preLeafGoToPositionWindowCount to my goToPositionWindowCount(logicProcess)
+                -- Preserve concrete pre-leaf references in this process as well as the serialized
+                -- count for timeout reconciliation. The references make a same-count replacement
+                -- detectable after Return; a count by itself cannot do that.
+                set preLeafGoToPositionWindows to {}
+                try
+                    set preLeafGoToPositionWindows to every window as list
+                    set preLeafGoToPositionWindowCount to count of preLeafGoToPositionWindows
+                on error
+                    set preLeafGoToPositionWindowCount to "UNREADABLE"
+                end try
                 if preLeafGoToPositionWindowCount is "UNREADABLE" then
                     return "DIALOG_PREEXISTENCE_UNREADABLE: Go To Position window count was unreadable before leaf click"
                 end if
@@ -1546,7 +1582,7 @@ extension AccessibilityChannel {
                         click menu item "Position…" of menu 1 of menu item "Go To" of menu 1 of menu bar item "Navigate" of menu bar 1
                     end if
                 on error errMsg
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                     if dialogCleanupState is not "CLOSED" then
                         return "DIALOG_ACTUATION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                     end if
@@ -1587,7 +1623,7 @@ extension AccessibilityChannel {
                 if not dialogReady then
                     if dialogAppearanceUnidentified then return "DIALOG_UNIDENTIFIED_NEW_WINDOW"
                     if dialogAppearanceUnreadable then return "DIALOG_APPEARANCE_UNREADABLE"
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                     if dialogCleanupState is not "CLOSED" then
                         return "DIALOG_ACTUATION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                     end if
@@ -1603,7 +1639,7 @@ extension AccessibilityChannel {
             -- it may have reached an unknown target rather than advertising a clean retry.
             try
                 if not my recordDialogIssuance("SELECT_ALL_ARMED", "\(ledgerPath)") then
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                     if dialogCleanupState is not "CLOSED" then
                         return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                     end if
@@ -1618,7 +1654,7 @@ extension AccessibilityChannel {
                 -- frontmost while this run was preparing the receipt.
                 set dialogFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)
                 if dialogFocusState is not "FOCUSED" then
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                     if dialogCleanupState is not "CLOSED" then
                         return "DIALOG_SUBMISSION_NOT_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                     end if
@@ -1631,7 +1667,7 @@ extension AccessibilityChannel {
                 keystroke "a" using command down
                 delay 0.1
             on error errMsg
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                 if dialogCleanupState is not "CLOSED" then
                     return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
@@ -1644,7 +1680,7 @@ extension AccessibilityChannel {
 
             try
                 if not my recordDialogIssuance("POSITION_INPUT_ARMED", "\(ledgerPath)") then
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                     if dialogCleanupState is not "CLOSED" then
                         return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                     end if
@@ -1658,7 +1694,7 @@ extension AccessibilityChannel {
                 -- global position text, not merely after the preceding Cmd+A.
                 set dialogTypingFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)
                 if dialogTypingFocusState is not "FOCUSED" then
-                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)
+                    set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                     if dialogCleanupState is not "CLOSED" then
                         return "DIALOG_INPUT_ISSUED: SELECT_ALL_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                     end if
@@ -1671,7 +1707,7 @@ extension AccessibilityChannel {
                 keystroke "\(position)"
                 delay 0.1
             on error errMsg
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                 if dialogCleanupState is not "CLOSED" then
                     return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
@@ -1686,7 +1722,7 @@ extension AccessibilityChannel {
             -- Return submission boundary, so a timeout or nonzero child exit after either point is
             -- conservatively reported rather than releasing another actuator.
             if not my recordDialogIssuance("RETURN_ARMED", "\(ledgerPath)") then
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                 if dialogCleanupState is not "CLOSED" then
                     return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
@@ -1700,7 +1736,7 @@ extension AccessibilityChannel {
             -- owner after its durable marker is written and immediately before submission.
             set dialogReturnFocusState to my observedGoToPositionDialogFocusState(logicProcess, observedGoToPositionDialog)
             if dialogReturnFocusState is not "FOCUSED" then
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                 if dialogCleanupState is not "CLOSED" then
                     return "DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
@@ -1714,7 +1750,7 @@ extension AccessibilityChannel {
                 keystroke return
                 delay 0.2
             on error errMsg
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                 if dialogCleanupState is not "CLOSED" then
                     return "DIALOG_SUBMISSION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
@@ -1726,9 +1762,9 @@ extension AccessibilityChannel {
             end try
             -- A normal Return reply is not proof Logic consumed it. Observe this exact modal before
             -- returning OK; if it survived, clean it only after recording the submission boundary.
-            set dialogPostReturnState to my goToPositionDialogState(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)
+            set dialogPostReturnState to my goToPositionDialogState(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                 if dialogPostReturnState is not "CLOSED" then
-                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)
+                set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)
                 if dialogCleanupState is not "CLOSED" then
                     return "DIALOG_SUBMISSION_ISSUED: dialog cleanup was not observed (" & dialogCleanupState & ")"
                 end if
@@ -1963,6 +1999,11 @@ extension AccessibilityChannel {
         /// A clean, normal leaf or pre-input focus failure may fall through because the script
         /// proved no global input or Return was sent and observed the relevant UI closed.
         var requiresUnsafeUIRefusal: Bool {
+            // The early menu outcomes occur before this run read either dialog count. A menu read
+            // that failed to resolve its leaf says nothing about whether a Go To Position modal is
+            // open, so it cannot release a global-keystroke route. Keep this as an observation
+            // property rather than making each router branch guess which sentinel happened.
+            if !performedDialogSafetyObservation { return true }
             switch self {
             case .failure(.menuCouldNotBeClosed),
                  .failure(.dialogPreexisting),
@@ -1976,6 +2017,20 @@ extension AccessibilityChannel {
                 return true
             default:
                 return false
+            }
+        }
+
+        /// Whether this result is downstream of the run's dialog-safety observation. `false`
+        /// means the route did not read the pre-leaf dialog/window state, not that it observed no
+        /// dialog. Callers must retain the failure rather than treating it as a clean fallback.
+        private var performedDialogSafetyObservation: Bool {
+            switch self {
+            case .failure(.menuNotFound),
+                 .failure(.menuStateUnreadable),
+                 .failure(.menuDisabled):
+                return false
+            default:
+                return true
             }
         }
 
@@ -2160,25 +2215,10 @@ extension AccessibilityChannel {
 
     private enum StrayGoToPositionUIOutcome: Equatable { case closed, openOrUnknown }
 
-    /// Reconcile the exact Go To Position modal before considering menu state. A menu-bar read does
-    /// not describe a modal dialog, so a post-timeout `CLOSED` menu must never authorise another route
-    /// while the dialog remains on screen.
-    private static func observeAndClearStrayGoToPositionUI(
-        preLeafWindowSnapshotPath: String,
-        executeScript: @escaping @Sendable (String, TimeInterval) async -> ChannelResult
-    ) async -> StrayGoToPositionUIOutcome {
-        let target = LogicProTarget.appleScriptTarget()
-        let script = """
-        on knownGoToPositionDialogSubrole(dialogSubrole)
-            if dialogSubrole is "AXFloatingWindow" or dialogSubrole is "AXDialog" or dialogSubrole is "AXSystemDialog" then return true
-            return false
-        end knownGoToPositionDialogSubrole
-
-        on knownGoToPositionDialogTitle(dialogTitle)
-            if dialogTitle is "위치로 이동" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then return true
-            return false
-        end knownGoToPositionDialogTitle
-
+    /// Kept as one generated fragment so the timeout reconciler and its no-System-Events parser
+    /// regression test execute exactly the same `do shell script` boundary behavior.
+    static func preLeafGoToPositionWindowSnapshotParserAppleScript() -> String {
+        """
         -- The timeout process must not infer ownership from a title. The child persisted readable
         -- known-dialog and total-window counts immediately before its leaf click; failure to read
         -- exactly that three-line format is unsafe, not empty.
@@ -2186,7 +2226,10 @@ extension AccessibilityChannel {
             try
                 set snapshotText to do shell script "/bin/cat " & (quoted form of snapshotPath)
                 set originalTextItemDelimiters to AppleScript's text item delimiters
-                set AppleScript's text item delimiters to linefeed
+                -- `do shell script` returns command output with LF normalized to CR. The writer
+                -- intentionally persists LF, so parse the returned representation rather than
+                -- pretending the file's byte delimiter survived this API boundary unchanged.
+                set AppleScript's text item delimiters to return
                 set snapshotItems to text items of snapshotText
                 set AppleScript's text item delimiters to originalTextItemDelimiters
                 if (count of snapshotItems) is not 3 then return "UNREADABLE"
@@ -2217,6 +2260,29 @@ extension AccessibilityChannel {
                 return "UNREADABLE"
             end try
         end preLeafGoToPositionWindowSnapshot
+        """
+    }
+
+    /// Reconcile the exact Go To Position modal before considering menu state. A menu-bar read does
+    /// not describe a modal dialog, so a post-timeout `CLOSED` menu must never authorise another route
+    /// while the dialog remains on screen.
+    private static func observeAndClearStrayGoToPositionUI(
+        preLeafWindowSnapshotPath: String,
+        executeScript: @escaping @Sendable (String, TimeInterval) async -> ChannelResult
+    ) async -> StrayGoToPositionUIOutcome {
+        let target = LogicProTarget.appleScriptTarget()
+        let script = """
+        on knownGoToPositionDialogSubrole(dialogSubrole)
+            if dialogSubrole is "AXFloatingWindow" or dialogSubrole is "AXDialog" or dialogSubrole is "AXSystemDialog" then return true
+            return false
+        end knownGoToPositionDialogSubrole
+
+        on knownGoToPositionDialogTitle(dialogTitle)
+            if dialogTitle is "위치로 이동" or dialogTitle is "位置の移動" or dialogTitle is "Go To Position" or dialogTitle is "Go to Position" then return true
+            return false
+        end knownGoToPositionDialogTitle
+
+        \(preLeafGoToPositionWindowSnapshotParserAppleScript())
 
         on windowWasPresentBefore(currentGoToPositionDialogCount, preLeafGoToPositionDialogCount)
             if currentGoToPositionDialogCount is "UNREADABLE" then return "UNREADABLE"
@@ -2305,7 +2371,10 @@ extension AccessibilityChannel {
             set currentGoToPositionWindowCount to my goToPositionWindowCount(theProcess)
             if currentGoToPositionWindowCount is "UNREADABLE" then return "UNREADABLE"
             if currentGoToPositionWindowCount is not preLeafGoToPositionWindowCount then return "UNIDENTIFIED"
-            return "CLOSED"
+            -- A fresh process has counts but not the pre-leaf AX references. Equal counts cannot
+            -- distinguish a closed target from an unidentified replacement paired with a different
+            -- disappearing window, so do not manufacture a CLOSED observation or release menu Escape.
+            return "UNIDENTIFIED"
         end goToPositionDialogState
 
         -- System Events keystrokes are global. Re-check frontmost after proving the exact modal

@@ -244,6 +244,28 @@ struct Issue529MenuValidationTests {
         #expect(!script.contains("menuItemOpenedAfterClick"))
     }
 
+    @Test("the reviewed Japanese Go To Position title is an exact operable dialog title")
+    func japaneseGoToPositionTitleIsCoveredInBothDialogObservers() throws {
+        // Mutation this rejects: remove `dialogTitle is "位置の移動"` from either title predicate.
+        // This issue covers the exact JA modal title plus its existing キャンセル dismissal path;
+        // it does not claim Japanese Navigate-menu routing or a general locale policy (#519).
+        let writeScript = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let source = try String(
+            contentsOfFile: #filePath.replacingOccurrences(
+                of: "Tests/LogicProMCPTests/Issue529MenuValidationTests.swift",
+                with: "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift"
+            ),
+            encoding: .utf8
+        )
+        let titlePredicateOccurrences = issue529Positions(
+            of: "dialogTitle is \"位置の移動\"", in: source
+        )
+
+        #expect(writeScript.contains("dialogTitle is \"位置の移動\""))
+        #expect(writeScript.contains("button \"キャンセル\""))
+        #expect(titlePredicateOccurrences.count == 2, "write and timeout observers must agree on the exact JA title")
+    }
+
     @Test("the dialog-ready poll remains the authority after the resolved leaf click")
     func resolvedLeafClickIsFollowedByDialogReadyPoll() throws {
         // Mutation this rejects: remove the bounded exact-dialog poll, or put dialog input before
@@ -474,14 +496,14 @@ struct Issue529MenuValidationTests {
         let leafFailureBlock = String(script[leafClick...])
         let leafError = try issue529Position(of: "on error errMsg", in: leafFailureBlock)
         let cleanup = try issue529Position(
-            of: "set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)",
+            of: "set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)",
             in: leafFailureBlock
         )
         let cleanupRefusal = try issue529Position(
             of: "if dialogCleanupState is not \"CLOSED\" then", in: leafFailureBlock
         )
         let dialogStateStart = try issue529Position(
-            of: "on goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindowCount)",
+            of: "on goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)",
             in: script
         )
         let dialogStateEnd = try issue529Position(of: "end goToPositionDialogState", in: script)
@@ -489,7 +511,7 @@ struct Issue529MenuValidationTests {
         #expect(leafError < cleanup)
         #expect(cleanup < cleanupRefusal)
         #expect(dialogState.contains("if dialogWindow is missing value then"))
-        #expect(dialogState.contains("if newWindowState is \"APPEARED\" or newWindowState is \"UNIDENTIFIED\" then return \"UNIDENTIFIED\""))
+        #expect(dialogState.contains("return my observedGoToPositionDialogClosure(theProcess, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)"))
 
         let scriptExecutions = Issue529Counter()
         let sliderWrites = Issue529Counter()
@@ -600,6 +622,53 @@ struct Issue529MenuValidationTests {
         #expect(scriptExecutions.value == 1, "fixture seam must deliver the unrecognised-title reply")
         #expect(sliderWrites.value == 0)
         #expect(cgEventRecorder.snapshot().isEmpty, "CGEvent must not receive the localized-dialog fallback")
+    }
+
+    @Test("a menu result that never observed dialogs cannot release CGEvent")
+    func uninspectedDialogPreflightFailuresDoNotRouteToCGEvent() async throws {
+        // Mutation this rejects: change `if !performedDialogSafetyObservation { return true }`
+        // to return false. Each script reply exits before either pre-leaf dialog/window count, so
+        // it cannot answer that no modal is open. The recorder would otherwise receive `/`, digits,
+        // and Return globally. Running all three proves every classifier seam reaches this gate.
+        for (scriptResult, diagnostic) in [
+            ("MENU_NOT_FOUND", "menu_not_found"),
+            ("MENU_DISABLED", "menu_disabled"),
+            ("MENU_STATE_UNREADABLE", "menu_state_unreadable"),
+        ] {
+            let scriptExecutions = Issue529Counter()
+            let sliderWrites = Issue529Counter()
+            let accessibility = Issue529DialogFixtureChannel(
+                scriptResult: scriptResult,
+                scriptExecutions: scriptExecutions,
+                sliderWrites: sliderWrites
+            )
+            let cgEventRecorder = CGEventRecorder()
+            let cgEvent = CGEventChannel(runtime: .init(
+                isLogicProRunning: { true },
+                logicProPID: { 529 },
+                postKeyEvent: { keyCode, flags, pid in
+                    cgEventRecorder.post(keyCode: keyCode, flags: flags, pid: pid)
+                },
+                sleepMicros: { _ in }
+            ))
+            let router = ChannelRouter()
+            await router.register(accessibility)
+            await router.register(cgEvent)
+            let result = await router.route(
+                operation: "transport.goto_position",
+                params: ["position": "5.1.1.1"]
+            )
+
+            let envelope = try #require(issue529Envelope(result))
+            #expect(!result.isSuccess, "\(scriptResult) must remain terminal")
+            #expect(try #require(envelope["state"] as? String) == "C")
+            #expect(try #require(envelope["dialog_route_outcome"] as? String) == diagnostic)
+            #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+            #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+            #expect(scriptExecutions.value == 1, "fixture seam must deliver \(scriptResult)")
+            #expect(sliderWrites.value == 0)
+            #expect(cgEventRecorder.snapshot().isEmpty, "\(scriptResult) must not release CGEvent")
+        }
     }
 
     @Test("an unreadable post-leaf total-window count is terminal rather than clean actuation")
@@ -891,12 +960,12 @@ struct Issue529MenuValidationTests {
         #expect(fixture.builder.actionCalls.isEmpty)
     }
 
-    @Test("timeout reconciliation refuses an unrecognised modal before menu Escape")
-    func timeoutReconcilerChecksTotalWindowCountBeforeReportingClosed() async throws {
-        // Mutation this rejects: remove the total-window count below the title whitelist. With
-        // READY\n0\n1 and a newly opened modal whose title is not measured, the old reconciler
-        // returned CLOSED and sent menu Escape. The fixture returns DIALOG_UNIDENTIFIED to prove
-        // the reconciliation seam ran; the captured script pins the count-and-return ordering.
+    @Test("timeout reconciliation refuses an unrecognised modal rather than reporting closed")
+    func timeoutReconcilerChecksTotalWindowCountBeforeWithholdingClosure() async throws {
+        // Mutation this rejects: return CLOSED after the equal-count branch. A timeout process has
+        // only serialized counts, not the in-process pre-leaf AX references, so equal totals cannot
+        // distinguish a vanished target from a replacement paired with a different disappearance.
+        // The fixture returns DIALOG_UNIDENTIFIED to prove the reconciliation seam ran.
         let reconciliationCalls = Issue529Counter()
         let reconciliationScript = Issue529StringBox()
         let runtime = issue529SliderRuntime(
@@ -938,7 +1007,6 @@ struct Issue529MenuValidationTests {
             of: "if currentGoToPositionWindowCount is not preLeafGoToPositionWindowCount then return \"UNIDENTIFIED\"",
             in: dialogState
         )
-        let closed = try issue529Position(of: "return \"CLOSED\"", in: dialogState)
         let dialogCleanup = try issue529Position(
             of: "set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafGoToPositionDialogCount, preLeafGoToPositionWindowCount)",
             in: script
@@ -950,7 +1018,7 @@ struct Issue529MenuValidationTests {
         #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         #expect(reconciliationCalls.value == 1, "fixture seam must execute the timeout reconciler")
         #expect(totalWindowCount < unidentified)
-        #expect(unidentified < closed)
+        #expect(!dialogState.contains("return \"CLOSED\""))
         #expect(dialogCleanup < menuFocus)
     }
 
@@ -1131,11 +1199,10 @@ struct Issue529MenuValidationTests {
         #expect(postReturnSliderWrites.value == 0)
     }
 
-    @Test("a menu-not-found dialog result does not issue the relative slider")
+    @Test("a menu-not-found result with no dialog observation is terminal and does not issue the slider")
     func menuNotFoundDoesNotIssueRelativeSlider() async throws {
-        // Mutation this rejects: restore the old slider AXValue write after `MENU_NOT_FOUND`, which
-        // moves the playhead by one bar instead of expressing the requested absolute position, or
-        // drop `dialog_route_outcome` and hide why the dialog did not drive.
+        // Mutation this rejects: treat MENU_NOT_FOUND as a clean fallback. It occurs before a
+        // dialog count, so it must be terminal even though no position write was attempted.
         let sliderWrites = Issue529Counter()
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "529"],
@@ -1151,9 +1218,9 @@ struct Issue529MenuValidationTests {
         let envelope = try #require(issue529Envelope(result))
         #expect(!result.isSuccess)
         #expect(try #require(envelope["state"] as? String) == "C")
-        #expect(try #require(envelope["error"] as? String) == "not_supported")
-        #expect(try #require(envelope["position_route"] as? String) == "unavailable")
+        #expect(try #require(envelope["error"] as? String) == "ax_write_failed")
         #expect(try #require(envelope["dialog_route_outcome"] as? String) == "menu_not_found")
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
         #expect(!writeAttempted)
         #expect(sliderWrites.value == 0)
@@ -1171,7 +1238,9 @@ struct Issue529MenuValidationTests {
             isFrontmost: { true },
             activateLogic: { true },
             sleepMicros: { _ in },
-            executeDialogScript: { _ in .success(#"{"result":"MENU_NOT_FOUND"}"#) }
+            executeDialogScript: { _ in
+                .success(#"{"result":"DIALOG_ACTUATION_ISSUED: dialog did not become ready"}"#)
+            }
         )
 
         let envelope = try #require(issue529Envelope(result))
@@ -1203,7 +1272,7 @@ struct Issue529MenuValidationTests {
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
         let returnKey = try issue529Position(of: "keystroke return", in: script)
         let postReturnObservation = try issue529Position(
-            of: "set dialogPostReturnState to my goToPositionDialogState(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)",
+            of: "set dialogPostReturnState to my goToPositionDialogState(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)",
             in: script
         )
         let postReturnClosedGate = try issue529Position(
@@ -1214,6 +1283,57 @@ struct Issue529MenuValidationTests {
         #expect(returnKey < postReturnObservation)
         #expect(postReturnObservation < postReturnClosedGate)
         #expect(postReturnClosedGate < ok)
+    }
+
+    @Test("post-Return closure preserves every pre-leaf window rather than trusting an equal count")
+    func postReturnClosureRequiresStablePreLeafWindowReferences() throws {
+        // Mutation this rejects: remove `if preLeafWindowsState is not "UNCHANGED" then return
+        // "UNIDENTIFIED"`. In the separating state, the original dialog reference is absent, an
+        // old unrelated window also disappeared, and an unnamed Go To Position modal remains. The
+        // totals happen to match, but the missing pre-leaf reference proves that equality is not
+        // an observed closure of this run's dialog.
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let preLeafSnapshot = try issue529Position(
+            of: "set preLeafGoToPositionWindows to every window as list", in: script
+        )
+        let leafClick = try issue529Position(
+            of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
+            in: script
+        )
+        let stateStart = try issue529Position(
+            of: "on goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)",
+            in: script
+        )
+        let stateEnd = try issue529Position(of: "end goToPositionDialogState", in: script)
+        let state = String(script[stateStart..<stateEnd])
+        let closureStart = try issue529Position(
+            of: "on observedGoToPositionDialogClosure(theProcess, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)",
+            in: script
+        )
+        let closureEnd = try issue529Position(of: "end observedGoToPositionDialogClosure", in: script)
+        let closure = String(script[closureStart..<closureEnd])
+        let referenceRead = try issue529Position(
+            of: "set preLeafWindowsState to my preLeafGoToPositionWindowsState(theProcess, preLeafGoToPositionWindows)",
+            in: closure
+        )
+        let preservedGuard = try issue529Position(
+            of: "if preLeafWindowsState is not \"UNCHANGED\" then return \"UNIDENTIFIED\"", in: closure
+        )
+        let currentCount = try issue529Position(
+            of: "set currentGoToPositionWindowCount to my goToPositionWindowCount(theProcess)", in: closure
+        )
+        let countGuard = try issue529Position(
+            of: "if currentGoToPositionWindowCount is not preLeafGoToPositionWindowCount then return \"UNIDENTIFIED\"", in: closure
+        )
+        let closed = try issue529Position(of: "return \"CLOSED\"", in: closure)
+
+        #expect(preLeafSnapshot < leafClick)
+        #expect(state.contains("if not (exists dialogWindow) then"))
+        #expect(state.contains("return my observedGoToPositionDialogClosure(theProcess, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)"))
+        #expect(referenceRead < preservedGuard)
+        #expect(preservedGuard < currentCount)
+        #expect(currentCount < countGuard)
+        #expect(countGuard < closed)
     }
 
     @Test("durable issuance checkpoints precede the leaf and Return actuators")
@@ -1392,7 +1512,7 @@ func gotoPositionDialogRequiresNewCountAndBracketedFocusedBinding() throws {
         of: "set logicIsStillFrontmost to frontmost", in: focusHandler
     )
     let dialogStateHandlerStart = try issue529Position(
-        of: "on goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindowCount)", in: script
+        of: "on goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)", in: script
     )
     let dialogStateHandlerEnd = try issue529Position(of: "end goToPositionDialogState", in: script)
     let dialogStateHandler = String(script[dialogStateHandlerStart..<dialogStateHandlerEnd])
@@ -1421,7 +1541,7 @@ func gotoPositionDialogRequiresNewCountAndBracketedFocusedBinding() throws {
     #expect(!focusHandler.contains("if focused of dialogWindow"))
     #expect(dialogStateHandler.contains("if not my knownGoToPositionDialogSubrole(dialogSubrole) then return \"OPEN_UNKNOWN_SUBROLE\""))
     #expect(dialogStateHandler.contains("if not my knownGoToPositionDialogTitle(dialogTitle) then return \"UNIDENTIFIED\""))
-    #expect(dialogStateHandler.contains("set newWindowState to my newWindowAppearedSince(theProcess, preLeafGoToPositionWindowCount)"))
+    #expect(dialogStateHandler.contains("return my observedGoToPositionDialogClosure(theProcess, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)"))
     #expect(dialogStateHandler.contains("set dialogIsModal to value of attribute \"AXModal\" of dialogWindow"))
     #expect(dialogStateHandler.contains("return \"OPEN_UNVERIFIED_MODALITY\""))
 }
@@ -1467,7 +1587,7 @@ func unreadableCancelDoesNotAuthoriseEscapeWithoutDialogObservation() throws {
     // frontmost-plus-AXFocusedWindow guard for that exact dialog.
     let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
     let handlerStart = try issue529Position(
-        of: "on dismissOpenGoToPositionDialog(theProcess, dialogWindow, preLeafGoToPositionWindowCount)", in: script
+        of: "on dismissOpenGoToPositionDialog(theProcess, dialogWindow, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)", in: script
     )
     let handlerEnd = try issue529Position(of: "end dismissOpenGoToPositionDialog", in: script)
     let handler = String(script[handlerStart..<handlerEnd])
@@ -1479,7 +1599,7 @@ func unreadableCancelDoesNotAuthoriseEscapeWithoutDialogObservation() throws {
     // `.first { before < $0 && $0 < escape }` form, none is selected using the ordering asserted
     // below, so moving Escape before a guard makes the test fail.
     let reobservation = try issue529Position(
-        of: "set dialogState to my goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindowCount)", in: unreadableBranch
+        of: "set dialogState to my goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindows, preLeafGoToPositionWindowCount)", in: unreadableBranch
     )
     let closedGuard = try issue529Position(
         of: "if dialogState is \"CLOSED\" then return \"CLOSED\"", in: unreadableBranch
@@ -1523,9 +1643,7 @@ func aDeadScriptReconcilesDialogBeforeMenuState() throws {
     let dialogObservation = try issue529Position(
         of: "on matchingGoToPositionDialog(theProcess, preLeafGoToPositionDialogCount)", in: helper
     )
-    let snapshotRead = try issue529Position(
-        of: "on preLeafGoToPositionWindowSnapshot(snapshotPath)", in: helper
-    )
+    let snapshotParser = AccessibilityChannel.preLeafGoToPositionWindowSnapshotParserAppleScript()
     let dialogCleanup = try issue529Position(
         of: "set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafGoToPositionDialogCount, preLeafGoToPositionWindowCount)",
         in: helper
@@ -1559,8 +1677,9 @@ func aDeadScriptReconcilesDialogBeforeMenuState() throws {
     let menuCleanupTail = String(helper[menuFocus...])
     let menuEscape = try issue529Position(of: "key code 53", in: menuCleanupTail)
 
-    #expect(measuredSubrole < snapshotRead)
-    #expect(snapshotRead < dialogObservation)
+    #expect(helper.contains("\\(preLeafGoToPositionWindowSnapshotParserAppleScript())"))
+    #expect(snapshotParser.contains("on preLeafGoToPositionWindowSnapshot(snapshotPath)"))
+    #expect(measuredSubrole < dialogObservation)
     #expect(dialogObservation < dialogCleanup)
     #expect(preexistingCountRefusal < targetMatch)
     #expect(nonOpenRefusal < cancelAttempt)
@@ -1608,6 +1727,36 @@ func preLeafGoToPositionSnapshotIsUnambiguousAndNonInjectable() throws {
     #expect(script.contains("set snapshotText to \"READY\" & linefeed & (matchingGoToPositionDialogCount as text) & linefeed & (totalWindowCount as text)"))
     #expect(!script.contains("id of contents of preLeafWindow"))
     #expect(!script.contains("AXIdentifier"))
+}
+
+@Test("the timeout parser accepts the LF snapshot after do shell script normalizes it to CR")
+func timeoutSnapshotParserUsesTheShellReturnedDelimiter() throws {
+    // Mutation this rejects: change the production parser's `text item delimiters to return` back
+    // to `linefeed`. The writer persists LF, but `do shell script` returns that output as CR; the
+    // probe executes that same boundary without touching System Events and would produce one item
+    // rather than the required three.
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("logic-pro-mcp-snapshot-parser-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let snapshotURL = directory.appendingPathComponent("preleaf-windows")
+    try "READY\n0\n1".write(to: snapshotURL, atomically: true, encoding: .utf8)
+
+    let parser = AccessibilityChannel.preLeafGoToPositionWindowSnapshotParserAppleScript()
+    let parserProbe = parser + "\nreturn preLeafGoToPositionWindowSnapshot(\"\(snapshotURL.path)\")"
+    let probeResult = try runProcess(
+        executable: "/usr/bin/osascript",
+        arguments: ["-e", parserProbe],
+        currentDirectoryURL: directory
+    )
+
+    let writer = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+
+    #expect(probeResult.exitCode == 0)
+    #expect(probeResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == "0, 1")
+    #expect(writer.contains("set snapshotText to \"READY\" & linefeed"))
+    #expect(parser.contains("set AppleScript's text item delimiters to return"))
+    #expect(!parser.contains("set AppleScript's text item delimiters to linefeed"))
 }
 
 @Test("the write script emits the unidentified-window refusal, and emits it before any dismissal")
