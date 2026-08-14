@@ -241,13 +241,15 @@ extension AccessibilityChannel {
         // name. Verifying against a single read produced a State A for a marker that was still
         // there. So require two consecutive identical readings before believing either of them, and
         // report State B when they will not settle rather than certifying a guess.
-        var observedSurvivorPositions: [String] = []
-        var observedSurvivors: [String] = []
-        var observedPositionEvidenceCanonical = false
-        var observedEmptySurvivorSet = false
-        var observedTargetRowStillSelected = false
-        var settled = false
-        var previousObservation: (positions: [String], targetRowStillSelected: Bool)?
+        var settledReadback: MarkerDeleteSettledReadback?
+        var previousObservation: (inventory: MarkerDeleteInventoryReadback, targetRowStillSelected: Bool)?
+        // Keep the inventory's settled ambiguity distinct from a failed selected-row read. The
+        // latter prevents State A, but does not make two agreeing, readable inventories
+        // unreadable. If those inventories already establish that a duplicate-position target
+        // cannot be identified, State B must say that rather than launder the observation into
+        // `readback_unavailable`.
+        var previousInventoryReadback: MarkerDeleteInventoryReadback?
+        var settledAmbiguousInventory: MarkerDeleteInventoryReadback?
         // A genuine AX rebuild failure voids the entire observation, regardless of whether it
         // arose from AXRows, structural corroboration, or a row cell. Keep the last one only so,
         // if it is still the final poll when the existing budget expires, State B reports that
@@ -273,6 +275,8 @@ extension AccessibilityChannel {
                 finalTransientReadbackFailure = failure
                 finalTargetSelectionReadbackFailure = nil
                 previousObservation = nil
+                previousInventoryReadback = nil
+                settledAmbiguousInventory = nil
                 mouse.sleepMicros(250_000)
                 continue
             case .failure(let failure):
@@ -281,6 +285,26 @@ extension AccessibilityChannel {
                 addMarkerDeleteReadbackFailure(failure, to: &extras)
                 return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
             }
+
+            let inventoryReadback = MarkerDeleteInventoryReadback(
+                survivorPositions: reading.map(\.position).map(canonicalMarkerPosition).sorted(),
+                survivors: reading
+                    .map { canonicalMarkerIdentity(name: $0.name, position: $0.position) }
+                    .sorted(),
+                positionEvidenceCanonical: !reading.isEmpty
+                    && reading.allSatisfy { $0.positionSource == .parser },
+                emptySurvivorSet: reading.isEmpty
+            )
+            if !targetPositionUnique,
+               inventoryReadback.survivorPositions.count == before.count - 1,
+               inventoryReadback.survivorPositions == expectedSurvivorPositions,
+               let previousInventoryReadback,
+               previousInventoryReadback.survivorPositions == inventoryReadback.survivorPositions {
+                settledAmbiguousInventory = inventoryReadback
+            } else {
+                settledAmbiguousInventory = nil
+            }
+            previousInventoryReadback = inventoryReadback
 
             let targetRowStillSelected: Bool
             switch markerListTargetRowIsSelected(targetRow, in: inventory.table, runtime: runtime.ax) {
@@ -297,43 +321,74 @@ extension AccessibilityChannel {
                 continue
             }
 
-            let positions = reading.map(\.position).map(canonicalMarkerPosition).sorted()
             if let previousObservation,
-               previousObservation.positions == positions,
+               previousObservation.inventory.survivorPositions == inventoryReadback.survivorPositions,
                previousObservation.targetRowStillSelected == targetRowStillSelected {
-                observedSurvivorPositions = positions
-                observedSurvivors = reading
-                    .map { canonicalMarkerIdentity(name: $0.name, position: $0.position) }
-                    .sorted()
-                // An empty successful survivor set has no observed positions to parse. Treat it
-                // explicitly as a successfully read empty set rather than accepting
-                // `[].allSatisfy` as canonical-position evidence.
-                observedEmptySurvivorSet = reading.isEmpty
-                observedPositionEvidenceCanonical = !reading.isEmpty
-                    && reading.allSatisfy { $0.positionSource == .parser }
-                observedTargetRowStillSelected = targetRowStillSelected
-                settled = true
+                settledReadback = MarkerDeleteSettledReadback(
+                    inventory: inventoryReadback,
+                    targetRowStillSelected: targetRowStillSelected
+                )
                 break
             }
-            previousObservation = (positions, targetRowStillSelected)
+            previousObservation = (inventoryReadback, targetRowStillSelected)
             mouse.sleepMicros(250_000)
         }
-        guard settled else {
+        let settleOutcome: MarkerDeleteSettleOutcome
+        if let settledReadback {
+            settleOutcome = .settled(settledReadback)
+        } else if let settledAmbiguousInventory {
+            settleOutcome = .ambiguousInventory(
+                settledAmbiguousInventory,
+                targetSelectionReadFailure: finalTargetSelectionReadbackFailure
+            )
+        } else if let finalTransientReadbackFailure {
+            settleOutcome = .unreadableInventory(finalTransientReadbackFailure)
+        } else if let finalTargetSelectionReadbackFailure {
+            settleOutcome = .unreadableTargetSelection(finalTargetSelectionReadbackFailure)
+        } else {
+            settleOutcome = .unsettled
+        }
+
+        let observedReadback: MarkerDeleteSettledReadback
+        switch settleOutcome {
+        case .settled(let settledReadback):
+            observedReadback = settledReadback
+        case .ambiguousInventory(let inventoryReadback, let targetSelectionReadFailure):
             extras["readback_settled"] = false
-            if let finalTransientReadbackFailure {
-                extras["readback_unreadable"] = true
-                addMarkerDeleteReadbackFailure(finalTransientReadbackFailure, to: &extras)
-                return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
-            }
-            if let finalTargetSelectionReadbackFailure {
-                extras["readback_unreadable"] = true
+            addMarkerDeleteInventoryReadback(inventoryReadback, prewritePositionEvidenceCanonical: prewritePositionEvidenceCanonical, to: &extras)
+            extras["inventory_readback_state"] = "settled_ambiguous"
+            if let targetSelectionReadFailure {
+                extras["target_selection_readback_state"] = "unreadable"
                 extras["readback_failure_site"] = "selected_rows"
-                extras["readback_ax_status"] = Int(finalTargetSelectionReadbackFailure.raw)
-                if let symbolicName = finalTargetSelectionReadbackFailure.symbolicName {
+                extras["readback_ax_status"] = Int(targetSelectionReadFailure.raw)
+                if let symbolicName = targetSelectionReadFailure.symbolicName {
                     extras["readback_ax_status_name"] = symbolicName
                 }
-                return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+            } else {
+                extras["target_selection_readback_state"] = "not_settled"
             }
+            extras["reason_detail"] = ambiguousMarkerDeleteReasonDetail(
+                targetPositionMatchCount: targetPositionMatchCount,
+                targetPosition: target.position
+            )
+            return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
+        case .unreadableInventory(let failure):
+            extras["readback_settled"] = false
+            extras["readback_unreadable"] = true
+            addMarkerDeleteReadbackFailure(failure, to: &extras)
+            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+        case .unreadableTargetSelection(let failure):
+            extras["readback_settled"] = false
+            extras["readback_unreadable"] = true
+            extras["target_selection_readback_state"] = "unreadable"
+            extras["readback_failure_site"] = "selected_rows"
+            extras["readback_ax_status"] = Int(failure.raw)
+            if let symbolicName = failure.symbolicName {
+                extras["readback_ax_status_name"] = symbolicName
+            }
+            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+        case .unsettled:
+            extras["readback_settled"] = false
             // All six inventory reads answered successfully. Do not invent an AX status for a
             // convergence failure: publishing one here would falsely attribute a status that no
             // AX read returned.
@@ -342,54 +397,114 @@ extension AccessibilityChannel {
             return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
         }
         extras["readback_settled"] = true
-        extras["marker_count_after"] = observedSurvivorPositions.count
-        extras["observed_position_evidence_canonical"] = observedPositionEvidenceCanonical
-        extras["observed_empty_survivor_set"] = observedEmptySurvivorSet
-        extras["position_evidence_canonical"] = prewritePositionEvidenceCanonical
-            && (observedEmptySurvivorSet || observedPositionEvidenceCanonical)
-        extras["target_row_still_selected_after_pick"] = observedTargetRowStillSelected
+        addMarkerDeleteInventoryReadback(
+            observedReadback.inventory,
+            prewritePositionEvidenceCanonical: prewritePositionEvidenceCanonical,
+            to: &extras
+        )
+        extras["inventory_readback_state"] = "settled"
+        extras["target_selection_readback_state"] = "settled"
+        extras["target_row_still_selected_after_pick"] = observedReadback.targetRowStillSelected
+
+        // This proves that precisely one position occurrence disappeared and that it was an
+        // occurrence at the target's position. It cannot establish WHICH marker was removed when
+        // multiple markers share that position; the position multiset contains no such identity.
+        guard observedReadback.inventory.survivorPositions.count == before.count - 1,
+              observedReadback.inventory.survivorPositions == expectedSurvivorPositions else {
+            // Either the target position survived, or another position disappeared. The
+            // name-carrying diagnostics make that mismatch useful to a human without making names
+            // part of the stable State-A comparison.
+            extras["observed_survivors"] = observedReadback.inventory.survivors
+            extras["expected_survivors"] = expectedSurvivors
+            extras["reason_detail"] = "The settled survivor set differs from the requested target; a different marker may have been deleted."
+            return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
+        }
+
+        // This inventory is readable and settled, but positions are a multiset rather than marker
+        // identities. Report the ambiguity before the selection no-op diagnostic: the selection
+        // guard still ran and still blocks State A, while this is the more exact State-B reason.
+        guard targetPositionUnique else {
+            extras["reason_detail"] = ambiguousMarkerDeleteReasonDetail(
+                targetPositionMatchCount: targetPositionMatchCount,
+                targetPosition: target.position
+            )
+            return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
+        }
 
         // A surviving target selection is a direct observed no-op, even if AXRows and AXChildren
         // happened to agree on an omitted row. The two table projections are corroboration, not
         // independent effects; never certify the deletion while the exact row selected for Delete
         // remains selected. This guard follows the two-reading settle so it is based on a complete
         // agreeing observation rather than one unstable poll.
-        guard !observedTargetRowStillSelected else {
+        guard !observedReadback.targetRowStillSelected else {
             extras["reason_detail"] = "The exact target row remained selected after the Delete pick, so the settled row omission is not sufficient evidence of deletion."
-            return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
-        }
-
-        // This proves that precisely one position occurrence disappeared and that it was an
-        // occurrence at the target's position. It cannot establish WHICH marker was removed when
-        // multiple markers share that position; the position multiset contains no such identity.
-        guard observedSurvivorPositions.count == before.count - 1,
-              observedSurvivorPositions == expectedSurvivorPositions else {
-            // Either the target position survived, or another position disappeared. The
-            // name-carrying diagnostics make that mismatch useful to a human without making names
-            // part of the stable State-A comparison.
-            extras["observed_survivors"] = observedSurvivors
-            extras["expected_survivors"] = expectedSurvivors
-            extras["reason_detail"] = "The settled survivor set differs from the requested target; a different marker may have been deleted."
             return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
         }
         // Bind the request-derived position-multiset expectation to the independently read-back
         // position multiset in State A. Names are not exposed here because Logic may renumber them.
         extras["expected_survivor_position_multiset"] = expectedSurvivorPositions.joined()
-        extras["observed_survivor_position_multiset"] = observedSurvivorPositions.joined()
-        guard targetPositionUnique else {
-            extras["reason_detail"] = "Delete was attempted and the marker count moved, but "
-                + "\(targetPositionMatchCount) pre-write markers shared target position "
-                + "\(target.position), so this readback cannot establish which marker was deleted."
-            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
-        }
+        extras["observed_survivor_position_multiset"] = observedReadback.inventory.survivorPositions.joined()
         guard prewritePositionEvidenceCanonical,
-              observedEmptySurvivorSet || observedPositionEvidenceCanonical else {
+              observedReadback.inventory.emptySurvivorSet
+                || observedReadback.inventory.positionEvidenceCanonical else {
             extras["reason_detail"] = "Delete was attempted and the marker count moved, but at "
                 + "least one marker position came from an ordinal parse fallback; synthetic "
                 + "positions cannot support a verified target identity."
             return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
         }
         return .success(HonestContract.encodeStateA(extras: extras))
+    }
+
+    /// The inventory records only position occurrences. A duplicate position is a readable
+    /// observation whose limitation is ambiguity, not an unavailable AX readback.
+    private static func ambiguousMarkerDeleteReasonDetail(
+        targetPositionMatchCount: Int,
+        targetPosition: String
+    ) -> String {
+        "Delete was attempted and the marker count moved, but "
+            + "\(targetPositionMatchCount) pre-write markers shared target position "
+            + "\(targetPosition), so this readback cannot establish which marker was deleted."
+    }
+
+    /// One successfully enumerated post-write Marker List inventory. It deliberately has no
+    /// selection result: the table inventory and AXSelectedRows are different measurements.
+    private struct MarkerDeleteInventoryReadback {
+        let survivorPositions: [String]
+        let survivors: [String]
+        let positionEvidenceCanonical: Bool
+        let emptySurvivorSet: Bool
+    }
+
+    /// State-A requires both a settled inventory and an agreeing selected-row observation.
+    private struct MarkerDeleteSettledReadback {
+        let inventory: MarkerDeleteInventoryReadback
+        let targetRowStillSelected: Bool
+    }
+
+    /// The terminal outcome of the fixed six-poll settle budget. Keeping these cases separate
+    /// prevents a readable ambiguous inventory from being reported as an unreadable readback
+    /// merely because the independent selected-row measurement did not settle.
+    private enum MarkerDeleteSettleOutcome {
+        case settled(MarkerDeleteSettledReadback)
+        case ambiguousInventory(
+            MarkerDeleteInventoryReadback,
+            targetSelectionReadFailure: AXHelpers.AXStatusError?
+        )
+        case unreadableInventory(AXLogicProElements.MarkerListReadFailure)
+        case unreadableTargetSelection(AXHelpers.AXStatusError)
+        case unsettled
+    }
+
+    private static func addMarkerDeleteInventoryReadback(
+        _ inventoryReadback: MarkerDeleteInventoryReadback,
+        prewritePositionEvidenceCanonical: Bool,
+        to extras: inout [String: Any]
+    ) {
+        extras["marker_count_after"] = inventoryReadback.survivorPositions.count
+        extras["observed_position_evidence_canonical"] = inventoryReadback.positionEvidenceCanonical
+        extras["observed_empty_survivor_set"] = inventoryReadback.emptySurvivorSet
+        extras["position_evidence_canonical"] = prewritePositionEvidenceCanonical
+            && (inventoryReadback.emptySurvivorSet || inventoryReadback.positionEvidenceCanonical)
     }
 
     /// A real AX failure during a rebuild makes this complete poll unreadable; the next poll must
