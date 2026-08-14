@@ -91,6 +91,9 @@ extension AccessibilityChannel {
         let expectedSurvivors = expectedSurvivorMarkers
             .map { canonicalMarkerIdentity(name: $0.name, position: $0.position) }
             .sorted()
+        let prewriteMarkerIdentities = before.map {
+            canonicalMarkerIdentity(name: $0.name, position: $0.position)
+        }
         let targetPositionMatchCount = before.filter { $0.position == target.position }.count
         let targetPositionUnique = targetPositionMatchCount == 1
         // A parse fallback manufactures `ordinal + 1.1.1.1`, which can happen to equal a
@@ -105,6 +108,7 @@ extension AccessibilityChannel {
             "target_position": target.position,
             "target_position_unique": targetPositionUnique,
             "prewrite_position_evidence_canonical": prewritePositionEvidenceCanonical,
+            "prewrite_marker_identities": prewriteMarkerIdentities,
             "marker_count_before": before.count,
         ]
 
@@ -296,6 +300,7 @@ extension AccessibilityChannel {
             // part of the stable State-A comparison.
             extras["observed_survivors"] = observedSurvivors
             extras["expected_survivors"] = expectedSurvivors
+            extras["reason_detail"] = "The settled survivor set differs from the requested target; a different marker may have been deleted."
             return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
         }
         // Bind the request-derived position-multiset expectation to the independently read-back
@@ -573,7 +578,9 @@ extension AccessibilityChannel {
 
             // Delete acts on CURRENT selection, not on the row element carried from inventory.
             // Re-read the bound table immediately before the sole AXPick so an intervening user
-            // or application selection change cannot redirect the destructive menu command.
+            // or application selection change cannot redirect the destructive menu command. AX
+            // offers no atomic select-and-pick, so a change after this read remains possible; the
+            // settled survivor mismatch below is the only honest way to report that residual gap.
             switch markerListTargetRowIsSelected(targetRow, in: selectionTable, runtime: runtime) {
             case .success(true):
                 break

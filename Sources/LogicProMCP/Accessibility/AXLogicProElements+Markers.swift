@@ -113,10 +113,15 @@ extension AXLogicProElements {
     ) -> [MarkerState] {
         // Strategy 1 — Logic 12.2+: scrape the Marker List window's AXTable.
         if let listWindow = findMarkerListWindow(runtime: runtime) {
-            if case .success(let listMarkers) = enumerateMarkersFromListWindow(
-                listWindow, runtime: runtime.ax
-            ), !listMarkers.isEmpty {
+            switch enumerateMarkersFromListWindow(listWindow, runtime: runtime.ax) {
+            case .success(let listMarkers):
                 return listMarkers
+            case .failure:
+                // An open Marker List is authoritative. Its failed read cannot be replaced with
+                // stale marker-ruler data and then presented as an independent marker answer.
+                // This list-returning legacy API cannot surface the AX error itself; callers that
+                // need that distinction use enumerateMarkersFromListWindow directly.
+                return []
             }
         }
 
@@ -268,22 +273,19 @@ extension AXLogicProElements {
     ) -> Result<MarkerListInventory, AXHelpers.AXStatusError> {
         let rows: [AXUIElement]
         switch AXHelpers.getAttributeResult(table, "AXRows", runtime: runtime) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
-        case .success(let observedRows?) where !observedRows.isEmpty:
-            rows = observedRows
-        case .success(.some):
-            // An EMPTY `AXRows` is not the same claim as an empty table. Measured shape: the table
-            // rebuilds, `AXRows` answers success with `[]` for a moment, and its children still hold
-            // a well-formed row. Believing the empty array settles as an empty survivor set and
-            // certifies a delete of a marker that is still there. A table saying it has no rows must
-            // agree with its own children before that is treated as the last marker going.
-            switch directChildren(
-                of: table, withRole: kAXRowRole as String,
-                absenceIsEmpty: false, runtime: runtime
-            ) {
-            case .success(let children) where children.isEmpty:
-                rows = []
-            case .success:
-                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+        case .success(let observedRows?):
+            // `AXRows` is never evidence that it is the complete row list. Logic can answer
+            // success while the table rebuild still leaves rows in its structural children, both
+            // as an empty array and as a truncated non-empty array. Treat a disagreement as an
+            // unreadable list, not as a survivor set. The direct-child order is deliberately not
+            // compared: AXRows defines marker indices, while the structural traversal can reorder
+            // otherwise identical row elements.
+            switch markerListStructuralRows(from: table, runtime: runtime) {
+            case .success(let structuralRows):
+                guard sameElementMultiset(observedRows, structuralRows) else {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                }
+                rows = observedRows
             case .failure(let error):
                 return .failure(error)
             }
@@ -365,6 +367,49 @@ extension AXLogicProElements {
             markers.append(.fromParsed(parsed, ordinal: index, name: name))
         }
         return .success(MarkerListInventory(table: table, rows: rows, markers: markers))
+    }
+
+    /// The table's direct structure corroborates an `AXRows` answer. A non-empty child list
+    /// whose children no longer identify as rows is not evidence of an empty Marker List: the
+    /// table is rebuilding and no complete row list is observable yet.
+    private static func markerListStructuralRows(
+        from table: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
+        let children: [AXUIElement]
+        switch AXHelpers.childrenResult(table, runtime: runtime) {
+        case .success(let observedChildren):
+            children = observedChildren
+        case .failure(let error):
+            return .failure(error)
+        }
+        var rows: [AXUIElement] = []
+        for child in children {
+            switch AXHelpers.getAttributeResult(
+                child, kAXRoleAttribute as String, runtime: runtime
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case .success(let role):
+                if role == (kAXRowRole as String) { rows.append(child) }
+            case .failure(let error):
+                return .failure(error)
+            }
+        }
+        guard children.isEmpty || !rows.isEmpty else {
+            return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+        }
+        return .success(rows)
+    }
+
+    private static func sameElementMultiset(_ lhs: [AXUIElement], _ rhs: [AXUIElement]) -> Bool {
+        guard lhs.count == rhs.count else { return false }
+        var unmatched = rhs
+        for element in lhs {
+            guard let index = unmatched.firstIndex(where: { CFEqual($0, element) }) else {
+                return false
+            }
+            unmatched.remove(at: index)
+        }
+        return unmatched.isEmpty
     }
 
     /// Finds the first Marker List table without turning a failed `AXChildren` read into an

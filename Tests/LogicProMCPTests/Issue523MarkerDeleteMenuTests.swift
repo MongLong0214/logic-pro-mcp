@@ -27,10 +27,19 @@ private final class Issue523MenuState: @unchecked Sendable {
     var menuEntryEnabledReadFails = false
     var postWriteRowsReadFails = false
     var postWriteRowsReadEmpty = false
+    var postWriteRowsDropIndex: Int?
+    var postWriteRowsSubstituteIndex: Int?
+    var postWriteRowsEmptyReadWasObserved = false
+    var postWriteRowsDropReadWasObserved = false
+    var postWriteRowsSubstituteReadWasObserved = false
+    var postWriteRowRolesBecomeNonRows = false
+    var postWriteRowRoleChangeWasObserved = false
     var postWriteRowCellsReadNoValue = false
     var rowSelectionWasWritten = false
     var selectedRowsReadFailsAfterSelection = false
     var selectionChangesAfterSelectWrite = false
+    var selectionChangesAfterFinalSelectionCheckBeforePick = false
+    var selectionChangeBetweenConfirmationAndPickWasObserved = false
     var selectionUnreadableBeforePick = false
     var selectedRowsReadFailsAfterShowMenu = false
     var selectedRowID: Int?
@@ -53,10 +62,12 @@ private struct Issue523MarkerDeleteFixture {
     let menuEntryID: Int
     let menuState: Issue523MenuState
     let readMarkerCount: () -> Int
+    let readMarkerNames: () -> [String]
     let readSelectedMarkerName: () -> String?
 
     var menuIsOpen: Bool { menuState.isOpen }
     var markerCount: Int { readMarkerCount() }
+    var markerNames: [String] { readMarkerNames() }
     var selectedMarkerName: String? { readSelectedMarkerName() }
 }
 
@@ -87,10 +98,14 @@ private func issue523MarkerDeleteFixture(
     selectionConfirms: Bool = true,
     selectedRowsReadFailsAfterSelection: Bool = false,
     selectionChangesAfterSelectWrite: Bool = false,
+    selectionChangesAfterFinalSelectionCheckBeforePick: Bool = false,
     selectionUnreadableBeforePick: Bool = false,
     pickDeletesSelectedRow: Bool = true,
     postWriteRowsReadFails: Bool = false,
     postWriteRowsReadEmpty: Bool = false,
+    postWriteRowsDropIndex: Int? = nil,
+    postWriteRowsSubstituteIndex: Int? = nil,
+    postWriteRowRolesBecomeNonRows: Bool = false,
     postWriteRowCellsReadNoValue: Bool = false,
     menuControlDiscoveryReadFails: Bool = false,
     menuActionNamesReadFails: Bool = false,
@@ -118,6 +133,7 @@ private func issue523MarkerDeleteFixture(
     menuState.menuChildrenReadFailsBetweenAbsences = menuChildrenReadFailsBetweenAbsences
     menuState.selectedRowsReadFailsAfterSelection = selectedRowsReadFailsAfterSelection
     menuState.selectionChangesAfterSelectWrite = selectionChangesAfterSelectWrite
+    menuState.selectionChangesAfterFinalSelectionCheckBeforePick = selectionChangesAfterFinalSelectionCheckBeforePick
     menuState.selectionUnreadableBeforePick = selectionUnreadableBeforePick
     let app = builder.element(52_300)
     let arrange = builder.element(52_301)
@@ -185,6 +201,27 @@ private func issue523MarkerDeleteFixture(
         builder.setChildren(nameCell, [name])
         builder.setChildren(row, [lockCell, positionCell, nameCell])
         return row
+    }
+    // This is deliberately a distinct AX element whose cells can impersonate a real post-write
+    // survivor. It lets the fixture model the dangerous same-count lie: AXRows supplies a
+    // plausible row payload while the table's own AXChildren retain the real row element.
+    let substituteRow = builder.element(98_765)
+    let substituteLockCell = builder.element(98_766)
+    let substitutePositionCell = builder.element(98_767)
+    let substituteNameCell = builder.element(98_768)
+    let substitutePosition = builder.element(98_769)
+    let substituteName = builder.element(98_770)
+    builder.setAttribute(substituteRow, kAXRoleAttribute as String, kAXRowRole as String)
+    for cell in [substituteLockCell, substitutePositionCell, substituteNameCell] {
+        builder.setAttribute(cell, kAXRoleAttribute as String, kAXCellRole as String)
+    }
+    builder.setChildren(substitutePositionCell, [substitutePosition])
+    builder.setChildren(substituteNameCell, [substituteName])
+    builder.setChildren(substituteRow, [substituteLockCell, substitutePositionCell, substituteNameCell])
+    @Sendable func makeSubstituteRowReadLike(_ source: AXUIElement) {
+        guard let index = rows.firstIndex(where: { CFEqual($0, source) }) else { return }
+        builder.setAttribute(substitutePosition, kAXDescriptionAttribute as String, markers[index].position)
+        builder.setAttribute(substituteName, kAXDescriptionAttribute as String, markers[index].name)
     }
     builder.setAttribute(table, "AXRows", rows)
     let structuralRows = structuralRowOrder.map { $0.map { rows[$0] } } ?? rows
@@ -259,8 +296,20 @@ private func issue523MarkerDeleteFixture(
                 guard menuState.isOpen else {
                     menuState.postWriteRowsReadFails = postWriteRowsReadFails
                     menuState.postWriteRowsReadEmpty = postWriteRowsReadEmpty
+                    menuState.postWriteRowsDropIndex = postWriteRowsDropIndex
+                    menuState.postWriteRowsSubstituteIndex = postWriteRowsSubstituteIndex
+                    menuState.postWriteRowRolesBecomeNonRows = postWriteRowRolesBecomeNonRows
                     menuState.postWriteRowCellsReadNoValue = postWriteRowCellsReadNoValue
                     return false
+                }
+                if menuState.selectionChangesAfterFinalSelectionCheckBeforePick,
+                   rows.indices.contains(1) {
+                    // There is no AX primitive that atomically joins the final AXSelectedRows read
+                    // to AXPick. Fire this seam at the start of the pick so it is strictly after
+                    // the route's last successful confirmation and before Delete observes selection.
+                    menuState.selectionChangeBetweenConfirmationAndPickWasObserved = true
+                    builder.setAttribute(table, "AXSelectedRows", [rows[1]])
+                    menuState.selectedRowID = builder.elementID(rows[1])
                 }
                 // AX reports failure despite delivering it. Delete exactly the AXSelected row so
                 // fixtures can distinguish AXRows order from structural-descendant order.
@@ -275,11 +324,21 @@ private func issue523MarkerDeleteFixture(
                     builder.setAttribute(table, "AXRows", afterPick)
                     builder.setChildren(table, afterPick)
                 }
+                if let substituteIndex = postWriteRowsSubstituteIndex,
+                   let currentRows: [AXUIElement] = AXHelpers.getAttribute(
+                       table, "AXRows", runtime: builder.makeAXRuntime()
+                   ),
+                   currentRows.indices.contains(substituteIndex) {
+                    makeSubstituteRowReadLike(currentRows[substituteIndex])
+                }
                 if unrelatedEmptyTableBecomesFirstAfterPick {
                     builder.setChildren(markerList, [unrelatedTable, bottomEdit, toolbarEdit, table])
                 }
                 menuState.postWriteRowsReadFails = postWriteRowsReadFails
                 menuState.postWriteRowsReadEmpty = postWriteRowsReadEmpty
+                menuState.postWriteRowsDropIndex = postWriteRowsDropIndex
+                menuState.postWriteRowsSubstituteIndex = postWriteRowsSubstituteIndex
+                menuState.postWriteRowRolesBecomeNonRows = postWriteRowRolesBecomeNonRows
                 menuState.postWriteRowCellsReadNoValue = postWriteRowCellsReadNoValue
                 return false
             }
@@ -401,7 +460,42 @@ private func issue523MarkerDeleteFixture(
                    builder.elementID(element) == builder.elementID(table),
                    attribute == "AXRows" {
                     // A SUCCESSFUL empty array while the table's children still hold the row.
+                    menuState.postWriteRowsEmptyReadWasObserved = true
                     return .success([] as NSArray)
+                }
+                if let dropIndex = menuState.postWriteRowsDropIndex,
+                   builder.elementID(element) == builder.elementID(table),
+                   attribute == "AXRows",
+                   dropIndex < rows.count {
+                    // A SUCCESSFUL but TRUNCATED array: `AXRows` drops the row while the table's
+                    // children still hold it. Same AX lie as the empty case, only not `[]`.
+                    menuState.postWriteRowsDropReadWasObserved = true
+                    var truncated = rows
+                    truncated.remove(at: dropIndex)
+                    return .success(truncated as NSArray)
+                }
+                if let substituteIndex = menuState.postWriteRowsSubstituteIndex,
+                   builder.elementID(element) == builder.elementID(table),
+                   attribute == "AXRows",
+                   let currentRows: [AXUIElement] = AXHelpers.getAttribute(
+                       table, "AXRows", runtime: builder.makeAXRuntime()
+                   ),
+                   currentRows.indices.contains(substituteIndex) {
+                    // A matching post-write count is not evidence that AXRows contains the same
+                    // row elements as the table's structural children. The foreign row is fully
+                    // readable and carries the real survivor's position/name payload.
+                    menuState.postWriteRowsSubstituteReadWasObserved = true
+                    var substituted = currentRows
+                    substituted[substituteIndex] = substituteRow
+                    return .success(substituted as NSArray)
+                }
+                if menuState.postWriteRowRolesBecomeNonRows,
+                   rows.contains(where: { CFEqual(element, $0) }),
+                   attribute == kAXRoleAttribute as String {
+                    // A rebuilding table can still expose child elements while none reports AXRow.
+                    // This is not a readable empty structural list; the test asserts this seam fired.
+                    menuState.postWriteRowRoleChangeWasObserved = true
+                    return .success(kAXGroupRole as NSString)
                 }
                 if menuState.menuEntryEnabledReadFails,
                    builder.elementID(element) == entryID,
@@ -436,6 +530,12 @@ private func issue523MarkerDeleteFixture(
         menuState: menuState,
         readMarkerCount: {
             AXHelpers.getChildren(table, runtime: builder.makeAXRuntime()).count
+        },
+        readMarkerNames: {
+            AXHelpers.getChildren(table, runtime: builder.makeAXRuntime()).compactMap { row in
+                guard let index = rows.firstIndex(where: { CFEqual($0, row) }) else { return nil }
+                return markers[index].name
+            }
         },
         readSelectedMarkerName: {
             guard let selectedRowID = menuState.selectedRowID,
@@ -501,6 +601,31 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         elementID: fixture.menuEntryID, action: kAXPickAction as String
     ) == 0)
     #expect(fixture.markerCount == 3)
+}
+
+@Test func testIssue523SelectionCanChangeAfterFinalConfirmationAndReportsPossibleWrongDelete() async throws {
+    // AX provides no atomic select-and-pick. This fixture changes the application selection at the
+    // start of AXPick, after the route's final successful AXSelectedRows confirmation. Delete
+    // therefore removes Other while the requested Target survives; the route cannot claim State A
+    // and must say plainly that a different marker may have been deleted.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        selectionChangesAfterFinalSelectionCheckBeforePick: true,
+        markers: [("1 1 1 1", "Target"), ("5 1 1 1", "Other")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "B")
+    #expect(envelope["reason"] as? String == "readback_mismatch")
+    #expect(envelope["reason_detail"] as? String == "The settled survivor set differs from the requested target; a different marker may have been deleted.")
+    #expect(fixture.menuState.selectionChangeBetweenConfirmationAndPickWasObserved)
+    #expect(fixture.markerNames == ["Target"])
+    #expect(envelope["expected_survivors"] as? [String] == ["5:Other7:5.1.1.1"])
+    #expect(envelope["observed_survivors"] as? [String] == ["6:Target7:1.1.1.1"])
 }
 
 @Test func testIssue523UnreadableSelectionBeforePickIsNotAChangedSelection() async throws {
@@ -598,6 +723,9 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         #expect(result.isSuccess)
         #expect(envelope["state"] as? String == "A")
         #expect(writeAttempted)
+        #expect(envelope["prewrite_marker_identities"] as? [String] == [
+            "5:Intro7:1.1.1.1", "5:Verse7:5.1.1.1", "6:Chorus7:9.1.1.1",
+        ])
         #expect(fixture.actions.actionCount(
             elementID: fixture.menuEntryID, action: kAXPickAction as String
         ) == 1)
@@ -838,6 +966,31 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     // scenario was reported as "does not reproduce".
     let observedState: String = envelope["state"] as? String ?? "nil"
     #expect(observedState != "A")
+    #expect(fixture.menuState.postWriteRowsEmptyReadWasObserved)
+    #expect(fixture.markerCount == 1)
+}
+
+@Test func testIssue523EmptyAXRowsWithChildrenThatNoLongerReportAXRowCannotReachStateA() async throws {
+    // Last-marker variant: AXRows says success([]), the child remains present, but the rebuilding
+    // table currently reports it as AXGroup rather than AXRow. A role-filtered `directChildren`
+    // read used to turn those present children into [] and falsely corroborate the empty AXRows.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteRowsReadEmpty: true,
+        postWriteRowRolesBecomeNonRows: true,
+        markers: [("1 1 1 1", "Only Marker")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "B")
+    #expect(envelope["reason"] as? String == "readback_unavailable")
+    #expect(fixture.menuState.postWriteRowsEmptyReadWasObserved)
+    #expect(fixture.menuState.postWriteRowRoleChangeWasObserved)
     #expect(fixture.markerCount == 1)
 }
 
@@ -1173,4 +1326,75 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     #expect(fixture.actions.actionCount(
         elementID: fixture.menuEntryID, action: kAXPickAction as String
     ) == 0)
+}
+
+@Test func testIssue523TruncatedAXRowsWithSurvivingChildRowCannotReachStateA() async throws {
+    // A non-empty `AXRows` is not evidence that it is the COMPLETE row list. The empty case was
+    // corroborated against the table's children; a truncated non-empty one was still trusted whole.
+    // Same measured AX lie — the table rebuilds and `AXRows` answers success — only the reading
+    // drops exactly the target row instead of every row.
+    //
+    // Concrete state: three markers, the AXPick is a no-op, and every subsequent `AXRows` read
+    // omits the target while `AXChildren` still holds all three rows. The expected survivor set is
+    // the other two, the truncated reading matches it exactly, two identical readings settle, and
+    // the uniqueness and canonical gates pass — so a delete that never happened certifies State A.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteRowsDropIndex: 1,
+        markers: [("1 1 1 1", "Intro"), ("5 1 1 1", "Verse"), ("12 1 1 1", "Chorus")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    let observedState: String = envelope["state"] as? String ?? "nil"
+    #expect(observedState != "A")
+    #expect(fixture.menuState.postWriteRowsDropReadWasObserved)
+    // The row is still a child of the bound table: nothing was deleted.
+    #expect(fixture.markerCount == 3)
+}
+
+@Test func testIssue523SubstitutedAXRowsElementWithSameCountCannotReachStateA() async throws {
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteRowsSubstituteIndex: 1,
+        markers: [("1 1 1 1", "Intro"), ("5 1 1 1", "Verse"), ("12 1 1 1", "Chorus")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    let observedState: String = envelope["state"] as? String ?? "nil"
+    #expect(observedState != "A")
+    #expect(fixture.markerCount == 3)
+    #expect(fixture.menuState.postWriteRowsSubstituteReadWasObserved)
+}
+
+@Test func testIssue523PostDeleteSubstitutedAXRowsElementCannotReachStateA() async throws {
+    // The real menu pick removes Verse. AXRows then reports the correct post-delete count and
+    // two plausible survivor positions, but replaces Chorus's AX element with a foreign element;
+    // AXChildren still holds the real Intro/Chorus rows. The survivor position/count proof alone
+    // would certify State A, so the identity corroboration must reject the reading first.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        postWriteRowsSubstituteIndex: 1,
+        markers: [("1 1 1 1", "Intro"), ("5 1 1 1", "Verse"), ("12 1 1 1", "Chorus")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "B")
+    #expect(envelope["reason"] as? String == "readback_unavailable")
+    #expect(fixture.menuState.postWriteRowsSubstituteReadWasObserved)
+    // The table really did delete the target; the rejection is solely about trusting the
+    // substituted AXRows element as a corroborated survivor observation.
+    #expect(fixture.markerCount == 2)
+    #expect(fixture.markerNames == ["Intro", "Chorus"])
 }

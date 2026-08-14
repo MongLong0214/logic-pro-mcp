@@ -83,6 +83,10 @@ private func makeMarkerListTree(
     return arrangeWindow
 }
 
+private final class MarkerListReadProbe: @unchecked Sendable {
+    var failedAXRowsReadWasObserved = false
+}
+
 @Test
 func enumerateMarkers_logic122_markerListWindow_open_returnsMarkers() async {
     let builder = FakeAXRuntimeBuilder()
@@ -391,6 +395,90 @@ func enumerateMarkers_listAndRulerBothPresent_listWins() async {
     #expect(markers.count == 1)
     #expect(markers[0].name == "FromList", "list strategy must take precedence")
     #expect(markers[0].positionSource == .parser, "list 경로 parser 성공 source 보존")
+}
+
+@Test
+func enumerateMarkers_openEmptyMarkerListDoesNotFallThroughToStaleRuler() async {
+    // A successfully read empty Marker List is an answer. It must not be replaced with an old
+    // ruler label merely because this convenience API returns an array rather than Result.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(7_530)
+    let arrange = builder.element(7_531)
+    let listWin = builder.element(7_532)
+    _ = makeMarkerListTree(
+        builder: builder, appElement: app,
+        arrangeWindow: arrange, markerListWindow: listWin,
+        rows: []
+    )
+    let timelineRuler = builder.element(7_533)
+    let markerRuler = builder.element(7_534)
+    let staleText = builder.element(7_535)
+    builder.setAttribute(timelineRuler, kAXRoleAttribute as String, "AXRuler")
+    builder.setAttribute(markerRuler, kAXRoleAttribute as String, "AXRuler")
+    builder.setAttribute(staleText, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    builder.setAttribute(staleText, kAXTitleAttribute as String, "Stale ruler marker")
+    builder.setChildren(markerRuler, [staleText])
+    builder.setChildren(arrange, [timelineRuler, markerRuler])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    guard case .success(let listMarkers) = AXLogicProElements.enumerateMarkersFromListWindow(
+        listWin, runtime: runtime.ax
+    ) else {
+        #expect(false, "the empty Marker List fixture must be a successful read")
+        return
+    }
+    #expect(listMarkers.isEmpty)
+    #expect(AXLogicProElements.enumerateMarkers(in: arrange, runtime: runtime).isEmpty)
+}
+
+@Test
+func enumerateMarkers_failedOpenMarkerListDoesNotFallThroughToStaleRuler() async {
+    // A failed Marker-List read is not a successful empty read, but neither result may be
+    // laundered into the stale ruler answer that feeds the independent position_multiset check.
+    let builder = FakeAXRuntimeBuilder()
+    let probe = MarkerListReadProbe()
+    let app = builder.element(7_540)
+    let arrange = builder.element(7_541)
+    let listWin = builder.element(7_542)
+    _ = makeMarkerListTree(
+        builder: builder, appElement: app,
+        arrangeWindow: arrange, markerListWindow: listWin,
+        rows: [(position: "1 1 1 1", name: "Live list marker", length: "∞")]
+    )
+    let table = builder.element(8_000)
+    let timelineRuler = builder.element(7_543)
+    let markerRuler = builder.element(7_544)
+    let staleText = builder.element(7_545)
+    builder.setAttribute(timelineRuler, kAXRoleAttribute as String, "AXRuler")
+    builder.setAttribute(markerRuler, kAXRoleAttribute as String, "AXRuler")
+    builder.setAttribute(staleText, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    builder.setAttribute(staleText, kAXTitleAttribute as String, "Stale ruler marker")
+    builder.setChildren(markerRuler, [staleText])
+    builder.setChildren(arrange, [timelineRuler, markerRuler])
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueResultHandler: { element, attribute in
+            if CFEqual(element, table), attribute == "AXRows" {
+                probe.failedAXRowsReadWasObserved = true
+                return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+            }
+            return nil
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+    let listResult = AXLogicProElements.enumerateMarkersFromListWindow(listWin, runtime: runtime.ax)
+    guard case .failure(let error) = listResult else {
+        #expect(false, "the failed Marker List seam must remain distinct from a successful empty read")
+        return
+    }
+    #expect(error.raw == AXError.failure.rawValue)
+    #expect(probe.failedAXRowsReadWasObserved)
+
+    probe.failedAXRowsReadWasObserved = false
+    #expect(AXLogicProElements.enumerateMarkers(in: arrange, runtime: runtime).isEmpty)
+    #expect(probe.failedAXRowsReadWasObserved)
 }
 
 // MARK: - StateCache.updateMarkers fetchedAt invariant (v3.1.9 Issue #8 cache bug)

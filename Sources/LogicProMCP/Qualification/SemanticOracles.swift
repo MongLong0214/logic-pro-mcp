@@ -84,6 +84,12 @@ enum OracleConstraint: Sendable {
     /// string named by another field. Both the wire and the comparison value must
     /// be readable strings; malformed entries and missing values fail closed.
     case lengthPrefixedEntriesExclude(key: String, forbiddenEntryKey: String)
+    /// The ordered pre-write identity at `indexKey` must encode exactly the claimed name and
+    /// position. This binds a delete receipt's requested index/name to the position whose
+    /// disappearance is proved by the survivor-position constraints.
+    case lengthPrefixedIdentityAtIndexEquals(
+        entriesKey: String, indexKey: String, nameKey: String, positionKey: String
+    )
     /// Two key paths WITHIN THE SAME payload resolve to equal leaf values. The
     /// load-bearing safe-mutation invariant: a verified write echoes what was
     /// requested as what was observed, so `requested == observed` proves the
@@ -136,6 +142,7 @@ enum OracleConstraint: Sendable {
              .typedField(let key, _),
              .lengthPrefixedEntryCountEquals(let key, _, _),
              .lengthPrefixedEntriesExclude(let key, _),
+             .lengthPrefixedIdentityAtIndexEquals(let key, _, _, _),
              .fieldsEqual(let key, _),
              .crossCheck(let key, _),
              .numericNear(let key, _, _),
@@ -153,7 +160,7 @@ enum OracleConstraint: Sendable {
     var isValueConstraint: Bool {
         switch self {
         case .valueEquals, .numericRange, .enumMember, .lengthPrefixedEntryCountEquals,
-             .lengthPrefixedEntriesExclude,
+             .lengthPrefixedEntriesExclude, .lengthPrefixedIdentityAtIndexEquals,
              .fieldsEqual, .crossCheck, .numericNear, .booleanFlipped:
             return true
         case .nonEmptyArray, .typedField, .emptyArray:
@@ -198,6 +205,19 @@ enum OracleConstraint: Sendable {
                   let forbidden = JSONPath.resolve(root, keyPath: forbiddenEntryKey) as? String,
                   let entries = Self.lengthPrefixedEntries(in: wire) else { return false }
             return entries.allSatisfy { $0 != forbidden }
+        case .lengthPrefixedIdentityAtIndexEquals(let entriesKey, let indexKey, let nameKey, let positionKey):
+            guard let rawEntries = JSONPath.resolve(root, keyPath: entriesKey) as? [Any],
+                  let rawIndex = JSONPath.resolve(root, keyPath: indexKey),
+                  let indexNumber = JSONInspector.number(of: rawIndex),
+                  indexNumber >= 0,
+                  indexNumber.rounded(.towardZero) == indexNumber,
+                  indexNumber <= Double(Int.max),
+                  rawEntries.indices.contains(Int(indexNumber)),
+                  let identity = rawEntries[Int(indexNumber)] as? String,
+                  let name = JSONPath.resolve(root, keyPath: nameKey) as? String,
+                  let position = JSONPath.resolve(root, keyPath: positionKey) as? String,
+                  let identityEntries = Self.lengthPrefixedEntries(in: identity) else { return false }
+            return identityEntries == [name, position]
         case .fieldsEqual(let keyA, let keyB):
             guard let a = JSONPath.resolve(root, keyPath: keyA),
                   let b = JSONPath.resolve(root, keyPath: keyB) else { return false }

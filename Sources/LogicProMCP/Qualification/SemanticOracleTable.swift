@@ -1613,6 +1613,7 @@ enum SemanticOracleTable {
             .typedField(key: "requested_index", type: .number),
             .typedField(key: "target_name", type: .string),
             .typedField(key: "target_position", type: .string),
+            .lengthPrefixedIdentityAtIndexEquals(entriesKey: "prewrite_marker_identities", indexKey: "requested_index", nameKey: "target_name", positionKey: "target_position"),
             .valueEquals(key: "target_position_unique", expected: .bool(true)),
             .valueEquals(key: "position_evidence_canonical", expected: .bool(true)),
             .typedField(key: "marker_count_before", type: .number),
