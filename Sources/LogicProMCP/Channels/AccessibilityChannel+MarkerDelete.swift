@@ -175,17 +175,15 @@ extension AccessibilityChannel {
             // `AXPick` status codes are not evidence of whether the menu action took effect. Once
             // issued, proceed directly to readback regardless of the return value.
             extras["write_attempted"] = true
-            guard !menuCloseWasNotObserved else {
-                // AXPick may already have deleted the marker, so this cannot be State C. But a
-                // menu that remains open means the UI was not restored to a state in which a
-                // verified result is safe to report or retry.
+            if menuCloseWasNotObserved {
+                // Keep the unresolved menu state and unsafe-retry signal: a retry could reach
+                // a still-open menu rather than a fresh Marker List. That observation says
+                // nothing about the independently bound table inventory, however. Let the
+                // settled survivor proof below determine whether the already-issued delete can
+                // be verified.
                 extras["safe_to_retry"] = false
                 extras["fallback_unsafe"] = true
                 extras["menu_state"] = "could_not_be_closed"
-                return .success(HonestContract.encodeStateB(
-                    reason: .readbackUnavailable,
-                    extras: extras
-                ))
             }
 
         case .routeUnavailable(let failure, let axStatus, let menuState, let menuCancelActionState):

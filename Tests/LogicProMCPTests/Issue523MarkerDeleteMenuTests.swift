@@ -285,7 +285,8 @@ private func issue523MarkerDeleteFixture(
                     menuState.isOpen = false
                     menuState.menuWasDismissed = true
                     builder.setChildren(toolbarEdit, [])
-                } else if menuChildrenReadFailsAfterCancel {
+                }
+                if menuChildrenReadFailsAfterCancel {
                     menuState.childrenReadFails = true
                 }
                 return true
@@ -737,6 +738,39 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         ) == 0)
         #expect(!fixture.menuIsOpen)
     }
+}
+
+@Test func testIssue523UnclosedMenuObservationDoesNotDiscardSettledBoundTableProof() async throws {
+    // AXPick deletes the target and AXCancel closes the menu, but the scoped child reads fail
+    // after that close. The run therefore cannot observe the closure even though no menu remains.
+    // That uncertainty makes a retry unsafe; it does not make the separately bound
+    // AXRows/AXChildren inventory unreadable. The two settled post-write readings still prove the
+    // requested row disappeared.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        menuChildrenReadFailsAfterCancel: true
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    // Mutation: restore the old early State-B return from the
+    // `menuCloseWasNotObserved` branch. The AXPick still deletes, but this precise State-A
+    // proof becomes unreachable and the test fails.
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "A")
+    #expect(envelope["menu_state"] as? String == "could_not_be_closed")
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+    #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+    #expect(try #require(envelope["readback_settled"] as? Bool))
+    #expect(envelope["marker_count_after"] as? Int == 2)
+    #expect(fixture.markerCount == 2)
+    #expect(fixture.markerNames == ["Verse", "Chorus"])
+    #expect(!fixture.menuIsOpen)
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuEntryID, action: kAXPickAction as String
+    ) == 1)
 }
 
 @Test func testIssue523ObservedMenuWithAbsentChildrenAfterCancelIsNotConfirmedClosed() async throws {
