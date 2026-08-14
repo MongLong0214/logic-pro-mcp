@@ -29,6 +29,10 @@ private final class Issue523MenuState: @unchecked Sendable {
     var postWriteRowsReadEmpty = false
     var postWriteRowCellsReadNoValue = false
     var rowSelectionWasWritten = false
+    var selectedRowsReadFailsAfterSelection = false
+    var selectionChangesAfterSelectWrite = false
+    var selectionUnreadableBeforePick = false
+    var selectedRowsReadFailsAfterShowMenu = false
     var selectedRowID: Int?
     var showMenuWasRequested = false
     var menuWasDismissed = false
@@ -81,6 +85,9 @@ private func issue523MarkerDeleteFixture(
     editControlTitle: String = "編集",
     toolbarEditAdvertisesCancel: Bool = false,
     selectionConfirms: Bool = true,
+    selectedRowsReadFailsAfterSelection: Bool = false,
+    selectionChangesAfterSelectWrite: Bool = false,
+    selectionUnreadableBeforePick: Bool = false,
     pickDeletesSelectedRow: Bool = true,
     postWriteRowsReadFails: Bool = false,
     postWriteRowsReadEmpty: Bool = false,
@@ -109,6 +116,9 @@ private func issue523MarkerDeleteFixture(
     menuState.menuEntryChildrenReadFails = menuEntryChildrenReadFails
     menuState.menuEntryEnabledReadFails = menuEntryEnabledReadFails
     menuState.menuChildrenReadFailsBetweenAbsences = menuChildrenReadFailsBetweenAbsences
+    menuState.selectedRowsReadFailsAfterSelection = selectedRowsReadFailsAfterSelection
+    menuState.selectionChangesAfterSelectWrite = selectionChangesAfterSelectWrite
+    menuState.selectionUnreadableBeforePick = selectionUnreadableBeforePick
     let app = builder.element(52_300)
     let arrange = builder.element(52_301)
     let markerList = builder.element(52_302)
@@ -213,6 +223,17 @@ private func issue523MarkerDeleteFixture(
                 menuState.menuWasDismissed = false
                 menuState.toolbarMenuReadCount = 0
                 menuState.toolbarAbsenceObservationCount = 0
+                if menuState.selectionUnreadableBeforePick {
+                    // The pre-pick re-confirmation read fails from here on. A failed read is not a
+                    // readable "something else is selected"; the receipt must keep them apart.
+                    menuState.selectedRowsReadFailsAfterShowMenu = true
+                }
+                if menuState.selectionChangesAfterSelectWrite, rows.indices.contains(1) {
+                    // Model an external selection change after this operation wrote AXSelected but
+                    // before the menu's AXPick. The real command deletes this CURRENT selected row.
+                    builder.setAttribute(table, "AXSelectedRows", [rows[1]])
+                    menuState.selectedRowID = builder.elementID(rows[1])
+                }
                 if menuEntryTitle != nil, menuBoundToToolbar {
                     menuState.discoveryReadFailsOnce = menuDiscoveryReadFails
                     menuState.discoveryReadAlwaysFails = menuDiscoveryReadAlwaysFails
@@ -360,6 +381,17 @@ private func issue523MarkerDeleteFixture(
                 return .success(children)
             },
             attributeValueResult: { element, attribute in
+                if menuState.selectedRowsReadFailsAfterSelection,
+                   menuState.rowSelectionWasWritten,
+                   builder.elementID(element) == builder.elementID(table),
+                   attribute == "AXSelectedRows" {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                }
+                if menuState.selectedRowsReadFailsAfterShowMenu,
+                   builder.elementID(element) == builder.elementID(table),
+                   attribute == "AXSelectedRows" {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                }
                 if menuState.postWriteRowsReadFails,
                    builder.elementID(element) == builder.elementID(table),
                    attribute == "AXRows" {
@@ -440,6 +472,91 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     #expect(envelope["state"] as? String == "A")
     #expect(fixture.selectedMarkerName == "Target")
     #expect(fixture.markerCount == 1)
+}
+
+@Test func testIssue523SelectionChangedBeforeAXPickRefusesWithoutDeletingCurrentRow() async throws {
+    // Source mutation applied once: remove the `markerListTargetRowIsSelected` switch immediately
+    // before AXPick. This fixture then picks Delete after the selection changes from Intro to
+    // Verse, removes Verse, and fails the State-C/no-pick/unchanged-marker-count proof below.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        selectionChangesAfterSelectWrite: true,
+        pickDeletesSelectedRow: true
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+    let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
+    let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
+
+    #expect(!result.isSuccess)
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "ax_write_failed")
+    #expect(envelope["edit_menu_route_state"] as? String == "target_selection_changed_before_pick")
+    #expect(envelope["target_selection_before_pick"] as? String == "changed")
+    #expect(!writeAttempted)
+    #expect(safeToRetry)
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuEntryID, action: kAXPickAction as String
+    ) == 0)
+    #expect(fixture.markerCount == 3)
+}
+
+@Test func testIssue523UnreadableSelectionBeforePickIsNotAChangedSelection() async throws {
+    // The re-confirmation immediately before AXPick has two distinct negative answers, and the
+    // route reports them separately: the target is no longer the sole selection, or the selection
+    // could not be read at all. Both refuse, so a test that only checks "it refused" cannot tell
+    // them apart — and collapsing the unreadable case into "changed" is the substitution this
+    // branch exists to stop.
+    //
+    // Mutation: return `.success(false)` from `markerListTargetRowIsSelected` on a failed read.
+    // The refusal still happens, so only the route state and the AX status below can catch it.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        selectionUnreadableBeforePick: true,
+        pickDeletesSelectedRow: true
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(!result.isSuccess)
+    #expect(envelope["edit_menu_route_state"] as? String == "target_selection_unreadable_before_pick")
+    #expect(envelope["target_selection_ax_status_before_pick"] as? Int == Int(AXError.cannotComplete.rawValue))
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuEntryID, action: kAXPickAction as String
+    ) == 0)
+    #expect(fixture.markerCount == 3)
+}
+
+@Test func testIssue523UnreadableSelectedRowsConfirmationIsNotAnEmptySelection() async throws {
+    // Source mutation applied once: replace the post-write AXSelectedRows `.failure` result with
+    // the successful empty array used for a genuinely empty selection. The refusal then loses its
+    // readback-unavailable error, unreadable state, and raw AX status, failing this receipt proof.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        selectedRowsReadFailsAfterSelection: true
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+    let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
+
+    #expect(!result.isSuccess)
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "readback_unavailable")
+    #expect(envelope["selection_state"] as? String == "unreadable")
+    #expect(envelope["selection_ax_status"] as? Int == Int(AXError.failure.rawValue))
+    #expect(!writeAttempted)
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.toolbarEditID, action: kAXShowMenuAction as String
+    ) == 0)
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuEntryID, action: kAXPickAction as String
+    ) == 0)
 }
 
 @Test func testIssue523PostWriteReadbackStaysBoundToPrewriteTable() async throws {
@@ -776,7 +893,7 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     #expect(fixture.markerCount == 3)
 }
 
-@Test func testIssue523ExpectedMenuChildrenAbsenceStatusesSettleAsAbsent() async throws {
+@Test func testIssue523MenuChildrenAbsenceAfterShowDoesNotPromiseCleanRetry() async throws {
     for status in [Int32(-25205), Int32(-25212)] {
         let fixture = issue523MarkerDeleteFixture(
             menuEntryTitle: nil,
@@ -788,15 +905,21 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         let envelope = try issue523Envelope(result)
         let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
         let safeToRetry = try #require(envelope["safe_to_retry"] as? Bool)
+        let fallbackUnsafe = try #require(envelope["fallback_unsafe"] as? Bool)
 
-        // Mutation: pass every non-success AXChildren status through as unreadable. These two
-        // documented absence answers would be reported as `menu_unreadable`, so the route-state
-        // assertion fails.
+        // Source mutation applied once: return `.routeUnavailable(.menuAbsent)` without a menu
+        // state from the settled-absence branch after AXShowMenu. These scoped absence statuses
+        // would then advertise a clean retry even though a detached menu might still be open.
         #expect(!result.isSuccess)
         #expect(envelope["state"] as? String == "C")
         #expect(envelope["edit_menu_route_state"] as? String == "menu_absent")
         #expect(!writeAttempted)
-        #expect(safeToRetry)
+        #expect(!safeToRetry)
+        #expect(fallbackUnsafe)
+        #expect(envelope["menu_state"] as? String == "could_not_be_closed")
+        #expect(fixture.actions.actionCount(
+            elementID: fixture.menuEntryID, action: kAXPickAction as String
+        ) == 0)
     }
 }
 

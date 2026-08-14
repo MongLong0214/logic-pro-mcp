@@ -138,6 +138,16 @@ extension AccessibilityChannel {
             extras["write_attempted"] = false
             extras["safe_to_retry"] = true
             extras["fallback_unsafe"] = true
+            if let confirmationError = selection.confirmationError {
+                extras["selection_state"] = "unreadable"
+                extras["selection_ax_status"] = Int(confirmationError.raw)
+                return .error(HonestContract.encodeStateC(
+                    error: .readbackUnavailable,
+                    hint: "Marker index \(index) could not be selected because the Marker List selection could not be read, so nothing was pressed",
+                    extras: extras
+                ))
+            }
+            extras["selection_state"] = "not_confirmed"
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: "Marker index \(index) could not be selected, so nothing was pressed",
@@ -152,6 +162,8 @@ extension AccessibilityChannel {
 
         switch pickDeleteFromMarkerListEditMenu(
             in: window,
+            targetRow: targetRow,
+            selectionTable: inventory.table,
             runtime: runtime.ax,
             mouse: mouse
         ) {
@@ -176,7 +188,23 @@ extension AccessibilityChannel {
             extras["edit_menu_route_state"] = failure.state
             // "Unreadable" without the status tells a caller nothing it can act on, and cost two
             // rounds of guessing to diagnose live. Report which AX status stopped the route.
-            if let axStatus { extras["edit_menu_route_ax_status"] = Int(axStatus) }
+            switch failure {
+            case .targetSelectionChangedBeforePick:
+                extras["target_selection_before_pick"] = "changed"
+            case .targetSelectionUnreadableBeforePick:
+                extras["target_selection_before_pick"] = "unreadable"
+            case .menuAbsent, .menuUnreadable, .exactDeleteEntryMissingOrDisabled:
+                break
+            }
+            if let axStatus {
+                switch failure {
+                case .targetSelectionUnreadableBeforePick:
+                    extras["target_selection_ax_status_before_pick"] = Int(axStatus)
+                case .menuAbsent, .menuUnreadable, .exactDeleteEntryMissingOrDisabled,
+                        .targetSelectionChangedBeforePick:
+                    extras["edit_menu_route_ax_status"] = Int(axStatus)
+                }
+            }
             if let menuState {
                 // AXShowMenu may have left an unobservable menu on screen. This is not a table
                 // focus failure, and no other deletion actuator may be attempted.
@@ -200,7 +228,7 @@ extension AccessibilityChannel {
             extras["safe_to_retry"] = true
             extras["fallback_unsafe"] = true
             return .error(HonestContract.encodeStateC(
-                error: .axWriteFailed,
+                error: failure.error,
                 hint: failure.hint + " No deletion was issued because no element-targeted Marker List route is available.",
                 extras: extras
             ))
@@ -311,6 +339,7 @@ extension AccessibilityChannel {
         let writeAttempted: Bool
         let confirmed: Bool
         let changedSelection: Bool?
+        let confirmationError: AXHelpers.AXStatusError?
     }
 
     /// Selects the row and confirms the table agrees, since a write that reports success without
@@ -339,17 +368,35 @@ extension AccessibilityChannel {
         _ = AXHelpers.setAttribute(
             targetRow, kAXSelectedAttribute as String, kCFBooleanTrue, runtime: runtime
         )
-        let selected: [AXUIElement] = AXHelpers.getAttribute(
+        switch AXHelpers.getAttributeResult(
             table, "AXSelectedRows", runtime: runtime
-        ) ?? []
-        guard selected.count == 1, CFEqual(selected[0], targetRow) else {
-            return MarkerRowSelection(writeAttempted: true, confirmed: false, changedSelection: nil)
+        ) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+        case .success(let selectedRows):
+            let selected = selectedRows ?? []
+            guard selected.count == 1, CFEqual(selected[0], targetRow) else {
+                return MarkerRowSelection(
+                    writeAttempted: true,
+                    confirmed: false,
+                    changedSelection: nil,
+                    confirmationError: nil
+                )
+            }
+            return MarkerRowSelection(
+                writeAttempted: true,
+                confirmed: true,
+                changedSelection: wasAlreadyExactlyTheTarget.map { !$0 },
+                confirmationError: nil
+            )
+        case .failure(let error):
+            // A failed post-write read is not an empty successful selection. The destructive
+            // route must refuse with that distinction intact for the caller's receipt.
+            return MarkerRowSelection(
+                writeAttempted: true,
+                confirmed: false,
+                changedSelection: nil,
+                confirmationError: error
+            )
         }
-        return MarkerRowSelection(
-            writeAttempted: true,
-            confirmed: true,
-            changedSelection: wasAlreadyExactlyTheTarget.map { !$0 }
-        )
     }
 
     /// Whether attempting the Marker List's own Edit → Delete menu path reached a destructive
@@ -359,12 +406,16 @@ extension AccessibilityChannel {
         case menuAbsent
         case menuUnreadable
         case exactDeleteEntryMissingOrDisabled
+        case targetSelectionChangedBeforePick
+        case targetSelectionUnreadableBeforePick
 
         var state: String {
             switch self {
             case .menuAbsent: "menu_absent"
             case .menuUnreadable: "menu_unreadable"
             case .exactDeleteEntryMissingOrDisabled: "exact_delete_entry_missing_or_disabled"
+            case .targetSelectionChangedBeforePick: "target_selection_changed_before_pick"
+            case .targetSelectionUnreadableBeforePick: "target_selection_unreadable_before_pick"
             }
         }
 
@@ -376,6 +427,20 @@ extension AccessibilityChannel {
                 "The Marker List Edit menu route could not be read, so its Delete entry was not picked."
             case .exactDeleteEntryMissingOrDisabled:
                 "The Marker List Edit menu's exact Delete entry was missing or disabled, so it was not picked."
+            case .targetSelectionChangedBeforePick:
+                "The bound Marker List row was no longer the sole selection immediately before Delete, so it was not picked."
+            case .targetSelectionUnreadableBeforePick:
+                "The Marker List selection could not be read immediately before Delete, so it was not picked."
+            }
+        }
+
+        var error: HonestContract.FailureError {
+            switch self {
+            case .targetSelectionUnreadableBeforePick:
+                .readbackUnavailable
+            case .menuAbsent, .menuUnreadable, .exactDeleteEntryMissingOrDisabled,
+                    .targetSelectionChangedBeforePick:
+                .axWriteFailed
             }
         }
     }
@@ -397,6 +462,8 @@ extension AccessibilityChannel {
     /// advertises `AXShowMenu`; inspect action names before deciding which control may be actuated.
     private static func pickDeleteFromMarkerListEditMenu(
         in window: AXUIElement,
+        targetRow: AXUIElement,
+        selectionTable: AXUIElement,
         runtime: AXHelpers.Runtime,
         mouse: AXMouseHelper.Runtime
     ) -> MarkerListEditMenuDeleteOutcome {
@@ -441,7 +508,11 @@ extension AccessibilityChannel {
             case .present(let observedMenu):
                 menu = observedMenu
             case .absent:
-                continue
+                // `AXShowMenu` has already been issued. Two scoped absent reads establish only
+                // that this opener does not currently vend a menu; they cannot establish that a
+                // detached menu did not open elsewhere. Do not advertise a clean retry or claim
+                // that there is no open menu on the strength of this scoped observation.
+                return .routeUnavailable(.menuAbsent, menuState: "could_not_be_closed")
             case .unknown(let observationError):
                 // AXShowMenu may have succeeded even though its scoped child reads failed or
                 // disagreed. Attempt AX-only cleanup before honestly reporting unreadable state.
@@ -500,6 +571,31 @@ extension AccessibilityChannel {
                 )
             }
 
+            // Delete acts on CURRENT selection, not on the row element carried from inventory.
+            // Re-read the bound table immediately before the sole AXPick so an intervening user
+            // or application selection change cannot redirect the destructive menu command.
+            switch markerListTargetRowIsSelected(targetRow, in: selectionTable, runtime: runtime) {
+            case .success(true):
+                break
+            case .success(false):
+                let menuWasClosed = dismissMarkerListEditMenu(
+                    menu, from: control, runtime: runtime, mouse: mouse
+                )
+                return .routeUnavailable(
+                    .targetSelectionChangedBeforePick,
+                    menuState: menuWasClosed ? nil : "could_not_be_closed"
+                )
+            case .failure(let error):
+                let menuWasClosed = dismissMarkerListEditMenu(
+                    menu, from: control, runtime: runtime, mouse: mouse
+                )
+                return .routeUnavailable(
+                    .targetSelectionUnreadableBeforePick,
+                    axStatus: error.raw,
+                    menuState: menuWasClosed ? nil : "could_not_be_closed"
+                )
+            }
+
             // Do not use the return value to select another actuator. This one call is the write.
             _ = AXHelpers.performAction(entry, kAXPickAction as String, runtime: runtime)
             // AXPick normally closes a menu itself. Only a successful read that finds no menu is
@@ -521,6 +617,25 @@ extension AccessibilityChannel {
             )
         }
         return .routeUnavailable(.menuAbsent)
+    }
+
+    /// Confirms the exact row carried from the one pre-write inventory is still the sole selection
+    /// just before the Delete actuator. A successful nil `AXSelectedRows` value is a readable empty
+    /// selection; an AX failure remains unreadable and must not be flattened into that answer.
+    private static func markerListTargetRowIsSelected(
+        _ targetRow: AXUIElement,
+        in table: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<Bool, AXHelpers.AXStatusError> {
+        switch AXHelpers.getAttributeResult(
+            table, "AXSelectedRows", runtime: runtime
+        ) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+        case .success(let selectedRows):
+            let selected = selectedRows ?? []
+            return .success(selected.count == 1 && CFEqual(selected[0], targetRow))
+        case .failure(let error):
+            return .failure(error)
+        }
     }
 
     /// Finds candidate Edit controls without collapsing a failed child/tree read to no controls.
