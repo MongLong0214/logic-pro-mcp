@@ -364,6 +364,8 @@ extension AccessibilityChannel {
             switch topLevelDialogRead(runtime: runtime) {
             case .unreadable, .blocking:
                 return unreadableModalSignals()
+            case .mandatoryNewTrack(let read):
+                return read
             case .informational(let target):
                 return noSheetModalSignals(
                     strayMenuOpen: false,
@@ -405,6 +407,8 @@ extension AccessibilityChannel {
         switch topLevelDialogRead(runtime: runtime) {
         case .unreadable, .blocking:
             return unreadableModalSignals()
+        case .mandatoryNewTrack(let read):
+            return read
         case .informational(let target):
             return noSheetModalSignals(
                 strayMenuOpen: false,
@@ -593,6 +597,10 @@ extension AccessibilityChannel {
     /// clean State-A observation.
     private enum TopLevelDialogRead {
         case none
+        /// A modal window can host the same mandatory New Track controls as an
+        /// `AXSheet`. Container shape is not a safety discriminator here: the
+        /// classifier receives the controls and description it actually read.
+        case mandatoryNewTrack(ModalSignalRead)
         case informational(AXLogicProElements.BlockingDialogTarget)
         case blocking
         case unreadable
@@ -664,6 +672,16 @@ extension AccessibilityChannel {
                     observedSubrole: subrole,
                     runtime: runtime.ax
                 ) else { continue }
+                // Some Logic builds present New Track as a top-level modal
+                // window instead of an AXSheet. It has the same structural
+                // signals and direct Create element, so classify its contents
+                // before reducing an otherwise unfamiliar modal window to the
+                // generic fail-closed blocker. Non-matching modals still take
+                // that blocker path below.
+                let modalRead = readModalSignals(from: window, runtime: runtime)
+                if ModalReconciliation.classify(modalRead.signals) == .mandatoryNewTrack {
+                    return .mandatoryNewTrack(modalRead)
+                }
                 if firstBlockingDialog == nil {
                     firstBlockingDialog = (window, knownSubrole)
                 }
@@ -1093,6 +1111,21 @@ extension AccessibilityChannel {
                 createButton: createButton,
                 runtime: runtime
             )
+            // A description-only New Track classification may precede the
+            // Create control's appearance. There was no direct action to
+            // witness yet, so return immediately and let the caller's bounded
+            // outer poll read the same modal again rather than spending a full
+            // sheet-witness budget on a no-op.
+            guard action.attempted else {
+                return ModalActionPerformResult(
+                    performed: false,
+                    actionAttempted: false,
+                    refusal: nil,
+                    actionFailure: nil,
+                    sheetWitness: [],
+                    witnessSummary: nil
+                )
+            }
             let witness: [ModalSheetWitnessPoll]
             if let sheet {
                 witness = await pollBoundSheetWitness(
@@ -1312,7 +1345,7 @@ extension AccessibilityChannel {
             current = observed
         case .none:
             return (false, false, .targetGone, nil)
-        case .blocking, .unreadable:
+        case .mandatoryNewTrack, .blocking, .unreadable:
             return (false, false, .targetChanged, nil)
         }
         guard CFEqual(current.element, target.element) else {

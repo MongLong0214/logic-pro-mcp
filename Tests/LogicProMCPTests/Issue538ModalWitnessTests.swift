@@ -1182,6 +1182,90 @@ struct Issue538ModalWitnessTests {
         #expect(!result.isSuccess)
         #expect(actionError == "ax_\(AXError.invalidUIElement.rawValue)")
     }
+
+    @Test("project.new retries a description-only New Track pass until Create is published")
+    func projectNewWaitsForDelayedCreateControl() async throws {
+        let fixture = makeProjectNewDelayedCreateFixture()
+
+        let result = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: fixture.runtime,
+            selection: "Empty Project",
+            observationAttempts: 2,
+            observationDelayNanoseconds: 0
+        )
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+        let mandatoryTrackCreated = try #require(envelope["mandatory_track_created"] as? Bool)
+
+        // Mutation `project-new-terminal-description-only-pass`: restore the
+        // former unconditional unconfirmed return after the first mandatory
+        // classification. The second pass never sees the newly published Create
+        // element, so this becomes a State B error with zero direct presses.
+        #expect(result.isSuccess)
+        #expect(mandatoryTrackCreated)
+        #expect(fixture.createPresses.current() == 1)
+    }
+
+    @Test("a top-level modal New Track host is classified and presses its direct Create element")
+    func topLevelModalNewTrackHostIsActionable() async {
+        let fixture = makeTopLevelModalNewTrackFixture(matchesNewTrack: true)
+
+        let outcome = await AccessibilityChannel.reconcileAfterMutation(
+            isDeleteContext: false,
+            runtime: fixture.runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        // Mutation `top-level-modal-new-track-as-generic-blocker`: remove the
+        // top-level contents read before the generic blocking return. This host
+        // is then unknownSheet and its resolved Create control is never pressed.
+        #expect(outcome.kind == .mandatoryNewTrack)
+        #expect(outcome.actionAttempted)
+        #expect(fixture.createPresses.current() == 1)
+    }
+
+    @Test("a non-New-Track top-level modal stays fail-closed")
+    func unrelatedTopLevelModalStaysUnknown() async {
+        let fixture = makeTopLevelModalNewTrackFixture(matchesNewTrack: false)
+
+        let outcome = await AccessibilityChannel.reconcileAfterMutation(
+            isDeleteContext: false,
+            runtime: fixture.runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        // Mutation `top-level-modal-unrelated-host-autocreate`: classify every
+        // AXModal window with a Create-labelled button as New Track. This
+        // unrelated, cancelable modal would receive an unauthorized direct press.
+        #expect(outcome.kind == .unknownSheet)
+        #expect(!outcome.actionAttempted)
+        #expect(fixture.createPresses.current() == 0)
+    }
+
+    @Test("an unreadable pre-delete rail is serialized as an unobserved count")
+    func deleteDoesNotReportUnreadableBeforeCountAsZero() async throws {
+        let runtime = makeUnreadableDeleteCountRuntime()
+
+        let result = await AccessibilityChannel.defaultDeleteTrack(runtime: runtime)
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+        let verified = try #require(envelope["verified"] as? Bool)
+        let trackCountBeforeWasUnobserved = envelope["track_count_before"] is NSNull
+        let trackCountAfterWasUnobserved = envelope["track_count_after"] is NSNull
+        let observedDeltaWasUnobserved = envelope["observed_delta"] is NSNull
+
+        // Mutation `unreadable-before-count-zero`: restore
+        // `allTrackHeaders().count` for the before read. This unreadable rail is
+        // then serialized as the unobserved number zero rather than null.
+        #expect(!verified)
+        #expect(trackCountBeforeWasUnobserved)
+        #expect(trackCountAfterWasUnobserved)
+        #expect(observedDeltaWasUnobserved)
+    }
 }
 
 private enum BoundSheetAction {
@@ -1535,6 +1619,155 @@ private struct ProjectNewPerformedCreateWithoutTrackFixture {
 private struct ProjectNewPerformedCreateWithTrackFixture {
     let runtime: AXLogicProElements.Runtime
     let createPresses: LockedCounter
+}
+
+private struct ProjectNewDelayedCreateFixture {
+    let runtime: AXLogicProElements.Runtime
+    let createPresses: LockedCounter
+}
+
+private func makeProjectNewDelayedCreateFixture() -> ProjectNewDelayedCreateFixture {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(320)
+    let window = builder.element(321)
+    let sheet = builder.element(322)
+    let create = builder.element(323)
+    let cancel = builder.element(324)
+    let trackHeaders = builder.element(325)
+    let track = builder.element(326)
+    let sheetChildReads = LockedCounter()
+    let createPresses = LockedCounter()
+    let actionIssued = LockedFlag()
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+    builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(window, kAXSubroleAttribute as String, kAXStandardWindowSubrole as String)
+    // Production shape: the sheet is modal; its host window explicitly reports
+    // AXModal false. An unset value would be an unreadable fake-only shape.
+    builder.setAttribute(window, kAXModalAttribute as String, false)
+    builder.setAttribute(window, kAXTitleAttribute as String, "Untitled 1 - Tracks")
+    builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+    builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+    builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+    builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+    builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+    builder.setAttribute(trackHeaders, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(trackHeaders, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setChildren(trackHeaders, [track])
+    builder.setChildren(window, [trackHeaders])
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueHandler: { element, attribute in
+            guard CFEqual(element, window), attribute == "AXSheets" else { return nil }
+            return actionIssued.get() ? .some([] as NSArray) : .some([sheet] as NSArray)
+        },
+        attributeValueResultHandler: { element, attribute in
+            guard actionIssued.get(),
+                  CFEqual(element, sheet),
+                  attribute == (kAXRoleAttribute as String)
+            else { return nil }
+            return .failure(AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue))
+        },
+        childrenHandler: { element in
+            guard CFEqual(element, sheet) else { return nil }
+            return sheetChildReads.next() == 1 ? [cancel] : [create, cancel]
+        },
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            guard CFEqual(element, create), action == (kAXPressAction as String) else { return false }
+            _ = createPresses.next()
+            actionIssued.set()
+            return true
+        }
+    )
+    return ProjectNewDelayedCreateFixture(runtime: runtime, createPresses: createPresses)
+}
+
+private struct TopLevelModalNewTrackFixture {
+    let runtime: AXLogicProElements.Runtime
+    let createPresses: LockedCounter
+}
+
+private func makeTopLevelModalNewTrackFixture(
+    matchesNewTrack: Bool
+) -> TopLevelModalNewTrackFixture {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(330)
+    let modal = builder.element(331)
+    let create = builder.element(332)
+    let cancel = builder.element(333)
+    let createPresses = LockedCounter()
+    let actionIssued = LockedFlag()
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, modal)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [modal])
+    builder.setAttribute(modal, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(modal, kAXSubroleAttribute as String, kAXStandardWindowSubrole as String)
+    builder.setAttribute(modal, kAXModalAttribute as String, true)
+    builder.setAttribute(modal, kAXDescriptionAttribute as String, matchesNewTrack ? "New Track" : "Save Changes")
+    builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+    builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+    builder.setAttribute(cancel, kAXEnabledAttribute as String, !matchesNewTrack)
+    builder.setChildren(modal, [create, cancel])
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueResultHandler: { element, attribute in
+            guard actionIssued.get(),
+                  CFEqual(element, modal),
+                  attribute == (kAXRoleAttribute as String)
+            else { return nil }
+            return .failure(AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue))
+        },
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            guard CFEqual(element, create), action == (kAXPressAction as String) else { return false }
+            _ = createPresses.next()
+            actionIssued.set()
+            return true
+        }
+    )
+    return TopLevelModalNewTrackFixture(runtime: runtime, createPresses: createPresses)
+}
+
+private func makeUnreadableDeleteCountRuntime() -> AXLogicProElements.Runtime {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(340)
+    let window = builder.element(341)
+    let menuBar = builder.element(342)
+    let trackMenu = builder.element(343)
+    let deleteItem = builder.element(344)
+    let trackHeaders = builder.element(345)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+    builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setAttribute(window, kAXModalAttribute as String, false)
+    builder.setChildren(window, [trackHeaders])
+    builder.setAttribute(trackHeaders, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(trackHeaders, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setChildren(menuBar, [trackMenu])
+    builder.setAttribute(trackMenu, kAXTitleAttribute as String, "Track")
+    builder.setChildren(trackMenu, [deleteItem])
+    builder.setAttribute(deleteItem, kAXTitleAttribute as String, "Delete Track")
+
+    return builder.makeLogicRuntime(
+        appElement: app,
+        childrenResultHandler: { element in
+            guard CFEqual(element, trackHeaders) else { return nil }
+            return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+        },
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            CFEqual(element, deleteItem) && action == (kAXPressAction as String)
+        }
+    )
 }
 
 private func makeProjectNewPerformedCreateWithoutTrackFixture() -> ProjectNewPerformedCreateWithoutTrackFixture {

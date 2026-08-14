@@ -1477,7 +1477,27 @@ extension AccessibilityChannel {
     static func defaultDeleteTrack(
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ChannelResult {
-        let beforeCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
+        // Resolve the arrange window once for the entire destructive envelope.
+        // The before and after counts must describe this same AX element; a
+        // best-effort `mainWindow()` read can otherwise flatten an unreadable
+        // rail to zero or silently switch windows between the two observations.
+        let arrangeWindow = AXLogicProElements.arrangeWindowRead(runtime: runtime)
+        let beforeTrackRead: AXLogicProElements.TrackHeaderRead
+        switch arrangeWindow {
+        case .found(let window):
+            beforeTrackRead = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+        case .absent:
+            beforeTrackRead = .unavailable
+        case .unreadable:
+            beforeTrackRead = .unreadable
+        }
+        let beforeCount: Int?
+        switch beforeTrackRead {
+        case .read(let headers):
+            beforeCount = headers.count
+        case .unavailable, .unreadable:
+            beforeCount = nil
+        }
         let click = clickTrackMenu(
             ["Delete Track", "트랙 삭제"],
             menuName: "트랙",
@@ -1488,7 +1508,7 @@ extension AccessibilityChannel {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
                 hint: "Track > Delete Track / 트랙 삭제 menu item not found / not pressable",
-                extras: ["track_count_before": beforeCount]
+                extras: ["track_count_before": beforeCount ?? NSNull()]
             ))
         }
 
@@ -1498,7 +1518,7 @@ extension AccessibilityChannel {
 
         var extras: [String: Any] = [
             "menu_clicked": menuClicked,
-            "track_count_before": beforeCount,
+            "track_count_before": beforeCount ?? NSNull(),
             "requested_delta": -1
         ]
 
@@ -1533,12 +1553,10 @@ extension AccessibilityChannel {
         for attempt in 0..<4 {
             try? await Task.sleep(nanoseconds: 250_000_000)
 
-            // Resolve the arrange candidate ONCE, then carry that same element
-            // into the header enumeration and modal sheet scan below. A failed
-            // header traversal is deliberately not `0`: only `.read([])` is an
-            // observed empty rail, so a transient AX failure cannot resemble a
-            // successful delete.
-            let arrangeWindow = AXLogicProElements.arrangeWindowRead(runtime: runtime)
+            // Carry the operation's one resolved arrange candidate into every
+            // post-delete header and modal read. A failed header traversal is
+            // deliberately not `0`: only `.read([])` is an observed empty rail,
+            // so a transient AX failure cannot resemble a successful delete.
             let currentTrackRead: AXLogicProElements.TrackHeaderRead
             switch arrangeWindow {
             case .found(let window):
@@ -1603,7 +1621,9 @@ extension AccessibilityChannel {
                 // so a later instance is eligible for one fresh direct action.
                 actionAttemptedModalKinds.removeAll()
             }
-            let observedTrackCountDecreased = currentCount.map { $0 < beforeCount } ?? false
+            let observedTrackCountDecreased = beforeCount.flatMap { beforeCount in
+                currentCount.map { $0 < beforeCount }
+            } ?? false
             if observedTrackCountDecreased,
                deletionModalObservationIsSettledClean(
                    // The direct recovery path may perform a fresh read in
@@ -1618,7 +1638,8 @@ extension AccessibilityChannel {
             } else {
                 consecutiveCleanModalObservations = 0
             }
-            if let currentCount,
+            if let beforeCount,
+               let currentCount,
                deletionCountCanCertifyStateA(
                 observedTrackCountDecreased: observedTrackCountDecreased,
                 settledCleanModalObservation: deletionCleanObservationStreakIsSettled(
@@ -1644,7 +1665,11 @@ extension AccessibilityChannel {
         }
 
         extras["track_count_after"] = lastObservedCount ?? NSNull()
-        extras["observed_delta"] = lastObservedCount.map { $0 - beforeCount } ?? NSNull()
+        if let beforeCount, let lastObservedCount {
+            extras["observed_delta"] = lastObservedCount - beforeCount
+        } else {
+            extras["observed_delta"] = NSNull()
+        }
         if reconcileKind == .mandatoryNewTrack {
             extras["mandatory_track_reconciliation_performed"] = mandatoryNewTrackReconciliationPerformed
         }

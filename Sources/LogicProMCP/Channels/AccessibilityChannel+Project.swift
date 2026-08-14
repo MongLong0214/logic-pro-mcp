@@ -292,14 +292,37 @@ extension AccessibilityChannel {
         var mandatoryTrackSheetGone = false
         var createdTrack = false
         var witnessSummary: ModalReconcileWitnessSummary?
+        // A mandatory New Track description can arrive before its Create
+        // control is published. Keep polling in that state, but once a direct
+        // Create press has been issued, do not press that modal kind again.
+        // Subsequent passes are observations only; this preserves the
+        // per-modal-kind action latch while leaving the delayed-control path
+        // a chance to become actionable.
+        var mandatoryTrackCreateActionAttempted = false
+        var mandatoryTrackCreateActionFailure: AXHelpers.AXActionError?
         let attempts = max(1, observationAttempts)
         for attempt in 0..<attempts {
             try? await Task.sleep(nanoseconds: observationDelayNanoseconds)
-            let outcome = await reconcileAfterMutation(isDeleteContext: false, runtime: runtime)
+            let outcome: ModalReconcileOutcome
+            if mandatoryTrackCreateActionAttempted {
+                outcome = observeModalAfterMutation(isDeleteContext: false, runtime: runtime)
+            } else {
+                outcome = await reconcileAfterMutation(isDeleteContext: false, runtime: runtime)
+            }
             switch outcome.kind {
             case .mandatoryNewTrack:
-                witnessSummary = outcome.witnessSummary
-                guard outcome.witnessSummary?.observedGone == true else {
+                if let observedWitnessSummary = outcome.witnessSummary {
+                    witnessSummary = observedWitnessSummary
+                }
+                if let actionFailure = outcome.actionFailure {
+                    mandatoryTrackCreateActionFailure = actionFailure
+                }
+                if outcome.actionAttempted {
+                    mandatoryTrackCreateActionAttempted = true
+                }
+                if outcome.witnessSummary?.observedGone == true {
+                    mandatoryTrackSheetGone = true
+                } else if attempt + 1 == attempts {
                     var extras: [String: Any] = [
                         "operation": "project.new",
                         "method": "accessibility",
@@ -311,7 +334,7 @@ extension AccessibilityChannel {
                     if let witnessSummary {
                         extras["modal_reconciliation_witness"] = witnessSummary.envelopeValue
                     }
-                    if let actionFailure = outcome.actionFailure {
+                    if let actionFailure = mandatoryTrackCreateActionFailure {
                         extras["reconcile_action_error"] = actionFailure.diagnosticLabel
                     }
                     return .error(HonestContract.encodeStateB(
@@ -319,7 +342,14 @@ extension AccessibilityChannel {
                         extras: extras
                     ))
                 }
-                mandatoryTrackSheetGone = true
+                if !mandatoryTrackSheetGone {
+                    // A description-only classification is safe, but it does
+                    // not prove that Create has appeared yet. Do not turn that
+                    // no-op pass into a terminal State B; another bounded
+                    // observation may resolve the direct element and press it
+                    // exactly once.
+                    continue
+                }
             case .unknownSheet, .deleteConfirm:
                 return .error(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
