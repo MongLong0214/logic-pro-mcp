@@ -292,16 +292,20 @@ struct Issue105GotoNoteTests {
         #expect(try #require(envelope["observed"] as? String) == "5.1.1.1")
     }
 
-    // Locks the `fallback_unsafe` arm: a coincidentally matching playhead is not proof this call performed the write.
-    @Test("an unsafe fallback write is never promoted to verified by a matching playhead")
-    func fallbackUnsafeCannotBeVerifiedByACoincidentPlayhead() async throws {
+    // A post-Return title/reference loss is not an observed dialog closure. The channel carries
+    // `fallback_unsafe`, and a matching playhead may predate this request, so finalization must
+    // preserve State B rather than falsely certifying State A.
+    @Test("an unidentified post-Return dialog is never verified by a coincident playhead")
+    func postReturnUnidentifiedDialogCannotBeVerifiedByACoincidentPlayhead() async throws {
         let fallbackUnsafeEnvelope = HonestContract.encodeStateB(
             reason: .readbackUnavailable,
             extras: [
                 "operation": "transport.goto_position",
                 "method": "dialog",
                 "requested": "5.1.1.1",
-                "dialog_input_attempted": true,
+                "dialog_route_outcome": "dialog_submission_issued_cleanup_closed_false",
+                "dialog_cleanup": "unobserved",
+                "dialog_submission_attempted": true,
                 "write_attempted": true,
                 "fallback_unsafe": true,
                 "safe_to_retry": false,
@@ -319,8 +323,9 @@ struct Issue105GotoNoteTests {
             cache: StateCache()
         )
         let envelope = try #require(obj(result))
-        let observedState: String = envelope["state"] as? String ?? "nil"
-        #expect(observedState != "A")
+        #expect(try #require(envelope["state"] as? String) == "B")
+        #expect(!(try #require(envelope["verified"] as? Bool)))
+        #expect(try #require(envelope["verification_withheld"] as? String) == "fallback_unsafe")
     }
 
     // Locks the `write_attempted_indeterminate` arm: a coincidentally matching playhead is not proof this call performed the write.
@@ -350,8 +355,7 @@ struct Issue105GotoNoteTests {
             cache: StateCache()
         )
         let envelope = try #require(obj(result))
-        let observedState: String = envelope["state"] as? String ?? "nil"
-        #expect(observedState != "A")
+        #expect(try #require(envelope["state"] as? String) == "B")
     }
 
     @Test("a matching playhead still verifies an otherwise ordinary dialog envelope")

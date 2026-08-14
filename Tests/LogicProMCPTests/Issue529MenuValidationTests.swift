@@ -45,6 +45,46 @@ private final class Issue529StringBox: @unchecked Sendable {
     }
 }
 
+/// Bridges the real AX Go To Position route into ChannelRouter while retaining the script-result
+/// seam. This lets the adversarial fixtures prove both that their script response was consumed and
+/// that the router did not release CGEvent's `/` + position + Return sequence.
+private actor Issue529DialogFixtureChannel: Channel {
+    nonisolated let id: ChannelID = .accessibility
+    private let scriptResult: String
+    private let scriptExecutions: Issue529Counter
+    private let sliderWrites: Issue529Counter
+
+    init(
+        scriptResult: String,
+        scriptExecutions: Issue529Counter,
+        sliderWrites: Issue529Counter
+    ) {
+        self.scriptResult = scriptResult
+        self.scriptExecutions = scriptExecutions
+        self.sliderWrites = sliderWrites
+    }
+
+    func start() async throws {}
+    func stop() async {}
+    func healthCheck() async -> ChannelHealth { .healthy(detail: "dialog fixture") }
+
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        let scriptResult = scriptResult
+        let scriptExecutions = scriptExecutions
+        return await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: params,
+            runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                scriptExecutions.bump()
+                return .success(#"{"result":"\#(scriptResult)"}"#)
+            }
+        )
+    }
+}
+
 private actor Issue529DialogLockGate {
     private var started = false
     private var startWaiter: CheckedContinuation<Void, Never>?
@@ -420,6 +460,73 @@ struct Issue529MenuValidationTests {
         #expect(sliderWrites.value == 0)
     }
 
+    @Test("a leaf click that may have opened an unidentified dialog never releases CGEvent")
+    func leafActuationFailureAfterOpeningDialogDoesNotRouteToCGEvent() async throws {
+        // Mutation this rejects: remove the `dialogActuationIssued(cleanupObservedClosed: false)`
+        // unsafe-UI classification. The fixture is the leaf's AX error after the total-window
+        // observation saw a new, unidentifiable dialog. Its reply must remain terminal: reaching
+        // CGEvent would post `/`, the position text, and Return into that still-open dialog.
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let leafClick = try issue529Position(
+            of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
+            in: script
+        )
+        let leafFailureBlock = String(script[leafClick...])
+        let leafError = try issue529Position(of: "on error errMsg", in: leafFailureBlock)
+        let cleanup = try issue529Position(
+            of: "set dialogCleanupState to my dismissOpenGoToPositionDialog(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)",
+            in: leafFailureBlock
+        )
+        let cleanupRefusal = try issue529Position(
+            of: "if dialogCleanupState is not \"CLOSED\" then", in: leafFailureBlock
+        )
+        let dialogStateStart = try issue529Position(
+            of: "on goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindowCount)",
+            in: script
+        )
+        let dialogStateEnd = try issue529Position(of: "end goToPositionDialogState", in: script)
+        let dialogState = String(script[dialogStateStart..<dialogStateEnd])
+        #expect(leafError < cleanup)
+        #expect(cleanup < cleanupRefusal)
+        #expect(dialogState.contains("if dialogWindow is missing value then"))
+        #expect(dialogState.contains("if newWindowState is \"APPEARED\" or newWindowState is \"UNIDENTIFIED\" then return \"UNIDENTIFIED\""))
+
+        let scriptExecutions = Issue529Counter()
+        let sliderWrites = Issue529Counter()
+        let accessibility = Issue529DialogFixtureChannel(
+            scriptResult: "DIALOG_ACTUATION_ISSUED: dialog cleanup was not observed (UNIDENTIFIED)",
+            scriptExecutions: scriptExecutions,
+            sliderWrites: sliderWrites
+        )
+        let cgEventRecorder = CGEventRecorder()
+        let cgEvent = CGEventChannel(runtime: .init(
+            isLogicProRunning: { true },
+            logicProPID: { 529 },
+            postKeyEvent: { keyCode, flags, pid in
+                cgEventRecorder.post(keyCode: keyCode, flags: flags, pid: pid)
+            },
+            sleepMicros: { _ in }
+        ))
+        let router = ChannelRouter()
+        await router.register(accessibility)
+        await router.register(cgEvent)
+
+        let result = await router.route(
+            operation: "transport.goto_position",
+            params: ["position": "529.1.1.1"]
+        )
+
+        let envelope = try #require(issue529Envelope(result))
+        #expect(!result.isSuccess)
+        #expect(try #require(envelope["state"] as? String) == "C")
+        #expect(try #require(envelope["dialog_route_outcome"] as? String)
+            == "dialog_actuation_issued_cleanup_closed_false")
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+        #expect(scriptExecutions.value == 1, "fixture seam must deliver the leaf-error reply")
+        #expect(sliderWrites.value == 0)
+        #expect(cgEventRecorder.snapshot().isEmpty, "CGEvent must not receive the fallback sequence")
+    }
+
     @Test("an issued leaf AX failure with unobserved cleanup stays State C and never selects the slider")
     func issuedLeafActuationFailureWithUnobservedCleanupDoesNotSelectSlider() async throws {
         // Mutation this rejects: classify OPEN_UNKNOWN_SUBROLE cleanup as CLOSED (or otherwise
@@ -448,24 +555,38 @@ struct Issue529MenuValidationTests {
         #expect(sliderWrites.value == 0)
     }
 
-    @Test("an unidentified new window is terminal and cannot release another position route")
+    @Test("an unrecognised localized dialog title is terminal and cannot release another position route")
     func unidentifiedNewWindowDoesNotProduceRouterContinuableResult() async throws {
-        // Mutation this rejects: restore the old `dialog did not become ready` result for an
-        // unmatched post-leaf window, or remove this classification from the unsafe-UI refusal.
+        // Mutation this rejects: treat an unmatched title as “not present”, restore the old `dialog
+        // did not become ready` result, or remove this classification from the unsafe-UI refusal.
+        // #519 still owns locale support; this fixture pins the narrower promise that a title we
+        // cannot match is honestly reported as unidentified rather than absent.
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
         #expect(script.contains("on newWindowAppearedSince(theProcess, preLeafGoToPositionWindowCount)"))
         #expect(script.contains("return \"DIALOG_UNIDENTIFIED_NEW_WINDOW\""))
 
         let sliderWrites = Issue529Counter()
-        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
-            params: ["bar": "529"],
-            runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
-            isFrontmost: { true },
-            activateLogic: { true },
-            sleepMicros: { _ in },
-            executeDialogScript: { _ in
-                .success(#"{"result":"DIALOG_UNIDENTIFIED_NEW_WINDOW"}"#)
-            }
+        let scriptExecutions = Issue529Counter()
+        let accessibility = Issue529DialogFixtureChannel(
+            scriptResult: "DIALOG_UNIDENTIFIED_NEW_WINDOW: localized title not in the measured whitelist",
+            scriptExecutions: scriptExecutions,
+            sliderWrites: sliderWrites
+        )
+        let cgEventRecorder = CGEventRecorder()
+        let cgEvent = CGEventChannel(runtime: .init(
+            isLogicProRunning: { true },
+            logicProPID: { 529 },
+            postKeyEvent: { keyCode, flags, pid in
+                cgEventRecorder.post(keyCode: keyCode, flags: flags, pid: pid)
+            },
+            sleepMicros: { _ in }
+        ))
+        let router = ChannelRouter()
+        await router.register(accessibility)
+        await router.register(cgEvent)
+        let result = await router.route(
+            operation: "transport.goto_position",
+            params: ["position": "529.1.1.1"]
         )
 
         let envelope = try #require(issue529Envelope(result))
@@ -476,7 +597,87 @@ struct Issue529MenuValidationTests {
         #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
         #expect(HonestContract.isFallbackUnsafeStateC(result.message))
+        #expect(scriptExecutions.value == 1, "fixture seam must deliver the unrecognised-title reply")
         #expect(sliderWrites.value == 0)
+        #expect(cgEventRecorder.snapshot().isEmpty, "CGEvent must not receive the localized-dialog fallback")
+    }
+
+    @Test("an unreadable post-leaf total-window count is terminal rather than clean actuation")
+    func unreadableDialogAppearanceDoesNotReleaseAnotherPositionRoute() async throws {
+        // Mutation this rejects: restore the old DIALOG_ACTUATION_ISSUED “appearance became
+        // unreadable” reply, which the classifier treated as cleanup observed closed. A failed
+        // count did not answer whether the leaf opened a dialog, so no later route may type.
+        let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
+        let unreadableRefusal = try issue529Position(
+            of: "if dialogAppearanceUnreadable then return \"DIALOG_APPEARANCE_UNREADABLE\"",
+            in: script
+        )
+        let cleanup = try #require(
+            issue529Positions(of: "set dialogCleanupState to my dismissOpenGoToPositionDialog(", in: script)
+                .first(where: { unreadableRefusal < $0 })
+        )
+        #expect(unreadableRefusal < cleanup)
+
+        let sliderWrites = Issue529Counter()
+        let scriptExecutions = Issue529Counter()
+        let accessibility = Issue529DialogFixtureChannel(
+            scriptResult: "DIALOG_APPEARANCE_UNREADABLE",
+            scriptExecutions: scriptExecutions,
+            sliderWrites: sliderWrites
+        )
+        let cgEventRecorder = CGEventRecorder()
+        let cgEvent = CGEventChannel(runtime: .init(
+            isLogicProRunning: { true },
+            logicProPID: { 529 },
+            postKeyEvent: { keyCode, flags, pid in
+                cgEventRecorder.post(keyCode: keyCode, flags: flags, pid: pid)
+            },
+            sleepMicros: { _ in }
+        ))
+        let router = ChannelRouter()
+        await router.register(accessibility)
+        await router.register(cgEvent)
+        let result = await router.route(
+            operation: "transport.goto_position",
+            params: ["position": "529.1.1.1"]
+        )
+
+        let envelope = try #require(issue529Envelope(result))
+        #expect(!result.isSuccess)
+        #expect(try #require(envelope["state"] as? String) == "C")
+        #expect(try #require(envelope["dialog_route_outcome"] as? String) == "dialog_appearance_unreadable")
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+        #expect(scriptExecutions.value == 1, "fixture seam must deliver the unreadable-count reply")
+        #expect(sliderWrites.value == 0)
+        #expect(cgEventRecorder.snapshot().isEmpty, "CGEvent must not receive the unreadable-count fallback")
+    }
+
+    @Test("an unidentified post-Return dialog never emits the ordinary dialog State B")
+    func postReturnUnidentifiedDialogCarriesUnsafeVerificationProvenance() async throws {
+        // Mutation this rejects: let goToPositionDialogState return CLOSED for a missing reference,
+        // `exists false`, or an unrecognised title. The post-Return cleanup reply then lacks the
+        // unsafe marker and a coincident playhead can falsely certify State A downstream.
+        let scriptExecutions = Issue529Counter()
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["position": "5.1.1.1"],
+            runtime: issue529SliderRuntime(sliderWrites: Issue529Counter()),
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { _ in
+                scriptExecutions.bump()
+                return .success(#"{"result":"DIALOG_SUBMISSION_ISSUED: dialog cleanup was not observed (UNIDENTIFIED)"}"#)
+            }
+        )
+
+        let envelope = try #require(issue529Envelope(result))
+        #expect(result.isSuccess)
+        #expect(try #require(envelope["state"] as? String) == "B")
+        #expect(try #require(envelope["dialog_route_outcome"] as? String)
+            == "dialog_submission_issued_cleanup_closed_false")
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+        #expect(try #require(envelope["dialog_submission_attempted"] as? Bool))
+        #expect(scriptExecutions.value == 1, "fixture seam must deliver the post-Return reply")
     }
 
     @Test("an absent new window retains the clean pre-input State C")
@@ -504,9 +705,13 @@ struct Issue529MenuValidationTests {
 
     @Test("a clean leaf-only failure does not invent an AX slider route")
     func cleanLeafActuationFailureDoesNotInventSliderRoute() async throws {
-        // Source mutation: restore `via:"slider"` or `error:.axWriteFailed` in the no-route
-        // receipt. The dialog failure did not resolve or write a slider, so this must fail.
+        // This requirement remains correct, but its fixture is deliberately narrow: “after
+        // observed cleanup” means the post-leaf total-window check proved no new window remained.
+        // If the click opened any window, the write script now returns unobserved cleanup instead
+        // and the terminal test above applies. Source mutation: restore `via:"slider"` or
+        // `error:.axWriteFailed` in the no-route receipt.
         let sliderWrites = Issue529Counter()
+        let scriptExecutions = Issue529Counter()
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "529"],
             runtime: issue529SliderRuntime(sliderWrites: sliderWrites),
@@ -514,7 +719,8 @@ struct Issue529MenuValidationTests {
             activateLogic: { true },
             sleepMicros: { _ in },
             executeDialogScript: { _ in
-                .success(#"{"result":"DIALOG_ACTUATION_ISSUED: AXPress reported failure after observed cleanup"}"#)
+                scriptExecutions.bump()
+                return .success(#"{"result":"DIALOG_ACTUATION_ISSUED: AXPress reported failure after observed cleanup"}"#)
             }
         )
 
@@ -526,6 +732,7 @@ struct Issue529MenuValidationTests {
         let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
         #expect(!writeAttempted)
         #expect(envelope["via"] == nil)
+        #expect(scriptExecutions.value == 1, "fixture seam must deliver the observed-cleanup reply")
         #expect(sliderWrites.value == 0)
     }
 
@@ -682,6 +889,69 @@ struct Issue529MenuValidationTests {
         #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         #expect(reconciliationCalls.value == 0)
         #expect(fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test("timeout reconciliation refuses an unrecognised modal before menu Escape")
+    func timeoutReconcilerChecksTotalWindowCountBeforeReportingClosed() async throws {
+        // Mutation this rejects: remove the total-window count below the title whitelist. With
+        // READY\n0\n1 and a newly opened modal whose title is not measured, the old reconciler
+        // returned CLOSED and sent menu Escape. The fixture returns DIALOG_UNIDENTIFIED to prove
+        // the reconciliation seam ran; the captured script pins the count-and-return ordering.
+        let reconciliationCalls = Issue529Counter()
+        let reconciliationScript = Issue529StringBox()
+        let runtime = issue529SliderRuntime(
+            sliderWrites: Issue529Counter(),
+            executeAppleScript: { script in
+                reconciliationCalls.bump()
+                reconciliationScript.set(script)
+                return .success(#"{"result":"DIALOG_UNIDENTIFIED"}"#)
+            }
+        )
+        let result = await AccessibilityChannel.gotoPositionViaBarSlider(
+            params: ["bar": "529"],
+            runtime: runtime,
+            isFrontmost: { true },
+            activateLogic: { true },
+            sleepMicros: { _ in },
+            executeDialogScript: { script in
+                let ledgerPath = try! issue529LedgerPath(from: script, stage: "LEAF_ARMED")
+                try! "LEAF_ARMED".write(toFile: ledgerPath, atomically: true, encoding: .utf8)
+                let snapshotPath = URL(fileURLWithPath: ledgerPath)
+                    .appendingPathExtension("preleaf-windows").path
+                try! "READY\n0\n1".write(toFile: snapshotPath, atomically: true, encoding: .utf8)
+                return .error("osascript timed out after leaf click")
+            }
+        )
+
+        let envelope = try #require(issue529Envelope(result))
+        let script = try #require(reconciliationScript.value)
+        let dialogStateStart = try issue529Position(
+            of: "on goToPositionDialogState(theProcess, preLeafGoToPositionDialogCount, preLeafGoToPositionWindowCount)",
+            in: script
+        )
+        let dialogStateEnd = try issue529Position(of: "end goToPositionDialogState", in: script)
+        let dialogState = String(script[dialogStateStart..<dialogStateEnd])
+        let totalWindowCount = try issue529Position(
+            of: "set currentGoToPositionWindowCount to my goToPositionWindowCount(theProcess)", in: dialogState
+        )
+        let unidentified = try issue529Position(
+            of: "if currentGoToPositionWindowCount is not preLeafGoToPositionWindowCount then return \"UNIDENTIFIED\"",
+            in: dialogState
+        )
+        let closed = try issue529Position(of: "return \"CLOSED\"", in: dialogState)
+        let dialogCleanup = try issue529Position(
+            of: "set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafGoToPositionDialogCount, preLeafGoToPositionWindowCount)",
+            in: script
+        )
+        let menuFocus = try issue529Position(of: "set menuFocusState to my menuEscapeFocusState(it)", in: script)
+
+        #expect(result.isSuccess)
+        #expect(try #require(envelope["state"] as? String) == "B")
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+        #expect(reconciliationCalls.value == 1, "fixture seam must execute the timeout reconciler")
+        #expect(totalWindowCount < unidentified)
+        #expect(unidentified < closed)
+        #expect(dialogCleanup < menuFocus)
     }
 
     @Test("an existing dialog or focus loss refuses before a position submission")
@@ -933,13 +1203,17 @@ struct Issue529MenuValidationTests {
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
         let returnKey = try issue529Position(of: "keystroke return", in: script)
         let postReturnObservation = try issue529Position(
-            of: "set dialogPostReturnState to my goToPositionDialogState(logicProcess, observedGoToPositionDialog)",
+            of: "set dialogPostReturnState to my goToPositionDialogState(logicProcess, observedGoToPositionDialog, preLeafGoToPositionWindowCount)",
             in: script
+        )
+        let postReturnClosedGate = try issue529Position(
+            of: "if dialogPostReturnState is not \"CLOSED\" then", in: script
         )
         let ok = try issue529Position(of: "return \"OK\"", in: script)
 
         #expect(returnKey < postReturnObservation)
-        #expect(postReturnObservation < ok)
+        #expect(postReturnObservation < postReturnClosedGate)
+        #expect(postReturnClosedGate < ok)
     }
 
     @Test("durable issuance checkpoints precede the leaf and Return actuators")
@@ -1117,7 +1391,9 @@ func gotoPositionDialogRequiresNewCountAndBracketedFocusedBinding() throws {
     let finalFrontmostRead = try issue529Position(
         of: "set logicIsStillFrontmost to frontmost", in: focusHandler
     )
-    let dialogStateHandlerStart = try issue529Position(of: "on goToPositionDialogState(theProcess, dialogWindow)", in: script)
+    let dialogStateHandlerStart = try issue529Position(
+        of: "on goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindowCount)", in: script
+    )
     let dialogStateHandlerEnd = try issue529Position(of: "end goToPositionDialogState", in: script)
     let dialogStateHandler = String(script[dialogStateHandlerStart..<dialogStateHandlerEnd])
 
@@ -1144,6 +1420,8 @@ func gotoPositionDialogRequiresNewCountAndBracketedFocusedBinding() throws {
     #expect(!focusHandler.contains("name of processFocusedWindow"))
     #expect(!focusHandler.contains("if focused of dialogWindow"))
     #expect(dialogStateHandler.contains("if not my knownGoToPositionDialogSubrole(dialogSubrole) then return \"OPEN_UNKNOWN_SUBROLE\""))
+    #expect(dialogStateHandler.contains("if not my knownGoToPositionDialogTitle(dialogTitle) then return \"UNIDENTIFIED\""))
+    #expect(dialogStateHandler.contains("set newWindowState to my newWindowAppearedSince(theProcess, preLeafGoToPositionWindowCount)"))
     #expect(dialogStateHandler.contains("set dialogIsModal to value of attribute \"AXModal\" of dialogWindow"))
     #expect(dialogStateHandler.contains("return \"OPEN_UNVERIFIED_MODALITY\""))
 }
@@ -1189,7 +1467,7 @@ func unreadableCancelDoesNotAuthoriseEscapeWithoutDialogObservation() throws {
     // frontmost-plus-AXFocusedWindow guard for that exact dialog.
     let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
     let handlerStart = try issue529Position(
-        of: "on dismissOpenGoToPositionDialog(theProcess, dialogWindow)", in: script
+        of: "on dismissOpenGoToPositionDialog(theProcess, dialogWindow, preLeafGoToPositionWindowCount)", in: script
     )
     let handlerEnd = try issue529Position(of: "end dismissOpenGoToPositionDialog", in: script)
     let handler = String(script[handlerStart..<handlerEnd])
@@ -1201,7 +1479,7 @@ func unreadableCancelDoesNotAuthoriseEscapeWithoutDialogObservation() throws {
     // `.first { before < $0 && $0 < escape }` form, none is selected using the ordering asserted
     // below, so moving Escape before a guard makes the test fail.
     let reobservation = try issue529Position(
-        of: "set dialogState to my goToPositionDialogState(theProcess, dialogWindow)", in: unreadableBranch
+        of: "set dialogState to my goToPositionDialogState(theProcess, dialogWindow, preLeafGoToPositionWindowCount)", in: unreadableBranch
     )
     let closedGuard = try issue529Position(
         of: "if dialogState is \"CLOSED\" then return \"CLOSED\"", in: unreadableBranch
@@ -1246,14 +1524,14 @@ func aDeadScriptReconcilesDialogBeforeMenuState() throws {
         of: "on matchingGoToPositionDialog(theProcess, preLeafGoToPositionDialogCount)", in: helper
     )
     let snapshotRead = try issue529Position(
-        of: "on preLeafGoToPositionDialogCount(snapshotPath)", in: helper
+        of: "on preLeafGoToPositionWindowSnapshot(snapshotPath)", in: helper
     )
     let dialogCleanup = try issue529Position(
-        of: "set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafGoToPositionDialogCount)",
+        of: "set dialogCleanupState to my dismissGoToPositionDialog(it, preLeafGoToPositionDialogCount, preLeafGoToPositionWindowCount)",
         in: helper
     )
     let dialogStateStart = try issue529Position(
-        of: "on goToPositionDialogState(theProcess, preLeafGoToPositionDialogCount)", in: helper
+        of: "on goToPositionDialogState(theProcess, preLeafGoToPositionDialogCount, preLeafGoToPositionWindowCount)", in: helper
     )
     let dialogStateEnd = try issue529Position(of: "end goToPositionDialogState", in: helper)
     let dialogState = String(helper[dialogStateStart..<dialogStateEnd])
@@ -1265,7 +1543,7 @@ func aDeadScriptReconcilesDialogBeforeMenuState() throws {
         in: dialogState
     )
     let dismissHandlerStart = try issue529Position(
-        of: "on dismissGoToPositionDialog(theProcess, preLeafGoToPositionDialogCount)", in: helper
+        of: "on dismissGoToPositionDialog(theProcess, preLeafGoToPositionDialogCount, preLeafGoToPositionWindowCount)", in: helper
     )
     let dismissHandlerEnd = try issue529Position(of: "end dismissGoToPositionDialog", in: helper)
     let dismissHandler = String(helper[dismissHandlerStart..<dismissHandlerEnd])
@@ -1295,7 +1573,7 @@ func aDeadScriptReconcilesDialogBeforeMenuState() throws {
     #expect(!helper.contains("ProcessUtils.logicProPID"))
 }
 
-@Test("the pre-leaf snapshot accepts only a readiness marker and a canonical decimal count")
+@Test("the pre-leaf snapshot accepts only a readiness marker and canonical dialog/window counts")
 func preLeafGoToPositionSnapshotIsUnambiguousAndNonInjectable() throws {
     // Mutation this rejects: weaken the count-format guard so a stale/truncated snapshot or a
     // title-shaped delimiter payload can reach timeout reconciliation as if it named this run.
@@ -1305,7 +1583,7 @@ func preLeafGoToPositionSnapshotIsUnambiguousAndNonInjectable() throws {
     let snapshotURL = ledger.preLeafWindowSnapshotURL
     #expect(ledger.preLeafWindowSnapshotPath == nil)
 
-    try "READY\n0".write(to: snapshotURL, atomically: true, encoding: .utf8)
+    try "READY\n0\n1".write(to: snapshotURL, atomically: true, encoding: .utf8)
     #expect(ledger.preLeafWindowSnapshotPath == snapshotURL.path)
 
     for malformedSnapshot in [
@@ -1315,6 +1593,11 @@ func preLeafGoToPositionSnapshotIsUnambiguousAndNonInjectable() throws {
         "READY\n-1",
         "READY\n1|title=forged",
         "READY\n1\nextra",
+        "READY\n0\n",
+        "READY\n01\n1",
+        "READY\n0\n01",
+        "READY\n1\n0",
+        "READY\n0\n1\nextra",
         "UNAVAILABLE",
     ] {
         try malformedSnapshot.write(to: snapshotURL, atomically: true, encoding: .utf8)
@@ -1322,7 +1605,7 @@ func preLeafGoToPositionSnapshotIsUnambiguousAndNonInjectable() throws {
     }
 
     let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
-    #expect(script.contains("set snapshotText to \"READY\" & linefeed & (matchingGoToPositionDialogCount as text)"))
+    #expect(script.contains("set snapshotText to \"READY\" & linefeed & (matchingGoToPositionDialogCount as text) & linefeed & (totalWindowCount as text)"))
     #expect(!script.contains("id of contents of preLeafWindow"))
     #expect(!script.contains("AXIdentifier"))
 }
@@ -1357,5 +1640,45 @@ func writeScriptRefusesAnUnidentifiedNewWindowBeforeDismissingAnything() throws 
     let dialogDismissal = try issue529Position(
         of: "set dialogCleanupState to my dismissOpenGoToPositionDialog(", in: script
     )
+    #expect(unidentifiedRefusal < dialogDismissal)
+}
+
+@Test("the write script records APPEARED before relying on the unidentified-window refusal")
+func writeScriptMarksAnAppearedUnidentifiedWindow() throws {
+    // The Swift classifier can only protect the result that AppleScript emits. Deleting this
+    // assignment leaves `dialogAppearanceUnidentified` false, bypasses the terminal return below,
+    // and turns a newly opened unknown-title window into a clean actuation failure. Keep the
+    // APPEARED observation, assignment, terminal return, and no-dismissal order load-bearing.
+    let source = try String(
+        contentsOfFile: #filePath.replacingOccurrences(
+            of: "Tests/LogicProMCPTests/Issue529MenuValidationTests.swift",
+            with: "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift"
+        ),
+        encoding: .utf8
+    )
+    let pollStart = try #require(source.range(of: "                repeat 30 times"))
+    let scriptEnd = try #require(source.range(of: "    struct DialogIssuanceLedger"))
+    let script = String(source[pollStart.lowerBound..<scriptEnd.lowerBound])
+    let totalWindowObservation = try issue529Position(
+        of: "set newWindowState to my newWindowAppearedSince(logicProcess, preLeafGoToPositionWindowCount)",
+        in: script
+    )
+    let appearedGuard = try issue529Position(
+        of: "if newWindowState is \"APPEARED\" or newWindowState is \"UNIDENTIFIED\" then",
+        in: script
+    )
+    let appearedAssignment = try issue529Position(
+        of: "set dialogAppearanceUnidentified to true", in: script
+    )
+    let unidentifiedRefusal = try issue529Position(
+        of: "if dialogAppearanceUnidentified then return \"DIALOG_UNIDENTIFIED_NEW_WINDOW\"", in: script
+    )
+    let dialogDismissal = try issue529Position(
+        of: "set dialogCleanupState to my dismissOpenGoToPositionDialog(", in: script
+    )
+
+    #expect(totalWindowObservation < appearedGuard)
+    #expect(appearedGuard < appearedAssignment)
+    #expect(appearedAssignment < unidentifiedRefusal)
     #expect(unidentifiedRefusal < dialogDismissal)
 }
