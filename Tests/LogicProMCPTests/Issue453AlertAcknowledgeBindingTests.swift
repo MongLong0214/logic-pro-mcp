@@ -104,6 +104,7 @@ private struct AlertFixture {
     let buttonIDs: [Int]
     let windows: PhasedValue<[AXUIElement]>
     let dialogChildren: PhasedValue<[AXUIElement]>
+    let buttonTitle: PhasedValue<String>
 
     var pressedElementIDs: [Int] {
         builder.actionCalls.filter { $0.action == (kAXPressAction as String) }.map(\.elementID)
@@ -116,6 +117,7 @@ private struct AlertFixture {
 private func makeAlertFixture(
     initialButtonTitles: [String],
     laterButtonTitles: [String]? = nil,
+    reuseInitialButtonForLaterTitle: Bool = false,
     replaceDialogAfterClassification: Bool = false,
     removeDialogAfterClassification: Bool = false,
     pressSucceeds: Bool = true,
@@ -166,7 +168,13 @@ private func makeAlertFixture(
     let dismissal = AlertDismissal()
     let dialogChildren = PhasedValue(
         before: initialButtons,
-        after: laterButtonTitles.map { buttons($0, startingAt: 300) } ?? initialButtons
+        after: reuseInitialButtonForLaterTitle
+            ? initialButtons
+            : laterButtonTitles.map { buttons($0, startingAt: 300) } ?? initialButtons
+    )
+    let buttonTitle = PhasedValue(
+        before: initialButtonTitles.first ?? "",
+        after: laterButtonTitles?.first ?? initialButtonTitles.first ?? ""
     )
 
     // `nil` means "not handled, fall through to the builder"; `.some(x)` means
@@ -186,11 +194,22 @@ private func makeAlertFixture(
         setAttributeHandler: nil,
         performActionHandler: nil
     )
+    let dynamicTitle: (@Sendable (AXUIElement, String) -> AnyObject??) = { element, attribute in
+        guard reuseInitialButtonForLaterTitle,
+              initialButtons.count == 1,
+              CFEqual(element, initialButtons[0]),
+              attribute == (kAXTitleAttribute as String)
+        else { return nil }
+        return .some(buttonTitle.next() as NSString)
+    }
     let runtime = AXLogicProElements.Runtime(
         logicProPID: { 4242 },
         ax: AXHelpers.Runtime(
             axApp: base.ax.axApp,
-            attributeValue: base.ax.attributeValue,
+            attributeValue: { element, attribute in
+                if let title = dynamicTitle(element, attribute) { return title }
+                return base.ax.attributeValue(element, attribute)
+            },
             setAttributeValue: base.ax.setAttributeValue,
             children: { element in
                 CFEqual(element, dialog) ? dialogChildren.next() : base.ax.children(element)
@@ -213,6 +232,7 @@ private func makeAlertFixture(
             childCount: base.ax.childCount,
             childrenResult: base.ax.childrenResult,
             attributeValueResult: { element, attribute in
+                if let title = dynamicTitle(element, attribute) { return .success(title) }
                 if dismissal.isDismissed(),
                    CFEqual(element, dialog),
                    attribute == (kAXModalAttribute as String) {
@@ -230,13 +250,15 @@ private func makeAlertFixture(
     _ = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
     windows.calibrate()
     dialogChildren.calibrate()
+    buttonTitle.calibrate()
 
     return AlertFixture(
         builder: builder,
         runtime: runtime,
         buttonIDs: buttonIDs,
         windows: windows,
-        dialogChildren: dialogChildren
+        dialogChildren: dialogChildren,
+        buttonTitle: buttonTitle
     )
 }
 
@@ -381,6 +403,39 @@ struct Issue453AlertAcknowledgeBindingTests {
         #expect(
             fixture.pressedElementIDs.isEmpty,
             "a two-button dialog is a choice and must never be answered automatically"
+        )
+    }
+
+    /// A count-only recheck is insufficient: a single harmless button can be
+    /// relabelled to a destructive action while retaining both its dialog and
+    /// one-button shape. The live button must still be the identity and title
+    /// that produced `topLevelAlertPrimaryButton` during classification.
+    @Test("a single alert button whose title changes after classification is not clicked")
+    func buttonTitleChangeIsRefused() async {
+        let fixture = makeAlertFixture(
+            initialButtonTitles: ["OK"],
+            laterButtonTitles: ["Don't Save"],
+            reuseInitialButtonForLaterTitle: true
+        )
+
+        let outcome = await AccessibilityChannel.reconcilePreflight(
+            runtime: fixture.runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        // Mutation `alert-button-title-identity-omission`: remove the title
+        // comparison from the identity guard. The re-read still has exactly one
+        // button, so the unchecked executor presses the new Don't Save action.
+        #expect(outcome.refusal == .targetChanged)
+        #expect(fixture.pressedElementIDs.isEmpty)
+        #expect(
+            fixture.dialogChildren.readCount > fixture.dialogChildren.boundary,
+            "the title-switch seam must be read after classification before this refusal is trusted"
+        )
+        #expect(
+            fixture.buttonTitle.readCount > fixture.buttonTitle.boundary,
+            "the same button's title must be re-read across the calibrated switch"
         )
     }
 

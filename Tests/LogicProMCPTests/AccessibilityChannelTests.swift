@@ -2719,7 +2719,7 @@ private func makeTempoSliderFixture(
     #expect(result.message.contains("\"observed_track_index\":1"))
     #expect(result.message.contains("\"observed_track_name\":\"Studio Grand\""))
     #expect(result.message.contains("\"observed_track_type\":\"software_instrument\""))
-    #expect(result.message.contains("\"track_type_verification_source\":\"menu_clicked\""))
+    #expect(result.message.contains("\"track_type_verification_source\":\"observed_header\""))
     #expect(result.message.contains("\"verification_source\":\"track_count_delta\""))
 }
 

@@ -234,8 +234,9 @@ extension AccessibilityChannel {
     /// single-button informational alert and a stray open menu; the mandatory
     /// New Track sheet is auto-cleared ONLY when `clearMandatoryNewTrack` is true
     /// (the default). The CREATE path passes `false` so preflight never clicks
-    /// "Create" — `createTrackViaMenu` opens/confirms its own New Track dialog,
-    /// and doing both would double-create. A deleteConfirm / unknownSheet is
+    /// "Create" — `createTrackViaMenu` reconciles its post-menu dialog through
+    /// the bound AX Create element, and doing both would double-create. A
+    /// deleteConfirm / unknownSheet is
     /// reported but NOT acted on (we never confirm a delete the caller did not
     /// request, nor dismiss a sheet/dialog that could be a Save prompt).
     static func reconcilePreflight(
@@ -395,6 +396,20 @@ extension AccessibilityChannel {
             // carried into this classification.
             return readModalSignals(from: sheet, runtime: runtime)
         case .incomplete, .unreadable(_):
+            return unreadableModalSignals()
+        case .absent:
+            break
+        }
+
+        // `AXMainWindow` identifies the arrange window, not the only possible
+        // sheet host. A complete clean answer also needs every *other* window
+        // to answer that it has no sheet. In particular, Logic may leave a
+        // mandatory sheet attached to an auxiliary non-modal host while the
+        // arrange window remains the main window.
+        switch anyWindowSheetLookup(runtime: runtime, excluding: window) {
+        case .found(let sheet):
+            return readModalSignals(from: sheet, runtime: runtime)
+        case .incomplete, .unreadable:
             return unreadableModalSignals()
         case .absent:
             break
@@ -622,8 +637,13 @@ extension AccessibilityChannel {
         switch AXHelpers.getAttributeResult(
             app, kAXWindowsAttribute as String, runtime: runtime.ax
         ) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
-        case .success(let windows):
-            return topLevelDialogRead(in: windows ?? [], runtime: runtime)
+        case .success(.some(let windows)):
+            return topLevelDialogRead(in: windows, runtime: runtime)
+        case .success(.none):
+            // The typed helper also turns a successfully returned payload of
+            // the wrong shape into nil. That is not an answer that there are
+            // no windows, so it cannot participate in a clean observation.
+            return .unreadable
         case .failure(let error) where error.raw == AXError.noValue.rawValue:
             return .none
         case .failure:
@@ -723,10 +743,12 @@ extension AccessibilityChannel {
     /// State-A gate. `attributeUnsupported` and `noValue` are structural answers
     /// and fall through to the role traversal; a malformed successful payload,
     /// a failed read, or a reached depth cap is *not* absence.
-    /// Every window the app currently vends, asked for a sheet. Used when `AXMainWindow` is absent:
-    /// the sheet is still attached to one of them, and its host is not itself modal.
+    /// Every window the app currently vends, asked for a sheet. Used when
+    /// `AXMainWindow` is absent and to complete a main-window host scan: the
+    /// sheet is still attached to one of them, and its host is not itself modal.
     private static func anyWindowSheetLookup(
-        runtime: AXLogicProElements.Runtime
+        runtime: AXLogicProElements.Runtime,
+        excluding excludedWindow: AXUIElement? = nil
     ) -> SheetLookup {
         guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return .unreadable(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)) }
         let windows: [AXUIElement]
@@ -736,7 +758,10 @@ extension AccessibilityChannel {
         case .success(let observed?):
             windows = observed
         case .success(nil):
-            return .absent
+            // `getAttributeResult` uses a typed cast, so nil also represents a
+            // successful malformed `AXWindows` payload. Do not flatten an
+            // unreadable search space into a claim that no host has a sheet.
+            return .unreadable(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
         case .failure(let error) where axStatusIsDefinitiveAbsence(error):
             return .absent
         case .failure(let error):
@@ -744,6 +769,7 @@ extension AccessibilityChannel {
         }
         var sawIncomplete = false
         for window in windows {
+            guard excludedWindow.map({ !CFEqual(window, $0) }) ?? true else { continue }
             switch firstSheetLookup(in: window, maxDepth: 32, runtime: runtime.ax) {
             case .found(let sheet):
                 return .found(sheet)
@@ -1352,14 +1378,24 @@ extension AccessibilityChannel {
             return (false, false, .targetChanged, nil)
         }
 
+        guard target.buttons.count == 1, let classifiedButton = target.buttons.first else {
+            return (false, false, .targetChanged, nil)
+        }
+
         // Re-read the count from the live element rather than trusting the count
-        // captured at classification time.
+        // captured at classification time. The element *and* title must still
+        // be the button that the classifier published: a one-button dialog can
+        // turn its harmless "OK" into a destructive "Don't Save" without
+        // changing its count.
         let buttons = AXLogicProElements.titledButtons(of: current.element, runtime: runtime.ax)
         guard buttons.count == 1, let only = buttons.first else {
             return (false, false, .buttonCountChanged, nil)
         }
+        guard CFEqual(only.element, classifiedButton.element), only.title == classifiedButton.title else {
+            return (false, false, .targetChanged, nil)
+        }
 
-        switch AXHelpers.performActionResult(only.element, kAXPressAction as String, runtime: runtime.ax) {
+        switch AXHelpers.performActionResult(classifiedButton.element, kAXPressAction as String, runtime: runtime.ax) {
         case .success:
             return (true, true, nil, nil)
         case .failure(let error):

@@ -855,7 +855,7 @@ struct SemanticOracleMutationTests {
         // COUNT/TYPE: create_audio rejects a create that produced a drummer track.
         let createAudio = try #require(SemanticOracleTable.byOperationID[.tracksCreateAudio])
         let wrongType: Bool = createAudio.evaluate(
-            responseData: Data(#"{"success":true,"verified":true,"state":"A","requested_delta":1,"verification_source":"track_count_delta","track_type_verification_source":"menu_clicked","observed_track_type":"drummer","observed_delta":1,"track_count_before":2,"track_count_after":3,"observed_track_index":2}"#.utf8),
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","requested_delta":1,"verification_source":"track_count_delta","track_type_verification_source":"observed_header","observed_track_type":"drummer","observed_delta":1,"track_count_before":2,"track_count_after":3,"observed_track_index":2}"#.utf8),
             readbackData: Data("{}".utf8)) == true
         #expect(!wrongType, "create_audio accepted a drummer track type")
         // STRUCTURAL: export_support_bundle rejects an empty file manifest.

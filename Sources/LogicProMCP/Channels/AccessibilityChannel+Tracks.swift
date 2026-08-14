@@ -1246,6 +1246,8 @@ extension AccessibilityChannel {
         korean: String,
         english: String,
         expectedTrackType: TrackType,
+        // Retained for channel-runtime compatibility. The create route no
+        // longer invokes this unchecked keyboard fallback.
         confirmDialog: @escaping @Sendable () -> Void = { sendReturnKey() },
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ChannelResult {
@@ -1257,13 +1259,17 @@ extension AccessibilityChannel {
         // single-OK top-level alert (audio-interface warning on fresh-document /
         // first-track creation) otherwise wedges the create. Scoped with
         // `clearMandatoryNewTrack: false` so preflight NEVER clicks "Create": the
-        // New-Track-dialog confirmation below (`sendReturnKey`) owns that, and
-        // doing both would double-create. Acknowledges alerts + escapes stray
+        // classifier-bound post-menu reconciliation below owns that, and doing
+        // both would double-create. Acknowledges alerts + escapes stray
         // menus only; a no-op AX read when nothing is blocking.
         let reconcileOutcome = await reconcilePreflight(clearMandatoryNewTrack: false, runtime: runtime)
 
-        let beforeTracks = observedTrackStates(runtime: runtime)
-        let beforeCount = beforeTracks.count
+        // A mutation witness needs the same status-preserving rail read as the
+        // delete path. The historic flattening enumerator turns a failed
+        // pre-write read into `[]`, which makes tracks that were already there
+        // look like the result of this menu click.
+        let arrangeWindow = AXLogicProElements.arrangeWindowRead(runtime: runtime)
+        let beforeTracks = observedTrackStates(in: arrangeWindow, runtime: runtime)
 
         // Try Korean locale first
         let result = clickTrackMenu(korean, menuName: "트랙", englishMenuName: "Track", runtime: runtime)
@@ -1277,33 +1283,36 @@ extension AccessibilityChannel {
             menuClickedTitle = english
         }
 
-        // Logic 12.0.1: menu click may show "새로운 트랙 생성" dialog (sometimes invisible
-        // to AX tree). Strategy: poll track count briefly. If track was already
-        // created without a dialog, do NOT send Return (avoids sending Enter to
-        // unrelated focused targets). If still unchanged after 400ms, assume
-        // dialog is up and send Return; verify after.
+        // Logic may publish a mandatory New Track dialog after the menu click.
+        // Reconcile it through the classifier-bound AX Create element; Return
+        // would actuate whichever default control happens to be focused and was
+        // never read as this operation's target.
         try? await Task.sleep(nanoseconds: 400_000_000)
-        let midCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
-        let dialogConfirmationAttempted = midCount == beforeCount
-        if dialogConfirmationAttempted {
-            // Track not created yet — assume New Track dialog is awaiting confirmation
-            confirmDialog()
-        }
+        let dialogReconcileOutcome = await reconcileAfterMutation(
+            isDeleteContext: false,
+            runtime: runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+        let dialogConfirmationAttempted = dialogReconcileOutcome.actionAttempted
+        let verificationReconcileOutcome = dialogReconcileOutcome.kind == .none
+            ? reconcileOutcome
+            : dialogReconcileOutcome
 
         return await verifyTrackCreation(
             title: menuClickedTitle,
             expectedTrackType: expectedTrackType,
             beforeTracks: beforeTracks,
+            arrangeWindow: arrangeWindow,
             dialogConfirmationAttempted: dialogConfirmationAttempted,
-            reconcileOutcome: reconcileOutcome,
+            reconcileOutcome: verificationReconcileOutcome,
             runtime: runtime
         )
     }
 
-    /// Send Return key via CGEvent — used to auto-confirm Logic 12's
-    /// "New Track" dialog (which is sometimes opaque to AX tree).
-    // internal (not private): retained for the opaque New Track dialog paths
-    // in this channel; modal reconciliation never uses a keyboard fallback.
+    /// Legacy keyboard fallback retained for injected runtime compatibility.
+    /// Track creation deliberately does not call it: Return has no AX-bound
+    /// target and can activate an unrelated default button.
     static func sendReturnKey() {
         guard let src = CGEventSource(stateID: .hidSystemState) else { return }
         let returnVK: CGKeyCode = 0x24
@@ -1319,21 +1328,21 @@ extension AccessibilityChannel {
     private static func verifyTrackCreation(
         title: String,
         expectedTrackType: TrackType,
-        beforeTracks: [TrackState],
+        beforeTracks: [TrackState]?,
+        arrangeWindow: AXLogicProElements.ArrangeWindowRead,
         dialogConfirmationAttempted: Bool,
         reconcileOutcome: ModalReconcileOutcome,
         runtime: AXLogicProElements.Runtime
     ) async -> ChannelResult {
-        let beforeCount = beforeTracks.count
-        var lastObservedCount = beforeCount
+        let beforeCount = beforeTracks?.count
+        var lastObservedCount: Int?
 
         var extras: [String: Any] = [
             "menu_clicked": title,
-            "track_count_before": beforeCount,
+            "track_count_before": beforeCount ?? NSNull(),
             "requested_delta": 1,
+            "requested_track_type": expectedTrackType.rawValue,
             "dialog_confirmation_attempted": dialogConfirmationAttempted,
-            "observed_track_type": expectedTrackType.rawValue,
-            "track_type_verification_source": "menu_clicked",
             "verification_source": "track_count_delta"
         ]
         // #348: note any pre-create reconciliation (alert acknowledged / stray
@@ -1343,25 +1352,30 @@ extension AccessibilityChannel {
             &extras,
             kind: reconcileOutcome.kind,
             action: attemptedReconcileActionLabel(reconcileOutcome),
-            newTrackAutoConfirmed: false,
+            newTrackAutoConfirmed: reconcileOutcome.kind == .mandatoryNewTrack && reconcileOutcome.actionAttempted,
             witnessSummary: reconcileOutcome.witnessSummary,
             refusal: reconcileOutcome.refusal,
             actionFailure: reconcileOutcome.actionFailure
         )
 
         for attempt in 0..<4 {
-            let currentTracks = observedTrackStates(runtime: runtime)
-            let currentCount = currentTracks.count
-            lastObservedCount = currentCount
-            if currentCount > beforeCount {
+            let currentTracks = observedTrackStates(in: arrangeWindow, runtime: runtime)
+            let currentCount = currentTracks?.count
+            if let currentCount {
+                lastObservedCount = currentCount
+            }
+            if let beforeTracks,
+               let currentTracks,
+               currentTracks.count > beforeTracks.count {
                 var merged = extras.merging([
-                    "track_count_after": currentCount,
-                    "observed_delta": currentCount - beforeCount
+                    "track_count_after": currentTracks.count,
+                    "observed_delta": currentTracks.count - beforeTracks.count
                 ]) { _, new in new }
                 if let observedTrack = observedCreatedTrack(before: beforeTracks, after: currentTracks) {
                     merged["observed_track_index"] = observedTrack.id
                     merged["observed_track_name"] = observedTrack.name
-                    merged["observed_track_type_inferred"] = observedTrack.type.rawValue
+                    merged["observed_track_type"] = observedTrack.type.rawValue
+                    merged["track_type_verification_source"] = "observed_header"
                 }
                 return .success(HonestContract.encodeStateA(extras: merged))
             }
@@ -1371,10 +1385,22 @@ extension AccessibilityChannel {
             }
         }
 
-        var merged = extras.merging([
-            "track_count_after": lastObservedCount,
-            "observed_delta": lastObservedCount - beforeCount
-        ]) { _, new in new }
+        var merged = extras
+        merged["track_count_after"] = lastObservedCount ?? NSNull()
+        if let beforeCount, let lastObservedCount {
+            merged["observed_delta"] = lastObservedCount - beforeCount
+        } else {
+            merged["observed_delta"] = NSNull()
+        }
+        // Without a successful pre-write rail read, a later count cannot tell
+        // whether the tracks existed before the menu action. The write may have
+        // happened, but State A is unavailable rather than a zero-count guess.
+        guard beforeTracks != nil else {
+            return .success(HonestContract.encodeStateB(
+                reason: .retryExhausted,
+                extras: merged
+            ))
+        }
         let dialogPresent = AXLogicProElements.dialogPresent(runtime: runtime)
         merged["dialog_present"] = dialogPresent
         if dialogPresent {
@@ -1392,9 +1418,13 @@ extension AccessibilityChannel {
     }
 
     private static func observedTrackStates(
+        in arrangeWindow: AXLogicProElements.ArrangeWindowRead,
         runtime: AXLogicProElements.Runtime = .production
-    ) -> [TrackState] {
-        AXLogicProElements.allTrackHeaders(runtime: runtime).enumerated().map { index, header in
+    ) -> [TrackState]? {
+        guard case .found(let window) = arrangeWindow,
+              case .read(let headers) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+        else { return nil }
+        return headers.enumerated().map { index, header in
             AXValueExtractors.extractTrackState(from: header, index: index, runtime: runtime.ax)
         }
     }
@@ -1614,7 +1644,7 @@ extension AccessibilityChannel {
                     reconcileWitnessSummary = outcome.witnessSummary
                 }
                 if outcome.kind == .mandatoryNewTrack, outcome.actionAttempted {
-                    mandatoryNewTrackReconciliationPerformed = outcome.performed
+                    mandatoryNewTrackReconciliationPerformed = true
                 }
             } else {
                 // A complete clean pass proves the prior visible kinds closed,

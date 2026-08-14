@@ -139,7 +139,7 @@ enum ModalReconciliation {
     /// button informational alert and a stray menu ALWAYS; the mandatory New
     /// Track sheet ONLY when `clearMandatoryNewTrack` is true. The create path
     /// passes `false` so preflight never clicks "Create" — `createTrackViaMenu`
-    /// opens and confirms its own New Track dialog, and auto-Creating here too
+    /// performs a bound post-menu Create reconciliation, and auto-Creating here too
     /// would DOUBLE-CREATE. deleteConfirm / unknownSheet / none never act at
     /// preflight (fail closed — never confirm an unrequested delete or dismiss a
     /// sheet that could be a Save prompt).

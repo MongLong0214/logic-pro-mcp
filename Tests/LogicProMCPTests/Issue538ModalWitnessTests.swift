@@ -253,6 +253,86 @@ struct Issue538ModalWitnessTests {
         #expect(kind != ModalReconciliation.BlockingModalKind.none)
     }
 
+    @Test("a mandatory sheet on another non-modal host blocks delete even when AXMainWindow is found")
+    func sheetOnAnotherWindowIsSeenWithAMainWindow() async throws {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(430)
+        let arrange = builder.element(431)
+        let sheetHost = builder.element(432)
+        let menuBar = builder.element(433)
+        let trackMenu = builder.element(434)
+        let deleteItem = builder.element(435)
+        let headers = builder.element(436)
+        let header = builder.element(437)
+        let sheet = builder.element(438)
+        let create = builder.element(439)
+        let cancel = builder.element(440)
+        let otherHostSheetReads = LockedCounter()
+        let createPresses = LockedCounter()
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, sheetHost])
+        builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+        builder.setAttribute(arrange, kAXModalAttribute as String, false)
+        builder.setAttribute(sheetHost, kAXModalAttribute as String, false)
+        builder.setChildren(arrange, [headers])
+        builder.setAttribute(headers, kAXRoleAttribute as String, kAXListRole as String)
+        builder.setAttribute(headers, kAXIdentifierAttribute as String, "Track Headers")
+        builder.setChildren(headers, [header])
+        builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        builder.setChildren(menuBar, [trackMenu])
+        builder.setAttribute(trackMenu, kAXTitleAttribute as String, "Track")
+        builder.setAttribute(trackMenu, kAXSelectedAttribute as String, false)
+        builder.setChildren(trackMenu, [deleteItem])
+        builder.setAttribute(deleteItem, kAXTitleAttribute as String, "Delete Track")
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+        builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+        builder.setChildren(sheet, [create, cancel])
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueHandler: { element, attribute in
+                guard CFEqual(element, sheetHost), attribute == "AXSheets" else { return nil }
+                _ = otherHostSheetReads.next()
+                return .some([sheet] as NSArray)
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard action == (kAXPressAction as String) else { return false }
+                if CFEqual(element, deleteItem) {
+                    builder.setChildren(headers, [])
+                    return true
+                }
+                if CFEqual(element, create) {
+                    _ = createPresses.next()
+                    return true
+                }
+                return false
+            }
+        )
+
+        let result = await AccessibilityChannel.defaultDeleteTrack(runtime: runtime)
+        try #require(result.isSuccess, "delete must complete its observation path: \(result.message)")
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+        let verified = try #require(envelope["verified"] as? Bool)
+
+        // Mutation `main-window-only-sheet-scan`: remove the other-window scan
+        // after the bound arrange-window sheet lookup. Two decrement polls then
+        // look clean and this fixture incorrectly encodes State A.
+        #expect(!verified)
+        let reconciledKind = try #require(envelope["reconciled_modal_kind"] as? String)
+        #expect(reconciledKind == "mandatory_new_track")
+        #expect(otherHostSheetReads.current() > 0, "the non-main host seam must be queried")
+        #expect(createPresses.current() == 1, "the classified host sheet must reach its direct Create action")
+    }
+
     @Test("an absent main window is an answer for the modal read, not an unknown blocker")
     func absentMainWindowIsAnAnswer() {
         // There is no main-window sheet when there is no main window, and during `project.new`
@@ -298,6 +378,68 @@ struct Issue538ModalWitnessTests {
             // -25205) to an empty list; that would incorrectly produce `.none`.
             #expect(kind == .unknownSheet)
         }
+    }
+
+    @Test("a successful malformed AXWindows payload cannot become no blocking window")
+    func malformedSuccessfulAXWindowsFailsClosed() {
+        for payload in [MalformedAXWindowsPayload.nilValue, .string] {
+            let builder = FakeAXRuntimeBuilder()
+            let app = builder.element(441)
+            let window = builder.element(442)
+            let windowsReads = LockedCounter()
+            builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+            builder.setAttribute(window, kAXModalAttribute as String, false)
+            let runtime = builder.makeLogicRuntime(
+                appElement: app,
+                attributeValueResultHandler: { element, attribute in
+                    guard CFEqual(element, app), attribute == (kAXWindowsAttribute as String) else { return nil }
+                    let read = windowsReads.next()
+                    if read != 1 { return .success([window] as NSArray) }
+                    switch payload {
+                    case .nilValue: return .success(nil)
+                    case .string: return .success("not-an-array" as NSString)
+                    }
+                },
+                setAttributeHandler: nil,
+                performActionHandler: nil
+            )
+
+            let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+
+            // Mutation `malformed-axwindows-as-absent`: restore
+            // `.success(nil) -> .absent` in `anyWindowSheetLookup`. A typed
+            // successful nil / NSString payload then becomes a clean pass.
+            #expect(kind == .unknownSheet)
+            #expect(windowsReads.current() > 0, "the malformed AXWindows seam must be read")
+        }
+    }
+
+    @Test("a malformed AXWindows payload during the top-level scan is unreadable")
+    func malformedSuccessfulTopLevelAXWindowsFailsClosed() {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(443)
+        let window = builder.element(444)
+        let windowsReads = LockedCounter()
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, app), attribute == (kAXWindowsAttribute as String) else { return nil }
+                let read = windowsReads.next()
+                return read == 1 ? .success([window] as NSArray) : .success("not-an-array" as NSString)
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+
+        // Mutation `top-level-malformed-axwindows-empty-list`: restore
+        // `windows ?? []` in `topLevelDialogRead`. The second, malformed
+        // successful payload is flattened to an empty dialog list.
+        #expect(kind == .unknownSheet)
+        #expect(windowsReads.current() > 1, "the top-level AXWindows seam must be reached after the sheet scan")
     }
 
     @Test("an AXSystemDialog remains a blocker instead of becoming no alert")
@@ -1153,6 +1295,7 @@ struct Issue538ModalWitnessTests {
             try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
         )
         let action = try #require(envelope["reconciled_action"] as? String)
+        let autoConfirmed = (envelope["new_track_dialog_auto_confirmed"] as? Bool) ?? false
 
         // Mutation source: restore the former operation-wide action latch; the
         // delete confirm still presses, but the later mandatory Create count is
@@ -1160,6 +1303,11 @@ struct Issue538ModalWitnessTests {
         #expect(fixture.deleteConfirmPresses.get() == 1)
         #expect(fixture.createPresses.get() == 1)
         #expect(action == "click_create")
+        // Mutation `new-track-auto-confirmed-performed-gate`: restore
+        // `mandatoryNewTrackReconciliationPerformed = outcome.performed`.
+        // Sheet actions intentionally never claim causal performance, so this
+        // direct Create press would lose its auto-confirmation receipt.
+        #expect(autoConfirmed)
     }
 
     @Test("project.new preserves a stale Create status in its unconfirmed envelope")
@@ -1277,6 +1425,11 @@ private enum IndeterminateModalRead: Sendable {
     case unsupported
     case noValue
     case malformed
+}
+
+private enum MalformedAXWindowsPayload: Sendable {
+    case nilValue
+    case string
 }
 
 private func makeIndeterminateModalRuntime(
