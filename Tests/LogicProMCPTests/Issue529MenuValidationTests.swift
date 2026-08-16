@@ -1729,12 +1729,12 @@ func preLeafGoToPositionSnapshotIsUnambiguousAndNonInjectable() throws {
     #expect(!script.contains("AXIdentifier"))
 }
 
-@Test("the timeout parser accepts the LF snapshot after do shell script normalizes it to CR")
-func timeoutSnapshotParserUsesTheShellReturnedDelimiter() throws {
-    // Mutation this rejects: change the production parser's `text item delimiters to return` back
-    // to `linefeed`. The writer persists LF, but `do shell script` returns that output as CR; the
-    // probe executes that same boundary without touching System Events and would produce one item
-    // rather than the required three.
+@Test("the timeout parser accepts the LF snapshot through Foundation")
+func timeoutSnapshotParserUsesFoundationPreservedDelimiter() throws {
+    // Mutation this rejects: change the production parser's `text item delimiters to linefeed`
+    // back to `return`. Foundation preserves the writer's LF, so the probe executes that same
+    // boundary without touching System Events and would produce one item rather than the
+    // required three.
     let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent("logic-pro-mcp-snapshot-parser-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -1755,8 +1755,8 @@ func timeoutSnapshotParserUsesTheShellReturnedDelimiter() throws {
     #expect(probeResult.exitCode == 0)
     #expect(probeResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == "0, 1")
     #expect(writer.contains("set snapshotText to \"READY\" & linefeed"))
-    #expect(parser.contains("set AppleScript's text item delimiters to return"))
-    #expect(!parser.contains("set AppleScript's text item delimiters to linefeed"))
+    #expect(parser.contains("set AppleScript's text item delimiters to linefeed"))
+    #expect(!parser.contains("set AppleScript's text item delimiters to return"))
 }
 
 @Test("the write script emits the unidentified-window refusal, and emits it before any dismissal")

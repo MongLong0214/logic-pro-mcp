@@ -537,7 +537,11 @@ private func liveTransportJSON(
     #expect(gotoOps.isEmpty)
     let axOps = await ax.executedOps
     expectExecutedOps(axOps, equals: [
+        // Every seek establishes an independent live baseline before routing
+        // its complete requested position to the position-capable AX channel.
+        ("transport.get_state", [:]),
         ("transport.goto_position", ["position": "9.1.1.1"]),
+        ("transport.get_state", [:]),
         ("transport.goto_position", ["position": "00:00:10:12"]),
         ("transport.set_cycle_range", ["start": "4.1.1.1", "end": "12.1.1.1"]),
     ])
@@ -662,21 +666,25 @@ private func liveTransportJSON(
 
 @Test func testTransportDispatcherGotoPositionReturnsErrorWhenTransportReadbackDoesNotMatch() async throws {
     let router = ChannelRouter()
+    let mismatchedPosition = TransportState(
+        position: "8.1.1.1",
+        positionReadback: TransportPositionReadback(
+            value: "8.1.1.1",
+            observedComponents: TransportPositionComponent.allCases
+        ),
+        timePosition: "00:00:08.000",
+        lastUpdated: Date()
+    )
     let ax = SequencedTransportReadbackChannel(
         gotoPositionResult: .success(HonestContract.encodeStateB(
             reason: .readbackUnavailable,
             extras: ["via": "dialog"]
         )),
         transportStates: [
-            TransportState(
-                position: "8.1.1.1",
-                positionReadback: TransportPositionReadback(
-                    value: "8.1.1.1",
-                    observedComponents: TransportPositionComponent.allCases
-                ),
-                timePosition: "00:00:08.000",
-                lastUpdated: Date()
-            )
+            // The first read is the pre-write baseline; the second is the
+            // post-write observation that proves the request still mismatched.
+            mismatchedPosition,
+            mismatchedPosition,
         ]
     )
     await router.register(ax)
@@ -3206,11 +3214,14 @@ private actor SelectiveFailChannel: Channel {
     let axOps = await ax.executedOps
     #expect(mcuOps.isEmpty)
     expectExecutedOps(axOps, equals: [
+        ("transport.get_state", [:]),
         ("transport.goto_position", ["position": "12.1.1.1"]),
         // v3.1.10: both index- and name-based goto_marker
         // now resolve from cache and route via transport.goto_position
         // using the marker's `position` string (chorus at 17.1.1.1).
+        ("transport.get_state", [:]),
         ("transport.goto_position", ["position": "17.1.1.1"]),
+        ("transport.get_state", [:]),
         ("transport.goto_position", ["position": "17.1.1.1"]),
         ("nav.open_marker_list", [:]),
         ("nav.get_markers", [:]),
@@ -3643,7 +3654,10 @@ private actor SelectiveFailChannel: Channel {
 
     #expect(!result.isError!)
     let ops = await ax.executedOps
-    expectExecutedOps(ops, equals: [("transport.goto_position", ["position": "17.1.1.1"])])
+    expectExecutedOps(ops, equals: [
+        ("transport.get_state", [:]),
+        ("transport.goto_position", ["position": "17.1.1.1"]),
+    ])
 }
 
 @Test func testNavigateDispatcherGotoBarRejectsOutOfRange() async {

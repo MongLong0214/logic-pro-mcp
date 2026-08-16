@@ -2216,20 +2216,21 @@ extension AccessibilityChannel {
     private enum StrayGoToPositionUIOutcome: Equatable { case closed, openOrUnknown }
 
     /// Kept as one generated fragment so the timeout reconciler and its no-System-Events parser
-    /// regression test execute exactly the same `do shell script` boundary behavior.
+    /// regression test execute exactly the same parent-owned snapshot boundary behavior.
     static func preLeafGoToPositionWindowSnapshotParserAppleScript() -> String {
         """
+        use framework "Foundation"
+
         -- The timeout process must not infer ownership from a title. The child persisted readable
         -- known-dialog and total-window counts immediately before its leaf click; failure to read
         -- exactly that three-line format is unsafe, not empty.
         on preLeafGoToPositionWindowSnapshot(snapshotPath)
             try
-                set snapshotText to do shell script "/bin/cat " & (quoted form of snapshotPath)
+                set snapshotText to (current application's NSString's stringWithContentsOfFile:snapshotPath encoding:(current application's NSUTF8StringEncoding) |error|:(missing value)) as text
                 set originalTextItemDelimiters to AppleScript's text item delimiters
-                -- `do shell script` returns command output with LF normalized to CR. The writer
-                -- intentionally persists LF, so parse the returned representation rather than
-                -- pretending the file's byte delimiter survived this API boundary unchanged.
-                set AppleScript's text item delimiters to return
+                -- Foundation preserves the writer's LF delimiters, so parse the persisted
+                -- representation rather than assuming an AppleScript conversion to CR.
+                set AppleScript's text item delimiters to linefeed
                 set snapshotItems to text items of snapshotText
                 set AppleScript's text item delimiters to originalTextItemDelimiters
                 if (count of snapshotItems) is not 3 then return "UNREADABLE"

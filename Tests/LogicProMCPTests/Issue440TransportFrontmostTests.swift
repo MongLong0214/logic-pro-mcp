@@ -129,15 +129,20 @@ struct Issue440TransportFrontmostTests {
         )
 
         // The AX tree is empty, so this fails further along — but NOT at the gate, and without
-        // having activated anything. A gate that refused here would block every legitimate call.
+        // having activated anything. The early menu failure cannot observe whether a dialog is
+        // present, so the current contract refuses later position routes rather than falling
+        // through to a global-input fallback. A gate that refused here would block every
+        // legitimate call before this terminal safety decision was reached.
         let obj = try #require(envelope(result))
-        // The route gets past the gate and fails further along without resolving or writing an
-        // alternative position route. Source mutation: restore `via:"slider"` / `ax_write_failed`
-        // in that receipt; this exact-route assertion must fail.
+        // This proves both facts the test owns: the gate admitted the dialog route, and its
+        // post-gate menu failure stayed terminal with no position write.
         #expect(try #require(obj["frontmost_preparation"] as? String) == "already_frontmost")
         #expect(try #require(obj["state"] as? String) == "C")
-        #expect(try #require(obj["error"] as? String) == "not_supported")
-        #expect(try #require(obj["position_route"] as? String) == "unavailable")
+        #expect(try #require(obj["error"] as? String) == "ax_write_failed")
+        #expect(try #require(obj["dialog_route_outcome"] as? String) == "menu_not_found")
+        #expect(try #require(obj["fallback_unsafe"] as? Bool))
+        #expect(!(try #require(obj["safe_to_retry"] as? Bool)))
+        #expect(obj["position_route"] == nil)
         let writeAttempted = try #require(obj["write_attempted"] as? Bool)
         #expect(!writeAttempted)
         #expect(obj["via"] == nil)

@@ -376,6 +376,17 @@ struct HCGlobalInvariantTests {
             #expect(!isError, "\(routeCase.command) failed before route assertion: \(sharedToolText(result))")
             let firstDestination = try #require(routeCase.destinations.first)
             let executedOps = await channels[firstDestination]?.executedOps ?? []
+            if routeCase.command == "mmc_locate", let bar = routeCase.params["bar"]?.intValue {
+                // Bar-based MMC locate shares goto_position's observed-effect
+                // contract: it reads a live baseline, then performs exactly one
+                // primary seek carrying the complete requested position.
+                #expect(executedOps.count == 2, "mmc_locate bar must read a baseline then seek once")
+                #expect(executedOps.first?.0 == "transport.get_state")
+                #expect(executedOps.first?.1 == [:])
+                #expect(executedOps.last?.0 == routeCase.operation)
+                #expect(executedOps.last?.1 == ["position": "\(bar).1.1.1"])
+                continue
+            }
             #expect(executedOps.count == 1, "\(routeCase.command) should execute exactly one primary route")
             #expect(executedOps.first?.0 == routeCase.operation)
         }
