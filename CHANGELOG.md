@@ -57,9 +57,10 @@ thing it claimed to check.**
   single unsettled count read: if the track count read higher than before, State A — with no check for
   whether anything was on screen. A create that raised the mandatory New Track sheet could therefore
   report success to a user who was wedged on it. The check that replaced it asks whether any blocker is
-  present, and on a live arrange window that question currently cannot be answered
-  ([#549](https://github.com/MongLong0214/logic-pro-mcp/issues/549)): the sheet scan retains the first
-  `-25200` from a child role read and can never return "absent". The write itself is unaffected — the
+  present, and on a live arrange window that question currently is not being answered
+  ([#549](https://github.com/MongLong0214/logic-pro-mcp/issues/549)): the sheet scan reports its read as
+  unreadable rather than as "no sheet present", so the settled-clean streak that certification waits for
+  never starts. The exact mechanism is still under measurement. The write itself is unaffected — the
   track is created, nothing is left blocking, the count is right. **Clients branching on `state == "A"`
   for `track.create` should read `observed_delta` until #549 lands.** Given up: a State A that never
   looked. Gained: an honest State B.
