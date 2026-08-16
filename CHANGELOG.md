@@ -6,9 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ---
 
-## [3.14.0] — 2026-08-17
+## [Unreleased]
 
-**This release removes several ways the server could report that it had verified something it had not.**
+**These changes remove several ways the server could report that it had verified something it had not.**
 
 Every operation answers with an Honest Contract envelope: State A means performed *and* independently
 verified, State B means attempted but unverifiable, State C means the write did not succeed. A false
@@ -166,6 +166,7 @@ through, so this is a behaviour change, not only a reordering.
   role and label, the exact route is required first, and chooser health is exposed so
   a caller can tell whether the surface is usable before driving it.
 - **#492** — see the transport reordering above.
+
 
 
 ### Changed — plugin-insert actuation
@@ -2321,8 +2322,6 @@ Dead code cleanup — ~43 lines of production code and ~40 lines of duplicated t
 
 - Total: **500 Swift tests** + **229 live E2E tests** passing.
 - New consolidated `SharedTestHelpers.swift` eliminates duplicate `toolText`, `resourceText`, and `ServerStartRecorder` helpers across 5 test files.
-
----
 
 ## [2.0.0] — 2026-04-06
 
