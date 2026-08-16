@@ -1187,6 +1187,13 @@ extension AccessibilityChannel {
     ///   - elementRole: `element`'s own role, when already known (nil only
     ///     for the initial window-root call, whose role this scan never
     ///     independently reads).
+    /// #549: roles that cannot be, or contain, an `AXSheet`. A failed `AXChildren` read on one of
+    /// these is not a hole in the sheet search: the node was never a candidate. Keyed on role because
+    /// `AXRole` is a non-localized constant, unlike titles and `AXRoleDescription` — a label-based
+    /// exclusion would silently stop working on a non-English Logic, which is the defect class of #519
+    /// and #523. One entry, the one that was measured.
+    private static let rolesThatCannotHostASheet: Set<String> = [kAXCellRole as String]
+
     private static func findSheetDescendantLookup(
         in element: AXUIElement,
         maxDepth: Int,
@@ -1210,6 +1217,24 @@ extension AccessibilityChannel {
         case .failure(let error):
             // A node with no children is an answer: nothing here, keep looking elsewhere.
             guard !axStatusIsDefinitiveAbsence(error) else { return .absent }
+            // #549: a node that CANNOT host a sheet contributes nothing to this question, so failing to
+            // read its children is not a gap in the search — asking it was the mistake.
+            //
+            // Measured: one `AXCell` inside the Marker List's table answers `AXChildren` with -25200 on
+            // every read. Because one unreadable node anywhere made the whole verdict `.unreadable`,
+            // `track.create` and `track.delete` could not certify State A on any project that has a
+            // marker while the Marker List is open — an ordinary working state. Verified by intervention
+            // in both directions with the window left open throughout: delete the marker and the node and
+            // the failure both vanish; recreate it and both return.
+            //
+            // The exclusion is by ROLE, not by depth. "A sheet is a direct child of its window" is an
+            // observation from one measurement that a future Logic layout change would silently break;
+            // "an AXCell cannot host a sheet" is true independent of tree shape. The set is deliberately
+            // one role — the one that was measured. Adding to it requires its own live measurement, and
+            // excluding a node that COULD host a sheet would trade a withheld State A for a false one.
+            if let elementRole, rolesThatCannotHostASheet.contains(elementRole) {
+                return .absent
+            }
             return .unreadable(
                 .windowSheetReadFailed(error),
                 ModalSheetScanFailureDetail(
