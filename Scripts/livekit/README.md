@@ -57,6 +57,15 @@ Copy the closest existing one. Then:
   `expected_name` and its hint says to rename by index first. The harness ignored that twice — once with a
   name, once by guessing `target_ref` would help — and both times the answer was already in the envelope.
 - **Record the operation, not the setup.** Start the recording after the precondition.
+- **Cover the call site you changed, not a neighbouring one.** `live_538_modal_reconcile.py` drives the
+  mandatory New Track sheet through `track.delete`; the create route reaches the same sheet through
+  different code. A green 538 run said nothing about the create fix, and writing
+  `live_542_track_create_retry.py` for that call site is what surfaced #549 on its first run.
+- **When a check goes red, measure the baseline before calling it a regression.** Re-run the same harness
+  against the pre-change binary in the same worktree and session. #549's receipt was byte-for-byte
+  identical at `HEAD~1`, which is the difference between a blocker and a separate pre-existing issue.
+- **Leave a true red check red.** A harness edited until it agrees with the product is no longer an
+  instrument. Name the open issue in the docstring instead.
 
 ## `check_review_integrity.sh`
 
