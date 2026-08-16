@@ -876,6 +876,49 @@ struct SemanticOracleMutationTests {
             readbackData: nonCanonicalReadback
         ))
         #expect(!canonicalityWasOnlySelfReported, "delete_marker accepted a self-reported canonicality flag contrary to readback")
+
+        // #549 BLOCKER follow-up: `observed_marker_count_before`/`_after` were presence-only
+        // (`.typedField`) — any count pair satisfied them. Mutation proven: drop
+        // `.numericEqualsOffset` (the AFTER == BEFORE - 1 pin) from the oracle. Both envelopes
+        // below evaluate true today with only `.typedField` in place; each carries the honest
+        // fixture's `observed_marker_count_before: 3` but a corrupted after-count that either
+        // claims no drop occurred (3, unchanged) or is disconnected from the before-count
+        // entirely (99).
+        var noDropCountsObject = try #require(
+            JSONSerialization.jsonObject(with: fixture.responseData) as? [String: Any]
+        )
+        noDropCountsObject["observed_marker_count_after"] = 3
+        let noDropCounts = try #require(oracle.evaluate(
+            responseData: try JSONSerialization.data(withJSONObject: noDropCountsObject),
+            readbackData: fixture.readbackData
+        ))
+        #expect(!noDropCounts, "delete_marker accepted an observed after-count equal to the before-count (no drop)")
+
+        var wildCountsObject = try #require(
+            JSONSerialization.jsonObject(with: fixture.responseData) as? [String: Any]
+        )
+        wildCountsObject["observed_marker_count_after"] = 99
+        let wildCounts = try #require(oracle.evaluate(
+            responseData: try JSONSerialization.data(withJSONObject: wildCountsObject),
+            readbackData: fixture.readbackData
+        ))
+        #expect(!wildCounts, "delete_marker accepted an observed after-count unrelated to the before-count")
+
+        // The companion pin — the pre-write witness must equal the table's own pre-write
+        // inventory size — is symmetric: a producer could otherwise report ANY
+        // `observed_marker_count_before`, as long as `_after` happens to be one less than IT,
+        // and still pass every other State-A gate. Mutation proven: drop `.fieldsEqual(
+        // observed_marker_count_before, marker_count_before)` from the oracle.
+        var staleBeforeCountObject = try #require(
+            JSONSerialization.jsonObject(with: fixture.responseData) as? [String: Any]
+        )
+        staleBeforeCountObject["observed_marker_count_before"] = 4
+        staleBeforeCountObject["observed_marker_count_after"] = 3
+        let staleBeforeCount = try #require(oracle.evaluate(
+            responseData: try JSONSerialization.data(withJSONObject: staleBeforeCountObject),
+            readbackData: fixture.readbackData
+        ))
+        #expect(!staleBeforeCount, "delete_marker accepted a pre-write witness that disagreed with the table's own pre-write inventory size")
     }
 
     /// #373 B3 — project.save_as is envelope-only because its
@@ -1488,6 +1531,24 @@ enum JSONMutator {
                JSONInspector.isBoolean(bValue),
                let b = (bValue as? NSNumber)?.boolValue {
                 mutants.append(contentsOf: replacements(root, keyA, [("flip-same", b)]))
+            }
+        case .numericEqualsOffset(let keyA, let keyB, let offset):
+            // Break the exact delta by moving EITHER side off it by 1, plus a
+            // non-number on keyA to exercise the numbers-only rule. (`drop keyA`
+            // is already added generically via `key`.)
+            if let bValue = JSONPath.resolve(root, keyPath: keyB),
+               let b = JSONInspector.number(of: bValue) {
+                mutants.append(contentsOf: replacements(root, keyA, [
+                    ("off-by-one high", b + offset + 1),
+                    ("off-by-one low", b + offset - 1),
+                    ("non-number", "not-a-number"),
+                ]))
+            }
+            if let aValue = JSONPath.resolve(root, keyPath: keyA),
+               let a = JSONInspector.number(of: aValue) {
+                mutants.append(contentsOf: replacements(root, keyB, [
+                    ("keyB moved off delta", a - offset + 1),
+                ]))
             }
         }
         return mutants

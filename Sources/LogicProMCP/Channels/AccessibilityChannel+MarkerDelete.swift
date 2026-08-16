@@ -111,7 +111,15 @@ extension AccessibilityChannel {
             "prewrite_marker_identities": prewriteMarkerIdentities,
             "marker_count_before": before.count,
         ]
-        let prewriteItemCount = readMarkerListItemCount(in: window, runtime: runtime.ax)
+        // Settle the same way the after-count is settled below: a single unsynced read taken
+        // right after `defaultOpenMarkerList` can catch Logic mid-render. This does not gate
+        // the write — an unreadable or unsettled pre-write witness still lets the operation
+        // proceed, exactly as an unreadable AFTER witness does not retroactively undo an
+        // already-issued Delete. It only changes what gets compared against `before.count`
+        // below, after the write.
+        let prewriteItemCount = settledMarkerListItemCount(
+            in: window, runtime: runtime.ax, mouse: mouse
+        )
         addMarkerDeleteItemCountObservation(
             prewriteItemCount, phase: .before, to: &extras
         )
@@ -503,6 +511,19 @@ extension AccessibilityChannel {
                 : prewriteItemCount.refusalDetail
             return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
         }
+        // The pre-write witness must corroborate the pre-write TABLE inventory, not merely be
+        // present. Without this, a pre-write count that is already wrong (stale render, wrong
+        // node, a decoy) combines with a rebuild that omits the target from the table's own
+        // projections to certify a delete that never happened: the after-count would still
+        // read exactly one less than the (wrong) before-count.
+        guard observedCountBefore == before.count else {
+            extras["reason_detail"] =
+                "The Marker List Number of Items count before the delete (observed "
+                + "\(observedCountBefore)) did not agree with the pre-write table inventory "
+                + "(\(before.count) markers), so this independent witness cannot corroborate "
+                + "the delete."
+            return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
+        }
         guard observedCountAfter == observedCountBefore - 1 else {
             extras["reason_detail"] =
                 "The Marker List Number of Items count did not drop by one (observed "
@@ -636,6 +657,30 @@ extension AccessibilityChannel {
         extras[stateKey] = observation.witnessState
     }
 
+    /// Reads the Number of Items witness repeatedly until two consecutive reads agree, or a
+    /// fixed budget is spent — the same settle discipline the post-write loop applies to the
+    /// table inventory, selection, and this same witness. A momentary AX hiccup on ONE read
+    /// must not certify (or falsely poison) a value that a second read would have confirmed
+    /// or corrected. If the budget is spent without two agreeing reads, the LAST reading is
+    /// returned rather than manufacturing a status the AX API never returned; a caller that
+    /// needs the value to be trustworthy still requires `.parsedCount` downstream.
+    private static func settledMarkerListItemCount(
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime,
+        mouse: AXMouseHelper.Runtime
+    ) -> MarkerListItemCountRead {
+        var previous: MarkerListItemCountRead?
+        for _ in 0..<6 {
+            let reading = readMarkerListItemCount(in: window, runtime: runtime)
+            if let previous, previous.agrees(with: reading) {
+                return reading
+            }
+            previous = reading
+            mouse.sleepMicros(250_000)
+        }
+        return previous ?? .missing
+    }
+
     /// Reads the Marker List's Number of Items static text by AXDescription, never
     /// by sibling position. The live node is under an AXGroup described "Marker";
     /// its value is Logic's own rendering (`"1 Marker"`, `"15 Markers"`).
@@ -674,13 +719,22 @@ extension AccessibilityChannel {
         }
     }
 
-    /// Walks the already-bound Marker List window for AXStaticText nodes whose
-    /// AXDescription is exactly `Number of Items`. The table subtree is skipped:
-    /// that count is not a table projection, and descending into AXRows/AXChildren
-    /// would couple the witness to the rebuild failure mode it exists to outvote.
-    /// An unreadable unrelated node is skipped; a completed walk with zero or many
-    /// matches is an unreadable witness, not a sibling-index guess. A walk error
-    /// with no match is a failed read.
+    /// Walks the already-bound Marker List window for AXStaticText nodes matching
+    /// `AXLocalePolicy.markerListNumberOfItemsLabel`, by AXDescription OR AXHelp — the same
+    /// two-attribute precedent `EventListReadbackCollector.readStaticText(help:)` uses for its
+    /// own "Number of Items" node. The table, button, and menu-button subtrees are skipped:
+    /// none of them can contain this witness (it sits under an AXGroup), and descending into
+    /// AXRows/AXChildren or the Edit control's own menu-negotiation subtree would couple this
+    /// witness to failure modes it exists to outvote, or to the unrelated menu route's own
+    /// read/retry discipline.
+    ///
+    /// Uniqueness can only be trusted when the entire searched subtree answered. A node that
+    /// will not answer might have been hiding a second "Number of Items" node — one whose
+    /// parent alone refuses to vend AXChildren, for instance — so finding exactly one match
+    /// elsewhere does NOT prove that match is unique. Any unreadable node anywhere in the
+    /// SEARCHED subtree therefore makes the whole search unreadable, regardless of how many
+    /// matches were already collected; only a walk that saw every candidate in scope can call
+    /// a single match unique.
     private static func findMarkerListNumberOfItemsNodes(
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
@@ -709,18 +763,35 @@ extension AccessibilityChannel {
                     case .success(let role):
                         childRole = role
                         if role == (kAXStaticTextRole as String) {
+                            var matched = false
                             switch AXHelpers.getAttributeResult(
                                 child, kAXDescriptionAttribute as String, runtime: runtime
                             ) as Result<String?, AXHelpers.AXStatusError> {
-                            case .success(let description)
-                                where description == "Number of Items":
-                                matches.append(child)
-                            case .success:
-                                break
+                            case .success(let description):
+                                matched = AXLocalePolicy.markerListNumberOfItemsLabel.matches(
+                                    description, mode: .exactStrict
+                                )
                             case .failure(let error) where error.isDefinitiveAbsence:
                                 break
                             case .failure(let error):
                                 unreadable = unreadable ?? error
+                            }
+                            if !matched {
+                                switch AXHelpers.getAttributeResult(
+                                    child, kAXHelpAttribute as String, runtime: runtime
+                                ) as Result<String?, AXHelpers.AXStatusError> {
+                                case .success(let help):
+                                    matched = AXLocalePolicy.markerListNumberOfItemsLabel.matches(
+                                        help, mode: .exactStrict
+                                    )
+                                case .failure(let error) where error.isDefinitiveAbsence:
+                                    break
+                                case .failure(let error):
+                                    unreadable = unreadable ?? error
+                                }
+                            }
+                            if matched {
+                                matches.append(child)
                             }
                         }
                     case .failure(let error) where error.isDefinitiveAbsence:
@@ -728,42 +799,47 @@ extension AccessibilityChannel {
                     case .failure(let error):
                         unreadable = unreadable ?? error
                     }
-                    // The independent count is not inside the Marker Table. Do not
-                    // descend into a projection we already know can omit rows.
-                    if childRole != (kAXTableRole as String) {
+                    // The independent count is not inside the Marker Table, and not inside a
+                    // button or menu button — Logic's own "Number of Items" text sits under an
+                    // AXGroup, never under a control. Do not descend into a projection we
+                    // already know can omit rows, or into the Edit control's OWN subtree: that
+                    // subtree's read health is coupled to the unrelated menu-route negotiation
+                    // (`AXShowMenu`/`AXCancel` observation), which has its own retry discipline
+                    // and must not be able to poison this witness by proxy.
+                    if childRole != (kAXTableRole as String),
+                       childRole != (kAXMenuButtonRole as String),
+                       childRole != (kAXButtonRole as String) {
                         next.append(child)
                     }
                 }
             }
             parents = next
         }
-        if matches.isEmpty, let unreadable {
+        // An unreadable node anywhere in this walk means uniqueness was never established,
+        // even when exactly one match was found: the part of the tree that would not answer
+        // could have been hiding a second candidate. Check this BEFORE looking at `matches`.
+        if let unreadable {
             return .failure(unreadable)
         }
         return .success(matches)
     }
 
-    /// Defensive parse of Logic's Number of Items value. Exactly one run of ASCII
-    /// digits is a count; any other rendering is unreadable. A failed parse is
-    /// never published as zero.
+    /// Defensive parse of Logic's Number of Items value, following the same leading-token rule
+    /// as the Event List reader's `parseCount`: the value must OPEN with an ASCII digit run,
+    /// immediately followed by end-of-string or whitespace, with no further digits anywhere
+    /// after. `runs.count == 1` alone is not that rule — it accepts a single digit run
+    /// ANYWHERE in the string, so a value like `"Marker 2"` (a decoy or a differently-labelled
+    /// sibling) parses as `2` even though its single ASCII run is not the item count. That
+    /// manufactured number can look exactly like a genuine drop while the selection merely
+    /// moved. A failed parse is never published as zero.
     private static func parseMarkerListItemCount(_ text: String) -> Int? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        var runs: [String] = []
-        var current = ""
-        for character in trimmed {
-            if character.isASCII && character.isNumber {
-                current.append(character)
-            } else if !current.isEmpty {
-                runs.append(current)
-                current = ""
-            }
-        }
-        if !current.isEmpty {
-            runs.append(current)
-        }
-        guard runs.count == 1, let value = Int(runs[0]) else { return nil }
-        return value
+        guard let first = trimmed.first, first.isASCII, first.isNumber else { return nil }
+        let leadingDigits = trimmed.prefix { $0.isASCII && $0.isNumber }
+        let rest = trimmed[leadingDigits.endIndex...]
+        guard rest.isEmpty || (rest.first?.isWhitespace ?? false) else { return nil }
+        guard !rest.contains(where: { $0.isASCII && $0.isNumber }) else { return nil }
+        return Int(leadingDigits)
     }
 
     /// The terminal outcome of the fixed six-poll settle budget. Keeping these cases separate
@@ -817,6 +893,14 @@ extension AccessibilityChannel {
            let structuralChildrenCount = failure.structuralChildrenCount {
             extras["readback_ax_rows_count"] = axRowsCount
             extras["readback_structural_children_count"] = structuralChildrenCount
+        }
+        // A persistently-failing item-count witness (e.g. a subtree that never stops
+        // answering -25200) exhausts the settle budget one poll at a time and surfaces here
+        // rather than through the single-read `.unreadable` branch below. Either path is the
+        // same observed fact — this witness could not be read — so both must publish the same
+        // `item_count_witness_state` a caller can check without branching on which site failed.
+        if failure.site == .itemCount {
+            extras["item_count_witness_state"] = "unreadable"
         }
     }
 

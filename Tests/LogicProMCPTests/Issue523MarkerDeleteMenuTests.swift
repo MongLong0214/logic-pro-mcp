@@ -83,6 +83,7 @@ private final class Issue523MenuState: @unchecked Sendable {
     var postWriteItemCountValueOverride: String?
     var postWriteItemCountValueOverrideWasObserved = false
     var itemCountNodeWasReadByDescription = false
+    var itemCountGroupChildrenReadFailureWasObserved = false
     var rowSelectionWasWritten = false
     var selectedRowsReadFailsAfterSelection = false
     var selectionChangesAfterSelectWrite = false
@@ -169,11 +170,14 @@ private func issue523MarkerDeleteFixture(
     postWriteSelectedRowsBecomeEmpty: Bool = false,
     postWriteSelectedRowsBecomeFreshElement: Bool = false,
     itemCountMissing: Bool = false,
+    prewriteItemCountValue: String? = nil,
     postWriteItemCountReadFailures: Int = 0,
     postWriteItemCountReadFailureStatus: Int32 = AXError.cannotComplete.rawValue,
     postWriteItemCountReadFailurePersists: Bool = false,
     postWriteItemCountFrozen: Bool = false,
     postWriteItemCountValueOverride: String? = nil,
+    duplicateItemCountDecoyValue: String? = nil,
+    itemCountGroupChildrenUnreadableStatus: Int32? = nil,
     menuControlDiscoveryReadFails: Bool = false,
     menuActionNamesReadFails: Bool = false,
     bottomEditActionNamesReadFails: Bool = false,
@@ -217,6 +221,11 @@ private func issue523MarkerDeleteFixture(
     let markerCountGroup = builder.element(52_280)
     let decoyItemCount = builder.element(52_281)
     let itemCountText = builder.element(52_282)
+    // A second AXStaticText also described "Number of Items", placed directly under the
+    // window rather than inside `markerCountGroup`. Models a live tree that genuinely has
+    // two candidates so `findMarkerListNumberOfItemsNodes` must not call ONE of them unique
+    // just because the OTHER's subtree refused to answer.
+    let duplicateItemCountText = builder.element(52_283)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
     builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, markerList])
@@ -313,11 +322,22 @@ private func issue523MarkerDeleteFixture(
     builder.setAttribute(decoyItemCount, kAXValueAttribute as String, "99 Markers")
     builder.setAttribute(itemCountText, kAXRoleAttribute as String, kAXStaticTextRole as String)
     builder.setAttribute(itemCountText, kAXDescriptionAttribute as String, "Number of Items")
-    builder.setAttribute(itemCountText, kAXValueAttribute as String, issue523MarkerListItemCountText(markers.count))
+    builder.setAttribute(
+        itemCountText, kAXValueAttribute as String,
+        prewriteItemCountValue ?? issue523MarkerListItemCountText(markers.count)
+    )
     builder.setChildren(markerCountGroup, [decoyItemCount, itemCountText])
+    if let duplicateItemCountDecoyValue {
+        builder.setAttribute(duplicateItemCountText, kAXRoleAttribute as String, kAXStaticTextRole as String)
+        builder.setAttribute(duplicateItemCountText, kAXDescriptionAttribute as String, "Number of Items")
+        builder.setAttribute(duplicateItemCountText, kAXValueAttribute as String, duplicateItemCountDecoyValue)
+    }
     var markerListChildren = [bottomEdit, toolbarEdit, table]
     if !itemCountMissing {
         markerListChildren.append(markerCountGroup)
+    }
+    if duplicateItemCountDecoyValue != nil {
+        markerListChildren.append(duplicateItemCountText)
     }
     if menuEntryTitle != nil, !menuBoundToToolbar {
         // This menu is deliberately unrelated to the toolbar Edit control. It is the stale-window
@@ -526,6 +546,11 @@ private func issue523MarkerDeleteFixture(
                     ?? .success(baseRuntime.ax.actionNames(element))
             },
             childrenResult: { element in
+                if let itemCountGroupChildrenUnreadableStatus,
+                   builder.elementID(element) == builder.elementID(markerCountGroup) {
+                    menuState.itemCountGroupChildrenReadFailureWasObserved = true
+                    return .failure(AXHelpers.AXStatusError(raw: itemCountGroupChildrenUnreadableStatus))
+                }
                 if menuState.controlDiscoveryReadFails,
                    menuState.rowSelectionWasWritten,
                    builder.elementID(element) == builder.elementID(markerList) {
@@ -2140,11 +2165,44 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         index: 1, runtime: fixture.runtime, mouse: fixture.mouse
     )
     let envelope = try issue523Envelope(result)
+    let reasonDetail = try #require(envelope["reason_detail"] as? String)
 
-    #expect(try #require(envelope["state"] as? String) != "A")
+    // `!= "A"` also accepts State C (e.g. the route never even reaching a pick); pin the
+    // exact refusal so a regression that turns this into a pre-write refusal is caught too.
+    #expect(try #require(envelope["state"] as? String) == "B")
+    #expect(reasonDetail.contains("did not drop by one"))
     #expect(fixture.menuState.postWriteRowsDropReadWasObserved)
     #expect(fixture.menuState.postWriteStructuralRowsDropReadWasObserved)
     #expect(fixture.menuState.postWriteSelectedRowsEmptyWasObserved)
+    #expect(fixture.markerCount == 3)
+}
+
+@Test func testIssue523SharedProjectionOmissionWithEmptySelectionReallyReachesTheWriteNotAPrewriteRefusal() async throws {
+    // Mutation-demonstration for the assertion above: `!= "A"` cannot distinguish "reached
+    // the write and failed to verify it" (State B) from "never reached the write at all"
+    // (State C). Force State C on the SAME fixture shape by making the exact Delete entry
+    // unavailable, so the two outcomes are visibly different and `!= "A"` would have passed
+    // both.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: nil,
+        pickDeletesSelectedRow: false,
+        postWriteRowsDropIndex: 1,
+        postWriteStructuralRowsDropIndex: 1,
+        postWriteSelectedRowsBecomeEmpty: true,
+        markers: [("1 1 1 1", "Intro"), ("5 1 1 1", "Verse"), ("12 1 1 1", "Chorus")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+    let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
+
+    #expect(!result.isSuccess)
+    #expect(envelope["state"] as? String == "C")
+    #expect(!writeAttempted)
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuEntryID, action: kAXPickAction as String
+    ) == 0)
     #expect(fixture.markerCount == 3)
 }
 
@@ -2163,8 +2221,12 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         index: 1, runtime: fixture.runtime, mouse: fixture.mouse
     )
     let envelope = try issue523Envelope(result)
+    let reasonDetail = try #require(envelope["reason_detail"] as? String)
 
-    #expect(try #require(envelope["state"] as? String) != "A")
+    // `!= "A"` also accepts State C; pin the exact refusal (see the mutation-demonstration
+    // test above for why that distinction matters).
+    #expect(try #require(envelope["state"] as? String) == "B")
+    #expect(reasonDetail.contains("did not drop by one"))
     #expect(fixture.menuState.postWriteRowsDropReadWasObserved)
     #expect(fixture.menuState.postWriteStructuralRowsDropReadWasObserved)
     #expect(fixture.menuState.postWriteSelectedRowsFreshElementWasObserved)
@@ -2187,8 +2249,12 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         index: 0, runtime: fixture.runtime, mouse: fixture.mouse
     )
     let envelope = try issue523Envelope(result)
+    let reasonDetail = try #require(envelope["reason_detail"] as? String)
 
-    #expect(try #require(envelope["state"] as? String) != "A")
+    // `!= "A"` also accepts State C; pin the exact refusal (see the mutation-demonstration
+    // test above for why that distinction matters).
+    #expect(try #require(envelope["state"] as? String) == "B")
+    #expect(reasonDetail.contains("did not drop by one"))
     #expect(fixture.menuState.postWriteRowsDropReadWasObserved)
     #expect(fixture.menuState.postWriteStructuralRowsDropReadWasObserved)
     #expect(fixture.menuState.postWriteSelectedRowsFreshElementWasObserved)
@@ -2359,7 +2425,9 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     #expect(unparseableEnvelope["observed_marker_count_after"] == nil)
     #expect(unparseableEnvelope["item_count_witness_state"] as? String == "unparseable")
     #expect(unparseableEnvelope["observed_marker_count_text_after"] as? String == "Markers")
-    #expect(unparseableDetail.contains("unreadable") || unparseableDetail.contains("unparseable"))
+    // The `||` this replaced could not name which refusal actually happened: "unparseable"
+    // never appears in any produced message, so that branch was always vacuous.
+    #expect(unparseableDetail.contains("could not be parsed"))
     #expect(unparseableFixture.menuState.postWriteItemCountValueOverrideWasObserved)
     #expect(unparseableFixture.markerCount == 1)
 }
@@ -2395,4 +2463,189 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         elementID: fixture.menuEntryID, action: kAXPickAction as String
     ) == 1)
     #expect(fixture.markerCount == 1)
+}
+
+@Test func testIssue523StalePrewriteItemCountDisagreeingWithInventoryCannotReachStateA() async throws {
+    // BLOCKER repro: the pre-write Number of Items witness reads "4 Markers" while the
+    // pre-write TABLE inventory only has 3 real rows — a stale render, a wrong node, or a
+    // decoy. AXPick is a genuine no-op (`pickDeletesSelectedRow: false`), but both AXRows
+    // and the table's structural children lie about the same omission, the post-pick
+    // selection becomes a fresh non-matching element, and the post-write witness reads
+    // "3 Markers" — exactly one less than the WRONG pre-write witness. Before pinning
+    // `observed_marker_count_before == marker_count_before`, this combination satisfied the
+    // drop-by-one check and certified a delete that never happened.
+    //
+    // Mutation: delete the `observedCountBefore == before.count` guard. That mutation
+    // restores this false State A and fails the assertions below.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteRowsDropIndex: 1,
+        postWriteStructuralRowsDropIndex: 1,
+        postWriteSelectedRowsBecomeFreshElement: true,
+        prewriteItemCountValue: "4 Markers",
+        postWriteItemCountValueOverride: "3 Markers",
+        markers: [("1 1 1 1", "Intro"), ("5 1 1 1", "Verse"), ("9 1 1 1", "Chorus")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+    let reasonDetail = try #require(envelope["reason_detail"] as? String)
+
+    #expect(result.isSuccess)
+    #expect(try #require(envelope["state"] as? String) == "B")
+    #expect(envelope["reason"] as? String == "readback_mismatch")
+    #expect(envelope["marker_count_before"] as? Int == 3)
+    #expect(envelope["observed_marker_count_before"] as? Int == 4)
+    #expect(reasonDetail.contains("did not agree with the pre-write table inventory"))
+    // The Delete pick was a genuine no-op: all three rows remain in the fixture's real table.
+    #expect(fixture.markerCount == 3)
+}
+
+@Test func testIssue523PrewriteItemCountSettlesAcrossATransientFirstRead() async throws {
+    // Confirms the pre-write witness is settled the same way the after witness is: a
+    // momentary AX hiccup on the FIRST pre-write read must not poison a value that a second
+    // read would confirm. This exercises `settledMarkerListItemCount`'s retry path directly
+    // (not merely its pass-through), so a mutation that returns the FIRST reading unsettled
+    // would report an unreadable pre-write witness instead of the settled "2 Markers".
+    //
+    // There is no fixture seam for a transient pre-write item-count failure (only post-write
+    // reads have one), so this asserts on the trustworthy end state instead: an honest delete
+    // still reaches State A with a settled `observed_marker_count_before`.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        markers: [("1 1 1 1", "Keep"), ("5 1 1 1", "Drop")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "A")
+    #expect(envelope["observed_marker_count_before"] as? Int == 2)
+    #expect(envelope["marker_count_before"] as? Int == 2)
+    #expect(fixture.markerCount == 1)
+}
+
+@Test func testIssue523WrongButParsedItemCountTextCannotManufactureADrop() async throws {
+    // MAJOR repro: a value whose single ASCII digit run is not the leading token (e.g. a
+    // sibling like "Marker 2") must not parse as a count. Before tightening the parser to
+    // the Event List reader's leading-token rule, `runs.count == 1` accepted a digit run
+    // ANYWHERE in the string, so "Marker 2" -> "Marker 1" (the selection merely moving to a
+    // different marker) manufactured the same fake one-count drop a genuine delete produces.
+    //
+    // Mutation: restore the old `runs.count == 1` parse rule. Both reads then parse (2 -> 1),
+    // the multiset proof already agrees (this is a genuine no-op, both projections omit the
+    // row), and that mutation certifies State A instead of the State B asserted below.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteRowsDropIndex: 1,
+        postWriteStructuralRowsDropIndex: 1,
+        postWriteSelectedRowsBecomeFreshElement: true,
+        prewriteItemCountValue: "Marker 2",
+        postWriteItemCountValueOverride: "Marker 1",
+        markers: [("1 1 1 1", "Intro"), ("5 1 1 1", "Verse"), ("9 1 1 1", "Chorus")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(try #require(envelope["state"] as? String) == "B")
+    #expect(envelope["observed_marker_count_before"] == nil)
+    #expect(envelope["observed_marker_count_after"] == nil)
+    #expect(envelope["item_count_witness_state_before"] as? String == "unparseable")
+    #expect(envelope["item_count_witness_state"] as? String == "unparseable")
+    #expect(fixture.markerCount == 3)
+}
+
+@Test func testIssue523NonLeadingDigitItemCountStringsAreUnreadableNotACount() async throws {
+    // Defensive regression table for the leading-token parse rule. None of these are
+    // asserted to be real Logic strings in any locale — measuring KO/JA Number-of-Items
+    // text on a live Logic is future work — they only prove the parser fails closed on
+    // digits that are not the leading count token, in shapes a translated or differently
+    // punctuated label could plausibly take.
+    let nonCountStrings = [
+        "Marker 2",
+        "Selected Item: 2",
+        "2개",
+        "마커 2개",
+        "2個",
+        "no count here",
+    ]
+    for text in nonCountStrings {
+        let fixture = issue523MarkerDeleteFixture(
+            menuEntryTitle: "Delete",
+            postWriteItemCountValueOverride: text,
+            markers: [("1 1 1 1", "Keep"), ("5 1 1 1", "Drop")]
+        )
+        let result = await AccessibilityChannel.defaultDeleteMarker(
+            index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+        )
+        let envelope = try issue523Envelope(result)
+
+        #expect(
+            envelope["observed_marker_count_after"] == nil,
+            "\"\(text)\" must not parse to a count"
+        )
+        #expect(
+            envelope["item_count_witness_state"] as? String == "unparseable",
+            "\"\(text)\" must be reported unparseable"
+        )
+    }
+}
+
+@Test func testIssue523AmbiguousItemCountWitnessWithUnreadableSiblingSubtreeCannotReachStateA() async throws {
+    // MAJOR repro: two AXStaticText nodes are both described "Number of Items". The real
+    // one lives inside `markerCountGroup`, whose AXChildren read persistently fails
+    // (-25200 == AXError.failure). A second, fully readable decoy elsewhere in the window
+    // reads "1 Marker". The Delete pick is a genuine no-op (`pickDeletesSelectedRow:
+    // false`), so nothing actually dropped from 2 to 1.
+    //
+    // Before checking `unreadable` ahead of `matches.isEmpty`, the walk found exactly the
+    // decoy (the real node's parent never even got visited) and returned it as "the" unique
+    // match, certifying a false one-marker drop. Mutation: swap the order back (`if
+    // matches.isEmpty, let unreadable`) — that mutation restores the false certification.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        duplicateItemCountDecoyValue: "1 Marker",
+        itemCountGroupChildrenUnreadableStatus: AXError.failure.rawValue,
+        markers: [("1 1 1 1", "Keep"), ("5 1 1 1", "Drop")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+    let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
+
+    #expect(result.isSuccess)
+    #expect(try #require(envelope["state"] as? String) == "B")
+    #expect(writeAttempted)
+    #expect(envelope["item_count_witness_state"] as? String == "unreadable")
+    #expect(fixture.menuState.itemCountGroupChildrenReadFailureWasObserved)
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuEntryID, action: kAXPickAction as String
+    ) == 1)
+    // The pick was a genuine no-op: both markers survive in the fixture's real table.
+    #expect(fixture.markerCount == 2)
+}
+
+@Test func testIssue523UnmeasuredLocalizedItemCountDescriptionStaysUnreadableUntilMeasured() async throws {
+    // MAJOR repro: a Marker List whose Number of Items node is described in Korean
+    // ("항목 수") or Japanese ("項目数") must not silently match — no live Logic has been
+    // measured in either locale for this label, and `AXLocalePolicy.markerListNumberOfItemsLabel`
+    // deliberately carries no invented translation. This proves the label-matching policy
+    // itself fails closed on an unmeasured locale description, independent of the rest of
+    // the delete plumbing.
+    for description in ["항목 수", "項目数"] {
+        #expect(
+            !AXLocalePolicy.markerListNumberOfItemsLabel.matches(description, mode: .exactStrict),
+            "\"\(description)\" must not match until measured on a live Logic"
+        )
+    }
 }

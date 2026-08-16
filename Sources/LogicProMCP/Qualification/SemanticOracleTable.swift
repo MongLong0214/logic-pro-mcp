@@ -1612,7 +1612,12 @@ enum SemanticOracleTable {
     // auto-generated names after deletion. State A also requires Logic's own
     // Number of Items count, read independently of the table projections, to drop
     // by exactly one; those observed counts are pinned below so a producer cannot
-    // certify State A without reporting the witness.
+    // certify State A without reporting the witness. Presence alone is not enough:
+    // the pre-write witness must also equal the table's own pre-write inventory
+    // size, and the post-write witness must be exactly one less than the pre-write
+    // witness — otherwise a stale/wrong pre-write count plus a rebuild that omits
+    // the target from the table's projections could certify a delete that never
+    // happened.
     static let navigateDeleteMarker = SafeMutationOracle.oracle(
         .navigateDeleteMarker,
         semantics: [
@@ -1633,6 +1638,17 @@ enum SemanticOracleTable {
             .typedField(key: "marker_count_after", type: .number),
             .typedField(key: "observed_marker_count_before", type: .number),
             .typedField(key: "observed_marker_count_after", type: .number),
+            // The witness fields above were presence-only: any count pair could satisfy
+            // typedField. A producer must additionally prove the two PRE-WRITE witnesses
+            // agree (this independent count equals the table's own pre-write inventory
+            // size) and that the independent AFTER count is exactly one less than the
+            // independent BEFORE count — not merely present, not merely near.
+            .fieldsEqual(keyA: "observed_marker_count_before", keyB: "marker_count_before"),
+            .numericEqualsOffset(
+                keyA: "observed_marker_count_after",
+                keyB: "observed_marker_count_before",
+                offset: -1
+            ),
             .lengthPrefixedEntryCountEquals(
                 key: "expected_survivor_position_multiset",
                 countKey: "marker_count_before",

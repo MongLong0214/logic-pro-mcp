@@ -139,6 +139,14 @@ enum OracleConstraint: Sendable {
     /// `0`/`1` must NOT satisfy it (`1` is not the negation of `false`) — and a
     /// missing key, a non-bool, or two EQUAL bools all fail closed.
     case booleanFlipped(keyA: String, keyB: String)
+    /// Two numeric key paths WITHIN THE SAME payload satisfy `value(keyA) == value(keyB) +
+    /// offset` EXACTLY (no tolerance). The honest form of "this count is derived from that
+    /// count by a fixed delta" — e.g. an independently-read after-count that must be exactly
+    /// one less than the independently-read before-count. Unlike `.numericNear`, there is no
+    /// slack: a producer that reports a drop of zero, two, or any value other than `offset`
+    /// fails. NUMBERS ONLY, with the same bool-vs-number discipline as the rest of the model,
+    /// and fails closed on a missing key or a non-number on either side.
+    case numericEqualsOffset(keyA: String, keyB: String, offset: Double)
 
     /// The primary RESPONSE-side key path — the one the generic mutator drops
     /// and error messages cite. For the relational cases it is the response side
@@ -158,7 +166,8 @@ enum OracleConstraint: Sendable {
              .crossCheck(let key, _),
              .numericNear(let key, _, _),
              .emptyArray(let key),
-             .booleanFlipped(let key, _):
+             .booleanFlipped(let key, _),
+             .numericEqualsOffset(let key, _, _):
             return key
         }
     }
@@ -173,7 +182,7 @@ enum OracleConstraint: Sendable {
         case .valueEquals, .numericRange, .enumMember, .lengthPrefixedEntryCountEquals,
              .lengthPrefixedEntriesExclude, .lengthPrefixedIdentityAtIndexEquals,
              .readbackArrayExcludesResponseIdentity, .fieldsEqual, .crossCheck, .numericNear,
-             .booleanFlipped:
+             .booleanFlipped, .numericEqualsOffset:
             return true
         case .nonEmptyArray, .typedField, .emptyArray:
             return false
@@ -304,6 +313,14 @@ enum OracleConstraint: Sendable {
                   let a = (aValue as? NSNumber)?.boolValue,
                   let b = (bValue as? NSNumber)?.boolValue else { return false }
             return a != b
+        case .numericEqualsOffset(let keyA, let keyB, let offset):
+            // NUMBERS ONLY: `number(of:)` rejects booleans. A missing key or a non-number on
+            // either side fails closed rather than treating an absent witness as satisfied.
+            guard let aValue = JSONPath.resolve(root, keyPath: keyA),
+                  let bValue = JSONPath.resolve(root, keyPath: keyB),
+                  let a = JSONInspector.number(of: aValue),
+                  let b = JSONInspector.number(of: bValue) else { return false }
+            return a == b + offset
         }
     }
 
