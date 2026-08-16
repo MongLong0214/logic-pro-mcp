@@ -442,11 +442,13 @@ struct SystemDispatcher: OperationTraceDispatching {
                     "automation_logic_pro": .string(status.automationState.rawValue),
                     "automation_system_events": .string(status.systemEventsAutomationState.rawValue),
                     "post_event": .string(status.postEventAccessState.rawValue),
-                    // Deliberately not a Bool: "Logic is not running" is not "permission denied", and a
-                    // client reading a single flag would have to treat them the same. Absent means
-                    // undetermined; the four states above always carry the real answer.
-                    "all_granted": status.automationState == .notVerifiable
-                        ? .null : .bool(status.allGranted),
+                    // Deliberately not a plain Bool: "undetermined" is not "permission denied", and a
+                    // client reading a single flag would have to treat them the same. `false` is reserved
+                    // for a MEASURED denial on at least one of the four states above; when nothing was
+                    // denied but something could not be verified, the key is present with a JSON `null` —
+                    // not omitted — so a caller that only checks presence still sees it and must read the
+                    // per-check states to learn why. See `Self.allGrantedValue`.
+                    "all_granted": Self.allGrantedValue(for: status),
                     "summary": .string(status.summary),
                 ])
             )
@@ -459,11 +461,17 @@ struct SystemDispatcher: OperationTraceDispatching {
             // Same reason as `permissions`: the oracle for this operation compares the WHOLE body to one
             // of these sentences, so the sentence stays the text.
             if let poller {
-                await poller.refreshNow()
+                // `refreshNow()` reports whether the cache actually advanced (at least one section was
+                // written), not merely that the call returned — the poller can run and legitimately write
+                // nothing (no visible Logic window yet, or an occluding dialog holds the cache steady).
+                // `refreshed:true` for a poll that touched nothing would be a claim this call never
+                // observed (#544 review MAJOR); the prose text is unchanged either way because the
+                // mechanism ("routed through the AX fallback poller") is true regardless of the outcome.
+                let advanced = await poller.refreshNow()
                 let message = "State refresh completed via AX fallback poller."
                 return toolTextResult(text: message, structured: .object([
                     "operation": .string("system.refresh_cache"),
-                    "refreshed": .bool(true),
+                    "refreshed": .bool(advanced),
                     "source": .string("ax_fallback_poller"),
                     "message": .string(message),
                 ]))
@@ -472,7 +480,10 @@ struct SystemDispatcher: OperationTraceDispatching {
             return toolTextResult(text: message, structured: .object([
                 "operation": .string("system.refresh_cache"),
                 "refreshed": .bool(false),
-                "source": .string("next_poll_cycle"),
+                // Not "next_poll_cycle": no poller is attached, so this call never started — and
+                // never scheduled — a future poll cycle. Naming one it did not start would be a
+                // claim about a mechanism that is not wired up (#544 review MINOR).
+                "source": .string("none"),
                 "message": .string(message),
             ]))
 
@@ -1139,6 +1150,20 @@ struct SystemDispatcher: OperationTraceDispatching {
 
         default:
             return unknownCommandResult(command)
+        }
+    }
+
+    /// Maps the MEASURED tri-state permission aggregate (`PermissionStatus.aggregateState`,
+    /// #544 review MAJOR) to the `all_granted` JSON value the `permissions` command emits:
+    /// `.bool(false)` only when something was ACTIVELY DENIED, `.null` when nothing was denied
+    /// but something is undetermined (never conflated with a denial), `.bool(true)` only when
+    /// every check came back granted. Pure and stateless so the mapping — not just the
+    /// underlying tri-state — can be pinned by a test without driving `handle` against live TCC.
+    static func allGrantedValue(for status: PermissionChecker.PermissionStatus) -> Value {
+        switch status.aggregateState {
+        case .granted: return .bool(true)
+        case .notGranted: return .bool(false)
+        case .notVerifiable: return .null
         }
     }
 

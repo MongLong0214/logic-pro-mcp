@@ -114,4 +114,211 @@ struct Issue544OutputSchemaContractTests {
         }
         #expect(permFields["accessibility"] != nil)
     }
+
+    // MARK: - #544 review MAJOR — `all_granted` must not conflate "undetermined"
+    // with "denied". `allGrantedValue(for:)` is the pure mapping the dispatcher's
+    // `permissions` case delegates to; it is tested here directly (data in,
+    // `Value` out) without driving `handle` against live TCC.
+
+    @Test("all_granted is true only when every check is granted")
+    func allGrantedValueIsTrueWhenEveryCheckIsGranted() {
+        let status = PermissionChecker.PermissionStatus(
+            accessibilityState: .granted,
+            automationState: .granted,
+            systemEventsAutomationState: .granted,
+            postEventAccessState: .granted
+        )
+        #expect(SystemDispatcher.allGrantedValue(for: status) == .bool(true))
+    }
+
+    @Test("all_granted is null, not false, when nothing is denied but something is undetermined")
+    func allGrantedValueIsNullNotFalseForUndetermined() {
+        // Exact reproduction from the review: Automation (Logic Pro) granted,
+        // Automation (System Events) not verifiable. Mutation target: change
+        // `Self.allGrantedValue` back to
+        // `status.automationState == .notVerifiable ? .null : .bool(status.allGranted)`
+        // and this goes RED because it evaluates to `.bool(false)`.
+        let status = PermissionChecker.PermissionStatus(
+            accessibilityState: .granted,
+            automationState: .granted,
+            systemEventsAutomationState: .notVerifiable,
+            postEventAccessState: .granted
+        )
+        #expect(SystemDispatcher.allGrantedValue(for: status) == .null)
+    }
+
+    @Test("all_granted is false when something is actually denied, even alongside an undetermined check")
+    func allGrantedValueIsFalseWhenSomethingIsDeniedEvenNextToUndetermined() {
+        // The other direction: a MEASURED denial must still surface as
+        // `.bool(false)`, not soften to `.null` just because a sibling check
+        // is undetermined. Mutation target: make the mapping check
+        // `.notVerifiable` membership before `.notGranted` membership (as
+        // `PermissionStatus.aggregateState` deliberately does NOT) and this
+        // goes RED because it would report `.null` instead of `.bool(false)`.
+        let status = PermissionChecker.PermissionStatus(
+            accessibilityState: .notGranted,
+            automationState: .notVerifiable,
+            systemEventsAutomationState: .granted,
+            postEventAccessState: .granted
+        )
+        #expect(SystemDispatcher.allGrantedValue(for: status) == .bool(false))
+    }
+
+    // MARK: - #544 review MAJOR — `refreshed` must reflect whether the cache
+    // actually advanced, not whether `StatePoller.refreshNow()` merely returned.
+
+    @Test("refresh_cache reports refreshed:false when the attached poller writes nothing")
+    func refreshCacheReportsFalseWhenPollerWritesNothing() async throws {
+        // Exact reproduction from the review: a StatePoller whose
+        // Runtime.hasVisibleWindow reports no window, called once against a
+        // fresh (zero-miss) poller. Production always supplies a poller, so
+        // pre-fix this branch unconditionally claimed `refreshed: true`.
+        let cache = StateCache()
+        let channel = AccessibilityChannel(runtime: .init(
+            isTrusted: { true }, isLogicProRunning: { true }, appRoot: { nil },
+            transportState: { .success("{}") }, toggleTransportButton: { _ in .success("{}") },
+            setTempo: { _ in .success("{}") }, setCycleRange: { _ in .success("{}") },
+            tracks: { .error("no window") }, selectedTrack: { .success("{}") },
+            selectTrack: { _ in .success("{}") }, setTrackToggle: { _, _ in .success("{}") },
+            renameTrack: { _ in .success("{}") }, mixerState: { .success("[]") },
+            channelStrip: { _ in .success("{}") }, setMixerValue: { _, _ in .success("{}") },
+            projectInfo: { .error("no window") }, markers: { .success("[]") }
+        ))
+        let poller = StatePoller(
+            axChannel: channel, cache: cache,
+            runtime: .init(hasVisibleWindow: { false })
+        )
+
+        let result = await SystemDispatcher.handle(
+            command: "refresh_cache", params: [:],
+            router: ChannelRouter(), cache: cache, poller: poller
+        )
+
+        // The graded prose is untouched regardless of the outcome.
+        guard case .text(let text, _, _) = try #require(result.content.first) else {
+            Issue.record("expected text content"); return
+        }
+        #expect(text == "State refresh completed via AX fallback poller.")
+        guard case .object(let fields) = try #require(result.structuredContent) else {
+            Issue.record("expected an object"); return
+        }
+        #expect(fields["refreshed"] == Value.bool(false))
+        #expect(fields["source"] == Value.string("ax_fallback_poller"))
+    }
+
+    @Test("refresh_cache reports refreshed:true when the attached poller writes fresh state")
+    func refreshCacheReportsTrueWhenPollerWritesFreshState() async throws {
+        let cache = StateCache()
+        let channel = AccessibilityChannel(runtime: .init(
+            isTrusted: { true }, isLogicProRunning: { true }, appRoot: { nil },
+            transportState: { .success("{}") }, toggleTransportButton: { _ in .success("{}") },
+            setTempo: { _ in .success("{}") }, setCycleRange: { _ in .success("{}") },
+            tracks: { .success("[]") }, selectedTrack: { .success("{}") },
+            selectTrack: { _ in .success("{}") }, setTrackToggle: { _, _ in .success("{}") },
+            renameTrack: { _ in .success("{}") }, mixerState: { .success("[]") },
+            channelStrip: { _ in .success("{}") }, setMixerValue: { _, _ in .success("{}") },
+            projectInfo: {
+                .success(#"{"name":"Fresh","sampleRate":48000,"bitDepth":24,"tempo":120,"timeSignature":"4/4","trackCount":0,"filePath":null,"lastUpdated":"2026-04-16T00:00:00Z"}"#)
+            },
+            markers: { .success("[]") }
+        ))
+        let poller = StatePoller(
+            axChannel: channel, cache: cache,
+            runtime: .init(hasVisibleWindow: { true })
+        )
+
+        let result = await SystemDispatcher.handle(
+            command: "refresh_cache", params: [:],
+            router: ChannelRouter(), cache: cache, poller: poller
+        )
+
+        guard case .object(let fields) = try #require(result.structuredContent) else {
+            Issue.record("expected an object"); return
+        }
+        #expect(fields["refreshed"] == Value.bool(true))
+        #expect(await cache.getProject().name == "Fresh")
+    }
+
+    @Test("refresh_cache without an attached poller names no mechanism it did not start")
+    func refreshCacheWithoutPollerNamesNoUnstartedCycle() async throws {
+        // #544 review MINOR: `source: "next_poll_cycle"` named a poll cycle
+        // this call never started (no poller is even attached). Mutation
+        // target: revert `source` to `.string("next_poll_cycle")` and this
+        // goes RED.
+        let result = await SystemDispatcher.handle(
+            command: "refresh_cache", params: [:],
+            router: ChannelRouter(), cache: StateCache()
+        )
+        guard case .object(let fields) = try #require(result.structuredContent) else {
+            Issue.record("expected an object"); return
+        }
+        #expect(fields["refreshed"] == Value.bool(false))
+        #expect(fields["source"] == Value.string("none"))
+    }
+
+    // MARK: - #544 review MAJOR — the registry-shape test cannot fail a tool
+    // that ANSWERS with prose. This exercises every command of every
+    // outputSchema-declaring tool through the REAL dispatch path
+    // (`LogicProServer.makeHandlers`, the same route `tools/call` uses) and
+    // asserts `structuredContent != nil` on every response — not just that
+    // the tool's static schema declares an object type.
+
+    /// Commands excluded from the blind sweep, with the reason each one
+    /// cannot be safely invoked with empty params in a unit test — not
+    /// silently skipped. `logic_project.launch` is the only one: unlike
+    /// every other mutating command, it does not route through the
+    /// (unregistered-in-this-harness) `ChannelRouter` and carries no
+    /// confirmation/consent gate, so with empty params it drives
+    /// `ProcessUtils.isLogicProRunning` + a REAL `osascript activate` against
+    /// the host machine's Logic Pro installation if one is present.
+    private static let structuredContentSweepExclusions: [String: Set<String>] = [
+        "logic_project": ["launch"],
+    ]
+
+    @Test("every command of every outputSchema-declaring tool answers with structuredContent")
+    func everyCommandOfEveryOutputSchemaToolAnswersWithStructuredContent() async throws {
+        // PRD-011: contain `export_support_bundle`'s empty-params default
+        // write under a temp root instead of the real
+        // ~/Library/Logs/LogicProMCP so this sweep cannot leave files on the
+        // host machine.
+        let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
+        let previousRoot = getenv(rootKey).map { String(cString: $0) }
+        setenv(rootKey, FileManager.default.temporaryDirectory.path, 1)
+        defer {
+            if let previousRoot { setenv(rootKey, previousRoot, 1) } else { unsetenv(rootKey) }
+        }
+
+        let server = LogicProServer()
+        let handlers = await server.makeHandlers()
+        var invoked = 0
+        var listedExceptions = 0
+
+        for tool in ServerCatalog.tools {
+            guard let toolID = ToolID(rawValue: tool.name) else {
+                Issue.record("\(tool.name) has no matching ToolID"); continue
+            }
+            let commands = OperationRegistry.commands(for: toolID)
+            #expect(!commands.isEmpty, "\(tool.name) has no registered commands to sweep")
+            let exclusions = Self.structuredContentSweepExclusions[tool.name] ?? []
+            for command in commands {
+                if exclusions.contains(command) {
+                    listedExceptions += 1
+                    continue
+                }
+                let result = await handlers.callTool(
+                    CallTool.Parameters(name: tool.name, arguments: ["command": .string(command)])
+                )
+                #expect(
+                    result.structuredContent != nil,
+                    "\(tool.name).\(command) answered without structuredContent"
+                )
+                invoked += 1
+            }
+        }
+
+        // Prove the sweep actually exercised commands rather than iterating
+        // an empty registry view.
+        #expect(invoked > 50)
+        #expect(listedExceptions == 1)
+    }
 }

@@ -103,11 +103,18 @@ private func seedCache(_ cache: StateCache) async {
 
     // Single occluded poll is enough to flip the flag — clients should not
     // have to wait for a threshold to learn that data is stale-by-occlusion.
-    await poller.refreshNow()
+    let advanced = await poller.refreshNow()
     #expect(await cache.getAXOccluded())
     // hasDocument intentionally stays true so reads do not 4xx; staleness
     // is signalled via axOccluded + the existing cache_age_sec field.
     #expect(await cache.getHasDocument())
+    // #544 review MAJOR: the occluded early-out preserves the cache and
+    // writes NO `ResourceCacheKey` (project/tracks both failed, and the
+    // occlusion branch appends nothing to `cacheKeys`), so `refreshNow()`
+    // must report `false` here even though `axOccluded` flipped — the
+    // occlusion flag lives outside the versioned cache sections `refreshed`
+    // is answering for.
+    #expect(!advanced)
 }
 
 @Test func testPollerClearsOccludedFlagWhenAXRecovers() async {
@@ -241,14 +248,20 @@ private func seedCache(_ cache: StateCache) async {
         )
     )
 
-    await poller.refreshNow()
-    await poller.refreshNow()
+    let firstMiss = await poller.refreshNow()
+    let secondMiss = await poller.refreshNow()
     #expect(await cache.getHasDocument(),
             "first 2 misses must not clear (existing failureThreshold=3 contract)")
 
-    await poller.refreshNow()
+    let thirdMiss = await poller.refreshNow()
     #expect(!(await cache.getHasDocument()),
             "3rd consecutive miss without occlusion must clear, as before")
     #expect(!(await cache.getAXOccluded()),
             "axOccluded must be false when document is genuinely closed")
+    // #544 review MAJOR: the first 2 misses write nothing (no ResourceCacheKey
+    // section changed) and must report `false`; only the 3rd, which actually
+    // flips `hasDocument` to false, may report `true`.
+    #expect(!firstMiss)
+    #expect(!secondMiss)
+    #expect(thirdMiss)
 }
