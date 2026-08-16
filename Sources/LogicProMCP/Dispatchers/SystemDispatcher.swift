@@ -84,6 +84,29 @@ struct SystemDispatcher: OperationTraceDispatching {
         let variants: [VariantAvailability]
     }
 
+    /// #544: `permissions` answered in prose under a tool that declares an `outputSchema`, so a
+    /// schema-enforcing client rejected the call. The states are the answer; the summary is the
+    /// operator-facing rendering of it, kept so nothing a human relied on disappeared.
+    private struct PermissionsResponse: Encodable {
+        let operation: String
+        let accessibility: String
+        let automationLogicPro: String
+        let automationSystemEvents: String
+        let postEvent: String
+        let allGranted: Bool
+        let summary: String
+    }
+
+    /// #544: `refresh_cache` answered in prose too, and its two prose strings carried a real
+    /// distinction — a refresh that ran versus one merely queued — that a caller could only recover
+    /// by string-matching.
+    private struct RefreshCacheResponse: Encodable {
+        let operation: String
+        let refreshed: Bool
+        let source: String
+        let message: String
+    }
+
     private struct HealthResponse: Encodable {
         struct VariantAvailabilitySection: Encodable {
             let variant: String
@@ -425,16 +448,40 @@ struct SystemDispatcher: OperationTraceDispatching {
             return toolTextResult(json)
 
         case "permissions":
+            // The human-readable summary is what an operator wants to read, but a caller needs the
+            // states themselves — `health` has always returned them and this command had not, which
+            // left it violating its own declared outputSchema (#544).
             let status = PermissionChecker.check()
-            return toolTextResult(status.summary)
+            return toolTextResult(encodeJSON(PermissionsResponse(
+                operation: "system.permissions",
+                accessibility: status.accessibilityState.rawValue,
+                automationLogicPro: status.automationState.rawValue,
+                automationSystemEvents: status.systemEventsAutomationState.rawValue,
+                postEvent: status.postEventAccessState.rawValue,
+                allGranted: status.allGranted,
+                summary: status.summary
+            )))
 
         case "refresh_cache":
             await cache.recordToolAccess()
+            // Whether the poller actually ran is the difference between a refresh that HAPPENED and one
+            // that was only scheduled. A caller that reads state next has to tell them apart, so it is
+            // a field rather than a difference in prose.
             if let poller {
                 await poller.refreshNow()
-                return toolTextResult("State refresh completed via AX fallback poller.")
+                return toolTextResult(encodeJSON(RefreshCacheResponse(
+                    operation: "system.refresh_cache",
+                    refreshed: true,
+                    source: "ax_fallback_poller",
+                    message: "State refresh completed via AX fallback poller."
+                )))
             }
-            return toolTextResult("State refresh triggered. Cache will be updated on next poll cycle.")
+            return toolTextResult(encodeJSON(RefreshCacheResponse(
+                operation: "system.refresh_cache",
+                refreshed: false,
+                source: "next_poll_cycle",
+                message: "State refresh triggered. Cache will be updated on next poll cycle."
+            )))
 
         case "setup_arm_key":
             // Consent-first: refuse before the trace, the mutation gate, or any

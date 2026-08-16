@@ -6,9 +6,21 @@ func toolTextContent(_ text: String) -> Tool.Content {
 }
 
 func toolTextResult(_ text: String, isError: Bool = false) -> CallTool.Result {
-    CallTool.Result(
+    // Every tool here is registered with an `outputSchema`, and MCP requires a response that declares
+    // one to carry matching `structuredContent`. A handler that hands back prose — a permission
+    // summary, "State refresh completed", a failure sentence — produced `nil` here and so violated the
+    // tool's own contract; a schema-enforcing client rejects the call outright (#544, reported against
+    // v3.13.0 with `logic_system.permissions` and `refresh_cache`).
+    //
+    // Prose is therefore carried as an object rather than dropped. The text in `content` stays
+    // byte-identical, and the structured half says what it actually is instead of claiming a shape it
+    // does not have. This is the floor, not the goal: a command whose answer has real fields should
+    // encode those fields, and the two commands in the report now do.
+    let prose: [String: Value] = ["message": .string(text)]
+    let structured: Value? = structuredContentValue(fromToolText: text) ?? .object(prose)
+    return CallTool.Result(
         content: [toolTextContent(text)],
-        structuredContent: structuredContentValue(fromToolText: text),
+        structuredContent: structured,
         isError: isError
     )
 }
