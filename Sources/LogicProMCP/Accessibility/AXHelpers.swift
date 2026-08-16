@@ -11,6 +11,11 @@ enum AXHelpers {
         let children: @Sendable (AXUIElement) -> [AXUIElement]
         let performAction: @Sendable (AXUIElement, String) -> Bool
         let childCount: @Sendable (AXUIElement) -> Int?
+        /// Enumerates the actions an element advertises without attempting one.
+        let actionNames: @Sendable (AXUIElement) -> [String]
+        /// Injectable status-preserving action-name seam. `nil` falls back to the ordinary
+        /// action reader, whose historical empty result has no status information.
+        let actionNamesResult: (@Sendable (AXUIElement) -> Result<[String], AXStatusError>)?
         /// Injectable typed-children seam. `nil` means "use the production read".
         let childrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXStatusError>)?
         /// Injectable status-preserving attribute seam. `nil` falls back to the ordinary
@@ -27,6 +32,8 @@ enum AXHelpers {
             children: @escaping @Sendable (AXUIElement) -> [AXUIElement],
             performAction: @escaping @Sendable (AXUIElement, String) -> Bool,
             childCount: @escaping @Sendable (AXUIElement) -> Int?,
+            actionNames: @escaping @Sendable (AXUIElement) -> [String] = { _ in [] },
+            actionNamesResult: (@Sendable (AXUIElement) -> Result<[String], AXStatusError>)? = nil,
             childrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXStatusError>)? = nil,
             attributeValueResult: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXStatusError>)? = nil
         ) {
@@ -36,6 +43,8 @@ enum AXHelpers {
             self.children = children
             self.performAction = performAction
             self.childCount = childCount
+            self.actionNames = actionNames
+            self.actionNamesResult = actionNamesResult
             self.childrenResult = childrenResult
             self.attributeValueResult = attributeValueResult
         }
@@ -75,6 +84,26 @@ enum AXHelpers {
                 let result = AXUIElementGetAttributeValueCount(element, kAXChildrenAttribute as CFString, &count)
                 guard result == .success else { return nil }
                 return count
+            },
+            actionNames: { element in
+                var names: CFArray?
+                guard AXUIElementCopyActionNames(element, &names) == .success,
+                      let names,
+                      let actions = names as? [String] else {
+                    return []
+                }
+                return actions
+            },
+            actionNamesResult: { element in
+                var names: CFArray?
+                let status = AXUIElementCopyActionNames(element, &names)
+                guard status == .success else {
+                    return .failure(AXStatusError(raw: status.rawValue))
+                }
+                guard let names, let actions = names as? [String] else {
+                    return .success([])
+                }
+                return .success(actions)
             },
             attributeValueResult: { element, attribute in
                 var value: AnyObject?
@@ -138,6 +167,56 @@ enum AXHelpers {
         init(raw: Int32) {
             self.raw = raw
         }
+
+        /// Two AX statuses are ANSWERS, not failures. `attributeUnsupported` (-25205) means the
+        /// element does not vend that attribute at all, and `noValue` (-25212) means it has none —
+        /// which is exactly what a childless node or a table without `AXRows` reports. Measured on
+        /// Logic 12.3, treating either as a failed read makes a status-preserving traversal answer
+        /// "unreadable" for a tree it can plainly see, because a real AX tree is full of both.
+        /// Everything else — cannot-complete, invalid element, API disabled — really is a failure.
+        ///
+        /// This lives here, on the status itself, because the distinction was independently
+        /// rediscovered in two channels and got it wrong the second time.
+        var isDefinitiveAbsence: Bool {
+            raw == AXError.attributeUnsupported.rawValue || raw == AXError.noValue.rawValue
+        }
+
+        /// AX can return either of these while Logic is rebuilding an otherwise still-bound
+        /// element tree. A post-write settle poll must discard the entire observation and try a
+        /// fresh one within its existing budget. This deliberately excludes `apiDisabled`: that
+        /// reports a disabled accessibility API, not a short-lived rebuild state, so retrying it
+        /// would only obscure the real failure.
+        var isTransientDuringRebuild: Bool {
+            raw == AXError.cannotComplete.rawValue
+                || raw == AXError.invalidUIElement.rawValue
+        }
+
+        /// The spelling of an AXError constant, when `raw` is one of Apple's defined values.
+        /// Keep the raw number alongside this label at an exposure boundary: the number is the
+        /// actual status returned by AX, while the label makes a live receipt actionable without
+        /// asking the caller to reverse-map the code.
+        var symbolicName: String? {
+            switch raw {
+            case AXError.success.rawValue: return "success"
+            case AXError.failure.rawValue: return "failure"
+            case AXError.illegalArgument.rawValue: return "illegalArgument"
+            case AXError.invalidUIElement.rawValue: return "invalidUIElement"
+            case AXError.invalidUIElementObserver.rawValue: return "invalidUIElementObserver"
+            case AXError.cannotComplete.rawValue: return "cannotComplete"
+            case AXError.attributeUnsupported.rawValue: return "attributeUnsupported"
+            case AXError.actionUnsupported.rawValue: return "actionUnsupported"
+            case AXError.notificationUnsupported.rawValue: return "notificationUnsupported"
+            case AXError.notImplemented.rawValue: return "notImplemented"
+            case AXError.notificationAlreadyRegistered.rawValue: return "notificationAlreadyRegistered"
+            case AXError.notificationNotRegistered.rawValue: return "notificationNotRegistered"
+            case AXError.apiDisabled.rawValue: return "apiDisabled"
+            case AXError.noValue.rawValue: return "noValue"
+            case AXError.parameterizedAttributeUnsupported.rawValue:
+                return "parameterizedAttributeUnsupported"
+            case AXError.notEnoughPrecision.rawValue: return "notEnoughPrecision"
+            default: return nil
+            }
+        }
     }
 
     /// Pure projection of an AX read outcome into a typed result.
@@ -195,6 +274,22 @@ enum AXHelpers {
     @discardableResult
     static func performAction(_ element: AXUIElement, _ action: String, runtime: Runtime = .production) -> Bool {
         runtime.performAction(element, action)
+    }
+
+    /// Enumerate the named actions that an element currently advertises.
+    static func getActionNames(_ element: AXUIElement, runtime: Runtime = .production) -> [String] {
+        runtime.actionNames(element)
+    }
+
+    /// Enumerate action names without flattening an AX read failure into an empty action list.
+    static func getActionNamesResult(
+        _ element: AXUIElement,
+        runtime: Runtime = .production
+    ) -> Result<[String], AXStatusError> {
+        if let read = runtime.actionNamesResult {
+            return read(element)
+        }
+        return .success(runtime.actionNames(element))
     }
 
     /// Get the role string of an element (e.g. "AXButton", "AXSlider").

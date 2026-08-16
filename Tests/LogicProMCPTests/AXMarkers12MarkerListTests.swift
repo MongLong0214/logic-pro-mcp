@@ -83,6 +83,10 @@ private func makeMarkerListTree(
     return arrangeWindow
 }
 
+private final class MarkerListReadProbe: @unchecked Sendable {
+    var failedAXRowsReadWasObserved = false
+}
+
 @Test
 func enumerateMarkers_logic122_markerListWindow_open_returnsMarkers() async {
     let builder = FakeAXRuntimeBuilder()
@@ -124,8 +128,118 @@ func enumerateMarkers_emptyMarkerListWindow_returnsEmpty() async {
         rows: []
     )
     let runtime = builder.makeLogicRuntime(appElement: app)
-    let markers = AXLogicProElements.enumerateMarkers(in: arrange, runtime: runtime)
-    #expect(markers.isEmpty)
+    let result = AXLogicProElements.enumerateMarkersFromListWindow(listWin, runtime: runtime.ax)
+
+    // Source mutation applied once: turn the successful empty `AXRows` result into a failure.
+    // This table genuinely exposes zero rows, so the restored reader must preserve its empty answer.
+    if case .success(let markers) = result {
+        #expect(markers.isEmpty)
+    } else {
+        #expect(false, "an exposed table with zero rows must be a readable empty list")
+    }
+}
+
+@Test
+func enumerateMarkers_missingTableIsUnavailableRatherThanEmpty() async {
+    // Source mutation applied once: restore `.success([])` when markerListTable finds no table.
+    // This window has no table, so that mutation fails the unavailable-read assertion.
+    let builder = FakeAXRuntimeBuilder()
+    let listWin = builder.element(7_150)
+    builder.setAttribute(listWin, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setChildren(listWin, [])
+
+    let result = AXLogicProElements.enumerateMarkersFromListWindow(
+        listWin, runtime: builder.makeAXRuntime()
+    )
+    if case .failure(let error) = result {
+        #expect(error.raw == AXError.noValue.rawValue)
+    } else {
+        #expect(false, "a Marker List without its table cannot certify an empty list")
+    }
+}
+
+@Test
+func enumerateMarkers_skipsUnreadableSiblingBeforeRealTable() async {
+    // Source mutation applied once: return the non-absence AXChildren failure directly from
+    // `markerListTable`. The first sibling then prevents the later real table from being reached,
+    // and this successful enumeration fails.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(7_160)
+    let arrange = builder.element(7_161)
+    let listWin = builder.element(7_162)
+    _ = makeMarkerListTree(
+        builder: builder,
+        appElement: app,
+        arrangeWindow: arrange,
+        markerListWindow: listWin,
+        rows: [(position: "5 1 1 1", name: "Reachable", length: "∞")]
+    )
+    let unreadableSibling = builder.element(7_163)
+    let tableGroup = builder.element(7_164)
+    let table = builder.element(8_000)
+    builder.setAttribute(unreadableSibling, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(tableGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setChildren(listWin, [unreadableSibling, tableGroup])
+    builder.setChildren(tableGroup, [table])
+
+    let runtime = builder.makeAXRuntime(
+        appElement: app,
+        childrenResultHandler: { element in
+            if CFEqual(element, unreadableSibling) {
+                return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+            }
+            return nil
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+    let result = AXLogicProElements.enumerateMarkersFromListWindow(listWin, runtime: runtime)
+
+    guard case .success(let markers) = result else {
+        #expect(false, "an unreadable unrelated sibling must not hide a readable Marker List table")
+        return
+    }
+    #expect(markers.map(\.name) == ["Reachable"])
+    #expect(markers.map(\.position) == ["5.1.1.1"])
+}
+
+@Test
+func enumerateMarkers_childValueSurvivesAbsentDescription() async {
+    // Source mutation applied once: return the child AXDescription absence as a failure instead of
+    // falling through to AXValue. The position child below then makes enumeration unavailable.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(7_170)
+    let arrange = builder.element(7_171)
+    let listWin = builder.element(7_172)
+    _ = makeMarkerListTree(
+        builder: builder,
+        appElement: app,
+        arrangeWindow: arrange,
+        markerListWindow: listWin,
+        rows: [(position: "unused", name: "AXValue Position", length: "∞")]
+    )
+    let positionChild = builder.element(8_105)
+    builder.setAttribute(positionChild, kAXValueAttribute as String, "5 1 1 1")
+    let runtime = builder.makeAXRuntime(
+        appElement: app,
+        attributeValueResultHandler: { element, attribute in
+            if CFEqual(element, positionChild), attribute == kAXDescriptionAttribute as String {
+                return .failure(AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue))
+            }
+            return nil
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+    let result = AXLogicProElements.enumerateMarkersFromListWindow(listWin, runtime: runtime)
+
+    guard case .success(let markers) = result else {
+        #expect(false, "an absent child description must fall through to its AXValue")
+        return
+    }
+    #expect(markers.count == 1)
+    #expect(markers[0].name == "AXValue Position")
+    #expect(markers[0].position == "5.1.1.1")
 }
 
 @Test
@@ -283,14 +397,97 @@ func enumerateMarkers_listAndRulerBothPresent_listWins() async {
     #expect(markers[0].positionSource == .parser, "list 경로 parser 성공 source 보존")
 }
 
+@Test
+func enumerateMarkers_openEmptyMarkerListDoesNotFallThroughToStaleRuler() async {
+    // A successfully read empty Marker List is an answer. It must not be replaced with an old
+    // ruler label merely because this convenience API returns an array rather than Result.
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(7_530)
+    let arrange = builder.element(7_531)
+    let listWin = builder.element(7_532)
+    _ = makeMarkerListTree(
+        builder: builder, appElement: app,
+        arrangeWindow: arrange, markerListWindow: listWin,
+        rows: []
+    )
+    let timelineRuler = builder.element(7_533)
+    let markerRuler = builder.element(7_534)
+    let staleText = builder.element(7_535)
+    builder.setAttribute(timelineRuler, kAXRoleAttribute as String, "AXRuler")
+    builder.setAttribute(markerRuler, kAXRoleAttribute as String, "AXRuler")
+    builder.setAttribute(staleText, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    builder.setAttribute(staleText, kAXTitleAttribute as String, "Stale ruler marker")
+    builder.setChildren(markerRuler, [staleText])
+    builder.setChildren(arrange, [timelineRuler, markerRuler])
+
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    guard case .success(let listMarkers) = AXLogicProElements.enumerateMarkersFromListWindow(
+        listWin, runtime: runtime.ax
+    ) else {
+        #expect(false, "the empty Marker List fixture must be a successful read")
+        return
+    }
+    #expect(listMarkers.isEmpty)
+    #expect(AXLogicProElements.enumerateMarkers(in: arrange, runtime: runtime).isEmpty)
+}
+
+@Test
+func enumerateMarkers_failedOpenMarkerListDoesNotFallThroughToStaleRuler() async {
+    // A failed Marker-List read is not a successful empty read, but neither result may be
+    // laundered into the stale ruler answer that feeds the independent position_multiset check.
+    let builder = FakeAXRuntimeBuilder()
+    let probe = MarkerListReadProbe()
+    let app = builder.element(7_540)
+    let arrange = builder.element(7_541)
+    let listWin = builder.element(7_542)
+    _ = makeMarkerListTree(
+        builder: builder, appElement: app,
+        arrangeWindow: arrange, markerListWindow: listWin,
+        rows: [(position: "1 1 1 1", name: "Live list marker", length: "∞")]
+    )
+    let table = builder.element(8_000)
+    let timelineRuler = builder.element(7_543)
+    let markerRuler = builder.element(7_544)
+    let staleText = builder.element(7_545)
+    builder.setAttribute(timelineRuler, kAXRoleAttribute as String, "AXRuler")
+    builder.setAttribute(markerRuler, kAXRoleAttribute as String, "AXRuler")
+    builder.setAttribute(staleText, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    builder.setAttribute(staleText, kAXTitleAttribute as String, "Stale ruler marker")
+    builder.setChildren(markerRuler, [staleText])
+    builder.setChildren(arrange, [timelineRuler, markerRuler])
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueResultHandler: { element, attribute in
+            if CFEqual(element, table), attribute == "AXRows" {
+                probe.failedAXRowsReadWasObserved = true
+                return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+            }
+            return nil
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+    let listResult = AXLogicProElements.enumerateMarkersFromListWindow(listWin, runtime: runtime.ax)
+    guard case .failure(let error) = listResult else {
+        #expect(false, "the failed Marker List seam must remain distinct from a successful empty read")
+        return
+    }
+    #expect(error.raw == AXError.failure.rawValue)
+    #expect(probe.failedAXRowsReadWasObserved)
+
+    probe.failedAXRowsReadWasObserved = false
+    #expect(AXLogicProElements.enumerateMarkers(in: arrange, runtime: runtime).isEmpty)
+    #expect(probe.failedAXRowsReadWasObserved)
+}
+
 // MARK: - StateCache.updateMarkers fetchedAt invariant (v3.1.9 Issue #8 cache bug)
 
 @Test
-func enumerateMarkers_malformedRow_skipsRowKeepsValid() async {
-    // A row with fewer than 3 cells (the `guard cells.count >= 3` branch
-    // in enumerateMarkersFromListWindow) should be silently skipped while
-    // valid rows are still surfaced. Pins the guard so future refactors
-    // that drop it surface as a test failure.
+func enumerateMarkers_malformedRowMakesEnumerationUnavailable() async {
+    // A present row with fewer than 3 cells has not been read completely. It must not be silently
+    // skipped while valid rows are surfaced, because a destructive caller could mistake that
+    // partial list for a complete survivor set.
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(7600)
     let arrange = builder.element(7601)
@@ -348,12 +545,15 @@ func enumerateMarkers_malformedRow_skipsRowKeepsValid() async {
     builder.setChildren(table, rows)
 
     let runtime = builder.makeLogicRuntime(appElement: app)
-    let markers = AXLogicProElements.enumerateMarkers(in: arrange, runtime: runtime)
-    #expect(markers.count == 2, "malformed row skipped, two valid rows surface")
-    #expect(markers[0].name == "ValidA")
-    #expect(markers[0].positionSource == .parser)
-    #expect(markers[1].name == "ValidB")
-    #expect(markers[1].positionSource == .parser)
+    let result = AXLogicProElements.enumerateMarkersFromListWindow(listWin, runtime: runtime.ax)
+
+    // Source mutation applied once: replace the incomplete-row failure with `continue`. That
+    // returns two valid-looking rows and fails this explicit unavailable-read assertion.
+    if case .failure(let error) = result {
+        #expect(error.raw == AXError.noValue.rawValue)
+    } else {
+        #expect(false, "a present unreadable row must make enumeration unavailable")
+    }
 }
 
 @Test

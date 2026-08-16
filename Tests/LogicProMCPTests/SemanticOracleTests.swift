@@ -113,6 +113,26 @@ struct SemanticOracleEngineTests {
         #expect(!OracleConstraint.fieldsEqual(keyA: "absent", keyB: "observed").isSatisfied(by: object))
     }
 
+    @Test func readbackArrayExcludesResponseIdentityRequiresAReadableIndependentAbsence() {
+        let constraint = OracleConstraint.readbackArrayExcludesResponseIdentity(
+            responseNameKey: "target_name",
+            responseIndexKey: "requested_index",
+            readbackArrayKey: "data",
+            readbackNameKey: "name",
+            readbackIndexKey: "id"
+        )
+        let response = root(#"{"target_name":"Verse","requested_index":1}"#)
+        let deleted = root(#"{"data":[{"id":0,"name":"Intro"},{"id":2,"name":"Chorus"}]}"#)
+        let survives = root(#"{"data":[{"id":1,"name":"Verse"}]}"#)
+
+        #expect(constraint.isSatisfied(by: response, readback: deleted))
+        #expect(!constraint.isSatisfied(by: response, readback: survives))
+        // A response claim cannot prove its own absence when the independent data records do not
+        // answer both identity fields.
+        #expect(!constraint.isSatisfied(by: response, readback: root(#"{"data":[{"id":1}]}"#)))
+        #expect(!constraint.isSatisfied(by: response, readback: nil))
+    }
+
     /// The same bool-vs-number discipline valueEquals enforces: a requested
     /// boolean `true` must not be satisfied by an observed numeric `1`, or a
     /// mute/arm write's `requested == observed` invariant becomes forgeable.
@@ -742,16 +762,16 @@ struct SemanticOracleMutationTests {
         // A settled no-op must be rejected even though the rest of State-A's
         // envelope shape is intact.
         let noOp = try #require(oracle.evaluate(
-            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":3,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:5.1.1.18:12.1.1.1"}"#.utf8),
-            readbackData: Data("{}".utf8)
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","prewrite_marker_identities":["5:Intro7:1.1.1.1","5:Verse7:5.1.1.1","6:Chorus8:12.1.1.1"],"target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":3,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:5.1.1.18:12.1.1.1"}"#.utf8),
+            readbackData: fixture.readbackData
         ))
         #expect(!noOp, "delete_marker accepted a settled State A whose position multiset lost no target occurrence")
 
         // Mutation: replace the expected 12.1.1.1 survivor with the target's
         // 5.1.1.1 position. Count-only validation would accept this wrong delete.
         let wrongPositions = try #require(oracle.evaluate(
-            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:5.1.1.1"}"#.utf8),
-            readbackData: Data("{}".utf8)
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","prewrite_marker_identities":["5:Intro7:1.1.1.1","5:Verse7:5.1.1.1","6:Chorus8:12.1.1.1"],"target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:5.1.1.1"}"#.utf8),
+            readbackData: fixture.readbackData
         ))
         #expect(!wrongPositions, "delete_marker accepted a settled readback with wrong positions")
 
@@ -759,9 +779,10 @@ struct SemanticOracleMutationTests {
         // deleting index 0, but their positions are exactly right. State A does
         // not normally carry these State-B diagnostic fields; including them here
         // proves the oracle deliberately binds the position multiset, not names.
+        let namesShiftedReadback = Data(#"{"source":"ax_live","readable":true,"position_multiset":"7:1.1.1.17:1.1.1.17:5.1.1.1","positions_canonical":true,"data":[]}"#.utf8)
         let namesShifted = try #require(oracle.evaluate(
-            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":0,"target_name":"Marker 1","target_position":"2.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":4,"write_attempted":true,"readback_settled":true,"marker_count_after":3,"expected_survivor_position_multiset":"7:1.1.1.17:1.1.1.17:5.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:1.1.1.17:5.1.1.1","expected_survivors":["8:Marker 27:1.1.1.1","8:Marker 37:1.1.1.1","8:Marker 47:5.1.1.1"],"observed_survivors":["8:Marker 17:1.1.1.1","8:Marker 27:1.1.1.1","8:Marker 37:5.1.1.1"]}"#.utf8),
-            readbackData: Data("{}".utf8)
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":0,"target_name":"Marker 1","target_position":"2.1.1.1","prewrite_marker_identities":["8:Marker 17:2.1.1.1","8:Marker 27:1.1.1.1","8:Marker 37:1.1.1.1","8:Marker 47:5.1.1.1"],"target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":4,"write_attempted":true,"readback_settled":true,"marker_count_after":3,"expected_survivor_position_multiset":"7:1.1.1.17:1.1.1.17:5.1.1.1","observed_survivor_position_multiset":"7:1.1.1.17:1.1.1.17:5.1.1.1","expected_survivors":["8:Marker 27:1.1.1.1","8:Marker 37:1.1.1.1","8:Marker 47:5.1.1.1"],"observed_survivors":["8:Marker 17:1.1.1.1","8:Marker 27:1.1.1.1","8:Marker 37:5.1.1.1"]}"#.utf8),
+            readbackData: namesShiftedReadback
         ))
         #expect(namesShifted, "delete_marker rejected correct positions solely because default names shifted")
 
@@ -769,10 +790,56 @@ struct SemanticOracleMutationTests {
         // but it contains only one entry while both counts require two. Equality
         // alone would accept this shared arbitrary value.
         let selfReportedMultisets = try #require(oracle.evaluate(
-            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:arbitrary","observed_survivor_position_multiset":"7:arbitrary"}"#.utf8),
-            readbackData: Data("{}".utf8)
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","prewrite_marker_identities":["5:Intro7:1.1.1.1","5:Verse7:5.1.1.1","6:Chorus8:12.1.1.1"],"target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:arbitrary","observed_survivor_position_multiset":"7:arbitrary"}"#.utf8),
+            readbackData: fixture.readbackData
         ))
         #expect(!selfReportedMultisets, "delete_marker accepted equal multiset fields whose entry counts contradict the marker counts")
+
+        // Mutation applied once: remove `lengthPrefixedEntriesExclude` from the delete-marker
+        // oracle. This envelope passes every other State-A check — including the independent
+        // resource cross-check — while describing the survival of the requested 1.1.1.1 target.
+        let targetSurvives = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":0,"target_name":"Intro","target_position":"1.1.1.1","prewrite_marker_identities":["5:Intro7:1.1.1.1","5:Verse7:5.1.1.1","6:Chorus8:12.1.1.1"],"target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.18:12.1.1.1"}"#.utf8),
+            readbackData: fixture.readbackData
+        ))
+        #expect(!targetSurvives, "delete_marker accepted an internally consistent State A where the target position survived")
+
+        // The settled positions prove that Verse at 5.1.1.1 disappeared, but this envelope claims
+        // the request was index 0 / Intro. Before the binding below, the typed request fields were
+        // unrelated to the observed disappearance and this otherwise well-formed envelope passed.
+        let wrongClaimedIdentity = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":0,"target_name":"Intro","target_position":"5.1.1.1","prewrite_marker_identities":["5:Intro7:1.1.1.1","5:Verse7:5.1.1.1","6:Chorus8:12.1.1.1"],"target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.18:12.1.1.1"}"#.utf8),
+            readbackData: fixture.readbackData
+        ))
+        #expect(!wrongClaimedIdentity, "delete_marker accepted a position deletion attributed to a different requested marker")
+
+        // Mutation proven: remove `.readbackArrayExcludesResponseIdentity(...)` from the
+        // delete-marker oracle. Every other field below is self-consistent: its forged pre-write
+        // identity says Intro was at Verse's disappearing position, and the survivor multiset
+        // correctly excludes that position. Only the independent logic://markers `data[]` read
+        // still sees `{ id: 0, name: "Intro" }`, so the restored cross-check rejects this
+        // envelope-only wrong target. Without that one oracle line it evaluates true.
+        let wrongEnvelopeOnlyIdentity = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":0,"target_name":"Intro","target_position":"5.1.1.1","prewrite_marker_identities":["5:Intro7:5.1.1.1","5:Verse7:5.1.1.1","6:Chorus8:12.1.1.1"],"target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1","observed_survivor_position_multiset":"7:1.1.1.18:12.1.1.1"}"#.utf8),
+            readbackData: fixture.readbackData
+        ))
+        #expect(!wrongEnvelopeOnlyIdentity, "delete_marker accepted a target identity supplied only by its own envelope")
+
+        // Source mutation applied once: remove both `crossCheck` constraints from the
+        // delete-marker oracle. This response is internally consistent and contains no target
+        // position, but its reported survivor set is unrelated to the independent marker resource.
+        let substitutedSurvivors = try #require(oracle.evaluate(
+            responseData: Data(#"{"success":true,"verified":true,"state":"A","operation":"nav.delete_marker","requested_index":1,"target_name":"Verse","target_position":"5.1.1.1","prewrite_marker_identities":["5:Intro7:1.1.1.1","5:Verse7:5.1.1.1","6:Chorus8:12.1.1.1"],"target_position_unique":true,"position_evidence_canonical":true,"marker_count_before":3,"write_attempted":true,"readback_settled":true,"marker_count_after":2,"expected_survivor_position_multiset":"7:2.1.1.17:3.1.1.1","observed_survivor_position_multiset":"7:2.1.1.17:3.1.1.1"}"#.utf8),
+            readbackData: fixture.readbackData
+        ))
+        #expect(!substitutedSurvivors, "delete_marker accepted a survivor multiset unrelated to its independent readback")
+
+        let nonCanonicalReadback = Data(#"{"source":"ax_live","readable":true,"position_multiset":"7:1.1.1.18:12.1.1.1","positions_canonical":false,"data":[]}"#.utf8)
+        let canonicalityWasOnlySelfReported = try #require(oracle.evaluate(
+            responseData: fixture.responseData,
+            readbackData: nonCanonicalReadback
+        ))
+        #expect(!canonicalityWasOnlySelfReported, "delete_marker accepted a self-reported canonicality flag contrary to readback")
     }
 
     /// #373 B3 — project.save_as is envelope-only because its
@@ -1282,6 +1349,56 @@ enum JSONMutator {
                let count = JSONInspector.number(of: current) {
                 mutants.append(contentsOf: replacements(root, countKey, [
                     ("wrong entry count", count + 1),
+                ]))
+            }
+        case .lengthPrefixedEntriesExclude(let wireKey, let forbiddenEntryKey):
+            // Add the forbidden payload as another well-formed wire entry. The
+            // delete-marker regression below additionally proves this cannot be
+            // hidden by another count constraint.
+            if let forbidden = JSONPath.resolve(root, keyPath: forbiddenEntryKey) as? String,
+               let wire = JSONPath.resolve(root, keyPath: wireKey) as? String {
+                let forbiddenWire = "\(forbidden.lengthOfBytes(using: .utf8)):\(forbidden)"
+                mutants.append(contentsOf: replacements(root, wireKey, [
+                    ("contains forbidden entry", wire + forbiddenWire),
+                ]))
+            }
+        case .lengthPrefixedIdentityAtIndexEquals(let entriesKey, let indexKey, let nameKey, let positionKey):
+            // Break every component of the claimed pre-write identity relation: an index that
+            // names another entry, or a name/position that no longer matches the selected entry.
+            if let rawIndex = JSONPath.resolve(root, keyPath: indexKey),
+               let index = JSONInspector.number(of: rawIndex) {
+                mutants.append(contentsOf: replacements(root, indexKey, [
+                    ("different identity index", index + 1),
+                ]))
+            }
+            if let name = JSONPath.resolve(root, keyPath: nameKey) {
+                mutants.append(contentsOf: replacements(root, nameKey, [
+                    ("different identity name", divergent(from: name)),
+                ]))
+            }
+            if let position = JSONPath.resolve(root, keyPath: positionKey) {
+                mutants.append(contentsOf: replacements(root, positionKey, [
+                    ("different identity position", divergent(from: position)),
+                ]))
+            }
+            if let entries = JSONPath.resolve(root, keyPath: entriesKey) as? [Any], !entries.isEmpty {
+                mutants.append(contentsOf: replacements(root, entriesKey, [
+                    ("malformed identity entry", ["not-a-length-prefixed-identity"] as [Any]),
+                ]))
+            }
+        case .readbackArrayExcludesResponseIdentity(let responseNameKey, let responseIndexKey, _, _, _):
+            // Response-side mutations cannot be mistaken for corroboration: removing or
+            // diverging either claimed identity component must fail closed. The meaningful
+            // readback-side survivor mutation is exercised directly by the delete-marker oracle
+            // regression, where the forged pre-write envelope keeps every other gate satisfied.
+            if let name = JSONPath.resolve(root, keyPath: responseNameKey) {
+                mutants.append(contentsOf: replacements(root, responseNameKey, [
+                    ("different readback identity name", divergent(from: name)),
+                ]))
+            }
+            if let index = JSONPath.resolve(root, keyPath: responseIndexKey) {
+                mutants.append(contentsOf: replacements(root, responseIndexKey, [
+                    ("different readback identity index", divergent(from: index)),
                 ]))
             }
         case .fieldsEqual(let keyA, let keyB):

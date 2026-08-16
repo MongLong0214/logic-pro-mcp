@@ -78,7 +78,6 @@ private func issue526SelectionFailureRuntime() -> AXLogicProElements.Runtime {
     builder.setAttribute(markerList, kAXDocumentAttribute as String, "/Issue526.logicx")
     builder.setAttribute(table, kAXRoleAttribute as String, kAXTableRole as String)
     builder.setAttribute(table, kAXDescriptionAttribute as String, "Marker Table")
-    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, table)
     builder.setAttribute(row, kAXRoleAttribute as String, kAXRowRole as String)
     for cell in [lockCell, positionCell, markerNameCell] {
         builder.setAttribute(cell, kAXRoleAttribute as String, kAXCellRole as String)
@@ -93,7 +92,7 @@ private func issue526SelectionFailureRuntime() -> AXLogicProElements.Runtime {
     builder.setChildren(markerList, [table])
 
     // The row's selected attribute may be set, but the table never confirms it in
-    // AXSelectedRows, which makes selectMarkerRowForDeletion refuse to press Delete.
+    // AXSelectedRows, which makes selectMarkerRowForDeletion refuse before any menu pick.
     return builder.makeLogicRuntime(appElement: app)
 }
 
@@ -104,18 +103,22 @@ private let issue526NoOpMouseRuntime = AXMouseHelper.Runtime(
     sleepMicros: { _ in }
 )
 
-/// Builds a Marker List whose Delete key removes `actualDeleteIndex`. Keeping that
-/// distinct from the requested index lets this fixture exercise the verification
-/// proof without using a coordinate click.
+/// Builds a Marker List whose exact Edit-menu Delete entry removes `actualDeleteIndex`. Keeping
+/// that distinct from the requested index lets this fixture exercise the verification proof without
+/// using a coordinate click or a synthetic key.
 private func issue526MarkerDeleteReadbackRuntime(
     markers: [(position: String, name: String)],
-    actualDeleteIndex: Int
+    actualDeleteIndex: Int,
+    postPickTargetSelectionReadFailure: AXHelpers.AXStatusError? = nil
 ) -> (runtime: AXLogicProElements.Runtime, mouse: AXMouseHelper.Runtime) {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(52_700)
     let arrange = builder.element(52_701)
     let markerList = builder.element(52_702)
     let table = builder.element(52_703)
+    let editMenu = builder.element(52_704)
+    let menu = builder.element(52_705)
+    let deleteEntry = builder.element(52_706)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
     builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, markerList])
@@ -125,9 +128,16 @@ private func issue526MarkerDeleteReadbackRuntime(
     builder.setAttribute(markerList, kAXRoleAttribute as String, kAXWindowRole as String)
     builder.setAttribute(markerList, kAXTitleAttribute as String, "Issue526 - Marker List")
     builder.setAttribute(markerList, kAXDocumentAttribute as String, "/Issue526.logicx")
+    builder.setAttribute(editMenu, kAXRoleAttribute as String, kAXMenuButtonRole as String)
+    builder.setAttribute(editMenu, kAXDescriptionAttribute as String, "Edit")
+    builder.setActionNames(editMenu, [kAXShowMenuAction as String])
+    builder.setAttribute(menu, kAXRoleAttribute as String, kAXMenuRole as String)
+    builder.setAttribute(deleteEntry, kAXRoleAttribute as String, kAXMenuItemRole as String)
+    builder.setAttribute(deleteEntry, kAXTitleAttribute as String, "Delete")
+    builder.setAttribute(deleteEntry, kAXEnabledAttribute as String, kCFBooleanTrue)
+    builder.setChildren(menu, [deleteEntry])
     builder.setAttribute(table, kAXRoleAttribute as String, kAXTableRole as String)
     builder.setAttribute(table, kAXDescriptionAttribute as String, "Marker Table")
-    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, table)
 
     let rows: [AXUIElement] = markers.enumerated().map { index, marker in
         let base = 52_710 + index * 10
@@ -150,29 +160,47 @@ private func issue526MarkerDeleteReadbackRuntime(
     }
     builder.setAttribute(table, "AXRows", rows)
     builder.setChildren(table, rows)
-    builder.setChildren(markerList, [table])
+    builder.setChildren(markerList, [editMenu, table])
 
     let runtime = builder.makeLogicRuntime(
         appElement: app,
+        attributeValueResultHandler: { element, attribute in
+            if let postPickTargetSelectionReadFailure,
+               CFEqual(element, table),
+               attribute == "AXSelectedRows",
+               builder.attributeValue(table, "Issue526DeleteWasPicked") as? Bool == true {
+                return .failure(postPickTargetSelectionReadFailure)
+            }
+            return nil
+        },
         setAttributeHandler: { element, attribute, _ in
             if attribute == kAXSelectedAttribute as String {
                 builder.setAttribute(table, "AXSelectedRows", [element])
             }
             return true
         },
-        performActionHandler: nil
+        performActionHandler: { element, action in
+            if CFEqual(element, editMenu), action == (kAXShowMenuAction as String) {
+                builder.setChildren(editMenu, [menu])
+                return true
+            }
+            if CFEqual(element, deleteEntry), action == (kAXPickAction as String) {
+                builder.setAttribute(table, "Issue526DeleteWasPicked", true)
+                let postDeleteRows = rows.enumerated()
+                    .filter { $0.offset != actualDeleteIndex }
+                    .map { $0.element }
+                builder.setAttribute(table, "AXRows", postDeleteRows)
+                builder.setChildren(table, postDeleteRows)
+                builder.setChildren(editMenu, [])
+                // Match the live anomaly: the AX action status is not proof of the observed write.
+                return false
+            }
+            return true
+        }
     )
     let mouse = AXMouseHelper.Runtime(
         postMouseEvent: { _, _, _ in false },
-        postKeyEvent: { keyCode in
-            guard keyCode == 0x33 else { return false }
-            let postDeleteRows = rows.enumerated()
-                .filter { $0.offset != actualDeleteIndex }
-                .map { $0.element }
-            builder.setAttribute(table, "AXRows", postDeleteRows)
-            builder.setChildren(table, postDeleteRows)
-            return true
-        },
+        postKeyEvent: { _ in false },
         postUnicodeScalar: { _ in false },
         sleepMicros: { _ in }
     )
@@ -183,7 +211,7 @@ private func issue526MarkerDeleteReadbackRuntime(
     let router = ChannelRouter()
     let envelope = HonestContract.encodeStateC(
         error: .axWriteFailed,
-        hint: "Delete is unsafe without Marker List keyboard focus",
+        hint: "Delete is unsafe without a confirmed Marker List menu route",
         extras: [
             "fallback_unsafe": true,
             "write_attempted": false,
@@ -196,7 +224,10 @@ private func issue526MarkerDeleteReadbackRuntime(
 
     let result = await router.route(operation: "nav.set_zoom_level", params: ["level": "50"])
 
+    // Mutation applied once: restore the removed keyboard-focus fallback wording. The receipt must
+    // describe the menu-only delete contract instead.
     #expect(!result.isSuccess)
+    #expect(!envelope.contains("keyboard"))
     #expect(result.message == envelope)
     #expect(HonestContract.isFallbackUnsafeStateC(result.message))
     #expect(await accessibility.executions() == 1)
@@ -271,13 +302,22 @@ private func issue526MarkerDeleteReadbackRuntime(
     #expect(!HonestContract.isFallbackUnsafeStateC(envelope))
 }
 
-@Test func testIssue526SelectionFailureRefusalIsFallbackUnsafeAndStopsChain() async {
+@Test func testIssue526SelectionFailureRefusalIsFallbackUnsafeAndStopsChain() async throws {
     let refusal = await AccessibilityChannel.defaultDeleteMarker(
         index: 0,
         runtime: issue526SelectionFailureRuntime(),
         mouse: issue526NoOpMouseRuntime
     )
+    let receipt = try #require(JSONSerialization.jsonObject(
+        with: Data(refusal.message.utf8)
+    ) as? [String: Any])
+    let selectionWriteAttempted = try #require(receipt["selection_write_attempted"] as? Bool)
+
+    // Mutation applied once: set `selection_write_attempted` false when AXSelectedRows cannot
+    // confirm the write. This fixture accepts AXSelected before that failed confirmation, so the
+    // false provenance claim fails here.
     #expect(!refusal.isSuccess)
+    #expect(selectionWriteAttempted)
     let router = ChannelRouter()
     let accessibility = Issue526ErrorChannel(id: .accessibility, envelope: refusal.message)
     let keyCommands = Issue526SuccessProbeChannel(id: .midiKeyCommands)
@@ -317,7 +357,7 @@ private func issue526MarkerDeleteReadbackRuntime(
 
     #expect(result.isSuccess)
     #expect(envelope["state"] as? String == "B")
-    #expect(envelope["reason"] as? String == "readback_unavailable")
+    #expect(envelope["reason"] as? String == "readback_mismatch")
     #expect(try #require(envelope["write_attempted"] as? Bool))
     #expect(envelope["marker_count_before"] as? Int == 4)
     #expect(envelope["marker_count_after"] as? Int == 3)
@@ -348,7 +388,44 @@ private func issue526MarkerDeleteReadbackRuntime(
 
     #expect(result.isSuccess)
     #expect(envelope["state"] as? String == "B")
+    #expect(envelope["reason"] as? String == "readback_mismatch")
     #expect(!(try #require(envelope["target_position_unique"] as? Bool)))
     #expect(!(try #require(envelope["prewrite_position_evidence_canonical"] as? Bool)))
+    #expect(try #require(envelope["reason_detail"] as? String).contains("cannot establish which marker"))
+}
+
+@Test func testIssue526ReadableAmbiguousInventoryIsNotLaunderedBySelectionReadFailure() async throws {
+    // A failed AXSelectedRows poll still prevents State A, but it does not make the six readable
+    // survivor inventories unreadable. Two matching inventories prove the duplicate-position
+    // limitation, so the receipt must preserve that more precise State-B outcome.
+    let fixture = issue526MarkerDeleteReadbackRuntime(
+        markers: [
+            (position: "1 1 1 1", name: "Intro"),
+            (position: "5 1 1 1", name: "Requested Target"),
+            (position: "5 1 1 1", name: "Wrong Row"),
+            (position: "9 1 1 1", name: "Outro"),
+        ],
+        actualDeleteIndex: 2,
+        postPickTargetSelectionReadFailure: AXHelpers.AXStatusError(
+            raw: AXError.cannotComplete.rawValue
+        )
+    )
+
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8)
+    ) as? [String: Any])
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "B")
+    #expect(envelope["reason"] as? String == "readback_mismatch")
+    #expect(!(try #require(envelope["readback_settled"] as? Bool)))
+    #expect(envelope["inventory_readback_state"] as? String == "settled_ambiguous")
+    #expect(envelope["target_selection_readback_state"] as? String == "unreadable")
+    #expect(envelope["readback_failure_site"] as? String == "selected_rows")
+    #expect(envelope["readback_ax_status"] as? Int == Int(AXError.cannotComplete.rawValue))
+    #expect(envelope["readback_unreadable"] == nil)
     #expect(try #require(envelope["reason_detail"] as? String).contains("cannot establish which marker"))
 }

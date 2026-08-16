@@ -49,6 +49,15 @@ struct AXLocalePolicyTests {
         #expect(!AXLocalePolicy.undoMenuItemPrefix.matches("Redo Insert Plug-in", mode: .prefix))
     }
 
+    @Test("Marker List Edit/Delete labels include the live-confirmed Korean exact forms")
+    func markerListEditDeleteKoreanExactForms() {
+        #expect(AXLocalePolicy.markerListEditMenuButton.matches("편집", mode: .exactStrict))
+        #expect(AXLocalePolicy.markerListDeleteMenuItem.matches("삭제", mode: .exactStrict))
+        // Korean Logic's Delete-Undo-History entry is a distinct destructive command. Whole-string
+        // matching must not widen the new `삭제` route to it.
+        #expect(!AXLocalePolicy.markerListDeleteMenuItem.matches("실행 취소 기록 삭제", mode: .exactStrict))
+    }
+
     @Test("#60 — matches(.contains/.prefix) is diacritic-SENSITIVE (no accent-folding widening)")
     func matchesIsDiacriticSensitive() {
         let set = AXLocalePolicy.LabelSet(
