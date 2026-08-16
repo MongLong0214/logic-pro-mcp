@@ -214,7 +214,7 @@ enum AXLocalePolicy {
 
     static let editMenuBar = LabelSet(
         canonical: "Edit",
-        variants: ["편집"],
+        variants: ["편집", "編集"],
         rationale: "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome."
     )
 
@@ -223,7 +223,7 @@ enum AXLocalePolicy {
     /// rather than guessing a translation.
     static let navigateMenuBar = LabelSet(
         canonical: "Navigate",
-        variants: ["탐색"],
+        variants: ["탐색", "移動"],
         rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
     )
 
@@ -246,14 +246,14 @@ enum AXLocalePolicy {
     /// #519: File > Import.
     static let importMenuItem = LabelSet(
         canonical: "Import",
-        variants: ["가져오기"],
+        variants: ["가져오기", "読み込む"],
         rationale: "File menu entry that opens the Import submenu used by midi.import_file."
     )
 
     /// #519: File > Import > MIDI File….
     static let midiFileMenuItem = LabelSet(
         canonical: "MIDI File…",
-        variants: ["MIDI 파일…"],
+        variants: ["MIDI 파일…", "MIDIファイル…"],
         rationale: "Import submenu leaf that opens the MIDI file chooser for midi.import_file."
     )
 
@@ -284,28 +284,28 @@ enum AXLocalePolicy {
     /// specifier, so the shared Korean text never crosses into the wrong menu.
     static let goToMenuItem = LabelSet(
         canonical: "Go To",
-        variants: ["이동"],
+        variants: ["이동", "移動"],
         rationale: "Navigate menu entry that opens the Go To submenu used by goto_position."
     )
 
     /// #519: Navigate > Go To > Position….
     static let goToPositionMenuItem = LabelSet(
         canonical: "Position…",
-        variants: ["위치…"],
+        variants: ["위치…", "位置…"],
         rationale: "Go To submenu leaf that opens the Go To Position dialog."
     )
 
     /// #519: Navigate > Open Marker List.
     static let openMarkerListMenuItem = LabelSet(
         canonical: "Open Marker List",
-        variants: ["마커 목록 열기"],
+        variants: ["마커 목록 열기", "マーカーリストを開く"],
         rationale: "Navigate menu entry that opens the Marker List window."
     )
 
     /// #519: Navigate > Create Marker.
     static let createMarkerMenuItem = LabelSet(
         canonical: "Create Marker",
-        variants: ["마커 생성"],
+        variants: ["마커 생성", "マーカーを作成"],
         rationale: "Navigate menu entry that creates a marker at the playhead."
     )
 
