@@ -291,6 +291,239 @@ struct Issue538TrackCreationObservationTests {
         #expect(sheetReads.current() > 0, "the mandatory-sheet seam must be read before Create is pressed")
     }
 
+    @Test("a New Track sheet classified before its Create control publishes is retried, not abandoned")
+    func createTrackViaMenuRetriesADelayedCreateControl() async throws {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(660)
+        let window = builder.element(661)
+        let menuBar = builder.element(662)
+        let trackMenu = builder.element(663)
+        let createItem = builder.element(664)
+        let headers = builder.element(665)
+        let existing = builder.element(666)
+        let created = builder.element(667)
+        let sheet = builder.element(668)
+        let create = builder.element(669)
+        let cancel = builder.element(670)
+        let menuWasClicked = TrackCreateFlag()
+        let sheetWasCleared = TrackCreateFlag()
+        let boundCreatePresses = TrackCreateCounter()
+        let sheetChildReads = TrackCreateCounter()
+        let sheetChildReadsWithoutCreate = TrackCreateCounter()
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        builder.setChildren(window, [headers])
+        builder.setAttribute(headers, kAXRoleAttribute as String, kAXListRole as String)
+        builder.setAttribute(headers, kAXIdentifierAttribute as String, "Track Headers")
+        builder.setChildren(headers, [existing])
+        builder.setAttribute(existing, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        builder.setAttribute(existing, kAXTitleAttribute as String, "Existing")
+        builder.setAttribute(existing, kAXDescriptionAttribute as String, "Audio Track")
+        builder.setAttribute(created, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        builder.setAttribute(created, kAXTitleAttribute as String, "Created Instrument")
+        builder.setAttribute(created, kAXDescriptionAttribute as String, "Software Instrument Track")
+        builder.setAttribute(created, kAXSelectedAttribute as String, true)
+        builder.setChildren(menuBar, [trackMenu])
+        builder.setAttribute(trackMenu, kAXTitleAttribute as String, "Track")
+        builder.setAttribute(trackMenu, kAXSelectedAttribute as String, false)
+        builder.setChildren(trackMenu, [createItem])
+        builder.setAttribute(createItem, kAXTitleAttribute as String, "소프트웨어 악기")
+        builder.setAttribute(createItem, kAXSelectedAttribute as String, false)
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+        builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+
+        // #538 counterexample: the sheet's AXDescription ("New Track") is
+        // readable on the FIRST post-menu poll, but its Create control is not
+        // yet published among the sheet's children — only Cancel is there.
+        // Every poll AFTER that publishes both [Create, Cancel].
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueHandler: { element, attribute in
+                guard CFEqual(element, window), attribute == "AXSheets" else { return nil }
+                guard menuWasClicked.get(), !sheetWasCleared.get() else { return .some([] as NSArray) }
+                return .some([sheet] as NSArray)
+            },
+            childrenHandler: { element in
+                guard CFEqual(element, sheet) else { return nil }
+                sheetChildReads.increment()
+                if sheetChildReads.current() == 1 {
+                    sheetChildReadsWithoutCreate.increment()
+                    return [cancel]
+                }
+                return [create, cancel]
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard action == (kAXPressAction as String) else { return false }
+                if CFEqual(element, createItem) {
+                    menuWasClicked.set()
+                    return true
+                }
+                if CFEqual(element, create) {
+                    boundCreatePresses.increment()
+                    sheetWasCleared.set()
+                    builder.setChildren(headers, [existing, created])
+                    return true
+                }
+                return false
+            }
+        )
+
+        let result = await AccessibilityChannel.createTrackViaMenu(
+            korean: "소프트웨어 악기",
+            english: "Software Instrument",
+            expectedTrackType: .softwareInstrument,
+            runtime: runtime,
+            dialogPollDelayNanoseconds: 0
+        )
+        try #require(result.isSuccess, "expected a verified creation envelope, got: \(result.message)")
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+        let verified = try #require(envelope["verified"] as? Bool)
+        let state = try #require(envelope["state"] as? String)
+        let action = try #require(envelope["reconciled_action"] as? String)
+
+        // Mutation source 1 (retry removed): restore the single unconditional
+        // `reconcileAfterMutation` call with no follow-up poll. The
+        // description-only first pass would then be the operation's only
+        // look at the sheet, Create is never pressed, and this becomes a
+        // State B `dialog_present` envelope with the sheet still up.
+        #expect(verified)
+        #expect(state == "A")
+        #expect(action == "click_create")
+        // Mutation source 2 (once-only guard removed): let the retry loop
+        // keep polling and pressing after `actionAttempted` is already true.
+        // Create would then be pressed a second time on this fixture's next
+        // poll, which is a double-create — worse than the original wedge.
+        #expect(boundCreatePresses.current() == 1, "Create must be pressed exactly once")
+        #expect(
+            sheetChildReadsWithoutCreate.current() == 1,
+            "the description-only, Create-not-yet-published poll seam must fire exactly once"
+        )
+        #expect(sheetChildReads.current() >= 2, "a later poll must re-read the sheet's now-published children")
+    }
+
+    @Test("the delayed-create retry never presses Create twice, even when a replacement sheet follows")
+    func createTrackViaMenuNeverPressesCreateTwiceOnAReplacementSheet() async throws {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(680)
+        let window = builder.element(681)
+        let menuBar = builder.element(682)
+        let trackMenu = builder.element(683)
+        let createItem = builder.element(684)
+        let headers = builder.element(685)
+        let existing = builder.element(686)
+        let sheet = builder.element(687)
+        let create = builder.element(688)
+        let cancel = builder.element(689)
+        let replacementSheet = builder.element(690)
+        let create2 = builder.element(691)
+        let cancel2 = builder.element(692)
+        let menuWasClicked = TrackCreateFlag()
+        let actionIssued = TrackCreateFlag()
+        let boundCreatePresses = TrackCreateCounter()
+        let sheetChildReads = TrackCreateCounter()
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        builder.setChildren(window, [headers])
+        builder.setAttribute(headers, kAXRoleAttribute as String, kAXListRole as String)
+        builder.setAttribute(headers, kAXIdentifierAttribute as String, "Track Headers")
+        builder.setChildren(headers, [existing])
+        builder.setAttribute(existing, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        builder.setAttribute(existing, kAXTitleAttribute as String, "Existing")
+        builder.setAttribute(existing, kAXDescriptionAttribute as String, "Audio Track")
+        builder.setChildren(menuBar, [trackMenu])
+        builder.setAttribute(trackMenu, kAXTitleAttribute as String, "Track")
+        builder.setAttribute(trackMenu, kAXSelectedAttribute as String, false)
+        builder.setChildren(trackMenu, [createItem])
+        builder.setAttribute(createItem, kAXTitleAttribute as String, "소프트웨어 악기")
+        builder.setAttribute(createItem, kAXSelectedAttribute as String, false)
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+        builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+        builder.setAttribute(replacementSheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(replacementSheet, kAXDescriptionAttribute as String, "New Track")
+        builder.setAttribute(create2, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create2, kAXTitleAttribute as String, "Create")
+        builder.setAttribute(cancel2, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel2, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(cancel2, kAXEnabledAttribute as String, false)
+        builder.setChildren(replacementSheet, [create2, cancel2])
+
+        // Same #538 shape as the delayed-create fixture above (Create absent
+        // on the first read of `sheet`, published from the second read on),
+        // but here a DIFFERENT, already-actionable "New Track" sheet is
+        // attached from the very next `AXSheets` read after the first Create
+        // press — reproducing the #538 replacement-sheet shape. If the
+        // once-only latch is not honored, the retry loop presses `create2` on
+        // this replacement exactly like it pressed `create`, doubling the
+        // create.
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueHandler: { element, attribute in
+                guard CFEqual(element, window), attribute == "AXSheets" else { return nil }
+                guard menuWasClicked.get() else { return .some([] as NSArray) }
+                guard !actionIssued.get() else { return .some([replacementSheet] as NSArray) }
+                return .some([sheet] as NSArray)
+            },
+            childrenHandler: { element in
+                guard CFEqual(element, sheet) else { return nil }
+                sheetChildReads.increment()
+                return sheetChildReads.current() == 1 ? [cancel] : [create, cancel]
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard action == (kAXPressAction as String) else { return false }
+                if CFEqual(element, createItem) {
+                    menuWasClicked.set()
+                    return true
+                }
+                if CFEqual(element, create) {
+                    boundCreatePresses.increment()
+                    actionIssued.set()
+                    return true
+                }
+                if CFEqual(element, create2) {
+                    boundCreatePresses.increment()
+                    return true
+                }
+                return false
+            }
+        )
+
+        _ = await AccessibilityChannel.createTrackViaMenu(
+            korean: "소프트웨어 악기",
+            english: "Software Instrument",
+            expectedTrackType: .softwareInstrument,
+            runtime: runtime,
+            dialogPollDelayNanoseconds: 0
+        )
+
+        // Mutation source 2 (once-only guard removed): drop the
+        // `if dialogReconcileOutcome.actionAttempted { break }` inside the
+        // retry loop. The loop would then poll again after the first
+        // successful press, find the replacement sheet's already-published
+        // `create2`, and press it too — `boundCreatePresses` becomes 2.
+        #expect(boundCreatePresses.current() == 1, "Create must never be pressed a second time on a replacement sheet")
+        #expect(actionIssued.get(), "the first Create press seam must fire")
+    }
+
     @Test("a create timeout with a still-present New Track sheet is State B, not a clean write failure")
     func createTimeoutNamesThePresentSheetInsteadOfReportingNoWindow() async throws {
         let builder = FakeAXRuntimeBuilder()

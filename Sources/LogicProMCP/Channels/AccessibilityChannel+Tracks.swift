@@ -1249,7 +1249,13 @@ extension AccessibilityChannel {
         // Retained for channel-runtime compatibility. The create route no
         // longer invokes this unchecked keyboard fallback.
         confirmDialog: @escaping @Sendable () -> Void = { sendReturnKey() },
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        // #538: total post-menu reconcile passes budgeted for the mandatory
+        // New Track sheet, including the first. Tests override the delay to
+        // 0 to stay fast; production keeps a real gap so a delayed AX publish
+        // has time to land.
+        dialogPollAttempts: Int = 5,
+        dialogPollDelayNanoseconds: UInt64 = 200_000_000
     ) async -> ChannelResult {
         guard AXLogicProElements.mainWindow(runtime: runtime) != nil else {
             return .error("No document open for track creation")
@@ -1288,12 +1294,37 @@ extension AccessibilityChannel {
         // would actuate whichever default control happens to be focused and was
         // never read as this operation's target.
         try? await Task.sleep(nanoseconds: 400_000_000)
-        let dialogReconcileOutcome = await reconcileAfterMutation(
+        var dialogReconcileOutcome = await reconcileAfterMutation(
             isDeleteContext: false,
             runtime: runtime,
             witnessAttempts: 1,
             witnessDelayNanoseconds: 0
         )
+        // #538 BLOCKER: `reconcileAfterMutation` can classify the sheet from its
+        // AXDescription before the sheet's Create control is published in the
+        // tree — the executor then no-ops (`createButton == nil`,
+        // `actionAttempted == false`) and this single pass presses nothing. The
+        // mandatory sheet's only exit is Create, so stopping here after one
+        // description-only pass leaves Logic wedged on it. Poll again, mirroring
+        // `observeProjectCreationOutcome`'s `mandatoryTrackCreateActionAttempted`
+        // latch: keep re-reconciling ONLY while no pass has yet issued the press
+        // AND the sheet is still classified `.mandatoryNewTrack`, and stop the
+        // instant one pass does — so a later-published Create control is
+        // pressed exactly once, never twice.
+        if !dialogReconcileOutcome.actionAttempted {
+            let extraAttempts = max(0, dialogPollAttempts - 1)
+            for _ in 0..<extraAttempts {
+                guard dialogReconcileOutcome.kind == .mandatoryNewTrack else { break }
+                try? await Task.sleep(nanoseconds: dialogPollDelayNanoseconds)
+                dialogReconcileOutcome = await reconcileAfterMutation(
+                    isDeleteContext: false,
+                    runtime: runtime,
+                    witnessAttempts: 1,
+                    witnessDelayNanoseconds: 0
+                )
+                if dialogReconcileOutcome.actionAttempted { break }
+            }
+        }
         let dialogConfirmationAttempted = dialogReconcileOutcome.actionAttempted
         let verificationReconcileOutcome = dialogReconcileOutcome.kind == .none
             && dialogReconcileOutcome.modalObservationIsComplete
