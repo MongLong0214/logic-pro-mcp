@@ -1602,12 +1602,17 @@ enum SemanticOracleTable {
     // to exclude the target position. It ALSO cross-checks the reported multiset and
     // canonicality flag against the independent `logic://markers` resource read: a
     // self-consistent producer cannot substitute unrelated survivor fields. It also
-    // rejects a claimed target identity that still appears as the same name/index
-    // entry in that independent `data[]` readback. A shared or synthetic target
-    // position is State B: a position occurrence can disappear without identifying
-    // which marker it was.
+    // rejects a claimed target POSITION that still appears in that independent
+    // `data[]` readback. Name+index is not identity: Logic auto-renames generated
+    // markers, so an absent name+index pair is forgeable and an honest delete of
+    // "Marker 1" at index 0 is rejected when a survivor is renamed onto that pair.
+    // A shared or synthetic target position is State B: a position occurrence can
+    // disappear without identifying which marker it was.
     // Marker names remain only State-B diagnostics because Logic can renumber
-    // auto-generated names after deletion.
+    // auto-generated names after deletion. State A also requires Logic's own
+    // Number of Items count, read independently of the table projections, to drop
+    // by exactly one; those observed counts are pinned below so a producer cannot
+    // certify State A without reporting the witness.
     static let navigateDeleteMarker = SafeMutationOracle.oracle(
         .navigateDeleteMarker,
         semantics: [
@@ -1617,17 +1622,17 @@ enum SemanticOracleTable {
             .typedField(key: "target_position", type: .string),
             .lengthPrefixedIdentityAtIndexEquals(entriesKey: "prewrite_marker_identities", indexKey: "requested_index", nameKey: "target_name", positionKey: "target_position"),
             .readbackArrayExcludesResponseIdentity(
-                responseNameKey: "target_name",
-                responseIndexKey: "requested_index",
+                responsePositionKey: "target_position",
                 readbackArrayKey: "data",
-                readbackNameKey: "name",
-                readbackIndexKey: "id"
+                readbackPositionKey: "position"
             ),
             .valueEquals(key: "target_position_unique", expected: .bool(true)),
             .valueEquals(key: "position_evidence_canonical", expected: .bool(true)),
             .typedField(key: "marker_count_before", type: .number),
             .valueEquals(key: "readback_settled", expected: .bool(true)),
             .typedField(key: "marker_count_after", type: .number),
+            .typedField(key: "observed_marker_count_before", type: .number),
+            .typedField(key: "observed_marker_count_after", type: .number),
             .lengthPrefixedEntryCountEquals(
                 key: "expected_survivor_position_multiset",
                 countKey: "marker_count_before",

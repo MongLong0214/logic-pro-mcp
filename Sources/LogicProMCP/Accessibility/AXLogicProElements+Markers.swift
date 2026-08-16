@@ -26,6 +26,7 @@ extension AXLogicProElements {
         case axRows = "ax_rows"
         case structuralChildren = "structural_children"
         case cell = "cell"
+        case itemCount = "item_count"
         case settleLoop = "settle_loop"
     }
 

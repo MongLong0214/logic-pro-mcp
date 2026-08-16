@@ -27,6 +27,7 @@ private final class Issue523MenuState: @unchecked Sendable {
     var menuEntryEnabledReadFails = false
     var postWriteRowsReadFails = false
     var postWriteRowsReadFailureWasObserved = false
+    var postWriteRowsReadFailureCount = 0
     var postWriteAXRowsReadFailuresRemaining = 0
     var postWriteAXRowsReadFailureStatus = AXError.cannotComplete.rawValue
     var postWriteAXRowsReadFailurePersists = false
@@ -67,6 +68,21 @@ private final class Issue523MenuState: @unchecked Sendable {
     var postWriteRowsNeverSettle = false
     var postWriteRowsNeverSettleReadCount = 0
     var postWriteRowsNeverSettleWasObserved = false
+    var postWriteSelectedRowsBecomeEmpty = false
+    var postWriteSelectedRowsBecomeFreshElement = false
+    var postWriteSelectedRowsEmptyWasObserved = false
+    var postWriteSelectedRowsFreshElementWasObserved = false
+    var postWriteItemCountReadFailuresRemaining = 0
+    var postWriteItemCountReadFailureStatus = AXError.cannotComplete.rawValue
+    var postWriteItemCountReadFailurePersists = false
+    var postWriteItemCountReadFailureCount = 0
+    var postWriteItemCountReadFailureWasObserved = false
+    var postWriteItemCountReadRecoveredAfterFailure = false
+    var postWriteItemCountRecoveredReadCount = 0
+    var postWriteItemCountFrozen = false
+    var postWriteItemCountValueOverride: String?
+    var postWriteItemCountValueOverrideWasObserved = false
+    var itemCountNodeWasReadByDescription = false
     var rowSelectionWasWritten = false
     var selectedRowsReadFailsAfterSelection = false
     var selectionChangesAfterSelectWrite = false
@@ -150,6 +166,14 @@ private func issue523MarkerDeleteFixture(
     postWriteRowCellsInvalidReadFailures: Int = 0,
     postWriteRowCellsInvalidReadPersists: Bool = false,
     postWriteRowsNeverSettle: Bool = false,
+    postWriteSelectedRowsBecomeEmpty: Bool = false,
+    postWriteSelectedRowsBecomeFreshElement: Bool = false,
+    itemCountMissing: Bool = false,
+    postWriteItemCountReadFailures: Int = 0,
+    postWriteItemCountReadFailureStatus: Int32 = AXError.cannotComplete.rawValue,
+    postWriteItemCountReadFailurePersists: Bool = false,
+    postWriteItemCountFrozen: Bool = false,
+    postWriteItemCountValueOverride: String? = nil,
     menuControlDiscoveryReadFails: Bool = false,
     menuActionNamesReadFails: Bool = false,
     bottomEditActionNamesReadFails: Bool = false,
@@ -178,6 +202,8 @@ private func issue523MarkerDeleteFixture(
     menuState.selectionChangesAfterSelectWrite = selectionChangesAfterSelectWrite
     menuState.selectionChangesAfterFinalSelectionCheckBeforePick = selectionChangesAfterFinalSelectionCheckBeforePick
     menuState.selectionUnreadableBeforePick = selectionUnreadableBeforePick
+    menuState.postWriteSelectedRowsBecomeEmpty = postWriteSelectedRowsBecomeEmpty
+    menuState.postWriteSelectedRowsBecomeFreshElement = postWriteSelectedRowsBecomeFreshElement
     let app = builder.element(52_300)
     let arrange = builder.element(52_301)
     let markerList = builder.element(52_302)
@@ -188,6 +214,9 @@ private func issue523MarkerDeleteFixture(
     let table = builder.element(52_307)
     let unrelatedTable = builder.element(52_308)
     let unreadableMenuSeparator = builder.element(52_309)
+    let markerCountGroup = builder.element(52_280)
+    let decoyItemCount = builder.element(52_281)
+    let itemCountText = builder.element(52_282)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
     builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, markerList])
@@ -261,6 +290,11 @@ private func issue523MarkerDeleteFixture(
     builder.setChildren(substitutePositionCell, [substitutePosition])
     builder.setChildren(substituteNameCell, [substituteName])
     builder.setChildren(substituteRow, [substituteLockCell, substitutePositionCell, substituteNameCell])
+    // A post-rebuild AXSelectedRows element that is not CFEqual to the pre-write target.
+    // The table's own selected-row projection can replace every row identity during rebuild
+    // without the marker leaving.
+    let freshSelectedRow = builder.element(98_780)
+    builder.setAttribute(freshSelectedRow, kAXRoleAttribute as String, kAXRowRole as String)
     @Sendable func makeSubstituteRowReadLike(_ source: AXUIElement) {
         guard let index = rows.firstIndex(where: { CFEqual($0, source) }) else { return }
         builder.setAttribute(substitutePosition, kAXDescriptionAttribute as String, markers[index].position)
@@ -269,7 +303,22 @@ private func issue523MarkerDeleteFixture(
     builder.setAttribute(table, "AXRows", rows)
     let structuralRows = structuralRowOrder.map { $0.map { rows[$0] } } ?? rows
     builder.setChildren(table, structuralRows)
+    // Logic renders its own count on a node that is not a table projection. The decoy
+    // static text is deliberately first among siblings so a position-based read would
+    // report 99 instead of the real marker count.
+    builder.setAttribute(markerCountGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(markerCountGroup, kAXDescriptionAttribute as String, "Marker")
+    builder.setAttribute(decoyItemCount, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    builder.setAttribute(decoyItemCount, kAXDescriptionAttribute as String, "Selected Item")
+    builder.setAttribute(decoyItemCount, kAXValueAttribute as String, "99 Markers")
+    builder.setAttribute(itemCountText, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    builder.setAttribute(itemCountText, kAXDescriptionAttribute as String, "Number of Items")
+    builder.setAttribute(itemCountText, kAXValueAttribute as String, issue523MarkerListItemCountText(markers.count))
+    builder.setChildren(markerCountGroup, [decoyItemCount, itemCountText])
     var markerListChildren = [bottomEdit, toolbarEdit, table]
+    if !itemCountMissing {
+        markerListChildren.append(markerCountGroup)
+    }
     if menuEntryTitle != nil, !menuBoundToToolbar {
         // This menu is deliberately unrelated to the toolbar Edit control. It is the stale-window
         // decoy that the old "first AXMenu anywhere" fallback mistook for the requested menu.
@@ -355,6 +404,11 @@ private func issue523MarkerDeleteFixture(
                     menuState.postWriteRowCellsInvalidReadFailuresRemaining = postWriteRowCellsInvalidReadFailures
                     menuState.postWriteRowCellsInvalidReadPersists = postWriteRowCellsInvalidReadPersists
                     menuState.postWriteRowsNeverSettle = postWriteRowsNeverSettle
+                    menuState.postWriteItemCountReadFailuresRemaining = postWriteItemCountReadFailures
+                    menuState.postWriteItemCountReadFailureStatus = postWriteItemCountReadFailureStatus
+                    menuState.postWriteItemCountReadFailurePersists = postWriteItemCountReadFailurePersists
+                    menuState.postWriteItemCountFrozen = postWriteItemCountFrozen
+                    menuState.postWriteItemCountValueOverride = postWriteItemCountValueOverride
                     return false
                 }
                 if menuState.selectionChangesAfterFinalSelectionCheckBeforePick,
@@ -382,6 +436,17 @@ private func issue523MarkerDeleteFixture(
                     // selection. Keep the operation's pre-pick diagnostic ID separately so the
                     // target-fidelity test can still identify which row AXPick acted on.
                     builder.setAttribute(table, "AXSelectedRows", [AXUIElement]())
+                    if !postWriteItemCountFrozen, postWriteItemCountValueOverride == nil {
+                        builder.setAttribute(
+                            itemCountText,
+                            kAXValueAttribute as String,
+                            issue523MarkerListItemCountText(afterPick.count)
+                        )
+                    }
+                }
+                if let override = postWriteItemCountValueOverride {
+                    builder.setAttribute(itemCountText, kAXValueAttribute as String, override)
+                    menuState.postWriteItemCountValueOverrideWasObserved = true
                 }
                 if let substituteIndex = postWriteRowsSubstituteIndex,
                    let currentRows: [AXUIElement] = AXHelpers.getAttribute(
@@ -391,7 +456,11 @@ private func issue523MarkerDeleteFixture(
                     makeSubstituteRowReadLike(currentRows[substituteIndex])
                 }
                 if unrelatedEmptyTableBecomesFirstAfterPick {
-                    builder.setChildren(markerList, [unrelatedTable, bottomEdit, toolbarEdit, table])
+                    var reboundChildren = [unrelatedTable, bottomEdit, toolbarEdit, table]
+                    if !itemCountMissing {
+                        reboundChildren.append(markerCountGroup)
+                    }
+                    builder.setChildren(markerList, reboundChildren)
                 }
                 menuState.postWriteRowsReadFails = postWriteRowsReadFails
                 menuState.postWriteAXRowsReadFailuresRemaining = postWriteAXRowsReadFailures
@@ -410,6 +479,19 @@ private func issue523MarkerDeleteFixture(
                 menuState.postWriteRowCellsInvalidReadFailuresRemaining = postWriteRowCellsInvalidReadFailures
                 menuState.postWriteRowCellsInvalidReadPersists = postWriteRowCellsInvalidReadPersists
                 menuState.postWriteRowsNeverSettle = postWriteRowsNeverSettle
+                menuState.postWriteItemCountReadFailuresRemaining = postWriteItemCountReadFailures
+                menuState.postWriteItemCountReadFailureStatus = postWriteItemCountReadFailureStatus
+                menuState.postWriteItemCountReadFailurePersists = postWriteItemCountReadFailurePersists
+                menuState.postWriteItemCountFrozen = postWriteItemCountFrozen
+                menuState.postWriteItemCountValueOverride = postWriteItemCountValueOverride
+                if menuState.postWriteSelectedRowsBecomeEmpty {
+                    builder.setAttribute(table, "AXSelectedRows", [AXUIElement]())
+                    menuState.postWriteSelectedRowsEmptyWasObserved = true
+                }
+                if menuState.postWriteSelectedRowsBecomeFreshElement {
+                    builder.setAttribute(table, "AXSelectedRows", [freshSelectedRow])
+                    menuState.postWriteSelectedRowsFreshElementWasObserved = true
+                }
                 return false
             }
             return true
@@ -608,6 +690,7 @@ private func issue523MarkerDeleteFixture(
                    builder.elementID(element) == builder.elementID(table),
                    attribute == "AXRows" {
                     menuState.postWriteRowsReadFailureWasObserved = true
+                    menuState.postWriteRowsReadFailureCount += 1
                     return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
                 }
                 if menuState.postWriteAXRowsReadNil,
@@ -683,6 +766,29 @@ private func issue523MarkerDeleteFixture(
                    attribute == kAXRoleAttribute as String {
                     return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
                 }
+                if builder.elementID(element) == builder.elementID(itemCountText),
+                   attribute == kAXDescriptionAttribute as String {
+                    menuState.itemCountNodeWasReadByDescription = true
+                }
+                if (menuState.postWriteItemCountReadFailuresRemaining > 0
+                    || menuState.postWriteItemCountReadFailurePersists),
+                   builder.elementID(element) == builder.elementID(itemCountText),
+                   attribute == kAXValueAttribute as String {
+                    menuState.postWriteItemCountReadFailureWasObserved = true
+                    menuState.postWriteItemCountReadFailureCount += 1
+                    if menuState.postWriteItemCountReadFailuresRemaining > 0 {
+                        menuState.postWriteItemCountReadFailuresRemaining -= 1
+                    }
+                    return .failure(AXHelpers.AXStatusError(
+                        raw: menuState.postWriteItemCountReadFailureStatus
+                    ))
+                }
+                if menuState.postWriteItemCountReadFailureCount > 0,
+                   builder.elementID(element) == builder.elementID(itemCountText),
+                   attribute == kAXValueAttribute as String {
+                    menuState.postWriteItemCountReadRecoveredAfterFailure = true
+                    menuState.postWriteItemCountRecoveredReadCount += 1
+                }
                 return baseRuntime.ax.attributeValueResult?(element, attribute)
                     ?? .success(baseRuntime.ax.attributeValue(element, attribute))
             }
@@ -723,6 +829,10 @@ private func issue523MarkerDeleteFixture(
     )
 }
 
+private func issue523MarkerListItemCountText(_ count: Int) -> String {
+    count == 1 ? "1 Marker" : "\(count) Markers"
+}
+
 private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     try #require(JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any])
 }
@@ -746,6 +856,7 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
 
     #expect(result.isSuccess)
     #expect(envelope["state"] as? String == "A")
+    #expect(try #require(envelope["verified"] as? Bool))
     #expect(fixture.selectedMarkerName == "Target")
     #expect(fixture.markerCount == 1)
 }
@@ -898,6 +1009,7 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
         // misreports the completed menu delete as a route refusal and fails the State-A assertion.
         #expect(result.isSuccess)
         #expect(envelope["state"] as? String == "A")
+        #expect(try #require(envelope["verified"] as? Bool))
         #expect(writeAttempted)
         #expect(envelope["prewrite_marker_identities"] as? [String] == [
             "5:Intro7:1.1.1.1", "5:Verse7:5.1.1.1", "6:Chorus7:9.1.1.1",
@@ -935,6 +1047,7 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     // proof becomes unreachable and the test fails.
     #expect(result.isSuccess)
     #expect(envelope["state"] as? String == "A")
+    #expect(try #require(envelope["verified"] as? Bool))
     #expect(envelope["menu_state"] as? String == "could_not_be_closed")
     #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
     #expect(try #require(envelope["fallback_unsafe"] as? Bool))
@@ -987,6 +1100,7 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
 
     #expect(result.isSuccess)
     #expect(envelope["state"] as? String == "A")
+    #expect(try #require(envelope["verified"] as? Bool))
     #expect(fixture.actions.actionCount(
         elementID: fixture.menuEntryID, action: kAXPickAction as String
     ) == 1)
@@ -1022,6 +1136,32 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     ) == 0)
     #expect(fixture.actions.actionCount(
         elementID: fixture.bottomEditID, action: kAXPressAction as String
+    ) == 0)
+}
+
+@Test func testIssue523UnknownLocaleEditDeleteLabelsRefuseWithoutIssuingAPick() async throws {
+    // Locale policy itself stays with #519. An unseen locale must refuse honestly rather
+    // than guess a destructive actuator. Mutation: return `.pickIssued` from the settled
+    // `.menuAbsent` branch. write_attempted and the zero-AXPick count both fail.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Löschen",
+        editControlTitle: "Bearbeiten"
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+    let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
+
+    #expect(!result.isSuccess)
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["edit_menu_route_state"] as? String == "menu_absent")
+    #expect(!writeAttempted)
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.toolbarEditID, action: kAXShowMenuAction as String
+    ) == 0)
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuEntryID, action: kAXPickAction as String
     ) == 0)
 }
 
@@ -1111,6 +1251,7 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
 
     #expect(result.isSuccess)
     #expect(envelope["state"] as? String == "A")
+    #expect(try #require(envelope["verified"] as? Bool))
     #expect(fixture.actions.actionCount(
         elementID: fixture.toolbarEditID, action: kAXShowMenuAction as String
     ) == 1)
@@ -1120,9 +1261,9 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
 }
 
 @Test func testIssue523PostWriteReadbackFailureReceiptNamesTheActualSiteAndStatus() async throws {
-    // Mutation A: replace the `ax_rows` receipt binding with `structural_children`. This first
-    // fixture still returns State B, but it must fail the exact-site assertion below. The boolean
-    // proves the fixture fired on the live AXRows call rather than a later structural read.
+    // Mutation A: remove `failure` from `isTransientDuringRebuild`. This first fixture then
+    // returns State B on poll 1 and fails the six-poll count below. The boolean plus the exact
+    // count prove the fixture fired on the live AXRows call and consumed the settle budget.
     let axRowsFixture = issue523MarkerDeleteFixture(
         menuEntryTitle: "Delete",
         pickDeletesSelectedRow: false,
@@ -1141,7 +1282,9 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     #expect(axRowsEnvelope["readback_ax_status"] as? Int == Int(AXError.failure.rawValue))
     #expect(axRowsEnvelope["readback_ax_status_name"] as? String == "failure")
     #expect(try #require(axRowsEnvelope["readback_unreadable"] as? Bool))
+    #expect(!(try #require(axRowsEnvelope["readback_settled"] as? Bool)))
     #expect(axRowsFixture.menuState.postWriteRowsReadFailureWasObserved)
+    #expect(axRowsFixture.menuState.postWriteRowsReadFailureCount == 6)
     #expect(axRowsFixture.actions.actionCount(
         elementID: axRowsFixture.menuEntryID, action: kAXPickAction as String
     ) == 1)
@@ -1232,6 +1375,7 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
 
     #expect(result.isSuccess)
     #expect(envelope["state"] as? String == "A")
+    #expect(try #require(envelope["verified"] as? Bool))
     #expect(try #require(envelope["readback_settled"] as? Bool))
     #expect(envelope["marker_count_after"] as? Int == 1)
     #expect(envelope["expected_survivor_position_multiset"] as? String == "7:5.1.1.1")
@@ -1268,6 +1412,7 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
 
     #expect(result.isSuccess)
     #expect(envelope["state"] as? String == "A")
+    #expect(try #require(envelope["verified"] as? Bool))
     #expect(try #require(envelope["readback_settled"] as? Bool))
     #expect(envelope["marker_count_after"] as? Int == 1)
     #expect(envelope["expected_survivor_position_multiset"] as? String == "7:5.1.1.1")
@@ -1301,6 +1446,7 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
 
     #expect(result.isSuccess)
     #expect(envelope["state"] as? String == "A")
+    #expect(try #require(envelope["verified"] as? Bool))
     #expect(try #require(envelope["readback_settled"] as? Bool))
     #expect(envelope["marker_count_after"] as? Int == 1)
     #expect(envelope["expected_survivor_position_multiset"] as? String == "7:5.1.1.1")
@@ -1336,6 +1482,7 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     // uses its existing structural route for each of the two genuine settle observations.
     #expect(axRowsAnswerResult.isSuccess)
     #expect(axRowsAnswerEnvelope["state"] as? String == "A")
+    #expect(try #require(axRowsAnswerEnvelope["verified"] as? Bool))
     #expect(try #require(axRowsAnswerEnvelope["readback_settled"] as? Bool))
     #expect(axRowsAnswerFixture.menuState.postWriteAXRowsReadFailureWasObserved)
     #expect(axRowsAnswerFixture.menuState.postWriteAXRowsReadFailureCount == 2)
@@ -1973,6 +2120,81 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     #expect(fixture.markerCount == 3)
 }
 
+@Test func testIssue523SharedProjectionOmissionWithEmptySelectionCannotReachStateA() async throws {
+    // The "target row is no longer selected" check is not independent of the table. After
+    // a rebuild, the pre-write Verse element is CFEqual to nothing — including an empty
+    // AXSelectedRows — whether or not the marker left. Two agreeing truncated inventories
+    // plus that empty selection must not encode State A.
+    //
+    // Mutation proven: restore `encodeStateA` after the selection-no-op guard. This fixture
+    // then certifies a no-op delete and fails the state / remaining-count assertions.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteRowsDropIndex: 1,
+        postWriteStructuralRowsDropIndex: 1,
+        postWriteSelectedRowsBecomeEmpty: true,
+        markers: [("1 1 1 1", "Intro"), ("5 1 1 1", "Verse"), ("12 1 1 1", "Chorus")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(try #require(envelope["state"] as? String) != "A")
+    #expect(fixture.menuState.postWriteRowsDropReadWasObserved)
+    #expect(fixture.menuState.postWriteStructuralRowsDropReadWasObserved)
+    #expect(fixture.menuState.postWriteSelectedRowsEmptyWasObserved)
+    #expect(fixture.markerCount == 3)
+}
+
+@Test func testIssue523SharedProjectionOmissionWithFreshSelectionCannotReachStateA() async throws {
+    // Same common-mode rebuild, only AXSelectedRows is a newly created element that is
+    // not CFEqual to the pre-write Verse row. That is still a table projection.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteRowsDropIndex: 1,
+        postWriteStructuralRowsDropIndex: 1,
+        postWriteSelectedRowsBecomeFreshElement: true,
+        markers: [("1 1 1 1", "Intro"), ("5 1 1 1", "Verse"), ("12 1 1 1", "Chorus")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(try #require(envelope["state"] as? String) != "A")
+    #expect(fixture.menuState.postWriteRowsDropReadWasObserved)
+    #expect(fixture.menuState.postWriteStructuralRowsDropReadWasObserved)
+    #expect(fixture.menuState.postWriteSelectedRowsFreshElementWasObserved)
+    #expect(fixture.markerCount == 3)
+}
+
+@Test func testIssue523LastMarkerSharedEmptyProjectionsWithNonMatchingSelectionCannotReachStateA() async throws {
+    // Last-marker variant: both projections successfully answer [] and the selection is a
+    // fresh non-matching element. An empty expected survivor set plus "target no longer
+    // selected" is the same rebuild lie, just with one row.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteRowsDropIndex: 0,
+        postWriteStructuralRowsDropIndex: 0,
+        postWriteSelectedRowsBecomeFreshElement: true,
+        markers: [("1 1 1 1", "Only Marker")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 0, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(try #require(envelope["state"] as? String) != "A")
+    #expect(fixture.menuState.postWriteRowsDropReadWasObserved)
+    #expect(fixture.menuState.postWriteStructuralRowsDropReadWasObserved)
+    #expect(fixture.menuState.postWriteSelectedRowsFreshElementWasObserved)
+    #expect(fixture.markerCount == 1)
+}
+
 @Test func testIssue523SubstitutedAXRowsElementWithSameCountCannotReachStateA() async throws {
     let fixture = issue523MarkerDeleteFixture(
         menuEntryTitle: "Delete",
@@ -2013,4 +2235,164 @@ private func issue523Envelope(_ result: ChannelResult) throws -> [String: Any] {
     // substituted AXRows element as a corroborated survivor observation.
     #expect(fixture.markerCount == 2)
     #expect(fixture.markerNames == ["Intro", "Chorus"])
+}
+
+@Test func testIssue523IndependentItemCountDropAndSurvivorMultisetReachStateA() async throws {
+    // Mutation proven: restore the "no independent witness" State B return after the
+    // canonical-position guard. The delete is real, the survivor multiset agrees, and
+    // Logic's own Number of Items count drops 3 → 2, so that mutation fails the State-A
+    // expectation below. The decoy sibling is first and reads "99 Markers"; matching by
+    // position among siblings would publish 99 and fail the observed-before assertion.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        markers: [("1 1 1 1", "Intro"), ("5 1 1 1", "Verse"), ("12 1 1 1", "Chorus")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "A")
+    #expect(try #require(envelope["verified"] as? Bool))
+    #expect(try #require(envelope["readback_settled"] as? Bool))
+    #expect(envelope["observed_marker_count_before"] as? Int == 3)
+    #expect(envelope["observed_marker_count_after"] as? Int == 2)
+    #expect(envelope["observed_marker_count_text_before"] as? String == "3 Markers")
+    #expect(envelope["observed_marker_count_text_after"] as? String == "2 Markers")
+    #expect(envelope["expected_survivor_position_multiset"] as? String == "7:1.1.1.18:12.1.1.1")
+    #expect(envelope["observed_survivor_position_multiset"] as? String == "7:1.1.1.18:12.1.1.1")
+    #expect(fixture.menuState.itemCountNodeWasReadByDescription)
+    #expect(fixture.markerCount == 2)
+    #expect(fixture.markerNames == ["Intro", "Chorus"])
+
+    let lastMarkerFixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        markers: [("1 1 1 1", "Keep"), ("5 1 1 1", "Drop")]
+    )
+    let lastMarkerResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: lastMarkerFixture.runtime, mouse: lastMarkerFixture.mouse
+    )
+    let lastMarkerEnvelope = try issue523Envelope(lastMarkerResult)
+    #expect(lastMarkerEnvelope["state"] as? String == "A")
+    #expect(lastMarkerEnvelope["observed_marker_count_before"] as? Int == 2)
+    #expect(lastMarkerEnvelope["observed_marker_count_after"] as? Int == 1)
+    #expect(lastMarkerEnvelope["observed_marker_count_text_after"] as? String == "1 Marker")
+}
+
+@Test func testIssue523ReadableUnchangedItemCountCannotReachStateAWhileProjectionsOmitTheRow() async throws {
+    // Mutation proven: skip the independent-count drop check and encode State A from the
+    // settled table projections alone. Both AXRows and AXChildren omit Verse, the
+    // selection is a fresh non-matching element, and the uniqueness/canonical gates
+    // pass — but Logic's own count still reads 3 Markers. That mutation certifies a
+    // no-op delete and fails the State-B / count-observation assertions below.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        pickDeletesSelectedRow: false,
+        postWriteRowsDropIndex: 1,
+        postWriteStructuralRowsDropIndex: 1,
+        postWriteSelectedRowsBecomeFreshElement: true,
+        markers: [("1 1 1 1", "Intro"), ("5 1 1 1", "Verse"), ("12 1 1 1", "Chorus")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "B")
+    #expect(envelope["reason"] as? String == "readback_mismatch")
+    #expect(try #require(envelope["readback_settled"] as? Bool))
+    #expect(envelope["observed_marker_count_before"] as? Int == 3)
+    #expect(envelope["observed_marker_count_after"] as? Int == 3)
+    let reasonDetail = try #require(envelope["reason_detail"] as? String)
+    #expect(reasonDetail.contains("Number of Items"))
+    #expect(reasonDetail.contains("3"))
+    #expect(fixture.menuState.postWriteRowsDropReadWasObserved)
+    #expect(fixture.menuState.postWriteStructuralRowsDropReadWasObserved)
+    #expect(fixture.menuState.postWriteSelectedRowsFreshElementWasObserved)
+    #expect(fixture.menuState.itemCountNodeWasReadByDescription)
+    #expect(fixture.markerCount == 3)
+}
+
+@Test func testIssue523UnreadableOrUnparseableItemCountCannotReachStateA() async throws {
+    // Mutation proven: treat a missing or unparseable Number of Items value as count 0.
+    // Both fixtures really delete the target, so a fabricated 0 would look like a drop
+    // and certify State A. The receipt must say the witness was unreadable and must
+    // not publish an invented observed_marker_count_after.
+    let missingFixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        itemCountMissing: true,
+        markers: [("1 1 1 1", "Keep"), ("5 1 1 1", "Drop")]
+    )
+    let missingResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: missingFixture.runtime, mouse: missingFixture.mouse
+    )
+    let missingEnvelope = try issue523Envelope(missingResult)
+    let missingDetail = try #require(missingEnvelope["reason_detail"] as? String)
+
+    #expect(missingResult.isSuccess)
+    #expect(missingEnvelope["state"] as? String == "B")
+    #expect(missingEnvelope["reason"] as? String == "readback_unavailable")
+    #expect(try #require(missingEnvelope["readback_settled"] as? Bool))
+    #expect(missingEnvelope["observed_marker_count_before"] == nil)
+    #expect(missingEnvelope["observed_marker_count_after"] == nil)
+    #expect(missingEnvelope["item_count_witness_state"] as? String == "unreadable")
+    #expect(missingDetail.contains("unreadable"))
+    #expect(missingFixture.markerCount == 1)
+
+    let unparseableFixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        postWriteItemCountValueOverride: "Markers",
+        markers: [("1 1 1 1", "Keep"), ("5 1 1 1", "Drop")]
+    )
+    let unparseableResult = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: unparseableFixture.runtime, mouse: unparseableFixture.mouse
+    )
+    let unparseableEnvelope = try issue523Envelope(unparseableResult)
+    let unparseableDetail = try #require(unparseableEnvelope["reason_detail"] as? String)
+
+    #expect(unparseableResult.isSuccess)
+    #expect(unparseableEnvelope["state"] as? String == "B")
+    #expect(unparseableEnvelope["reason"] as? String == "readback_unavailable")
+    #expect(unparseableEnvelope["observed_marker_count_before"] as? Int == 2)
+    #expect(unparseableEnvelope["observed_marker_count_after"] == nil)
+    #expect(unparseableEnvelope["item_count_witness_state"] as? String == "unparseable")
+    #expect(unparseableEnvelope["observed_marker_count_text_after"] as? String == "Markers")
+    #expect(unparseableDetail.contains("unreadable") || unparseableDetail.contains("unparseable"))
+    #expect(unparseableFixture.menuState.postWriteItemCountValueOverrideWasObserved)
+    #expect(unparseableFixture.markerCount == 1)
+}
+
+@Test func testIssue523TransientItemCountReadFailureRetiresPollThenSettles() async throws {
+    // Mutation proven: return State B from the first failed Number of Items value read
+    // instead of retiring that poll. The AXPick still deletes, so the operation must
+    // continue; two later agreeing count reads then settle on 1 Marker and this
+    // State-A expectation fails if the first -25204 retired the whole write.
+    let fixture = issue523MarkerDeleteFixture(
+        menuEntryTitle: "Delete",
+        postWriteItemCountReadFailures: 2,
+        postWriteItemCountReadFailureStatus: AXError.cannotComplete.rawValue,
+        markers: [("1 1 1 1", "Keep"), ("5 1 1 1", "Drop")]
+    )
+    let result = await AccessibilityChannel.defaultDeleteMarker(
+        index: 1, runtime: fixture.runtime, mouse: fixture.mouse
+    )
+    let envelope = try issue523Envelope(result)
+
+    #expect(result.isSuccess)
+    #expect(envelope["state"] as? String == "A")
+    #expect(try #require(envelope["verified"] as? Bool))
+    #expect(try #require(envelope["readback_settled"] as? Bool))
+    #expect(envelope["observed_marker_count_before"] as? Int == 2)
+    #expect(envelope["observed_marker_count_after"] as? Int == 1)
+    #expect(envelope["observed_marker_count_text_after"] as? String == "1 Marker")
+    #expect(fixture.menuState.postWriteItemCountReadFailureWasObserved)
+    #expect(fixture.menuState.postWriteItemCountReadFailureCount == 2)
+    #expect(fixture.menuState.postWriteItemCountReadRecoveredAfterFailure)
+    #expect(fixture.menuState.postWriteItemCountRecoveredReadCount == 2)
+    #expect(fixture.actions.actionCount(
+        elementID: fixture.menuEntryID, action: kAXPickAction as String
+    ) == 1)
+    #expect(fixture.markerCount == 1)
 }

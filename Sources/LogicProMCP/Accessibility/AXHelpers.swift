@@ -181,13 +181,15 @@ enum AXHelpers {
             raw == AXError.attributeUnsupported.rawValue || raw == AXError.noValue.rawValue
         }
 
-        /// AX can return either of these while Logic is rebuilding an otherwise still-bound
+        /// AX can return any of these while Logic is rebuilding an otherwise still-bound
         /// element tree. A post-write settle poll must discard the entire observation and try a
-        /// fresh one within its existing budget. This deliberately excludes `apiDisabled`: that
-        /// reports a disabled accessibility API, not a short-lived rebuild state, so retrying it
-        /// would only obscure the real failure.
+        /// fresh one within its existing budget. `failure` (-25200) is a failed read, not an
+        /// answer of absence: it retires that poll, not the operation. This deliberately
+        /// excludes `apiDisabled`: that reports a disabled accessibility API, not a short-lived
+        /// rebuild state, so retrying it would only obscure the real failure.
         var isTransientDuringRebuild: Bool {
-            raw == AXError.cannotComplete.rawValue
+            raw == AXError.failure.rawValue
+                || raw == AXError.cannotComplete.rawValue
                 || raw == AXError.invalidUIElement.rawValue
         }
 

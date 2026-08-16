@@ -111,6 +111,10 @@ extension AccessibilityChannel {
             "prewrite_marker_identities": prewriteMarkerIdentities,
             "marker_count_before": before.count,
         ]
+        let prewriteItemCount = readMarkerListItemCount(in: window, runtime: runtime.ax)
+        addMarkerDeleteItemCountObservation(
+            prewriteItemCount, phase: .before, to: &extras
+        )
 
         guard let selection = selectMarkerRowForDeletion(
             targetRow, in: inventory.table, runtime: runtime.ax
@@ -242,7 +246,11 @@ extension AccessibilityChannel {
         // there. So require two consecutive identical readings before believing either of them, and
         // report State B when they will not settle rather than certifying a guess.
         var settledReadback: MarkerDeleteSettledReadback?
-        var previousObservation: (inventory: MarkerDeleteInventoryReadback, targetRowStillSelected: Bool)?
+        var previousObservation: (
+            inventory: MarkerDeleteInventoryReadback,
+            targetRowStillSelected: Bool,
+            itemCount: MarkerListItemCountRead
+        )?
         // Keep the inventory's settled ambiguity distinct from a failed selected-row read. The
         // latter prevents State A, but does not make two agreeing, readable inventories
         // unreadable. If those inventories already establish that a duplicate-position target
@@ -255,10 +263,10 @@ extension AccessibilityChannel {
         // if it is still the final poll when the existing budget expires, State B reports that
         // exact site and status without re-resolving the already-bound table.
         var finalTransientReadbackFailure: AXLogicProElements.MarkerListReadFailure?
-        // AXRows and AXChildren are both projections of the same table and can omit the same row
-        // during one rebuild. The table's selected-row relation is a separate observed effect of
-        // the exact target we selected for the menu actuator. A failure to read it retires this
-        // whole poll; it never becomes an answer that the target left the selection.
+        // AXRows, AXChildren, and AXSelectedRows are all projections of the same table and can
+        // omit the same pre-write row during one rebuild. A failure to read the selection retires
+        // this whole poll; it never becomes an answer that the target left the selection. Absence
+        // of that pre-write element from AXSelectedRows is not independent deletion evidence.
         var finalTargetSelectionReadbackFailure: AXHelpers.AXStatusError?
         for _ in 0..<6 {
             let reading: [MarkerState]
@@ -321,16 +329,48 @@ extension AccessibilityChannel {
                 continue
             }
 
+            let itemCountRead = readMarkerListItemCount(in: window, runtime: runtime.ax)
+            if case .unreadable(let error) = itemCountRead, error.isTransientDuringRebuild {
+                // Same rule as the inventory: a failed Number of Items read voids this poll,
+                // not the already-issued delete.
+                finalTransientReadbackFailure = AXLogicProElements.MarkerListReadFailure(
+                    site: .itemCount,
+                    status: error
+                )
+                finalTargetSelectionReadbackFailure = nil
+                previousObservation = nil
+                previousInventoryReadback = nil
+                settledAmbiguousInventory = nil
+                mouse.sleepMicros(250_000)
+                continue
+            }
+            if case .unreadable(let error) = itemCountRead {
+                extras["readback_settled"] = false
+                extras["readback_unreadable"] = true
+                extras["item_count_witness_state"] = itemCountRead.witnessState
+                extras["readback_failure_site"] = AXLogicProElements.MarkerListReadFailureSite
+                    .itemCount.rawValue
+                extras["readback_ax_status"] = Int(error.raw)
+                if let symbolicName = error.symbolicName {
+                    extras["readback_ax_status_name"] = symbolicName
+                }
+                extras["reason_detail"] = itemCountRead.refusalDetail
+                return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+            }
+            finalTransientReadbackFailure = nil
+
             if let previousObservation,
                previousObservation.inventory.survivorPositions == inventoryReadback.survivorPositions,
-               previousObservation.targetRowStillSelected == targetRowStillSelected {
+               previousObservation.targetRowStillSelected == targetRowStillSelected,
+               previousObservation.itemCount.agrees(with: itemCountRead) {
                 settledReadback = MarkerDeleteSettledReadback(
                     inventory: inventoryReadback,
-                    targetRowStillSelected: targetRowStillSelected
+                    targetRowStillSelected: targetRowStillSelected,
+                    itemCount: itemCountRead
                 )
                 break
             }
-            previousObservation = (inventoryReadback, targetRowStillSelected)
+            previousObservation = (inventoryReadback, targetRowStillSelected, itemCountRead)
             mouse.sleepMicros(250_000)
         }
         let settleOutcome: MarkerDeleteSettleOutcome
@@ -432,16 +472,13 @@ extension AccessibilityChannel {
         }
 
         // A surviving target selection is a direct observed no-op, even if AXRows and AXChildren
-        // happened to agree on an omitted row. The two table projections are corroboration, not
-        // independent effects; never certify the deletion while the exact row selected for Delete
-        // remains selected. This guard follows the two-reading settle so it is based on a complete
-        // agreeing observation rather than one unstable poll.
+        // happened to agree on an omitted row. Never certify the deletion while the exact row
+        // selected for Delete remains selected. This guard follows the two-reading settle so it
+        // is based on a complete agreeing observation rather than one unstable poll.
         guard !observedReadback.targetRowStillSelected else {
             extras["reason_detail"] = "The exact target row remained selected after the Delete pick, so the settled row omission is not sufficient evidence of deletion."
             return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
         }
-        // Bind the request-derived position-multiset expectation to the independently read-back
-        // position multiset in State A. Names are not exposed here because Logic may renumber them.
         extras["expected_survivor_position_multiset"] = expectedSurvivorPositions.joined()
         extras["observed_survivor_position_multiset"] = observedReadback.inventory.survivorPositions.joined()
         guard prewritePositionEvidenceCanonical,
@@ -451,6 +488,27 @@ extension AccessibilityChannel {
                 + "least one marker position came from an ordinal parse fallback; synthetic "
                 + "positions cannot support a verified target identity."
             return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+        }
+        // AXRows, AXChildren, and AXSelectedRows can all omit the pre-write row because the
+        // table rebuilt. Logic's own Number of Items rendering is not a projection of that
+        // table. State A needs both that independently-read count dropping by one and the
+        // settled survivor multiset agreeing; neither witness is enough alone.
+        addMarkerDeleteItemCountObservation(
+            observedReadback.itemCount, phase: .after, to: &extras
+        )
+        guard let observedCountBefore = prewriteItemCount.parsedCount,
+              let observedCountAfter = observedReadback.itemCount.parsedCount else {
+            extras["reason_detail"] = observedReadback.itemCount.parsedCount == nil
+                ? observedReadback.itemCount.refusalDetail
+                : prewriteItemCount.refusalDetail
+            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+        }
+        guard observedCountAfter == observedCountBefore - 1 else {
+            extras["reason_detail"] =
+                "The Marker List Number of Items count did not drop by one (observed "
+                + "\(observedCountBefore) → \(observedCountAfter)) while the settled table "
+                + "inventory claimed the target left."
+            return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
         }
         return .success(HonestContract.encodeStateA(extras: extras))
     }
@@ -475,10 +533,237 @@ extension AccessibilityChannel {
         let emptySurvivorSet: Bool
     }
 
-    /// State-A requires both a settled inventory and an agreeing selected-row observation.
+    /// State-A requires a settled inventory, an agreeing selected-row observation, and
+    /// Logic's independently rendered Number of Items count.
     private struct MarkerDeleteSettledReadback {
         let inventory: MarkerDeleteInventoryReadback
         let targetRowStillSelected: Bool
+        let itemCount: MarkerListItemCountRead
+    }
+
+    /// One read of the Marker List window's own Number of Items node.
+    ///
+    /// A parsed integer is the only value that may be published as
+    /// `observed_marker_count_*`. Missing, ambiguous, or unparseable text is an
+    /// unreadable witness, not a count of zero.
+    private enum MarkerListItemCountRead: Equatable {
+        case parsed(Int, raw: String)
+        case unparseable(raw: String)
+        case missing
+        case ambiguous
+        case unreadable(AXHelpers.AXStatusError)
+
+        static let unreadableWitnessDetail =
+            "The Marker List Number of Items count was unreadable as an independent deletion witness."
+
+        var refusalDetail: String {
+            switch self {
+            case .unparseable:
+                return "The Marker List Number of Items count was unreadable: the value could not be parsed."
+            case .missing, .ambiguous, .unreadable, .parsed:
+                return Self.unreadableWitnessDetail
+            }
+        }
+
+        var parsedCount: Int? {
+            if case .parsed(let count, _) = self { return count }
+            return nil
+        }
+
+        var rawText: String? {
+            switch self {
+            case .parsed(_, let raw), .unparseable(let raw):
+                return raw
+            case .missing, .ambiguous, .unreadable:
+                return nil
+            }
+        }
+
+        var witnessState: String {
+            switch self {
+            case .parsed:
+                return "readable"
+            case .unparseable:
+                return "unparseable"
+            case .missing, .ambiguous, .unreadable:
+                return "unreadable"
+            }
+        }
+
+        func agrees(with other: MarkerListItemCountRead) -> Bool {
+            switch (self, other) {
+            case (.parsed(let left, _), .parsed(let right, _)):
+                return left == right
+            case (.unparseable, .unparseable),
+                 (.missing, .missing),
+                 (.ambiguous, .ambiguous):
+                return true
+            default:
+                return false
+            }
+        }
+    }
+
+    private enum MarkerListItemCountPhase {
+        case before
+        case after
+    }
+
+    private static func addMarkerDeleteItemCountObservation(
+        _ observation: MarkerListItemCountRead,
+        phase: MarkerListItemCountPhase,
+        to extras: inout [String: Any]
+    ) {
+        let countKey: String
+        let textKey: String
+        let stateKey: String
+        switch phase {
+        case .before:
+            countKey = "observed_marker_count_before"
+            textKey = "observed_marker_count_text_before"
+            stateKey = "item_count_witness_state_before"
+        case .after:
+            countKey = "observed_marker_count_after"
+            textKey = "observed_marker_count_text_after"
+            stateKey = "item_count_witness_state"
+        }
+        if let count = observation.parsedCount {
+            extras[countKey] = count
+        }
+        if let raw = observation.rawText {
+            extras[textKey] = raw
+        }
+        extras[stateKey] = observation.witnessState
+    }
+
+    /// Reads the Marker List's Number of Items static text by AXDescription, never
+    /// by sibling position. The live node is under an AXGroup described "Marker";
+    /// its value is Logic's own rendering (`"1 Marker"`, `"15 Markers"`).
+    private static func readMarkerListItemCount(
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> MarkerListItemCountRead {
+        switch findMarkerListNumberOfItemsNodes(in: window, runtime: runtime) {
+        case .failure(let error):
+            return .unreadable(error)
+        case .success(let nodes) where nodes.isEmpty:
+            return .missing
+        case .success(let nodes) where nodes.count > 1:
+            return .ambiguous
+        case .success(let nodes):
+            let node = nodes[0]
+            switch AXHelpers.getAttributeResult(
+                node, kAXValueAttribute as String, runtime: runtime
+            ) as Result<AnyObject?, AXHelpers.AXStatusError> {
+            case .failure(let error):
+                return .unreadable(error)
+            case .success(let value):
+                let raw: String
+                if let string = value as? String {
+                    raw = string
+                } else if let number = value as? NSNumber {
+                    raw = number.stringValue
+                } else {
+                    return .unparseable(raw: "")
+                }
+                guard let parsed = parseMarkerListItemCount(raw) else {
+                    return .unparseable(raw: raw)
+                }
+                return .parsed(parsed, raw: raw)
+            }
+        }
+    }
+
+    /// Walks the already-bound Marker List window for AXStaticText nodes whose
+    /// AXDescription is exactly `Number of Items`. The table subtree is skipped:
+    /// that count is not a table projection, and descending into AXRows/AXChildren
+    /// would couple the witness to the rebuild failure mode it exists to outvote.
+    /// An unreadable unrelated node is skipped; a completed walk with zero or many
+    /// matches is an unreadable witness, not a sibling-index guess. A walk error
+    /// with no match is a failed read.
+    private static func findMarkerListNumberOfItemsNodes(
+        in window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
+        var matches: [AXUIElement] = []
+        var parents = [window]
+        var unreadable: AXHelpers.AXStatusError?
+        for _ in 0..<12 {
+            var next: [AXUIElement] = []
+            for parent in parents {
+                let children: [AXUIElement]
+                switch AXHelpers.childrenResult(parent, runtime: runtime) {
+                case .success(let observedChildren):
+                    children = observedChildren
+                case .failure(let error) where error.isDefinitiveAbsence:
+                    children = []
+                case .failure(let error):
+                    unreadable = unreadable ?? error
+                    children = []
+                }
+                for child in children {
+                    var childRole: String?
+                    switch AXHelpers.getAttributeResult(
+                        child, kAXRoleAttribute as String, runtime: runtime
+                    ) as Result<String?, AXHelpers.AXStatusError> {
+                    case .success(let role):
+                        childRole = role
+                        if role == (kAXStaticTextRole as String) {
+                            switch AXHelpers.getAttributeResult(
+                                child, kAXDescriptionAttribute as String, runtime: runtime
+                            ) as Result<String?, AXHelpers.AXStatusError> {
+                            case .success(let description)
+                                where description == "Number of Items":
+                                matches.append(child)
+                            case .success:
+                                break
+                            case .failure(let error) where error.isDefinitiveAbsence:
+                                break
+                            case .failure(let error):
+                                unreadable = unreadable ?? error
+                            }
+                        }
+                    case .failure(let error) where error.isDefinitiveAbsence:
+                        break
+                    case .failure(let error):
+                        unreadable = unreadable ?? error
+                    }
+                    // The independent count is not inside the Marker Table. Do not
+                    // descend into a projection we already know can omit rows.
+                    if childRole != (kAXTableRole as String) {
+                        next.append(child)
+                    }
+                }
+            }
+            parents = next
+        }
+        if matches.isEmpty, let unreadable {
+            return .failure(unreadable)
+        }
+        return .success(matches)
+    }
+
+    /// Defensive parse of Logic's Number of Items value. Exactly one run of ASCII
+    /// digits is a count; any other rendering is unreadable. A failed parse is
+    /// never published as zero.
+    private static func parseMarkerListItemCount(_ text: String) -> Int? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        var runs: [String] = []
+        var current = ""
+        for character in trimmed {
+            if character.isASCII && character.isNumber {
+                current.append(character)
+            } else if !current.isEmpty {
+                runs.append(current)
+                current = ""
+            }
+        }
+        if !current.isEmpty {
+            runs.append(current)
+        }
+        guard runs.count == 1, let value = Int(runs[0]) else { return nil }
+        return value
     }
 
     /// The terminal outcome of the fixed six-poll settle budget. Keeping these cases separate
