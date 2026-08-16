@@ -347,7 +347,14 @@ extension AccessibilityChannel {
                 if outcome.actionAttempted {
                     mandatoryTrackCreateActionAttempted = true
                 }
-                if outcome.witnessSummary?.blockerSetClear == true {
+                // Two facts, and neither alone is the conclusion. `observedGone` says the sheet THIS
+                // run captured is gone — an invalidated element is the only signal macOS gives for a
+                // destroyed one. `blockerSetClear` says no blocker is present NOW, which a scan can
+                // report without ever having seen our sheet leave. Latching on the second alone
+                // certifies a dismissal this run cannot attribute to itself; latching on the first
+                // alone ignores a different sheet that arrived in its place.
+                if outcome.witnessSummary?.observedGone == true
+                    && outcome.witnessSummary?.blockerSetClear == true {
                     mandatoryTrackSheetGone = true
                 } else if attempt + 1 == attempts {
                     var extras: [String: Any] = [
@@ -418,7 +425,41 @@ extension AccessibilityChannel {
                         "safe_to_retry": false,
                     ]
                 ))
-            case .none, .informationalAlert, .strayMenu:
+            case .informationalAlert, .strayMenu:
+                // This poll OBSERVED a live blocker. `reconcileAfterMutation`
+                // above may have just attempted to acknowledge/escape it, but
+                // an attempted action is not proof it closed — the very next
+                // read could still see the same alert or a replacement one.
+                // Falling through here would let a still-open one-button
+                // warning or contextual menu certify the arrange window /
+                // track count as if nothing were blocking. Only a later
+                // `.none` observation may do that; keep polling until one
+                // arrives, or report the persistent blocker honestly once the
+                // observation budget is exhausted.
+                guard attempt + 1 == attempts else { continue }
+                var extras: [String: Any] = [
+                    "operation": "project.new",
+                    "method": "accessibility",
+                    "selection": selection,
+                    "phase": "blocking_dialog_unconfirmed",
+                    "write_attempted": true,
+                    "safe_to_retry": false,
+                ]
+                mergeReconcileExtras(
+                    &extras,
+                    kind: outcome.kind,
+                    action: attemptedReconcileActionLabel(outcome),
+                    newTrackAutoConfirmed: false,
+                    witnessSummary: outcome.witnessSummary,
+                    refusal: outcome.refusal,
+                    actionFailure: outcome.actionFailure,
+                    unreadableReason: outcome.unreadableReason
+                )
+                return .error(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: extras
+                ))
+            case .none:
                 break
             }
             // `allTrackHeaders` is the project-level fact we can safely report:

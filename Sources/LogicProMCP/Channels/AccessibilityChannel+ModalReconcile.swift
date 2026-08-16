@@ -121,6 +121,16 @@ extension AccessibilityChannel {
             unreadableReason == nil
         }
 
+        /// `actionAttempted` is true whenever a press/key event was ISSUED,
+        /// including when AX rejected it (`actionFailure != nil`, e.g. -25202
+        /// on a stale captured button). A caller reporting that the New Track
+        /// dialog's Create control was "auto-confirmed" needs the AX call to
+        /// have actually been accepted, not merely tried — an attempted press
+        /// that AX itself refused is not a confirmation of anything.
+        var actionAccepted: Bool {
+            actionAttempted && actionFailure == nil
+        }
+
         init(
             kind: ModalReconciliation.BlockingModalKind,
             decision: ModalReconciliation.ModalReconcileDecision,
@@ -752,9 +762,15 @@ extension AccessibilityChannel {
             // establish an empty search space. The raw decoder distinguishes
             // this from a CFArray whose Swift `[AXUIElement]` bridge failed.
             return .unreadable(.axWindowsPayloadUninterpretable)
-        case .failure(let error) where error.raw == AXError.noValue.rawValue:
-            return .none
         case .failure(let error):
+            // `noValue` (-25212) is not treated as "the app has zero windows".
+            // AX statuses can lie during a Logic rebuild (measured live for
+            // -25202 on a bound sheet, #538) and there is no fallback tree to
+            // search here the way `AXSheets` has one: mistaking a transient
+            // noValue for a genuinely empty window list would certify a clean
+            // blocker set while a real window — and a sheet on it — still
+            // exists. Every failure, including noValue, retires this poll as
+            // unreadable so the caller retries instead of certifying absence.
             return .unreadable(.axWindowsReadFailed(error))
         }
     }
@@ -848,9 +864,10 @@ extension AccessibilityChannel {
     }
 
     /// Status-preserving sheet lookup used for classification and for a clean
-    /// State-A gate. `attributeUnsupported` and `noValue` are structural answers
-    /// and fall through to the role traversal; a malformed successful payload,
-    /// a failed read, or a reached depth cap is *not* absence.
+    /// State-A gate. A malformed successful payload, ANY failed `AXWindows`
+    /// read (including `noValue`), or a reached depth cap is *not* absence —
+    /// there is no fallback tree to search here if the window list itself was
+    /// misread, unlike `AXSheets` below a resolved host.
     /// Every window the app currently vends, asked for a sheet. Used when
     /// `AXMainWindow` is absent and to complete a main-window host scan: the
     /// sheet is still attached to one of them, and its host is not itself modal.
@@ -872,11 +889,12 @@ extension AccessibilityChannel {
             // sheet host exists. Keep its distinct diagnostic cause instead of
             // laundering it into a clean empty list.
             return .unreadable(.axWindowsPayloadUninterpretable)
-        case .failure(let error) where error.raw == AXError.noValue.rawValue:
-            return .absent
         case .failure(let error):
-            // Unsupported is an answer that this attribute is not vended, not
-            // an empty list of hosts.
+            // `noValue` is not "the app has zero windows" — AX statuses can
+            // lie during a rebuild, and a real window (holding a real sheet)
+            // can exist behind a transiently unreadable AXWindows call. Every
+            // failure, noValue included, must not be laundered into "no other
+            // hosts".
             return .unreadable(.axWindowsReadFailed(error))
         }
         var incompleteReason: ModalReadFailure?

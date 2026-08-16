@@ -1353,7 +1353,7 @@ extension AccessibilityChannel {
             &extras,
             kind: reconcileOutcome.kind,
             action: attemptedReconcileActionLabel(reconcileOutcome),
-            newTrackAutoConfirmed: reconcileOutcome.kind == .mandatoryNewTrack && reconcileOutcome.actionAttempted,
+            newTrackAutoConfirmed: reconcileOutcome.kind == .mandatoryNewTrack && reconcileOutcome.actionAccepted,
             witnessSummary: reconcileOutcome.witnessSummary,
             refusal: reconcileOutcome.refusal,
             actionFailure: reconcileOutcome.actionFailure,
@@ -1361,6 +1361,14 @@ extension AccessibilityChannel {
         )
 
         var lastModal = reconcileOutcome
+        // #538 BLOCKER: a single clean+increased poll is not settled absence.
+        // After Create, Logic rebuilds — the bound sheet invalidates
+        // (`.gone`), `AXChildren` can read back a successful `[]` for one
+        // poll, and a replacement New Track sheet can attach on the very next
+        // read. Mirror the delete path's requirement of two CONSECUTIVE clean
+        // observations (`deletionCleanObservationStreakIsSettled`) instead of
+        // certifying State A off attempt 0 alone.
+        var consecutiveCleanIncreasedObservations = 0
         for attempt in 0..<4 {
             let currentTracks = observedTrackStates(in: arrangeWindow, runtime: runtime)
             let currentCount = currentTracks?.count
@@ -1383,17 +1391,34 @@ extension AccessibilityChannel {
                     return false
                 }()
             )
-            if countIncreased,
-               settledClean,
-               let beforeTracks,
-               let currentTracks {
+            if countIncreased, settledClean {
+                consecutiveCleanIncreasedObservations += 1
+            } else {
+                consecutiveCleanIncreasedObservations = 0
+            }
+            if let beforeTracks,
+               let currentTracks,
+               deletionCountCanCertifyStateA(
+                   observedTrackCountDecreased: countIncreased,
+                   settledCleanModalObservation: deletionCleanObservationStreakIsSettled(
+                       consecutiveCleanIncreasedObservations
+                   )
+               ) {
                 var merged = extras.merging([
                     "track_count_after": currentTracks.count,
                     "observed_delta": currentTracks.count - beforeTracks.count
                 ]) { _, new in new }
                 if let observedTrack = observedCreatedTrack(before: beforeTracks, after: currentTracks) {
                     merged["observed_track_index"] = observedTrack.id
-                    merged["observed_track_name"] = observedTrack.name
+                    // `extractTrackName` returns the literal placeholder "Untitled"
+                    // with `liveIdentityBacked == false` when no title/description/
+                    // text-field name was actually readable. Publishing that literal
+                    // as `observed_track_name` would claim the header named itself
+                    // when nothing was read. Only a live-identity-backed name is an
+                    // observed effect.
+                    if observedTrack.liveIdentityBacked {
+                        merged["observed_track_name"] = observedTrack.name
+                    }
                     merged["observed_track_type"] = observedTrack.type.rawValue
                     merged["track_type_verification_source"] = "observed_header"
                 }
@@ -1416,7 +1441,7 @@ extension AccessibilityChannel {
             &merged,
             kind: lastModal.kind,
             action: attemptedReconcileActionLabel(lastModal),
-            newTrackAutoConfirmed: lastModal.kind == .mandatoryNewTrack && lastModal.actionAttempted,
+            newTrackAutoConfirmed: lastModal.kind == .mandatoryNewTrack && lastModal.actionAccepted,
             witnessSummary: lastModal.witnessSummary,
             refusal: lastModal.refusal,
             actionFailure: lastModal.actionFailure,
@@ -1431,10 +1456,30 @@ extension AccessibilityChannel {
                 extras: merged
             ))
         }
-        let blockingOrUnreadable = lastModal.kind != .none || !lastModal.modalObservationIsComplete
-        merged["dialog_present"] = blockingOrUnreadable
-        if blockingOrUnreadable {
+        // `dialog_present` / `waiting_for_user` must claim only what was
+        // actually observed. `kind != .none` is a real blocker: something is
+        // genuinely on screen waiting for the user. An incomplete scan
+        // (`!modalObservationIsComplete` while `kind == .none`) is a read
+        // that did not answer — it must not be reported as "a dialog is
+        // present", which is a claim about a control that was never seen.
+        // `mergeReconcileExtras` above already records the honest
+        // `reconciled_modal_observation: "incomplete"` for that case; this
+        // flag must not contradict it.
+        let realBlockerPresent = lastModal.kind != .none
+        merged["dialog_present"] = realBlockerPresent
+        if realBlockerPresent {
             merged["waiting_for_user"] = true
+            return .success(HonestContract.encodeStateB(
+                reason: .retryExhausted,
+                extras: merged
+            ))
+        }
+        guard lastModal.modalObservationIsComplete else {
+            // No dialog was observed, but the blocker-set scan itself never
+            // completed. Neither "clean" nor "blocked" is an honest claim;
+            // stay in the safe, retryable State B rather than asserting a
+            // dialog that was never seen or a write failure that was never
+            // confirmed.
             return .success(HonestContract.encodeStateB(
                 reason: .retryExhausted,
                 extras: merged
@@ -1677,7 +1722,13 @@ extension AccessibilityChannel {
                 if outcome.actionAttempted || reconcileActionKind != outcome.kind {
                     reconcileWitnessSummary = outcome.witnessSummary
                 }
-                if outcome.kind == .mandatoryNewTrack, outcome.actionAttempted {
+                // `mandatoryNewTrackReconciliationPerformed` feeds both
+                // `mandatory_track_reconciliation_performed` and
+                // `new_track_dialog_auto_confirmed` below. `actionAttempted`
+                // is true even when AX rejected the press (e.g. -25202 on a
+                // stale Create button); only `actionAccepted` means AX itself
+                // took the click.
+                if outcome.kind == .mandatoryNewTrack, outcome.actionAccepted {
                     mandatoryNewTrackReconciliationPerformed = true
                 }
             } else if outcome.modalObservationIsComplete {

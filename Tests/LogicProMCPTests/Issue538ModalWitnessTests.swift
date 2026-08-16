@@ -2231,6 +2231,120 @@ struct Issue538ModalWitnessTests {
         #expect(fixture.createPresses.current() == 1)
     }
 
+    @Test("project.new does not latch mandatory-track completion when the blocker scan is clear but the bound sheet is still readable")
+    func projectNewDoesNotLatchWhenBlockerScanClearsWithoutBoundSheetGone() async throws {
+        // #538: `blockerSetClear == true` alone is not the sheet-gone conclusion. Here the
+        // follow-up full scan reports no blocker (AXSheets == []) while the sheet THIS run
+        // captured never became invalid — its AXRole keeps reading back successfully. If the
+        // consumer regresses to `blockerSetClear == true` alone, this fixture publishes
+        // `mandatory_track_created`.
+        let fixture = makeProjectNewPerformedCreateWithTrackFixture(
+            boundSheetStaysReadableAfterAction: true
+        )
+
+        let result = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: fixture.runtime,
+            selection: "Empty Project",
+            observationAttempts: 1,
+            observationDelayNanoseconds: 0
+        )
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+
+        #expect(!result.isSuccess)
+        #expect(envelope["mandatory_track_created"] == nil)
+        #expect(fixture.createPresses.current() == 1, "the Create press seam must have fired")
+        #expect(
+            fixture.divergentBoundReadObserved.get(),
+            "the still-readable-after-action seam must have fired at least once, or this test proves nothing"
+        )
+    }
+
+    @Test("project.new does not latch mandatory-track completion when the bound sheet is gone but the blocker scan finds a replacement")
+    func projectNewDoesNotLatchWhenBoundSheetGoneWithoutBlockerScanClear() async throws {
+        // #538: `observedGone == true` alone is not the sheet-gone conclusion either. Here the
+        // bound sheet this run pressed Create on is invalidated, but a fresh full scan finds a
+        // different New Track sheet still attached to the arrange window. If the consumer
+        // regresses to `observedGone == true` alone, this fixture publishes
+        // `mandatory_track_created` off the back of a different sheet's presence.
+        let fixture = makeProjectNewPerformedCreateWithTrackFixture(
+            blockerScanFindsReplacementAfterAction: true
+        )
+
+        let result = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: fixture.runtime,
+            selection: "Empty Project",
+            observationAttempts: 1,
+            observationDelayNanoseconds: 0
+        )
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+
+        #expect(!result.isSuccess)
+        #expect(envelope["mandatory_track_created"] == nil)
+        #expect(fixture.createPresses.current() == 1, "the Create press seam must have fired")
+        #expect(
+            fixture.divergentScanObserved.get(),
+            "the replacement-sheet scan seam must have fired at least once, or this test proves nothing"
+        )
+    }
+
+    @Test("project.new does not certify the arrange window while a live informational alert was just observed")
+    func projectNewDoesNotCertifyWindowWhileInformationalAlertObserved() async throws {
+        // #538: `case .none, .informationalAlert, .strayMenu: break` let a poll that
+        // OBSERVED a live one-button alert fall straight through to the arrange-window
+        // check, as if `.informationalAlert` were the same as `.none`. With a single
+        // observation attempt, the alert is still up on the only poll this run gets —
+        // an attempted acknowledgement is not proof it closed. The fixed behaviour must
+        // report the persistent blocker honestly instead of certifying
+        // `created_project_window_observed` off an alert-carrying poll.
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(920)
+        let arrange = builder.element(921)
+        let alert = builder.element(922)
+        let acknowledge = builder.element(923)
+
+        builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, alert])
+        builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
+        builder.setAttribute(arrange, kAXSubroleAttribute as String, kAXStandardWindowSubrole as String)
+        builder.setAttribute(arrange, kAXTitleAttribute as String, "Untitled 1 - Tracks")
+        builder.setAttribute(arrange, kAXModalAttribute as String, false)
+        builder.setAttribute(alert, kAXModalAttribute as String, true)
+        builder.setAttribute(alert, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+        builder.setAttribute(acknowledge, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(acknowledge, kAXTitleAttribute as String, "OK")
+        builder.setChildren(alert, [acknowledge])
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                CFEqual(element, acknowledge) && action == (kAXPressAction as String)
+            }
+        )
+
+        let result = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: runtime,
+            selection: "Empty Project",
+            observationAttempts: 1,
+            observationDelayNanoseconds: 0
+        )
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+        let phase = try #require(envelope["phase"] as? String)
+
+        // Mutation `project-new-alert-break-through`: restore
+        // `case .none, .informationalAlert, .strayMenu: break`. The exact-title
+        // arrange window this fixture already exposes then certifies on the
+        // very poll that observed the alert.
+        #expect(!result.isSuccess)
+        #expect(phase != "created_project_window_observed")
+        #expect(envelope["window_title"] == nil)
+    }
+
     @Test("a delete-confirm followed by New Track presses each classifier-bound action once")
     func sequentialDeleteAndMandatorySheetEachReceiveOneAction() async throws {
         let fixture = makeSequentialDeleteSheetFixture()
@@ -2513,6 +2627,96 @@ struct Issue538ModalWitnessTests {
             )
         )
         #expect(!AccessibilityChannel.freshCompleteModalReadIsClear(in: window, runtime: runtime))
+    }
+
+    @Test("AXWindows noValue is not proof that no other sheet host exists")
+    func axWindowsNoValueIsNotNoOtherHosts() {
+        // #538: `noValue` (-25212) on `AXWindows` used to be treated as "the app
+        // currently has zero windows", certifying an empty search space with no
+        // fallback tree to search (unlike `AXSheets`, which always falls through
+        // to a descendant traversal). AX statuses can lie during a Logic rebuild,
+        // so a real window — holding a real sheet — can exist behind a
+        // transiently unreadable `AXWindows` call. This must stay unreadable.
+        //
+        // No `AXMainWindow` is set, so this isolates the FIRST `AXWindows` read
+        // site: `anyWindowSheetLookup(runtime:)` (no `excluding` window). That
+        // read fails with `noValue`; the SECOND, independent read
+        // (`topLevelDialogRead`, reached afterward regardless) is served a
+        // genuine clean empty array so it cannot mask the first site's mutation.
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(880)
+        let windowsReads = LockedCounter()
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, app), attribute == (kAXWindowsAttribute as String) else { return nil }
+                return windowsReads.next() == 1
+                    ? .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+                    : .success([] as NSArray)
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+
+        // Mutation `axwindows-novalue-is-no-other-hosts`: restore
+        // `case .failure(let error) where error.raw == AXError.noValue.rawValue:
+        // return .absent` in `anyWindowSheetLookup`. A transiently unreadable
+        // excluding-scan would then certify no other sheet host exists, and the
+        // second (clean) read would let the whole observation look complete.
+        #expect(ModalReconciliation.classify(read.signals) == .none)
+        #expect(!read.modalObservationIsComplete)
+        #expect(
+            read.unreadableReason == .axWindowsReadFailed(
+                AXHelpers.AXStatusError(raw: AXError.noValue.rawValue)
+            )
+        )
+        #expect(
+            windowsReads.current() == 2,
+            "both the excluding-scan and the top-level-dialog scan must fire, or this test proves nothing"
+        )
+    }
+
+    @Test("AXWindows noValue is not proof that no top-level modal window exists")
+    func axWindowsNoValueIsNotNoTopLevelModal() {
+        // Isolates the SECOND `AXWindows` read site: `topLevelDialogRead`, reached
+        // only after the excluding sheet-host scan came back genuinely clean (a
+        // real empty array, not a failure). That scan's read succeeds; the
+        // independent top-level-dialog scan's read is the one that returns
+        // `noValue`, and it alone must not certify "no modal window exists".
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(882)
+        let window = builder.element(883)
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        let windowsReads = LockedCounter()
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, app), attribute == (kAXWindowsAttribute as String) else { return nil }
+                return windowsReads.next() == 1
+                    ? .success([] as NSArray)
+                    : .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+
+        // Mutation `axwindows-novalue-is-no-modal`: restore
+        // `case .failure(let error) where error.raw == AXError.noValue.rawValue:
+        // return .none` in `topLevelDialogRead(runtime:)`. A noValue here would
+        // then certify a clean no-modal answer instead of staying unreadable.
+        #expect(ModalReconciliation.classify(read.signals) == .none)
+        #expect(!read.modalObservationIsComplete)
+        #expect(
+            read.unreadableReason == .axWindowsReadFailed(
+                AXHelpers.AXStatusError(raw: AXError.noValue.rawValue)
+            )
+        )
+        #expect(windowsReads.current() == 2, "both AXWindows read sites must have fired, or this test proves nothing")
     }
 
     @Test("an AXSheets member is a candidate only when its role is AXSheet")
@@ -2987,6 +3191,12 @@ private struct ProjectNewPerformedCreateWithoutTrackFixture {
 private struct ProjectNewPerformedCreateWithTrackFixture {
     let runtime: AXLogicProElements.Runtime
     let createPresses: LockedCounter
+    /// Set when the fixture's "bound sheet AXRole keeps reading back successfully after the
+    /// Create press" seam actually ran. A test that asserts on `blockerSetClear` alone without
+    /// checking this could pass even if the seam was never armed.
+    let divergentBoundReadObserved: LockedFlag
+    /// Set when the fixture's "the follow-up scan finds a replacement sheet" seam actually ran.
+    let divergentScanObserved: LockedFlag
 }
 
 private struct ProjectNewDelayedCreateFixture {
@@ -3187,7 +3397,21 @@ private func makeProjectNewPerformedCreateWithoutTrackFixture() -> ProjectNewPer
     return ProjectNewPerformedCreateWithoutTrackFixture(runtime: runtime)
 }
 
-private func makeProjectNewPerformedCreateWithTrackFixture() -> ProjectNewPerformedCreateWithTrackFixture {
+/// - Parameters:
+///   - boundSheetStaysReadableAfterAction: When true, the sheet this run captured keeps
+///     reading its AXRole back successfully after the Create press (never invalidates), while
+///     the independent post-action AXSheets scan still clears to empty. This decouples
+///     `observedGone` (false) from `blockerSetClear` (true) — #538 case 1.
+///   - blockerScanFindsReplacementAfterAction: When true, the bound sheet still invalidates
+///     (its AXRole read fails) after the Create press, but the independent post-action
+///     AXSheets scan finds a different, still-attached "New Track" sheet instead of clearing.
+///     This decouples `observedGone` (true) from `blockerSetClear` (false) — #538 case 2.
+///     Mutually exclusive with `boundSheetStaysReadableAfterAction`; combining both is not a
+///     coherent AX state and is not exercised here.
+private func makeProjectNewPerformedCreateWithTrackFixture(
+    boundSheetStaysReadableAfterAction: Bool = false,
+    blockerScanFindsReplacementAfterAction: Bool = false
+) -> ProjectNewPerformedCreateWithTrackFixture {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(290)
     let window = builder.element(291)
@@ -3196,8 +3420,11 @@ private func makeProjectNewPerformedCreateWithTrackFixture() -> ProjectNewPerfor
     let cancel = builder.element(294)
     let trackHeaders = builder.element(295)
     let track = builder.element(296)
+    let replacementSheet = builder.element(297)
     let actionIssued = LockedFlag()
     let createPresses = LockedCounter()
+    let divergentBoundReadObserved = LockedFlag()
+    let divergentScanObserved = LockedFlag()
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setAttribute(app, kAXWindowsAttribute as String, [window])
@@ -3213,6 +3440,8 @@ private func makeProjectNewPerformedCreateWithTrackFixture() -> ProjectNewPerfor
     builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
     builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
     builder.setChildren(sheet, [create, cancel])
+    builder.setAttribute(replacementSheet, kAXRoleAttribute as String, kAXSheetRole as String)
+    builder.setAttribute(replacementSheet, kAXDescriptionAttribute as String, "New Track")
     builder.setAttribute(trackHeaders, kAXRoleAttribute as String, kAXListRole as String)
     builder.setAttribute(trackHeaders, kAXIdentifierAttribute as String, "Track Headers")
     builder.setChildren(trackHeaders, [track])
@@ -3222,13 +3451,25 @@ private func makeProjectNewPerformedCreateWithTrackFixture() -> ProjectNewPerfor
         appElement: app,
         attributeValueHandler: { element, attribute in
             guard CFEqual(element, window), attribute == "AXSheets" else { return nil }
-            return actionIssued.get() ? .some([] as NSArray) : .some([sheet] as NSArray)
+            guard actionIssued.get() else { return .some([sheet] as NSArray) }
+            if blockerScanFindsReplacementAfterAction {
+                divergentScanObserved.set()
+                return .some([replacementSheet] as NSArray)
+            }
+            return .some([] as NSArray)
         },
         attributeValueResultHandler: { element, attribute in
             guard actionIssued.get(),
                   CFEqual(element, sheet),
                   attribute == (kAXRoleAttribute as String)
             else { return nil }
+            if boundSheetStaysReadableAfterAction {
+                // Fall through to the still-set dictionary value (kAXSheetRole) instead of
+                // reporting invalidUIElement: the bound sheet handle stays valid even though
+                // the independent AXSheets scan above has already cleared.
+                divergentBoundReadObserved.set()
+                return nil
+            }
             return .failure(AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue))
         },
         setAttributeHandler: nil,
@@ -3239,7 +3480,12 @@ private func makeProjectNewPerformedCreateWithTrackFixture() -> ProjectNewPerfor
             return true
         }
     )
-    return ProjectNewPerformedCreateWithTrackFixture(runtime: runtime, createPresses: createPresses)
+    return ProjectNewPerformedCreateWithTrackFixture(
+        runtime: runtime,
+        createPresses: createPresses,
+        divergentBoundReadObserved: divergentBoundReadObserved,
+        divergentScanObserved: divergentScanObserved
+    )
 }
 
 private func makeProjectNewStaleCreateFixture() -> ProjectNewStaleCreateFixture {
