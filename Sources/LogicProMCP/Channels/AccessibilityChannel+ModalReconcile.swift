@@ -384,7 +384,9 @@ extension AccessibilityChannel {
             sheet: read.sheet,
             mainWindow: mainWindow,
             createButton: read.createButton,
+            createButtonTitle: signals.createButtonTitle,
             deleteButton: read.deleteButton,
+            deletePrimaryTitle: signals.deletePrimaryTitle,
             runtime: runtime,
             witnessAttempts: witnessAttempts,
             witnessDelayNanoseconds: witnessDelayNanoseconds
@@ -1323,7 +1325,9 @@ extension AccessibilityChannel {
         sheet: AXUIElement?,
         mainWindow: ModalMainWindowLookup,
         createButton: AXUIElement?,
+        createButtonTitle: String,
         deleteButton: AXUIElement?,
+        deletePrimaryTitle: String,
         runtime: AXLogicProElements.Runtime,
         witnessAttempts: Int,
         witnessDelayNanoseconds: UInt64
@@ -1336,6 +1340,7 @@ extension AccessibilityChannel {
         case .clickCreate:
             let action = clickNewTrackCreateButton(
                 createButton: createButton,
+                expectedTitle: createButtonTitle,
                 runtime: runtime
             )
             // A description-only New Track classification may precede the
@@ -1390,6 +1395,7 @@ extension AccessibilityChannel {
         case .confirmDelete:
             let action = confirmDeleteTracksSheet(
                 deleteButton: deleteButton,
+                expectedTitle: deletePrimaryTitle,
                 runtime: runtime
             )
             let witness: [ModalSheetWitnessPoll]
@@ -1467,7 +1473,12 @@ extension AccessibilityChannel {
                 // Escape has the same timing gap as a direct press: a menu may
                 // close for another reason before its bound target is polled.
                 performed: false,
-                actionAttempted: true,
+                // `sendEscapeKey` is monolithic — there is no press to accept
+                // independently of the script running, unlike an AX element
+                // press. A failed AppleScript (for example, denied System
+                // Events automation) never sent the key at all, so that is not
+                // an attempt that happened; only a successful call is.
+                actionAttempted: actionAccepted,
                 refusal: nil,
                 actionFailure: nil,
                 sheetWitness: [],
@@ -1504,11 +1515,23 @@ extension AccessibilityChannel {
     /// Escape/Cancel are inert on this sheet; an unavailable or rejected element
     /// is reported by the false action result and is never replaced by a fresh
     /// ordinal lookup.
+    ///
+    /// `expectedTitle` re-binds the label immediately before pressing, the same
+    /// discipline `acknowledgeTopLevelAlert` already applies to its target: the
+    /// AX identity captured at classification time can still resolve while
+    /// Logic has repurposed the control underneath it. A changed label means
+    /// this is no longer the control that was classified, so this refuses to
+    /// press it blind — the caller's bounded outer poll re-reads and
+    /// re-classifies instead.
     private static func clickNewTrackCreateButton(
         createButton: AXUIElement?,
+        expectedTitle: String,
         runtime: AXLogicProElements.Runtime
     ) -> (attempted: Bool, accepted: Bool, failure: AXHelpers.AXActionError?) {
         guard let createButton else { return (false, false, nil) }
+        guard buttonLabel(createButton, runtime: runtime.ax) == expectedTitle else {
+            return (false, false, nil)
+        }
         switch AXHelpers.performActionResult(createButton, kAXPressAction as String, runtime: runtime.ax) {
         case .success:
             return (true, true, nil)
@@ -1520,11 +1543,21 @@ extension AccessibilityChannel {
     /// Confirm the delete-channel-strips sheet by pressing its resolved primary
     /// destructive button. A missing or rejected element is an unperformed
     /// action, not permission to send Return at an unidentified sheet.
+    ///
+    /// `expectedTitle` re-binds the label immediately before pressing — see
+    /// `clickNewTrackCreateButton`. This destructive press is exactly where a
+    /// stale identity matters most: a control whose label changed since
+    /// classification is refused rather than pressed on the strength of an AX
+    /// identity alone.
     private static func confirmDeleteTracksSheet(
         deleteButton: AXUIElement?,
+        expectedTitle: String,
         runtime: AXLogicProElements.Runtime
     ) -> (attempted: Bool, accepted: Bool, failure: AXHelpers.AXActionError?) {
         guard let deleteButton else { return (false, false, nil) }
+        guard buttonLabel(deleteButton, runtime: runtime.ax) == expectedTitle else {
+            return (false, false, nil)
+        }
         switch AXHelpers.performActionResult(deleteButton, kAXPressAction as String, runtime: runtime.ax) {
         case .success:
             return (true, true, nil)

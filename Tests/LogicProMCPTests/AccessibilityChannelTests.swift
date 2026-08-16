@@ -88,6 +88,29 @@ func creatorStudioDelayedProjectWindowIsHonestStateB() throws {
     #expect(!safeToRetry)
     #expect(body["phase"] as? String == "created_project_window_pending")
     #expect(body["observation_budget_ms"] as? Int == 20_000)
+    #expect(body["observed_window_titles"] as? [String] == ["Untitled"])
+    #expect(body["observed_window_titles_unread"] == nil)
+}
+
+@Test("Creator Studio delayed Project witness says the window list was unread instead of claiming it empty")
+func creatorStudioDelayedProjectWindowNamesAnUnreadWindowList() throws {
+    // `AXWindows` failing to read is not the same fact as the app vending zero windows. Collapsing
+    // both into an empty array made this pending receipt claim it had seen a clean window list when
+    // the read never happened at all.
+    let body = decodeAccessibilityJSON(
+        AccessibilityChannel.projectNewPendingReadbackEnvelope(
+            mandatoryTrackCreated: false,
+            observedWindowTitles: nil,
+            observationBudgetMs: 20_000
+        )
+    )
+    #expect(body["state"] as? String == "B")
+    #expect(body["observed_window_titles"] == nil)
+    // Mutation `unread-window-titles-as-empty-array`: pass `observedWindowTitles ?? []` through
+    // instead of omitting the key. `observed_window_titles` would then be `[]`, which is
+    // indistinguishable from a caller that saw zero windows on a successful read.
+    let unread = try #require(body["observed_window_titles_unread"] as? Bool)
+    #expect(unread)
 }
 
 @Test("Creator Studio chooser transition observes one exact created Project window")

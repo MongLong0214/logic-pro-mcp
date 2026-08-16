@@ -199,19 +199,32 @@ extension AccessibilityChannel {
         return matches.count == 1 ? matches[0] : nil
     }
 
+    /// `nil` means `AXWindows` was never successfully read — a non-array
+    /// payload or a failed call — and that is not the same fact as "the app
+    /// currently vends zero windows". Collapsing the two into `[]` made a
+    /// pending-project receipt claim an empty window list when the read
+    /// simply never happened.
     private static func observedWindowTitles(
         runtime: AXLogicProElements.Runtime
-    ) -> [String] {
-        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return [] }
-        let windows: [AXUIElement] = AXHelpers.getAttribute(
+    ) -> [String]? {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return nil }
+        switch AXHelpers.getAXUIElementArrayRead(
             app, kAXWindowsAttribute as String, runtime: runtime.ax
-        ) ?? []
-        return windows.compactMap { AXHelpers.getTitle($0, runtime: runtime.ax) }
+        ) {
+        case .success(.elements(let windows)):
+            return windows.compactMap { AXHelpers.getTitle($0, runtime: runtime.ax) }
+        case .success(.absent):
+            // A successful absent value is a legitimate zero-windows answer
+            // for this best-effort receipt field.
+            return []
+        case .success(.malformed), .failure:
+            return nil
+        }
     }
 
     static func projectNewPendingReadbackEnvelope(
         mandatoryTrackCreated: Bool,
-        observedWindowTitles: [String],
+        observedWindowTitles: [String]?,
         observationBudgetMs: Int,
         witnessSummary: ModalReconcileWitnessSummary? = nil,
         modalUnreadableReason: ModalReadFailure? = nil
@@ -222,11 +235,18 @@ extension AccessibilityChannel {
             "selection": "Empty Project",
             "phase": "created_project_window_pending",
             "mandatory_track_created": mandatoryTrackCreated,
-            "observed_window_titles": observedWindowTitles,
             "observation_budget_ms": observationBudgetMs,
             "write_attempted": true,
             "safe_to_retry": false,
         ]
+        if let observedWindowTitles {
+            extras["observed_window_titles"] = observedWindowTitles
+        } else {
+            // The window list was never successfully read. Say so explicitly
+            // rather than omitting it silently, so this is distinguishable
+            // from a caller who simply forgot to check for the key.
+            extras["observed_window_titles_unread"] = true
+        }
         if let witnessSummary {
             extras["modal_reconciliation_witness"] = witnessSummary.envelopeValue
         }
@@ -375,6 +395,14 @@ extension AccessibilityChannel {
                         reason: .readbackUnavailable,
                         extras: extras
                     ))
+                } else {
+                    // This poll's own classification just read `.mandatoryNewTrack` — a blocker is
+                    // present RIGHT NOW, whether it is the same sheet still lingering or a genuine
+                    // replacement. A latch set by an EARLIER poll's gone+clear pair is a memory, not
+                    // an observation, and it cannot outrank what this poll just saw. Reset it so the
+                    // fallthrough below never certifies a live blocker as absent; only a poll that
+                    // itself proves gone+clear (above) may set it true again.
+                    mandatoryTrackSheetGone = false
                 }
                 if !mandatoryTrackSheetGone {
                     // A description-only classification is safe, but it does

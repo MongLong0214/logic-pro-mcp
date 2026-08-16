@@ -1611,6 +1611,50 @@ struct Issue538ModalWitnessTests {
         #expect(!blockerSetClear)
     }
 
+    @Test("a failed Escape AppleScript is not reported as an attempt that happened")
+    func failedEscapeAppleScriptIsNotReportedAttempted() async throws {
+        // `sendEscapeKey` is one indivisible AppleScript call, unlike an AX element press that can
+        // be issued and then separately rejected. If the script itself never ran — for example a
+        // denied System Events automation grant — no key event reached Logic at all, so this must
+        // not be reported the same way as a successful Escape that simply arrived too late to close
+        // the menu.
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(85)
+        let arrange = builder.element(86)
+        let menuBar = builder.element(87)
+        let selectedMenu = builder.element(88)
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [arrange])
+        builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+        builder.setAttribute(arrange, kAXModalAttribute as String, false)
+        builder.setChildren(menuBar, [selectedMenu])
+        builder.setAttribute(selectedMenu, kAXSelectedAttribute as String, true)
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            setAttributeHandler: nil,
+            performActionHandler: nil,
+            executeAppleScript: { _ in .error("System Events automation denied") }
+        )
+
+        let outcome = await AccessibilityChannel.reconcilePreflight(
+            runtime: runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        // Mutation `escape-attempted-regardless-of-script-result`: restore the hard-coded
+        // `actionAttempted: true` for `.escapeMenu`. A denied/failed AppleScript would then be
+        // reported the same way as a genuinely sent Escape key.
+        #expect(outcome.kind == .strayMenu)
+        #expect(
+            !outcome.actionAttempted,
+            "a failed AppleScript never sent the Escape key, so this is not an attempt that happened"
+        )
+        #expect(!outcome.performed)
+    }
+
     @Test("an accepted Create with a gone bound sheet reports observations, not causation")
     func acceptedCreateGoneSheetIsNotPerformed() async throws {
         let fixture = makeBoundSheetFixture(action: .create, actionAccepted: true, postAction: .gone)
@@ -1830,6 +1874,124 @@ struct Issue538ModalWitnessTests {
             diagnostic == "ax_\(AXError.invalidUIElement.rawValue)",
             "Mutation caught: remove `actionFailure` from `mergeReconcileExtras`; the raw invalidUIElement rejection would not reach callers."
         )
+    }
+
+    @Test("a Create control whose label changed since classification is not pressed blind")
+    func createButtonTitleChangeSinceClassificationIsRefused() async {
+        // The AX identity captured at classification time can still resolve while Logic has
+        // repurposed the control underneath it between that read and the press. Pressing on
+        // identity alone — the way this path used to — would press whatever control now sits at
+        // that identity, not the "Create" the classifier actually named.
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(510)
+        let window = builder.element(511)
+        let sheet = builder.element(512)
+        let create = builder.element(513)
+        let cancel = builder.element(514)
+        let titleReads = LockedCounter()
+        let createPresses = LockedCounter()
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        builder.setAttribute(window, "AXSheets", [sheet])
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+        builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create, kAXEnabledAttribute as String, true)
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+        builder.setChildren(sheet, [create, cancel])
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueHandler: { element, attribute in
+                guard CFEqual(element, create), attribute == (kAXTitleAttribute as String) else { return nil }
+                let read = titleReads.next()
+                // Read 1 is the classifier's own label resolution — "Create" so the
+                // sheet is correctly identified as mandatory. Every read after that
+                // is the pre-press re-bind: the label has since changed underneath
+                // the same AX identity.
+                return .some((read == 1 ? "Create" : "Renamed") as NSString)
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard CFEqual(element, create), action == (kAXPressAction as String) else { return false }
+                _ = createPresses.next()
+                return true
+            }
+        )
+
+        let outcome = await AccessibilityChannel.reconcileAfterMutation(
+            isDeleteContext: false,
+            runtime: runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        // Mutation `create-press-skips-title-rebind`: drop the `buttonLabel(createButton,...) ==
+        // expectedTitle` guard from `clickNewTrackCreateButton`. The stale AX identity would then be
+        // pressed even though its live label no longer reads "Create".
+        #expect(outcome.kind == .mandatoryNewTrack)
+        #expect(
+            !outcome.actionAttempted,
+            "the control's label changed since classification; it must not be pressed on identity alone"
+        )
+        #expect(createPresses.current() == 0)
+        #expect(titleReads.current() >= 2, "both the classification read and the pre-press re-bind read must fire")
+    }
+
+    @Test("a Delete confirmation control whose label changed since classification is not pressed blind")
+    func deleteButtonTitleChangeSinceClassificationIsRefused() async {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(520)
+        let window = builder.element(521)
+        let sheet = builder.element(522)
+        let deleteButton = builder.element(523)
+        let titleReads = LockedCounter()
+        let deletePresses = LockedCounter()
+
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        builder.setAttribute(window, "AXSheets", [sheet])
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(deleteButton, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setChildren(sheet, [deleteButton])
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueHandler: { element, attribute in
+                guard CFEqual(element, deleteButton), attribute == (kAXTitleAttribute as String) else { return nil }
+                let read = titleReads.next()
+                // Read 1 matches the structural "Delete " prefix the classifier accepts; every
+                // subsequent read reports a live label that no longer matches it at all.
+                return .some((read == 1 ? "Delete 3 Tracks" : "Cancel") as NSString)
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard CFEqual(element, deleteButton), action == (kAXPressAction as String) else { return false }
+                _ = deletePresses.next()
+                return true
+            }
+        )
+
+        let outcome = await AccessibilityChannel.reconcileAfterMutation(
+            isDeleteContext: true,
+            runtime: runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+
+        // Mutation `delete-press-skips-title-rebind`: drop the `buttonLabel(deleteButton,...) ==
+        // expectedTitle` guard from `confirmDeleteTracksSheet`. This destructive press would then
+        // fire on a stale identity whose live label no longer matches what was classified.
+        #expect(outcome.kind == .deleteConfirm)
+        #expect(
+            !outcome.actionAttempted,
+            "the control's label changed since classification; a destructive press must not fire on identity alone"
+        )
+        #expect(deletePresses.current() == 0)
+        #expect(titleReads.current() >= 2, "both the classification read and the pre-press re-bind read must fire")
     }
 
     @Test("only a none reconciliation is a settled clean modal observation")
@@ -2291,6 +2453,45 @@ struct Issue538ModalWitnessTests {
         )
     }
 
+    @Test("a mandatory-track latch set by an earlier poll cannot outrank a REPLACEMENT sheet a later poll observes present")
+    func projectNewLatchDoesNotOutrankALaterObservedReplacementSheet() async throws {
+        // #538 follow-up: poll 0 presses Create; its bound sheet invalidates and the immediate
+        // follow-up scan is clear, so the gone+clear pair correctly latches `mandatoryTrackSheetGone
+        // = true` (no track yet, so this poll only continues). Poll 1 is observe-only (the action
+        // latch is already set) and reads a REPLACEMENT New Track sheet now attached to the same
+        // window — `.mandatoryNewTrack` again, this time with no witness of its own. A sticky latch
+        // that survives this live re-observation would fall through to the track-count/window check
+        // and certify `created_project_window_observed` / `mandatory_track_created: true` while the
+        // sheet is classified present. The fix must instead treat this poll's own positive
+        // classification as outranking the stale latch and keep polling; the final poll (still
+        // seeing the replacement) must end in an honest, unconfirmed State B.
+        let fixture = makeProjectNewLatchedSheetGoneThenReplacementFixture()
+
+        let result = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: fixture.runtime,
+            selection: "Empty Project",
+            observationAttempts: 3,
+            observationDelayNanoseconds: 0
+        )
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+
+        // Mutation `mandatory-track-latch-survives-replacement`: delete the `else { mandatoryTrackSheetGone
+        // = false }` branch added beside the gone+clear latch in `observeProjectCreationOutcome`. Poll 1
+        // then falls through on the stale latch, `mandatory_track_created` becomes `true`, and
+        // `phase` becomes `created_project_window_observed` despite the replacement sheet this
+        // fixture proves was seen.
+        #expect(!result.isSuccess)
+        #expect(envelope["mandatory_track_created"] == nil)
+        #expect(envelope["phase"] as? String != "created_project_window_observed")
+        #expect(fixture.createPresses.current() == 1, "Create must be pressed exactly once, never on the replacement")
+        #expect(
+            fixture.replacementSheetObserved.get(),
+            "the replacement-sheet seam must have fired at least once, or this test proves nothing"
+        )
+    }
+
     @Test("project.new does not certify the arrange window while a live informational alert was just observed")
     func projectNewDoesNotCertifyWindowWhileInformationalAlertObserved() async throws {
         // #538: `case .none, .informationalAlert, .strayMenu: break` let a poll that
@@ -2343,6 +2544,47 @@ struct Issue538ModalWitnessTests {
         #expect(!result.isSuccess)
         #expect(phase != "created_project_window_observed")
         #expect(envelope["window_title"] == nil)
+    }
+
+    @Test("a persistently unreadable AXWindows list is reported unread, never as an observed empty one")
+    func projectNewPendingEnvelopeNamesUnreadWindowList() async throws {
+        // `AXWindows` fails on every read, both for the modal scan (which stays incomplete and
+        // retries the full observation budget) and for the receipt's own window-title read. Before
+        // the fix, `observed_window_titles` collapsed a failed read into `[]`, indistinguishable
+        // from a caller that legitimately saw zero windows.
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(900)
+        let windowsReads = LockedCounter()
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, app), attribute == (kAXWindowsAttribute as String) else { return nil }
+                _ = windowsReads.next()
+                return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let result = await AccessibilityChannel.observeProjectCreationOutcome(
+            runtime: runtime,
+            selection: "Empty Project",
+            observationAttempts: 1,
+            observationDelayNanoseconds: 0
+        )
+        let envelope = try #require(
+            try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+        )
+
+        // Mutation `unread-window-titles-as-empty-array`: restore `?? []` for the failed
+        // `AXWindows` read inside `observedWindowTitles`. This receipt's `observed_window_titles`
+        // would then silently become `[]` instead of naming the read as unread.
+        #expect(result.isSuccess)
+        #expect(envelope["phase"] as? String == "created_project_window_pending")
+        #expect(envelope["observed_window_titles"] == nil)
+        let unread = try #require(envelope["observed_window_titles_unread"] as? Bool)
+        #expect(unread)
+        #expect(windowsReads.current() > 0, "the failing AXWindows seam must fire")
     }
 
     @Test("a delete-confirm followed by New Track presses each classifier-bound action once")
@@ -3485,6 +3727,108 @@ private func makeProjectNewPerformedCreateWithTrackFixture(
         createPresses: createPresses,
         divergentBoundReadObserved: divergentBoundReadObserved,
         divergentScanObserved: divergentScanObserved
+    )
+}
+
+private struct ProjectNewLatchedSheetGoneThenReplacementFixture {
+    let runtime: AXLogicProElements.Runtime
+    let createPresses: LockedCounter
+    /// Set once the fixture has actually served a REPLACEMENT New Track sheet
+    /// from a poll after the first Create press. A test that asserts on the
+    /// final envelope alone, without checking this fired, could pass even if
+    /// the replacement-sheet seam was never armed.
+    let replacementSheetObserved: LockedFlag
+}
+
+/// Poll 0: the classified sheet's Create is pressed; its own bound identity
+/// invalidates (`.gone`) and the immediate follow-up scan is clear
+/// (`blockerSetClear == true`) — the legitimate gone+clear pair, so
+/// `mandatoryTrackSheetGone` correctly latches true. No track exists yet at
+/// that instant, so this poll only continues.
+///
+/// Poll 1 onward: the action latch is already set, so every remaining poll is
+/// observe-only (`observeModalAfterMutation`, which never carries a
+/// witness). Those polls read a REPLACEMENT "New Track" sheet still attached
+/// to the same window, and only THEN does the mandatory track land in the
+/// track-headers rail — reproducing the #538 follow-up shape where a live
+/// re-observed blocker must outrank a latch set on an earlier poll.
+private func makeProjectNewLatchedSheetGoneThenReplacementFixture() -> ProjectNewLatchedSheetGoneThenReplacementFixture {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(310)
+    let window = builder.element(311)
+    let sheet = builder.element(312)
+    let create = builder.element(313)
+    let cancel = builder.element(314)
+    let trackHeaders = builder.element(315)
+    let track = builder.element(316)
+    let replacementSheet = builder.element(317)
+    let actionIssued = LockedFlag()
+    let createPresses = LockedCounter()
+    let sheetReadsSinceAction = LockedCounter()
+    let replacementSheetObserved = LockedFlag()
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+    builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(window, kAXSubroleAttribute as String, kAXStandardWindowSubrole as String)
+    builder.setAttribute(window, kAXModalAttribute as String, false)
+    builder.setAttribute(window, kAXTitleAttribute as String, "Untitled 1 - Tracks")
+    builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+    builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+    builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+    builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+    builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+    builder.setChildren(sheet, [create, cancel])
+    builder.setAttribute(replacementSheet, kAXRoleAttribute as String, kAXSheetRole as String)
+    builder.setAttribute(replacementSheet, kAXDescriptionAttribute as String, "New Track")
+    builder.setAttribute(trackHeaders, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(trackHeaders, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setChildren(trackHeaders, [])
+    builder.setChildren(window, [trackHeaders])
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueHandler: { element, attribute in
+            guard CFEqual(element, window), attribute == "AXSheets" else { return nil }
+            guard actionIssued.get() else { return .some([sheet] as NSArray) }
+            let read = sheetReadsSinceAction.next()
+            // The FIRST AXSheets read after the press is the follow-up scan
+            // `perform()` takes immediately inside the same call that pressed
+            // Create — nothing has arrived yet, so it is genuinely clear.
+            // Every read after that is a LATER, separate outer-loop poll: a
+            // replacement sheet is now attached, and only now does the
+            // mandatory track land in the headers rail.
+            if read == 1 {
+                return .some([] as NSArray)
+            }
+            replacementSheetObserved.set()
+            builder.setChildren(trackHeaders, [track])
+            return .some([replacementSheet] as NSArray)
+        },
+        attributeValueResultHandler: { element, attribute in
+            guard actionIssued.get(),
+                  CFEqual(element, sheet),
+                  attribute == (kAXRoleAttribute as String)
+            else { return nil }
+            // The bound sheet THIS run pressed Create on is destroyed — its
+            // own identity read fails with invalidUIElement on every poll
+            // after the press, exactly like every other #538 fixture.
+            return .failure(AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue))
+        },
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            guard CFEqual(element, create), action == (kAXPressAction as String) else { return false }
+            _ = createPresses.next()
+            actionIssued.set()
+            return true
+        }
+    )
+    return ProjectNewLatchedSheetGoneThenReplacementFixture(
+        runtime: runtime,
+        createPresses: createPresses,
+        replacementSheetObserved: replacementSheetObserved
     )
 }
 
