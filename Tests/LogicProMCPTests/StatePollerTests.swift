@@ -297,11 +297,79 @@ private func makeStatePollerAccessibilityRuntime(
     // Post-hardening: a single missed window check no longer clears state —
     // 3 consecutive misses are required so transient AX glitches don't make
     // resource reads flap "no document open" during normal Logic UI motion.
-    await poller.refreshNow()
-    await poller.refreshNow()
+    let firstMiss = await poller.refreshNow()
+    let secondMiss = await poller.refreshNow()
     #expect(await cache.getHasDocument()) // still trusts cache after 2 misses
-    await poller.refreshNow()
+    let thirdMiss = await poller.refreshNow()
     #expect(!(await cache.getHasDocument())) // 3rd miss clears
+
+    // #544 review MAJOR: `refreshNow()` must report whether the cache
+    // actually advanced, not merely that the call returned. The first two
+    // misses write nothing (below `failureThreshold`) and must report
+    // `false`; only the 3rd call, which actually flips `hasDocument`, may
+    // report `true`.
+    #expect(!firstMiss)
+    #expect(!secondMiss)
+    #expect(thirdMiss)
+}
+
+/// #544 review MAJOR — exact reproduction from the adversarial review: a
+/// `StatePoller` whose `Runtime.hasVisibleWindow` reports no window, called
+/// ONCE with a fresh (zero-miss) poller. Pre-fix, `SystemDispatcher`
+/// unconditionally reported `refreshed: true` for any call that reached this
+/// point because `refreshNow()` returned `Void` — a completed call was
+/// (wrongly) treated as evidence of a write. This pins the poller-level fix:
+/// a single below-threshold miss writes nothing to the cache and must report
+/// `false`.
+@Test func testStatePollerRefreshNowReportsFalseForSingleBelowThresholdMiss() async {
+    final class WindowCheckCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private(set) var calls = 0
+        func hit() -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            calls += 1
+            return false
+        }
+    }
+    let counter = WindowCheckCounter()
+    let cache = StateCache()
+    let channel = AccessibilityChannel(
+        runtime: makeStatePollerAccessibilityRuntime(projectInfoResult: .error("unavailable"))
+    )
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(hasVisibleWindow: { counter.hit() })
+    )
+
+    let advanced = await poller.refreshNow()
+
+    // Prove the fixture seam actually fired before trusting its result.
+    #expect(counter.calls == 1)
+    #expect(!advanced)
+}
+
+/// #544 review MAJOR — the positive case: a poll that actually reads and
+/// caches fresh state must report `true`. Complements the false-path tests
+/// above so the return value is pinned in both directions, not just the one
+/// the report reproduced.
+@Test func testStatePollerRefreshNowReportsTrueWhenItWritesFreshState() async {
+    let cache = StateCache()
+    let channel = AccessibilityChannel(
+        runtime: makeStatePollerAccessibilityRuntime(
+            projectInfoResult: .success(#"{"name":"Fresh","sampleRate":48000,"bitDepth":24,"tempo":120,"timeSignature":"4/4","trackCount":1,"filePath":null,"lastUpdated":"2026-04-16T00:00:00Z"}"#)
+        )
+    )
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(hasVisibleWindow: { true })
+    )
+
+    let advanced = await poller.refreshNow()
+
+    #expect(advanced)
+    #expect(await cache.getProject().name == "Fresh")
 }
 
 @Test func testStatePollerPopulatesMarkerCache() async {

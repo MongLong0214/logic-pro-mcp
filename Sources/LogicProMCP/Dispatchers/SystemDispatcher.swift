@@ -84,6 +84,8 @@ struct SystemDispatcher: OperationTraceDispatching {
         let variants: [VariantAvailability]
     }
 
+
+
     private struct HealthResponse: Encodable {
         struct VariantAvailabilitySection: Encodable {
             let variant: String
@@ -425,16 +427,65 @@ struct SystemDispatcher: OperationTraceDispatching {
             return toolTextResult(json)
 
         case "permissions":
+            // The human-readable summary is what an operator wants to read, but a caller needs the
+            // states themselves — `health` has always returned them and this command had not, which
+            // left it violating its own declared outputSchema (#544).
             let status = PermissionChecker.check()
-            return toolTextResult(status.summary)
+            // The prose stays the text: `SemanticOracleTable.systemPermissions` grades this operation by
+            // asserting its four exact lines, so encoding JSON here would RED a correct answer in
+            // qualification while every unit test stayed green. The states go beside it.
+            return toolTextResult(
+                text: status.summary,
+                structured: .object([
+                    "operation": .string("system.permissions"),
+                    "accessibility": .string(status.accessibilityState.rawValue),
+                    "automation_logic_pro": .string(status.automationState.rawValue),
+                    "automation_system_events": .string(status.systemEventsAutomationState.rawValue),
+                    "post_event": .string(status.postEventAccessState.rawValue),
+                    // Deliberately not a plain Bool: "undetermined" is not "permission denied", and a
+                    // client reading a single flag would have to treat them the same. `false` is reserved
+                    // for a MEASURED denial on at least one of the four states above; when nothing was
+                    // denied but something could not be verified, the key is present with a JSON `null` —
+                    // not omitted — so a caller that only checks presence still sees it and must read the
+                    // per-check states to learn why. See `Self.allGrantedValue`.
+                    "all_granted": Self.allGrantedValue(for: status),
+                    "summary": .string(status.summary),
+                ])
+            )
 
         case "refresh_cache":
             await cache.recordToolAccess()
+            // Whether the poller actually ran is the difference between a refresh that HAPPENED and one
+            // that was only scheduled. A caller that reads state next has to tell them apart, so it is
+            // a field rather than a difference in prose.
+            // Same reason as `permissions`: the oracle for this operation compares the WHOLE body to one
+            // of these sentences, so the sentence stays the text.
             if let poller {
-                await poller.refreshNow()
-                return toolTextResult("State refresh completed via AX fallback poller.")
+                // `refreshNow()` reports whether the cache actually advanced (at least one section was
+                // written), not merely that the call returned — the poller can run and legitimately write
+                // nothing (no visible Logic window yet, or an occluding dialog holds the cache steady).
+                // `refreshed:true` for a poll that touched nothing would be a claim this call never
+                // observed (#544 review MAJOR); the prose text is unchanged either way because the
+                // mechanism ("routed through the AX fallback poller") is true regardless of the outcome.
+                let advanced = await poller.refreshNow()
+                let message = "State refresh completed via AX fallback poller."
+                return toolTextResult(text: message, structured: .object([
+                    "operation": .string("system.refresh_cache"),
+                    "refreshed": .bool(advanced),
+                    "source": .string("ax_fallback_poller"),
+                    "message": .string(message),
+                ]))
             }
-            return toolTextResult("State refresh triggered. Cache will be updated on next poll cycle.")
+            let message = "State refresh triggered. Cache will be updated on next poll cycle."
+            return toolTextResult(text: message, structured: .object([
+                "operation": .string("system.refresh_cache"),
+                "refreshed": .bool(false),
+                // Not "next_poll_cycle": no poller is attached, so this call never started — and
+                // never scheduled — a future poll cycle. Naming one it did not start would be a
+                // claim about a mechanism that is not wired up (#544 review MINOR).
+                "source": .string("none"),
+                "message": .string(message),
+            ]))
 
         case "setup_arm_key":
             // Consent-first: refuse before the trace, the mutation gate, or any
@@ -1099,6 +1150,20 @@ struct SystemDispatcher: OperationTraceDispatching {
 
         default:
             return unknownCommandResult(command)
+        }
+    }
+
+    /// Maps the MEASURED tri-state permission aggregate (`PermissionStatus.aggregateState`,
+    /// #544 review MAJOR) to the `all_granted` JSON value the `permissions` command emits:
+    /// `.bool(false)` only when something was ACTIVELY DENIED, `.null` when nothing was denied
+    /// but something is undetermined (never conflated with a denial), `.bool(true)` only when
+    /// every check came back granted. Pure and stateless so the mapping — not just the
+    /// underlying tri-state — can be pinned by a test without driving `handle` against live TCC.
+    static func allGrantedValue(for status: PermissionChecker.PermissionStatus) -> Value {
+        switch status.aggregateState {
+        case .granted: return .bool(true)
+        case .notGranted: return .bool(false)
+        case .notVerifiable: return .null
         }
     }
 

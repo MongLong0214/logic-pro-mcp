@@ -136,7 +136,16 @@ actor StatePoller {
 
     // MARK: - Poll loop
 
-    func refreshNow() async {
+    /// Runs one poll cycle and reports whether the cache actually advanced —
+    /// i.e. at least one section was written and `postPoll` fired for it — not
+    /// merely whether this function returned. A poll that finds no visible
+    /// window (below the miss threshold) or that backs off under an occluding
+    /// dialog writes nothing and returns `false`; every caller that needs to
+    /// know "did state move" (not "did I call refreshNow") must read this
+    /// return value rather than assume a completed call means a write landed
+    /// (#544 review).
+    @discardableResult
+    func refreshNow() async -> Bool {
         await pollOnce(axChannel: axChannel, cache: cache)
     }
 
@@ -159,7 +168,20 @@ actor StatePoller {
         Log.info("AX Supplementary Poller loop exited", subsystem: "poller")
     }
 
-    private func pollOnce(axChannel: AccessibilityChannel, cache: StateCache) async {
+    /// Emits `postPoll` iff this cycle touched at least one cache section, and
+    /// reports that as the honest "did the cache advance" signal. A poll that
+    /// returns having written nothing (window not visible below threshold,
+    /// backing off under an occluding dialog) must report `false`, not merely
+    /// "the function returned" (#544 review).
+    @discardableResult
+    private func finishPoll(_ cacheKeys: [ResourceCacheKey]) async -> Bool {
+        guard !cacheKeys.isEmpty else { return false }
+        await postPoll(cacheKeys)
+        return true
+    }
+
+    @discardableResult
+    private func pollOnce(axChannel: AccessibilityChannel, cache: StateCache) async -> Bool {
         var cacheKeys: [ResourceCacheKey] = []
         guard runtime.hasVisibleWindow() else {
             // Be conservative: a single missed window check is often a transient
@@ -177,8 +199,7 @@ actor StatePoller {
                 await cache.updateBlockingDialogButtons(nil)
                 cacheKeys.append(.document)
             }
-            if !cacheKeys.isEmpty { await postPoll(cacheKeys) }
-            return
+            return await finishPoll(cacheKeys)
         }
         consecutiveWindowMisses = 0
         // #432: sample the authoritative blocking-dialog signal once per
@@ -239,8 +260,7 @@ actor StatePoller {
                 // do NOT clear hasDocument. fetchedAt timestamps continue
                 // ageing so `cache_age_sec` keeps growing — clients that
                 // treat freshness as a contract still see staleness.
-                if !cacheKeys.isEmpty { await postPoll(cacheKeys) }
-                return
+                return await finishPoll(cacheKeys)
             }
             consecutivePollMisses += 1
             if consecutivePollMisses >= Self.failureThreshold {
@@ -253,8 +273,7 @@ actor StatePoller {
         }
 
         guard hasDocument else {
-            if !cacheKeys.isEmpty { await postPoll(cacheKeys) }
-            return
+            return await finishPoll(cacheKeys)
         }
 
         let transportReady = await poll(
@@ -288,7 +307,7 @@ actor StatePoller {
                 await cache.markMarkersUnreadable()
             }
         }
-        if !cacheKeys.isEmpty { await postPoll(cacheKeys) }
+        return await finishPoll(cacheKeys)
     }
 
     /// 3 consecutive misses (~9s at the 3s poll interval) before declaring

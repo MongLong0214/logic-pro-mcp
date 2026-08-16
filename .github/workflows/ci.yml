@@ -206,6 +206,16 @@ jobs:
   # does no work and exists so that one required name transitively requires every real gate. It must
   # run with `if: always()` and inspect results explicitly — a job skipped because a dependency
   # failed reports as skipped, and GitHub does not treat a skipped required check as a failure.
+  # The single required status check on `main`, and deliberately the only one.
+  #
+  # This job runs no build of its own — it is the aggregator. `if: always()` makes it run even when a
+  # dependency failed, and it then refuses unless every gate succeeded. Requiring it is therefore
+  # equivalent to requiring `compile` and `test`, with two advantages: renaming or adding a gate does not
+  # need the branch ruleset edited in lockstep, and a job that legitimately does not run on some event
+  # cannot leave a required check pending forever and wedge the merge button.
+  #
+  # If you are here because "only `build` is required" looked like a hole: it is not. Add new gates to
+  # `needs` and assert their result below; do not add them to the ruleset.
   build:
     runs-on: ubuntu-latest
     needs: [compile, test]

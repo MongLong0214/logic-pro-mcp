@@ -121,6 +121,80 @@ private final class PermissionRuntimeHarness: @unchecked Sendable {
     #expect(status.summary.contains("NOT VERIFIABLE"))
 }
 
+// MARK: - #544 review MAJOR — `aggregateState` must not conflate "undetermined"
+// with "denied". `PermissionStatus.allGranted` is a plain Bool that
+// intentionally collapses both into `false` for fail-closed callers
+// (`--check-permissions`, `SetupDoctor`); `aggregateState` is the tri-state a
+// caller that must NOT make that collapse (the `system.permissions` JSON
+// field) reads instead. All constructed directly via the existing
+// state-based `PermissionStatus` initializer — no live TCC call, no seam
+// needed, so the mapping is pinned as pure data-in/data-out.
+
+@Test func testAggregateStateIsGrantedOnlyWhenEveryCheckIsGranted() {
+    let status = PermissionChecker.PermissionStatus(
+        accessibilityState: .granted,
+        automationState: .granted,
+        systemEventsAutomationState: .granted,
+        postEventAccessState: .granted
+    )
+    #expect(status.aggregateState == .granted)
+}
+
+@Test func testAggregateStateReportsNotVerifiableWhenNothingIsDeniedButSomethingIsUndetermined() {
+    // Exact reproduction from the #544 adversarial review: Logic Pro
+    // automation is granted, but the SEPARATE System Events automation
+    // target could not be verified (e.g. an osascript timeout). Pre-fix,
+    // `SystemDispatcher` only special-cased `automationState == .notVerifiable`,
+    // so this exact combination fell through to `.bool(status.allGranted)` ==
+    // `.bool(false)` — indistinguishable from a real denial.
+    let status = PermissionChecker.PermissionStatus(
+        accessibilityState: .granted,
+        automationState: .granted,
+        systemEventsAutomationState: .notVerifiable,
+        postEventAccessState: .granted
+    )
+    #expect(status.aggregateState == .notVerifiable)
+}
+
+@Test func testAggregateStateReportsNotVerifiableWhenLogicProAutomationItselfIsUndetermined() {
+    // The ORIGINAL pre-fix special case (Logic Pro not running) must still
+    // resolve to undetermined, not a denial — this direction must not
+    // regress while fixing the MAJOR above.
+    let status = PermissionChecker.PermissionStatus(
+        accessibilityState: .granted,
+        automationState: .notVerifiable,
+        systemEventsAutomationState: .granted,
+        postEventAccessState: .granted
+    )
+    #expect(status.aggregateState == .notVerifiable)
+}
+
+@Test func testAggregateStateReportsNotGrantedWhenAnythingIsMeasuredDenied() {
+    // A REAL denial must still win over "granted" — the fix must not soften
+    // `aggregateState` into optimism. Accessibility denied, everything else
+    // granted.
+    let status = PermissionChecker.PermissionStatus(
+        accessibilityState: .notGranted,
+        automationState: .granted,
+        systemEventsAutomationState: .granted,
+        postEventAccessState: .granted
+    )
+    #expect(status.aggregateState == .notGranted)
+}
+
+@Test func testAggregateStatePrefersDeniedOverUndeterminedWhenBothArePresent() {
+    // A measured denial must win over an undetermined sibling, not average
+    // out to "undetermined" — a real refusal is never softened by an
+    // unrelated check that simply never ran.
+    let status = PermissionChecker.PermissionStatus(
+        accessibilityState: .notGranted,
+        automationState: .notVerifiable,
+        systemEventsAutomationState: .granted,
+        postEventAccessState: .granted
+    )
+    #expect(status.aggregateState == .notGranted)
+}
+
 @Test(processInspectionUnavailableInSandbox)
 func testPermissionCheckerProductionWrapperFunctionsReturnStatuses() {
     // The Bool returns are environment-dependent (real TCC state), so no value
