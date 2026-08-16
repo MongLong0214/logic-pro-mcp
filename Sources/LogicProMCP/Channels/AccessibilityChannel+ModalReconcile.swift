@@ -2004,12 +2004,21 @@ extension AccessibilityChannel {
         // carrying a node from a sheet scan in an earlier poll. That is the "names the wrong node
         // confidently" outcome this field exists to prevent, and it would be believed precisely because
         // the field looks specific.
-        if let sheetScanFailureDetail {
-            extras["reconciled_modal_unreadable_node"] = sheetScanFailureDetail.envelopeValue
-        } else if unreadableReason?.originatesInSheetScan == true {
-            extras["reconciled_modal_unreadable_node"] = ModalSheetScanFailureDetail.unrecordedEnvelopeValue
-        } else {
-            extras.removeValue(forKey: "reconciled_modal_unreadable_node")
+        // The node moves with the reason it describes — both are written here, or neither is touched.
+        //
+        // The first version of this fix removed the key whenever THIS merge carried no detail, which was
+        // wrong in the same shape it was fixing. The reason above is only written when this merge has
+        // one, so a merge with no reason leaves the previous merge's reason standing; deleting its node
+        // there strands a reason whose node was known and discarded. Scoping both to the same condition
+        // keeps the pair consistent whichever merge last supplied it.
+        if let unreadableReason {
+            if let sheetScanFailureDetail {
+                extras["reconciled_modal_unreadable_node"] = sheetScanFailureDetail.envelopeValue
+            } else if unreadableReason.originatesInSheetScan {
+                extras["reconciled_modal_unreadable_node"] = ModalSheetScanFailureDetail.unrecordedEnvelopeValue
+            } else {
+                extras.removeValue(forKey: "reconciled_modal_unreadable_node")
+            }
         }
     }
 }

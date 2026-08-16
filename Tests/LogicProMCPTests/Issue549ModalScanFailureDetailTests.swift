@@ -364,6 +364,45 @@ struct Issue549ModalScanFailureDetailTests {
             "the earlier sheet-scan node must not survive beside a reason from a different scan"
         )
     }
+
+    @Test("a merge that carries no reason leaves the previous reason and its node together")
+    func aMergeWithoutAReasonStrandsNeitherHalf() throws {
+        // The counterpart to the stale-node test, and the defect the first version of that fix
+        // introduced. The reason is only written when a merge supplies one, so a merge without one
+        // leaves the earlier reason standing. Removing its node there would report a sheet-scan failure
+        // whose node was known and then discarded — the same "the receipt is missing what was measured"
+        // shape, pointed the other way.
+        var extras: [String: Any] = [:]
+        AccessibilityChannel.mergeReconcileExtras(
+            &extras,
+            kind: .none,
+            action: "none",
+            newTrackAutoConfirmed: false,
+            unreadableReason: .windowSheetReadFailed(AXHelpers.AXStatusError(raw: -25200)),
+            sheetScanFailureDetail: AccessibilityChannel.ModalSheetScanFailureDetail(
+                site: .recursiveDescendantWalk,
+                attribute: .children,
+                subjectRole: kAXCellRole as String,
+                path: [.init(parentRole: kAXRowRole as String, childIndex: 0)]
+            )
+        )
+        // A second merge that found a real blocker and has no unreadable reason of its own.
+        AccessibilityChannel.mergeReconcileExtras(
+            &extras,
+            kind: .mandatoryNewTrack,
+            action: "click_create",
+            newTrackAutoConfirmed: true,
+            unreadableReason: nil,
+            sheetScanFailureDetail: nil
+        )
+        let reason = try #require(extras["reconciled_modal_unreadable_reason"] as? String)
+        #expect(reason == "window_sheet_read_failed")
+        let node = try #require(
+            extras["reconciled_modal_unreadable_node"] as? [String: Any],
+            "the node describing a surviving reason must survive with it"
+        )
+        #expect((node["subject_role"] as? String) == (kAXCellRole as String))
+    }
 }
 
 private final class LockedCounter549: @unchecked Sendable {
