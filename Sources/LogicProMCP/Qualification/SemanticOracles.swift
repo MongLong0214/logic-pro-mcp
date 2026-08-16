@@ -90,17 +90,15 @@ enum OracleConstraint: Sendable {
     case lengthPrefixedIdentityAtIndexEquals(
         entriesKey: String, indexKey: String, nameKey: String, positionKey: String
     )
-    /// The independent readback array must NOT still contain the exact target identity claimed by
-    /// the response. Both the name and index are checked together: marker ordinals and generated
-    /// names can renumber after a delete, but an entry retaining both the claimed name and claimed
-    /// pre-write index is direct evidence that this claimed target survived. Missing or malformed
-    /// identities fail closed rather than becoming an answer of absence.
+    /// The independent readback array must NOT still contain the claimed target POSITION.
+    /// Name+index is not identity here: Logic auto-renames generated markers, so an absent
+    /// name+index pair is forgeable and an honest delete of "Marker 1" at index 0 is rejected
+    /// when a survivor is renamed to "Marker 1" at index 0. Positions do not rename.
+    /// Missing or malformed positions fail closed rather than becoming an answer of absence.
     case readbackArrayExcludesResponseIdentity(
-        responseNameKey: String,
-        responseIndexKey: String,
+        responsePositionKey: String,
         readbackArrayKey: String,
-        readbackNameKey: String,
-        readbackIndexKey: String
+        readbackPositionKey: String
     )
     /// Two key paths WITHIN THE SAME payload resolve to equal leaf values. The
     /// load-bearing safe-mutation invariant: a verified write echoes what was
@@ -141,6 +139,14 @@ enum OracleConstraint: Sendable {
     /// `0`/`1` must NOT satisfy it (`1` is not the negation of `false`) — and a
     /// missing key, a non-bool, or two EQUAL bools all fail closed.
     case booleanFlipped(keyA: String, keyB: String)
+    /// Two numeric key paths WITHIN THE SAME payload satisfy `value(keyA) == value(keyB) +
+    /// offset` EXACTLY (no tolerance). The honest form of "this count is derived from that
+    /// count by a fixed delta" — e.g. an independently-read after-count that must be exactly
+    /// one less than the independently-read before-count. Unlike `.numericNear`, there is no
+    /// slack: a producer that reports a drop of zero, two, or any value other than `offset`
+    /// fails. NUMBERS ONLY, with the same bool-vs-number discipline as the rest of the model,
+    /// and fails closed on a missing key or a non-number on either side.
+    case numericEqualsOffset(keyA: String, keyB: String, offset: Double)
 
     /// The primary RESPONSE-side key path — the one the generic mutator drops
     /// and error messages cite. For the relational cases it is the response side
@@ -155,12 +161,13 @@ enum OracleConstraint: Sendable {
              .lengthPrefixedEntryCountEquals(let key, _, _),
              .lengthPrefixedEntriesExclude(let key, _),
              .lengthPrefixedIdentityAtIndexEquals(let key, _, _, _),
-             .readbackArrayExcludesResponseIdentity(let key, _, _, _, _),
+             .readbackArrayExcludesResponseIdentity(let key, _, _),
              .fieldsEqual(let key, _),
              .crossCheck(let key, _),
              .numericNear(let key, _, _),
              .emptyArray(let key),
-             .booleanFlipped(let key, _):
+             .booleanFlipped(let key, _),
+             .numericEqualsOffset(let key, _, _):
             return key
         }
     }
@@ -175,7 +182,7 @@ enum OracleConstraint: Sendable {
         case .valueEquals, .numericRange, .enumMember, .lengthPrefixedEntryCountEquals,
              .lengthPrefixedEntriesExclude, .lengthPrefixedIdentityAtIndexEquals,
              .readbackArrayExcludesResponseIdentity, .fieldsEqual, .crossCheck, .numericNear,
-             .booleanFlipped:
+             .booleanFlipped, .numericEqualsOffset:
             return true
         case .nonEmptyArray, .typedField, .emptyArray:
             return false
@@ -233,32 +240,34 @@ enum OracleConstraint: Sendable {
                   let identityEntries = Self.lengthPrefixedEntries(in: identity) else { return false }
             return identityEntries == [name, position]
         case .readbackArrayExcludesResponseIdentity(
-            let responseNameKey,
-            let responseIndexKey,
+            let responsePositionKey,
             let readbackArrayKey,
-            let readbackNameKey,
-            let readbackIndexKey
+            let readbackPositionKey
         ):
             // Envelope-provided target metadata cannot corroborate itself. The post-write marker
-            // records must be readable enough to tell whether that claimed target remains.
-            guard let targetName = JSONPath.resolve(root, keyPath: responseNameKey) as? String,
-                  let rawTargetIndex = JSONPath.resolve(root, keyPath: responseIndexKey),
-                  let targetIndex = JSONInspector.number(of: rawTargetIndex),
-                  targetIndex >= 0,
-                  targetIndex.rounded(.towardZero) == targetIndex,
+            // records must be readable enough to tell whether that claimed target position remains.
+            // A missing `data[]` is not an answer of absence: empty-array hiding made name+index
+            // identity look like it accepted honest auto-renames.
+            guard let targetPosition = JSONPath.resolve(root, keyPath: responsePositionKey) as? String,
+                  !targetPosition.isEmpty,
                   let readback,
                   let entries = JSONPath.resolve(readback, keyPath: readbackArrayKey) as? [Any] else {
                 return false
             }
-            for entry in entries {
-                guard let entryName = JSONPath.resolve(entry, keyPath: readbackNameKey) as? String,
-                      let rawEntryIndex = JSONPath.resolve(entry, keyPath: readbackIndexKey),
-                      let entryIndex = JSONInspector.number(of: rawEntryIndex),
-                      entryIndex >= 0,
-                      entryIndex.rounded(.towardZero) == entryIndex else {
+            if entries.isEmpty {
+                // Empty data[] is an answer of absence only when the independent readback
+                // itself claims a verified empty list. A names-shifted test once hid both
+                // a forged identity and an honest auto-rename behind `data: []`.
+                guard let verifiedEmpty = JSONPath.resolve(readback, keyPath: "verified_empty") as? Bool else {
                     return false
                 }
-                if entryName == targetName, entryIndex == targetIndex { return false }
+                return verifiedEmpty
+            }
+            for entry in entries {
+                guard let entryPosition = JSONPath.resolve(entry, keyPath: readbackPositionKey) as? String else {
+                    return false
+                }
+                if entryPosition == targetPosition { return false }
             }
             return true
         case .fieldsEqual(let keyA, let keyB):
@@ -304,6 +313,14 @@ enum OracleConstraint: Sendable {
                   let a = (aValue as? NSNumber)?.boolValue,
                   let b = (bValue as? NSNumber)?.boolValue else { return false }
             return a != b
+        case .numericEqualsOffset(let keyA, let keyB, let offset):
+            // NUMBERS ONLY: `number(of:)` rejects booleans. A missing key or a non-number on
+            // either side fails closed rather than treating an absent witness as satisfied.
+            guard let aValue = JSONPath.resolve(root, keyPath: keyA),
+                  let bValue = JSONPath.resolve(root, keyPath: keyB),
+                  let a = JSONInspector.number(of: aValue),
+                  let b = JSONInspector.number(of: bValue) else { return false }
+            return a == b + offset
         }
     }
 

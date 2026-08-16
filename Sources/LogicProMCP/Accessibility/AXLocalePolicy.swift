@@ -225,6 +225,19 @@ enum AXLocalePolicy {
         rationale: "Live-confirmed on Logic 12.3: the Marker List toolbar AXMenuButton exposes the exact AXDescription `編集` in Japanese and `편집` in Korean; the bottom AXButton with the same label is deliberately rejected unless its actions advertise AXShowMenu."
     )
 
+    /// The Marker List's own "Number of Items" static text — Logic's independent rendering of
+    /// the marker count, used as a second witness alongside the table's row projections. Only
+    /// the English form has been measured on a live Logic 12.3; no Korean or Japanese variant
+    /// has been read from a live Logic. Do NOT add a translated guess here — an unmeasured
+    /// locale must stay unreadable (State B) rather than silently matching on an invented
+    /// label. Matched against both AXDescription and AXHelp, mirroring the Event List reader's
+    /// `readStaticText(help:)` precedent for the same "Number of Items" node.
+    static let markerListNumberOfItemsLabel = LabelSet(
+        canonical: "Number of Items",
+        variants: [],
+        rationale: "Live-confirmed on Logic 12.3 (English) via AXDescription. Korean/Japanese not yet measured; an unmeasured locale must fail closed rather than match a guessed translation."
+    )
+
     /// The destructive Marker List Edit-menu command. This must always be whole-string matched.
     static let markerListDeleteMenuItem = LabelSet(
         canonical: "Delete",

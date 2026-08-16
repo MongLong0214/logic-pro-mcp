@@ -780,6 +780,7 @@ enum SemanticOracleFixtures {
                 "target_position_unique":true,"position_evidence_canonical":true,\
                 "marker_count_before":3,"write_attempted":true,\
                 "readback_settled":true,"marker_count_after":2,\
+                "observed_marker_count_before":3,"observed_marker_count_after":2,\
                 "expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1",\
                 "observed_survivor_position_multiset":"7:1.1.1.18:12.1.1.1"}
                 """,
