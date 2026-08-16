@@ -84,28 +84,7 @@ struct SystemDispatcher: OperationTraceDispatching {
         let variants: [VariantAvailability]
     }
 
-    /// #544: `permissions` answered in prose under a tool that declares an `outputSchema`, so a
-    /// schema-enforcing client rejected the call. The states are the answer; the summary is the
-    /// operator-facing rendering of it, kept so nothing a human relied on disappeared.
-    private struct PermissionsResponse: Encodable {
-        let operation: String
-        let accessibility: String
-        let automationLogicPro: String
-        let automationSystemEvents: String
-        let postEvent: String
-        let allGranted: Bool
-        let summary: String
-    }
 
-    /// #544: `refresh_cache` answered in prose too, and its two prose strings carried a real
-    /// distinction — a refresh that ran versus one merely queued — that a caller could only recover
-    /// by string-matching.
-    private struct RefreshCacheResponse: Encodable {
-        let operation: String
-        let refreshed: Bool
-        let source: String
-        let message: String
-    }
 
     private struct HealthResponse: Encodable {
         struct VariantAvailabilitySection: Encodable {
@@ -452,36 +431,50 @@ struct SystemDispatcher: OperationTraceDispatching {
             // states themselves — `health` has always returned them and this command had not, which
             // left it violating its own declared outputSchema (#544).
             let status = PermissionChecker.check()
-            return toolTextResult(encodeJSON(PermissionsResponse(
-                operation: "system.permissions",
-                accessibility: status.accessibilityState.rawValue,
-                automationLogicPro: status.automationState.rawValue,
-                automationSystemEvents: status.systemEventsAutomationState.rawValue,
-                postEvent: status.postEventAccessState.rawValue,
-                allGranted: status.allGranted,
-                summary: status.summary
-            )))
+            // The prose stays the text: `SemanticOracleTable.systemPermissions` grades this operation by
+            // asserting its four exact lines, so encoding JSON here would RED a correct answer in
+            // qualification while every unit test stayed green. The states go beside it.
+            return toolTextResult(
+                text: status.summary,
+                structured: .object([
+                    "operation": .string("system.permissions"),
+                    "accessibility": .string(status.accessibilityState.rawValue),
+                    "automation_logic_pro": .string(status.automationState.rawValue),
+                    "automation_system_events": .string(status.systemEventsAutomationState.rawValue),
+                    "post_event": .string(status.postEventAccessState.rawValue),
+                    // Deliberately not a Bool: "Logic is not running" is not "permission denied", and a
+                    // client reading a single flag would have to treat them the same. Absent means
+                    // undetermined; the four states above always carry the real answer.
+                    "all_granted": status.automationState == .notVerifiable
+                        ? .null : .bool(status.allGranted),
+                    "summary": .string(status.summary),
+                ])
+            )
 
         case "refresh_cache":
             await cache.recordToolAccess()
             // Whether the poller actually ran is the difference between a refresh that HAPPENED and one
             // that was only scheduled. A caller that reads state next has to tell them apart, so it is
             // a field rather than a difference in prose.
+            // Same reason as `permissions`: the oracle for this operation compares the WHOLE body to one
+            // of these sentences, so the sentence stays the text.
             if let poller {
                 await poller.refreshNow()
-                return toolTextResult(encodeJSON(RefreshCacheResponse(
-                    operation: "system.refresh_cache",
-                    refreshed: true,
-                    source: "ax_fallback_poller",
-                    message: "State refresh completed via AX fallback poller."
-                )))
+                let message = "State refresh completed via AX fallback poller."
+                return toolTextResult(text: message, structured: .object([
+                    "operation": .string("system.refresh_cache"),
+                    "refreshed": .bool(true),
+                    "source": .string("ax_fallback_poller"),
+                    "message": .string(message),
+                ]))
             }
-            return toolTextResult(encodeJSON(RefreshCacheResponse(
-                operation: "system.refresh_cache",
-                refreshed: false,
-                source: "next_poll_cycle",
-                message: "State refresh triggered. Cache will be updated on next poll cycle."
-            )))
+            let message = "State refresh triggered. Cache will be updated on next poll cycle."
+            return toolTextResult(text: message, structured: .object([
+                "operation": .string("system.refresh_cache"),
+                "refreshed": .bool(false),
+                "source": .string("next_poll_cycle"),
+                "message": .string(message),
+            ]))
 
         case "setup_arm_key":
             // Consent-first: refuse before the trace, the mutation gate, or any

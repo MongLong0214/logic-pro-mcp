@@ -29,6 +29,27 @@ func toolTextResult(_ result: ChannelResult) -> CallTool.Result {
     toolTextResult(result.message, isError: !result.isSuccess)
 }
 
+/// A receipt whose two halves are deliberately different: the text a caller has always read, and the
+/// structured object the declared `outputSchema` requires.
+///
+/// Reaching for this instead of encoding the object as the text matters more than it looks. Several
+/// operations are graded by `SemanticOracleTable` against the exact prose they emit — permissions is
+/// checked line by line, refresh_cache whole-body — so replacing the text with JSON turns a correct
+/// answer RED in qualification while every unit test stays green, because the oracles run against
+/// fixtures rather than the live handler. Keep the text; add the structure beside it.
+func toolTextResult(
+    text: String,
+    structured: Value,
+    isError: Bool = false
+) -> CallTool.Result {
+    let payload: Value? = structured
+    return CallTool.Result(
+        content: [toolTextContent(text)],
+        structuredContent: payload,
+        isError: isError
+    )
+}
+
 func toolStateCResult(
     _ error: HonestContract.FailureError,
     hint: String? = nil,

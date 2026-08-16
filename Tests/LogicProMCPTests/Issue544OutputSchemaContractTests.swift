@@ -72,4 +72,46 @@ struct Issue544OutputSchemaContractTests {
         #expect(fields["message"] == .string("Failed to open the project."))
         #expect(try #require(result.isError))
     }
+
+    @Test("the two reported commands keep the exact text their semantic oracle grades")
+    func structuredAnswersDoNotDisturbTheGradedText() async throws {
+        // The first attempt at #544 encoded the new objects AS the text. Every unit test stayed green and
+        // the live gate passed, because `SemanticOracleTable` grades these operations against fixtures
+        // rather than the live handler — so a correct answer would only have turned RED later, in
+        // qualification. The text and the structure are now separate halves on purpose, and this test is
+        // the thing that notices if they are ever merged again.
+        let refresh = await SystemDispatcher.handle(
+            command: "refresh_cache", params: [:],
+            router: ChannelRouter(), cache: StateCache()
+        )
+        guard case .text(let refreshText, _, _) = try #require(refresh.content.first) else {
+            Issue.record("expected text content"); return
+        }
+        #expect(refreshText == "State refresh triggered. Cache will be updated on next poll cycle.")
+        #expect(try #require(SemanticOracleTable.systemRefreshCache.evaluate(
+            responseData: Data(refreshText.utf8), readbackData: Data("{}".utf8)
+        )))
+
+        // ...and the structured half is still there, which is the whole point of the change.
+        guard case .object(let refreshFields) = try #require(refresh.structuredContent) else {
+            Issue.record("expected an object"); return
+        }
+        #expect(refreshFields["refreshed"] == Value.bool(false))
+
+        let perms = await SystemDispatcher.handle(
+            command: "permissions", params: [:],
+            router: ChannelRouter(), cache: StateCache()
+        )
+        guard case .text(let permText, _, _) = try #require(perms.content.first) else {
+            Issue.record("expected text content"); return
+        }
+        #expect(permText.hasPrefix("Accessibility: "))
+        #expect(try #require(SemanticOracleTable.systemPermissions.evaluate(
+            responseData: Data(permText.utf8), readbackData: Data("{}".utf8)
+        )))
+        guard case .object(let permFields) = try #require(perms.structuredContent) else {
+            Issue.record("expected an object"); return
+        }
+        #expect(permFields["accessibility"] != nil)
+    }
 }
