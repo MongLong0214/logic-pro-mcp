@@ -26,10 +26,11 @@ struct Issue136GotoDriftHonestTests {
     private actor StubTransportChannel: Channel {
         nonisolated let id: ChannelID = .accessibility
         let gotoResult: ChannelResult
-        let readbackPosition: String
-        init(gotoResult: ChannelResult, readbackPosition: String) {
+        let readbackPositions: [String]
+        private var readbackIndex = 0
+        init(gotoResult: ChannelResult, readbackPositions: [String]) {
             self.gotoResult = gotoResult
-            self.readbackPosition = readbackPosition
+            self.readbackPositions = readbackPositions
         }
         func start() async throws {}
         func stop() async {}
@@ -38,8 +39,14 @@ struct Issue136GotoDriftHonestTests {
             switch operation {
             case "transport.goto_position": return gotoResult
             case "transport.get_state":
+                let index = min(readbackIndex, readbackPositions.count - 1)
+                readbackIndex += 1
                 var state = TransportState()
-                state.position = readbackPosition
+                state.position = readbackPositions[index]
+                state.positionReadback = TransportPositionReadback(
+                    value: readbackPositions[index],
+                    observedComponents: TransportPositionComponent.allCases
+                )
                 state.lastUpdated = Date(timeIntervalSince1970: 0)
                 let encoder = JSONEncoder()
                 encoder.dateEncodingStrategy = .iso8601
@@ -77,7 +84,7 @@ struct Issue136GotoDriftHonestTests {
         // #136 symptom: the write "succeeded" but the readback disagrees.
         await router.register(StubTransportChannel(
             gotoResult: dispatchAckStateB(requested: "9.1.1.1"),
-            readbackPosition: "9.2.1.1"
+            readbackPositions: ["1.1.1.1", "9.2.1.1"]
         ))
         let result = await TransportDispatcher.handle(
             command: "goto_position",
@@ -125,12 +132,12 @@ struct Issue136GotoDriftHonestTests {
         #expect(!text(result).contains("not read back"))
     }
 
-    @Test("control case: exact readback match is the only path to verified:true")
+    @Test("control case: an exact landing after a distinct pre-read is verified:true")
     func exactMatchIsVerifiedTrue() async throws {
         let router = ChannelRouter()
         await router.register(StubTransportChannel(
             gotoResult: dispatchAckStateB(requested: "9.1.1.1"),
-            readbackPosition: "9.1.1.1"
+            readbackPositions: ["1.1.1.1", "9.1.1.1"]
         ))
         let result = await TransportDispatcher.handle(
             command: "goto_position",

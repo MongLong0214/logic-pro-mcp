@@ -16,7 +16,9 @@ import Testing
 struct Issue440TransportFrontmostTests {
     /// A runtime whose AX tree is irrelevant: every test here must refuse or proceed before any AX
     /// element is looked up, so reaching the tree at all is itself the failure.
-    private func unusableAXRuntime() -> AXLogicProElements.Runtime {
+    private func unusableAXRuntime(
+        dialogScriptExecutions: Counter? = nil
+    ) -> AXLogicProElements.Runtime {
         return AXLogicProElements.Runtime(
             logicProPID: { 4242 },
             ax: AXHelpers.Runtime(
@@ -26,7 +28,17 @@ struct Issue440TransportFrontmostTests {
                 children: { _ in [] },
                 performAction: { _, _ in false },
                 childCount: { _ in 0 }
-            )
+            ),
+            // Stubbed deliberately. Omitting it defaults to the real `AppleScriptChannel`, so this
+            // test drove the actual Logic Pro on any machine where Logic was running, and its
+            // result depended on whether the dialog route happened to work there. It passed only
+            // while that route was broken.
+            executeAppleScript: { _ in
+                dialogScriptExecutions?.bump()
+                // A normal pre-actuation dialog refusal proves the route can safely reach its
+                // documented slider refusal without opening a real Logic dialog.
+                return .success(#"{"result":"MENU_NOT_FOUND: fixture"}"#)
+            }
         )
     }
 
@@ -103,20 +115,41 @@ struct Issue440TransportFrontmostTests {
     @Test("a frontmost Logic is not refused — the gate lets real work through")
     func frontmostProceedsPastTheGate() async throws {
         let activations = Counter()
+        let frontmostReadings = Counter()
+        let dialogScriptExecutions = Counter()
+        // Mutation this rejects: replace `isFrontmost: isFrontmost` in
+        // `gotoPositionViaBarSlider`'s FrontmostGate call with a non-injected false answer. The
+        // route then refuses before this runtime's dialog seam and these assertions fail.
         let result = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "1"],
-            runtime: unusableAXRuntime(),
-            isFrontmost: { true },
+            runtime: unusableAXRuntime(dialogScriptExecutions: dialogScriptExecutions),
+            isFrontmost: { frontmostReadings.bump(); return true },
             activateLogic: { activations.bump(); return true },
             sleepMicros: { _ in }
         )
 
         // The AX tree is empty, so this fails further along — but NOT at the gate, and without
-        // having activated anything. A gate that refused here would block every legitimate call.
+        // having activated anything. The early menu failure cannot observe whether a dialog is
+        // present, so the current contract refuses later position routes rather than falling
+        // through to a global-input fallback. A gate that refused here would block every
+        // legitimate call before this terminal safety decision was reached.
         let obj = try #require(envelope(result))
+        // This proves both facts the test owns: the gate admitted the dialog route, and its
+        // post-gate menu failure stayed terminal with no position write.
         #expect(try #require(obj["frontmost_preparation"] as? String) == "already_frontmost")
-        #expect(obj["write_attempted"] == nil)
+        #expect(try #require(obj["state"] as? String) == "C")
+        #expect(try #require(obj["error"] as? String) == "ax_write_failed")
+        #expect(try #require(obj["dialog_route_outcome"] as? String) == "menu_not_found")
+        #expect(try #require(obj["fallback_unsafe"] as? Bool))
+        #expect(!(try #require(obj["safe_to_retry"] as? Bool)))
+        #expect(obj["position_route"] == nil)
+        let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
+        #expect(obj["via"] == nil)
+        #expect(result.message.contains(#""write_attempted":false"#))
         #expect(activations.value == 0)
+        #expect(frontmostReadings.value == FrontmostGate.requiredObservations)
+        #expect(dialogScriptExecutions.value == 1)
     }
 }
 

@@ -1,5 +1,25 @@
 import Foundation
 
+/// A musical-position component whose value was actually read from Logic's AX tree.
+///
+/// `TransportState.position` remains a display value for compatibility, but it is not by itself
+/// evidence that every part of a four-component musical position was observable.  In particular,
+/// Logic's Control Bar can expose only bar and beat sliders.
+enum TransportPositionComponent: String, Sendable, Codable, CaseIterable {
+    case bar
+    case beat
+    case subdivision
+    case tick
+}
+
+/// The raw position text assembled from observed AX controls and the components it contains.
+/// A missing value means the state reader did not observe a position at all; callers must not
+/// promote `TransportState`'s defaults into a readback.
+struct TransportPositionReadback: Sendable, Codable, Equatable {
+    var value: String
+    var observedComponents: [TransportPositionComponent]
+}
+
 /// Transport state from Logic Pro.
 struct TransportState: Sendable, Codable {
     var isPlaying: Bool = false
@@ -8,7 +28,13 @@ struct TransportState: Sendable, Codable {
     var isCycleEnabled: Bool = false
     var isMetronomeEnabled: Bool = false
     var tempo: Double = 120.0
-    var position: String = "1.1.1.1"  // Bar.Beat.Division.Tick
+    /// A display value only. Its legacy default is not an AX observation; consult
+    /// `positionReadback` before treating it as evidence of a landed position.
+    var position: String = "1.1.1.1"
+    /// Which components of `position` came from an AX read. Optional preserves decoding of
+    /// historical state payloads, whose `position` string had no observation provenance.
+    var positionReadback: TransportPositionReadback? = nil
+    /// A display value only. It has no independent readback provenance in the transport model.
     var timePosition: String = "00:00:00.000"
     var sampleRate: Int = 44100
     var lastUpdated: Date = .distantPast
