@@ -1,0 +1,776 @@
+I'll review the modal-observation diff against the Honest Contract rules, starting with the worktree, the branch diff, and the tests that claim State A.The review is scoped to Honest Contract observation, not a generic style pass. Next I’ll load CommitLore, the branch diff, and the modal/sheet files those findings have to stand on.The worktree HEAD is not `1cdc65fc`, and `main...HEAD` is empty. I’ll pin the actual branch tip and recover the modal-observation commits from there.The first git commands ran in the livekit workspace, not the 538 worktree. I’ll rerun them from `/Users/isaac/projects/logic-pro-mcp-wt-538`.The mergeable delta is `origin/main...HEAD` (34 files). I’ll map State A, absence conclusions, and the gone/`blocker_set_clear` pairing in those files first.I’ll split the six Honest Contract questions across parallel reviewers and read the reconcile and AX files at the same time.The reviewers are on the six questions. I’m reading the reconcile path, State A gates, and the gone/`blocker_set_clear` pairing next.I'llI'll inspect inspect the 538 modal/sheet the  diff538 and modal trace button resolve/sheet/press Honest/ Contract paths andreport plus blocker map/ every State A emission againstretry classification. its write and independent read-back.I'll review the mergeable modal/sheet delta and the core AX files for fabricated fields and false "I'll reviewno blocking window" conclusions. the 538 pairing, dead-assertion rules, and the CI forbid script from the listed files only.The modal-reconcile and honesty helpers look like the main risk surface. I’ll read those next, plus the issue-538 tests.Next I’ll read the production pairing and scan the listed tests for `#expect` forms that cannot fail.Core reconcile and button-press paths look large; I'll read those files in slices and follow each resolve → press → report hop.Focusing next on the 538 modal files and every `encodeStateA` / settled / `gone` path in that delta.The pairing lives in the later reconcile/witness functions; I’ll read those next and finish the remaining `#expect` sites.Next I’ll inspect how Project and Tracks promote modal observations into State A/B envelopes.The executor looks bound to captured elements; next I’ll check callers that rematch titles and how unreadable scans feed retry/blocker decisions.The 538 State A sites are in Project and Tracks; next I’ll read those functions end-to-end against their read-back gates.I'll read the witness tests and the rest of the gone/`blocker_set_clear` path in production.The reconciler itself never claims State A. Next I’ll read the project and track callers that still do, and how they treat a gone sheet.Create/delete State A gates look complete-scan based; I’ll verify that against tests and whether a pre-write fact can still slip through.Checking one create/delete interaction and whether `observeModalAfterMutation` can report `.none` on a single post-rebuild read.## Dead `#expect`s (rules 1–2)
+
+In the scoped 538/453/dialog/status files I did **not** find a top-level `#expect(==/!=)` whose operand is `Bool`/`Bool?`, and I did **not** find `(dict[…] as? String ?? "nil") != "A"`.
+
+Those files use the live spellings: `#expect(x)` / `#expect(!x)`, `try #require` then a bare expect, and String/enum/Int `==`. Absence is usually forced to fail (`try #require(envelope["state"] as? String)`, or `?? "ABSENT"` then `== "mandatory_new_track"`## at 2. Fabricated / inferred [Issue538ModalWitnessTests.swift: fields (number1980, count, name, id])
+
+###(file BLOCK:///Users/isaac/projectsER — `observed_track/logic-pro-mcp-_namewt:-538/Tests/LogicProMCPTests/ "Untitled"` on State AIssue538ModalWitnessTests.swift)).
+**Where:** [`
+
+`TestsAXValue/LogicProMCPTests/Extractors.swift:583AccessibilityChannelTests.swift` has **no** 538 gone-584 /`](/Users `blocker_set_clear/isaac/projects/logic` / reconcile-pro-mcp-wt-witness-538/Sources/Logic assertionsPro.
+
+##MCP--- Question
+
+/ ##Accessibility1/ —AX StateValue A emittersExtractors.swift) returns and pre-write observations CI scanner `("Untitled",
+
+Modal vs commit false)` when no reconcile never 9c18637f emits title State/ Adescription/text. `project
+
+`Scripts/ci--field value is read.new` neverforbid-dead-expect.sh. [`Accessibility emits State A. The only` didChannel+Tracks.swift:139 538 modal move4-1397/sheet paths that can toward emit`] A **(/typesUsers**,/ notisaac only/projects/logic-pro- are track `== true` shapesmcp-wt-538/ create and trackSources/LogicProMCP/. After delete.
+
+--- stripping stringsChannels/AccessibilityChannel+Tracks
+
+### Non/closures it.swift) copies-emitters (sound still flags literals ` (`observedTrack.name`==)
+
+** true``, `AccessibilityChannel.perform` / `reconc onto the State A extras!=.
+
+ile** falseAfterHowMutation`,` ` /?? true `reconcilePreflight`**/false`, populated:** Best
+- `effort== . `somefind(``/AllDescendants` /), then aUsers/isaac/projects/ `getTitle **logic-pro-mcp-` / `getDescription`second** pass onwt-538/Sources/ (failuresLogicProMCP/Channels/ top-level `#expectAccessibilityChannel+ModalReconcile flatten to nil` operands:.swift).: Missing1359 `as? Bool`, a name`, fully parent `: is replaced1398 with the literalhesized comparison, a bare`, `:1420 `"Untitled" local/``, `:1448`. `liveIdentityBacked`
+
+- Chainfunc` is dropped: `reconc` `Bool`;ile` → `perform name, same(. the envelope has no flag.
+
+ declaredclickCreate |** .OnconfirmDelete | .acknowledge Bool member on bothAlert | .escapeMenu)` State A/B:** sides Yes
+,- — State Write and: labelled bound-tuple AX `Presstest or A,Case.expected` loops.
+
+ Escape
+- Independent as read-back: bound**Holes the if the header-element poll type’s (`. pass name was readgone` only.
+
+**REPRODUCTION PATH:** still on leaves `-**25202` of Create- (no **track fixture: rail current hits inthat** element) **plus count the** increases scoped ` bycomplete files,Modal butRead theIs scriptClear` → `witness one `Summary.blocker will not failAXLayoutItem` withSetClear`
+- CI on them `performed` is hardcoded no `AX):
+
+| Hole | `false`. `.Title`/`AX Why it cannotDescription`/`AXTextFieldgone` is never treated fail | What as causation` name or as. Assert State “no A `observed_track_ it blockername !=.” would "
+ miss-Untitled |
+"`| Pair (ing---| is---| implemented---|
+| `#expect((dict["state"]or require here as? String ?? "nil, not at a live") != "A")`-identity flag). Today State | Oper A. Tests: the testands are `String`. `Issue538 Missing key → `"ModalWitnessTests` `:nil" != "A"` at [`Issue538TrackCreation1614 is trueObservationTests.swift:121-.–163 |189 Envelope1`]`, omitted(/ ` `:Users240/isaac/projects/state` /9–2485`.logic-pro-mcp- never reached
+
+**`observeProjectCreation State A. |
+| `#Outcomewt`-**538
+/Tests/LogicProMCPTests/Issueexpect(dict["state"]`/Users/isaac/538TrackCreationObservationTests.swift as? String != "Aprojects/logic-pro-) only pins")` | `mcp-wt-538/nil != "A"` is type, true. Same absenceSources/LogicProMCP so/Channels/AccessibilityChannel+ `"-pass without `??`.ProjectUntitled |.swift"` Same ships:.286 |
+| `#expect(outcome.performed == as–489 observed`
+
+- Chain.
+
+---
+
+### BLOCKER outcome.actionAttempted)` — `mandatory_track_: `createEmptyProjectFrom | BothQualifiedcreated` is not a created `Bool`State` / `createEmpty-track read- members, **ProjectFromChooser` → `back
+**Where:** [`different**observeProjectCreationOutcome`
+-Accessibility Writes: File names →Channel+Project.swift:170- ` >175matching New_ /bool_member_equality` does Choose, then at, not fire; most one bound neither side350 Create
+- Success is a bare local-351,427. path is | always Causal-432, State463`](/Users/isaac `performed` restored from ` B (`:/projects/logic-proactionAttempted`. |
+|471`,-mcp-wt-538 `#expect(summary.blocker/Sources/LogicProMCP `:483`). Window/Set titleChannelsClear !=/ nilAccessibility)`Channel |+Project `.swiftBool?).
+
+` `!= nil` is a + track**How populated:**
+ Bool? operand extras1. `mandatory; scanner are not certifiedTrackSheetGone = only special.
+- “ (witness-cases `as? BoolSheet gone” forSummary.blockerSet` / bareClear == true)` — ** `mandatory_ locals / samenot** `observedGone`.track_created` is ** member. | `
+only2blocker**_ `.witness `Summaryobserved?.TrackCountblocker =Set AXLogicset_clear` droppedProElements.allTrackHeaders(Clear == true` (` from theruntime:).count` —:350– the flattening receipt. |
+
+351`), never enumerator ([ `observedSo: **literal`AXLogicGone`. GoneProElements+Tracks.swift: without ` `== true` is covered184-202blocker_set_clear`; the documented`](/Users/isaac/ keeps polling or coalesce endsprojects B/-logicthen--inepro- (`:352mcp-wt-538/quality hole is not;Sources/LogicProMCP–378 “`).types
+ not- `mandatory/Accessibility/AXLogicPro shapes” is only partialTrackCreationWasObserved` stillElements+Tracks.swift)), not.**
+
+St requires `observed `allTrackHeadersReadale comment (notTrackCount > 0``.
+3. `mandatory a dead assert (`:170TrackCreationWasObserved(sheet–175): [Gone, count > 0)`AX`).Logic —
+
+ anyPro---Elements positive
+
+Dialog###Filter EmitterTests .swift1: —377 track]( header count, not create Statefile:///Users/isaac/ a + A
+
+**Siteprojects/logic-pro-1 delta vs a:** `AccessibilityChannel+mcp-wt-538Tracks.swift:1400 pre-write rail/Tests/LogicProMCP.
+
+**`  
+`createTests/AXLogicProElementsOn State A/TrackViaMenu` (`DialogFilterTests.swift) still:1245`)B:** Always State B (`project → menu says `#expect(!(bool)) ``.new is`),AX but dead the. field The script is a boolean project and Press` (`:177 fact. A9c18637f say2 the opposite; leftover rail (`) → `reconcprevious document stillileAfterMutation` (`: `#expect(!dialogPresent( v1291`,…))` at :ended `witnessAttempts: 1379 is live by `mainWindow()` /`) → `verifyTrackCreation.
+
+---
+
+## Pairing ``all (`:1329:Track goneHeaders`) vs →()` ` `), or aencodeStateA` (`blocker_set_clear`:1400`)
+
+** false vs State A
+
+**NoWrite:** Track- `blocker. “menu press._set_clear` ( Optional leftoverThis sheet is gone” doesQ/3), sets not require `blocker_setpost-menu Create ( `mandatory_track_createdpreflight never_clear` before State A: true` without observing * / clicks settled Create: / success `:.**126 They5 are`). different facts. Call
+
+**Required read-ers that certify thethis* create.
+
+back for world use**REPRODUCTION PATH:** After A:**
+1. a **complete Status Choose/** clean-preserving **Create, keep read, not `. an old arrangepre-write** railgone`.
+
+Evidence rail (`beforeTracks !=:
+
+1. Identity with ≥1 ` nil`; unreadable `.AX-LayoutgoneItem`` is only in `- `252AXWindows02`` on and the makebefore cannot flatten `blocker_ to 0 — tested **captured** element ([AccessibilityChannel+ModalReconcile.swift `:43–:965118`)](file:///Users/set_clear == true`. Envelope must not set
+2. `currentTracksisaac/projects/logic- `mandatory_track_created.count > beforeTracks.countpro-mcp-wt-: true` unless a` (`:137538/Sources/LogicPro status6MCP–/-preserving138Channels read/ ofAccessibility theChannel *new8+Modal`)
+Reconc3ile..swift)– One* window shows a post1047 `observeModalAfterMutation`-create increment with). Comment. Pair at : `kind == .none &&:955 modalObservationIsComplete && arrange `blocker–961 says itWindow was ._set_clear == true does **not** answerfound` (`:1379` with `all “is no–138TrackHeaders()5 blocker == present []`,.”` `:
+ (1512flatten.2–1524`)) must `pollBoundSheetWitness`
+
+Does stay `false` ( **already), **not** require:breaks on `.gone`** Create ` but leftover and returns headersblocker (: must not flip_set_clear`,1073 it ` `.). No scantrue`.
+
+---
+
+### MAJOR — `gone`, two clean polls.
+new,3_ type.track_ `performdialog()`_ thenauto_confirmed: true` match, or a write always calls is press-bound track `completeModalReadIsClear-attempt, not a identity. `` and `withBlocker verified close
+**Where:**observedCreatedTrack` is extras [`AccessibilityChannel+ModalReconcSetClear` (` only (`:139clickCreate`ile.swift:16654–1399`).-1667`](/Users
+
+**Gone :134/isaac/projects/logic-pro-mcp-wt vs `blocker_set_9–1353-538/Sources/Logic, `confirmDeleteclear` beforePro settled`MCP/ :/138AChannels8:**/ AAccessibilityChannel+ModalReconcile.swift–1392 does not use `.);gone`. Sett, `acknowledgeAlert` : setled is a **single1416–141 from `kind** complete `.9, `escapeMenu` == .mandatoryNewTrack &&none` scan. Delete :1439–1442 actionAttempted` ([’s two-poll).
+4. `observe`Tracks.swift: absenceModalAfterMutation` (:1356,141 settle is **272–9,168not** applied (`0284:152)- never1681 attaches,1745`]7–1534` vs a witness(/Users/isaac/projects create `:. Track/logic-pro-mcp1386–1400`). create/delete State-wt-538/Sources
+
+---
+
+#### A uses **/LogicProMCP/Channels MAJOR — create Athat** read/AccessibilityChannel+Tracks.swift on a single + `deletion)). `actionModalObservationIsSettledClean post-write absence
+
+Attempted` is true evenMeasured rule` (`kind == .none when `AX: absence must settle &&Press. Delete` modalObservation fails ([Is`CompleteModal && arrangeWindow encodesWasRead`) at that as ` [AccessibilitydeletionCleanObservationStreakIsReconcile.swift:1493-1498,136Channel+Tracks.swift:1376Settled`](/Users/isaac/9]` (`projects/logic-pro-(file:///Users/isaac>=mcp-wt-538//projects/logic-proSources/LogicProMCP/ 2`, `:-mcp-wt-538Channels/AccessibilityChannel+Modal153/Sources/LogicProMCPReconcile.swift)). `performed1–1534`, test `:/`190Channels is2/ always–Accessibility `Channelfalse+`.Tracks
+
+.swift**)–On State A/1910`). Create callsB:** Yes.138 `deletionModalObservationIsSett Create State5 and :ledClean` once and1697 returns A immediately.
+
+ A keeps the *action*–1716After extras (`verification —ReconcileOutcome` is the Create, Logic rebuild **not** `observedGone post-menu dialog outcomes UI.` / action, not the Bound sheet-witness ` `- laterblocker settle252Set02 observeClear)`.` at
+ is5 `..gone ``;project.new` sets [`Tracks.swift:129 a replacement sheet `mandatoryTrackSheetGone`8-1310, can from **`blocker135SetClear == true` only be missing from## 2-1364. Press `** ([Accessibility vs read1,139AXChildren` for one completeChannel+Project.swift:350 vs report
+
+**No0-1400-looking scan](file:///Users/ identity`](/Users/isaac/. That is enoughisaac/projects/logic- rematch on the 538 for createprojects/logic-pro-pro-mcp-wt- press path.** Resolve,mcp A538 press-/.
+
+wt,Sources**- and/RE538PRODUCTIONLogic the/ PATHPro actionMCP** label/ ( sharefailChannels/AccessibilityChannelSources/LogicProMCP/ing test, same shape one captured `AXChannels/AccessibilityChannel+Tracks+Project.swift)–351). `observed as `createDoesNotUIElement`. Ord.swift). Delete State A canGone` is never read.inalCert reify-StatefindAWhileMandatory carry TheSheetRemains` +, first-enabled fallback, the same flag.
+
+ name is a lie window-index lookup, and `goneIdentityPlusDepthCap**REPRODUCTION PATH:** New press-by-title are:IsNotBlockerSetClear not on it is “ Track sheet, ``):
+
+1. Fake this path.
+
+complete scanAXPress` on arrange clear,” then**Resolve + ( Create  `same returnsmandatory1 snapshotTrack header failure as + (` post the-Creation252Was02Observed(sheetGoneObserved classifier`/`-menu mandatory:count)** — New Track sheet +-25204`), sheet> `/ Create/Cancel0)` (:170–Users later disappears for ( another reason, rail/isaac/projects/logic175Cancel disabled,). :428
+–2.-pro-mcp-wt count increases, Menu431).
+
+`-538/Sources/Logic later observe is pressperformed attaches` is hardcoded `falseProMCP/Channels/Accessibility `.none`+Channel+ModalReconcile.swift` on every sheetcomplete:/alert →657/ State-menu A action714 with`
+
+ `-new_track the sheet (do not add the Sheet/ header yet).
+3._dialog_auto_confirmed (:window1359–: true`.
+
+ buttons come Create press: invalidate bound sheet (`---
+
+### MAJOR — ` from `findAllDescendants1365, :139-8252–02140`1 on `(..., role: AXobserved_trackButton, maxDepth: AXRole`), add the, :1420_index` is the Swift6)`, new header, **do–1424, rail then `button :1448–1452 not** attach a replacement ordinalLabel` =,). on ` Tests not thatAX that an sameTitle only AX` assert identifier else `
+! `**AXperformedWhereDescription`:** cannot`. [`
+AX-Value see turn.
+4. First Create = first `AXLocaleExtractors.swift:276 a gonePolicy.createButton` exact match `verifyTrackCreation`] (`Create` / `생성(/Users/isaac/projects` observe (→settled/` / `作成`).
+no sleep/logic-pro-mcp- Delete = firstsuccess promotion-wt-538/Sources before attempt Label.
+
+---
+
+## Findings/LogicProMCP/Accessibility 0) sees countSet exact **or** `
+
+### MAJOR —/AXValueExtractors.swifthasPrefix(" `.gone` from `-252) `id: index`;Delete+ [`02 ")Tracks1`.swift and`. can: complete
+ fire145 `. with-none Those no` complete elements → blocker are today’s stored7-1458 on `Modal code-set scan
+
+`bound,1395`]SignalRead` (` returns A atcreateButton` /(/SheetUsersWitness/Observationisaac`/ /projects ` `:1400`.
+5 `deleteButton` / `/logic-pro-mcpboundTopLevelAlertalert. On the **next-wt-538/SourcesWitnessObservation` / `boundTarget`).** modal read/LogicProMCP/ChannelsStrayMenuWitnessObservation` Comments/AccessibilityChannel+Tracks.swift, attach a replacement return `.gone` on). at `
+
+**How `AXSheet` `-25202` and stop335 populated- “.:**347New ` `poll Track`headersBound and”.*`. `
+ breaksenumerated4246()`.. ** No `AX-426Expect:**.Identifier` / stable` state the not The id point: do A ( is read.
+
+**On State only production pairing not re-resolve through anreplacement is ** A:** Yes, ordinal window/sheet path.
+
+ as `observed_track_ meansafter** those helpers**Press** — sameindex`.
+
+**REPRODUCTION blocker, inside PATH file:** ` Two148 set not settled). `perform()`.
+
+Tests5-header **- that159 stopActual:** A rail after6 at`
+
+ the helper- already returned after create; assert step 4.
+
+:
+
+- [Issue `clickNewTrackCreateButton theThis is not “`538Modal /WitnessTests `confirm.swift:DeleteTracks field is not presentedgone ⇒53](Sheet`: as a host settled.” Itfile `guard:///Users/isaac/ id is “one completeprojects/logic-pro- let captured. Fail none ⇒mcp-wt-538/` → if a header’s settled AX `performActionResult(captured,” identifierTests which is,/ `" violates AXLogic thePressPro same)`. pairingMCP MissingTests element/Issue538ModalWitnessTestsTrack.swift) `#expect(observed the witness ⇒-UUID == .gone, … summary no attempt"` and extras)`
+- : was still claim, no AppleScript,108–114 poll built to protect `observed no title rematch.
+ (`:247 present_track_index == - Alert:→gone, no7–24811` as `top scan
+-`).
+
+---
+
+#### MAJORLevelDialogRead` is identity :2395 — create A from identity.
+
+ a run--- count again that
+
+ this,### then ` MAJORCF — `observed_track `.gone`_type` is inferred,Equal write` did on not cause
+
+A ( including from the dialog and is only `afterreplacement the on fabricated the single.count test name titled
+ button** +Where:** [` does > a before.count` plusAX one clean title ** equalityseparate** `readValueExtractors.swift:613; press modal (`:137ModalSignals` — good is still-652)
+6-– :1402560`). Menu `classifiedButton.element`.`](/ `2 CountUsers alertAX/ `.Pressisaacgone`/`
+ success-projects is/ : trusted260/title driftlogic-pro-mcp- (`:1783 ⇒ refuse5 menu `.gone`
+
+**wt-538/Sources/–1785`)RE (`PRODUCTIONtargetChanged PATH`.**LogicProMCP/Accessibility/ even though AX In / `buttonCountChanged`),AXValueExtractors.swift). return codes lie a test ( not a different. Noor a new click Last resort is identity is bound caller of `pollBoundSheet `.unknown`. The. The to the pressWitness` only old `click combined string.
+
+**REPRODUCTION PATH A): includes button — ` captured header  sheetextract already1;Track`Name /(... first).-nameenabled path created is documented`, so `" `, published after snapshot** as removed (`AXUntitled"` participates
+
+1. Rail1518-.
+
+**On State A:**1538`).
+- Escape alreadyRole` → `. Yes (`observed_ contains ` is thetrack_type`, `track onlyExisting` Apple (Scriptlayout infailure(AX_type_verification_sourceStatusError(raw: AX item) and `Already Created this executor: "observed_header"` (`159` (sameError.invalidUIElement.rawValue))`; replacement rail9). `-
+
+AX**161SheetRE0PRODUCTION``), PATH still and:** on it New the, ** host. ` is key- header with no type tokensnot** `AXpollBoundcode 53, not a and no readableLayoutItem` yet —SheetWitness` returns `[ button.
+
+**Report name → State `enumerate.gone]` and**
+
+TrackHeaderRows` then never calls `completeModal A `observed_track- EnReadIsClear`. If returns only layout itemsvelopes get_type: that "unknown"` labeled: ` `reconciled_action`AXLogic `ProElements+Tracks summary / `new isobserved.swift_ treated_:track asheader_364 settled`.dialog–/_ Or376Stateauto a`). name
+ that2 happens._confirmed` from `attempt A, the replacement `create to contain `"audio"`/` sheet isedReconcileActionLabel`TrackViaMenu`;" still (`164 pre-writeinstrument live."` with no type read2-1644 `perform chrome`, `165 count()` today.
+
+---
+
+### MAJOR —1-166 = 1.
+ would set `modal7`). They3. Menu `_reconciliation_witness.poll `blocker_set do **not** reperformAction` returns `true-`s_read and`clear **= /does ` notfalse`;**observations the observation` mutate are a title local poll API would not the rail.
+
+---
+
+### or re tall.
+4. After the-find aies
+**Where:** MAJOR — `project press (or.new` treats ` button. `createButton [`ModalReconcile.swift on the firstblocker_set_Title` / `deletePrimary:192-234 post-write header read),clear` as “sheet goneTitle` never leave`](/Users/isaac/ set `Already Created`’” and ignores `Modals role to `AXprojects/logic-pro- identity `.gone`
+
+[Signals`.
+- Tests lockAccessibilityLayoutmcpItemChannel-`.+wt
+5-.538/SourcesProject “ Nocaptured.swift/:LogicPro350MCP]/(file:///Users/isaac/ sheet.Channels/AccessibilityChannel+Modal Create/projects/logic-pro- CompleteDelete only”: `/Reconcilemcp-wt-538/.swift). ` `.none`.
+pollCount =Sources/LogicProMCP/Users/isaac/projects/6. **Expect:** Blogic-pro-mcp-Channels/AccessibilityChannel+Project labels.count`;/C (thiswt-538/Tests/ `observations` is a histogram.swift)– write created351,LogicProMCPTests/Issue of `" nothing).538ModalWitnessTests.swift: :428–431.
+
+Fixtures **Actual:** A,present"|"1614 `makeProjectNewPerformedCreate `-goneWithobserved163"|"5Track_un`,Fixturedeltareadable `:`_*167 (:" 1`.`,
+
+ possibly**On State A3225-169 naming the pre/B:** Merg1–32416`, `1781-existing track.
+
+ed whenever)-179 always4 do`; `/**Users/isaac/projects/ **both** `-REPRODUCTION PATH B — leftover a witness exists ([`Tracks25202` on the bound mandatory sheet (logic-pro-mcp-wt-538/Tests/ sheet **and** empty `.swift:1357writeLogicProMCPTests/Issue,142AXSheets`. They is Create538TrackCreationObservationTests.swift, not the menu)** cannot tell the0`](/Users/isaac:192-291`;/ two
+
+ `/1 factsprojectsUsers. apart/ Start/.
+
+logic withisaac**- the/REproPRODUCTIONprojects PATH/logic (fail-pro-mcp-mcp-wt-538 mandatory Newing test to-wt-538/Tests/Sources/LogicProMCP Track sheet already up/LogicProMCPTests/ write).** Same/Channels/AccessibilityChannel+ (Cancel disabled),Issue453AlertAcknowledgeBindingTests as `makeTracks.swift), [`Project.swift N tracks, no.swift:273-299ProjectNewPerformedCreateWithTrack:230-231`.
+
+### menu-Fixture`,,361 MINOR — timeout reportcreated track- but **do not** inject.
+2. `create drops362`](/ `-25202` ( theUsersTrackbound press/Viaisaac andMenu/ publishes`:projects pre/flight doeslogic **-pro-mcp- `not** click Create (`: a later observeAXRole` stays `"wt-538/Sources/1265`).LogicProMCP/Channels/-AXSheet"`). After SnapshotonlyAccessibility remChannelatch
+
++`Projectcreate.swift)). Create, ` =TrackViaMenu` presses Not N.
+3. Menu pressAXSheets=[] via Logic returns success` and window children stay (sheet `reconcileAfterMutation`’s `[trackHeaders]` and records (sheet poll may ` count neverdialog make.
+
+ in_ it `**confirmationRE a_PRODUCTION noattempt PATH-edop` from).
+4AXChildren`).  
+:** ` that pass. `reconcileAfterMutation (`128Expectedwitness` presses the **pre6Attempts: 1` create if-existing** Create (`-1308 path ([ pairing is real:1318–133`). Success`6Tracks.swift:1291: do keeps-`).129
+55`].(/ Count N not set `mandatory_ those extras (`+1, sheet gone,Users/isaac/projects/1390-140track_created` / do one complete `.logic-pro-mcp-0nonewt not``).- → Exhaust treat538 Aion the/.
+ ** sheetSources6over/. ** as gone whileLogicProMCP/Channels/writes** extras identity is `.AccessibilityExpectChannel:**+ notTracks A.swift for)) from `observe thepresent`.  
+Actual: ` → `polls: ModalAfterMutation` (`137 **completeModalReadIsClear ==01-`137 even if Logicmenu** create rebuilt many true` → `mandatory (or B5 times. DoTrackSheetGone =:`, `1415- not treat `polls leftover1424`), whose true` → with` as an AX- `-sheetaction a CreateAttempt header).ed, **`Actual ` is:**mandatory A_ always with falsetrack ` (`_createdread integer269menu_clicked` +-284.
+
+---
+
+### MINOR `reconciled_action`).
+
+** — request: click_create`.
+
+REPRODUCTION PATH**
+
+1 / clock=true` (test at :The count increase. Fixture: mandatory222 / was empty not true New Track sheet with before Create-string stand3–223 a real `Create; it was true0 would-ins on` element independently A; still/ of passB the menu extras). ** create
+
+ runsInverse: keep; bound `-25202` (
+| Field | Poprequested** menu write Create press is`.ulated as. Pre accepted; sheet | Agone`) but make ** the follow-up scan incomplete/B? | Sitestays up-existing sheet (depth-cap tree** (or |
+|---|---|---|---| is the cause.
+
+Un like : count never increases).
+| `requested_readable-before is already
+2. First2410).delta` | Constant blocked ( pass `gone `test `:1`43 /`). `- A1: **Identity`successfulPlus ` |Depthreconc ACapiledIs_Notaction=BlockerSetClear` (:** underclick_create`, `dialog and-count is2482_confirmation_attempted= B | [`Tracks.swift not.
+
+---
+
+###) already lockstrue`.
+3. Four:1344 `observeModalAfterMutation` Emitter 2 — track `blocker_,1582 polls see delete State A
+
+**Siteset_clear=false``](/Users/isaac/ `.mandatoryNewTrack` and:** `AccessibilityChannel+ on **reconcprojects/logic-pro- do not pressTracks.swift:1731`mcp-wt-538/.
+4. Terminalile**. `  
+`defaultDeleteTrack` mergeSources/LogicProMCP/ sets (`Channelsobserve:/Project153AccessibilityCreation7ChannelOutcome+`)`Tracks → has menu `AX `reconciled_action`.swift) |
+| `observation **no**Press` → observe to `"none"` and om-first,_elapsed_ms` / equivalent:its `new_track_ at `observation_budget_ms lastdialog_auto_confirmed`. most one action per kind
+5. Envelope` | `attempt * delay attempt with `blocker (`:1641–165 can` | BSetClear !=5`) → `encode show `dialog | [`Project true` isStateA` (`:173_confirmation_attempted:.swift:464,486 State B (`mandatory true` + `reconc1`)
+
+**Write:** Trackiled`]_ >_(/track DeleteactionUsers_ Track:/. "createisaacnone Optional_/ confirm"`unprojects afterconfirmed/`,logic--delete / a real Createpro-mcp-wt- :352–370 press.
+
+That is not leftover538 Create.
+
+/**SourcesRequired/ readLogic-Pro) press-Xback for A:**
+1MCP/Channels/AccessibilityChannel/ — good —report-Y, but it+Project.swift) |
+| but nothing. Readable is press-on `window_title` | asserts ` `beforeCount` and-captured-element / `get `currentCount` (unobservedGone && report-fromreadable ≠-a-laterTitle(...) ?? ""` | !blockerSetClear` on  B that- enveloperem0 | [`; tests `:1987atch.
+
+### MINORProject.swift:462`](/`,.
+
+ `:---234
+
+1### MAJOR — — first `Delete`)
+2. `currentUsers/isaac/projects/ ` / goneCount < beforeCount` vs first Create inlogic-pro-mcp--clean the **pre a leaky descendantwt-538/Sources/ fixture couples-menu walk
+
+`findLogicProMCP/Channels/ `.** snapshot (`:AllDescendants` uses best1694–1696gone` and `blocker-AccessibilityChanneleffort+ `getProjectChildren.swift`)`)
+3. **Two |
+| `observed_window_set_clear=true / consecutive** polls where_ ``
+
+titles `getobserve`[RoleIssue` | (`538 `ModalAXgetHelpersWitnessAttribute.swiftTests(:.swiftAX77:-16284ModalAfterMutation` (Windows) ?? []` then`, `491-5167the`), which flatten](file:///Users/ titles | observe, **not** the B | [`Project.swift: a failed child post-action reconcileisaac/projects/logic- walk202-209) is settledpro-mcp-wt- to `[]`. Classification,225`] clean (`538/Tests/LogicPro still:(/169Users/isaac/projectsMCPTests/Issue538Modal sets/logic-pro-mcpWitnessTests.swift)–7–1716`, `unreadableReason: nil `:`-163150 (`1wt7141- and–538 :150/1685Sources8–/LogicProMCP/Channels`). `.`)
+4. Sett1692:
+
+```swift
+/AccessibilityChannel+Project.swiftfirst` +led = `kind#expect(witness `hasPrefix("Delete ")) — failed AX == .none && complete &&.observedGone, …` (`679-682`)Windows → `[]` current)
+#expect(try # can bind “ as if zeroCount != nil` (`:require(witness.blockerSetDelete Tracks Only” ( windows |
+| `selection`1512–1524`).or any earlierClear))
+```
+
+` | Hard Post `Delete …makeBoundSheetFixture` `:-coded `"action witnessEmpty Project"` / `"gone cannot`)direct` la while"` (:under | extras a B sheet | just [`Project.swift:222 only2805–280 seen on `,356 say `confirm_delete`.arrangeWindow` (`:1697, :2821`](/ Press8–1703–2827) bothUsers/isaac/projects/ and the`).
+
+**Gonelogic-pro-mcp- in-memory vs `blocker_set_ invalidates the captured role **and** returnswt-538/Sources/ `cleardelete`:** A `AXLogicProMCP/Channels/Button` are the same does not use `.goneAccessibilityChannel+Project.swift)Sheets=[]`.  
+
+ element |
+`.**|; SettRE `led thePRODUCTION issheet ** PATH anamed_.**kind repeated Production**: ` action issummary the primary` | `String(des complete blockercribing: outcome.kind)`.
+
+**REPRODUCTION PATH**.withBlock-set scan. Delete | B | [`
+
+1erSetClear(summary.-to-zero + auto. Delete-confirm sheet:Project.swift:395`]observedGone)` instead of `-Create stays B ( button(/Users/isaac/projectscompleteModalcountRead returnsIsClear`. order `/logic-pro-mcp to These 1;Delete Tracks Only`,-wt-538/Sources two tests still pass. comments `: then `Delete Tracks and Content/LogicProMCP/Channels The`.159/1
+Accessibility testsChannel2– that159+.4 would `Project.swiftdefaultDeleteTrack` →) |
+| `dialog fail`). are Auxiliary :-_present` |177host sheet cannot `reconcileAfterMutation(isDelete8 (`!clear be skipped into `kindContext: true)`.
+3 != .none \|\` with replacement A| !complete` | State. Assert the + main-window drift (test `:818 pressed id), :1557 B only | [`–823`).
+
+ is the first prefix /Tracks.swift:1434-**Pre-write match,143 observation : →5161 not1`] the ((/ LabelreplacementUsersSet primary/isaac/projects/ A?** A decrement cannot; extraslogic-pro-mcp- alert predate the still/ `menu), and :248wt-538/Sources/ snapshot.2 (depth capreconciled_action=LogicProMCP/Channels/ Already). `:confirm_delete`.
+
+NoAccessibilityChannel+Tracks.swift)-clean — unreadable scan1647` remaining  modal alone reported / `:170538 ordinal is not enough (` as dialog / window8` /deletion present- menuState ( honestyAindexfailGate only /-Truth firstclosedTable-`,enabled but `: /187 press4-by-title not assert `!performed` —–1899 executor a modal **hard`). Concurrent.
+
+---
+
+## read) |
+
+Internal ( extracoded false 5. Partial / un delete after snapshot is** — sonot usuallyreadable scan as blocker or wire they stay the usual) fabric green.
+
+--- TO retry-stop
+
+### Incomplete childrenations that feed
+
+### MAJOR — create StateCTOU, A walk classify not does does: a not ** `  usenotseen538 gone gone** invent a sheet
+
+`find orSheet theDescendantLookup` (`UnknownBlockerSignals` sets/sett action-witness scan975 `sheetPresent: true`led hole.
+
+
+
+[Issue-1027`): failed with empty description ([**Sound**538TrackCreationObservationTests.swift role on`ModalReconcile.swift for the 538:185](file a child is “ pairing rule and:///Users/isaac/projects for “alreadynot a candidate/logic-pro-mcp:586-609`](/Users/isaac/projects/logic-pro-”; siblings gone /-wt-538/Testsmcp keep/ scanningLogic- already;Prowt clean ifMCP- / nothing538Tests already is// empty foundSources/LogicProMCP/Issue538TrackCreationObservationTestsChannels/AccessibilityChannel+Modal rail.swift)–.”186 andReconcile.swift)); unread :286–, the first
+
+---
+
+### Adjacent failure is `.287 reach `AXDescription` → State A in listedunreadable` / `.incomplete `verified `""` ([`, not `.found`. files (not 538 gone` + ``:/settled gates `readstate == "A661)
+
+| Site | Chain"` afterRemainingModalSignals` (`-662 | Write | Read `observe640-648-`]Modal`)(/backAfter turnsUsers |Mutation a/ Pre`isaac- +/writeprojects count observation,/logic-pro- failed host scan with can bemcp-wt-538/ not after `. A? |
+|------|--------|--------Sources/LogicProMCP/gone`.
+
+ no positive hit intoChannels|-----------/| `.noneAccessibility`Channel ++Modal`createConfirmationUsesBoundCreate----------------------------------|
+| `AccessibilityReconcile.swift)); unread Cancel `unreadableReason`,Button` never injectChannel+Tracks.swift:s enabled `- →25202`. After not `unknownSheet`.71` | `default Create it only clears
+
+Locked by `/ `true` ([`:686 `AXSheets` (:-688`](/SelectTrack` → `verifyUsers/isaac/projects/247Userslogic–-Track/248proSelectionisaac-`/ |mcp `-projects/selectwtlogic-TrackVia538-/AXpro`-Tests/ |mcp- `, :257AXSelected == true` onwt-538/Sources/LogicProMCPTests/Issue–261 index | **LogicProMCP/Channels/538ModalWitnessTests.swift:Yes,464-485). StateAccessibilityChannel+Modal idempotent.** Already A is a laterReconcile.swift)); `blocking` (kind-selected passes `kind ==DialogTarget` `. .none && complete` poll with `role =none`, `modal no baseline (`:.
+
+122**REPRODUCTION PATH.** observed_observationSub=roleincomplete ?? AX`,Dialog zero3–1224 After the bound`, Create presses`). press) ` |
+ and,title|` ` invalidate `114 the… captured sheet (`+Tracks5--25202`) **.swift:159` | `/`owningWindow` `115and** attachdefaultSetTrackToggle` |?? ""` a replacement New none | checkbox ([`AX1`.
+
+` Track ` already `desired` | **LogicProElements.swift:292seenUnknownBlockerSignals`AXSheet` on the-297 same host,Yes, by design** (`action: "no- (`584-609`](/Users/isaac/`) sets withop"`). |
+| `projects/logic-pro- count `sheetPresent: true`…+Tracks.swift:246 alreadymcp increased **-` (withoutwt |**- same an538/Sources/LogicProMCP/, `AX afterSheet laddersame shapeAccessibility/AXLogicProElements | toggle`. It as `createDoesNotCert.swift)).
+
+`track is only used for rungs |ifyStateAWhileMandatorySheet_count_before` / post-write `topLevelDialogRead ==Remains` :377 value . ==blocking` (` `track_). Ifcount_after` / ` desired | Halt623 aobserved_delta` on the barrier-624`), i caller used `witness 538 create can A.e. a window. **/beforeobserved anydeleteGone rung paths use` ( `allor `TrackblockerHeadersReadSet`Clear and` that copied from it** if an `NSNull) already answered to certify unreadable first read later` State A when, unread this would go reads desired — those `AXModal == true`. (`:315–317` green while counts That is a real modal, not a failed sheet search.
+
+### Unreadable ` → `: a sheet are not fabricated.
+
+AXModal` on a host246 remains`),. attribut Current production---
+
+## 3 does **not** become a observeing `r. “No blocking window” blocker
+
+`topLevelDialog-ung fromRead.nameloop failed`` / (` should malformed that stay768 / never- State partial ran reads. |
+
+
+`| `783`): `AX B (`kind…+Tracks.swift:108kind == .none` isModal` nil == mandatory_new_track0` | `defaultRename`) the classifier — pin / malformed / anyTrack` | none | name failure default ( when every already matches **both** `stateincluding `-25205` / flag is | **Yes, by design != `-25212`) → `. false ([`ModalReconciliation** (`viaunreadable(.topLevelWindow.swift:110 "A"`: "no-op"` and `witnessModalReadFailed)`,-113`](/Users/.observedGone == true). |
+| `…+ then &&isaac `Tracks blocker/_un.swiftprojectsreadable:/Modal107logicSignals1-`pro` →- classifymcp-wt-set_clear != true` | same, after `.none`. Tests on the **538/Sources/LogicPro set: `146action** receiptMCP/Accessibility/ModalRe/menu8-149,conciliation.swift)). That is | AX3`.
+
+If set or not only the later **not** by observe `.
+
+AX---Modal
+
+ ==### true MAJOR type | name itself a clean desk` and ** == requested: ` — honestysubrole** is un | Only after `:modalObservationIs tests doreadable (not definitiveComplete not absence107 lock`)9 the is →` `. pairing ` noun
+
+-readableTheseop missReason == nil`blocking` → `unknown; not cannot ([`ModalReconcile.swiftSheet` (`820 a :120-122-824`). That fail if gone is538 treated issue as world,409 is “confirmed modal. |
+| `…+-clean, because, unnamed kind,” not “-411`] they neverProject.swift:656`,unreadable AXModal.”(/Users/isaac/projects read `blocker `:664` | `save/logic-pro-mcp
+
+`modalAsViaAXDialog_set_clear`MainWindow ==-wt-538/Sources / `observedGone`:
+
+` | set/ path .- +LogicunPro [readableMCPIssue`/538 (`ChannelsMenu460Witness-461`) skips/AccessibilityChannel+ModalReconcHonestyTests.swift:22 Save | `File alertsManager.fileExists` |ile].swift(file)).:/// CreateUsers/delete//menus entirelyisaac/projects/logic- State A AND **Yes.** and returns incompletepro-mcp-wt- No pre-write `.538/Tests/LogicPro absence. Existing `completeModalMCPTests/Issue538Menunone`. Fail- fileReadIsClear` requireclosed, not anWitness + SaveHonesty `Tests.swift)– `.AXPress` success (23, invented sheet.
+
+none` **### :canand36 lie `.**,)un complete : →readable ([ A`52. does — |
+ not only become `!`Tracks.swift:1379performed|` ` /… `+actionProjectAttempt.swift State C; it **-:7531385` | `opened`
+- [Issue538,1522-1524BounceDialogViaMenu` |ModaldoesWitness**Tests become.swift “:164must click” on track`](/Users7](file:///Users create
+
+Witness AppleScript menu |/ sameisaac/projects/logic/isaac/projects/logic polls only script sees-pro-mcp-wt-pro-mcp-wt stop on `. “Bounce”-538/Sources/Logic-538/Tests/Logicgone` (`1073/“바ProMCP/Channels/AccessibilityProMCPTests/Issue538운`,ChannelModal `스+Witness125”TracksTests |0.swift.swift **);)–Yes164 [`ModalReconcile.swift:`). `.un.**8, Dialog : already170 open8– satisfies the1481-148readable` retries1709 —2`](/Users/isaac poll. Labels are hardcoded inside replacement sheet/ ENprojects//KOlogic.- |
+
+Savepro the witness, only `!performed`
+-as /-mcp-wt-538 budget (`- [Issue453AlertAcknowledge bounce are sheet/Sources/LogicProMCP1048BindingTests.swift:291]--adjacent1051`)./Channels/AccessibilityChannel+(file:///Users/isaac `project causalityModalReconcile.swift)).
+
+/projects/logic-pro-###.new holes BLOCKmcp`,ER continues- not — whilewt the Successful- 538538 gone empty //Tests/LogicProMCP/`blocker_set_clear shallow children `!modalObservationTests/Issue453AlertAcknowledge`IsComplete gate` (`325 treatedBindingTests.swift)–292.
+
+---
+
+### Gone as absence (absence-333`) — acknowledged alert gated and only exits did, no `observed ` on `blocker_set_ not settle)
+**SitesunknownSheetclear` before settled/Gone` / `blocker_:**
+` on the lastset_clear`
+
+**REA
+
+| Path |- [`findSheetDescendant attempt (`380PRODUCTION PATH.** Menu fixture UsesLookup- already`] `.407(/gone`).`Users Create/ as Stateisaac settled C// requiresprojects a/logic-pro closesA? | Requires **-mcpcomplete**- cleanwt-538 the classified `blocker_set_clear observation/Sources/LogicProMCP item and can` ( and no count/Channels/AccessibilityChannel+or equivalent complete add aModalReconcile.swift) `: increase (`1434 modal scan floating)? |
+|------|----------------------------986-1027-1446`).|------------------------------------------------`
+
+### — MAJOR `children — replacement (same--------------|
+| Re as : unreadable createResult` **concile `performed` |1560 settlesuccess). No Assert ` is advertised (`[]`performed**` `observed as a dialog always false) | Witness → noGone && blocker the user always sheet → `.absent`. must click
+
+```SetClear == false`. Today records a
+- [`complete1434:1441 nothing **separate** `completeModalReadIsClear`](/:/Users/ does onModalReadIsClear` |
+Users/isaac/projects/isaac/projects/logic- the honesty| `project.new` extraslogic-pro-mcp-pro-mcp-wt- file.
+
+ | No | `mandatorywt-538/Sources/538/Sources/LogicProTrackLogicMCP---ProSheet/
+
+GoneMCPChannels###`// MINChannels **AccessibilityORonly/Channel — `isDefinitiveAbsence+Tracks.swift
+        letAccessibilityChannel+ModalReconcile` is on the** if `blockerSet.swift) `:1473 blockingOrUnreadable = last right type; duplicateClear == true` (`:Modal.kind != .none-1482` +350`) |
+| Delete || !lastModal.modal — **one** snapshot merge note on A | No |ObservationIsComplete
+        merged.
+ `symbolicName`
+
+`is Two complete["- Createdialog settle_present"] =DefinitiveAbsence` is `.none` observes: ** on `AXHelpers blockingOrUnreadable
+       ; if blockingOrUnreadable {
+one** `observe.AXStatusError` ([            notModal `. mergedAfter["goneMutationwaiting`` |
+_ perfor |AX_ CreateuserHelpers A"].swift |: = No276 true |]
+1s slot One            return .success(Honest ([`Tracks.swift:136 complete `.none`;(file:///Users/isaac/projects/logic-proContract.encodeStateB(
+```4-1388 **not** the-mcp-wt-538
+
+`kind == Create`](/ witnessUsers’s/isaac//Sources/LogicProMCP .none` + `un `blocker_set_clearprojects/logic-pro-/Accessibility/AXHelpers.swiftreadableReason != nil` still`, and **mcp-wt-538/)– sets `dialognot** settledSources/LogicProMCP/_present`278 acrossChannels/AccessibilityChannel+Tracks and `waiting_for_):.swift twouser)). only abs`. `- `252merge05Reconc`ences / |
+
+ `-The25212`. ` Delete needsileExtras` correctlyinvalidUIElement` is ** 538 pairing is two ([not** absence with held forholds `reconc;` itTracks is.swift `:153 reconcile receipts,iled_modal_kind`isTransientDuringRebuild` (:1-1534 `project.new`, and delete and writes `reconc285–288,169 A. Create7-1716iled_modal_observation=) and separately A is the gap `axStatusIsBoundElementincomplete` (`1668`](/Users/isaac/: it neverGone` (:965- promotesprojects–167/9671).logic`),- sopro the- envelopemcp-wt-538/ `.gone` to A
+
+Modal contradicts itself:Sources/LogicProMCP/, but it will reconcileChannels/AccessibilityChannel+Tracks incomplete promote **duplicates observation a **single** complete** that predicate **and** “dialog.swift)).
+- Post none to as present, wait for-Create witness A while `axStatusIsDefinit: ` the user.”
+
+The a replacement sheet caniveAbsence` (:944 witnessAttempts4×: 1`, still appear–946) instead of `.error1 `s.isdelayDef loop: does init retry0ive`Absence; ([ after budget`Tracks.swift:129`. AX1-1295`](/ it stops andWindows **does notUsers/isaac/projects/ lies** use itlogic-pro-mcp- for about `- *why252*.05
+
+` (unsupportedwt-538/Sources/LogicProMCP/Channels/ → `**REPRODUCTION PATH** (AccessibilityChannel+Tracks.swift))failing test shapeaxWindowsReadFailed`, then immediate `complete already :877–880);Modal used at `ReadIsnoClearValue` ([`ModalReconcile.swift:1349` is empty `Issue538ModalWitnessTests` ~ (:-1353`](/875–876lineUsers/isaac/projects/logic-pro-mcp- 400)
+
+). Using the propertywt1-.538 Arrange window/ presentSources/; `AXSheetsLogicProMCP/Channels/ = on AXWindows would beAccessibilityChannel+ModalReconcile.swift the - wrong)).252 **
+
+call05Failed site`;**, ` notAXChildren` or children the wrong a descendant (`-25200`/` type.
+
+`symbolicName` role is-25204`/`- is on the same `-25200`25202` on the struct/`-25204`; host) stay un no `AXSheet (:readable. **Success`; no `294–314AXModal == of) and includes `invalidUI true` window.
+2. an empty childElement` and ` ` listcannotcreate duringCompleteTrack rebuildVia`. does EnvelopeMenu` after a successful extras use `symbolic not.**
+
+** TrackName`, not `diagnosticLabelREPRODUCTION PATH:** After Create-` (:77–79menu click (, host `AXChildren`). Test commentcount may returns `. stay at flat [Issuesuccess([])` for one).
+3538.Modal EachWitnessTests.swift: poll while the `observeModalAfterMutation`1198](file:/// New Track sheet is still being is `.none` + `Users/isaac/projects/ rebuiltlogicwindow-_;prosheet_ other- windowsreadmcp `_-failed` (wt-538/Tests/or `descendantAXModal == false`; menuLogicProMCPTests/Issue_ bar unselected538ModalWitnessTests.swift)–traversal_depth_cap`).. `completeModalReadIs1201 records the
+4. After four origin/main mergeClear == true polls, expect (` **` /cannotnot** `dialog create State AComplete` vs snake_case_present` / ` if the railwaiting ` already_diagnostic incrementedforLabel_`).user That`. expect Today. Same both is a ** are `true`, shape aslive String** `state= the depth-cap pairing compareB`, `reason=retry: test ([_exhausted`, `reconciled missing `symbolic`Issue538ModalWitnessTests_modal_kind`Name` → `.swift:2471-248 absent, `reconciled_nil == "5`](/Users/isaacmodal_observation=incomplete`.cannotComplete"` fails/
+
+.
+
+Deleteprojects** (`/RE173logicPRODUCTION8- PATHpro (-duplicatemcp-wt-538-1760`) does/Tests/LogicProMCP drift **not** set `waitingTests/Issue538ModalWitness).** Change only_for_user`; it `AXStatusTests.swift)), but is onlyError.isDefinitiveAbsence with retry a` to include `invalid-exhausted State **successful emptyUIElement`. Modal B.
+
+### Failed search is** tree not a found sheet sheet instead of a cap walk /
+
+Sheet `..
+
+ `---modal
+
+Main###Window` keep using the private BLOCKER — `dialogPresentfound` only when` / `window copy → testsHostsBlockingModal` can `AXRole == AXSheet` (` stay green while922 answer marker-923`, `100 “no dialog/other channels4-1005” from a partial walk treat `-25202` as`). AX
+**Where emptyWindows. Or the:** [`AXLogic/` reverseProAX:ElementsSheets change.swift`: failures177-218 are un only the private copyreadable or fall`](/Users/isaac/; `AXHelpers` testsprojects through./ Testslogic-pro- stay green.
+
+:` `488mcp-wt-538/-524Sources/LogicProMCP/modalMainWindow` already maps ``, `930Accessibility/AXLogicProElementsisDefinitiveAbsence`.swift).
+
+|-950`. → `.absent` (: Input |524
+
+ Conclusion–###525 |
+ Gone| without---| `---|blocker
+_|set_). Adding Direct `-25202` thereclear` does not certify `AXChildren would treat` a `- rebuilding clean or stop main window as “25205`/`-252 observation
+
+Bound `-25202` isno main window12` | `false` `.gone` and **.” Pinends (no sheet on with `AX that witness this window) |
+MainWindow` →** (`948- `-|967252 Direct02 children readable`, and sheet a`, `1041 sheet still on `AXWindows` nested under `-1047`, `107AXGroup` | ` (same3`). ` intentfalse` — **no descentblocker_ as :191** (`caseset_clear` is a3). .success: continue`) |
+ separate complete scan (`
+
+---
+
+### MINOR| Top134 — `#-level New Track **9-1353expect(kind != .informational`,windowAlert `**)`147 (` isAX3 liveModal- but ==148 weak true
+
+`,[ not `AXLogicProElementsDialogFilterTests.swift:AXDialog`/`AXSystem3`). `project.new`901](file:///UsersDialog`, no `AXSheet advances/isaac/projects/logic` child) | `false-pro-mcp-wt `mandatoryTrack-`538 — SheetGone` only when `538’/Tests/LogicProMCPblockerSetClear == true`Tests/AXLogicProElementss `topLevelDialog (`350-351DialogFilterTests.swift) —Read` *does`). Tests: replacement enum `!=`,* alert not see Bool this/. ([menu Pass gone`esModal forReconc `.ilenone.swift`,: `.unknownSheet`, `.blocking`, + unclear788-811`](/ etc. A setUsers/isaac/projects/ classifier that drops (`1496-155 the unreadable twologic-pro-mcp-7`, `156-button dialog towt-538/Sources/0-1611`); `.none` stillLogicProMCP/Channels/ Create/ passes. AssertAccessibilityChannel+ModalReconcile theDelete gone +.swift)) |
+| Child exact clear kind role ( `- (`252161054`-/`1631`, `1675-1692and `!action-25212` | skip candidate`).
+
+AfterAttempted`, already (search the first Create ** :902,).
+
+---
+
+**Notattempt**, `project a blocker:**.new` latches and `perform OK) |
+| Child role other only observes (`312()` does failure | `-323 runtrue` (fail-closed`). Gone + a) unclear complete |
+ scan| after AX every issuedWindows fail/malformed ( Create/Deletereplacement | New ` Tracktrue`, (/ackfail-closed) |
+
+Used or unreadable complete/Escape. State as scan) will A for tracks requires not press again “no modal a later complete `kind →” before synthetic keys == .none`, terminal ([`Tracks.swift:914 `mandatory_track_create-916 not`](/_ `.Usersungone/confirmed`.isaac` The/ State holes B are. ( That is fail-1) observationprojects/logic-pro- APIs emitmcp-wt-538/closed anti-double `.gone` alone-create, not a falseSources/LogicProMCP/, (2) `projectChannels/AccessibilityChannel+Tracks.new` aliases.swift clear)).
+
+**REPRODUCTION→“ PATH:** Windowgone,” (3) several `AXModal == tests false cannot A`, see. ` a ObservationAX stillSheets runs == to -252 budget.
+
+05###`, New `AXStatusError` split (HEAD pairing regression; Track `AXSheet, (4) the `` under one CI script still missesorigin/main` not `AXGroup` (the readable the documented String deep-sheet here)
+
+|-absence form fixture at Mapping and some Bool [`Issue538ModalWitnessTests-typed | `-25202.swift:607` invalid-UI646Element | `- `==`.`](/Users/isaac/25204` cannotprojects/logic-pro-Complete | `-25205`mcp-wt-538/ / `-25212` |
+Tests/LogicProMCPTests|---|---|---|---|
+/Issue538ModalWitnessTests| `AXHelpers.swift)). `dialog.isDefinitiveAbsence` `276-278Present()` | no | == false` while `read noModal |Signals yesAnd |
+Alert| LocalTarget` is `axStatusIsDefinit `.mandatoryNewTrackiveAbsence` `944-946`. Second fixture: sole window is` | no | no | yes (duplicate) |
+| `isTransient modalDuringRebuild` `285- New Track (288` | **not AXyes** | yes | no |
+Dialog|, Bound no witness AX `SheetaxStatusIsBoundElementGone` child) → ` `965-967` |dialogPresent() == **`.gone`** | `. false`.unreadable` | n
+
+---
+
+### MAJOR —/a (not `kind used) |
+| Host == .none` from failed reads sheet ` (cleanchildrenResult` ` only if the982-985` | `. caller ignores `unreadableReason`)
+Theseunreadable` (retry) | `.unreadable` **do** | `.absent` |
+
+Modal produce `. reconcile does **not** callnone`; `isTransientDuringRebuild`. they set Marker delete ` stillunreadable doesReason (``Accessibility so State A shouldChannel+MarkerDelete.swift: not fire.517`). Wid They **areening `isDefinitive** “no blocking windowAbsence` to include `-25202` would make a host” if anyone class `-25202` look like “ifies `readModalSignals()` aloneno sheet” (false ([` cleanModal). NarrowReconcile.swift:418-ing `isTransientDuringRebuild` would421`](/ change marker-delete settle, not the Users/isaac/projects/538 witnesslogic-pro-mcp-. Onwt-538/Sources/ this tree theLogicProMCP/Channels/ two `isDefinitiveAbsence` copies stillAccessibilityChannel+ModalReconcile match; bound.swift `.gone) drops` is the local reason — production mutate and intentional (` pathsIssue use `And538ModalWitnessTests.swiftAlertTarget`).
+
+| Site:37-56 | Trigger`). `. | Result |
+|git` in---|---|---|
+| [` this worktree was not readable,ModalReconcile.swift so a post:-merge460 **-461`](/delta vsUsers/isaac/projects/ `origin/main`**logic-pro-mcp- is unverified.wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift) | `AXMainWindow` / arrange `.unreadable` | `unreadableModalSignals` → flags all false → `.none` **and skips other hosts** |
+| [`ModalReconcile.swift:531-537`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift) | arrange `.unreadable` mapped to `.malformedAttribute` | same short-circuit |
+| [`ModalReconcile.swift:750-754`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift) | AXWindows success `.absent` / `.malformed` | unreadable, not empty |
+| [`ModalReconcile.swift:757-758,877-880`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift) | AXWindows failure except `noValue` (incl. `-25205`) | unreadable |
+| [`ModalReconcile.swift:773-783`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift) | AXModal success `nil` / type mismatch / **any** AXModal failure including `-25205`/`-25212` | unreadable (not false) |
+| [`ModalReconcile.swift:980-985,997-1001,1016-1027`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift) | children fail (not `-25205`/`-25212`); role fail while walking; depth cap `:980` | unreadable / incomplete → `.none` + reason |
+| [`ModalReconcile.swift:651-652,1198-1199`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift) | stray-menu children / `AXSelected` fail | `.none` + `strayMenuReadFailed` |
+| [`ModalReconcile.swift:514-515`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift) | no app root | `.none` + `appRootUnavailable` |
+
+**REPRODUCTION PATH:** Already pinned in [`Issue538ModalWitnessTests`](/Users/isaac/projects/logic-pro-mcp-wt-538/Tests/LogicProMCPTests/Issue538ModalWitnessTests.swift) (`depthCapIsFailClosed`, `malformedChildrenAreFailClosed`, `indeterminateAXModalFailsClosed`, `unreadableStrayMenuFailsClosed`, `axWindowsUnsupportedIsNotNoOtherHosts`). Mutation: `classify(readModalSignals()) == .none` without checking `modalObservationIsComplete`.
+
+---
+
+### MAJOR — AXWindows `noValue` (`-25212`) is “no windows / no blocker”
+**Where:** [`ModalReconcile.swift:755-756,875-876`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift).
+
+Contract treats `-25212` as ANSWER. Here it is **empty search space**: `topLevelDialogRead → .none`, `anyWindowSheetLookup → .absent`. If a sheet host still exists and AXWindows says `noValue`, that is a clean desk.
+
+**REPRODUCTION PATH:** `AXMainWindow` found with an `AXSheet` child; app `AXWindows` returns `-25212`. Main-window sheet scan still sees the sheet. Invert: **no** `AXMainWindow`, `AXWindows == -25212`, sheet only reachable via windows list → `.none` + complete.
+
+---
+
+### MAJOR — `project.new` treats `.informationalAlert` / `.strayMenu` as non-blocking
+**Where:** [`Project.swift:421-422`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+Project.swift) `case .none, .informationalAlert, .strayMenu: break` then certifies the arrange window.
+
+**REPRODUCTION PATH:** After Create, complete read is `.informationalAlert` (one-button AXDialog). Observer still emits `created_project_window_observed` State B. Not `kind == .none`, but it settles the write while a blocker is present.
+
+---
+
+### MINOR / correctly fail-closed (not “no blocker”)
+- **AXSheets `-25205`:** never absence; always fall through to descendants ([`ModalReconcile.swift:909-934`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift)). Tests: `structuralAbsenceStatusesRemainClean`, `uninformativeAXSheetsOutcomesReachDescendantSheet`.
+- **AXSheets role fail while searching:** `continue`, then descendants (`:924-927`) — search, not verdict.
+- **AXModal fail:** unreadable, not false (`:778-783`).
+- **Sheet AXModal:** unused for classify; bound **alert** witness uses AXModal (`:1112-1128`); bound **sheet** uses AXRole (`:1038-1051`).
+- **`-25202` on captured element:** `.gone` only ([`ModalReconcile.swift:965-967,1041-1047`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift)). Other statuses stay `.unreadable`. Not a blocker-set answer.
+- **`isDialogWindow` / `isBlockingDialogWindow`:** failed/missing subrole → not a dialog ([`AXLogicProElements.swift:430-448`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Accessibility/AXLogicProElements.swift)) — used for arrange filtering / `dialogPresent` first hop, not 538’s AXModal scan.
+- **`blockingDialogTarget()`** `AXWindows ?? []` ([`:252-257`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Accessibility/AXLogicProElements.swift)) → `nil` (“no target”). 538 classify uses `topLevelDialogRead`, not this.
+- **`strayMenu`:** menu-bar / children `-25205`/`-25212` → `.none` ([`ModalReconcile.swift:1179-1205`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift)) — ANSWER of no menu.
+- **`classify` New Track walk:** `readModalSignals(from:)` + `findAllDescendants(..., maxDepth: 6)` via flattening `getChildren` ([`:670-672`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift)). Missed buttons → `unknownSheet` / description-only mandatory, **not** `.none` (`sheetPresent: true`).
+- **`seenUnknownBlockerSignals`:** fabricates a sheet so classify is `.unknownSheet`, not `.none`.
+
+There is no function named `classifyNewTrack`. Classification is `ModalReconciliation.classify` + `readModalSignals(from:)`.
+
+---
+
+### Pairing: gone ∧ `blocker_set_clear` before settled?
+
+**Gone alone cannot settle.** `performed` is hard-`false` ([`ModalReconcile.swift:1365,1401,1424,1451`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift)). Tests reject gone-as-performed ([`Issue538ModalWitnessTests.swift:1614-1733`](/Users/isaac/projects/logic-pro-mcp-wt-538/Tests/LogicProMCPTests/Issue538ModalWitnessTests.swift)). Gone + incomplete scan ⇒ `blocker_set_clear == false` ([`:2471-2485`](/Users/isaac/projects/logic-pro-mcp-wt-538/Tests/LogicProMCPTests/Issue538ModalWitnessTests.swift)).
+
+**They are not AND-ed for settlement.**
+- Witness: `blocker_set_clear` is a **separate** `completeModalReadIsClear` write, always attached after the bound poll ([`ModalReconcile.swift:1349-1353,1388-1392,1416-1419,1439-1442`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+ModalReconcile.swift)).
+- `project.new` sets `mandatoryTrackSheetGone` from **`blockerSetClear == true` only** — `observedGone` is not required ([`Project.swift:350-351`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+Project.swift)).
+- Create/delete State A ignore the bound gone witness and use a later `kind == .none && complete` observe ([`Tracks.swift:1370-1388,1641-1716`](/Users/isaac/projects/logic-pro-mcp-wt-538/Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift)).
+
+**REPRODUCTION PATH (clear without gone):** After Create, bound `AXRole` stays `-25204` (unreadable, not gone); host `AXChildren` is a successful empty list (or the sheet is missed). Envelope: `observations.unreadable_sheet_-25204 ≥ 1`, `gone` absent, `blocker_set_clear: true` → `project.new` treats the sheet as gone. Inverse (gone without clear) is already tested and does **not** settle.The create path can certify State A from a single clean absence. I’m confirming that against the name extractor and the settle loop before I write the verdict.Reviewed `origin/main...HEAD` at `1cdc65fc` (local `main` is stale; the mergeable 538 delta is 34 files). The origin/main merge left `isDefinitiveAbsence` / `symbolicName` on `AXStatusError` and did not move them onto `AXActionError`. `-25202` on a **captured** element is `.gone` again; every other status stays `.unreadable`. That pairing is implemented on the reconcile *receipt*. It is **not** what certifies State A on track create.
+
+## Evidence
+
+**Who can emit State A**
+
+The reconciler never does. `perform()` hard-codes `performed: false` after Create / Delete / ack / Escape (`AccessibilityChannel+ModalReconcile.swift:1359–1452`). `project.new` ends in State B (`AccessibilityChannel+Project.swift:471, 483`).
+
+The only 538 modal paths that emit A:
+
+| Path | Site | Gate |
+|---|---|---|
+| `createTrackViaMenu` → `verifyTrackCreation` | `AccessibilityChannel+Tracks.swift:1400` | count increased **and one** `kind == .none && complete` observe |
+| `defaultDeleteTrack` | `AccessibilityChannel+Tracks.swift:1731` | count decreased **and two** consecutive clean observes |
+
+Delete uses `deletionCleanObservationStreakIsSettled` (`>= 2`, `:1531–1534`). Create calls `deletionModalObservationIsSettledClean` once and returns immediately (`:1379–1400`). It does not read `observedGone` or the action-witness `blocker_set_clear`.
+
+**Gone vs `blocker_set_clear`**
+
+`boundSheetWitnessObservation` maps only `-25202` on the captured element to `.gone` (`:965–1051`). `pollBoundSheetWitness` **stops on `.gone`** (`:1073`). `perform()` then always runs a separate `completeModalReadIsClear` and writes `blocker_set_clear` (`:1349–1353` and the other three actions). `project.new` treats the sheet as gone only when `blockerSetClear == true` (`Project.swift:350–351`), never from `observedGone`. Delete State A uses two complete `.none` observes, not `.gone`.
+
+So: gone-alone cannot set `performed` or delete-A. Create-A never looks at gone — it looks at **one** complete `.none`. That is the hole.
+
+**Merge**
+
+`AXStatusError.isDefinitiveAbsence` is only `-25205` / `-25212` (`AXHelpers.swift:276–278`). `isTransientDuringRebuild` still includes `-25202` (`:285–288`) and is used by marker-delete, not by the 538 bound witness. Modal reconcile duplicates the absence predicate locally (`:944–946`) instead of calling the property.
+
+---
+
+## Findings
+
+### BLOCKER — Create State A from a single unsettled absence
+`AccessibilityChannel+Tracks.swift:1379–1400`
+
+Absence must settle. Delete already requires two clean polls. Create certifies A on the first `observeModalAfterMutation` that is `.none` + complete, with no sleep before attempt 0. After Create, Logic rebuilds: the bound sheet is `-25202` (`.gone`), `AXChildren` can be a successful `[]` for one poll, and a replacement New Track sheet can appear on the next read. That one empty snapshot is enough for A.
+
+This is not “gone ⇒ A”. It is “one complete none ⇒ A”, which is the same pairing the depth-cap test exists to protect (`Issue538ModalWitnessTests.swift:2477–2485`).
+
+**REPRODUCTION PATH**
+
+1. Fake arrange + 1 `AXLayoutItem` + post-menu mandatory New Track sheet (Create / Cancel, Cancel disabled).
+2. Menu press attaches the sheet. Do not add the new header yet.
+3. Create press: bound sheet `AXRole` → `-25202`; add the new header; do **not** attach a replacement on that turn.
+4. `verifyTrackCreation` attempt 0 (no sleep) sees count+1 and complete `.none` → today’s code returns A at `:1400`.
+5. On the next modal read, attach a replacement `AXSheet` “New Track”.
+6. Expect: not A. Actual: A already returned.
+
+Same shape with host `childrenResult == .success([])` for one poll instead of a missing replacement (`ModalReconcile.swift:986–1027`).
+
+---
+
+### MAJOR — Create State A from a count this write did not cause
+`AccessibilityChannel+Tracks.swift:1376–1400`, `AXLogicProElements+Tracks.swift:364–376`
+
+A is only `after.count > before.count` plus that one clean modal. Unreadable-before is blocked. A **successful under-count** is not.
+
+`enumerateTrackHeaderRows` returns only `AXLayoutItem` children once any exist. A pre-existing header that is still an `AXGroup` is invisible to the snapshot, then appears as a +1 after the menu.
+
+**REPRODUCTION PATH**
+
+1. Rail: `Existing` (`AXLayoutItem`) + `Already Created` (`AXGroup`).
+2. `createTrackViaMenu`. Pre-write count = 1.
+3. Menu `AXPress` returns true and does not mutate the rail.
+4. First post-write read: set `Already Created` role to `AXLayoutItem`. No sheet. Complete `.none`.
+5. Expect: not A. Actual: A, `observed_delta: 1`.
+
+Second fixture: leftover mandatory New Track already up. Preflight does not click Create (`:1265`). Menu press may no-op. `reconcileAfterMutation` clicks the **pre-existing** Create. Count +1, one clean none → A for the menu op.
+
+---
+
+### MAJOR — `observed_track_name: "Untitled"` was not read
+`AXValueExtractors.swift:583–584` → `Tracks.swift:1396`
+
+`extractTrackName` returns `("Untitled", false)` when title / description / text field are unread. `liveIdentityBacked` is dropped. State A extras publish the literal as if the header named itself.
+
+**REPRODUCTION PATH**
+
+Create-track fixture: rail grows by one `AXLayoutItem` with no `AXTitle` / `AXDescription` / name field. Assert State A does not carry `observed_track_name == "Untitled"` (or require a live-identity flag). Today `Issue538TrackCreationObservationTests.swift:121–189` only pins type.
+
+`observed_track_index` is the Swift `enumerated()` ordinal (`:1457–1458`), not an AX identifier. Same extras blob.
+
+---
+
+### MAJOR — `new_track_dialog_auto_confirmed: true` is a press attempt
+`ModalReconcile.swift:1493–1498, 1665–1667`; `Tracks.swift:1356, 1390–1400`
+
+`actionAttempted` is true when `AXPress` **fails**. `performed` stays false. Create State A still merges the *action* extras (`verificationReconcileOutcome` is the post-menu reconcile, not the later observe).
+
+**REPRODUCTION PATH**
+
+New Track sheet. Create `AXPress` returns `-25202`. Sheet later closes for another reason. Count increases. Later observe is `.none`+complete. Envelope: State A + `new_track_dialog_auto_confirmed: true`.
+
+---
+
+### MAJOR — `dialogPresent` can answer “no blocking window” from a failed or partial walk
+`AXLogicProElements.swift:177–218`
+
+538 taught the reconciler that `AXModal` answers blocking (`ModalReconcile.swift:768–824`). `dialogPresent` still does not read `AXModal`. It is: flattening `isBlockingDialogWindow` (subrole `AXDialog`/`AXSystemDialog`) **or** a **direct** `AXSheet` child.
+
+| Input | `dialogPresent` |
+|---|---|
+| Child role / AXWindows failure (not `-25205`/`-25212`) | `true` (fail-closed) |
+| Direct children `-25205`/`-25212` | `false` |
+| Sheet nested under `AXGroup` (no descent) | `false` |
+| Top-level New Track **window** (`AXModal == true`, not Dialog/SystemDialog, no AXSheet child) | `false` |
+| Subrole unreadable via `getAttribute` → nil, no direct sheet | `false` |
+
+Used as the no-modal gate before synthetic keys (`Tracks.swift:914–916`) and by dispatchers. Reconciler `topLevelDialogRead` **does** see the modal New Track window.
+
+**REPRODUCTION PATH**
+
+1. Window `AXModal == false`, `AXSheets == -25205`, New Track `AXSheet` under one `AXGroup` (fixture at `Issue538ModalWitnessTests.swift:607–646`). `dialogPresent() == false` while `readModalSignalsAndAlertTarget` is `.mandatoryNewTrack`.
+2. Sole window is modal New Track (not AXDialog, no AXSheet child) → `dialogPresent() == false`.
+
+---
+
+### MAJOR — “no blocking window” sites (reconciler)
+
+These produce `kind == .none`. State A is supposed to also require `modalObservationIsComplete`. They are clean-desk answers if that flag is ignored (`readModalSignals()` drops it, `:418–421`; production mutate paths use `AndAlertTarget`).
+
+| Site | What becomes “none” |
+|---|---|
+| `ModalReconcile.swift:460–461, 531–537` | Unreadable main/arrange window → `unreadableModalSignals`, **skips other hosts** |
+| `:750–754` | AXWindows success `.absent` / `.malformed` → unreadable (not empty) |
+| `:757–758, 877–880` | AXWindows failure except `noValue`, including `-25205` → unreadable |
+| `:755–756, 875–876` | AXWindows `-25212` → empty search space (ANSWER, but empty) |
+| `:773–783` | AXModal nil / type mismatch / any failure including `-25205`/`-25212` → unreadable, **not** false |
+| `:980–1027` | Children fail (not `-25205`/`-25212`); role fail while walking; depth cap → unreadable/incomplete |
+| `:986` | Children **success `[]`** → `.absent` (see BLOCKER) |
+| `:651–652, 1179–1205` | Stray-menu fail → `.none` + reason; `-25205`/`-25212` on menu bar → no menu |
+| `Project.swift:421–422` | `.informationalAlert` / `.strayMenu` treated as non-blocking for the arrange-window witness |
+
+AXSheets `-25205` correctly falls through to descendants (`:909–934`). `-25202` on a **search** node stays unreadable, not gone.
+
+**REPRODUCTION PATH (AXWindows `noValue` as empty world):** no `AXMainWindow`, app `AXWindows == -25212`, sheet only reachable via the windows list → `.none` + complete.
+
+---
+
+### MAJOR — unreadable create settle is advertised as a dialog
+`Tracks.swift:1434–1441`
+
+```1434:1441:Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift
+        let blockingOrUnreadable = lastModal.kind != .none || !lastModal.modalObservationIsComplete
+        merged["dialog_present"] = blockingOrUnreadable
+        if blockingOrUnreadable {
+            merged["waiting_for_user"] = true
+            return .success(HonestContract.encodeStateB(
+```
+
+`kind == .none` + `unreadableReason != nil` still sets `dialog_present` and `waiting_for_user`. `mergeReconcileExtras` honestly writes `reconciled_modal_observation=incomplete` (`:1668–1671`). The envelope contradicts itself and stops the create as “wait for the user.”
+
+**REPRODUCTION PATH**
+
+Arrange present; `AXSheets = -25205`; a descendant role is `-25200`; no sheet; no `AXModal == true` window. After a successful Track-menu click, four observe polls stay `.none` + `window_sheet_read_failed`. Expect not `dialog_present` / `waiting_for_user`. Actual: both true, State B `retry_exhausted`.
+
+Create also calls `reconcileAfterMutation` **once** (`:1291–1295`, `witnessAttempts: 1`) then only observes. A New Track sheet that appears after that one shot, or a top-level modal whose **subrole** fails (`:820–824` → `.blocking` → `unknownSheet`), never gets a Create retry. That wedges; it does not emit A.
+
+---
+
+### Q4 — button pressed vs button reported
+
+**No identity rematch on the 538 press path.** Create / Delete press the captured element (`:1489–1515`). Alert re-reads, requires `CFEqual` + same title, then still presses `classifiedButton.element` (`:1548–1596`). No ordinal window lookup, no `click button 1`.
+
+**MINOR** — `findAllDescendants` + `.first` + `hasPrefix("Delete ")` (`:670–682`) can bind “Delete Tracks Only” ahead of “Delete Tracks and Content”. Pressed element == stored element; the wire label is still `confirm_delete`.
+
+**MINOR** — exhausted create overwrites extras from `observeModalAfterMutation` (`:1415–1424`), so a real Create press can ship as `dialog_confirmation_attempted: true` + `reconciled_action: "none"`.
+
+---
+
+### Q2 — other fields (not read from Logic)
+
+| Field | What it actually is | On A/B? |
+|---|---|---|
+| `mandatory_track_created` | `blockerSetClear` **and** flattening `allTrackHeaders().count > 0` (`Project.swift:170–175, 427–432`) — not a +1 on the new window | State B only |
+| `modal_reconciliation_witness.polls` / `observations` | Local poll histogram (`ModalReconcile.swift:192–234`) | A/B when a witness exists |
+| `requested_delta` | Constant `1` / `-1` | A and B |
+| `observed_window_titles` | `AXWindows ?? []` then titles (`Project.swift:202–209`) | B |
+
+`track_count_before` / `after` / `observed_delta` on create/delete use `allTrackHeadersRead` and `NSNull` when unread. Those counts are not invented.
+
+---
+
+### Q6 — tests that cannot fail
+
+In the 538/453/dialog/status files I did **not** find a top-level `#expect(==/!=)` with a `Bool`/`Bool?` operand, and I did **not** find `(dict["state"] as? String ?? "nil") != "A"`. Those files use `#expect(x)` / `#expect(!x)`, `try #require` then a bare expect, and String/enum/Int `==`.
+
+`Scripts/ci-forbid-dead-expect.sh` (9c18637f) still will not catch:
+
+- `#expect((dict["state"] as? String ?? "nil") != "A")` — missing key passes
+- `#expect(dict["state"] as? String != "A")` — `nil != "A"` passes
+- `#expect(outcome.performed == outcome.actionAttempted)` — two different Bool members
+
+Stale comment at `AXLogicProElementsDialogFilterTests.swift:377` still says `#expect(!(bool))` is dead. It is not; `:379` is live.
+
+Honesty tests that only assert `!performed` (`Issue538MenuWitnessHonestyTests.swift:22–23`; `Issue538ModalWitnessTests.swift:1647–1648`) cannot see a gone→settled regression because `performed` is hardcoded false. The pairing is locked by `:1557`, `:1611`, `:1778`, `:2482` — not by those honesty tests.
+
+---
+
+## Pairing verdict (the question you asked to verify)
+
+| Path | Gone alone settles? | `blocker_set_clear` (or equivalent complete scan) required? |
+|---|---|---|
+| Reconcile `performed` | No (always false) | Separate `completeModalReadIsClear` always recorded |
+| `project.new` extras | No | **Only** `blockerSetClear == true` (ignores `observedGone`) |
+| Delete A | No | Two complete `.none` observes |
+| Create A | No | **One** complete `.none` — **not** settled, **not** AND-ed with gone |
+
+`-25202` on the captured element is `.gone`. That is correct and tested (`Issue538ModalWitnessTests.swift:37–56, 2562, 2605`). It is **not** AND-ed with `blocker_set_clear` before create State A, because create State A never looks at either witness field.
+
+---
+
+VERDICT: DO NOT MERGE

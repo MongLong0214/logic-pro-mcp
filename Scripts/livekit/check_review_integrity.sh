@@ -21,9 +21,36 @@ set -uo pipefail
 F="${1:?usage: check_review_integrity.sh <review-output>}"
 DAMAGED=0
 fail() { echo "-> REVIEW INTEGRITY FAIL: $1"; DAMAGED=1; }
-undetermined() { echo "-> REVIEW INTEGRITY UNDETERMINED: $1"; exit 2; }
+# "cannot be checked" only stands when nothing else already answered the question. A spliced file usually
+# loses its count line as well, and exiting 2 there would report an open question about a file whose damage
+# has already been seen.
+undetermined() {
+    echo "-> REVIEW INTEGRITY UNDETERMINED: $1"
+    [ "$DAMAGED" -eq 0 ] || return 0
+    exit 2
+}
 
 [ -s "$F" ] || undetermined "empty output — nothing to check"
+
+# --- splice markers first: what interleaving leaves that prose never does ---------------------------
+# These run BEFORE the count checks on purpose. A spliced file often loses its count line too, and
+# reporting "integrity undetermined" for a file whose damage is visible understates what is known.
+# Observed damage outranks an unanswerable question.
+MIDHASH=$(grep -cE '.+###' "$F")
+[ "$MIDHASH" -eq 0 ] || fail "$MIDHASH line(s) carry '###' inside the line — a heading was spliced into other text"
+# Fenced blocks are skipped, fence lines included: a fence is three backticks, so it is ALWAYS odd, and
+# code legitimately contains unpaired backticks. Without this every review carrying a reproduction command
+# was called damaged — and this check's failure path is "discard the verdict", the same decision that
+# nearly threw away thirteen findings including a blocker. A false alarm here costs as much as a miss.
+#
+# Known blind spot, stated rather than papered over: interleaving that falls entirely inside a fenced
+# block is invisible to this signal. The mid-line `###` check and the ordinal sequence cover that case.
+ODD=$(awk '
+  /^[[:space:]]*```/ { infence = !infence; next }
+  !infence           { n = gsub(/`/, "`"); if (n % 2 == 1) c++ }
+  END                { print c+0 }
+' "$F")
+[ "$ODD" -eq 0 ] || fail "$ODD line(s) have an unbalanced code span — text was cut mid-token"
 
 # --- ordinals: the primary count, because they survive a lost tail ---------------------------------
 # Each finding heading carries `[k/N]`. A missing middle finding shows as a gap (1,2,4) and a lost tail
@@ -54,10 +81,6 @@ VERDICTS=$(grep -cE '^`?VERDICT: (MERGE|DO NOT MERGE)' "$F")
 # --- splice markers: what interleaving leaves that prose never does --------------------------------
 # Measured on the real pair, same minute and flags: corrupted 12 mid-line '###' and 142/488 odd-backtick
 # lines; its clean sibling 0 and 0.
-MIDHASH=$(grep -cE '.+###' "$F")
-[ "$MIDHASH" -eq 0 ] || fail "$MIDHASH line(s) carry '###' inside the line — a heading was spliced into other text"
-ODD=$(awk '{n=gsub(/`/,"`"); if (n%2==1) c++} END {print c+0}' "$F")
-[ "$ODD" -eq 0 ] || fail "$ODD line(s) have an unbalanced code span — text was cut mid-token"
 
 [ "$DAMAGED" -eq 0 ] || {
     echo
