@@ -216,6 +216,9 @@ import Testing
 }
 
 @Test func testAXLogicProElementsControlBarCheckboxesAndLocatorSliders() {
+    // Mutations this rejects: restore the historical four-level Control Bar slider scan, or replace
+    // `playheadPositionGroupLabel` with the generic `playheadPositionFieldLabel`. The live Logic
+    // 12.3 components can be deeper than that cutoff, and a generic Position group is not their owner.
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(320)
     let window = builder.element(321)
@@ -224,12 +227,34 @@ import Testing
     let cycleDescription = builder.element(324)
     let barSlider = builder.element(325)
     let beatSlider = builder.element(326)
+    let positionOuter = builder.element(327)
+    let positionMiddle = builder.element(328)
+    let positionInner = builder.element(329)
+    let playheadPosition = builder.element(330)
+    let positionComponents = builder.element(331)
+    let unrelatedPosition = builder.element(332)
+    let unrelatedBar = builder.element(333)
+    let unrelatedBeat = builder.element(334)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setChildren(window, [controlBar])
     builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
     builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
-    builder.setChildren(controlBar, [recordTitle, cycleDescription, barSlider, beatSlider])
+    builder.setChildren(controlBar, [recordTitle, cycleDescription, unrelatedPosition, positionOuter])
+    builder.setAttribute(unrelatedPosition, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(unrelatedPosition, kAXDescriptionAttribute as String, "Position")
+    builder.setChildren(unrelatedPosition, [unrelatedBar, unrelatedBeat])
+    builder.setAttribute(unrelatedBar, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setAttribute(unrelatedBar, kAXDescriptionAttribute as String, "Bar")
+    builder.setAttribute(unrelatedBeat, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setAttribute(unrelatedBeat, kAXDescriptionAttribute as String, "Beat")
+    builder.setChildren(positionOuter, [positionMiddle])
+    builder.setChildren(positionMiddle, [positionInner])
+    builder.setChildren(positionInner, [playheadPosition])
+    builder.setAttribute(playheadPosition, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(playheadPosition, kAXDescriptionAttribute as String, "Playhead Position")
+    builder.setChildren(playheadPosition, [positionComponents])
+    builder.setChildren(positionComponents, [barSlider, beatSlider])
 
     builder.setAttribute(recordTitle, kAXRoleAttribute as String, kAXCheckBoxRole as String)
     builder.setAttribute(recordTitle, kAXTitleAttribute as String, "Record")

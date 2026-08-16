@@ -13,8 +13,9 @@ struct Issue108Tests {
 
     private actor StubTransportChannel: Channel {
         nonisolated let id: ChannelID = .accessibility
-        let readbackPosition: String
-        init(readbackPosition: String) { self.readbackPosition = readbackPosition }
+        let readbackPositions: [String]
+        private var readbackIndex = 0
+        init(readbackPositions: [String]) { self.readbackPositions = readbackPositions }
         func start() async throws {}
         func stop() async {}
         func healthCheck() async -> ChannelHealth { .healthy(detail: "stub") }
@@ -27,8 +28,14 @@ struct Issue108Tests {
                 // the dispatcher decodes with — a hand-written fractional-seconds
                 // date (".000Z") fails strict .iso8601 decoding on the CI
                 // Foundation, making liveTransportState return nil.
+                let index = min(readbackIndex, readbackPositions.count - 1)
+                readbackIndex += 1
                 var state = TransportState()
-                state.position = readbackPosition
+                state.position = readbackPositions[index]
+                state.positionReadback = TransportPositionReadback(
+                    value: readbackPositions[index],
+                    observedComponents: TransportPositionComponent.allCases
+                )
                 state.lastUpdated = Date(timeIntervalSince1970: 0)
                 let encoder = JSONEncoder()
                 encoder.dateEncodingStrategy = .iso8601
@@ -48,7 +55,9 @@ struct Issue108Tests {
     @Test("mmc_locate(bar) verifies the playhead via transport-state read-back")
     func mmcLocateVerifies() async throws {
         let router = ChannelRouter()
-        await router.register(StubTransportChannel(readbackPosition: "5.1.1.1"))
+        // State A needs a measured change across the write boundary, not merely a matching
+        // post-read that may have predated this locate request.
+        await router.register(StubTransportChannel(readbackPositions: ["1.1.1.1", "5.1.1.1"]))
         let result = await MIDIDispatcher.handle(
             command: "mmc_locate", params: ["bar": .int(5)], router: router, cache: StateCache()
         )
@@ -63,7 +72,7 @@ struct Issue108Tests {
     @Test("mmc_locate(bar) fails closed when the playhead does not land")
     func mmcLocateMismatchFailsClosed() async throws {
         let router = ChannelRouter()
-        await router.register(StubTransportChannel(readbackPosition: "9.1.1.1"))
+        await router.register(StubTransportChannel(readbackPositions: ["1.1.1.1", "9.1.1.1"]))
         let result = await MIDIDispatcher.handle(
             command: "mmc_locate", params: ["bar": .int(5)], router: router, cache: StateCache()
         )

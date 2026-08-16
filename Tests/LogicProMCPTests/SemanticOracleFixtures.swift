@@ -776,13 +776,21 @@ enum SemanticOracleFixtures {
                 {"success":true,"verified":true,"state":"A",\
                 "operation":"nav.delete_marker","requested_index":1,\
                 "target_name":"Verse","target_position":"5.1.1.1",\
+                "prewrite_marker_identities":["5:Intro7:1.1.1.1","5:Verse7:5.1.1.1","6:Chorus8:12.1.1.1"],\
                 "target_position_unique":true,"position_evidence_canonical":true,\
                 "marker_count_before":3,"write_attempted":true,\
                 "readback_settled":true,"marker_count_after":2,\
                 "expected_survivor_position_multiset":"7:1.1.1.18:12.1.1.1",\
                 "observed_survivor_position_multiset":"7:1.1.1.18:12.1.1.1"}
                 """,
-            readback: "{}"
+            readback: """
+                {"source":"ax_live","readable":true,"verified_empty":false,
+                "position_multiset":"7:1.1.1.18:12.1.1.1","positions_canonical":true,
+                "data":[
+                  {"id":0,"name":"Intro","position":"1.1.1.1","position_source":"parser","is_canonical":true},
+                  {"id":2,"name":"Chorus","position":"12.1.1.1","position_source":"parser","is_canonical":true}
+                ]}
+                """
         ),
         // defaultRenameMarker post-write path: observed_name == requested_name.
         .navigateRenameMarker: SemanticOracleFixture(

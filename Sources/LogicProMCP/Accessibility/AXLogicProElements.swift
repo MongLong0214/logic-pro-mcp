@@ -9,23 +9,34 @@ enum AXLogicProElements {
         let logicProPID: @Sendable () -> pid_t?
         let ax: AXHelpers.Runtime
         let executeAppleScript: @Sendable (String) async -> ChannelResult
+        /// A timeout-aware variant for routes whose bounded UI protocol needs more than the
+        /// channel default. Test runtimes that only inject `executeAppleScript` automatically
+        /// retain control of this seam.
+        let executeAppleScriptWithTimeout: @Sendable (String, TimeInterval) async -> ChannelResult
 
         init(
             logicProPID: @escaping @Sendable () -> pid_t?,
             ax: AXHelpers.Runtime,
             executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
                 await AppleScriptChannel.executeAppleScript($0)
-            }
+            },
+            executeAppleScriptWithTimeout: (@Sendable (String, TimeInterval) async -> ChannelResult)? = nil
         ) {
             self.logicProPID = logicProPID
             self.ax = ax
             self.executeAppleScript = executeAppleScript
+            self.executeAppleScriptWithTimeout = executeAppleScriptWithTimeout ?? { script, _ in
+                await executeAppleScript(script)
+            }
         }
 
         static let production = Runtime(
             logicProPID: { ProcessUtils.logicProPID() },
             ax: .production,
-            executeAppleScript: { await AppleScriptChannel.executeAppleScript($0) }
+            executeAppleScript: { await AppleScriptChannel.executeAppleScript($0) },
+            executeAppleScriptWithTimeout: { script, timeout in
+                await AppleScriptChannel.executeAppleScript(script, timeout: timeout)
+            }
         )
     }
 

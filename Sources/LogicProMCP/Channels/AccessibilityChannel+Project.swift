@@ -832,9 +832,15 @@ extension AccessibilityChannel {
     /// | non-nil      | open / closed      | `enumerateMarkers(in: area)` runs all 3 strategies |
     static func defaultGetMarkers(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
         if let listWindow = AXLogicProElements.findMarkerListWindow(runtime: runtime) {
-            return encodeResult(AXLogicProElements.enumerateMarkersFromListWindow(
-                listWindow, runtime: runtime.ax
-            ))
+            switch AXLogicProElements.enumerateMarkersFromListWindow(listWindow, runtime: runtime.ax) {
+            case .success(let markers):
+                return encodeResult(markers)
+            case .failure:
+                return .error(HonestContract.encodeStateC(
+                    error: .readbackUnavailable,
+                    hint: "Marker List rows could not be read."
+                ))
+            }
         }
         if let area = AXLogicProElements.getArrangementArea(runtime: runtime) {
             let legacyMarkers = AXLogicProElements.enumerateMarkers(in: area, runtime: runtime)

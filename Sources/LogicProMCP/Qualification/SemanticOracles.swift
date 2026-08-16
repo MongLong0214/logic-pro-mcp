@@ -80,6 +80,28 @@ enum OracleConstraint: Sendable {
     /// The empty string is the canonical zero-entry encoding. Malformed prefixes,
     /// fractional/negative counts, and byte-length overruns fail closed.
     case lengthPrefixedEntryCountEquals(key: String, countKey: String, offset: Int)
+    /// A joined `<utf8-byte-count>:<entry>` wire field must not contain the exact
+    /// string named by another field. Both the wire and the comparison value must
+    /// be readable strings; malformed entries and missing values fail closed.
+    case lengthPrefixedEntriesExclude(key: String, forbiddenEntryKey: String)
+    /// The ordered pre-write identity at `indexKey` must encode exactly the claimed name and
+    /// position. This binds a delete receipt's requested index/name to the position whose
+    /// disappearance is proved by the survivor-position constraints.
+    case lengthPrefixedIdentityAtIndexEquals(
+        entriesKey: String, indexKey: String, nameKey: String, positionKey: String
+    )
+    /// The independent readback array must NOT still contain the exact target identity claimed by
+    /// the response. Both the name and index are checked together: marker ordinals and generated
+    /// names can renumber after a delete, but an entry retaining both the claimed name and claimed
+    /// pre-write index is direct evidence that this claimed target survived. Missing or malformed
+    /// identities fail closed rather than becoming an answer of absence.
+    case readbackArrayExcludesResponseIdentity(
+        responseNameKey: String,
+        responseIndexKey: String,
+        readbackArrayKey: String,
+        readbackNameKey: String,
+        readbackIndexKey: String
+    )
     /// Two key paths WITHIN THE SAME payload resolve to equal leaf values. The
     /// load-bearing safe-mutation invariant: a verified write echoes what was
     /// requested as what was observed, so `requested == observed` proves the
@@ -131,6 +153,9 @@ enum OracleConstraint: Sendable {
              .nonEmptyArray(let key),
              .typedField(let key, _),
              .lengthPrefixedEntryCountEquals(let key, _, _),
+             .lengthPrefixedEntriesExclude(let key, _),
+             .lengthPrefixedIdentityAtIndexEquals(let key, _, _, _),
+             .readbackArrayExcludesResponseIdentity(let key, _, _, _, _),
              .fieldsEqual(let key, _),
              .crossCheck(let key, _),
              .numericNear(let key, _, _),
@@ -148,15 +173,17 @@ enum OracleConstraint: Sendable {
     var isValueConstraint: Bool {
         switch self {
         case .valueEquals, .numericRange, .enumMember, .lengthPrefixedEntryCountEquals,
-             .fieldsEqual, .crossCheck, .numericNear, .booleanFlipped:
+             .lengthPrefixedEntriesExclude, .lengthPrefixedIdentityAtIndexEquals,
+             .readbackArrayExcludesResponseIdentity, .fieldsEqual, .crossCheck, .numericNear,
+             .booleanFlipped:
             return true
         case .nonEmptyArray, .typedField, .emptyArray:
             return false
         }
     }
 
-    /// `readback` is the parsed INDEPENDENT readback payload, read only by
-    /// `.crossCheck`; every other case ignores it. Defaulting it to nil keeps the
+    /// `readback` is the parsed INDEPENDENT readback payload, read only by the
+    /// response↔readback constraints; every other case ignores it. Defaulting it to nil keeps the
     /// single-payload call sites (and the engine unit tests) unchanged.
     func isSatisfied(by root: Any, readback: Any? = nil) -> Bool {
         switch self {
@@ -187,6 +214,53 @@ enum OracleConstraint: Sendable {
                   let entryCount = Self.lengthPrefixedEntryCount(in: wire) else { return false }
             let (expected, overflow) = Int(count).addingReportingOverflow(offset)
             return !overflow && expected >= 0 && entryCount == expected
+        case .lengthPrefixedEntriesExclude(let key, let forbiddenEntryKey):
+            guard let wire = JSONPath.resolve(root, keyPath: key) as? String,
+                  let forbidden = JSONPath.resolve(root, keyPath: forbiddenEntryKey) as? String,
+                  let entries = Self.lengthPrefixedEntries(in: wire) else { return false }
+            return entries.allSatisfy { $0 != forbidden }
+        case .lengthPrefixedIdentityAtIndexEquals(let entriesKey, let indexKey, let nameKey, let positionKey):
+            guard let rawEntries = JSONPath.resolve(root, keyPath: entriesKey) as? [Any],
+                  let rawIndex = JSONPath.resolve(root, keyPath: indexKey),
+                  let indexNumber = JSONInspector.number(of: rawIndex),
+                  indexNumber >= 0,
+                  indexNumber.rounded(.towardZero) == indexNumber,
+                  indexNumber <= Double(Int.max),
+                  rawEntries.indices.contains(Int(indexNumber)),
+                  let identity = rawEntries[Int(indexNumber)] as? String,
+                  let name = JSONPath.resolve(root, keyPath: nameKey) as? String,
+                  let position = JSONPath.resolve(root, keyPath: positionKey) as? String,
+                  let identityEntries = Self.lengthPrefixedEntries(in: identity) else { return false }
+            return identityEntries == [name, position]
+        case .readbackArrayExcludesResponseIdentity(
+            let responseNameKey,
+            let responseIndexKey,
+            let readbackArrayKey,
+            let readbackNameKey,
+            let readbackIndexKey
+        ):
+            // Envelope-provided target metadata cannot corroborate itself. The post-write marker
+            // records must be readable enough to tell whether that claimed target remains.
+            guard let targetName = JSONPath.resolve(root, keyPath: responseNameKey) as? String,
+                  let rawTargetIndex = JSONPath.resolve(root, keyPath: responseIndexKey),
+                  let targetIndex = JSONInspector.number(of: rawTargetIndex),
+                  targetIndex >= 0,
+                  targetIndex.rounded(.towardZero) == targetIndex,
+                  let readback,
+                  let entries = JSONPath.resolve(readback, keyPath: readbackArrayKey) as? [Any] else {
+                return false
+            }
+            for entry in entries {
+                guard let entryName = JSONPath.resolve(entry, keyPath: readbackNameKey) as? String,
+                      let rawEntryIndex = JSONPath.resolve(entry, keyPath: readbackIndexKey),
+                      let entryIndex = JSONInspector.number(of: rawEntryIndex),
+                      entryIndex >= 0,
+                      entryIndex.rounded(.towardZero) == entryIndex else {
+                    return false
+                }
+                if entryName == targetName, entryIndex == targetIndex { return false }
+            }
+            return true
         case .fieldsEqual(let keyA, let keyB):
             guard let a = JSONPath.resolve(root, keyPath: keyA),
                   let b = JSONPath.resolve(root, keyPath: keyB) else { return false }
@@ -237,9 +311,16 @@ enum OracleConstraint: Sendable {
     /// the entries themselves. That keeps the parser faithful to the wire rule:
     /// lengths measure UTF-8 bytes, rather than Swift character counts.
     private static func lengthPrefixedEntryCount(in wire: String) -> Int? {
+        lengthPrefixedEntries(in: wire)?.count
+    }
+
+    /// Decodes concatenated `<utf8-byte-count>:<entry>` records. Decoding every
+    /// entry (rather than merely skipping its bytes) lets exclusion constraints
+    /// compare exact UTF-8 payload strings without accepting split code points.
+    private static func lengthPrefixedEntries(in wire: String) -> [String]? {
         let bytes = Array(wire.utf8)
         var offset = 0
-        var entries = 0
+        var entries: [String] = []
         while offset < bytes.count {
             var length = 0
             let lengthStart = offset
@@ -255,8 +336,11 @@ enum OracleConstraint: Sendable {
                   length > 0 else { return nil }
             offset += 1
             guard length <= bytes.count - offset else { return nil }
+            guard let entry = String(bytes: bytes[offset..<(offset + length)], encoding: .utf8) else {
+                return nil
+            }
             offset += length
-            entries += 1
+            entries.append(entry)
         }
         return entries
     }
@@ -323,9 +407,9 @@ struct OperationOracle: Sendable {
             return custom(responseData, readbackData)
         }
         guard let root = JSONInspector.parse(responseData) else { return false }
-        // A missing/unparseable readback is nil; only `.crossCheck` reads it (and
-        // it fails closed on nil). Every non-relational constraint ignores the
-        // readback, so their verdicts are byte-for-byte unchanged.
+        // A missing/unparseable readback is nil; every response↔readback constraint fails closed
+        // on nil. Every non-relational constraint ignores the readback, so their verdicts are
+        // byte-for-byte unchanged.
         let readback = JSONInspector.parse(readbackData)
         return constraints.allSatisfy { $0.isSatisfied(by: root, readback: readback) }
     }

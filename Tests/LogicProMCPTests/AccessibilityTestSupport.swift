@@ -6,6 +6,7 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
     private var elements: [Int: AXUIElement] = [:]
     private var attributes: [Int: [String: Any]] = [:]
     private var children: [Int: [AXUIElement]] = [:]
+    private var actionNames: [Int: [String]] = [:]
     private(set) var setCalls: [(elementID: Int, attribute: String)] = []
     private(set) var actionCalls: [(elementID: Int, action: String)] = []
 
@@ -31,6 +32,10 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         for child in value {
             setAttribute(child, kAXParentAttribute as String, element)
         }
+    }
+
+    func setActionNames(_ element: AXUIElement, _ value: [String]) {
+        actionNames[key(for: element)] = value
     }
 
     func attributeValue(_ element: AXUIElement, _ attribute: String) -> Any? {
@@ -96,6 +101,14 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
             childCount: { [self] element in
                 children[key(for: element)]?.count
             },
+            actionNames: { [self] element in
+                actionNames[key(for: element)] ?? []
+            },
+            // Without this the status-preserving reader falls through to the REAL
+            // `AXUIElementCopyAttributeValue` and asks the window server about a fake element, which
+            // answers a genuine AX failure. Every fixture then reports "unreadable" for children it
+            // plainly set, and the defect looks like a product bug. Supply the seam by default so no
+            // fixture can reach the live API by omission.
             childrenResult: { [self] element in
                 if let handled = childrenResultHandler?(element) {
                     return handled

@@ -94,7 +94,6 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
         // Navigation (reusing CC range with CH16 — no conflict)
         "nav.goto_marker":              38,
         "nav.create_marker":            39,
-        "nav.delete_marker":            45,
         "nav.zoom_to_fit":              46,
         "nav.set_zoom_level":           47,
 

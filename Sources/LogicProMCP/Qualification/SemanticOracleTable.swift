@@ -1598,8 +1598,14 @@ enum SemanticOracleTable {
     // is length-prefixed before the entries are sorted and joined, so the envelope's
     // strings have unambiguous boundaries and can be checked against both counts.
     // The oracle binds that independently read-back multiset to the
-    // request-derived expectation. A shared or synthetic target position is State B:
-    // a position occurrence can disappear without identifying which marker it was.
+    // request-derived expectation and independently requires the observed survivors
+    // to exclude the target position. It ALSO cross-checks the reported multiset and
+    // canonicality flag against the independent `logic://markers` resource read: a
+    // self-consistent producer cannot substitute unrelated survivor fields. It also
+    // rejects a claimed target identity that still appears as the same name/index
+    // entry in that independent `data[]` readback. A shared or synthetic target
+    // position is State B: a position occurrence can disappear without identifying
+    // which marker it was.
     // Marker names remain only State-B diagnostics because Logic can renumber
     // auto-generated names after deletion.
     static let navigateDeleteMarker = SafeMutationOracle.oracle(
@@ -1609,6 +1615,14 @@ enum SemanticOracleTable {
             .typedField(key: "requested_index", type: .number),
             .typedField(key: "target_name", type: .string),
             .typedField(key: "target_position", type: .string),
+            .lengthPrefixedIdentityAtIndexEquals(entriesKey: "prewrite_marker_identities", indexKey: "requested_index", nameKey: "target_name", positionKey: "target_position"),
+            .readbackArrayExcludesResponseIdentity(
+                responseNameKey: "target_name",
+                responseIndexKey: "requested_index",
+                readbackArrayKey: "data",
+                readbackNameKey: "name",
+                readbackIndexKey: "id"
+            ),
             .valueEquals(key: "target_position_unique", expected: .bool(true)),
             .valueEquals(key: "position_evidence_canonical", expected: .bool(true)),
             .typedField(key: "marker_count_before", type: .number),
@@ -1624,9 +1638,21 @@ enum SemanticOracleTable {
                 countKey: "marker_count_after",
                 offset: 0
             ),
+            .lengthPrefixedEntriesExclude(
+                key: "observed_survivor_position_multiset",
+                forbiddenEntryKey: "target_position"
+            ),
             .fieldsEqual(
                 keyA: "expected_survivor_position_multiset",
                 keyB: "observed_survivor_position_multiset"
+            ),
+            .crossCheck(
+                responseKey: "observed_survivor_position_multiset",
+                readbackKey: "position_multiset"
+            ),
+            .crossCheck(
+                responseKey: "position_evidence_canonical",
+                readbackKey: "positions_canonical"
             ),
         ]
     )

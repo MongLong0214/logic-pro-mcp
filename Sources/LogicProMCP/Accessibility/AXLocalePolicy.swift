@@ -218,6 +218,20 @@ enum AXLocalePolicy {
         rationale: "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome."
     )
 
+    /// The Marker List toolbar's own Edit menu button, not the application menu bar.
+    static let markerListEditMenuButton = LabelSet(
+        canonical: "Edit",
+        variants: ["編集", "편집"],
+        rationale: "Live-confirmed on Logic 12.3: the Marker List toolbar AXMenuButton exposes the exact AXDescription `編集` in Japanese and `편집` in Korean; the bottom AXButton with the same label is deliberately rejected unless its actions advertise AXShowMenu."
+    )
+
+    /// The destructive Marker List Edit-menu command. This must always be whole-string matched.
+    static let markerListDeleteMenuItem = LabelSet(
+        canonical: "Delete",
+        variants: ["削除", "삭제"],
+        rationale: "Live-confirmed on Logic 12.3: Marker List Delete is `削除` in Japanese and `삭제` in Korean. It is used only with exactStrict because the Edit menu also has Delete-Undo-History entries; prefix or containment matching can reach a different destructive command."
+    )
+
     static let undoMenuItemPrefix = LabelSet(
         canonical: "Undo",
         variants: ["실행 취소"],
@@ -238,8 +252,8 @@ enum AXLocalePolicy {
 
     static let goToPositionDialogTitle = LabelSet(
         canonical: "Go To Position",
-        variants: ["위치로 이동"],
-        rationale: "Used only to dismiss a stale dialog before another verified operation."
+        variants: ["위치로 이동", "位置の移動"],
+        rationale: "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately."
     )
 
     static let cancelButton = LabelSet(
@@ -359,6 +373,12 @@ enum AXLocalePolicy {
         canonical: "position",
         variants: ["재생헤드 위치"],
         rationale: "Identifies the playhead position text field description; read-only."
+    )
+
+    static let playheadPositionGroupLabel = LabelSet(
+        canonical: "playhead position",
+        variants: ["재생헤드 위치", "再生ヘッド位置"],
+        rationale: "Identifies Logic 12.3's Playhead Position AXGroup before resolving its bar/beat component sliders."
     )
 
     // --- Control-bar slider locators (read-only, verbatim `.exactStrict`) ---

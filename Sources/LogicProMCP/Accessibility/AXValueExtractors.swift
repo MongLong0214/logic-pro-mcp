@@ -427,10 +427,21 @@ enum AXValueExtractors {
                 if let tempo = Double(value.replacingOccurrences(of: " BPM", with: "")) {
                     state.tempo = tempo
                 }
-            } else if AXLocalePolicy.playheadPositionFieldLabel.containsAny(in: descLower) || value.contains(".") && value.contains(":") == false {
-                // Bar.Beat.Division.Tick format
-                if value.filter({ $0 == "." }).count >= 2 {
+            } else if AXLocalePolicy.playheadPositionFieldLabel.containsAny(in: descLower)
+                || value.contains(".") && value.contains(":") == false {
+                // Do not turn a partial display into an invented B.B.S.T position. A labelled
+                // playhead field may faithfully expose a prefix; an unlabelled numeric string is
+                // treated as a position only when it has the historical three-dot shape.
+                let isLabelledPosition = AXLocalePolicy.playheadPositionFieldLabel.containsAny(in: descLower)
+                if let components = observedPositionComponents(
+                    in: value,
+                    allowPartial: isLabelledPosition
+                ), components.count > (state.positionReadback?.observedComponents.count ?? 0) {
                     state.position = value
+                    state.positionReadback = TransportPositionReadback(
+                        value: value,
+                        observedComponents: components
+                    )
                 }
             } else if value.contains(":") {
                 // Time format HH:MM:SS
@@ -438,25 +449,91 @@ enum AXValueExtractors {
             }
         }
 
-        let sliders = AXHelpers.findAllDescendants(of: transport, role: kAXSliderRole, maxDepth: 4, runtime: runtime)
+        // Logic 12.3 nests the Bar/Beat controls six levels below the Control Bar. Resolve the
+        // Depth 8 covers both the measured live tree (Control Bar -> group -> Playhead Position ->
+        // sliders, three hops) and the deeper fixture topology. It is deliberately not locked by a
+        // test: the group sits within four hops in both, so lowering the bound does not fail
+        // anything. The live check that does bind it is the readback returning "37.3" rather than
+        // nothing.
+        // same named Playhead Position owner as the locator before scanning its subtree, so an
+        // unrelated Position group cannot become a transport readback.
+        let sliders = AXHelpers.findAllDescendants(
+            of: transport, role: kAXSliderRole, maxDepth: 8, runtime: runtime
+        )
+        let playheadPositionGroups = AXHelpers.findAllDescendants(
+            of: transport, role: kAXGroupRole, maxDepth: 8, runtime: runtime
+        )
+        let positionSliders = playheadPositionGroups
+            .first(where: {
+                AXLocalePolicy.playheadPositionGroupLabel.matches(
+                    AXHelpers.getDescription($0, runtime: runtime), mode: .exactStrict
+                )
+            })
+            .map {
+                AXHelpers.findAllDescendants(
+                    of: $0, role: kAXSliderRole, maxDepth: 8, runtime: runtime
+                )
+            }
+            ?? []
         var barValue: Int?
         var beatValue: Int?
         for slider in sliders {
             let desc = (AXHelpers.getDescription(slider, runtime: runtime) ?? "").lowercased()
             if AXLocalePolicy.tempoSliderContainsLabel.containsAny(in: desc), let tempo = extractSliderValue(slider, runtime: runtime) {
                 state.tempo = tempo
-            } else if AXLocalePolicy.barSliderLabel.containsAny(in: desc) {
-                barValue = Int(extractSliderValue(slider, runtime: runtime) ?? 0)
-            } else if AXLocalePolicy.beatSliderLabel.containsAny(in: desc) {
-                beatValue = Int(extractSliderValue(slider, runtime: runtime) ?? 0)
             }
         }
-        if let barValue, let beatValue {
-            state.position = "\(barValue).\(beatValue).1.1"
+        for slider in positionSliders {
+            let desc = (AXHelpers.getDescription(slider, runtime: runtime) ?? "").lowercased()
+            if AXLocalePolicy.barSliderLabel.containsAny(in: desc),
+               let value = extractSliderValue(slider, runtime: runtime) {
+                barValue = Int(value)
+            } else if AXLocalePolicy.beatSliderLabel.containsAny(in: desc),
+                      let value = extractSliderValue(slider, runtime: runtime) {
+                beatValue = Int(value)
+            }
+        }
+        // The Control Bar exposes bar and beat independently. They are observations, but they
+        // say nothing about subdivision or tick; preserve that boundary instead of fabricating
+        // `.1.1` and letting a four-component request verify against it.
+        if let barValue, let beatValue,
+           (state.positionReadback?.observedComponents.count ?? 0) < 2 {
+            let value = "\(barValue).\(beatValue)"
+            state.position = value
+            state.positionReadback = TransportPositionReadback(
+                value: value,
+                observedComponents: [.bar, .beat]
+            )
+        } else if let barValue, (state.positionReadback?.observedComponents.count ?? 0) < 1 {
+            let value = "\(barValue)"
+            state.position = value
+            state.positionReadback = TransportPositionReadback(
+                value: value,
+                observedComponents: [.bar]
+            )
         }
 
         state.lastUpdated = Date()
         return state
+    }
+
+    /// Returns exactly the leading musical-position components represented by an AX text value.
+    /// This deliberately accepts partial labelled fields (`37.3`) while requiring the old
+    /// four-component-like shape for unlabelled text, which avoids classifying a tempo such as
+    /// `120.0` as a playhead observation.
+    private static func observedPositionComponents(
+        in value: String,
+        allowPartial: Bool
+    ) -> [TransportPositionComponent]? {
+        let parts = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: ".", omittingEmptySubsequences: false)
+        let minimumComponentCount = allowPartial ? 1 : 3
+        guard (minimumComponentCount...4).contains(parts.count),
+              parts.allSatisfy({ Int($0) != nil }) else {
+            return nil
+        }
+        return Array(TransportPositionComponent.allCases.prefix(parts.count))
     }
 
     // MARK: - Private helpers

@@ -75,8 +75,14 @@ private let toolText = sharedToolText
 
     #expect(!(result.isError!))
     let ops = await ax.executedOps
-    #expect(ops.first?.0 == "transport.goto_position")
-    #expect(ops.first?.1["position"] == "7.1.1.1")
+    // The independent transport-state pre-read establishes the playhead baseline
+    // for observed-effect verification. This test guarantees that cache-resolved
+    // marker navigation still issues exactly one position write, and that its
+    // complete payload is the named marker's cached position rather than a
+    // default or a value re-read from a different source.
+    let gotoPositionOps = ops.filter { $0.0 == "transport.goto_position" }
+    #expect(gotoPositionOps.count == 1)
+    #expect(gotoPositionOps.first?.1 == ["position": "7.1.1.1"])
 }
 
 @Test func testNavigateDispatcherGotoMarkerByIndexUsesCachedPosition() async {
@@ -101,8 +107,14 @@ private let toolText = sharedToolText
 
     #expect(!(result.isError!))
     let ops = await ax.executedOps
-    #expect(ops.first?.0 == "transport.goto_position")
-    #expect(ops.first?.1["position"] == "9.1.1.1")
+    // The independent transport-state pre-read establishes the playhead baseline
+    // for observed-effect verification. This test guarantees that cache-resolved
+    // marker navigation still issues exactly one position write, and that its
+    // complete payload is marker #2's cached position rather than a default or
+    // a value re-read from a different source.
+    let gotoPositionOps = ops.filter { $0.0 == "transport.goto_position" }
+    #expect(gotoPositionOps.count == 1)
+    #expect(gotoPositionOps.first?.1 == ["position": "9.1.1.1"])
 }
 
 @Test func testNavigateDispatcherGotoMarkerColdCacheReturnsElementNotFound() async {

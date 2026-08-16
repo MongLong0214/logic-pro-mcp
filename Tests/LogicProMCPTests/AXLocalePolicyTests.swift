@@ -49,6 +49,15 @@ struct AXLocalePolicyTests {
         #expect(!AXLocalePolicy.undoMenuItemPrefix.matches("Redo Insert Plug-in", mode: .prefix))
     }
 
+    @Test("Marker List Edit/Delete labels include the live-confirmed Korean exact forms")
+    func markerListEditDeleteKoreanExactForms() {
+        #expect(AXLocalePolicy.markerListEditMenuButton.matches("편집", mode: .exactStrict))
+        #expect(AXLocalePolicy.markerListDeleteMenuItem.matches("삭제", mode: .exactStrict))
+        // Korean Logic's Delete-Undo-History entry is a distinct destructive command. Whole-string
+        // matching must not widen the new `삭제` route to it.
+        #expect(!AXLocalePolicy.markerListDeleteMenuItem.matches("실행 취소 기록 삭제", mode: .exactStrict))
+    }
+
     @Test("#60 — matches(.contains/.prefix) is diacritic-SENSITIVE (no accent-folding widening)")
     func matchesIsDiacriticSensitive() {
         let set = AXLocalePolicy.LabelSet(
@@ -228,13 +237,14 @@ struct AXLocalePolicyTests {
     // MARK: - Go-to-Position dialog dismissal (.contains mode)
 
     /// The stale Go-to-Position dialog dismissal matches the window title with
-    /// `.contains`. Pin that the live-verified real titles ("Go to Position",
-    /// "위치로 이동") match even when wrapped in a window title, and that an
+    /// `.contains`. Pin that the reviewed exact titles ("Go to Position",
+    /// "위치로 이동", "位置の移動") match even when wrapped in a window title, and that an
     /// unrelated window is rejected.
     @Test("go-to-position dialog title matches in contains mode")
     func goToPositionContainsMode() {
         #expect(AXLocalePolicy.goToPositionDialogTitle.matches("Go to Position", mode: .contains))
         #expect(AXLocalePolicy.goToPositionDialogTitle.matches("위치로 이동", mode: .contains))
+        #expect(AXLocalePolicy.goToPositionDialogTitle.matches("位置の移動", mode: .contains))
         // Windowed title containing the phrase still matches.
         #expect(AXLocalePolicy.goToPositionDialogTitle.matches("Untitled — 위치로 이동", mode: .contains))
         #expect(AXLocalePolicy.goToPositionDialogTitle.matches("go to position", mode: .contains))
@@ -561,6 +571,12 @@ struct AXLocalePolicyTests {
         #expect(AXLocalePolicy.beatSliderLabel.matches("beat", mode: .exactStrict))
         #expect(AXLocalePolicy.beatSliderLabel.matches("비트", mode: .exactStrict))
         #expect(!AXLocalePolicy.beatSliderLabel.matches("bar", mode: .exactStrict))
+
+        // Mutation this rejects: change this exact group label to generic `position` (or add that
+        // token as a variant), which would make an unrelated AXGroup eligible as the owner.
+        #expect(AXLocalePolicy.playheadPositionGroupLabel.matches("Playhead Position", mode: .exactStrict))
+        #expect(AXLocalePolicy.playheadPositionGroupLabel.matches("재생헤드 위치", mode: .exactStrict))
+        #expect(!AXLocalePolicy.playheadPositionGroupLabel.matches("Position", mode: .exactStrict))
     }
 
     /// The metronome is the one Japanese transport label that is a compound word.
