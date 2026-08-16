@@ -8,7 +8,77 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-### Fixed
+**These changes remove several ways the server could report that it had verified something it had not.**
+
+Every operation answers with an Honest Contract envelope: State A means performed *and* independently
+verified, State B means attempted but unverifiable, State C means the write did not succeed. A false
+State A is the worst answer this server can give, because a caller has no way to detect it.
+
+Six were found and closed this cycle, all the same shape underneath: **a check that could not observe the
+thing it claimed to check.**
+
+### Fixed — false State A
+
+- **`navigate.delete_marker` verifies against a witness the table does not speak for (#523).** It
+  checked `AXRows`, `AXChildren` and `AXSelectedRows` — three properties of one AX table. When Logic
+  rebuilds that table all three can omit the same row for the same reason, so their agreement was never
+  corroboration. Deletion now also requires Logic's own marker count, read from a different node, to drop
+  by exactly one, and the surviving multiset to lose the target. A false State A now needs two unrelated
+  surfaces to lie in the same direction at the same moment.
+
+- **`transport.goto_position` requires an observed transition (#534).** State A was granted whenever a
+  post-read equalled the request — a condition a playhead that was already there satisfies without any
+  write. A request that already matches now returns `unchanged` with `write_attempted: false` instead of
+  opening a dialog.
+
+- **`track.create` waits for absence to settle (#538).** It certified on the first modal read that came
+  back clean. Absence has to settle; delete had required two consecutive clean polls for exactly this
+  reason. The same route had the opposite hole as well: it reconciled the mandatory New Track sheet
+  exactly once, so a sheet whose description publishes before its Create control classified correctly and
+  then pressed nothing, leaving Logic wedged on a sheet only Create can dismiss. It now polls the way
+  `project.new` always has, and stops the instant one pass presses.
+
+- **`project.new` cannot let a latch outrank a live observation (#538).** It set "the mandatory sheet is
+  gone" once and never unset it, so a later poll that classified a replacement sheet as present did not
+  stop the run. A latch records what was observed; it cannot outrank what is observed now.
+
+- **Four receipt fields stopped reporting values nobody read (#538).** A placeholder track name published
+  as an observation, a confirmation flag set from an attempt AX had rejected, `dialog_present` asserted
+  from a scan that was merely incomplete, and an empty window list where the list had not been read at all.
+
+- **`logic_system.permissions` and `refresh_cache` answer their declared schema (#544).** Both returned
+  prose under a tool declaring an `outputSchema`, so a schema-enforcing client rejected the call outright
+  with `MCP error -32600`. Reported externally with an exact trace; the fix covers all ten sites of that
+  class, not the two reported.
+
+### Changed — one deliberate trade
+
+- **`track.create` now returns State B rather than State A, on purpose.** Its previous success path was a
+  single unsettled count read: if the track count read higher than before, State A — with no check for
+  whether anything was on screen. A create that raised the mandatory New Track sheet could therefore
+  report success to a user who was wedged on it. The check that replaced it asks whether any blocker is
+  present, and on a live arrange window that question currently is not being answered
+  ([#549](https://github.com/MongLong0214/logic-pro-mcp/issues/549)): the sheet scan reports its read as
+  unreadable rather than as "no sheet present", so the settled-clean streak that certification waits for
+  never starts. The exact mechanism is still under measurement. The write itself is unaffected — the
+  track is created, nothing is left blocking, the count is right. **Clients branching on `state == "A"`
+  for `track.create` should read `observed_delta` until #549 lands.** Given up: a State A that never
+  looked. Gained: an honest State B.
+
+### Added
+
+- **Live-evidence harnesses (`Scripts/livekit/`).** Three changes in this cycle passed the full unit suite
+  *and* the ship gate while being dead or wrong against the running application; nothing but a run against
+  real Logic Pro found them. `evidence.py` refuses unsettled captures, captures straddling displays,
+  region-less visual assertions, checks with no demonstrated mutation, and cached reads presented as live.
+
+### Known
+
+- **Mixer volume/pan is unusable on any Logic UI language other than English or Korean**
+  ([#519](https://github.com/MongLong0214/logic-pro-mcp/issues/519)) — the controls are located by a
+  hardcoded label list. Tracked as a functional defect rather than a tidiness item; not fixed here.
+
+### Fixed — MIDI readback, project chooser, and locale
 - **The MIDI readback collector can resolve the Event List display mode (#524).** It searched the
   **application** menu bar for `Event Position and Length as Time`; that menu has sixteen entries on
   Logic 12.3 and none of them is the setting, which lives in the Event pane's own View menu beside the
@@ -96,6 +166,7 @@ through, so this is a behaviour change, not only a reordering.
   role and label, the exact route is required first, and chooser health is exposed so
   a caller can tell whether the surface is usable before driving it.
 - **#492** — see the transport reordering above.
+
 
 
 ### Changed — plugin-insert actuation
@@ -2251,8 +2322,6 @@ Dead code cleanup — ~43 lines of production code and ~40 lines of duplicated t
 
 - Total: **500 Swift tests** + **229 live E2E tests** passing.
 - New consolidated `SharedTestHelpers.swift` eliminates duplicate `toolText`, `resourceText`, and `ServerStartRecorder` helpers across 5 test files.
-
----
 
 ## [2.0.0] — 2026-04-06
 
