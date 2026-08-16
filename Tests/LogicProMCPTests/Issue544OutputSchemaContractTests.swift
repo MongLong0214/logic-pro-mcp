@@ -9,8 +9,18 @@ import MCP
 ///
 /// The reporter found two commands. The property is wider than the two: ANY handler that answers with
 /// something other than a JSON object breaks the contract of whichever tool it belongs to, and ten such
-/// sites existed across four dispatchers. These tests lock the property rather than the two instances,
-/// so the next prose return is caught by the suite instead of by a user.
+/// sites existed across four dispatchers.
+///
+/// What this suite does and does NOT lock, stated exactly, because an earlier version of this comment
+/// claimed the whole property and a review had to point out that it did not:
+///
+/// - LOCKED: the `toolTextResult` floor. Delete it and permissions, refresh_cache, help and
+///   is_running go back to nil `structuredContent`, and the sweep goes red.
+/// - LOCKED: a new tool that builds a `CallTool.Result` without `structuredContent` at all.
+/// - NOT LOCKED: the next handler that answers in prose. The floor wraps it as `{"message": …}`, which
+///   satisfies "structuredContent is not nil", so the sweep stays green. Prose is legal now — it is
+///   schema-conformant and the client no longer refuses it — but a command whose answer has real fields
+///   should still encode them, and nothing here forces that.
 @Suite("Issue #544 — a declared outputSchema is always honoured")
 struct Issue544OutputSchemaContractTests {
 
