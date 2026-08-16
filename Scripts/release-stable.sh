@@ -8,6 +8,16 @@
 # This script keeps the stable tag gate on clean main, duplicate tag/release
 # checks, and deterministic local build/test gates before pushing the tag.
 #
+# BEFORE running this: cutting the version is ONE commit, not three.
+#
+#   CHANGELOG.md         ## [Unreleased]  ->  ## [X.Y.Z] — YYYY-MM-DD
+#   ServerConfig.swift   serverVersion    ->  "X.Y.Z"
+#   ResourceProvider     the release timestamp every resource reports
+#
+# `VersionConsistencyTests` enforces that those three agree, so renaming the changelog heading on its own
+# fails the suite. That is the point: until the tag exists, a dated release heading claims something that
+# did not happen. Leave the notes under ## [Unreleased] and cut all three together, here.
+#
 # Usage:
 #   Scripts/release-stable.sh v3.4.6
 #   DRY_RUN=1 Scripts/release-stable.sh v3.4.6
