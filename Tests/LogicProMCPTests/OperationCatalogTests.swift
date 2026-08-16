@@ -676,7 +676,8 @@ struct OperationCatalogTests {
 
         for spec in OperationRegistry.specs {
             let requiresTarget = spec.target == .acceptsStableTarget
-            #expect(spec.allowedParams.contains("target_ref") == requiresTarget, "\(spec.id.rawValue)")
+            let hasTargetRef = spec.allowedParams.contains("target_ref")
+            #expect(requiresTarget ? hasTargetRef : !hasTargetRef, "\(spec.id.rawValue)")
 
             if requiresTarget {
                 #expect(
@@ -923,10 +924,10 @@ struct OperationCatalogTests {
             #expect(row["deadline"] as? String == Self.wire(spec.deadline))
             #expect(row["availability"] as? String == Self.wire(spec.availability))
             #expect(row["allowedParams"] as? [String] == spec.allowedParams.sorted())
-            #expect(
-                (row["allowedParams"] as? [String])?.contains("target_ref")
-                    == (spec.target == .acceptsStableTarget)
-            )
+            let targetRefPresence = ((row["allowedParams"] as? [String])?.contains("target_ref"))
+                .map { $0 ? "present" : "absent" } ?? "missing"
+            let expectedTargetRefPresence = spec.target == .acceptsStableTarget ? "present" : "absent"
+            #expect(targetRefPresence == expectedTargetRefPresence)
             #expect(row["capability"] as? String == spec.capability.rawValue)
             #expect(
                 row["dirtySections"] as? [String]
@@ -986,6 +987,7 @@ struct OperationCatalogTests {
         )
 
         #expect(sharedToolText(withUnknownParams) == sharedToolText(baseline))
-        #expect(withUnknownParams.isError == baseline.isError)
+        let errorState: (Bool?) -> String = { $0.map { $0 ? "true" : "false" } ?? "nil" }
+        #expect(errorState(withUnknownParams.isError) == errorState(baseline.isError))
     }
 }

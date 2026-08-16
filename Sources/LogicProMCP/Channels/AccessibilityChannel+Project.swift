@@ -164,6 +164,16 @@ extension AccessibilityChannel {
             && isCreatedProjectWindowTitle(windowTitle)
     }
 
+    /// A mandatory sheet disappearing is an input to verification, not a fact
+    /// about the Project. Only a subsequent positive track-count observation
+    /// permits the response to say that the mandatory track was created.
+    static func mandatoryTrackCreationWasObserved(
+        sheetGoneObserved: Bool,
+        observedTrackCount: Int
+    ) -> Bool {
+        sheetGoneObserved && observedTrackCount > 0
+    }
+
     private static func exactCreatedProjectWindow(
         runtime: AXLogicProElements.Runtime
     ) -> AXUIElement? {
@@ -189,34 +199,70 @@ extension AccessibilityChannel {
         return matches.count == 1 ? matches[0] : nil
     }
 
+    /// `nil` means `AXWindows` was never successfully read — a non-array
+    /// payload or a failed call — and that is not the same fact as "the app
+    /// currently vends zero windows". Collapsing the two into `[]` made a
+    /// pending-project receipt claim an empty window list when the read
+    /// simply never happened.
     private static func observedWindowTitles(
         runtime: AXLogicProElements.Runtime
-    ) -> [String] {
-        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return [] }
-        let windows: [AXUIElement] = AXHelpers.getAttribute(
+    ) -> [String]? {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return nil }
+        switch AXHelpers.getAXUIElementArrayRead(
             app, kAXWindowsAttribute as String, runtime: runtime.ax
-        ) ?? []
-        return windows.compactMap { AXHelpers.getTitle($0, runtime: runtime.ax) }
+        ) {
+        case .success(.elements(let windows)):
+            return windows.compactMap { AXHelpers.getTitle($0, runtime: runtime.ax) }
+        case .success(.absent):
+            // A successful absent value is a legitimate zero-windows answer
+            // for this best-effort receipt field.
+            return []
+        case .success(.malformed), .failure:
+            return nil
+        }
     }
 
     static func projectNewPendingReadbackEnvelope(
         mandatoryTrackCreated: Bool,
-        observedWindowTitles: [String],
-        observationBudgetMs: Int
+        observedWindowTitles: [String]?,
+        observationBudgetMs: Int,
+        witnessSummary: ModalReconcileWitnessSummary? = nil,
+        modalUnreadableReason: ModalReadFailure? = nil
     ) -> String {
-        HonestContract.encodeStateB(
+        var extras: [String: Any] = [
+            "operation": "project.new",
+            "method": "accessibility",
+            "selection": "Empty Project",
+            "phase": "created_project_window_pending",
+            "mandatory_track_created": mandatoryTrackCreated,
+            "observation_budget_ms": observationBudgetMs,
+            "write_attempted": true,
+            "safe_to_retry": false,
+        ]
+        if let observedWindowTitles {
+            extras["observed_window_titles"] = observedWindowTitles
+        } else {
+            // The window list was never successfully read. Say so explicitly
+            // rather than omitting it silently, so this is distinguishable
+            // from a caller who simply forgot to check for the key.
+            extras["observed_window_titles_unread"] = true
+        }
+        if let witnessSummary {
+            extras["modal_reconciliation_witness"] = witnessSummary.envelopeValue
+        }
+        if let modalUnreadableReason {
+            // This is an incomplete observation, not a discovered unknown
+            // sheet. Reissuing project.new remains unsafe after its write
+            // boundary, but the bounded observer retried this read throughout
+            // its budget.
+            extras["modal_observation"] = "incomplete"
+            for (key, value) in modalUnreadableReason.envelopeExtras {
+                extras[key] = value
+            }
+        }
+        return HonestContract.encodeStateB(
             reason: .readbackUnavailable,
-            extras: [
-                "operation": "project.new",
-                "method": "accessibility",
-                "selection": "Empty Project",
-                "phase": "created_project_window_pending",
-                "mandatory_track_created": mandatoryTrackCreated,
-                "observed_window_titles": observedWindowTitles,
-                "observation_budget_ms": observationBudgetMs,
-                "write_attempted": true,
-                "safe_to_retry": false,
-            ]
+            extras: extras
         )
     }
 
@@ -271,28 +317,130 @@ extension AccessibilityChannel {
         // bounded AX witness that the exact Empty Project selection completed.
         // The caller still performs independent Project-resource readback
         // before saving.
+        // A stale bound-sheet reference does not establish project causation.
+        // Keep the sheet-disappearance observation separate until a subsequent
+        // AX track count positively observes the mandatory track.
+        var mandatoryTrackSheetGone = false
         var createdTrack = false
+        var witnessSummary: ModalReconcileWitnessSummary?
+        // A mandatory New Track description can arrive before its Create
+        // control is published. Keep polling in that state, but once a direct
+        // Create press has been issued, do not press that modal kind again.
+        // Subsequent passes are observations only; this preserves the
+        // per-modal-kind action latch while leaving the delayed-control path
+        // a chance to become actionable.
+        var mandatoryTrackCreateActionAttempted = false
+        var mandatoryTrackCreateActionFailure: AXHelpers.AXActionError?
+        var lastModalUnreadableReason: ModalReadFailure?
         let attempts = max(1, observationAttempts)
         for attempt in 0..<attempts {
             try? await Task.sleep(nanoseconds: observationDelayNanoseconds)
-            let outcome = await reconcileAfterMutation(isDeleteContext: false, runtime: runtime)
+            let outcome: ModalReconcileOutcome
+            if mandatoryTrackCreateActionAttempted {
+                outcome = observeModalAfterMutation(isDeleteContext: false, runtime: runtime)
+            } else {
+                outcome = await reconcileAfterMutation(isDeleteContext: false, runtime: runtime)
+            }
+
+            // A no-modal classifier result is clean only when all modal sources
+            // were readable. In particular, a failed auxiliary sheet-host scan
+            // must poll again rather than becoming an invented `unknownSheet` or
+            // allowing the project-window path to certify a clean blocker set.
+            if !outcome.modalObservationIsComplete {
+                if let unreadableReason = outcome.unreadableReason {
+                    lastModalUnreadableReason = unreadableReason
+                }
+                continue
+            }
+            // Do not carry a transient, already-resolved scan failure into a
+            // later complete observation's final envelope.
+            lastModalUnreadableReason = nil
+
             switch outcome.kind {
             case .mandatoryNewTrack:
-                guard outcome.performed else {
+                if let observedWitnessSummary = outcome.witnessSummary {
+                    witnessSummary = observedWitnessSummary
+                }
+                if let actionFailure = outcome.actionFailure {
+                    mandatoryTrackCreateActionFailure = actionFailure
+                }
+                if outcome.actionAttempted {
+                    mandatoryTrackCreateActionAttempted = true
+                }
+                // Two facts, and neither alone is the conclusion. `observedGone` says the sheet THIS
+                // run captured is gone — an invalidated element is the only signal macOS gives for a
+                // destroyed one. `blockerSetClear` says no blocker is present NOW, which a scan can
+                // report without ever having seen our sheet leave. Latching on the second alone
+                // certifies a dismissal this run cannot attribute to itself; latching on the first
+                // alone ignores a different sheet that arrived in its place.
+                if outcome.witnessSummary?.observedGone == true
+                    && outcome.witnessSummary?.blockerSetClear == true {
+                    mandatoryTrackSheetGone = true
+                } else if attempt + 1 == attempts {
+                    var extras: [String: Any] = [
+                        "operation": "project.new",
+                        "method": "accessibility",
+                        "selection": selection,
+                        "phase": "mandatory_track_create_unconfirmed",
+                        "write_attempted": true,
+                        "safe_to_retry": false,
+                    ]
+                    if let witnessSummary {
+                        extras["modal_reconciliation_witness"] = witnessSummary.envelopeValue
+                    }
+                    if let actionFailure = mandatoryTrackCreateActionFailure {
+                        extras["reconcile_action_error"] = actionFailure.diagnosticLabel
+                    }
                     return .error(HonestContract.encodeStateB(
                         reason: .readbackUnavailable,
-                        extras: [
-                            "operation": "project.new",
-                            "method": "accessibility",
-                            "selection": selection,
-                            "phase": "mandatory_track_create_unconfirmed",
-                            "write_attempted": true,
-                            "safe_to_retry": false,
-                        ]
+                        extras: extras
                     ))
+                } else {
+                    // This poll's own classification just read `.mandatoryNewTrack` — a blocker is
+                    // present RIGHT NOW, whether it is the same sheet still lingering or a genuine
+                    // replacement. A latch set by an EARLIER poll's gone+clear pair is a memory, not
+                    // an observation, and it cannot outrank what this poll just saw. Reset it so the
+                    // fallthrough below never certifies a live blocker as absent; only a poll that
+                    // itself proves gone+clear (above) may set it true again.
+                    mandatoryTrackSheetGone = false
                 }
-                createdTrack = true
-            case .unknownSheet, .deleteConfirm:
+                if !mandatoryTrackSheetGone {
+                    // A description-only classification is safe, but it does
+                    // not prove that Create has appeared yet. Do not turn that
+                    // no-op pass into a terminal State B; another bounded
+                    // observation may resolve the direct element and press it
+                    // exactly once.
+                    continue
+                }
+            case .unknownSheet:
+                // A fail-closed modal read with an unreadable cause must not
+                // certify the project as clean, but it is also not evidence
+                // that a future poll cannot identify the mandatory sheet.
+                // Keep the bounded observer alive; a persistent unknown sheet
+                // still ends in State B below without any unchecked action.
+                if let unreadableReason = outcome.unreadableReason {
+                    lastModalUnreadableReason = unreadableReason
+                }
+                guard attempt + 1 == attempts else { continue }
+                var extras: [String: Any] = [
+                    "operation": "project.new",
+                    "method": "accessibility",
+                    "selection": selection,
+                    "phase": "unexpected_blocking_sheet",
+                    "sheet_kind": String(describing: outcome.kind),
+                    "write_attempted": true,
+                    "safe_to_retry": false,
+                ]
+                if let lastModalUnreadableReason {
+                    for (key, value) in lastModalUnreadableReason.envelopeExtras {
+                        extras[key] = value
+                    }
+                }
+                return .error(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: extras
+                ))
+            case .deleteConfirm:
                 return .error(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
                     extras: [
@@ -305,23 +453,93 @@ extension AccessibilityChannel {
                         "safe_to_retry": false,
                     ]
                 ))
-            case .none, .informationalAlert, .strayMenu:
+            case .informationalAlert, .strayMenu:
+                // This poll OBSERVED a live blocker. `reconcileAfterMutation`
+                // above may have just attempted to acknowledge/escape it, but
+                // an attempted action is not proof it closed — the very next
+                // read could still see the same alert or a replacement one.
+                // Falling through here would let a still-open one-button
+                // warning or contextual menu certify the arrange window /
+                // track count as if nothing were blocking. Only a later
+                // `.none` observation may do that; keep polling until one
+                // arrives, or report the persistent blocker honestly once the
+                // observation budget is exhausted.
+                guard attempt + 1 == attempts else { continue }
+                var extras: [String: Any] = [
+                    "operation": "project.new",
+                    "method": "accessibility",
+                    "selection": selection,
+                    "phase": "blocking_dialog_unconfirmed",
+                    "write_attempted": true,
+                    "safe_to_retry": false,
+                ]
+                mergeReconcileExtras(
+                    &extras,
+                    kind: outcome.kind,
+                    action: attemptedReconcileActionLabel(outcome),
+                    newTrackAutoConfirmed: false,
+                    witnessSummary: outcome.witnessSummary,
+                    refusal: outcome.refusal,
+                    actionFailure: outcome.actionFailure,
+                    unreadableReason: outcome.unreadableReason
+                )
+                return .error(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: extras
+                ))
+            case .none:
                 break
             }
+            // `allTrackHeaders` is the project-level fact we can safely report:
+            // do not promote a successful Create request or a stale sheet alone
+            // into `mandatory_track_created`.
+            let observedTrackCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
+            if mandatoryTrackCreationWasObserved(
+                sheetGoneObserved: mandatoryTrackSheetGone,
+                observedTrackCount: observedTrackCount
+            ) {
+                createdTrack = true
+            }
+            // When this route exposed the mandatory sheet, the positive count
+            // is the observable gate for its track fact. Keep polling while it
+            // settles rather than turning the absence of `performed` into an
+            // immediate hard failure before the count can be read.
+            if mandatoryTrackSheetGone, !createdTrack {
+                guard attempt + 1 == attempts else { continue }
+                var extras: [String: Any] = [
+                    "operation": "project.new",
+                    "method": "accessibility",
+                    "selection": selection,
+                    "phase": "mandatory_track_count_unconfirmed",
+                    "write_attempted": true,
+                    "safe_to_retry": false,
+                ]
+                if let witnessSummary {
+                    extras["modal_reconciliation_witness"] = witnessSummary.envelopeValue
+                }
+                return .error(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: extras
+                ))
+            }
             if let current = exactCreatedProjectWindow(runtime: runtime) {
+                var extras: [String: Any] = [
+                    "operation": "project.new",
+                    "method": "accessibility",
+                    "selection": selection,
+                    "phase": "created_project_window_observed",
+                    "window_title": AXHelpers.getTitle(current, runtime: runtime.ax) ?? "",
+                    "mandatory_track_created": createdTrack,
+                    "observation_elapsed_ms": (attempt + 1) * Int(observationDelayNanoseconds / 1_000_000),
+                    "write_attempted": true,
+                    "safe_to_retry": false,
+                ]
+                if let witnessSummary {
+                    extras["modal_reconciliation_witness"] = witnessSummary.envelopeValue
+                }
                 return .success(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
-                    extras: [
-                        "operation": "project.new",
-                        "method": "accessibility",
-                        "selection": selection,
-                        "phase": "created_project_window_observed",
-                        "window_title": AXHelpers.getTitle(current, runtime: runtime.ax) ?? "",
-                        "mandatory_track_created": createdTrack,
-                        "observation_elapsed_ms": (attempt + 1) * Int(observationDelayNanoseconds / 1_000_000),
-                        "write_attempted": true,
-                        "safe_to_retry": false,
-                    ]
+                    extras: extras
                 ))
             }
         }
@@ -334,7 +552,9 @@ extension AccessibilityChannel {
         return .success(projectNewPendingReadbackEnvelope(
             mandatoryTrackCreated: createdTrack,
             observedWindowTitles: observedWindowTitles(runtime: runtime),
-            observationBudgetMs: attempts * Int(observationDelayNanoseconds / 1_000_000)
+            observationBudgetMs: attempts * Int(observationDelayNanoseconds / 1_000_000),
+            witnessSummary: witnessSummary,
+            modalUnreadableReason: lastModalUnreadableReason
         ))
     }
 

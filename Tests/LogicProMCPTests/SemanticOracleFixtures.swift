@@ -856,10 +856,10 @@ enum SemanticOracleFixtures {
             response: """
                 {"success":true,"verified":true,"state":"A","menu_clicked":"새로운 오디오 트랙",\
                 "track_count_before":2,"requested_delta":1,"dialog_confirmation_attempted":false,\
-                "observed_track_type":"audio","track_type_verification_source":"menu_clicked",\
+                "observed_track_type":"audio","track_type_verification_source":"observed_header",\
                 "verification_source":"track_count_delta","track_count_after":3,"observed_delta":1,\
                 "observed_track_index":2,"observed_track_name":"Audio 1",\
-                "observed_track_type_inferred":"audio"}
+                "requested_track_type":"audio"}
                 """,
             readback: "{}"
         ),
@@ -869,10 +869,10 @@ enum SemanticOracleFixtures {
                 {"success":true,"verified":true,"state":"A",\
                 "menu_clicked":"새로운 소프트웨어 악기 트랙","track_count_before":2,"requested_delta":1,\
                 "dialog_confirmation_attempted":true,"observed_track_type":"software_instrument",\
-                "track_type_verification_source":"menu_clicked",\
+                "track_type_verification_source":"observed_header",\
                 "verification_source":"track_count_delta","track_count_after":3,"observed_delta":1,\
                 "observed_track_index":2,"observed_track_name":"Inst 1",\
-                "observed_track_type_inferred":"software_instrument"}
+                "requested_track_type":"software_instrument"}
                 """,
             readback: "{}"
         ),
@@ -882,9 +882,9 @@ enum SemanticOracleFixtures {
                 {"success":true,"verified":true,"state":"A",\
                 "menu_clicked":"새로운 Session Player SI 트랙…","track_count_before":2,\
                 "requested_delta":1,"dialog_confirmation_attempted":true,\
-                "observed_track_type":"drummer","track_type_verification_source":"menu_clicked",\
+                "observed_track_type":"drummer","track_type_verification_source":"observed_header",\
                 "verification_source":"track_count_delta","track_count_after":3,"observed_delta":1,\
-                "observed_track_index":2,"observed_track_name":"Drummer","observed_track_type_inferred":"drummer"}
+                "observed_track_index":2,"observed_track_name":"Drummer","requested_track_type":"drummer"}
                 """,
             readback: "{}"
         ),
@@ -893,9 +893,9 @@ enum SemanticOracleFixtures {
             response: """
                 {"success":true,"verified":true,"state":"A","menu_clicked":"새로운 외부 MIDI 트랙",\
                 "track_count_before":2,"requested_delta":1,"dialog_confirmation_attempted":false,\
-                "observed_track_type":"external_midi","track_type_verification_source":"menu_clicked",\
+                "observed_track_type":"external_midi","track_type_verification_source":"observed_header",\
                 "verification_source":"track_count_delta","track_count_after":3,"observed_delta":1,\
-                "observed_track_index":2,"observed_track_name":"External MIDI","observed_track_type_inferred":"external_midi"}
+                "observed_track_index":2,"observed_track_name":"External MIDI","requested_track_type":"external_midi"}
                 """,
             readback: "{}"
         ),

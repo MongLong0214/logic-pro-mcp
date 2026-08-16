@@ -158,7 +158,7 @@ struct Issue60LocalePhase4Tests {
         b.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
         b.setAttribute(window, kAXTitleAttribute as String, title)
         let isPicker = AXLogicProElements.isProjectPickerWindow(window, runtime: b.makeLogicRuntime(appElement: app))
-        #expect(isPicker == expected, "title=\(title)")
+        #expect(expected ? isPicker : !isPicker, "title=\(title)")
     }
 
     @Test("findPanControlInHeader locates the pan slider by Korean child description")

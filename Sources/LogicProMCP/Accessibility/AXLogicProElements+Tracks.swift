@@ -5,6 +5,16 @@ import Foundation
 extension AXLogicProElements {
     // MARK: - Tracks
 
+    /// A track-header enumeration whose unsuccessful traversal cannot be
+    /// confused with an empty, successfully read rail. Mutation verification
+    /// uses this instead of `allTrackHeaders().count`: zero is evidence only in
+    /// `.read([])`, never in `.unavailable` or `.unreadable`.
+    enum TrackHeaderRead {
+        case read([AXUIElement])
+        case unavailable
+        case unreadable
+    }
+
     /// Returns true when Logic's main window is the Choose Project picker
     /// (shown when no project is open). Any AXOutline/AXTable inside the picker
     /// describes template choices, NOT tracks — misidentifying them yields
@@ -190,6 +200,221 @@ extension AXLogicProElements {
             return layoutItems
         }
         return []
+    }
+
+    /// Status-preserving counterpart to `allTrackHeaders`, bound to a window
+    /// already resolved by the caller. This is deliberately narrower than the
+    /// historic best-effort API: a missing header container or any failed
+    /// traversal is not an empty track list and must not be used to certify a
+    /// destructive mutation.
+    static func allTrackHeadersRead(
+        in window: AXUIElement,
+        runtime: Runtime = .production
+    ) -> TrackHeaderRead {
+        guard !isProjectPickerWindow(window, runtime: runtime) else {
+            return .unavailable
+        }
+
+        // Preserve `getTrackHeaders`' established locator order: named list,
+        // named scroll area, structural/labelled group, then trusted
+        // outline/table fallback. Candidate discovery is intentionally tolerant
+        // of an unrelated subtree being mid-load: the question is whether the
+        // Track Headers rail can be read, not whether every descendant of the
+        // arrange window can be read.
+        let candidates = trackHeaderCandidates(in: window, maxDepth: 32, runtime: runtime.ax)
+        for candidate in candidates.lists {
+            return enumerateTrackHeaderRows(in: candidate, runtime: runtime.ax)
+        }
+        for candidate in candidates.scrollAreas {
+            return enumerateTrackHeaderRows(in: candidate, runtime: runtime.ax)
+        }
+        for candidate in candidates.groups {
+            return enumerateTrackHeaderRows(in: candidate, runtime: runtime.ax)
+        }
+        for candidate in candidates.outlinesAndTables {
+            switch AXHelpers.childrenResult(candidate, runtime: runtime.ax) {
+            case .failure:
+                // This candidate was not established as the rail, so an
+                // unrelated outline/table loading underneath the arrange window
+                // cannot poison a readable named or group candidate elsewhere.
+                continue
+            case .success(let children):
+                var hasLayoutItem = false
+                var childRoleUnreadable = false
+                for child in children {
+                    switch trackStringAttribute(child, kAXRoleAttribute as String, runtime: runtime.ax) {
+                    case .success(let role):
+                        hasLayoutItem = hasLayoutItem || role == (kAXLayoutItemRole as String)
+                    case .failure:
+                        childRoleUnreadable = true
+                    }
+                }
+                // No positive Track Headers identity was found for this
+                // outline/table. Its unreadable child therefore cannot make a
+                // separately readable rail unavailable.
+                guard !childRoleUnreadable else { continue }
+                if hasLayoutItem {
+                    return enumerateTrackHeaderRows(in: candidate, runtime: runtime.ax)
+                }
+            }
+        }
+        return .unavailable
+    }
+
+    private struct TrackHeaderCandidates {
+        var lists: [AXUIElement] = []
+        var scrollAreas: [AXUIElement] = []
+        var groups: [AXUIElement] = []
+        var outlinesAndTables: [AXUIElement] = []
+    }
+
+    /// Discover potential Track Headers rails without making an unrelated AX
+    /// branch part of the rail's read contract. Once a candidate is positively
+    /// identified, `enumerateTrackHeaderRows` resumes strict, status-preserving
+    /// traversal of that candidate itself. A depth cap or AX failure here only
+    /// stops this untrusted branch; it must not turn a separately readable empty
+    /// rail into `.unreadable`.
+    private static func trackHeaderCandidates(
+        in root: AXUIElement,
+        maxDepth: Int,
+        runtime: AXHelpers.Runtime
+    ) -> TrackHeaderCandidates {
+        var candidates = TrackHeaderCandidates()
+
+        func visit(_ element: AXUIElement, remainingDepth: Int) {
+            switch trackStringAttribute(element, kAXRoleAttribute as String, runtime: runtime) {
+            case .success(.some(let role)):
+                if role == (kAXListRole as String),
+                   case .success(let identifier) = trackStringAttribute(
+                        element, kAXIdentifierAttribute as String, runtime: runtime
+                   ),
+                   identifier == "Track Headers" {
+                    candidates.lists.append(element)
+                } else if role == (kAXScrollAreaRole as String),
+                          case .success(let identifier) = trackStringAttribute(
+                            element, kAXIdentifierAttribute as String, runtime: runtime
+                          ),
+                          identifier == "Tracks" {
+                    candidates.scrollAreas.append(element)
+                } else if role == (kAXGroupRole as String),
+                          isTrackHeadersGroup(element, runtime: runtime) {
+                    candidates.groups.append(element)
+                } else if role == (kAXOutlineRole as String) || role == (kAXTableRole as String) {
+                    candidates.outlinesAndTables.append(element)
+                }
+            case .success(.none), .failure:
+                break
+            }
+
+            guard remainingDepth > 0 else { return }
+            guard case .success(let children) = AXHelpers.childrenResult(element, runtime: runtime) else {
+                return
+            }
+            for child in children {
+                visit(child, remainingDepth: remainingDepth - 1)
+            }
+        }
+
+        visit(root, remainingDepth: maxDepth)
+        return candidates
+    }
+
+    private enum TrackDescendantsRead {
+        case complete([AXUIElement])
+        case unresolved
+    }
+
+    /// Unlike `findAllDescendants`, this walker retains AX failures. A failed
+    /// child read cannot be flattened to `[]`, because that would create the
+    /// exact false zero-count that a delete State-A witness must reject.
+    private static func trackDescendantsRead(
+        in element: AXUIElement,
+        maxDepth: Int,
+        runtime: AXHelpers.Runtime
+    ) -> TrackDescendantsRead {
+        switch AXHelpers.childrenResult(element, runtime: runtime) {
+        case .failure(let error):
+            return trackStatusIsDefinitiveAbsence(error) ? .complete([]) : .unresolved
+        case .success(let children):
+            guard maxDepth > 0 else {
+                return children.isEmpty ? .complete([]) : .unresolved
+            }
+            var descendants: [AXUIElement] = []
+            for child in children {
+                switch trackDescendantsRead(in: child, maxDepth: maxDepth - 1, runtime: runtime) {
+                case .complete(let nested):
+                    descendants.append(child)
+                    descendants.append(contentsOf: nested)
+                case .unresolved:
+                    return .unresolved
+                }
+            }
+            return .complete(descendants)
+        }
+    }
+
+    private static func enumerateTrackHeaderRows(
+        in headers: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> TrackHeaderRead {
+        switch AXHelpers.childrenResult(headers, runtime: runtime) {
+        case .failure:
+            return .unreadable
+        case .success(let directChildren):
+            if !directChildren.isEmpty {
+                var layoutItems: [AXUIElement] = []
+                for child in directChildren {
+                    switch trackStringAttribute(child, kAXRoleAttribute as String, runtime: runtime) {
+                    case .success(let role):
+                        if role == (kAXLayoutItemRole as String) {
+                            layoutItems.append(child)
+                        }
+                    case .failure:
+                        return .unreadable
+                    }
+                }
+                return .read(layoutItems.isEmpty ? directChildren : layoutItems)
+            }
+
+            switch trackDescendantsRead(in: headers, maxDepth: 3, runtime: runtime) {
+            case .unresolved:
+                return .unreadable
+            case .complete(let descendants):
+                var layoutItems: [AXUIElement] = []
+                for child in descendants {
+                    switch trackStringAttribute(child, kAXRoleAttribute as String, runtime: runtime) {
+                    case .success(let role):
+                        if role == (kAXLayoutItemRole as String) {
+                            layoutItems.append(child)
+                        }
+                    case .failure:
+                        return .unreadable
+                    }
+                }
+                return .read(layoutItems)
+            }
+        }
+    }
+
+    /// A missing metadata attribute is a structural answer while locating a
+    /// rail; a genuine AX read failure is not. This keeps -25205/-25212 as the
+    /// established absence classes without treating a transient traversal error
+    /// as an empty track list.
+    private static func trackStringAttribute(
+        _ element: AXUIElement,
+        _ attribute: String,
+        runtime: AXHelpers.Runtime
+    ) -> Result<String?, AXHelpers.AXStatusError> {
+        switch AXHelpers.getAttributeResult(element, attribute, runtime: runtime) as Result<String?, AXHelpers.AXStatusError> {
+        case .failure(let error) where trackStatusIsDefinitiveAbsence(error):
+            return .success(nil)
+        case let result:
+            return result
+        }
+    }
+
+    private static func trackStatusIsDefinitiveAbsence(_ error: AXHelpers.AXStatusError) -> Bool {
+        error.raw == AXError.attributeUnsupported.rawValue || error.raw == AXError.noValue.rawValue
     }
 
     // MARK: - Track Controls

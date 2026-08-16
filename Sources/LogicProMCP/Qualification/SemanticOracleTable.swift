@@ -1802,16 +1802,17 @@ enum SemanticOracleTable {
     // before) is ≥ 1 — the genuine "a new track is present" invariant, pinned as a
     // `.numericRange(min: 1)`. `requested_delta:1` is the create intent,
     // `verification_source:"track_count_delta"` is how it was verified, and
-    // `track_type_verification_source:"menu_clicked"` records that the type is
-    // inferred from the clicked menu item. `observed_track_type` is the PER-OP
-    // discriminator — the four create_* handlers pass distinct `expectedTrackType`
-    // values (audio / softwareInstrument / drummer / externalMIDI), so pinning it
-    // is what makes each oracle REJECT a create that produced the wrong track type.
+    // `track_type_verification_source:"observed_header"` records that the type
+    // came from the newly observed header rather than from the requested menu
+    // item. `observed_track_type` is the PER-OP discriminator — the four
+    // create_* handlers pass distinct expected types (audio / softwareInstrument
+    // / drummer / externalMIDI), so pinning it rejects a create that produced a
+    // different observed type.
     private static func createTrackSemantics(observedType: String) -> [OracleConstraint] {
         [
             .valueEquals(key: "requested_delta", expected: .number(1)),
             .valueEquals(key: "verification_source", expected: .string("track_count_delta")),
-            .valueEquals(key: "track_type_verification_source", expected: .string("menu_clicked")),
+            .valueEquals(key: "track_type_verification_source", expected: .string("observed_header")),
             .valueEquals(key: "observed_track_type", expected: .string(observedType)),
             .numericRange(key: "observed_delta", min: 1, max: 10_000),
             .typedField(key: "track_count_before", type: .number),

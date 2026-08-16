@@ -1,4 +1,5 @@
 @preconcurrency import ApplicationServices
+import Foundation
 import Testing
 @testable import LogicProMCP
 
@@ -804,4 +805,117 @@ private func buildSmartControlsPane(_ builder: FakeAXRuntimeBuilder, base: Int) 
 
     let runtime = builder.makeLogicRuntime(appElement: app)
     #expect(AXLogicProElements.dialogPresent(runtime: runtime))
+}
+
+@Test func testDialogPresentIsFailClosedWhenAppRootIsMissing() {
+    let builder = FakeAXRuntimeBuilder()
+    let runtime = builder.makeLogicRuntime(
+        pid: nil,
+        appElement: builder.element(1),
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+    #expect(AXLogicProElements.dialogPresent(runtime: runtime))
+}
+
+@Test func testDialogPresentSeesASheetChildOnANonModalWindow() {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let window = builder.element(2)
+    let sheet = builder.element(3)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+    builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(window, kAXModalAttribute as String, false)
+    builder.setChildren(window, [sheet])
+    builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+    builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+    let runtime = builder.makeLogicRuntime(appElement: app)
+    #expect(AXLogicProElements.dialogPresent(runtime: runtime))
+}
+
+@Test func testTitledButtonsRefuseWhenASiblingRoleReadFails() {
+    let builder = FakeAXRuntimeBuilder()
+    let dialog = builder.element(1)
+    let dontSave = builder.element(2)
+    let cancel = builder.element(3)
+    builder.setAttribute(dontSave, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(dontSave, kAXTitleAttribute as String, "Don't Save")
+    builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+    builder.setChildren(dialog, [dontSave, cancel])
+    let runtime = builder.makeAXRuntime(
+        attributeValueResultHandler: { element, attribute in
+            guard CFEqual(element, cancel), attribute == (kAXRoleAttribute as String) else { return nil }
+            return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+
+    switch AXLogicProElements.titledButtonsRead(of: dialog, runtime: runtime) {
+    case .unreadable:
+        break
+    case .buttons(let buttons):
+        Issue.record("unreadable Cancel made a choice look complete: \(buttons.map(\.title))")
+    }
+}
+
+@Test func testAnUnreadableChoiceDialogIsNotAcknowledged() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(1)
+    let arrange = builder.element(2)
+    let dialog = builder.element(3)
+    let dontSave = builder.element(4)
+    let cancel = builder.element(5)
+    let presses = DialogFilterPressCount()
+    builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, dialog])
+    builder.setAttribute(arrange, kAXModalAttribute as String, false)
+    builder.setAttribute(dialog, kAXModalAttribute as String, true)
+    builder.setAttribute(dialog, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(dontSave, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(dontSave, kAXTitleAttribute as String, "Don't Save")
+    builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+    builder.setChildren(dialog, [dontSave, cancel])
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueResultHandler: { element, attribute in
+            guard CFEqual(element, cancel), attribute == (kAXRoleAttribute as String) else { return nil }
+            return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+        },
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            guard action == (kAXPressAction as String) else { return false }
+            presses.increment()
+            return true
+        }
+    )
+
+    let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+    let kind = ModalReconciliation.classify(read.signals)
+    let outcome = await AccessibilityChannel.reconcilePreflight(
+        runtime: runtime,
+        witnessAttempts: 1,
+        witnessDelayNanoseconds: 0
+    )
+
+    #expect(kind != .informationalAlert)
+    #expect(!outcome.actionAttempted)
+    #expect(presses.current() == 0)
+}
+
+private final class DialogFilterPressCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func increment() {
+        lock.lock()
+        value += 1
+        lock.unlock()
+    }
+
+    func current() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
 }

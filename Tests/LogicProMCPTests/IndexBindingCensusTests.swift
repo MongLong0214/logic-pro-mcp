@@ -174,8 +174,9 @@ struct IndexBindingCensusTests {
         for spec in OperationRegistry.specs {
             let isTargetBearingMutation =
                 spec.target == .acceptsStableTarget && spec.mutability == Mutability.`mutating`
+            let hasIndexBinding = spec.indexBinding != nil
             #expect(
-                (spec.indexBinding != nil) == isTargetBearingMutation,
+                isTargetBearingMutation ? hasIndexBinding : !hasIndexBinding,
                 "\(spec.id.rawValue): indexBinding=\(String(describing: spec.indexBinding)) but target-bearing-mutation=\(isTargetBearingMutation)"
             )
         }

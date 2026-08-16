@@ -40,6 +40,20 @@ enum AXLogicProElements {
         )
     }
 
+    /// A status-preserving arrange-window resolution for safety-critical reads.
+    ///
+    /// `mainWindow()` intentionally remains a best-effort discovery helper for
+    /// ordinary UI work. A mutation verification, however, must distinguish an
+    /// actual absence from an AX failure and must carry the *same* element into
+    /// both its track and sheet reads. In particular, `AXMainWindow` reporting
+    /// -25205/-25212 is a structural answer, not permission to call a later,
+    /// unrelated `mainWindow()` lookup and combine its answer with this one.
+    enum ArrangeWindowRead {
+        case found(AXUIElement)
+        case absent
+        case unreadable
+    }
+
     /// Get the root AX element for Logic Pro. Returns nil if not running.
     static func appRoot(runtime: Runtime = .production) -> AXUIElement? {
         guard let pid = runtime.logicProPID() else { return nil }
@@ -97,16 +111,112 @@ enum AXLogicProElements {
         return nonDialogs.first
     }
 
-    /// Returns true when at least one of Logic's windows is currently a modal
-    /// dialog (subrole `AXDialog` / `AXSystemDialog`). v3.1.1 (P1-2) — used
-    /// by `StatePoller` and any caller that wants to short-circuit cache
-    /// updates while a blocking sheet is up.
+    /// Resolve the non-dialog arrange candidate once for a verification poll.
+    /// The caller carries the returned element to every dependent observation;
+    /// it must not re-run `mainWindow()` for a count, sheet scan, or presence
+    /// check and accidentally combine three different AX snapshots.
+    static func arrangeWindowRead(runtime: Runtime = .production) -> ArrangeWindowRead {
+        guard let app = appRoot(runtime: runtime) else { return .unreadable }
+
+        switch AXHelpers.getAttributeResult(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax
+        ) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+        case .success(.some(let windows)) where !windows.isEmpty:
+            let nonDialogs = windows.filter { !isDialogWindow($0, runtime: runtime.ax) }
+            guard !nonDialogs.isEmpty else {
+                // A dialog is not an arrange-window witness. Returning the raw
+                // main-window dialog here would let a zero count certify a
+                // deletion even though no arrange tree was read.
+                return .absent
+            }
+            if let arrange = nonDialogs.first(where: {
+                hasTrackHeadersGroup($0, runtime: runtime.ax)
+            }) {
+                return .found(arrange)
+            }
+            // Keep the established main-window selection order. The caller still
+            // requires a successful track-header enumeration below, so an
+            // auxiliary non-dialog window cannot supply a count by itself.
+            return .found(nonDialogs[0])
+        case .success:
+            return directArrangeWindowRead(app: app, runtime: runtime.ax)
+        case .failure(let error) where isDefinitiveAXAbsence(error):
+            return directArrangeWindowRead(app: app, runtime: runtime.ax)
+        case .failure:
+            return .unreadable
+        }
+    }
+
+    private static func directArrangeWindowRead(
+        app: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> ArrangeWindowRead {
+        switch AXHelpers.getAttributeResult(
+            app, kAXMainWindowAttribute as String, runtime: runtime
+        ) as Result<AXUIElement?, AXHelpers.AXStatusError> {
+        case .success(.some(let window)):
+            return .found(window)
+        case .success(.none):
+            return .absent
+        case .failure(let error) where isDefinitiveAXAbsence(error):
+            return .absent
+        case .failure:
+            return .unreadable
+        }
+    }
+
+    private static func isDefinitiveAXAbsence(_ error: AXHelpers.AXStatusError) -> Bool {
+        error.raw == AXError.attributeUnsupported.rawValue || error.raw == AXError.noValue.rawValue
+    }
+
+    /// Returns true when a blocking dialog or sheet is present, or when the
+    /// scan cannot prove absence. A missing app root and an unreadable
+    /// `AXWindows` list are not "no dialog". Subrole-only top-level windows
+    /// miss Logic's New Track sheet, which is an `AXChildren` member with
+    /// role `AXSheet` on a host whose own `AXModal` is false.
     static func dialogPresent(runtime: Runtime = .production) -> Bool {
-        guard let app = appRoot(runtime: runtime) else { return false }
-        guard let windows: [AXUIElement] = AXHelpers.getAttribute(
-            app, kAXWindowsAttribute, runtime: runtime.ax
-        ) else { return true }
-        return windows.contains { isBlockingDialogWindow($0, runtime: runtime.ax) }
+        guard let app = appRoot(runtime: runtime) else { return true }
+        switch AXHelpers.getAXUIElementArrayRead(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax
+        ) {
+        case .success(.elements(let windows)):
+            return windows.contains { windowHostsBlockingModal($0, runtime: runtime.ax) }
+        case .success(.absent), .success(.malformed), .failure:
+            return true
+        }
+    }
+
+    private static func windowHostsBlockingModal(
+        _ window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        if isBlockingDialogWindow(window, runtime: runtime) { return true }
+        switch AXHelpers.childrenResult(window, runtime: runtime) {
+        case .failure(let error)
+            where error.raw == AXError.attributeUnsupported.rawValue
+                || error.raw == AXError.noValue.rawValue:
+            return false
+        case .failure:
+            return true
+        case .success(let children):
+            for child in children {
+                switch AXHelpers.getAttributeResult(
+                    child, kAXRoleAttribute as String, runtime: runtime
+                ) as Result<String?, AXHelpers.AXStatusError> {
+                case .success(.some(let role)) where role == (kAXSheetRole as String):
+                    return true
+                case .failure(let error)
+                    where error.raw == AXError.attributeUnsupported.rawValue
+                        || error.raw == AXError.noValue.rawValue:
+                    continue
+                case .failure:
+                    return true
+                case .success:
+                    continue
+                }
+            }
+            return false
+        }
     }
 
     /// Identity of a blocking dialog/sheet, for #190 diagnostics: callers refuse
@@ -145,44 +255,151 @@ enum AXLogicProElements {
         guard let dialog = windows.first(where: { isBlockingDialogWindow($0, runtime: runtime.ax) }) else {
             return nil
         }
-        let title = (AXHelpers.getAttribute(dialog, kAXTitleAttribute, runtime: runtime.ax) ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let role = (AXHelpers.getAttribute(dialog, kAXSubroleAttribute, runtime: runtime.ax) ?? (kAXDialogSubrole as String))
-        let owningWindow = (mainWindow(runtime: runtime).flatMap {
-            AXHelpers.getTitle($0, runtime: runtime.ax)
-        } ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let buttons = titledButtons(of: dialog, runtime: runtime.ax)
-        return BlockingDialogTarget(
-            element: dialog,
-            buttons: buttons,
-            info: BlockingDialogInfo(
-                title: title,
-                role: role,
-                owningWindow: owningWindow,
-                buttonTitles: buttons.map(\.title),
-                recoveryAction: blockingDialogRecoveryAction(title: title, buttons: buttons.map(\.title))
-            )
+        return blockingDialogTarget(dialog, runtime: runtime)
+    }
+
+    /// Build a target from the exact top-level dialog a caller already scanned.
+    /// This lets the complete modal reader reuse the normal non-blocking-dialog
+    /// exclusions without replacing its classified window with a fresh ordinal
+    /// search through `AXWindows`.
+    static func blockingDialogTarget(
+        _ dialog: AXUIElement,
+        runtime: Runtime = .production
+    ) -> BlockingDialogTarget? {
+        guard isBlockingDialogWindow(dialog, runtime: runtime.ax) else { return nil }
+        let subrole: String? = AXHelpers.getAttribute(dialog, kAXSubroleAttribute, runtime: runtime.ax)
+        return blockingDialogTarget(
+            dialog,
+            observedSubrole: subrole,
+            runtime: runtime
         )
     }
 
-    /// The dialog's actionable buttons: direct children with the button role and
-    /// a non-empty trimmed title. Shared by the reader and the #453 re-check so
-    /// "exactly one button" means the same thing at classify time and click time
-    /// — two counts derived differently would let a gate pass on one definition
-    /// and act on another.
+    /// Build a target from a window whose subrole was already read through a
+    /// status-preserving scan. The complete modal reader must not discard that
+    /// answer by asking the best-effort API a second time: a transient failure on
+    /// the second request must not make an already-observed dialog disappear.
+    static func blockingDialogTarget(
+        _ dialog: AXUIElement,
+        observedSubrole: String?,
+        runtime: Runtime = .production
+    ) -> BlockingDialogTarget? {
+        guard isBlockingModalWindow(
+            dialog,
+            observedSubrole: observedSubrole,
+            runtime: runtime.ax
+        ) else { return nil }
+        let title = (AXHelpers.getAttribute(dialog, kAXTitleAttribute, runtime: runtime.ax) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let role = observedSubrole ?? (kAXDialogSubrole as String)
+        let owningWindow = (mainWindow(runtime: runtime).flatMap {
+            AXHelpers.getTitle($0, runtime: runtime.ax)
+        } ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        switch titledButtonsRead(of: dialog, runtime: runtime.ax) {
+        case .unreadable:
+            return nil
+        case .buttons(let buttons):
+            return BlockingDialogTarget(
+                element: dialog,
+                buttons: buttons,
+                info: BlockingDialogInfo(
+                    title: title,
+                    role: role,
+                    owningWindow: owningWindow,
+                    buttonTitles: buttons.map(\.title),
+                    recoveryAction: blockingDialogRecoveryAction(title: title, buttons: buttons.map(\.title))
+                )
+            )
+        }
+    }
+
+    /// A complete button-set read. A failed child role or title is not "this
+    /// child is not a button": dropping it would turn a two-button choice into
+    /// a one-button alert. Measured Logic also places sheet/dialog buttons one
+    /// `AXGroup` deep, so that group is part of the same candidate set.
+    enum TitledButtonsRead {
+        case buttons([(element: AXUIElement, title: String)])
+        case unreadable
+    }
+
+    static func titledButtonsRead(
+        of dialog: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> TitledButtonsRead {
+        collectTitledButtons(of: dialog, runtime: runtime, descendIntoGroups: true)
+    }
+
+    /// The dialog's actionable buttons when the whole candidate set was
+    /// readable. An unreadable sibling collapses to an empty list so leftover
+    /// callers cannot act on a partial set.
     static func titledButtons(
         of dialog: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> [(element: AXUIElement, title: String)] {
-        AXHelpers.getChildren(dialog, runtime: runtime)
-            .filter { AXHelpers.getRole($0, runtime: runtime) == (kAXButtonRole as String) }
-            .compactMap { button in
-                guard let title = AXHelpers.getTitle(button, runtime: runtime)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-                    !title.isEmpty
-                else { return nil }
-                return (element: button, title: title)
+        switch titledButtonsRead(of: dialog, runtime: runtime) {
+        case .buttons(let buttons):
+            return buttons
+        case .unreadable:
+            return []
+        }
+    }
+
+    private static func collectTitledButtons(
+        of element: AXUIElement,
+        runtime: AXHelpers.Runtime,
+        descendIntoGroups: Bool
+    ) -> TitledButtonsRead {
+        let children: [AXUIElement]
+        switch AXHelpers.childrenResult(element, runtime: runtime) {
+        case .failure(let error)
+            where error.raw == AXError.attributeUnsupported.rawValue
+                || error.raw == AXError.noValue.rawValue:
+            return .buttons([])
+        case .failure:
+            return .unreadable
+        case .success(let observed):
+            children = observed
+        }
+        var buttons: [(element: AXUIElement, title: String)] = []
+        for child in children {
+            switch AXHelpers.getAttributeResult(
+                child, kAXRoleAttribute as String, runtime: runtime
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case .failure(let error)
+                where error.raw == AXError.attributeUnsupported.rawValue
+                    || error.raw == AXError.noValue.rawValue:
+                continue
+            case .failure:
+                return .unreadable
+            case .success(.none):
+                continue
+            case .success(.some(let role)) where role == (kAXButtonRole as String):
+                switch AXHelpers.getAttributeResult(
+                    child, kAXTitleAttribute as String, runtime: runtime
+                ) as Result<String?, AXHelpers.AXStatusError> {
+                case .failure(let error)
+                    where error.raw != AXError.attributeUnsupported.rawValue
+                        && error.raw != AXError.noValue.rawValue:
+                    return .unreadable
+                case .failure, .success(.none):
+                    continue
+                case .success(.some(let rawTitle)):
+                    let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !title.isEmpty else { continue }
+                    buttons.append((element: child, title: title))
+                }
+            case .success(.some(let role)) where role == (kAXGroupRole as String) && descendIntoGroups:
+                switch collectTitledButtons(of: child, runtime: runtime, descendIntoGroups: false) {
+                case .unreadable:
+                    return .unreadable
+                case .buttons(let nested):
+                    buttons.append(contentsOf: nested)
+                }
+            case .success:
+                continue
             }
+        }
+        return .buttons(buttons)
     }
 
     static func blockingDialogInfo(runtime: Runtime = .production) -> BlockingDialogInfo? {
@@ -220,14 +437,33 @@ enum AXLogicProElements {
             || subrole == (kAXSystemDialogSubrole as String)
     }
 
-    private static func isBlockingDialogWindow(
+    static func isBlockingDialogWindow(
         _ window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Bool {
-        guard isDialogWindow(window, runtime: runtime) else { return false }
+        let subrole: String? = AXHelpers.getAttribute(window, kAXSubroleAttribute, runtime: runtime)
+        guard subrole == (kAXDialogSubrole as String)
+                || subrole == (kAXSystemDialogSubrole as String)
+        else { return false }
+        return isBlockingModalWindow(window, observedSubrole: subrole, runtime: runtime)
+    }
+
+    /// Applies the established non-blocking-dialog exclusions to a window whose
+    /// modality was determined separately from `AXModal`. `AXSubrole` answers
+    /// which modal kind this is; it does not decide whether the window blocks.
+    /// A modal floating window has no current exclusion and therefore remains a
+    /// blocker rather than being erased by the dialog-only exclusion helpers.
+    static func isBlockingModalWindow(
+        _ window: AXUIElement,
+        observedSubrole: String?,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        guard observedSubrole == (kAXDialogSubrole as String)
+                || observedSubrole == (kAXSystemDialogSubrole as String)
+        else { return true }
         return !isKeyboardLayoutOverlayWindow(window, runtime: runtime)
-            && !isPluginEditorWindow(window, runtime: runtime)
-            && !isSmartControlsWindow(window, runtime: runtime)
+            && !isPluginEditorWindow(window, observedSubrole: observedSubrole, runtime: runtime)
+            && !isSmartControlsWindow(window, observedSubrole: observedSubrole, runtime: runtime)
     }
 
     /// #234: Logic 12.3 tags plugin-EDITOR windows with subrole `AXDialog` and a
@@ -276,7 +512,16 @@ enum AXLogicProElements {
         runtime: AXHelpers.Runtime
     ) -> Bool {
         let subrole: String? = AXHelpers.getAttribute(window, kAXSubroleAttribute, runtime: runtime)
-        guard subrole == (kAXDialogSubrole as String) else { return false }
+        return isPluginEditorWindow(window, observedSubrole: subrole, runtime: runtime)
+    }
+
+    /// As above, but reuse a caller's status-preserving subrole read.
+    static func isPluginEditorWindow(
+        _ window: AXUIElement,
+        observedSubrole: String?,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        guard observedSubrole == (kAXDialogSubrole as String) else { return false }
 
         let closeButton: AXUIElement? = AXHelpers.getAttribute(
             window, kAXCloseButtonAttribute, runtime: runtime
@@ -349,7 +594,16 @@ enum AXLogicProElements {
         runtime: AXHelpers.Runtime
     ) -> Bool {
         let subrole: String? = AXHelpers.getAttribute(window, kAXSubroleAttribute, runtime: runtime)
-        guard subrole == (kAXDialogSubrole as String) else { return false }
+        return isSmartControlsWindow(window, observedSubrole: subrole, runtime: runtime)
+    }
+
+    /// As above, but reuse a caller's status-preserving subrole read.
+    static func isSmartControlsWindow(
+        _ window: AXUIElement,
+        observedSubrole: String?,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        guard observedSubrole == (kAXDialogSubrole as String) else { return false }
 
         let title: String = AXHelpers.getAttribute(window, kAXTitleAttribute, runtime: runtime) ?? ""
         guard title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }

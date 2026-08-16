@@ -54,9 +54,11 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         appElement: AXUIElement? = nil,
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
         attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
+        childrenHandler: (@Sendable (AXUIElement) -> [AXUIElement]?)? = nil,
         childrenResultHandler: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXHelpers.AXStatusError>?)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
+        performActionResultHandler: (@Sendable (AXUIElement, String) -> Result<Void, AXHelpers.AXStatusError>)? = nil,
         executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
             await AppleScriptChannel.executeAppleScript($0)
         }
@@ -84,7 +86,10 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
                 return true
             },
             children: { [self] element in
-                children[key(for: element)] ?? []
+                if let handled = childrenHandler?(element) {
+                    return handled
+                }
+                return children[key(for: element)] ?? []
             },
             performAction: { [self] element, action in
                 if let performActionHandler {
@@ -122,7 +127,8 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
                     return .success(NSArray())
                 }
                 return .success(bridge(attributes[key(for: element)]?[attribute]))
-            }
+            },
+            performActionResult: performActionResultHandler
         )
     }
 
@@ -140,8 +146,11 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
         appElement: AXUIElement? = nil,
         attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
         attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
+        childrenHandler: (@Sendable (AXUIElement) -> [AXUIElement]?)? = nil,
+        childrenResultHandler: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXHelpers.AXStatusError>?)? = nil,
         setAttributeHandler: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)?,
         performActionHandler: (@Sendable (AXUIElement, String) -> Bool)?,
+        performActionResultHandler: (@Sendable (AXUIElement, String) -> Result<Void, AXHelpers.AXStatusError>)? = nil,
         executeAppleScript: @escaping @Sendable (String) async -> ChannelResult = {
             await AppleScriptChannel.executeAppleScript($0)
         }
@@ -152,8 +161,11 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
                 appElement: appElement,
                 attributeValueHandler: attributeValueHandler,
                 attributeValueResultHandler: attributeValueResultHandler,
+                childrenHandler: childrenHandler,
+                childrenResultHandler: childrenResultHandler,
                 setAttributeHandler: setAttributeHandler,
-                performActionHandler: performActionHandler
+                performActionHandler: performActionHandler,
+                performActionResultHandler: performActionResultHandler
             ),
             executeAppleScript: executeAppleScript
         )
@@ -164,6 +176,12 @@ final class FakeAXRuntimeBuilder: @unchecked Sendable {
     }
 
     private func bridge(_ value: Any?) -> AnyObject? {
+        // An absent attribute must bridge to nil, not to NSNull. Swift will happily match
+        // `Optional<Any>.none` against `as AnyObject` and hand back NSNull, so without this guard
+        // every unset attribute reads as a present-but-malformed value. Code that fails closed on
+        // malformed reads — which is the correct behaviour — then sees a blocking sheet on a window
+        // that has none.
+        guard let value else { return nil }
         switch value {
         case let value as String:
             return value as NSString

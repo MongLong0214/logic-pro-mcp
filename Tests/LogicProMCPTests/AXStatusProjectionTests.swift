@@ -42,16 +42,18 @@ struct AXStatusProjectionTests {
         #expect(absentIsEmptySuccess)
     }
 
-    @Test func malformedNonArrayIsEmptySuccess() {
-        var emptySuccess = false
-        var observed = "failure"
-        if case .success(let elements) = AXHelpers.projectChildrenStatus(.success, "10,20" as NSString) {
-            emptySuccess = elements.isEmpty
-            observed = "success(count: \(elements.count))"
+    @Test func malformedNonArrayIsUnreadable() {
+        let projected = AXHelpers.projectChildrenStatus(.success, "10,20" as NSString)
+        let malformedIsUnreadable: Bool
+        if case .failure(let error) = projected {
+            malformedIsUnreadable = error == .malformedChildren
+        } else {
+            malformedIsUnreadable = false
         }
-        print("EVIDENCE AC-3 expected=success(count: 0) actual=\(observed)")
-        let malformedIsEmptySuccess: Bool = emptySuccess
-        #expect(malformedIsEmptySuccess)
+        #expect(
+            malformedIsUnreadable,
+            "Mutation caught: return an empty success for a malformed successful AXChildren value; an undecodable subtree cannot prove absence."
+        )
     }
 
     @Test func wellFormedChildrenProjectToExpectedElements() {

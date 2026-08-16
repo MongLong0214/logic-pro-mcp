@@ -1246,8 +1246,16 @@ extension AccessibilityChannel {
         korean: String,
         english: String,
         expectedTrackType: TrackType,
+        // Retained for channel-runtime compatibility. The create route no
+        // longer invokes this unchecked keyboard fallback.
         confirmDialog: @escaping @Sendable () -> Void = { sendReturnKey() },
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        // #538: total post-menu reconcile passes budgeted for the mandatory
+        // New Track sheet, including the first. Tests override the delay to
+        // 0 to stay fast; production keeps a real gap so a delayed AX publish
+        // has time to land.
+        dialogPollAttempts: Int = 5,
+        dialogPollDelayNanoseconds: UInt64 = 200_000_000
     ) async -> ChannelResult {
         guard AXLogicProElements.mainWindow(runtime: runtime) != nil else {
             return .error("No document open for track creation")
@@ -1257,13 +1265,17 @@ extension AccessibilityChannel {
         // single-OK top-level alert (audio-interface warning on fresh-document /
         // first-track creation) otherwise wedges the create. Scoped with
         // `clearMandatoryNewTrack: false` so preflight NEVER clicks "Create": the
-        // New-Track-dialog confirmation below (`sendReturnKey`) owns that, and
-        // doing both would double-create. Acknowledges alerts + escapes stray
+        // classifier-bound post-menu reconciliation below owns that, and doing
+        // both would double-create. Acknowledges alerts + escapes stray
         // menus only; a no-op AX read when nothing is blocking.
         let reconcileOutcome = await reconcilePreflight(clearMandatoryNewTrack: false, runtime: runtime)
 
-        let beforeTracks = observedTrackStates(runtime: runtime)
-        let beforeCount = beforeTracks.count
+        // A mutation witness needs the same status-preserving rail read as the
+        // delete path. The historic flattening enumerator turns a failed
+        // pre-write read into `[]`, which makes tracks that were already there
+        // look like the result of this menu click.
+        let arrangeWindow = AXLogicProElements.arrangeWindowRead(runtime: runtime)
+        let beforeTracks = observedTrackStates(in: arrangeWindow, runtime: runtime)
 
         // Try Korean locale first
         let result = clickTrackMenu(korean, menuName: "트랙", englishMenuName: "Track", runtime: runtime)
@@ -1277,33 +1289,62 @@ extension AccessibilityChannel {
             menuClickedTitle = english
         }
 
-        // Logic 12.0.1: menu click may show "새로운 트랙 생성" dialog (sometimes invisible
-        // to AX tree). Strategy: poll track count briefly. If track was already
-        // created without a dialog, do NOT send Return (avoids sending Enter to
-        // unrelated focused targets). If still unchanged after 400ms, assume
-        // dialog is up and send Return; verify after.
+        // Logic may publish a mandatory New Track dialog after the menu click.
+        // Reconcile it through the classifier-bound AX Create element; Return
+        // would actuate whichever default control happens to be focused and was
+        // never read as this operation's target.
         try? await Task.sleep(nanoseconds: 400_000_000)
-        let midCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
-        let dialogConfirmationAttempted = midCount == beforeCount
-        if dialogConfirmationAttempted {
-            // Track not created yet — assume New Track dialog is awaiting confirmation
-            confirmDialog()
+        var dialogReconcileOutcome = await reconcileAfterMutation(
+            isDeleteContext: false,
+            runtime: runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+        // #538 BLOCKER: `reconcileAfterMutation` can classify the sheet from its
+        // AXDescription before the sheet's Create control is published in the
+        // tree — the executor then no-ops (`createButton == nil`,
+        // `actionAttempted == false`) and this single pass presses nothing. The
+        // mandatory sheet's only exit is Create, so stopping here after one
+        // description-only pass leaves Logic wedged on it. Poll again, mirroring
+        // `observeProjectCreationOutcome`'s `mandatoryTrackCreateActionAttempted`
+        // latch: keep re-reconciling ONLY while no pass has yet issued the press
+        // AND the sheet is still classified `.mandatoryNewTrack`, and stop the
+        // instant one pass does — so a later-published Create control is
+        // pressed exactly once, never twice.
+        if !dialogReconcileOutcome.actionAttempted {
+            let extraAttempts = max(0, dialogPollAttempts - 1)
+            for _ in 0..<extraAttempts {
+                guard dialogReconcileOutcome.kind == .mandatoryNewTrack else { break }
+                try? await Task.sleep(nanoseconds: dialogPollDelayNanoseconds)
+                dialogReconcileOutcome = await reconcileAfterMutation(
+                    isDeleteContext: false,
+                    runtime: runtime,
+                    witnessAttempts: 1,
+                    witnessDelayNanoseconds: 0
+                )
+                if dialogReconcileOutcome.actionAttempted { break }
+            }
         }
+        let dialogConfirmationAttempted = dialogReconcileOutcome.actionAttempted
+        let verificationReconcileOutcome = dialogReconcileOutcome.kind == .none
+            && dialogReconcileOutcome.modalObservationIsComplete
+            ? reconcileOutcome
+            : dialogReconcileOutcome
 
         return await verifyTrackCreation(
             title: menuClickedTitle,
             expectedTrackType: expectedTrackType,
             beforeTracks: beforeTracks,
+            arrangeWindow: arrangeWindow,
             dialogConfirmationAttempted: dialogConfirmationAttempted,
-            reconcileOutcome: reconcileOutcome,
+            reconcileOutcome: verificationReconcileOutcome,
             runtime: runtime
         )
     }
 
-    /// Send Return key via CGEvent — used to auto-confirm Logic 12's
-    /// "New Track" dialog (which is sometimes opaque to AX tree).
-    // internal (not private): reused by the +ModalReconcile extension as the
-    // delete-confirm sheet's default-button fallback (#346).
+    /// Legacy keyboard fallback retained for injected runtime compatibility.
+    /// Track creation deliberately does not call it: Return has no AX-bound
+    /// target and can activate an unrelated default button.
     static func sendReturnKey() {
         guard let src = CGEventSource(stateID: .hidSystemState) else { return }
         let returnVK: CGKeyCode = 0x24
@@ -1319,21 +1360,21 @@ extension AccessibilityChannel {
     private static func verifyTrackCreation(
         title: String,
         expectedTrackType: TrackType,
-        beforeTracks: [TrackState],
+        beforeTracks: [TrackState]?,
+        arrangeWindow: AXLogicProElements.ArrangeWindowRead,
         dialogConfirmationAttempted: Bool,
         reconcileOutcome: ModalReconcileOutcome,
         runtime: AXLogicProElements.Runtime
     ) async -> ChannelResult {
-        let beforeCount = beforeTracks.count
-        var lastObservedCount = beforeCount
+        let beforeCount = beforeTracks?.count
+        var lastObservedCount: Int?
 
         var extras: [String: Any] = [
             "menu_clicked": title,
-            "track_count_before": beforeCount,
+            "track_count_before": beforeCount ?? NSNull(),
             "requested_delta": 1,
+            "requested_track_type": expectedTrackType.rawValue,
             "dialog_confirmation_attempted": dialogConfirmationAttempted,
-            "observed_track_type": expectedTrackType.rawValue,
-            "track_type_verification_source": "menu_clicked",
             "verification_source": "track_count_delta"
         ]
         // #348: note any pre-create reconciliation (alert acknowledged / stray
@@ -1342,24 +1383,75 @@ extension AccessibilityChannel {
         mergeReconcileExtras(
             &extras,
             kind: reconcileOutcome.kind,
-            action: reconcileActionLabel(reconcileOutcome.decision),
-            newTrackAutoConfirmed: false,
-            refusal: reconcileOutcome.refusal
+            action: attemptedReconcileActionLabel(reconcileOutcome),
+            newTrackAutoConfirmed: reconcileOutcome.kind == .mandatoryNewTrack && reconcileOutcome.actionAccepted,
+            witnessSummary: reconcileOutcome.witnessSummary,
+            refusal: reconcileOutcome.refusal,
+            actionFailure: reconcileOutcome.actionFailure,
+            unreadableReason: reconcileOutcome.unreadableReason
         )
 
+        var lastModal = reconcileOutcome
+        // #538 BLOCKER: a single clean+increased poll is not settled absence.
+        // After Create, Logic rebuilds — the bound sheet invalidates
+        // (`.gone`), `AXChildren` can read back a successful `[]` for one
+        // poll, and a replacement New Track sheet can attach on the very next
+        // read. Mirror the delete path's requirement of two CONSECUTIVE clean
+        // observations (`deletionCleanObservationStreakIsSettled`) instead of
+        // certifying State A off attempt 0 alone.
+        var consecutiveCleanIncreasedObservations = 0
         for attempt in 0..<4 {
-            let currentTracks = observedTrackStates(runtime: runtime)
-            let currentCount = currentTracks.count
-            lastObservedCount = currentCount
-            if currentCount > beforeCount {
+            let currentTracks = observedTrackStates(in: arrangeWindow, runtime: runtime)
+            let currentCount = currentTracks?.count
+            if let currentCount {
+                lastObservedCount = currentCount
+            }
+            let modal = observeModalAfterMutation(
+                isDeleteContext: false,
+                arrangeWindow: arrangeWindow,
+                runtime: runtime
+            )
+            lastModal = modal
+            let countIncreased = beforeTracks.map { before in
+                currentTracks.map { $0.count > before.count } ?? false
+            } ?? false
+            let settledClean = deletionModalObservationIsSettledClean(
+                modal,
+                arrangeWindowWasRead: {
+                    if case .found = arrangeWindow { return true }
+                    return false
+                }()
+            )
+            if countIncreased, settledClean {
+                consecutiveCleanIncreasedObservations += 1
+            } else {
+                consecutiveCleanIncreasedObservations = 0
+            }
+            if let beforeTracks,
+               let currentTracks,
+               deletionCountCanCertifyStateA(
+                   observedTrackCountDecreased: countIncreased,
+                   settledCleanModalObservation: deletionCleanObservationStreakIsSettled(
+                       consecutiveCleanIncreasedObservations
+                   )
+               ) {
                 var merged = extras.merging([
-                    "track_count_after": currentCount,
-                    "observed_delta": currentCount - beforeCount
+                    "track_count_after": currentTracks.count,
+                    "observed_delta": currentTracks.count - beforeTracks.count
                 ]) { _, new in new }
                 if let observedTrack = observedCreatedTrack(before: beforeTracks, after: currentTracks) {
                     merged["observed_track_index"] = observedTrack.id
-                    merged["observed_track_name"] = observedTrack.name
-                    merged["observed_track_type_inferred"] = observedTrack.type.rawValue
+                    // `extractTrackName` returns the literal placeholder "Untitled"
+                    // with `liveIdentityBacked == false` when no title/description/
+                    // text-field name was actually readable. Publishing that literal
+                    // as `observed_track_name` would claim the header named itself
+                    // when nothing was read. Only a live-identity-backed name is an
+                    // observed effect.
+                    if observedTrack.liveIdentityBacked {
+                        merged["observed_track_name"] = observedTrack.name
+                    }
+                    merged["observed_track_type"] = observedTrack.type.rawValue
+                    merged["track_type_verification_source"] = "observed_header"
                 }
                 return .success(HonestContract.encodeStateA(extras: merged))
             }
@@ -1369,14 +1461,56 @@ extension AccessibilityChannel {
             }
         }
 
-        var merged = extras.merging([
-            "track_count_after": lastObservedCount,
-            "observed_delta": lastObservedCount - beforeCount
-        ]) { _, new in new }
-        let dialogPresent = AXLogicProElements.dialogPresent(runtime: runtime)
-        merged["dialog_present"] = dialogPresent
-        if dialogPresent {
+        var merged = extras
+        merged["track_count_after"] = lastObservedCount ?? NSNull()
+        if let beforeCount, let lastObservedCount {
+            merged["observed_delta"] = lastObservedCount - beforeCount
+        } else {
+            merged["observed_delta"] = NSNull()
+        }
+        mergeReconcileExtras(
+            &merged,
+            kind: lastModal.kind,
+            action: attemptedReconcileActionLabel(lastModal),
+            newTrackAutoConfirmed: lastModal.kind == .mandatoryNewTrack && lastModal.actionAccepted,
+            witnessSummary: lastModal.witnessSummary,
+            refusal: lastModal.refusal,
+            actionFailure: lastModal.actionFailure,
+            unreadableReason: lastModal.unreadableReason
+        )
+        // Without a successful pre-write rail read, a later count cannot tell
+        // whether the tracks existed before the menu action. The write may have
+        // happened, but State A is unavailable rather than a zero-count guess.
+        guard beforeTracks != nil else {
+            return .success(HonestContract.encodeStateB(
+                reason: .retryExhausted,
+                extras: merged
+            ))
+        }
+        // `dialog_present` / `waiting_for_user` must claim only what was
+        // actually observed. `kind != .none` is a real blocker: something is
+        // genuinely on screen waiting for the user. An incomplete scan
+        // (`!modalObservationIsComplete` while `kind == .none`) is a read
+        // that did not answer — it must not be reported as "a dialog is
+        // present", which is a claim about a control that was never seen.
+        // `mergeReconcileExtras` above already records the honest
+        // `reconciled_modal_observation: "incomplete"` for that case; this
+        // flag must not contradict it.
+        let realBlockerPresent = lastModal.kind != .none
+        merged["dialog_present"] = realBlockerPresent
+        if realBlockerPresent {
             merged["waiting_for_user"] = true
+            return .success(HonestContract.encodeStateB(
+                reason: .retryExhausted,
+                extras: merged
+            ))
+        }
+        guard lastModal.modalObservationIsComplete else {
+            // No dialog was observed, but the blocker-set scan itself never
+            // completed. Neither "clean" nor "blocked" is an honest claim;
+            // stay in the safe, retryable State B rather than asserting a
+            // dialog that was never seen or a write failure that was never
+            // confirmed.
             return .success(HonestContract.encodeStateB(
                 reason: .retryExhausted,
                 extras: merged
@@ -1390,9 +1524,13 @@ extension AccessibilityChannel {
     }
 
     private static func observedTrackStates(
+        in arrangeWindow: AXLogicProElements.ArrangeWindowRead,
         runtime: AXLogicProElements.Runtime = .production
-    ) -> [TrackState] {
-        AXLogicProElements.allTrackHeaders(runtime: runtime).enumerated().map { index, header in
+    ) -> [TrackState]? {
+        guard case .found(let window) = arrangeWindow,
+              case .read(let headers) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+        else { return nil }
+        return headers.enumerated().map { index, header in
             AXValueExtractors.extractTrackState(from: header, index: index, runtime: runtime.ax)
         }
     }
@@ -1401,21 +1539,19 @@ extension AccessibilityChannel {
         before: [TrackState],
         after: [TrackState]
     ) -> TrackState? {
-        if let selected = after.first(where: { $0.isSelected }) {
-            return selected
+        let beforeSignatures = Set(before.map(trackCreationSignature))
+        let newTracks = after.filter { !beforeSignatures.contains(trackCreationSignature($0)) }
+        if newTracks.count == 1 {
+            return newTracks[0]
         }
-        guard after.count == before.count + 1 else {
-            return after.last
-        }
+        guard after.count == before.count + 1 else { return nil }
         var prefix = 0
         while prefix < before.count,
               trackCreationSignature(before[prefix]) == trackCreationSignature(after[prefix]) {
             prefix += 1
         }
-        if prefix < after.count {
-            return after[prefix]
-        }
-        return after.last
+        guard prefix < after.count else { return nil }
+        return after[prefix]
     }
 
     private static func trackCreationSignature(_ track: TrackState) -> String {
@@ -1433,10 +1569,71 @@ extension AccessibilityChannel {
     /// verify the track count decremented by 1 within a 4×1s budget. Returns
     /// State A on confirmed delta, State B `retry_exhausted` if AX poll never
     /// catches the decrement, State C if the menu click itself fails.
+    ///
+    /// A deletion count is State A only after a *subsequent*, clean modal
+    /// observation. Every non-`none` reconcile kind is still a blocker here,
+    /// even if its action was accepted: a successful action is evidence of an
+    /// attempted recovery, not proof that the modal set is now settled clean.
+    static func deletionCountCanCertifyStateA(
+        observedTrackCountDecreased: Bool,
+        settledCleanModalObservation: Bool
+    ) -> Bool {
+        observedTrackCountDecreased && settledCleanModalObservation
+    }
+
+    /// A reconciliation is settled clean only after a read that finds no
+    /// blocking modal at all. A witnessed action is deliberately insufficient:
+    /// its close witness concerns the action's target, while State A needs a
+    /// fresh observation of the complete blocker set.
+    static func deletionModalObservationIsSettledClean(
+        _ outcome: ModalReconcileOutcome,
+        arrangeWindowWasRead: Bool
+    ) -> Bool {
+        // The modal read answers "no blocker", which is truthful even when there is no main window
+        // to hold one — during `project.new` there genuinely is not one yet. A track deletion is
+        // different: the count it just read comes FROM the arrange window, so a decrement observed
+        // while that window cannot be resolved is a transient AX failure wearing the shape of a
+        // successful delete. Require the window here, where the requirement actually belongs,
+        // rather than making every caller of the modal read pretend absence is unreadable.
+        outcome.kind == .none
+            && outcome.modalObservationIsComplete
+            && arrangeWindowWasRead
+    }
+
+    /// Two complete clean reads make the delete State-A gate temporal rather
+    /// than a single racy snapshot. The delete poll cadence is one second, so
+    /// a decrement pays one additional ~1s observation interval before State A
+    /// can be certified.
+    static func deletionCleanObservationStreakIsSettled(
+        _ consecutiveCleanObservationCount: Int
+    ) -> Bool {
+        consecutiveCleanObservationCount >= 2
+    }
+
     static func defaultDeleteTrack(
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ChannelResult {
-        let beforeCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
+        // Resolve the arrange window once for the entire destructive envelope.
+        // The before and after counts must describe this same AX element; a
+        // best-effort `mainWindow()` read can otherwise flatten an unreadable
+        // rail to zero or silently switch windows between the two observations.
+        let arrangeWindow = AXLogicProElements.arrangeWindowRead(runtime: runtime)
+        let beforeTrackRead: AXLogicProElements.TrackHeaderRead
+        switch arrangeWindow {
+        case .found(let window):
+            beforeTrackRead = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+        case .absent:
+            beforeTrackRead = .unavailable
+        case .unreadable:
+            beforeTrackRead = .unreadable
+        }
+        let beforeCount: Int?
+        switch beforeTrackRead {
+        case .read(let headers):
+            beforeCount = headers.count
+        case .unavailable, .unreadable:
+            beforeCount = nil
+        }
         let click = clickTrackMenu(
             ["Delete Track", "트랙 삭제"],
             menuName: "트랙",
@@ -1447,7 +1644,7 @@ extension AccessibilityChannel {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
                 hint: "Track > Delete Track / 트랙 삭제 menu item not found / not pressable",
-                extras: ["track_count_before": beforeCount]
+                extras: ["track_count_before": beforeCount ?? NSNull()]
             ))
         }
 
@@ -1457,55 +1654,161 @@ extension AccessibilityChannel {
 
         var extras: [String: Any] = [
             "menu_clicked": menuClicked,
-            "track_count_before": beforeCount,
+            "track_count_before": beforeCount ?? NSNull(),
             "requested_delta": -1
         ]
 
         // #346: a channel-strip delete raises a "delete channel strips…" confirm
         // sheet, and a delete that empties the project raises the mandatory New
         // Track sheet (Cancel disabled, Escape inert) — both wedge Logic until
-        // reconciled. Reconcile each poll round (a cheap AX read that no-ops when
-        // no sheet is up) and note the outcome. Reconciliation is ADDITIVE: State
-        // A below still requires a real decrement, so auto-Creating a replacement
-        // track on delete-to-zero correctly stays an honest State B rather than a
-        // fabricated success.
+        // reconciled. Each sheet KIND receives at most one direct action while
+        // it remains visible; a sequential delete-confirm → mandatory-New-Track
+        // transition can therefore reconcile both without double-pressing either.
+        // Reconciliation is ADDITIVE:
+        // State A below still requires a real decrement, so auto-Creating a
+        // replacement track on delete-to-zero correctly stays an honest State B
+        // rather than a fabricated success.
         var reconcileKind = ModalReconciliation.BlockingModalKind.none
         var reconcileAction = "none"
+        var reconcileActionKind = ModalReconciliation.BlockingModalKind.none
         // #453: an acknowledgement the executor declined must reach the envelope.
         // Kept beside kind/action so a refusal on any attempt survives to the
         // result, rather than being overwritten by a later clean pass.
         var reconcileRefusal: AlertAcknowledgeRefusal?
-        var newTrackAutoConfirmed = false
+        var reconcileActionFailure: AXHelpers.AXActionError?
+        var reconcileWitnessSummary: ModalReconcileWitnessSummary?
+        var reconcileUnreadableReason: ModalReadFailure?
+        var actionAttemptedModalKinds: Set<String> = []
+        var mandatoryNewTrackReconciliationPerformed = false
+        var consecutiveCleanModalObservations = 0
 
-        var lastObservedCount = beforeCount
+        // `nil` means no post-delete rail read succeeded. Do not initialize this
+        // from `beforeCount`: serialising that pre-delete number as "after" makes
+        // four unreadable polls externally indistinguishable from four observed
+        // no-delta polls.
+        var lastObservedCount: Int?
         for attempt in 0..<4 {
             try? await Task.sleep(nanoseconds: 250_000_000)
 
-            // Bound the mandatory-New-Track auto-Create to exactly once — it is
-            // the terminal sheet, so stop reconciling after it fires.
-            if !newTrackAutoConfirmed {
-                let outcome = await reconcileAfterMutation(isDeleteContext: true, runtime: runtime)
-                if outcome.kind != .none {
-                    reconcileKind = outcome.kind
-                    reconcileAction = reconcileActionLabel(outcome.decision)
-                    if let refusal = outcome.refusal { reconcileRefusal = refusal }
-                    if outcome.kind == .mandatoryNewTrack && outcome.performed {
-                        newTrackAutoConfirmed = true
-                    }
-                }
+            // Carry the operation's one resolved arrange candidate into every
+            // post-delete header and modal read. A failed header traversal is
+            // deliberately not `0`: only `.read([])` is an observed empty rail,
+            // so a transient AX failure cannot resemble a successful delete.
+            let currentTrackRead: AXLogicProElements.TrackHeaderRead
+            switch arrangeWindow {
+            case .found(let window):
+                currentTrackRead = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+            case .absent:
+                currentTrackRead = .unavailable
+            case .unreadable:
+                currentTrackRead = .unreadable
             }
-
-            let currentCount = AXLogicProElements.allTrackHeaders(runtime: runtime).count
-            lastObservedCount = currentCount
-            if currentCount < beforeCount {
+            let currentCount: Int?
+            switch currentTrackRead {
+            case .read(let headers):
+                currentCount = headers.count
+                lastObservedCount = headers.count
+            case .unavailable, .unreadable:
+                currentCount = nil
+            }
+            // Observe first, then action only once for that visible sheet kind.
+            // This bounds a Create press without globally wedging a later,
+            // different blocker in the same delete operation.
+            let observed = observeModalAfterMutation(
+                isDeleteContext: true,
+                arrangeWindow: arrangeWindow,
+                runtime: runtime
+            )
+            let outcome: ModalReconcileOutcome
+            if observed.kind != .none,
+               !actionAttemptedModalKinds.contains(reconcileKindLabel(observed.kind)) {
+                outcome = await reconcileAfterMutation(isDeleteContext: true, runtime: runtime)
+                if outcome.actionAttempted {
+                    actionAttemptedModalKinds.insert(reconcileKindLabel(outcome.kind))
+                }
+            } else {
+                outcome = observed
+            }
+            if outcome.kind != .none {
+                reconcileKind = outcome.kind
+                // Never claim a decision label as an action when no direct
+                // press/key event was issued. If this is a later observation of
+                // the same sheet kind, retain its earlier actual action label;
+                // if it is a new unacted kind, clear the old kind's label.
+                if outcome.actionAttempted {
+                    reconcileAction = reconcileActionLabel(outcome.decision)
+                    reconcileActionKind = outcome.kind
+                } else if reconcileActionKind != outcome.kind {
+                    reconcileAction = "none"
+                    reconcileActionKind = .none
+                }
+                if let refusal = outcome.refusal { reconcileRefusal = refusal }
+                if let actionFailure = outcome.actionFailure { reconcileActionFailure = actionFailure }
+                if let unreadableReason = outcome.unreadableReason {
+                    reconcileUnreadableReason = unreadableReason
+                }
+                // A current unacted *new* blocker must not inherit a witness
+                // from a prior sheet. A repeated observation of the same kind
+                // retains its own prior direct-action witness.
+                if outcome.actionAttempted || reconcileActionKind != outcome.kind {
+                    reconcileWitnessSummary = outcome.witnessSummary
+                }
+                // `mandatoryNewTrackReconciliationPerformed` feeds both
+                // `mandatory_track_reconciliation_performed` and
+                // `new_track_dialog_auto_confirmed` below. `actionAttempted`
+                // is true even when AX rejected the press (e.g. -25202 on a
+                // stale Create button); only `actionAccepted` means AX itself
+                // took the click.
+                if outcome.kind == .mandatoryNewTrack, outcome.actionAccepted {
+                    mandatoryNewTrackReconciliationPerformed = true
+                }
+            } else if outcome.modalObservationIsComplete {
+                // A complete clean pass proves the prior visible kinds closed,
+                // so a later instance is eligible for one fresh direct action.
+                actionAttemptedModalKinds.removeAll()
+                reconcileUnreadableReason = nil
+            } else if let unreadableReason = outcome.unreadableReason {
+                // An incomplete no-modal answer is neither a blocker nor a
+                // clean pass. Preserve its diagnostic and leave the action
+                // latch intact until a later complete observation settles it.
+                reconcileUnreadableReason = unreadableReason
+            }
+            let observedTrackCountDecreased = beforeCount.flatMap { beforeCount in
+                currentCount.map { $0 < beforeCount }
+            } ?? false
+            if observedTrackCountDecreased,
+               deletionModalObservationIsSettledClean(
+                   // The direct recovery path may perform a fresh read in
+                   // order to bind an action to its classifier. That later
+                   // read is not this poll's sheet observation, so it cannot
+                   // turn a sheet we just saw on `arrangeWindow` into clean.
+                   // Only `observed` shares the count's resolved window.
+                   observed,
+                   arrangeWindowWasRead: currentCount != nil
+               ) {
+                consecutiveCleanModalObservations += 1
+            } else {
+                consecutiveCleanModalObservations = 0
+            }
+            if let beforeCount,
+               let currentCount,
+               deletionCountCanCertifyStateA(
+                observedTrackCountDecreased: observedTrackCountDecreased,
+                settledCleanModalObservation: deletionCleanObservationStreakIsSettled(
+                    consecutiveCleanModalObservations
+                )
+            ) {
                 extras["track_count_after"] = currentCount
                 extras["observed_delta"] = currentCount - beforeCount
                 mergeReconcileExtras(
                     &extras,
                     kind: reconcileKind,
                     action: reconcileAction,
-                    newTrackAutoConfirmed: newTrackAutoConfirmed,
-                    refusal: reconcileRefusal
+                    newTrackAutoConfirmed: mandatoryNewTrackReconciliationPerformed,
+                    witnessSummary: reconcileWitnessSummary,
+                    refusal: reconcileRefusal,
+                    actionFailure: reconcileActionFailure,
+                    unreadableReason: reconcileUnreadableReason
                 )
                 return .success(HonestContract.encodeStateA(extras: extras))
             }
@@ -1514,14 +1817,24 @@ extension AccessibilityChannel {
             }
         }
 
-        extras["track_count_after"] = lastObservedCount
-        extras["observed_delta"] = lastObservedCount - beforeCount
+        extras["track_count_after"] = lastObservedCount ?? NSNull()
+        if let beforeCount, let lastObservedCount {
+            extras["observed_delta"] = lastObservedCount - beforeCount
+        } else {
+            extras["observed_delta"] = NSNull()
+        }
+        if reconcileKind == .mandatoryNewTrack {
+            extras["mandatory_track_reconciliation_performed"] = mandatoryNewTrackReconciliationPerformed
+        }
         mergeReconcileExtras(
             &extras,
             kind: reconcileKind,
             action: reconcileAction,
-            newTrackAutoConfirmed: newTrackAutoConfirmed,
-            refusal: reconcileRefusal
+            newTrackAutoConfirmed: mandatoryNewTrackReconciliationPerformed,
+            witnessSummary: reconcileWitnessSummary,
+            refusal: reconcileRefusal,
+            actionFailure: reconcileActionFailure,
+            unreadableReason: reconcileUnreadableReason
         )
         return .success(HonestContract.encodeStateB(
             reason: .retryExhausted,

@@ -41,8 +41,8 @@ struct OperationRegistryCoverageTests {
                     OperationRegistry.deadlineSeconds(tool: tool, command: command)
                 )
 
-                #expect(LogicProServer.isMutatingCommand(tool: tool, command: command)
-                    == (spec.mutability == Mutability.`mutating`))
+                let isMutating = LogicProServer.isMutatingCommand(tool: tool, command: command)
+                #expect(spec.mutability == Mutability.`mutating` ? isMutating : !isMutating)
                 #expect(registryDeadline == LogicProServer.commandDeadlineSeconds(
                     tool: tool,
                     command: command

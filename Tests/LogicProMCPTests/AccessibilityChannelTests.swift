@@ -88,6 +88,29 @@ func creatorStudioDelayedProjectWindowIsHonestStateB() throws {
     #expect(!safeToRetry)
     #expect(body["phase"] as? String == "created_project_window_pending")
     #expect(body["observation_budget_ms"] as? Int == 20_000)
+    #expect(body["observed_window_titles"] as? [String] == ["Untitled"])
+    #expect(body["observed_window_titles_unread"] == nil)
+}
+
+@Test("Creator Studio delayed Project witness says the window list was unread instead of claiming it empty")
+func creatorStudioDelayedProjectWindowNamesAnUnreadWindowList() throws {
+    // `AXWindows` failing to read is not the same fact as the app vending zero windows. Collapsing
+    // both into an empty array made this pending receipt claim it had seen a clean window list when
+    // the read never happened at all.
+    let body = decodeAccessibilityJSON(
+        AccessibilityChannel.projectNewPendingReadbackEnvelope(
+            mandatoryTrackCreated: false,
+            observedWindowTitles: nil,
+            observationBudgetMs: 20_000
+        )
+    )
+    #expect(body["state"] as? String == "B")
+    #expect(body["observed_window_titles"] == nil)
+    // Mutation `unread-window-titles-as-empty-array`: pass `observedWindowTitles ?? []` through
+    // instead of omitting the key. `observed_window_titles` would then be `[]`, which is
+    // indistinguishable from a caller that saw zero windows on a successful read.
+    let unread = try #require(body["observed_window_titles_unread"] as? Bool)
+    #expect(unread)
 }
 
 @Test("Creator Studio chooser transition observes one exact created Project window")
@@ -109,6 +132,9 @@ func creatorStudioChooserToCreatedProjectTransition() async throws {
     builder.setAttribute(choose, kAXEnabledAttribute as String, true)
     builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
     builder.setAttribute(arrange, kAXSubroleAttribute as String, kAXStandardWindowSubrole as String)
+    // This post-chooser top-level window has explicitly answered the AXModal
+    // question. Missing AXModal is intentionally no longer treated as false.
+    builder.setAttribute(arrange, kAXModalAttribute as String, false)
     builder.setAttribute(arrange, kAXTitleAttribute as String, "Untitled - Tracks")
 
     let runtime = builder.makeLogicRuntime(
@@ -129,6 +155,9 @@ func creatorStudioChooserToCreatedProjectTransition() async throws {
     )
     let body = decodeAccessibilityJSON(result.message)
 
+    // Mutation `creator-project-window-explicit-axmodal`: remove the explicit
+    // false above. The successor window must then be unreadable rather than
+    // silently certified as non-modal.
     #expect(result.isSuccess)
     #expect(body["state"] as? String == "B")
     #expect(body["phase"] as? String == "created_project_window_observed")
@@ -332,7 +361,14 @@ private func makeDeleteTrackFixture(
     let itemElements = itemTitles.indices.map { builder.element(390 + $0) }
     let session = DeleteTrackSession()
 
+    // Mutation `delete-track-clean-modal-fixture`: remove the complete clean
+    // top-level state below. The verified delete cases must then stay State B,
+    // because an omitted AXModal/selected/menu-window observation is not clean.
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+    // A clean top-level window must say it is non-modal; AXModal is recommended
+    // rather than required, so absent is deliberately not equivalent to false.
+    builder.setAttribute(window, kAXModalAttribute as String, false)
     builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
     builder.setChildren(window, [trackList])
     builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
@@ -341,6 +377,7 @@ private func makeDeleteTrackFixture(
     builder.setAttribute(trackHeader, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     builder.setChildren(menuBar, [trackMenu])
     builder.setAttribute(trackMenu, kAXTitleAttribute as String, menuTitle)
+    builder.setAttribute(trackMenu, kAXSelectedAttribute as String, false)
     builder.setChildren(trackMenu, itemElements)
     for (element, title) in zip(itemElements, itemTitles) {
         builder.setAttribute(element, kAXTitleAttribute as String, title)
@@ -2670,7 +2707,9 @@ private func makeTempoSliderFixture(
     let createdTrackHeader = builder.element(187)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
     builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setAttribute(window, kAXModalAttribute as String, false)
     builder.setChildren(window, [trackList])
     builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
     builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
@@ -2681,8 +2720,10 @@ private func makeTempoSliderFixture(
 
     builder.setChildren(menuBar, [trackMenu])
     builder.setAttribute(trackMenu, kAXTitleAttribute as String, "트랙")
+    builder.setAttribute(trackMenu, kAXSelectedAttribute as String, false)
     builder.setChildren(trackMenu, [createItem])
     builder.setAttribute(createItem, kAXTitleAttribute as String, "새로운 소프트웨어 악기 트랙")
+    builder.setAttribute(createItem, kAXSelectedAttribute as String, false)
 
     builder.setAttribute(createdTrackHeader, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     builder.setAttribute(createdTrackHeader, kAXTitleAttribute as String, "Studio Grand")
@@ -2710,7 +2751,7 @@ private func makeTempoSliderFixture(
     #expect(result.message.contains("\"observed_track_index\":1"))
     #expect(result.message.contains("\"observed_track_name\":\"Studio Grand\""))
     #expect(result.message.contains("\"observed_track_type\":\"software_instrument\""))
-    #expect(result.message.contains("\"track_type_verification_source\":\"menu_clicked\""))
+    #expect(result.message.contains("\"track_type_verification_source\":\"observed_header\""))
     #expect(result.message.contains("\"verification_source\":\"track_count_delta\""))
 }
 
@@ -2762,7 +2803,7 @@ private func makeTempoSliderFixture(
     #expect(fixture.session.pressedTitles.isEmpty)
 }
 
-@Test func testAccessibilityChannelCreateInstrumentFailsWhenTrackCountDoesNotIncrease() async {
+@Test func testAccessibilityChannelCreateInstrumentFailsWhenTrackCountDoesNotIncrease() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(190)
     let window = builder.element(191)
@@ -2773,7 +2814,9 @@ private func makeTempoSliderFixture(
     let trackHeader = builder.element(196)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
     builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setAttribute(window, kAXModalAttribute as String, false)
     builder.setChildren(window, [trackList])
     builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
     builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
@@ -2781,8 +2824,10 @@ private func makeTempoSliderFixture(
 
     builder.setChildren(menuBar, [trackMenu])
     builder.setAttribute(trackMenu, kAXTitleAttribute as String, "트랙")
+    builder.setAttribute(trackMenu, kAXSelectedAttribute as String, false)
     builder.setChildren(trackMenu, [createItem])
     builder.setAttribute(createItem, kAXTitleAttribute as String, "새로운 소프트웨어 악기 트랙")
+    builder.setAttribute(createItem, kAXSelectedAttribute as String, false)
 
     let runtime = builder.makeLogicRuntime(
         appElement: app,
@@ -2799,14 +2844,20 @@ private func makeTempoSliderFixture(
 
     let result = await channel.execute(operation: "track.create_instrument", params: [:])
 
-    #expect(confirmation.value)
+    let receipt = decodeAccessibilityJSON(result.message)
+    // This fixture exposes only the Track menu and track rail: it contains no
+    // AXSheet/AXDialog descendant with a readable Create button. The injected
+    // closure represents the legacy unchecked Return seam, which must remain
+    // untouched when no AX-bound confirmation target was read.
+    #expect(!confirmation.value)
+    #expect(!(try #require(receipt["dialog_confirmation_attempted"] as? Bool)))
     #expect(!result.isSuccess)
     #expect(result.message.contains("\"error\":\"ax_write_failed\""))
     #expect(result.message.contains("track count did not increase"))
     #expect(result.message.contains("\"observed_delta\":0"))
 }
 
-@Test func testAccessibilityChannelCreateInstrumentReportsDialogPendingWhenModalPersists() async {
+@Test func testAccessibilityChannelCreateInstrumentReportsDialogPendingWhenModalPersists() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(280)
     let window = builder.element(281)
@@ -2819,6 +2870,8 @@ private func makeTempoSliderFixture(
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setAttribute(app, kAXWindowsAttribute as String, [window, dialog])
+    builder.setAttribute(window, kAXModalAttribute as String, false)
+    builder.setAttribute(dialog, kAXModalAttribute as String, true)
     builder.setAttribute(dialog, kAXSubroleAttribute as String, kAXDialogSubrole as String)
     builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
     builder.setChildren(window, [trackList])
@@ -2830,8 +2883,10 @@ private func makeTempoSliderFixture(
 
     builder.setChildren(menuBar, [trackMenu])
     builder.setAttribute(trackMenu, kAXTitleAttribute as String, "트랙")
+    builder.setAttribute(trackMenu, kAXSelectedAttribute as String, false)
     builder.setChildren(trackMenu, [createItem])
     builder.setAttribute(createItem, kAXTitleAttribute as String, "새로운 소프트웨어 악기 트랙")
+    builder.setAttribute(createItem, kAXSelectedAttribute as String, false)
 
     let runtime = builder.makeLogicRuntime(
         appElement: app,
@@ -2848,7 +2903,13 @@ private func makeTempoSliderFixture(
 
     let result = await channel.execute(operation: "track.create_instrument", params: [:])
 
-    #expect(confirmation.value)
+    let receipt = decodeAccessibilityJSON(result.message)
+    // This fixture's top-level AXDialog has no children and therefore exposes
+    // no readable Create button. It must remain pending rather than triggering
+    // the injected legacy Return seam; the receipt makes that non-confirmation
+    // explicit for the caller.
+    #expect(!confirmation.value)
+    #expect(!(try #require(receipt["dialog_confirmation_attempted"] as? Bool)))
     #expect(result.isSuccess)
     #expect(result.message.contains("\"verified\":false"))
     #expect(result.message.contains("\"reason\":\"retry_exhausted\""))

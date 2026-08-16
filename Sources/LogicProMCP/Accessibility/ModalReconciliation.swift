@@ -83,7 +83,7 @@ enum ModalReconciliation {
     /// the New Track description) — the `createButtonPresent` conjunct keeps a
     /// delete-confirm sheet that happens to disable Cancel from being misread as
     /// a New Track sheet. Both signals are locale-aware (#350): the description is
-    /// matched against `AXLocalePolicy.newTrackSheetDescription` (EN + KO), and
+    /// matched against `AXLocalePolicy.newTrackSheetDescription` (EN + KO + JA), and
     /// `createButtonPresent`/`cancelButtonPresent` are resolved by the reader
     /// against the localized button LabelSets. A top-level alert is only
     /// acknowledged when it has EXACTLY ONE button; two+ buttons is a lossy CHOICE
@@ -139,7 +139,7 @@ enum ModalReconciliation {
     /// button informational alert and a stray menu ALWAYS; the mandatory New
     /// Track sheet ONLY when `clearMandatoryNewTrack` is true. The create path
     /// passes `false` so preflight never clicks "Create" — `createTrackViaMenu`
-    /// opens and confirms its own New Track dialog, and auto-Creating here too
+    /// performs a bound post-menu Create reconciliation, and auto-Creating here too
     /// would DOUBLE-CREATE. deleteConfirm / unknownSheet / none never act at
     /// preflight (fail closed — never confirm an unrequested delete or dismiss a
     /// sheet that could be a Save prompt).

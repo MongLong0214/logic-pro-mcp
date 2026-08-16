@@ -519,7 +519,7 @@ func testHealthResponseFullSchema() async throws {
         logicHealthObservation: { qualificationHealthObservation() }
     )
     let json = try! sharedParseJSON(toolText(result)) as! [String: Any]
-    #expect(json["logic_pro_running"] as? Bool != nil)
+    _ = try #require(json["logic_pro_running"] as? Bool)
     #expect(json["logic_pro_version"] as? String != nil)
     #expect(json["logic_pro_bundle_id"] as? String != nil)
     #expect(json["logic_pro_bundle_id"] as? String == LogicProVariant.desktop.bundleID)
@@ -531,7 +531,7 @@ func testHealthResponseFullSchema() async throws {
     #expect(desktopRunning)
     let creatorInstalled = try #require(variants?.first(where: { $0["variant"] as? String == "creator_studio" })?["installed"] as? Bool)
     #expect(!creatorInstalled)
-    #expect(json["process_metadata_resolved"] as? Bool != nil)
+    _ = try #require(json["process_metadata_resolved"] as? Bool)
     #expect(json["mcu"] as? [String: Any] != nil)
     #expect(json["channels"] as? [[String: Any]] != nil)
     #expect(json["cache"] as? [String: Any] != nil)
@@ -539,7 +539,7 @@ func testHealthResponseFullSchema() async throws {
     #expect(permissions != nil)
     #expect(permissions?["accessibility_status"] as? String != nil)
     #expect(permissions?["automation_status"] as? String != nil)
-    #expect(permissions?["automation_verifiable"] as? Bool != nil)
+    _ = try #require(permissions?["automation_verifiable"] as? Bool)
     #expect(permissions?["automation_granted"] == nil || permissions?["automation_granted"] as? Bool != nil)
     #expect(json["process"] as? [String: Any] != nil)
 }

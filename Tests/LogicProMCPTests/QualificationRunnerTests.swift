@@ -1736,7 +1736,8 @@ struct QualificationRunnerTests {
             #expect(v2)
             let v3 = try #require(evidence["handler_bound"] as? Bool)
             #expect(v3)
-            #expect((evidence["trace_started"] as? Bool ?? false) == (spec.id == .systemSagaExecute)) // test-integrity:live: top-level == compares two non-literal Bools; the "?? false" is a sub-expression, not the asserted comparison
+            let traceStarted = evidence["trace_started"] as? Bool ?? false
+            #expect(spec.id == .systemSagaExecute ? traceStarted : !traceStarted)
         }
 
         #expect(FileManager.default.fileExists(atPath: fixture.manifestURL.path))
