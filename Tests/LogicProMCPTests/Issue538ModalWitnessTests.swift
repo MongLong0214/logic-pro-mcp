@@ -1195,7 +1195,10 @@ struct Issue538ModalWitnessTests {
             #expect(extras["reconciled_modal_unreadable_reason"] as? String == expectedReason)
             if let expectedStatus {
                 #expect(extras["reconciled_modal_unreadable_ax_status"] as? Int == expectedStatus)
-                #expect(extras["reconciled_modal_unreadable_ax_status_name"] as? String == "cannot_complete")
+                // `symbolicName` carries Apple's own constant spelling, which is what a field named
+                // `..._status_name` should say; the snake_case form is `diagnosticLabel`, a different
+                // property. The two met at the main merge and this expectation was the older one.
+                #expect(extras["reconciled_modal_unreadable_ax_status_name"] as? String == "cannotComplete")
             } else {
                 #expect(extras["reconciled_modal_unreadable_ax_status"] == nil)
                 #expect(extras["reconciled_modal_unreadable_ax_status_name"] == nil)
