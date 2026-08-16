@@ -1388,7 +1388,8 @@ extension AccessibilityChannel {
             witnessSummary: reconcileOutcome.witnessSummary,
             refusal: reconcileOutcome.refusal,
             actionFailure: reconcileOutcome.actionFailure,
-            unreadableReason: reconcileOutcome.unreadableReason
+            unreadableReason: reconcileOutcome.unreadableReason,
+            sheetScanFailureDetail: reconcileOutcome.sheetScanFailureDetail
         )
 
         var lastModal = reconcileOutcome
@@ -1476,7 +1477,8 @@ extension AccessibilityChannel {
             witnessSummary: lastModal.witnessSummary,
             refusal: lastModal.refusal,
             actionFailure: lastModal.actionFailure,
-            unreadableReason: lastModal.unreadableReason
+            unreadableReason: lastModal.unreadableReason,
+            sheetScanFailureDetail: lastModal.sheetScanFailureDetail
         )
         // Without a successful pre-write rail read, a later count cannot tell
         // whether the tracks existed before the menu action. The write may have
@@ -1678,6 +1680,9 @@ extension AccessibilityChannel {
         var reconcileActionFailure: AXHelpers.AXActionError?
         var reconcileWitnessSummary: ModalReconcileWitnessSummary?
         var reconcileUnreadableReason: ModalReadFailure?
+        // #549: which exact node/scan the sheet scan gave up on, mirrored
+        // beside `reconcileUnreadableReason` at every site that sets/clears it.
+        var reconcileSheetScanFailureDetail: ModalSheetScanFailureDetail?
         var actionAttemptedModalKinds: Set<String> = []
         var mandatoryNewTrackReconciliationPerformed = false
         var consecutiveCleanModalObservations = 0
@@ -1746,6 +1751,7 @@ extension AccessibilityChannel {
                 if let actionFailure = outcome.actionFailure { reconcileActionFailure = actionFailure }
                 if let unreadableReason = outcome.unreadableReason {
                     reconcileUnreadableReason = unreadableReason
+                    reconcileSheetScanFailureDetail = outcome.sheetScanFailureDetail
                 }
                 // A current unacted *new* blocker must not inherit a witness
                 // from a prior sheet. A repeated observation of the same kind
@@ -1767,11 +1773,13 @@ extension AccessibilityChannel {
                 // so a later instance is eligible for one fresh direct action.
                 actionAttemptedModalKinds.removeAll()
                 reconcileUnreadableReason = nil
+                reconcileSheetScanFailureDetail = nil
             } else if let unreadableReason = outcome.unreadableReason {
                 // An incomplete no-modal answer is neither a blocker nor a
                 // clean pass. Preserve its diagnostic and leave the action
                 // latch intact until a later complete observation settles it.
                 reconcileUnreadableReason = unreadableReason
+                reconcileSheetScanFailureDetail = outcome.sheetScanFailureDetail
             }
             let observedTrackCountDecreased = beforeCount.flatMap { beforeCount in
                 currentCount.map { $0 < beforeCount }
@@ -1808,7 +1816,8 @@ extension AccessibilityChannel {
                     witnessSummary: reconcileWitnessSummary,
                     refusal: reconcileRefusal,
                     actionFailure: reconcileActionFailure,
-                    unreadableReason: reconcileUnreadableReason
+                    unreadableReason: reconcileUnreadableReason,
+                    sheetScanFailureDetail: reconcileSheetScanFailureDetail
                 )
                 return .success(HonestContract.encodeStateA(extras: extras))
             }
@@ -1834,7 +1843,8 @@ extension AccessibilityChannel {
             witnessSummary: reconcileWitnessSummary,
             refusal: reconcileRefusal,
             actionFailure: reconcileActionFailure,
-            unreadableReason: reconcileUnreadableReason
+            unreadableReason: reconcileUnreadableReason,
+            sheetScanFailureDetail: reconcileSheetScanFailureDetail
         )
         return .success(HonestContract.encodeStateB(
             reason: .retryExhausted,
