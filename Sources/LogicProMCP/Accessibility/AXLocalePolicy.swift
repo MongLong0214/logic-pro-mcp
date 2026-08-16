@@ -218,6 +218,97 @@ enum AXLocalePolicy {
         rationale: "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome."
     )
 
+    /// #519: the Navigate menu bar item. Only EN/KO have been observed in the AppleScript
+    /// call sites this backs; no Japanese form has been measured, so `variants` stays KO-only
+    /// rather than guessing a translation.
+    static let navigateMenuBar = LabelSet(
+        canonical: "Navigate",
+        variants: ["탐색"],
+        rationale: "Top-level menu titles expose no stable AXIdentifier in Logic."
+    )
+
+    /// #519: File > Bounce.
+    static let bounceMenuItem = LabelSet(
+        canonical: "Bounce",
+        variants: ["바운스"],
+        rationale: "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path."
+    )
+
+    /// #519: the Bounce submenu's "Project or Section…" leaf. Both the curly-ellipsis (`…`) and
+    /// literal three-dot (`...`) renderings have been observed across Logic builds, in both
+    /// locales, so all four spellings are kept rather than assuming one glyph.
+    static let projectOrSectionMenuItem = LabelSet(
+        canonical: "Project or Section…",
+        variants: ["프로젝트 또는 섹션…", "Project or Section...", "프로젝트 또는 섹션..."],
+        rationale: "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds."
+    )
+
+    /// #519: File > Import.
+    static let importMenuItem = LabelSet(
+        canonical: "Import",
+        variants: ["가져오기"],
+        rationale: "File menu entry that opens the Import submenu used by midi.import_file."
+    )
+
+    /// #519: File > Import > MIDI File….
+    static let midiFileMenuItem = LabelSet(
+        canonical: "MIDI File…",
+        variants: ["MIDI 파일…"],
+        rationale: "Import submenu leaf that opens the MIDI file chooser for midi.import_file."
+    )
+
+    /// #519: Edit > Move.
+    static let moveMenuItem = LabelSet(
+        canonical: "Move",
+        variants: ["이동"],
+        rationale: "Edit menu entry that opens the Move submenu used to reposition a selected region."
+    )
+
+    /// #519: Edit > Move > To Playhead.
+    static let toPlayheadMenuItem = LabelSet(
+        canonical: "To Playhead",
+        variants: ["재생헤드로"],
+        rationale: "Move submenu leaf that repositions the selected region to the playhead."
+    )
+
+    /// #519: Navigate > Set Locators….
+    static let setLocatorsMenuItem = LabelSet(
+        canonical: "Set Locators…",
+        variants: ["로케이터 설정…"],
+        rationale: "Navigate menu entry that opens the cycle-range locator dialog."
+    )
+
+    /// #519: Navigate > Go To. Korean Logic renders this the same `이동` string as Edit > Move
+    /// (`moveMenuItem`) — the two LabelSets deliberately share that surface form under different
+    /// English canonicals; each is scoped to its own menu bar by the caller's resolved parent
+    /// specifier, so the shared Korean text never crosses into the wrong menu.
+    static let goToMenuItem = LabelSet(
+        canonical: "Go To",
+        variants: ["이동"],
+        rationale: "Navigate menu entry that opens the Go To submenu used by goto_position."
+    )
+
+    /// #519: Navigate > Go To > Position….
+    static let goToPositionMenuItem = LabelSet(
+        canonical: "Position…",
+        variants: ["위치…"],
+        rationale: "Go To submenu leaf that opens the Go To Position dialog."
+    )
+
+    /// #519: Navigate > Open Marker List.
+    static let openMarkerListMenuItem = LabelSet(
+        canonical: "Open Marker List",
+        variants: ["마커 목록 열기"],
+        rationale: "Navigate menu entry that opens the Marker List window."
+    )
+
+    /// #519: Navigate > Create Marker.
+    static let createMarkerMenuItem = LabelSet(
+        canonical: "Create Marker",
+        variants: ["마커 생성"],
+        rationale: "Navigate menu entry that creates a marker at the playhead."
+    )
+
     /// The Marker List toolbar's own Edit menu button, not the application menu bar.
     static let markerListEditMenuButton = LabelSet(
         canonical: "Edit",

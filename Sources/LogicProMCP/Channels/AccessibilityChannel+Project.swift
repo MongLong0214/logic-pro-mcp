@@ -762,21 +762,41 @@ extension AccessibilityChannel {
         }
 
         let processTarget = LogicProTarget.appleScriptTarget().systemEventsProcessTarget
+        // #519: bar ("File") and item ("Bounce") names are resolved from AXLocalePolicy's
+        // LabelSets instead of hard-coded EN/KO literals — this also makes the already-recorded
+        // Japanese "ファイル" variant reachable, which the old hard-coded pair could not reach.
+        // The "Project or Section…" leaf keeps trying every recorded ellipsis rendering, now
+        // sourced from AXLocalePolicy.projectOrSectionMenuItem instead of a separate inline list.
+        let barResolution = AppleScriptMenuResolution.menuBarItem(
+            AXLocalePolicy.fileMenuBar,
+            variableName: "barName",
+            notFoundError: "BOUNCE_MENU_ITEM_NOT_FOUND"
+        )
+        let itemResolution = AppleScriptMenuResolution.menuItem(
+            AXLocalePolicy.bounceMenuItem,
+            under: "menu bar item barName of menu bar 1",
+            variableName: "itemName",
+            notFoundError: "BOUNCE_MENU_ITEM_NOT_FOUND"
+        )
+        let projectOrSectionLiterals = AXLocalePolicy.projectOrSectionMenuItem.labels
+            .map { "\"\(AppleScriptSafety.escapeForScript($0))\"" }
+            .joined(separator: ", ")
         let script = """
         tell application "System Events"
             tell \(processTarget)
                 set frontmost to true
                 set menuClicked to false
-                repeat with targetName in {"프로젝트 또는 섹션…", "프로젝트 또는 섹션...", "Project or Section…", "Project or Section..."}
+                try
+                    \(barResolution)
+                    \(itemResolution)
+                on error
+                    return "BOUNCE_MENU_ITEM_NOT_FOUND"
+                end try
+                repeat with targetName in {\(projectOrSectionLiterals)}
                     if menuClicked is false then
                         try
-                            click menu item (targetName as text) of menu 1 of menu item "바운스" of menu 1 of menu bar item "파일" of menu bar 1
+                            click menu item (targetName as text) of menu 1 of menu item itemName of menu 1 of menu bar item barName of menu bar 1
                             set menuClicked to true
-                        on error
-                            try
-                                click menu item (targetName as text) of menu 1 of menu item "Bounce" of menu 1 of menu bar item "File" of menu bar 1
-                                set menuClicked to true
-                            end try
                         end try
                     end if
                 end repeat
