@@ -132,7 +132,36 @@ enum PermissionChecker {
         // an Apple Events denial — the exact #188 false-green. The production
         // probe is unconditional (System Events is always running), so a denied
         // target is reported truthfully here rather than advertised as ready.
+        //
+        // This is a plain Bool by design for callers that must fail closed on
+        // anything short of a VERIFIED grant (`--check-permissions` exit code,
+        // `SetupDoctor`'s status clamp): it intentionally collapses "actively
+        // denied" and "could not be verified" into the same `false`, because
+        // both mean "do not proceed". `aggregateState` below is for the caller
+        // that must NOT make that collapse.
         var allGranted: Bool { accessibility && automationLogicPro && automationSystemEvents && postEventAccess }
+
+        // The MEASURED tri-state aggregate across all four checks (#544 review
+        // MAJOR): `.notGranted` only when at least one check was ACTIVELY
+        // DENIED by the OS; `.notVerifiable` when nothing was denied but at
+        // least one check could not run (Logic Pro not launched, an osascript
+        // probe timed out); `.granted` only when every check came back
+        // granted. Unlike `allGranted`, this never reports a denial for a
+        // check that simply never ran — an undetermined check is not evidence
+        // of a refusal, and reporting it as one is indistinguishable from a
+        // real "NOT GRANTED" to a caller reading a single flag.
+        //
+        // Pure and stateless over the four already-computed states (no live
+        // TCC call), so the mapping is directly testable via the
+        // `PermissionStatus(accessibilityState:automationState:...)`
+        // initializer without driving `SystemDispatcher.handle` against the
+        // real permission system.
+        var aggregateState: CheckState {
+            let states = [accessibilityState, automationState, systemEventsAutomationState, postEventAccessState]
+            if states.contains(.notGranted) { return .notGranted }
+            if states.contains(.notVerifiable) { return .notVerifiable }
+            return .granted
+        }
 
         var summary: String {
             var lines: [String] = []

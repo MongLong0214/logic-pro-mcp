@@ -6,15 +6,48 @@ func toolTextContent(_ text: String) -> Tool.Content {
 }
 
 func toolTextResult(_ text: String, isError: Bool = false) -> CallTool.Result {
-    CallTool.Result(
+    // Every tool here is registered with an `outputSchema`, and MCP requires a response that declares
+    // one to carry matching `structuredContent`. A handler that hands back prose — a permission
+    // summary, "State refresh completed", a failure sentence — produced `nil` here and so violated the
+    // tool's own contract; a schema-enforcing client rejects the call outright (#544, reported against
+    // v3.13.0 with `logic_system.permissions` and `refresh_cache`).
+    //
+    // Prose is therefore carried as an object rather than dropped. The text in `content` stays
+    // byte-identical, and the structured half says what it actually is instead of claiming a shape it
+    // does not have. This is the floor, not the goal: a command whose answer has real fields should
+    // encode those fields, and the two commands in the report now do.
+    let prose: [String: Value] = ["message": .string(text)]
+    let structured: Value? = structuredContentValue(fromToolText: text) ?? .object(prose)
+    return CallTool.Result(
         content: [toolTextContent(text)],
-        structuredContent: structuredContentValue(fromToolText: text),
+        structuredContent: structured,
         isError: isError
     )
 }
 
 func toolTextResult(_ result: ChannelResult) -> CallTool.Result {
     toolTextResult(result.message, isError: !result.isSuccess)
+}
+
+/// A receipt whose two halves are deliberately different: the text a caller has always read, and the
+/// structured object the declared `outputSchema` requires.
+///
+/// Reaching for this instead of encoding the object as the text matters more than it looks. Several
+/// operations are graded by `SemanticOracleTable` against the exact prose they emit — permissions is
+/// checked line by line, refresh_cache whole-body — so replacing the text with JSON turns a correct
+/// answer RED in qualification while every unit test stays green, because the oracles run against
+/// fixtures rather than the live handler. Keep the text; add the structure beside it.
+func toolTextResult(
+    text: String,
+    structured: Value,
+    isError: Bool = false
+) -> CallTool.Result {
+    let payload: Value? = structured
+    return CallTool.Result(
+        content: [toolTextContent(text)],
+        structuredContent: payload,
+        isError: isError
+    )
 }
 
 func toolStateCResult(
