@@ -572,13 +572,18 @@ extension AccessibilityChannel {
         )
     }
 
-    /// The common fail-closed projection for any incomplete blocker read.
-    /// `unknownSheet` is the pure classifier's established representation for
-    /// an unknown blocker, including an unreadable source rather than a literal
-    /// sheet node.
+    /// An incomplete observation is not a sheet that was seen. Callers that
+    /// need fail-closed behaviour key on `unreadableReason`, not on inventing
+    /// `unknownSheet`.
     private static func unreadableModalSignals(
         reason: ModalReadFailure? = nil
     ) -> ModalSignalRead {
+        noSheetModalSignals(strayMenuOpen: false, unreadableReason: reason)
+    }
+
+    /// A modal window was observed and could not be classified as a sanctioned
+    /// informational alert. That is a real blocker, not an unreadable scan.
+    private static func seenUnknownBlockerSignals() -> ModalSignalRead {
         ModalSignalRead(
             signals: ModalReconciliation.ModalSignals(
                 sheetPresent: true,
@@ -600,7 +605,7 @@ extension AccessibilityChannel {
             sheet: nil,
             createButton: nil,
             deleteButton: nil,
-            unreadableReason: reason
+            unreadableReason: nil
         )
     }
 
@@ -616,7 +621,7 @@ extension AccessibilityChannel {
         case .unreadable(let reason):
             return unreadableModalSignals(reason: reason)
         case .blocking:
-            return unreadableModalSignals()
+            return seenUnknownBlockerSignals()
         case .mandatoryNewTrack(let read):
             return read
         case .informational(let target):
@@ -867,9 +872,11 @@ extension AccessibilityChannel {
             // sheet host exists. Keep its distinct diagnostic cause instead of
             // laundering it into a clean empty list.
             return .unreadable(.axWindowsPayloadUninterpretable)
-        case .failure(let error) where axStatusIsDefinitiveAbsence(error):
+        case .failure(let error) where error.raw == AXError.noValue.rawValue:
             return .absent
         case .failure(let error):
+            // Unsupported is an answer that this attribute is not vended, not
+            // an empty list of hosts.
             return .unreadable(.axWindowsReadFailed(error))
         }
         var incompleteReason: ModalReadFailure?
@@ -907,9 +914,19 @@ extension AccessibilityChannel {
         // non-authoritative read veto the descendant traversal.
         switch AXHelpers.getAttributeResult(window, "AXSheets", runtime: runtime) as Result<AnyObject?, AXHelpers.AXStatusError> {
         case .success(.some(let value)):
-            if CFGetTypeID(value) == CFArrayGetTypeID(),
-               let sheet = AXHelpers.decodeChildrenArray(value).first {
-                return .found(sheet)
+            if CFGetTypeID(value) == CFArrayGetTypeID() {
+                for candidate in AXHelpers.decodeChildrenArray(value) {
+                    switch AXHelpers.getAttributeResult(
+                        candidate, kAXRoleAttribute as String, runtime: runtime
+                    ) as Result<String?, AXHelpers.AXStatusError> {
+                    case .success(.some(let role)) where role == (kAXSheetRole as String):
+                        return .found(candidate)
+                    case .failure, .success:
+                        // A failure while searching says this node is not a
+                        // candidate. It is not a verdict on the rest of the tree.
+                        continue
+                    }
+                }
             }
         case .failure, .success(.none):
             break
@@ -926,6 +943,27 @@ extension AccessibilityChannel {
     /// always falls through to the descendant traversal above.
     private static func axStatusIsDefinitiveAbsence(_ error: AXHelpers.AXStatusError) -> Bool {
         error.raw == AXError.attributeUnsupported.rawValue || error.raw == AXError.noValue.rawValue
+    }
+
+    /// `invalidUIElement` (-25202) on the EXACT element a bound witness reads
+    /// is not a generic read failure: it is the only signal macOS gives that
+    /// that specific AX element has been destroyed. Measured live (#538): a
+    /// bound New Track sheet returned exactly this status on every one of 30
+    /// follow-up polls after the Create press, and no other status ever
+    /// produced `.gone`, so the witness could never observe the sheet close.
+    ///
+    /// This is scoped to the bound element ONLY. It answers "is the thing
+    /// this run pressed Create on / acknowledged / escaped gone" — it does
+    /// NOT answer "is no blocker present now": Logic can invalidate the
+    /// captured element while a different AXSheet/AXDialog/menu is still
+    /// live, so that second question is left entirely to the separate,
+    /// complete blocker-set scan (`completeModalReadIsClear`,
+    /// `ModalReconcileWitnessSummary.blockerSetClear`). Every other status —
+    /// `cannotComplete` (-25204), `failure` (-25200), etc. — means the read
+    /// did not answer, not that the element was destroyed, and must stay
+    /// `.unreadable` so the poll can retry.
+    private static func axStatusIsBoundElementGone(_ error: AXHelpers.AXStatusError) -> Bool {
+        error.raw == AXError.invalidUIElement.rawValue
     }
 
     /// Searches one level before descending through the fallback tree. A sheet
@@ -1000,11 +1038,16 @@ extension AccessibilityChannel {
         switch AXHelpers.getAttributeResult(sheet, kAXRoleAttribute as String, runtime: runtime.ax) as Result<String?, AXHelpers.AXStatusError> {
         case .success(_):
             return .present
-        case .failure(let error) where error.raw == AXError.invalidUIElement.rawValue:
-            // This is an identity-bound observation: unlike a window lookup,
-            // invalidUIElement means this exact captured sheet no longer exists.
+        case .failure(let error) where axStatusIsBoundElementGone(error):
+            // See axStatusIsBoundElementGone: an invalidated element identity
+            // IS the closure signal for the sheet this run pressed Create on.
+            // This does not claim no sheet of this kind exists — a
+            // replacement AXSheet can still be a child of the arrange
+            // window — only that the bound one is gone.
             return .gone
         case .failure(let error):
+            // A read failure that is not "this exact element is gone"
+            // retires this poll without claiming closure.
             return .unreadable(.sheet(error))
         }
     }
@@ -1076,7 +1119,10 @@ extension AccessibilityChannel {
             return .present
         case .success(.none):
             return .unreadable(.alertModal(.malformedAttribute))
-        case .failure(let error) where error.raw == AXError.invalidUIElement.rawValue:
+        case .failure(let error) where axStatusIsBoundElementGone(error):
+            // Same shape as the sheet witness: the bound alert element itself
+            // was destroyed. Whether some other blocker is present now is a
+            // question only the complete blocker-set scan can answer.
             return .gone
         case .failure(let error):
             return .unreadable(.alertModal(error))
@@ -1175,7 +1221,11 @@ extension AccessibilityChannel {
             return .gone
         case .success(.none):
             return .unreadable(.menuItemSelected(.malformedAttribute))
-        case .failure(let error) where error.raw == AXError.invalidUIElement.rawValue:
+        case .failure(let error) where axStatusIsBoundElementGone(error):
+            // Same shape as the sheet witness: the bound menu item element
+            // itself was destroyed, which is the closure signal for THIS
+            // stray menu. A different menu being open is left to the
+            // complete blocker-set scan.
             return .gone
         case .failure(let error):
             return .unreadable(.menuItemSelected(error))
@@ -1297,8 +1347,9 @@ extension AccessibilityChannel {
                 witness = []
             }
             var summary = ModalReconcileWitnessSummary(sheetWitness: witness)
-            let completeBlockerSetIsClear = summary.observedGone
-                && completeModalReadIsClear(runtime: runtime, mainWindow: mainWindow)
+            let completeBlockerSetIsClear = completeModalReadIsClear(
+                runtime: runtime, mainWindow: mainWindow
+            )
             summary = summary.withBlockerSetClear(completeBlockerSetIsClear)
             Log.info(
                 "modal_sheet_confirmation action=click_create accepted=\(action.accepted) "
@@ -1335,8 +1386,9 @@ extension AccessibilityChannel {
                 witness = []
             }
             var summary = ModalReconcileWitnessSummary(sheetWitness: witness)
-            let completeBlockerSetIsClear = summary.observedGone
-                && completeModalReadIsClear(runtime: runtime, mainWindow: mainWindow)
+            let completeBlockerSetIsClear = completeModalReadIsClear(
+                runtime: runtime, mainWindow: mainWindow
+            )
             summary = summary.withBlockerSetClear(completeBlockerSetIsClear)
             Log.info(
                 "modal_sheet_confirmation action=confirm_delete accepted=\(action.accepted) "
@@ -1361,8 +1413,9 @@ extension AccessibilityChannel {
                 observationAttempts: witnessAttempts,
                 observationDelayNanoseconds: witnessDelayNanoseconds
             )
-            let completeBlockerSetIsClear = summary.observedGone
-                && completeModalReadIsClear(runtime: runtime, mainWindow: mainWindow)
+            let completeBlockerSetIsClear = completeModalReadIsClear(
+                runtime: runtime, mainWindow: mainWindow
+            )
             summary = summary.withBlockerSetClear(completeBlockerSetIsClear)
             return ModalActionPerformResult(
                 // A direct press and a later disappearance are not proof that
@@ -1383,8 +1436,9 @@ extension AccessibilityChannel {
                 observationAttempts: witnessAttempts,
                 observationDelayNanoseconds: witnessDelayNanoseconds
             )
-            let completeBlockerSetIsClear = summary.observedGone
-                && completeModalReadIsClear(runtime: runtime, mainWindow: mainWindow)
+            let completeBlockerSetIsClear = completeModalReadIsClear(
+                runtime: runtime, mainWindow: mainWindow
+            )
             summary = summary.withBlockerSetClear(completeBlockerSetIsClear)
             Log.info(
                 "modal_menu_confirmation escape_accepted=\(actionAccepted) "
@@ -1420,12 +1474,12 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime,
         mainWindow: ModalMainWindowLookup
     ) -> Bool {
-        ModalReconciliation.classify(
-            readModalSignalsAndAlertTarget(
-                runtime: runtime,
-                mainWindow: mainWindow
-            ).signals
-        ) == .none
+        let read = readModalSignalsAndAlertTarget(
+            runtime: runtime,
+            mainWindow: mainWindow
+        )
+        return ModalReconciliation.classify(read.signals) == .none
+            && read.modalObservationIsComplete
     }
 
     /// Press the mandatory New Track sheet's resolved `Create` / `생성` element.
@@ -1520,7 +1574,13 @@ extension AccessibilityChannel {
         // be the button that the classifier published: a one-button dialog can
         // turn its harmless "OK" into a destructive "Don't Save" without
         // changing its count.
-        let buttons = AXLogicProElements.titledButtons(of: current.element, runtime: runtime.ax)
+        let buttons: [(element: AXUIElement, title: String)]
+        switch AXLogicProElements.titledButtonsRead(of: current.element, runtime: runtime.ax) {
+        case .unreadable:
+            return (false, false, .buttonCountChanged, nil)
+        case .buttons(let observed):
+            buttons = observed
+        }
         guard buttons.count == 1, let only = buttons.first else {
             return (false, false, .buttonCountChanged, nil)
         }

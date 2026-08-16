@@ -230,7 +230,12 @@ private func makeAlertFixture(
                 return accepted
             },
             childCount: base.ax.childCount,
-            childrenResult: base.ax.childrenResult,
+            childrenResult: { element in
+                if CFEqual(element, dialog) {
+                    return .success(dialogChildren.next())
+                }
+                return base.ax.childrenResult!(element)
+            },
             attributeValueResult: { element, attribute in
                 if let title = dynamicTitle(element, attribute) { return .success(title) }
                 if dismissal.isDismissed(),

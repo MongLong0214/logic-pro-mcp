@@ -34,8 +34,8 @@ struct Issue538ModalWitnessTests {
         )
     }
 
-    @Test("invalidUIElement means the captured sheet identity is gone")
-    func invalidCapturedSheetIsGone() {
+    @Test("invalidUIElement on the captured sheet is observed gone")
+    func invalidCapturedSheetIsObservedGone() {
         let builder = FakeAXRuntimeBuilder()
         let sheet = builder.element(2)
         let invalid = AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue)
@@ -52,7 +52,7 @@ struct Issue538ModalWitnessTests {
 
         #expect(
             observed == .gone,
-            "Mutation caught: treat invalidUIElement on the captured sheet as unreadable; this status means that exact sheet identity ceased to exist."
+            "Mutation caught: keep invalidUIElement mapped to .unreadable(.sheet); -25202 on the bound element IS macOS's only closure signal for that exact element and must be .gone."
         )
     }
 
@@ -74,11 +74,11 @@ struct Issue538ModalWitnessTests {
 
         #expect(
             observed == .unreadable(.sheet(cannotComplete)),
-            "Mutation caught: classify cannotComplete on the captured sheet as gone; only invalidUIElement proves this identity disappeared."
+            "A failed identity read retires this poll. cannotComplete is not sheet absence."
         )
     }
 
-    @Test("polling stops only after the bound sheet becomes invalid")
+    @Test("polling stops as soon as the bound sheet's identity is invalidated")
     func pollingReportsPresentThenGone() async {
         let builder = FakeAXRuntimeBuilder()
         let sheet = builder.element(4)
@@ -101,13 +101,20 @@ struct Issue538ModalWitnessTests {
             observationDelayNanoseconds: 0
         )
 
+        // Prove the seam actually fired: the fake must have been read exactly
+        // twice (present, then invalidUIElement) for the assertions below to
+        // mean anything.
+        #expect(reads.current() == 2, "Fixture seam did not fire as expected — the attribute handler was not read twice.")
         #expect(
-            polls.map(\.observation) == [.present, .gone],
-            "Mutation caught: keep polling after invalidUIElement or treat a readable captured sheet as gone."
+            polls.map(\.observation) == [
+                .present,
+                .gone,
+            ],
+            "Mutation caught: keep polling past invalidUIElement instead of breaking on .gone; -25202 on the bound element is the sheet's closure signal and must stop the poll."
         )
         #expect(
             polls.map(\.index) == [1, 2],
-            "Mutation caught: omit the initial bound-sheet poll or misnumber the invalid-element close poll."
+            "Polling must stop at the poll where the bound sheet's identity was invalidated."
         )
     }
 
@@ -377,9 +384,9 @@ struct Issue538ModalWitnessTests {
         #expect(outcome.kind == .mandatoryNewTrack)
         #expect(outcome.decision == .clickCreate)
         #expect(outcome.actionAttempted)
-        #expect(sheetReads.current() == 1, "the measured AXSheets -25205 seam must fire")
-        #expect(windowChildrenReads.current() == 1, "the eleven-child AXChildren seam must fire exactly once")
-        #expect(roleReadFailures.current() == 5, "every failing direct sibling role must be visited before the sheet")
+        #expect(sheetReads.current() == 2, "classify plus the post-action confirmation scan must each consume AXSheets")
+        #expect(windowChildrenReads.current() == 2, "classify plus the confirmation scan must each read the eleven-child host")
+        #expect(roleReadFailures.current() == 10, "every failing direct sibling role must be visited on each host scan")
         #expect(readableSiblingDescents.current() == 0, "a direct AXSheet must win before any sibling subtree is traversed")
         #expect(createPresses.current() == 1, "the classifier-bound Create element must be pressed exactly once")
     }
@@ -672,6 +679,10 @@ struct Issue538ModalWitnessTests {
             read.unreadableReason == .descendantTraversalDepthCap,
             "Mutation `depth-cap-reason-flattened`: replace the capped traversal reason with a generic sheet failure; the receipt must identify the depth cap."
         )
+        #expect(
+            !AccessibilityChannel.freshCompleteModalReadIsClear(in: window, runtime: runtime),
+            "classify == .none with an unreadable reason is not a clear blocker set."
+        )
     }
 
     @Test("a malformed successful children payload blocks clean classification")
@@ -730,7 +741,8 @@ struct Issue538ModalWitnessTests {
 
         // Mutation: route an absent `AXMainWindow` straight to the top-level modal scan without
         // looking for sheets on the windows that are present; this becomes `.none`.
-        #expect(kind != ModalReconciliation.BlockingModalKind.none)
+        // `!= .none` cannot tell a real New Track sheet from an invented unknown_sheet.
+        #expect(kind == .mandatoryNewTrack)
     }
 
     @Test("a mandatory sheet on another non-modal host blocks delete even when AXMainWindow is found")
@@ -958,9 +970,9 @@ struct Issue538ModalWitnessTests {
             let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
             let kind = ModalReconciliation.classify(read.signals)
 
-            // Mutation source: flatten a failed AXWindows list (including
-            // -25205) to an empty list; that would incorrectly produce `.none`.
-            #expect(kind == .unknownSheet)
+            // An unreadable AXWindows list is not a sheet that was seen.
+            #expect(kind == .none)
+            #expect(!read.modalObservationIsComplete)
             #expect(
                 read.unreadableReason == .axWindowsReadFailed(AXHelpers.AXStatusError(raw: status)),
                 "the exact AXWindows failure status must survive the modal read"
@@ -1027,10 +1039,9 @@ struct Issue538ModalWitnessTests {
         let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
         let kind = ModalReconciliation.classify(read.signals)
 
-        // Mutation `top-level-malformed-axwindows-empty-list`: restore
-        // `windows ?? []` in `topLevelDialogRead`. The second, malformed
-        // successful payload is flattened to an empty dialog list.
-        #expect(kind == .unknownSheet)
+        // A malformed AXWindows payload is an unreadable scan, not a sheet.
+        #expect(kind == .none)
+        #expect(!read.modalObservationIsComplete)
         #expect(read.unreadableReason == .axWindowsPayloadUninterpretable)
         #expect(windowsReads.current() > 1, "the top-level AXWindows seam must be reached after the sheet scan")
     }
@@ -1152,7 +1163,8 @@ struct Issue538ModalWitnessTests {
 
         let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
 
-        #expect(ModalReconciliation.classify(read.signals) == .unknownSheet)
+        #expect(ModalReconciliation.classify(read.signals) == .none)
+        #expect(!read.modalObservationIsComplete)
         #expect(read.unreadableReason == .appRootUnavailable)
     }
 
@@ -1355,6 +1367,7 @@ struct Issue538ModalWitnessTests {
         let systemDialog = builder.element(55)
         builder.setAttribute(app, kAXMainWindowAttribute as String, window)
         builder.setAttribute(app, kAXWindowsAttribute as String, [window, systemDialog])
+        builder.setAttribute(window, kAXModalAttribute as String, false)
         builder.setAttribute(systemDialog, kAXModalAttribute as String, true)
         builder.setAttribute(systemDialog, kAXSubroleAttribute as String, kAXSystemDialogSubrole as String)
         let runtime = builder.makeLogicRuntime(appElement: app, setAttributeHandler: nil, performActionHandler: nil)
@@ -1440,11 +1453,13 @@ struct Issue538ModalWitnessTests {
             performActionHandler: nil
         )
 
-        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+        let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+        let kind = ModalReconciliation.classify(read.signals)
 
-        // Mutation source: convert a menu-child AX failure to `gone`; this
-        // otherwise empty fixture would incorrectly produce `.none`.
-        #expect(kind == .unknownSheet)
+        // A failed menu-child read is not a sheet that was seen.
+        #expect(kind == .none)
+        #expect(!read.modalObservationIsComplete)
+        #expect(read.unreadableReason == .strayMenuReadFailed)
     }
 
     @Test("missing or malformed AXModal is not a clean non-modal answer")
@@ -1459,12 +1474,20 @@ struct Issue538ModalWitnessTests {
             runtime: makeIndeterminateModalRuntime(.malformed)
         ))
 
-        // Mutation `axmodal-indeterminate-is-false`: restore the former
-        // unsupported/noValue and non-Boolean `modal != true` continuations.
-        // Each of these windows must stop a State-A clean observation.
-        #expect(unsupportedKind == .unknownSheet)
-        #expect(noValueKind == .unknownSheet)
-        #expect(malformedKind == .unknownSheet)
+        // Each of these windows must stop a State-A clean observation, without
+        // being serialized as a sheet that was never seen.
+        #expect(unsupportedKind == .none)
+        #expect(noValueKind == .none)
+        #expect(malformedKind == .none)
+        #expect(!AccessibilityChannel.readModalSignalsAndAlertTarget(
+            runtime: makeIndeterminateModalRuntime(.unsupported)
+        ).modalObservationIsComplete)
+        #expect(!AccessibilityChannel.readModalSignalsAndAlertTarget(
+            runtime: makeIndeterminateModalRuntime(.noValue)
+        ).modalObservationIsComplete)
+        #expect(!AccessibilityChannel.readModalSignalsAndAlertTarget(
+            runtime: makeIndeterminateModalRuntime(.malformed)
+        ).modalObservationIsComplete)
     }
 
     @Test("an alert replacement is retained in the bound witness receipt")
@@ -1517,12 +1540,17 @@ struct Issue538ModalWitnessTests {
         let blockerSetClear = try #require(summary.blockerSetClear as Bool?)
 
         // Mutation `alert-bound-complete-witness`: restore the old unbound
-        // AXDialog-only witness and causal `performed` conjunction. The captured
-        // alert is gone, but the AXSystemDialog replacement still blocks.
+        // AXDialog-only witness and causal `performed` conjunction. The bound
+        // alert element itself is invalidated (correctly observed gone, #538),
+        // but the AXSystemDialog replacement still blocks — `performed` must
+        // stay false and the complete blocker-set scan must stay unclear.
         #expect(outcome.kind == .informationalAlert)
         #expect(outcome.actionAttempted)
         #expect(!outcome.performed)
-        #expect(summary.observedGone)
+        #expect(
+            summary.observedGone,
+            "#538: invalidUIElement on the bound alert element IS its closure signal and must be observed gone."
+        )
         #expect(!blockerSetClear)
     }
 
@@ -1590,10 +1618,14 @@ struct Issue538ModalWitnessTests {
         // Mutation `sheet-close-causation-create`: restore a causal `performed`
         // conjunction. A user-close between AX accepting the press and this
         // witness is indistinguishable, so only the press and gone observation
-        // may be reported.
+        // may be reported — never promoted to `performed`.
         #expect(!outcome.performed)
         #expect(outcome.actionAttempted)
-        #expect(witness.observedGone)
+        #expect(
+            witness.observedGone,
+            "#538: invalidUIElement on the bound sheet element IS its closure signal and must be observed gone."
+        )
+        #expect(try #require(witness.blockerSetClear))
         #expect(
             !fixture.ordinalFallbackUsed.get(),
             "Mutation caught: replace the bound Create press with an ordinal fallback; only the captured Create element may produce this success."
@@ -1646,10 +1678,15 @@ struct Issue538ModalWitnessTests {
 
         // Mutation `sheet-close-causation-delete`: restore a causal `performed`
         // conjunction. The action was directly attempted and the target is gone,
-        // but those observations cannot establish who closed the sheet.
+        // but those observations cannot establish who closed the sheet — never
+        // promoted to `performed`.
         #expect(!outcome.performed)
         #expect(outcome.actionAttempted)
-        #expect(witness.observedGone)
+        #expect(
+            witness.observedGone,
+            "#538: invalidUIElement on the bound sheet element IS its closure signal and must be observed gone."
+        )
+        #expect(try #require(witness.blockerSetClear))
         #expect(
             !fixture.ordinalFallbackUsed.get(),
             "Mutation caught: replace the bound delete press with an ordinal fallback; only the captured destructive button may produce this success."
@@ -2318,6 +2355,276 @@ struct Issue538ModalWitnessTests {
         #expect(trackCountBeforeWasUnobserved)
         #expect(trackCountAfterWasUnobserved)
         #expect(observedDeltaWasUnobserved)
+    }
+
+    @Test("invalidUIElement on the captured sheet is gone, but that is not absence of the sheet kind")
+    func invalidIdentityIsNotSheetAbsenceWhenReplacementRemains() {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(800)
+        let window = builder.element(801)
+        let captured = builder.element(802)
+        let replacement = builder.element(803)
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        builder.setChildren(window, [replacement])
+        builder.setAttribute(replacement, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(replacement, kAXDescriptionAttribute as String, "New Track")
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                if CFEqual(element, window), attribute == "AXSheets" {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue))
+                }
+                if CFEqual(element, captured), attribute == (kAXRoleAttribute as String) {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue))
+                }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let identity = AccessibilityChannel.boundSheetWitnessObservation(captured, runtime: runtime)
+        let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+
+        // Fact 1: the bound element this run pressed Create on is gone.
+        #expect(
+            identity == .gone,
+            "Mutation caught: keep invalidUIElement mapped to .unreadable; -25202 on the bound element is that element's closure signal."
+        )
+        // Fact 2 (a SEPARATE fresh scan, not derived from fact 1): a
+        // replacement sheet is still present. Conflating fact 1 with fact 2 —
+        // treating the bound element's closure as proof no sheet exists — is
+        // exactly the #538 bug this witness must not reintroduce.
+        #expect(
+            ModalReconciliation.classify(read.signals) == .mandatoryNewTrack,
+            "A gone bound identity must never be read as 'no sheet of this kind exists'; the fresh scan still finds the replacement sheet."
+        )
+    }
+
+    @Test("a gone bound sheet plus an incomplete follow-up scan is not a clean/settled conclusion")
+    func goneIdentityPlusDepthCapIsNotBlockerSetClear() async throws {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(810)
+        let window = builder.element(811)
+        let sheet = builder.element(812)
+        let create = builder.element(813)
+        let cancel = builder.element(814)
+        let groups = (0..<33).map { builder.element(820 + $0) }
+        let pressed = LockedFlag()
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        builder.setChildren(window, [sheet])
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+        builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create, kAXTitleAttribute as String, "Create")
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+        builder.setChildren(sheet, [create, cancel])
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                if CFEqual(element, window), attribute == "AXSheets" {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue))
+                }
+                if pressed.get(), CFEqual(element, sheet), attribute == (kAXRoleAttribute as String) {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue))
+                }
+                return nil
+            },
+            childrenResultHandler: { element in
+                guard pressed.get() else { return nil }
+                if CFEqual(element, window) {
+                    return .success([groups[0]])
+                }
+                return nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard CFEqual(element, create), action == (kAXPressAction as String) else { return false }
+                pressed.set()
+                builder.setChildren(window, [groups[0]])
+                for index in 0..<(groups.count - 1) {
+                    builder.setChildren(groups[index], [groups[index + 1]])
+                }
+                return true
+            }
+        )
+
+        let outcome = await AccessibilityChannel.reconcileAfterMutation(
+            isDeleteContext: false,
+            runtime: runtime,
+            witnessAttempts: 1,
+            witnessDelayNanoseconds: 0
+        )
+        let summary = try #require(outcome.witnessSummary)
+        let clear = try #require(summary.blockerSetClear)
+
+        #expect(outcome.actionAttempted)
+        // The bound sheet's own identity read came back invalidUIElement
+        // after the press, so the witness correctly observes it gone...
+        #expect(
+            summary.observedGone,
+            "Mutation caught: keep invalidUIElement mapped to .unreadable; the bound sheet's own identity read must be observed gone here."
+        )
+        // ...but the SEPARATE complete blocker-set scan hit the descendant
+        // depth cap and came back incomplete, so it must not be certified
+        // clear. A gone bound sheet plus an unread/incomplete scan of the
+        // rest of the modal surface is NOT a clean desk — this is the pairing
+        // that must hold before any caller treats the outcome as settled.
+        #expect(
+            !clear,
+            "A gone bound sheet must not make the complete blocker-set scan clear on its own; the incomplete depth-capped scan must still gate this false."
+        )
+        #expect(!AccessibilityChannel.freshCompleteModalReadIsClear(in: window, runtime: runtime))
+    }
+
+    @Test("AXWindows unsupported is not an empty list of other hosts")
+    func axWindowsUnsupportedIsNotNoOtherHosts() {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(850)
+        let window = builder.element(851)
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, app), attribute == (kAXWindowsAttribute as String) else { return nil }
+                return .failure(AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let read = AccessibilityChannel.readModalSignalsAndAlertTarget(runtime: runtime)
+
+        #expect(ModalReconciliation.classify(read.signals) == .none)
+        #expect(!read.modalObservationIsComplete)
+        #expect(
+            read.unreadableReason == .axWindowsReadFailed(
+                AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue)
+            )
+        )
+        #expect(!AccessibilityChannel.freshCompleteModalReadIsClear(in: window, runtime: runtime))
+    }
+
+    @Test("an AXSheets member is a candidate only when its role is AXSheet")
+    func axSheetsFirstElementIsNotTrustedWithoutSheetRole() {
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(860)
+        let window = builder.element(861)
+        let decoy = builder.element(862)
+        let sheet = builder.element(863)
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        builder.setAttribute(window, kAXModalAttribute as String, false)
+        builder.setChildren(window, [sheet])
+        builder.setAttribute(decoy, kAXRoleAttribute as String, kAXGroupRole as String)
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+        let runtime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, window), attribute == "AXSheets" else { return nil }
+                return .success([decoy] as NSArray)
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let kind = ModalReconciliation.classify(AccessibilityChannel.readModalSignals(runtime: runtime))
+
+        #expect(kind == .mandatoryNewTrack)
+    }
+
+    @Test("invalidUIElement on the captured alert is observed gone")
+    func invalidAlertIdentityIsObservedGone() {
+        let builder = FakeAXRuntimeBuilder()
+        let alert = builder.element(870)
+        let runtime = builder.makeLogicRuntime(
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, alert), attribute == (kAXModalAttribute as String) else { return nil }
+                return .failure(AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let observed = AccessibilityChannel.boundTopLevelAlertWitnessObservation(alert, runtime: runtime)
+
+        #expect(
+            observed == .gone,
+            "Mutation caught: keep invalidUIElement mapped to .unreadable(.alertModal); -25202 on the bound alert element is that element's closure signal, same shape as the sheet witness."
+        )
+    }
+
+    @Test("cannotComplete on the captured alert stays unreadable")
+    func nonStaleCapturedAlertIsUnreadable() {
+        let builder = FakeAXRuntimeBuilder()
+        let alert = builder.element(872)
+        let cannotComplete = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        let runtime = builder.makeLogicRuntime(
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, alert), attribute == (kAXModalAttribute as String) else { return nil }
+                return .failure(cannotComplete)
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let observed = AccessibilityChannel.boundTopLevelAlertWitnessObservation(alert, runtime: runtime)
+
+        #expect(
+            observed == .unreadable(.alertModal(cannotComplete)),
+            "A read that did not answer must retire this poll as unreadable, not gone."
+        )
+    }
+
+    @Test("invalidUIElement on the captured menu item is observed gone")
+    func invalidMenuIdentityIsObservedGone() {
+        let builder = FakeAXRuntimeBuilder()
+        let item = builder.element(871)
+        let runtime = builder.makeLogicRuntime(
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, item), attribute == (kAXSelectedAttribute as String) else { return nil }
+                return .failure(AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let observed = AccessibilityChannel.boundStrayMenuWitnessObservation(item, runtime: runtime)
+
+        #expect(
+            observed == .gone,
+            "Mutation caught: keep invalidUIElement mapped to .unreadable(.menuItemSelected); -25202 on the bound menu item is that element's closure signal, same shape as the sheet witness."
+        )
+    }
+
+    @Test("cannotComplete on the captured menu item stays unreadable")
+    func nonStaleCapturedMenuIsUnreadable() {
+        let builder = FakeAXRuntimeBuilder()
+        let item = builder.element(873)
+        let cannotComplete = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+        let runtime = builder.makeLogicRuntime(
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, item), attribute == (kAXSelectedAttribute as String) else { return nil }
+                return .failure(cannotComplete)
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let observed = AccessibilityChannel.boundStrayMenuWitnessObservation(item, runtime: runtime)
+
+        #expect(
+            observed == .unreadable(.menuItemSelected(cannotComplete)),
+            "A read that did not answer must retire this poll as unreadable, not gone."
+        )
     }
 }
 

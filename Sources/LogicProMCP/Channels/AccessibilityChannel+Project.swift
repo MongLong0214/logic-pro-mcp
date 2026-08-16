@@ -347,7 +347,7 @@ extension AccessibilityChannel {
                 if outcome.actionAttempted {
                     mandatoryTrackCreateActionAttempted = true
                 }
-                if outcome.witnessSummary?.observedGone == true {
+                if outcome.witnessSummary?.blockerSetClear == true {
                     mandatoryTrackSheetGone = true
                 } else if attempt + 1 == attempts {
                     var extras: [String: Any] = [

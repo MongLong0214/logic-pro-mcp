@@ -158,16 +158,54 @@ enum AXLogicProElements {
         error.raw == AXError.attributeUnsupported.rawValue || error.raw == AXError.noValue.rawValue
     }
 
-    /// Returns true when at least one of Logic's windows is currently a modal
-    /// dialog (subrole `AXDialog` / `AXSystemDialog`). v3.1.1 (P1-2) — used
-    /// by `StatePoller` and any caller that wants to short-circuit cache
-    /// updates while a blocking sheet is up.
+    /// Returns true when a blocking dialog or sheet is present, or when the
+    /// scan cannot prove absence. A missing app root and an unreadable
+    /// `AXWindows` list are not "no dialog". Subrole-only top-level windows
+    /// miss Logic's New Track sheet, which is an `AXChildren` member with
+    /// role `AXSheet` on a host whose own `AXModal` is false.
     static func dialogPresent(runtime: Runtime = .production) -> Bool {
-        guard let app = appRoot(runtime: runtime) else { return false }
-        guard let windows: [AXUIElement] = AXHelpers.getAttribute(
-            app, kAXWindowsAttribute, runtime: runtime.ax
-        ) else { return true }
-        return windows.contains { isBlockingDialogWindow($0, runtime: runtime.ax) }
+        guard let app = appRoot(runtime: runtime) else { return true }
+        switch AXHelpers.getAXUIElementArrayRead(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax
+        ) {
+        case .success(.elements(let windows)):
+            return windows.contains { windowHostsBlockingModal($0, runtime: runtime.ax) }
+        case .success(.absent), .success(.malformed), .failure:
+            return true
+        }
+    }
+
+    private static func windowHostsBlockingModal(
+        _ window: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        if isBlockingDialogWindow(window, runtime: runtime) { return true }
+        switch AXHelpers.childrenResult(window, runtime: runtime) {
+        case .failure(let error)
+            where error.raw == AXError.attributeUnsupported.rawValue
+                || error.raw == AXError.noValue.rawValue:
+            return false
+        case .failure:
+            return true
+        case .success(let children):
+            for child in children {
+                switch AXHelpers.getAttributeResult(
+                    child, kAXRoleAttribute as String, runtime: runtime
+                ) as Result<String?, AXHelpers.AXStatusError> {
+                case .success(.some(let role)) where role == (kAXSheetRole as String):
+                    return true
+                case .failure(let error)
+                    where error.raw == AXError.attributeUnsupported.rawValue
+                        || error.raw == AXError.noValue.rawValue:
+                    continue
+                case .failure:
+                    return true
+                case .success:
+                    continue
+                }
+            }
+            return false
+        }
     }
 
     /// Identity of a blocking dialog/sheet, for #190 diagnostics: callers refuse
@@ -246,38 +284,111 @@ enum AXLogicProElements {
         let owningWindow = (mainWindow(runtime: runtime).flatMap {
             AXHelpers.getTitle($0, runtime: runtime.ax)
         } ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let buttons = titledButtons(of: dialog, runtime: runtime.ax)
-        return BlockingDialogTarget(
-            element: dialog,
-            buttons: buttons,
-            info: BlockingDialogInfo(
-                title: title,
-                role: role,
-                owningWindow: owningWindow,
-                buttonTitles: buttons.map(\.title),
-                recoveryAction: blockingDialogRecoveryAction(title: title, buttons: buttons.map(\.title))
+        switch titledButtonsRead(of: dialog, runtime: runtime.ax) {
+        case .unreadable:
+            return nil
+        case .buttons(let buttons):
+            return BlockingDialogTarget(
+                element: dialog,
+                buttons: buttons,
+                info: BlockingDialogInfo(
+                    title: title,
+                    role: role,
+                    owningWindow: owningWindow,
+                    buttonTitles: buttons.map(\.title),
+                    recoveryAction: blockingDialogRecoveryAction(title: title, buttons: buttons.map(\.title))
+                )
             )
-        )
+        }
     }
 
-    /// The dialog's actionable buttons: direct children with the button role and
-    /// a non-empty trimmed title. Shared by the reader and the #453 re-check so
-    /// "exactly one button" means the same thing at classify time and click time
-    /// — two counts derived differently would let a gate pass on one definition
-    /// and act on another.
+    /// A complete button-set read. A failed child role or title is not "this
+    /// child is not a button": dropping it would turn a two-button choice into
+    /// a one-button alert. Measured Logic also places sheet/dialog buttons one
+    /// `AXGroup` deep, so that group is part of the same candidate set.
+    enum TitledButtonsRead {
+        case buttons([(element: AXUIElement, title: String)])
+        case unreadable
+    }
+
+    static func titledButtonsRead(
+        of dialog: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> TitledButtonsRead {
+        collectTitledButtons(of: dialog, runtime: runtime, descendIntoGroups: true)
+    }
+
+    /// The dialog's actionable buttons when the whole candidate set was
+    /// readable. An unreadable sibling collapses to an empty list so leftover
+    /// callers cannot act on a partial set.
     static func titledButtons(
         of dialog: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> [(element: AXUIElement, title: String)] {
-        AXHelpers.getChildren(dialog, runtime: runtime)
-            .filter { AXHelpers.getRole($0, runtime: runtime) == (kAXButtonRole as String) }
-            .compactMap { button in
-                guard let title = AXHelpers.getTitle(button, runtime: runtime)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines),
-                    !title.isEmpty
-                else { return nil }
-                return (element: button, title: title)
+        switch titledButtonsRead(of: dialog, runtime: runtime) {
+        case .buttons(let buttons):
+            return buttons
+        case .unreadable:
+            return []
+        }
+    }
+
+    private static func collectTitledButtons(
+        of element: AXUIElement,
+        runtime: AXHelpers.Runtime,
+        descendIntoGroups: Bool
+    ) -> TitledButtonsRead {
+        let children: [AXUIElement]
+        switch AXHelpers.childrenResult(element, runtime: runtime) {
+        case .failure(let error)
+            where error.raw == AXError.attributeUnsupported.rawValue
+                || error.raw == AXError.noValue.rawValue:
+            return .buttons([])
+        case .failure:
+            return .unreadable
+        case .success(let observed):
+            children = observed
+        }
+        var buttons: [(element: AXUIElement, title: String)] = []
+        for child in children {
+            switch AXHelpers.getAttributeResult(
+                child, kAXRoleAttribute as String, runtime: runtime
+            ) as Result<String?, AXHelpers.AXStatusError> {
+            case .failure(let error)
+                where error.raw == AXError.attributeUnsupported.rawValue
+                    || error.raw == AXError.noValue.rawValue:
+                continue
+            case .failure:
+                return .unreadable
+            case .success(.none):
+                continue
+            case .success(.some(let role)) where role == (kAXButtonRole as String):
+                switch AXHelpers.getAttributeResult(
+                    child, kAXTitleAttribute as String, runtime: runtime
+                ) as Result<String?, AXHelpers.AXStatusError> {
+                case .failure(let error)
+                    where error.raw != AXError.attributeUnsupported.rawValue
+                        && error.raw != AXError.noValue.rawValue:
+                    return .unreadable
+                case .failure, .success(.none):
+                    continue
+                case .success(.some(let rawTitle)):
+                    let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !title.isEmpty else { continue }
+                    buttons.append((element: child, title: title))
+                }
+            case .success(.some(let role)) where role == (kAXGroupRole as String) && descendIntoGroups:
+                switch collectTitledButtons(of: child, runtime: runtime, descendIntoGroups: false) {
+                case .unreadable:
+                    return .unreadable
+                case .buttons(let nested):
+                    buttons.append(contentsOf: nested)
+                }
+            case .success:
+                continue
             }
+        }
+        return .buttons(buttons)
     }
 
     static func blockingDialogInfo(runtime: Runtime = .production) -> BlockingDialogInfo? {

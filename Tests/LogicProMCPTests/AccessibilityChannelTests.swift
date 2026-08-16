@@ -2679,7 +2679,9 @@ private func makeTempoSliderFixture(
     let createdTrackHeader = builder.element(187)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
     builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setAttribute(window, kAXModalAttribute as String, false)
     builder.setChildren(window, [trackList])
     builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
     builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
@@ -2690,8 +2692,10 @@ private func makeTempoSliderFixture(
 
     builder.setChildren(menuBar, [trackMenu])
     builder.setAttribute(trackMenu, kAXTitleAttribute as String, "트랙")
+    builder.setAttribute(trackMenu, kAXSelectedAttribute as String, false)
     builder.setChildren(trackMenu, [createItem])
     builder.setAttribute(createItem, kAXTitleAttribute as String, "새로운 소프트웨어 악기 트랙")
+    builder.setAttribute(createItem, kAXSelectedAttribute as String, false)
 
     builder.setAttribute(createdTrackHeader, kAXRoleAttribute as String, kAXLayoutItemRole as String)
     builder.setAttribute(createdTrackHeader, kAXTitleAttribute as String, "Studio Grand")
@@ -2782,7 +2786,9 @@ private func makeTempoSliderFixture(
     let trackHeader = builder.element(196)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
     builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setAttribute(window, kAXModalAttribute as String, false)
     builder.setChildren(window, [trackList])
     builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
     builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
@@ -2790,8 +2796,10 @@ private func makeTempoSliderFixture(
 
     builder.setChildren(menuBar, [trackMenu])
     builder.setAttribute(trackMenu, kAXTitleAttribute as String, "트랙")
+    builder.setAttribute(trackMenu, kAXSelectedAttribute as String, false)
     builder.setChildren(trackMenu, [createItem])
     builder.setAttribute(createItem, kAXTitleAttribute as String, "새로운 소프트웨어 악기 트랙")
+    builder.setAttribute(createItem, kAXSelectedAttribute as String, false)
 
     let runtime = builder.makeLogicRuntime(
         appElement: app,
@@ -2834,6 +2842,8 @@ private func makeTempoSliderFixture(
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setAttribute(app, kAXWindowsAttribute as String, [window, dialog])
+    builder.setAttribute(window, kAXModalAttribute as String, false)
+    builder.setAttribute(dialog, kAXModalAttribute as String, true)
     builder.setAttribute(dialog, kAXSubroleAttribute as String, kAXDialogSubrole as String)
     builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
     builder.setChildren(window, [trackList])
@@ -2845,8 +2855,10 @@ private func makeTempoSliderFixture(
 
     builder.setChildren(menuBar, [trackMenu])
     builder.setAttribute(trackMenu, kAXTitleAttribute as String, "트랙")
+    builder.setAttribute(trackMenu, kAXSelectedAttribute as String, false)
     builder.setChildren(trackMenu, [createItem])
     builder.setAttribute(createItem, kAXTitleAttribute as String, "새로운 소프트웨어 악기 트랙")
+    builder.setAttribute(createItem, kAXSelectedAttribute as String, false)
 
     let runtime = builder.makeLogicRuntime(
         appElement: app,

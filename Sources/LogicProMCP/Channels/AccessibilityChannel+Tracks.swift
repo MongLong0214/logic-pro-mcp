@@ -1360,15 +1360,33 @@ extension AccessibilityChannel {
             unreadableReason: reconcileOutcome.unreadableReason
         )
 
+        var lastModal = reconcileOutcome
         for attempt in 0..<4 {
             let currentTracks = observedTrackStates(in: arrangeWindow, runtime: runtime)
             let currentCount = currentTracks?.count
             if let currentCount {
                 lastObservedCount = currentCount
             }
-            if let beforeTracks,
-               let currentTracks,
-               currentTracks.count > beforeTracks.count {
+            let modal = observeModalAfterMutation(
+                isDeleteContext: false,
+                arrangeWindow: arrangeWindow,
+                runtime: runtime
+            )
+            lastModal = modal
+            let countIncreased = beforeTracks.map { before in
+                currentTracks.map { $0.count > before.count } ?? false
+            } ?? false
+            let settledClean = deletionModalObservationIsSettledClean(
+                modal,
+                arrangeWindowWasRead: {
+                    if case .found = arrangeWindow { return true }
+                    return false
+                }()
+            )
+            if countIncreased,
+               settledClean,
+               let beforeTracks,
+               let currentTracks {
                 var merged = extras.merging([
                     "track_count_after": currentTracks.count,
                     "observed_delta": currentTracks.count - beforeTracks.count
@@ -1394,6 +1412,16 @@ extension AccessibilityChannel {
         } else {
             merged["observed_delta"] = NSNull()
         }
+        mergeReconcileExtras(
+            &merged,
+            kind: lastModal.kind,
+            action: attemptedReconcileActionLabel(lastModal),
+            newTrackAutoConfirmed: lastModal.kind == .mandatoryNewTrack && lastModal.actionAttempted,
+            witnessSummary: lastModal.witnessSummary,
+            refusal: lastModal.refusal,
+            actionFailure: lastModal.actionFailure,
+            unreadableReason: lastModal.unreadableReason
+        )
         // Without a successful pre-write rail read, a later count cannot tell
         // whether the tracks existed before the menu action. The write may have
         // happened, but State A is unavailable rather than a zero-count guess.
@@ -1403,9 +1431,9 @@ extension AccessibilityChannel {
                 extras: merged
             ))
         }
-        let dialogPresent = AXLogicProElements.dialogPresent(runtime: runtime)
-        merged["dialog_present"] = dialogPresent
-        if dialogPresent {
+        let blockingOrUnreadable = lastModal.kind != .none || !lastModal.modalObservationIsComplete
+        merged["dialog_present"] = blockingOrUnreadable
+        if blockingOrUnreadable {
             merged["waiting_for_user"] = true
             return .success(HonestContract.encodeStateB(
                 reason: .retryExhausted,
@@ -1435,21 +1463,19 @@ extension AccessibilityChannel {
         before: [TrackState],
         after: [TrackState]
     ) -> TrackState? {
-        if let selected = after.first(where: { $0.isSelected }) {
-            return selected
+        let beforeSignatures = Set(before.map(trackCreationSignature))
+        let newTracks = after.filter { !beforeSignatures.contains(trackCreationSignature($0)) }
+        if newTracks.count == 1 {
+            return newTracks[0]
         }
-        guard after.count == before.count + 1 else {
-            return after.last
-        }
+        guard after.count == before.count + 1 else { return nil }
         var prefix = 0
         while prefix < before.count,
               trackCreationSignature(before[prefix]) == trackCreationSignature(after[prefix]) {
             prefix += 1
         }
-        if prefix < after.count {
-            return after[prefix]
-        }
-        return after.last
+        guard prefix < after.count else { return nil }
+        return after[prefix]
     }
 
     private static func trackCreationSignature(_ track: TrackState) -> String {
