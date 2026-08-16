@@ -129,7 +129,14 @@ ev.check("549/no-blocker-left-behind",
 # observed string always states how many receipts actually carried a reason.
 with_reason = [(op, b) for op, b in receipts
                if isinstance(b, dict) and b.get("reconciled_modal_unreadable_reason")]
-named = [(op, b) for op, b in with_reason if isinstance(b.get("reconciled_modal_unreadable_node"), dict)]
+# `unrecorded` is the marker for "a failure arrived with no node", so counting it as "named" would let
+# the check pass on exactly the receipts it exists to catch.
+def names_a_node(body):
+    node = body.get("reconciled_modal_unreadable_node")
+    return isinstance(node, dict) and node.get("site") != "unrecorded"
+
+
+named = [(op, b) for op, b in with_reason if names_a_node(b)]
 exercised = len(with_reason) > 0
 
 ev.check("549/an-unreadable-reason-always-names-its-node",

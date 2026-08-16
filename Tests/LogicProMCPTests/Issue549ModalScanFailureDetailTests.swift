@@ -58,7 +58,6 @@ struct Issue549ModalScanFailureDetailTests {
         #expect(detail.attribute == .children)
         #expect(detail.subjectRole == (kAXGroupRole as String))
         #expect(detail.path == [.init(parentRole: nil, childIndex: 1)])
-        #expect(detail.wouldHaveBeenAbsent)
     }
 
     @Test("a role-read failure at the window's own top level is attributed to the main-window scan, not the recursive walk")
@@ -96,7 +95,6 @@ struct Issue549ModalScanFailureDetailTests {
         #expect(detail.attribute == .role)
         #expect(detail.subjectRole == nil, "a role failure cannot name a role it never read")
         #expect(detail.path == [.init(parentRole: nil, childIndex: 0)])
-        #expect(!detail.wouldHaveBeenAbsent)
     }
 
     @Test("a role-read failure on another window is attributed to the any-window scan")
@@ -172,7 +170,6 @@ struct Issue549ModalScanFailureDetailTests {
         let detail = try #require(read.sheetScanFailureDetail)
 
         #expect(detail.attribute == .children)
-        #expect(detail.wouldHaveBeenAbsent)
     }
 
     @Test("the counterfactual reports NOT would-have-been-absent when the hidden node's true (unreadable) role is the sheet")
@@ -217,7 +214,6 @@ struct Issue549ModalScanFailureDetailTests {
         #expect(!read.signals.sheetPresent)
         let detail = try #require(read.sheetScanFailureDetail)
         #expect(detail.attribute == .role)
-        #expect(!detail.wouldHaveBeenAbsent)
     }
 
     // MARK: - No user content
@@ -325,6 +321,48 @@ struct Issue549ModalScanFailureDetailTests {
         )
         #expect(extras["reconciled_modal_unreadable_node"] == nil)
         #expect(extras["reconciled_modal_unreadable_reason"] != nil)
+    }
+
+    @Test("a second merge into the same receipt cannot leave the first merge's node behind")
+    func staleNodeDoesNotSurviveASecondMerge() throws {
+        // `verifyTrackCreation` merges twice into one dictionary: the post-menu outcome, then
+        // `var merged = extras` plus the final poll's outcome. The reason is overwritten by the second
+        // merge; if the node were only ever written and never removed, a node from the first merge's
+        // sheet scan would ride along beside a reason from a poll that never touched the sheet tree —
+        // naming the wrong node, confidently, in the one field added to stop exactly that.
+        var extras: [String: Any] = [:]
+        let firstDetail = AccessibilityChannel.ModalSheetScanFailureDetail(
+            site: .mainWindowFirstSheetLookup,
+            attribute: .children,
+            subjectRole: kAXGroupRole as String,
+            path: [.init(parentRole: nil, childIndex: 1)]
+        )
+        AccessibilityChannel.mergeReconcileExtras(
+            &extras,
+            kind: .none,
+            action: "none",
+            newTrackAutoConfirmed: false,
+            unreadableReason: .windowSheetReadFailed(AXHelpers.AXStatusError(raw: -25200)),
+            sheetScanFailureDetail: firstDetail
+        )
+        let afterFirst = try #require(extras["reconciled_modal_unreadable_node"] as? [String: Any])
+        #expect((afterFirst["subject_role"] as? String) == (kAXGroupRole as String))
+
+        // Second merge: a stray-menu failure, which never involved the sheet scan and carries no node.
+        AccessibilityChannel.mergeReconcileExtras(
+            &extras,
+            kind: .none,
+            action: "none",
+            newTrackAutoConfirmed: false,
+            unreadableReason: .strayMenuReadFailed,
+            sheetScanFailureDetail: nil
+        )
+        let reason = try #require(extras["reconciled_modal_unreadable_reason"] as? String)
+        #expect(reason == "stray_menu_read_failed")
+        #expect(
+            extras["reconciled_modal_unreadable_node"] == nil,
+            "the earlier sheet-scan node must not survive beside a reason from a different scan"
+        )
     }
 }
 

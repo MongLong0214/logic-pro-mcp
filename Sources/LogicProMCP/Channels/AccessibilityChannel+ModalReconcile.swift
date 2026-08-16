@@ -148,26 +148,31 @@ extension AccessibilityChannel {
 
         let site: Site
         let attribute: Attribute
-        /// The failing node's own role, when it was already known before the
-        /// read that failed. An `AXChildren` failure always has this — a
-        /// node only reaches that read after its own role was confirmed
-        /// non-sheet by the caller that descended into it. `nil` when the
-        /// failing read WAS the role lookup itself.
+        /// The failing node's own role, when it was already known before the read that failed.
+        ///
+        /// `nil` in two distinct situations, and the receipt cannot tell them apart — say so rather than
+        /// implying otherwise. Either the failing read WAS the role lookup, or the failing node is the
+        /// window root, whose role this scan never reads (`firstSheetLookup` enters the walk with no
+        /// role for it). So an `AXChildren` failure does NOT always carry a role: a failed `AXChildren`
+        /// read on the window itself — an ordinary occurrence while Logic rebuilds — reports `nil` here
+        /// with an empty path.
         let subjectRole: String?
         /// Root-to-node ordinal path, one entry per level of descent from
         /// the window root down to (but not including) the failing node.
         let path: [PathStep]
-        /// Whether the failing node's own identity — had this exact read
-        /// succeeded — could still have changed the scan's verdict. `true`
-        /// only for an `AXChildren`/depth-cap failure on a node whose role
-        /// was already confirmed non-sheet: THAT node is provably not the
-        /// missing sheet, so the read that failed could only have ruled out
-        /// content beneath it, never revealed the sheet itself. `false` for
-        /// an `AXRole` failure, where the node's identity is unknown and
-        /// could have been the sheet. This deliberately does not claim
-        /// knowledge of an `AXChildren` failure's unexamined descendants —
-        /// only that the reported node itself was not load-bearing.
-        let wouldHaveBeenAbsent: Bool
+        // There is deliberately NO "would the scan have answered absent" field. One was specified and
+        // built, and it was wrong: for an `AXChildren` or depth-cap failure it reported `true` — the
+        // failing node is provably not the sheet — while the subtree BELOW that node went entirely
+        // unexamined and may hold it. In the likeliest real case, Logic wedged on a sheet this scan
+        // cannot read, that field would have told an investigator the failed read could not have hidden
+        // it. A confidently wrong pointer is worse than none, and this type exists precisely because
+        // confident wrongness cost three misdiagnoses.
+        //
+        // What is known is already carried, without a counterfactual:
+        //   `subjectRole` present — the node's role was read and is not a sheet
+        //   `subjectRole` nil     — the node was never identified; it could have been the sheet
+        //   either way            — everything below the failing node is unexamined, which is exactly
+        //                           why the verdict was `.unreadable` rather than `.absent`
 
         /// Emitted when the sheet scan reported a failure but no detail reached the receipt. It marks a
         /// hole in this feature's own coverage rather than a fact about Logic, and it is deliberately
@@ -194,7 +199,6 @@ extension AccessibilityChannel {
                     }
                     return entry
                 },
-                "would_have_been_absent": wouldHaveBeenAbsent,
             ]
             if let subjectRole {
                 value["subject_role"] = subjectRole
@@ -1019,10 +1023,11 @@ extension AccessibilityChannel {
     private enum SheetLookup {
         case found(AXUIElement)
         case absent
-        /// #549: `detail` names the exact node/scan/attribute behind `reason`
-        /// when the failure originated in the sheet scan itself (always true
-        /// for every construction site below); `nil` is not currently
-        /// reachable but keeps this additive rather than force-unwrapped.
+        /// #549: `detail` names the exact node/scan/attribute behind `reason` when the failure
+        /// originated in the sheet scan itself. `nil` IS reachable and is the correct value for the
+        /// failures that arise before the walk begins — `appRootUnavailable`,
+        /// `axWindowsPayloadUninterpretable`, `axWindowsReadFailed` — which have no node to name. Do not
+        /// force-unwrap it.
         case incomplete(ModalReadFailure, ModalSheetScanFailureDetail?)
         case unreadable(ModalReadFailure, ModalSheetScanFailureDetail?)
     }
@@ -1197,11 +1202,7 @@ extension AccessibilityChannel {
                     site: site,
                     attribute: .depthCapped,
                     subjectRole: elementRole,
-                    path: ancestorPath,
-                    // The node we were about to descend into was already
-                    // confirmed non-sheet by the caller that reached it here;
-                    // only its unexamined descendants remain unknown.
-                    wouldHaveBeenAbsent: true
+                    path: ancestorPath
                 )
             )
         }
@@ -1215,8 +1216,7 @@ extension AccessibilityChannel {
                     site: site,
                     attribute: .children,
                     subjectRole: elementRole,
-                    path: ancestorPath,
-                    wouldHaveBeenAbsent: true
+                    path: ancestorPath
                 )
             )
         case .success(let children):
@@ -1244,11 +1244,7 @@ extension AccessibilityChannel {
                             // The failing child's own role is exactly what
                             // this read could not establish.
                             subjectRole: nil,
-                            path: ancestorPath + [.init(parentRole: elementRole, childIndex: index)],
-                            // Unknown identity: this child might have BEEN
-                            // the sheet, so the verdict cannot be claimed
-                            // absent from this failure alone.
-                            wouldHaveBeenAbsent: false
+                            path: ancestorPath + [.init(parentRole: elementRole, childIndex: index)]
                         )
                     }
                     continue
@@ -2001,10 +1997,19 @@ extension AccessibilityChannel {
         // will set the reason and forget the detail, and the field will simply be absent. An absent
         // field reads as "the scan had no unreadable node" — which is precisely the silence this field
         // exists to end. So a sheet-scan failure with no detail says so, loudly, instead of vanishing.
+        // The write is TOTAL — every branch either sets the key or removes it. `verifyTrackCreation`
+        // merges twice into one dictionary (`+Tracks.swift`: the post-menu outcome, then `var merged =
+        // extras` and the final poll's outcome). Without the removal, a node recorded by the first merge
+        // survives into a receipt whose reason came from the second: a `stray_menu_read_failed` envelope
+        // carrying a node from a sheet scan in an earlier poll. That is the "names the wrong node
+        // confidently" outcome this field exists to prevent, and it would be believed precisely because
+        // the field looks specific.
         if let sheetScanFailureDetail {
             extras["reconciled_modal_unreadable_node"] = sheetScanFailureDetail.envelopeValue
         } else if unreadableReason?.originatesInSheetScan == true {
             extras["reconciled_modal_unreadable_node"] = ModalSheetScanFailureDetail.unrecordedEnvelopeValue
+        } else {
+            extras.removeValue(forKey: "reconciled_modal_unreadable_node")
         }
     }
 }
