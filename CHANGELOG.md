@@ -65,7 +65,43 @@ thing it claimed to check.**
   for `track.create` should read `observed_delta` until #549 lands.** Given up: a State A that never
   looked. Gained: an honest State B.
 
+### Fixed — receipts that named a wrong cause
+
+- **`track.delete` recognises the confirmation Logic actually shows (#545).** Deleting a track that
+  carries regions raises a **top-level `AXWindow`/`AXDialog`**, not a sheet — Logic never vends `AXSheets`
+  at all, answering `-25205` for that attribute always. The reconciler had no route for it, so the dialog
+  was classified `unknown_sheet` and **left standing**, after which every later operation in every surface
+  returned State C until a human clicked it. The first attempt at this fix targeted sheet button labels
+  and changed nothing on the path that runs, while six unit tests passed; only a run against the
+  application found that. Verified live end-to-end, including that the dialog *appears* — a check that
+  only asks whether one remains afterwards passes just as happily when none was ever raised.
+
+- **`mixer.set_volume` / `set_pan` name which lookup step failed (#543).** The refusal said only "cannot
+  locate", which neither the reporter nor the maintainer could act on. It now distinguishes a missing
+  track-header rail, a rail that was found but could not be enumerated, a rail read as genuinely empty,
+  an out-of-range index, and a header carrying no slider. `header_count` is published only when a read
+  actually succeeded: reporting `0` for an unreadable rail asserts "this project has no tracks" from a
+  read that never happened. The header is also indexed out of the array already read, so the receipt can
+  no longer contradict itself with `header_count: 3` beside `no_header_at_index` for index 1.
+
+- **The AX status pair moves with the reason it annotates (#554).** Two receipts merge into one
+  dictionary, and the status keys were written only when a reason carried one — so a reason carrying none
+  left the previous reason's status standing beside it, and a receipt could report
+  `stray_menu_read_failed` with a `-25200` that belonged to an earlier poll's sheet scan. A number
+  describing a different failure is worse than no number. Written totally now, and no longer gated on the
+  status having a symbolic name: the two `malformedAttribute` / `malformedChildren` sentinels sit outside
+  `AXError` by design, and gating on the name deleted a status those sentinels exist to publish.
+
 ### Added
+
+- **The public-surface preflight is recorded, and the push checks the record (#552).** Three times the
+  preflight was walked past by `bash preflight | tail -2 && git push`: `tail` returns 0, so `&&` proceeded
+  while `PREFLIGHT FAIL` scrolled by. A pre-push hook now refuses a tree with no recorded pass, moving the
+  check from something that must be *invoked* to something that must be *passed*. Keyed over tree, commit
+  object and base — an earlier revision keyed on the tree alone and advertised "a message-only amend keeps
+  its stamp", which was the exploit, since the preflight greps commit messages. Scope, stated plainly:
+  this converts *accidental* walk-past into *deliberate* opt-out. `git push --no-verify` still bypasses
+  it, as it bypasses every local hook.
 
 - **Live-evidence harnesses (`Scripts/livekit/`).** Three changes in this cycle passed the full unit suite
   *and* the ship gate while being dead or wrong against the running application; nothing but a run against
