@@ -11,6 +11,17 @@
 # that swallowed the exit code, run from the wrong directory, or not run at all — the push stops, because
 # the check has moved from something you must remember to something you must pass.
 #
+# WHAT THIS DOES NOT DO. The commit that introduced this said "impossible to walk past". That is one step
+# stronger than the mechanism: `git push --no-verify` skips every pre-push hook, and no local hook can
+# prevent that. What this actually converts is ACCIDENTAL walk-past into DELIBERATE opt-out — nobody
+# intended `| tail -2 &&`, whereas `--no-verify` has to be typed. That is a real improvement and it is the
+# most a local hook can offer; it is not an unbypassable gate. Making it unbypassable requires enforcement
+# where the push LANDS (a server-side ruleset / required status check), not where it starts.
+#
+# Stating this here because the alternative has already cost us twice: a guard header that claimed a
+# literal "can no longer be written at all" was defeated by one escape, and a receipt that claimed more
+# than its code did was three times a blocker. A header that overstates its mechanism gets believed.
+#
 # Deletions and branch removals pass: there is no tree to have verified.
 set -uo pipefail
 

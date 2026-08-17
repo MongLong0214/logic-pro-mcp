@@ -58,6 +58,53 @@ case $? in
 esac
 rm -rf "$SCRATCH"
 
+# `hook` must be able to report every state it distinguishes. Exercised in a scratch repo so the real
+# clone's hook is never touched — a test that installs or removes the live gate to prove a point would
+# leave the machine in whichever state it crashed in.
+HOOKTEST=$(mktemp -d) || { echo "CANNOT-TEST(2): mktemp failed"; exit 2; }
+(
+  cd "$HOOKTEST" || exit 1
+  git init -q . && git config user.email t@t && git config user.name t
+  echo x > f && git add f && git commit -qm "c"
+  cp "$OLDPWD/$STAMPER" ./stamp.sh
+  H=$(git rev-parse --git-common-dir)/hooks/pre-push.commitlore-chained
+
+  bash ./stamp.sh hook >/dev/null 2>&1
+  [ $? -eq 1 ] || exit 11                       # absent must be NOT-ENFORCED(1)
+
+  # A stamp recorded into a hookless clone has to SAY so; silence there is the whole defect.
+  # Capture, do not pipe into `grep -q`. Under `set -o pipefail` a `-q` grep exits at its first match,
+  # the producer takes SIGPIPE writing its next line, and the pipeline reports 141 — so the assertion
+  # fails or passes depending on whether the writer happened to finish first. That race cost a real
+  # debugging detour here; a check whose verdict depends on buffering is not a check.
+  OUT=$(LPM_STAMP_DIR="$HOOKTEST/st" bash ./stamp.sh record HEAD 2>&1)
+  case "$OUT" in *"warning: no executable"*) ;; *) exit 12 ;; esac
+
+  printf '#!/bin/bash\nexit 0\n' > "$H"
+  chmod -x "$H"
+  OUT=$(bash ./stamp.sh hook 2>&1)
+  case "$OUT" in *"not executable"*) ;; *) exit 13 ;; esac
+
+  chmod +x "$H"
+  bash ./stamp.sh hook >/dev/null 2>&1
+  [ $? -eq 0 ] || exit 14                       # installed and executable must be OK(0)
+
+  # ...and the warning must STOP once it is installed, or it is noise rather than a signal.
+  OUT=$(LPM_STAMP_DIR="$HOOKTEST/st2" bash ./stamp.sh record HEAD 2>&1)
+  case "$OUT" in *"warning: no executable"*) exit 15 ;; esac
+  exit 0
+)
+case $? in
+  0)  ok "hook reports absent / non-executable / installed, and record warns only when unenforced" ;;
+  11) no "an absent hook did not report NOT-ENFORCED(1)" ;;
+  12) no "record stayed silent in a clone with no hook installed — the silent absence is the defect" ;;
+  13) no "a non-executable hook was not distinguished from an installed one" ;;
+  14) no "an installed executable hook did not report OK(0)" ;;
+  15) no "record warned about an absent hook while one was installed" ;;
+  *)  no "hook-state fixture broke before it could measure anything" ;;
+esac
+rm -rf "$HOOKTEST"
+
 printf 'refs/heads/x 0000000000000000000000000000000000000000 refs/heads/x %s\n' "$(git rev-parse HEAD)" \
   | bash "$HOOK" >/dev/null 2>&1
 [ $? -eq 0 ] && ok "hook allows a branch deletion" || no "hook refused a deletion"
