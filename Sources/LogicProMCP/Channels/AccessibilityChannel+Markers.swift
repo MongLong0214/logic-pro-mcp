@@ -324,12 +324,16 @@ extension AccessibilityChannel {
         let focusBlock: String
         switch action {
         case .create:
+            // The arrange window's title suffix is localized, so it is resolved from the same
+            // LabelSet the rest of this file uses. It was an English/Korean literal pair, which
+            // made this script fail outright on a Japanese Logic and surface as a missing menu item.
+            let arrangeResolution = AppleScriptMenuResolution.windowWithTitleSuffix(
+                AXLocalePolicy.arrangeWindowTitleSuffix,
+                variableName: "targetWindow",
+                notFoundError: "ARRANGE_WINDOW_NOT_FOUND"
+            )
             focusBlock = """
-                try
-                    set targetWindow to first window whose name ends with "Tracks"
-                on error
-                    set targetWindow to first window whose name ends with "트랙"
-                end try
+                \(arrangeResolution)
                 set value of attribute "AXMain" of targetWindow to true
                 perform action "AXRaise" of targetWindow
                 delay 0.1

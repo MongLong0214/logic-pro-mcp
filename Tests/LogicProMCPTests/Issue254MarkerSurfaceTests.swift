@@ -54,7 +54,26 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     builder.setAttribute(window, kAXDocumentAttribute as String, "/Issue254.logicx")
     builder.setAttribute(table, kAXRoleAttribute as String, kAXTableRole as String)
     builder.setAttribute(table, "AXRows", [AXUIElement]())
-    builder.setChildren(window, [table])
+    // The measured empty shape (Logic 12.3): the table still vends its four columns and a group,
+    // and the window carries Logic's own count. This fixture used to give the table no children at
+    // all, which let the reader publish an empty list without consulting the count — the one route
+    // to empty that skipped corroboration entirely.
+    var tableChildren: [AXUIElement] = []
+    for column in 0..<4 {
+        let columnElement = builder.element(25_420 + column)
+        builder.setAttribute(columnElement, kAXRoleAttribute as String, kAXColumnRole as String)
+        tableChildren.append(columnElement)
+    }
+    let tableGroup = builder.element(25_430)
+    builder.setAttribute(tableGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+    tableChildren.append(tableGroup)
+    builder.setChildren(table, tableChildren)
+
+    let itemCount = builder.element(25_431)
+    builder.setAttribute(itemCount, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    builder.setAttribute(itemCount, kAXDescriptionAttribute as String, "Number of Items")
+    builder.setAttribute(itemCount, kAXValueAttribute as String, "0 Markers")
+    builder.setChildren(window, [table, itemCount])
 
     let result = AccessibilityChannel.defaultGetMarkers(
         runtime: builder.makeLogicRuntime(appElement: app)
@@ -127,6 +146,27 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     let readable = try #require(envelope["readable"] as? Bool)
     #expect(!readable)
     #expect(envelope["reason"] as? String == "markers_not_polled_yet")
+}
+
+/// The distinction is "did anything TRY", which the fetch timestamp cannot answer:
+/// `markersFetchedAt` advances only on a successful read, so a poll that ran and failed leaves it
+/// exactly where a poll that never ran leaves it. Keying the reason on the timestamp would have
+/// moved the false attribution instead of removing it — this is the case that catches that.
+@Test func markerResourceSaysTheListIsClosedOnceAPollHasActuallyFailed() async throws {
+    let cache = StateCache()
+    await cache.markMarkersUnreadable()
+
+    let result = try await ResourceHandlers.read(
+        uri: "logic://markers",
+        cache: cache,
+        router: ChannelRouter()
+    )
+    let envelope = try issue254Envelope(result)
+
+    let readable = try #require(envelope["readable"] as? Bool)
+    #expect(!readable)
+    #expect(envelope["fetched_at"] == nil || envelope["fetched_at"] is NSNull)
+    #expect(envelope["reason"] as? String == "marker_list_not_open")
 }
 
 /// `nav.delete_marker` must work on a default install.

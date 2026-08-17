@@ -314,7 +314,11 @@ extension AXLogicProElements {
             return .failure(MarkerListReadFailure(site: .tableLookup, status: error))
         }
 
-        return markerListInventoryWithReadFailure(from: table, runtime: runtime)
+        // The witness must be read from the window the CALLER bound, not from whatever the table's
+        // `AXWindow` answers. Resolving it again would make an empty list depend on an attribute
+        // this path never needed, and a mis-bound `AXWindow` pointing at some other window whose
+        // own count reads zero is the one wrong-window direction that is not safe.
+        return markerListInventoryWithReadFailure(from: table, ownerWindow: window, runtime: runtime)
     }
 
     /// Re-reads the exact table element a caller already bound, without resolving another table
@@ -336,9 +340,12 @@ extension AXLogicProElements {
     /// this method never re-discovers a table from the window.
     static func enumerateMarkersFromListTableWithReadFailure(
         _ table: AXUIElement,
+        ownerWindow: AXUIElement? = nil,
         runtime: AXHelpers.Runtime
     ) -> Result<[MarkerState], MarkerListReadFailure> {
-        switch markerListInventoryWithReadFailure(from: table, runtime: runtime) {
+        switch markerListInventoryWithReadFailure(
+            from: table, ownerWindow: ownerWindow, runtime: runtime
+        ) {
         case .success(let inventory):
             return .success(inventory.markers)
         case .failure(let failure):
@@ -361,8 +368,12 @@ extension AXLogicProElements {
     /// Mirrors the inventory reader's existing read/guard flow exactly, retaining where its
     /// existing `AXStatusError` arose instead of flattening it before the delete receipt can
     /// expose the result.
+    /// `ownerWindow` is the Marker List window a caller already resolved. It is nil only on the
+    /// post-write table-only path, which deliberately holds no window; there the owner is recovered
+    /// from the table's own `AXWindow`.
     private static func markerListInventoryWithReadFailure(
         from table: AXUIElement,
+        ownerWindow: AXUIElement? = nil,
         runtime: AXHelpers.Runtime
     ) -> Result<MarkerListInventory, MarkerListReadFailure> {
         enum RowSource {
@@ -387,7 +398,7 @@ extension AXLogicProElements {
             // unreadable list, not as a survivor set. The direct-child order is deliberately not
             // compared: AXRows defines marker indices, while the structural traversal can reorder
             // otherwise identical row elements.
-            switch markerListStructuralRows(from: table, runtime: runtime) {
+            switch markerListStructuralRows(from: table, ownerWindow: ownerWindow, runtime: runtime) {
             case .success(let structuralRows):
                 guard sameElementMultiset(observedRows, structuralRows) else {
                     return .failure(MarkerListReadFailure(
@@ -408,7 +419,7 @@ extension AXLogicProElements {
             // role-filtered structural `[]` is a complete Marker List. Use the same structural
             // reader as the AXRows-corrobation path: present children that temporarily cease to
             // report AXRow make this poll unreadable rather than a false empty survivor set.
-            switch markerListStructuralRows(from: table, runtime: runtime) {
+            switch markerListStructuralRows(from: table, ownerWindow: ownerWindow, runtime: runtime) {
             case .success(let structuralRows):
                 rows = structuralRows
                 rowSource = .structuralChildren
@@ -418,7 +429,7 @@ extension AXLogicProElements {
         case .success(nil):
             // A successful nil carries the same attribute-absence answer as a definitive
             // AXRows failure, so it must take the same guarded structural route.
-            switch markerListStructuralRows(from: table, runtime: runtime) {
+            switch markerListStructuralRows(from: table, ownerWindow: ownerWindow, runtime: runtime) {
             case .success(let structuralRows):
                 rows = structuralRows
                 rowSource = .structuralChildren
@@ -517,6 +528,7 @@ extension AXLogicProElements {
     /// read unreadable — so a rebuilding table still cannot be mistaken for an empty marker list.
     private static func markerListStructuralRows(
         from table: AXUIElement,
+        ownerWindow: AXUIElement?,
         runtime: AXHelpers.Runtime
     ) -> Result<[AXUIElement], MarkerListReadFailure> {
         let children: [AXUIElement]
@@ -537,12 +549,15 @@ extension AXLogicProElements {
                 return .failure(MarkerListReadFailure(site: .structuralChildren, status: error))
             }
         }
-        // A table that vends NO children at all keeps its pre-existing answer: that shape was
-        // already accepted as an empty list and is not what this fix is about. The change is
-        // confined to the shape Logic actually presents — children present, none of them rows.
-        guard !rows.isEmpty || !children.isEmpty else { return .success([]) }
         guard rows.isEmpty else { return .success(rows) }
-        switch markerListZeroItemsWitness(forTableOf: table, runtime: runtime) {
+        // Every empty row set goes through the witness, including a table that vends NO children at
+        // all. That case used to be published as an empty list with no corroboration, on the
+        // reasoning that a childless table is obviously empty — but "the table answered with
+        // nothing" is exactly the answer a rebuild gives, and it is the original unguarded path
+        // that once certified the delete of a marker that was still present. Logic's live table
+        // always carries its columns, so this branch is not a shape the application presents; the
+        // only thing keeping it separate was a test fixture that built it.
+        switch markerListZeroItemsWitness(forTableOf: table, ownerWindow: ownerWindow, runtime: runtime) {
         case .zero:
             return .success([])
         case .nonZero:
@@ -577,18 +592,23 @@ extension AXLogicProElements {
     /// witness is not a zero.
     static func markerListZeroItemsWitness(
         forTableOf table: AXUIElement,
+        ownerWindow: AXUIElement? = nil,
         runtime: AXHelpers.Runtime
     ) -> MarkerListZeroItemsWitness {
         let window: AXUIElement
-        switch AXHelpers.getAttributeResult(
-            table, kAXWindowAttribute as String, runtime: runtime
-        ) as Result<AXUIElement?, AXHelpers.AXStatusError> {
-        case .success(let owner?):
-            window = owner
-        case .success(nil):
-            return .unreadable(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
-        case .failure(let error):
-            return .unreadable(error)
+        if let ownerWindow {
+            window = ownerWindow
+        } else {
+            switch AXHelpers.getAttributeResult(
+                table, kAXWindowAttribute as String, runtime: runtime
+            ) as Result<AXUIElement?, AXHelpers.AXStatusError> {
+            case .success(let owner?):
+                window = owner
+            case .success(nil):
+                return .unreadable(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+            case .failure(let error):
+                return .unreadable(error)
+            }
         }
         switch markerListNumberOfItemsNodes(in: window, runtime: runtime) {
         case .failure(let error):
@@ -738,7 +758,20 @@ extension AXLogicProElements {
         guard let first = trimmed.first, first.isASCII, first.isNumber else { return nil }
         let leadingDigits = trimmed.prefix { $0.isASCII && $0.isNumber }
         let rest = trimmed[leadingDigits.endIndex...]
-        guard rest.isEmpty || (rest.first?.isWhitespace ?? false) else { return nil }
+        // English separates the count from its noun with a space (`"15 Markers"`), but Korean and
+        // Japanese do not: measured on a live Logic 12.3 on 2026-08-17, the same node renders
+        // `2개의 마커` and `0個のマーカー`, where the counter word abuts the digits. Requiring
+        // whitespace there made the witness unparseable in both locales, which is not a locale
+        // detail — this count is what the delete receipt needs for State A, so `nav.delete_marker`
+        // could not certify on a Korean or Japanese Logic at all.
+        //
+        // The relaxation is narrow on purpose: the character after the digits may be whitespace or
+        // NON-ASCII (a CJK counter word). An ASCII letter is still a refusal, so `"1st"` or `"0x1F"`
+        // cannot become a count, and the two original rules stand — the value must OPEN with the
+        // digit run, so a decoy like `"Marker 2"` never parses, and no digit may appear after it.
+        guard rest.isEmpty
+                || (rest.first?.isWhitespace ?? false)
+                || !(rest.first?.isASCII ?? true) else { return nil }
         guard !rest.contains(where: { $0.isASCII && $0.isNumber }) else { return nil }
         return Int(leadingDigits)
     }

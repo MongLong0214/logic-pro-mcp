@@ -85,7 +85,12 @@ def logic_window(title_contains="Tracks"):
         Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements,
         Quartz.kCGNullWindowID)
     for w in wins or []:
-        if w.get("kCGWindowOwnerName") != "Logic Pro":
+        # Measured 2026-08-17: with Logic running in Korean, `kCGWindowOwnerName` comes back as
+        # "Logic Pro" — a NO-BREAK SPACE — while English and Japanese give an ordinary space.
+        # An exact compare therefore found ZERO Logic windows on a Korean Logic, and every capture
+        # in the run recorded `window: null` while Logic was plainly on screen.
+        owner = (w.get("kCGWindowOwnerName") or "").replace(" ", " ")
+        if owner != "Logic Pro":
             continue
         name = w.get("kCGWindowName") or ""
         if title_contains and title_contains not in name:
