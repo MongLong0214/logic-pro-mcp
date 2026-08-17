@@ -59,18 +59,23 @@ struct Issue545DeleteConfirmBareLabelTests {
         #expect(kind != .unknownSheet)
     }
 
-    @Test("the Korean bare primary button (삭제) classifies as deleteConfirm")
-    func bareKoreanDeleteClassifiesAsDeleteConfirm() {
-        let kind = classifiedKind(primaryButtonTitle: "삭제")
-        #expect(kind == .deleteConfirm)
-        #expect(kind != .unknownSheet)
-    }
-
-    @Test("the Japanese bare primary button (削除) classifies as deleteConfirm")
-    func bareJapaneseDeleteClassifiesAsDeleteConfirm() {
-        let kind = classifiedKind(primaryButtonTitle: "削除")
-        #expect(kind == .deleteConfirm)
-        #expect(kind != .unknownSheet)
+    @Test("unmeasured locale labels do NOT classify — the gap is real and is left fail-closed")
+    func unmeasuredLocaleLabelsDoNotClassify() {
+        // A revision of this suite asserted that 삭제 and 削除 classify as `.deleteConfirm`. Those two
+        // strings were translated by hand rather than read from the live sheet, which `AXLocalePolicy`'s
+        // header forbids — and forbids because a hand translation was already wrong in this app once
+        // (New is 신규, not the 새로 만들기 a translator reaches for). The tests then encoded the guess
+        // and agreed with it, which is how the ORIGINAL #545 fix passed six tests while doing nothing.
+        //
+        // Note what is NOT sufficient: `markerListDeleteMenuItem` carries a live-confirmed 삭제/削除, so
+        // these strings are real Logic labels somewhere in this app. That raises the prior; it is not a
+        // measurement of THIS button. The same app is exactly where 신규 and 새로 만들기 diverged.
+        //
+        // So the absence is asserted deliberately. Outside English these sheets classify as unknown and
+        // are left on screen — fail-closed, and the honest state of the gap (tracked in #519). Restoring
+        // the variants means changing this test, and changing it should require naming a measurement.
+        #expect(classifiedKind(primaryButtonTitle: "삭제") != .deleteConfirm)
+        #expect(classifiedKind(primaryButtonTitle: "削除") != .deleteConfirm)
     }
 
     @Test("the channel-strip sheet's full canonical label still classifies (no regression)")

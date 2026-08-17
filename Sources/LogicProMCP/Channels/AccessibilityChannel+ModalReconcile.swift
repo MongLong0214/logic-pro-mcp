@@ -877,6 +877,16 @@ extension AccessibilityChannel {
             ?? true
 
         return ModalSignalRead(signals: ModalReconciliation.ModalSignals(
+            // `sheetPresent` means "a modal container was read HERE", not "an `AXSheet` exists". This
+            // function is handed the container directly, so the answer is unconditionally true for
+            // whatever it was pointed at — including a top-level `AXWindow`/`AXDialog`, which is what
+            // #545's delete confirmation actually is. The name predates the measurement that Logic never
+            // vends `AXSheets` at all (`-25205` for that attribute, always), and reading it as a literal
+            // sheet test is exactly the inference that produced #545's first, wrong root cause: a fix
+            // aimed at sheet button labels, six passing tests, and no effect on the running path.
+            // `classify` gates `.deleteConfirm` behind this flag, so a reader who takes the name at face
+            // value concludes top-level dialogs cannot reach that case. They can, and live evidence
+            // shows they do.
             sheetPresent: true,
             sheetDescription: description,
             createButtonPresent: createButton != nil,
