@@ -16,8 +16,14 @@ import Testing
 /// `.unreadable`. These tests prove: (1) the reproduction is actually fixed, (2) the narrowing is
 /// exactly one role wide and does not casually swallow a role that COULD host a sheet, (3) a real
 /// sheet elsewhere in the same tree is still found — the narrowing must never blind the scan, and
-/// (4) a node whose OWN role read failed (so its role is unknown, not merely non-hosting) still
-/// poisons, because it could have been the sheet.
+/// (4) a node whose role this scan never read — the window root, the only such node — still poisons,
+/// because an unidentified node could have been the sheet.
+///
+/// Note what (4) does NOT cover, since the name once claimed it did: a CHILD whose own `AXRole` read
+/// fails never reaches the recursive call at all — it hits `continue` and is not descended into — so no
+/// node with a failed role read can ever arrive as `element`. That case is unreachable by construction
+/// and therefore untestable; the reachable `elementRole == nil` node is the window root, which is what
+/// this exercises.
 @Suite("Issue #549 — an AXCell that cannot host a sheet does not poison the scan")
 struct Issue549CellExclusionTests {
 
@@ -143,7 +149,7 @@ struct Issue549CellExclusionTests {
         #expect(CFEqual(sheet, sheetNode))
     }
 
-    @Test("a node whose OWN role read failed still poisons a subsequent children-read failure — identity unknown means it could have been the sheet")
+    @Test("a node whose role this scan never read still poisons its children-read failure — an unidentified node could have been the sheet")
     func unknownRoleChildrenFailureStillPoisons() throws {
         // The window root is the one node this scan ever descends into with `elementRole == nil`
         // for a reason OTHER than "role read failed": its role is never independently read at all
