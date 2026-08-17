@@ -293,19 +293,37 @@ extension AccessibilityChannel {
         let pre = selectedRegionInfo(runtime: runtime)
 
         let logicProAppleScript = LogicProTarget.appleScriptTarget()
+        // #519: bar/item/leaf names come from AXLocalePolicy's LabelSets (Edit/Move/To
+        // Playhead) instead of a hard-coded EN/KO literal pair — see AppleScriptMenuResolution.
+        let editBarResolution = AppleScriptMenuResolution.menuBarItem(
+            AXLocalePolicy.editMenuBar,
+            variableName: "editBarName",
+            notFoundError: "EDIT_MENU_BAR_NOT_FOUND"
+        )
+        let moveMenuItemResolution = AppleScriptMenuResolution.menuItem(
+            AXLocalePolicy.moveMenuItem,
+            under: "menu bar item editBarName of menu bar 1",
+            variableName: "moveItemName",
+            notFoundError: "MOVE_MENU_ITEM_NOT_FOUND"
+        )
+        let toPlayheadMenuItemResolution = AppleScriptMenuResolution.menuItem(
+            AXLocalePolicy.toPlayheadMenuItem,
+            under: "menu item moveItemName of menu 1 of menu bar item editBarName of menu bar 1",
+            variableName: "toPlayheadItemName",
+            notFoundError: "TO_PLAYHEAD_MENU_ITEM_NOT_FOUND"
+        )
         let script = """
         \(logicProAppleScript.activateByBundleID)
         delay 0.1
         tell application "System Events"
             tell \(logicProAppleScript.systemEventsProcessTarget)
                 try
-                    click menu item "재생헤드로" of menu 1 of menu item "이동" of menu 1 of menu bar item "편집" of menu bar 1
-                on error
-                    try
-                        click menu item "To Playhead" of menu 1 of menu item "Move" of menu 1 of menu bar item "Edit" of menu bar 1
-                    on error errMsg
-                        return "MENU_ERROR: " & errMsg
-                    end try
+                    \(editBarResolution)
+                    \(moveMenuItemResolution)
+                    \(toPlayheadMenuItemResolution)
+                    click menu item toPlayheadItemName of menu 1 of menu item moveItemName of menu 1 of menu bar item editBarName of menu bar 1
+                on error errMsg
+                    return "MENU_ERROR: " & errMsg
                 end try
             end tell
         end tell

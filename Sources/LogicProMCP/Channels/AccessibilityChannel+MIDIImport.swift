@@ -194,6 +194,25 @@ extension AccessibilityChannel {
         // `window whose subrole is "AXSheet"` (file chooser) — fall back to the
         // standard window if no sheet subrole is exposed on this build.
         let logicProAppleScript = LogicProTarget.appleScriptTarget()
+        // #519: bar/item/leaf names come from AXLocalePolicy's LabelSets (File/Import/MIDI
+        // File…) instead of a hard-coded EN/KO literal pair — see AppleScriptMenuResolution.
+        let importMenuBarResolution = AppleScriptMenuResolution.menuBarItem(
+            AXLocalePolicy.fileMenuBar,
+            variableName: "importBarName",
+            notFoundError: "IMPORT_MENU_BAR_NOT_FOUND"
+        )
+        let importMenuItemResolution = AppleScriptMenuResolution.menuItem(
+            AXLocalePolicy.importMenuItem,
+            under: "menu bar item importBarName of menu bar 1",
+            variableName: "importItemName",
+            notFoundError: "IMPORT_MENU_ITEM_NOT_FOUND"
+        )
+        let midiFileMenuItemResolution = AppleScriptMenuResolution.menuItem(
+            AXLocalePolicy.midiFileMenuItem,
+            under: "menu item importItemName of menu 1 of menu bar item importBarName of menu bar 1",
+            variableName: "midiFileItemName",
+            notFoundError: "MIDI_FILE_MENU_ITEM_NOT_FOUND"
+        )
         let script = """
         on importMIDI()
             \(logicProAppleScript.activateByBundleID)
@@ -213,13 +232,12 @@ extension AccessibilityChannel {
                 end tell
                 tell \(logicProAppleScript.systemEventsProcessTarget)
                     try
-                        click menu item "MIDI 파일…" of menu 1 of menu item "가져오기" of menu 1 of menu bar item "파일" of menu bar 1
-                    on error
-                        try
-                            click menu item "MIDI File…" of menu 1 of menu item "Import" of menu 1 of menu bar item "File" of menu bar 1
-                        on error errMsg
-                            return "MENU_ERROR: " & errMsg
-                        end try
+                        \(importMenuBarResolution)
+                        \(importMenuItemResolution)
+                        \(midiFileMenuItemResolution)
+                        click menu item midiFileItemName of menu 1 of menu item importItemName of menu 1 of menu bar item importBarName of menu bar 1
+                    on error errMsg
+                        return "MENU_ERROR: " & errMsg
                     end try
                 end tell
                 -- Poll for the file-open sheet to actually exist before typing

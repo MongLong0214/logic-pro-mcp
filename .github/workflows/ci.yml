@@ -28,6 +28,18 @@ jobs:
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
 
+      - name: Self-test the menu-literal guard (#519)
+        # A guard nobody has watched fail is decoration. This asserts each known evasion is caught, that
+        # legitimate code is not flagged, and that a tree the guard cannot examine is never reported
+        # clean — the failure the guard itself had before review.
+        run: bash Scripts/test-menu-literal-guard.sh
+
+      - name: Forbid hard-coded menu-bar item literals (#519 locale-routing)
+        # A literal `menu bar item "..."` cannot reach the extra locale variants
+        # AXLocalePolicy already records for that menu. Fail fast before the build if one
+        # reappears — see the script for the full rationale.
+        run: bash Scripts/ci-forbid-hardcoded-menu-bar-item.sh
+
       - name: Cache SwiftPM and build products
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
@@ -61,6 +73,18 @@ jobs:
         # `#expect(<Bool> == true/false)` and kin pass unconditionally on this toolchain — they
         # prove nothing. Fail fast (no Xcode needed) before the build if any reappear.
         run: bash Scripts/ci-forbid-dead-expect.sh
+
+      - name: Self-test the menu-literal guard (#519)
+        # A guard nobody has watched fail is decoration. This asserts each known evasion is caught, that
+        # legitimate code is not flagged, and that a tree the guard cannot examine is never reported
+        # clean — the failure the guard itself had before review.
+        run: bash Scripts/test-menu-literal-guard.sh
+
+      - name: Forbid hard-coded menu-bar item literals (#519 locale-routing)
+        # A literal `menu bar item "..."` cannot reach the extra locale variants
+        # AXLocalePolicy already records for that menu. Fail fast before the build if one
+        # reappears — see the script for the full rationale.
+        run: bash Scripts/ci-forbid-hardcoded-menu-bar-item.sh
 
       - name: Cache SwiftPM and build products
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4

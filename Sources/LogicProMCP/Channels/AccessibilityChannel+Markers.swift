@@ -304,22 +304,22 @@ extension AccessibilityChannel {
         )
     }
 
-    private enum MarkerMenuAction {
+    enum MarkerMenuAction {
         case openList
         case create
     }
 
-    private static func pressMarkerMenuItem(_ action: MarkerMenuAction) async -> ChannelResult {
+    /// Kept internal so the #519 menu-locale regression tests can assert the exact generated
+    /// AppleScript (label coverage, canonical-first ordering, the Escape-on-error path) without
+    /// invoking Logic Pro. Pure text generation — no execution.
+    static func markerMenuActuationScript(_ action: MarkerMenuAction) -> String {
         let target = LogicProTarget.appleScriptTarget()
-        let englishItem: String
-        let koreanItem: String
+        let itemLabelSet: AXLocalePolicy.LabelSet
         switch action {
         case .openList:
-            englishItem = "Open Marker List"
-            koreanItem = "마커 목록 열기"
+            itemLabelSet = AXLocalePolicy.openMarkerListMenuItem
         case .create:
-            englishItem = "Create Marker"
-            koreanItem = "마커 생성"
+            itemLabelSet = AXLocalePolicy.createMarkerMenuItem
         }
         let focusBlock: String
         switch action {
@@ -337,45 +337,49 @@ extension AccessibilityChannel {
         case .openList:
             focusBlock = ""
         }
-        let script = """
+        // #519: resolve the Navigate bar/item names from AXLocalePolicy's LabelSets instead of
+        // hard-coding one EN/KO literal each — see AppleScriptMenuResolution for why.
+        let barResolution = AppleScriptMenuResolution.menuBarItem(
+            AXLocalePolicy.navigateMenuBar,
+            variableName: "barName",
+            notFoundError: "NAVIGATE_MENU_BAR_NOT_FOUND"
+        )
+        let itemResolution = AppleScriptMenuResolution.menuItem(
+            itemLabelSet,
+            under: "menu bar item barName of menu bar 1",
+            variableName: "itemName",
+            notFoundError: "NAVIGATE_MENU_ITEM_NOT_FOUND"
+        )
+        return """
         \(target.activateByBundleID)
         tell application "System Events"
             tell \(target.systemEventsProcessTarget)
                 set frontmost to true
         \(focusBlock)
-                if exists menu bar item "Navigate" of menu bar 1 then
-                    click menu bar item "Navigate" of menu bar 1
+                \(barResolution)
+                click menu bar item barName of menu bar 1
+                delay 0.1
+                -- #346: once the menu is open, ANY failure (item missing on a
+                -- wrong locale, or disabled) must Escape it before erroring so
+                -- the Navigate menu is never left open (wedging Logic).
+                try
+                    \(itemResolution)
+                    set targetItem to menu item itemName of menu 1 of menu bar item barName of menu bar 1
+                    if enabled of targetItem is false then error "menu item disabled"
+                    click targetItem
+                on error errMsg
+                    key code 53
                     delay 0.1
-                    -- #346: once the menu is open, ANY failure (item missing on a
-                    -- wrong locale, or disabled) must Escape it before erroring so
-                    -- the Navigate menu is never left open (wedging Logic).
-                    try
-                        set targetItem to menu item "\(englishItem)" of menu 1 of menu bar item "Navigate" of menu bar 1
-                        if enabled of targetItem is false then error "menu item disabled"
-                        click targetItem
-                    on error errMsg
-                        key code 53
-                        delay 0.1
-                        error errMsg
-                    end try
-                else
-                    click menu bar item "탐색" of menu bar 1
-                    delay 0.1
-                    try
-                        set targetItem to menu item "\(koreanItem)" of menu 1 of menu bar item "탐색" of menu bar 1
-                        if enabled of targetItem is false then error "menu item disabled"
-                        click targetItem
-                    on error errMsg
-                        key code 53
-                        delay 0.1
-                        error errMsg
-                    end try
-                end if
+                    error errMsg
+                end try
             end tell
         end tell
         return "clicked"
         """
-        return await AppleScriptChannel.executeAppleScript(script)
+    }
+
+    private static func pressMarkerMenuItem(_ action: MarkerMenuAction) async -> ChannelResult {
+        await AppleScriptChannel.executeAppleScript(markerMenuActuationScript(action))
     }
 
     private static func focusArrangeWindow(runtime: AXLogicProElements.Runtime) -> Bool {
