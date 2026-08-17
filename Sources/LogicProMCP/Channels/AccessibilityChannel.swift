@@ -345,6 +345,25 @@ actor AccessibilityChannel: Channel {
             return runtime.setCycleRange(params)
 
         case "transport.goto_position":
+            // The Go To Position dialog route needs a live transport read immediately before it, in
+            // the same request. Measured 2026-08-17 on Logic 12.3, three samples each way: as the
+            // first thing a fresh server process does, the route reports `menu_state:
+            // could_not_be_closed` with `menu_actuation_attempted: false` — it never tries, and no
+            // menu is open (an external System Events read counts zero). Adding this read turns
+            // 3/3 FAIL into 3/3 OK. The same read issued seconds earlier as a separate request does
+            // NOT help, so it is the immediacy that matters, not the warmth.
+            //
+            // It lives HERE rather than in the callers because that is what went wrong: every
+            // caller reaching this operation through `TransportDispatcher.handleGotoPosition` was
+            // covered by its `liveTransportState` pre-read, and `record_sequence` — the one caller
+            // that routes the operation directly — was not, so its mandatory playhead reset failed
+            // on every fresh process (#572). A precondition kept in each caller is a precondition
+            // one caller will miss.
+            //
+            // Why the route needs it is NOT established. What is established is the pair above: an
+            // in-request read fixes it and an earlier one does not. Do not delete this as a
+            // pointless warm-up without reproducing that pair first.
+            _ = runtime.transportState()
             return await AccessibilityChannel.gotoPositionViaBarSlider(
                 params: params, runtime: runtime.logicRuntime
             )
