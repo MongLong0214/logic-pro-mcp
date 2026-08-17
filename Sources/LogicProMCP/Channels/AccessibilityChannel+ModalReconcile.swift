@@ -85,15 +85,29 @@ extension AccessibilityChannel {
             }
         }
 
-        var envelopeExtras: [String: Any] {
-            var extras: [String: Any] = [
-                "reconciled_modal_unreadable_reason": wireReason
-            ]
-            if let status, let symbolicName = status.symbolicName {
+        /// #554: write this failure's fields TOTALLY — set the status pair, or remove it.
+        ///
+        /// `verifyTrackCreation` merges twice into one dictionary, and the status keys were written only
+        /// when the reason carried a status. A reason that carries none — `stray_menu_read_failed`,
+        /// `descendant_traversal_depth_cap` — therefore left the PREVIOUS reason's status standing beside
+        /// it, so a receipt could read `stray_menu_read_failed` with a `-25200` that belonged to a sheet
+        /// scan in an earlier poll. These two fields annotate whichever reason is currently reported;
+        /// they have to move with it or they describe something else.
+        func apply(to extras: inout [String: Any]) {
+            extras["reconciled_modal_unreadable_reason"] = wireReason
+            // Gate on the STATUS, not on its symbolic name. `AXStatusError.malformedAttribute` is a
+            // production sentinel (`Int32.min + 1`) that is deliberately outside `AXError`, so it has no
+            // symbolic name — and keying on the name deleted both fields for a failure that HAD a status,
+            // turning "we did not read one" into an assertion that none existed. That sentinel exists
+            // precisely to publish "a malformed payload has not said false"; dropping it at the exposure
+            // boundary destroys the distinction it was added for. `diagnosticLabel` names both kinds.
+            if let status {
                 extras["reconciled_modal_unreadable_ax_status"] = Int(status.raw)
-                extras["reconciled_modal_unreadable_ax_status_name"] = symbolicName
+                extras["reconciled_modal_unreadable_ax_status_name"] = status.symbolicName ?? status.diagnosticLabel
+            } else {
+                extras.removeValue(forKey: "reconciled_modal_unreadable_ax_status")
+                extras.removeValue(forKey: "reconciled_modal_unreadable_ax_status_name")
             }
-            return extras
         }
     }
 
@@ -2038,9 +2052,7 @@ extension AccessibilityChannel {
             // The classifier kind alone does not explain whether a discovered
             // blocker was unknown or a no-modal observation was incomplete.
             // This fixed diagnostic provenance carries that distinction.
-            for (key, value) in unreadableReason.envelopeExtras {
-                extras[key] = value
-            }
+            unreadableReason.apply(to: &extras)
         }
         // #549: which exact node/scan/attribute the sheet scan gave up on,
         // ADDITIVE beside the existing status-only fields above.

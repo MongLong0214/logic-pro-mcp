@@ -257,9 +257,7 @@ extension AccessibilityChannel {
             // boundary, but the bounded observer retried this read throughout
             // its budget.
             extras["modal_observation"] = "incomplete"
-            for (key, value) in modalUnreadableReason.envelopeExtras {
-                extras[key] = value
-            }
+            modalUnreadableReason.apply(to: &extras)
             // See mergeReconcileExtras: a sheet-scan failure carrying no companion detail says so
             // rather than omitting the field, because an omitted field reads as "no unreadable node".
             if let modalSheetScanFailureDetail {
@@ -447,9 +445,7 @@ extension AccessibilityChannel {
                     "safe_to_retry": false,
                 ]
                 if let lastModalUnreadableReason {
-                    for (key, value) in lastModalUnreadableReason.envelopeExtras {
-                        extras[key] = value
-                    }
+                    lastModalUnreadableReason.apply(to: &extras)
                 }
                 // See mergeReconcileExtras: an omitted field would read as "no unreadable node".
                 if let lastModalSheetScanFailureDetail {
