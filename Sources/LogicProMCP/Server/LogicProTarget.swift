@@ -416,8 +416,28 @@ struct LogicProTarget: Sendable, Equatable {
         return isKnownBundleID(bundleID)
     }
 
+    /// Whether a process/window-owner name is one of Logic's, compared with its internal spacing
+    /// normalised.
+    ///
+    /// Measured on macOS 15 with Logic Pro 12.3, 2026-08-17, by switching
+    /// `defaults write com.apple.logic10 AppleLanguages` and restarting:
+    /// `CGWindowListCopyWindowInfo`'s `kCGWindowOwnerName` answers `"Logic Pro"` with an ordinary
+    /// space in English and Japanese, and with a **NO-BREAK SPACE (U+00A0)** in Korean. An exact
+    /// compare against the manifest's `"Logic Pro"` therefore matched nothing on a Korean-UI Mac,
+    /// and `ProcessUtils.logicProPID(fromWindowList:)` silently found no Logic window at all — a
+    /// discriminator contributing nothing, for a reason having nothing to do with Logic.
+    ///
+    /// The normalisation is deliberately narrow: whitespace characters collapse to `U+0020`, so any
+    /// separator macOS localises to (U+00A0 here, U+202F elsewhere) still matches, while `LogicPro`
+    /// with the separator REMOVED does not. Fixing it here rather than adding a second literal to
+    /// the manifest keeps one locale's rendering from becoming a second product name.
     static func isLogicProcessName(_ name: String) -> Bool {
-        knownProcessNames.contains(name)
+        let normalized = normalizedProcessName(name)
+        return knownProcessNames.contains { normalizedProcessName($0) == normalized }
+    }
+
+    static func normalizedProcessName(_ name: String) -> String {
+        String(name.map { $0.isWhitespace ? " " : $0 })
     }
 
     /// Health/diagnostic label for the resolved variant.

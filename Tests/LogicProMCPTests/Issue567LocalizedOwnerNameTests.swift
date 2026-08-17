@@ -1,0 +1,56 @@
+import Testing
+@testable import LogicProMCP
+
+/// `kCGWindowOwnerName` for Logic Pro is locale-dependent.
+///
+/// Measured on macOS 15 with Logic Pro 12.3 on 2026-08-17, in both directions, by switching
+/// `defaults write com.apple.logic10 AppleLanguages` and restarting:
+///
+///     English   "Logic Pro"      U+0020
+///     Japanese  "Logic Pro"      U+0020
+///     Korean    "Logic\u{00A0}Pro"   NO-BREAK SPACE
+///
+/// `manifest.json` declares `"process_name": "Logic Pro"` with an ordinary space, so an exact
+/// compare found ZERO Logic windows on a Korean-UI Mac. The harness hit the identical bug first —
+/// every capture in a Korean run recorded `window: null` while Logic was plainly on screen.
+@Suite("#567 the window-owner name survives a localized separator")
+struct Issue567LocalizedOwnerNameTests {
+    /// The exact string CoreGraphics returned under a Korean UI.
+    private static let koreanOwnerName = "Logic\u{00A0}Pro"
+
+    @Test("the measured Korean owner name is recognised")
+    func koreanOwnerNameMatches() {
+        #expect(LogicProTarget.isLogicProcessName(Self.koreanOwnerName))
+        // The premise: it is genuinely a different string, so this is not a tautology.
+        #expect(Self.koreanOwnerName != "Logic Pro")
+    }
+
+    @Test("the ordinary-space name keeps matching")
+    func englishOwnerNameStillMatches() {
+        #expect(LogicProTarget.isLogicProcessName("Logic Pro"))
+        #expect(LogicProTarget.isLogicProcessName("Logic Pro Creator Studio"))
+    }
+
+    /// Any separator macOS localises to has to work, but a name with the separator REMOVED is a
+    /// different application name and must stay unmatched — otherwise the fix would be "ignore
+    /// spacing", which is a wider claim than the measurement supports.
+    @Test("other whitespace separators match, a removed separator does not")
+    func separatorHandlingIsNarrow() {
+        #expect(LogicProTarget.isLogicProcessName("Logic\u{202F}Pro"))
+        #expect(!LogicProTarget.isLogicProcessName("LogicPro"))
+        #expect(!LogicProTarget.isLogicProcessName("Logic Pro X"))
+        #expect(!LogicProTarget.isLogicProcessName("Not Logic Pro"))
+    }
+
+    @Test("the window-list resolver finds Logic under a Korean owner name")
+    func windowListResolverAcceptsTheKoreanName() throws {
+        // The one caller, exercised end to end: without the normalisation this returns nil and the
+        // visible-window PID route contributes nothing on a Korean Mac.
+        let pid = ProcessUtils.logicProPID(fromWindowList: [[
+            "kCGWindowOwnerName": Self.koreanOwnerName,
+            "kCGWindowOwnerPID": 4242,
+            "kCGWindowBounds": ["Width": 1920, "Height": 1050],
+        ]])
+        #expect(try #require(pid) == 4242)
+    }
+}
