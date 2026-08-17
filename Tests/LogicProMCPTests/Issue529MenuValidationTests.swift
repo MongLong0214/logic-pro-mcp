@@ -212,32 +212,42 @@ struct Issue529MenuValidationTests {
         // Mutation this rejects: restore either intermediate menu-bar/submenu click, or replace
         // either full leaf path with an object selected by a prior click. Both let a menu-bar click
         // block the script before the Go To Position dialog can open.
+        //
+        // #519: the bar/item/leaf names are each resolved from an AXLocalePolicy LabelSet
+        // (canonical first, then variants) instead of a hard-coded EN/KO literal branch pair, so
+        // the three read-only candidate loops below (bar, then "Go To", then "Position…") replace
+        // the old koreanDecision/englishDecision two-branch check.
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
-        let koreanDecision = try issue529Position(
-            of: "if exists menu item \"위치…\"",
+        // Candidate lists are derived from the LabelSets rather than spelled out: a measured label
+        // added to AXLocalePolicy must not break an ordering test that is about ordering.
+        func candidateList(_ set: AXLocalePolicy.LabelSet) -> String {
+            "repeat with candidate in {" + set.labels.map { "\"\($0)\"" }.joined(separator: ", ") + "}"
+        }
+        let barResolution = try issue529Position(
+            of: candidateList(AXLocalePolicy.navigateMenuBar),
             in: script
         )
-        let englishDecision = try issue529Position(
-            of: "else if exists menu item \"Position…\"",
+        let itemResolution = try issue529Position(
+            of: candidateList(AXLocalePolicy.goToMenuItem),
+            in: script
+        )
+        let leafResolution = try issue529Position(
+            of: candidateList(AXLocalePolicy.goToPositionMenuItem),
             in: script
         )
         let enabledRead = try issue529Position(
-            of: "set menuItemEnabled to enabled of menu item \"위치…\"",
+            of: "set menuItemEnabled to enabled of menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
             in: script
         )
-        let koreanLeaf = try issue529Position(
-            of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
-            in: script
-        )
-        let englishLeaf = try issue529Position(
-            of: "click menu item \"Position…\" of menu 1 of menu item \"Go To\" of menu 1 of menu bar item \"Navigate\" of menu bar 1",
+        let leafClick = try issue529Position(
+            of: "click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
             in: script
         )
 
-        #expect(koreanDecision < englishDecision)
-        #expect(englishDecision < enabledRead)
-        #expect(enabledRead < koreanLeaf)
-        #expect(koreanLeaf < englishLeaf)
+        #expect(barResolution < itemResolution)
+        #expect(itemResolution < leafResolution)
+        #expect(leafResolution < enabledRead)
+        #expect(enabledRead < leafClick)
         #expect(!script.contains("click menu bar item"))
         #expect(!script.contains("selectedMenuBarItem"))
         #expect(!script.contains("selectedSubmenuItem"))
@@ -272,7 +282,7 @@ struct Issue529MenuValidationTests {
         // it. The leaf can issue successfully while Logic has not rendered the modal yet.
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
         let leafClick = try issue529Position(
-            of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
+            of: "click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
             in: script
         )
         let readyPoll = try issue529Position(
@@ -298,9 +308,14 @@ struct Issue529MenuValidationTests {
             in: script
         )
         let firstOperationalDelay = try issue529Position(of: "delay 0.2", in: script)
-        let localeDecision = try issue529Position(of: "if exists menu item \"위치…\"", in: script)
+        let localeDecision = try issue529Position(
+            of: "repeat with candidate in {"
+                + AXLocalePolicy.navigateMenuBar.labels.map { "\"\($0)\"" }.joined(separator: ", ")
+                + "}",
+            in: script
+        )
         let leafClick = try issue529Position(
-            of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
+            of: "click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
             in: script
         )
 
@@ -318,7 +333,12 @@ struct Issue529MenuValidationTests {
             of: "if entryMenuCleanup is not \"CLOSED\" then",
             in: script
         )
-        let localeDecision = try issue529Position(of: "if exists menu item \"위치…\"", in: script)
+        let localeDecision = try issue529Position(
+            of: "repeat with candidate in {"
+                + AXLocalePolicy.navigateMenuBar.labels.map { "\"\($0)\"" }.joined(separator: ", ")
+                + "}",
+            in: script
+        )
 
         #expect(entryGuard < localeDecision)
         #expect(script.contains("if menuState is \"UNREADABLE\" and not knownOpen then return \"UNREADABLE\""))
@@ -400,7 +420,7 @@ struct Issue529MenuValidationTests {
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
         let attempted = try issue529Position(of: "set menuActuationAttempted to true", in: script)
         let leafClick = try issue529Position(
-            of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
+            of: "click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
             in: script
         )
         let leafErrorHandlerEnd = try issue529Position(of: "-- Wait up to 3s for a new exact modal dialog", in: script)
@@ -490,7 +510,7 @@ struct Issue529MenuValidationTests {
         // CGEvent would post `/`, the position text, and Return into that still-open dialog.
         let script = AccessibilityChannel.gotoPositionViaDialogAppleScript(bar: 529)
         let leafClick = try issue529Position(
-            of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
+            of: "click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
             in: script
         )
         let leafFailureBlock = String(script[leafClick...])
@@ -1297,7 +1317,7 @@ struct Issue529MenuValidationTests {
             of: "set preLeafGoToPositionWindows to every window as list", in: script
         )
         let leafClick = try issue529Position(
-            of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
+            of: "click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
             in: script
         )
         let stateStart = try issue529Position(
@@ -1350,7 +1370,7 @@ struct Issue529MenuValidationTests {
             of: "recordDialogIssuance(\"LEAF_ARMED\"", in: script
         )
         let leafClick = try issue529Position(
-            of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
+            of: "click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
             in: script
         )
         let returnCheckpoint = try issue529Position(
@@ -1422,14 +1442,22 @@ func dismissalContextKeepsLocaleReadsUnownedUntilResolvedLeafIssuance() throws {
 
     // Entry, locale discovery, enabled/disabled handling, and a failed durable checkpoint are all
     // unowned until the resolved leaf is actually issued.
-    #expect(issue529Positions(of: "my dismissOpenMenu(logicProcess, false)", in: script).count == 6)
+    //
+    // #519: locale discovery used to have two textually separate cleanup call sites — an explicit
+    // "no candidate exists" branch and a catch-all `on error errMsg` handler — because the old
+    // if/else-if chain distinguished "nothing matched" from "reading a candidate raised an AX
+    // error". The candidate-loop resolution now raises the SAME kind of AppleScript `error` for
+    // both ("not found" and "unreadable" are no longer distinguishable, which the old code did not
+    // rely on either — both returned the same MENU_NOT_FOUND-prefixed refusal), so one shared
+    // `on error errMsg` handler covers what used to be two call sites: 5 sites, not 6.
+    #expect(issue529Positions(of: "my dismissOpenMenu(logicProcess, false)", in: script).count == 5)
 
     let leafCheckpoint = try issue529Position(
         of: "recordDialogIssuance(\"LEAF_ARMED\"",
         in: script
     )
     let resolvedLeaf = try issue529Position(
-        of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
+        of: "click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
         in: script
     )
     #expect(leafCheckpoint < resolvedLeaf)
@@ -1464,7 +1492,7 @@ func gotoPositionDialogRequiresNewCountAndBracketedFocusedBinding() throws {
         in: script
     )
     let leafClick = try issue529Position(
-        of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
+        of: "click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
         in: script
     )
     let observedDialog = try issue529Position(
@@ -1558,7 +1586,7 @@ func gotoPositionDialogRefusesPreexistingMatchingDialogBeforeLeaf() throws {
         of: "if preLeafGoToPositionDialogCount is greater than 0 then", in: script
     )
     let leaf = try issue529Position(
-        of: "click menu item \"위치…\" of menu 1 of menu item \"이동\" of menu 1 of menu bar item \"탐색\" of menu bar 1",
+        of: "click menu item positionName of menu 1 of menu item goToName of menu 1 of menu bar item barName of menu bar 1",
         in: script
     )
     let matcherStart = try issue529Position(
