@@ -86,11 +86,33 @@ def dialog_count():
     return int(raw) if raw.isdigit() else None
 
 
+def _project_mtime():
+    """Modification time of the open project's bundle, or None if it cannot be read.
+
+    `.logicx` is a directory bundle, so stat the ProjectData inside it: macOS updates a directory's
+    mtime for reasons unrelated to Logic saving, which would make a false RED and, worse, a false GREEN
+    if it happened to be stable for the wrong reason.
+    """
+    try:
+        return os.stat(os.path.join(PROJECT, "Alternatives", "000", "ProjectData")).st_mtime
+    except OSError:
+        try:
+            return os.stat(PROJECT).st_mtime
+        except OSError:
+            return None
+
+
 def tracks():
     """A `select` forces a live AX read; without it the resource answers with synthesised names."""
     d.tool("logic_tracks", "select", {"index": 0})
     return d.resource("logic://tracks").get("data", []) or []
 
+
+# The open project's bundle, derived from the window title rather than hard-coded, so this harness is
+# not silently bound to one machine's file layout.
+_title = (E.logic_window() or {}).get("title", "")
+PROJECT = os.path.expanduser("~/Music/Logic/" + _title.replace(" - Tracks", ""))
+disk_before = _project_mtime()
 
 win = E.logic_window()
 if not win:
@@ -206,9 +228,9 @@ ev.check("545/no-dialog-is-left-on-screen",
 # `reason=None`, so on a run where the delete never got as far as raising the dialog this check went
 # GREEN while proving nothing — it passed for a reason unrelated to what it claims to measure.
 ev.check("545/the-dialog-was-recognised-not-refused-as-unknown",
-         seen["max"] >= 1 and reason != "unknown_sheet",
-         "the reconciler classified the delete-confirm dialog instead of falling through to the generic "
-         "fail-closed blocker",
+         seen["max"] >= 1 and reconciled == "delete_confirm",
+         "the reconciler positively classified the dialog as delete_confirm — asserted on the kind it "
+         "reports, not on the ABSENCE of unknown_sheet, which any nil satisfies",
          f"dialog_seen={seen['max']} state={state!r} reason={reason!r} "
          f"reconciled_modal_kind={reconciled!r}",
          "removed the .deleteConfirm case from the top-level dialog switch; the receipt reported "
@@ -234,11 +256,17 @@ ev.visual("545/the-row-goes-away",
           why="the deleted track has to disappear from the rail; pixels witness the removal without "
               "trusting any AX read")
 
-ev.restored("545/the-project-on-disk-is-untouched", True,
-            "the run deletes a track in memory and never saves; the .logicx bundle is not written")
+# Measured, not asserted. This was `restored(..., True, ...)` — a literal that cannot fail, in the one
+# record type whose whole purpose is to prove the run cleaned up after itself. Compare the bundle's
+# modification time across the run: deleting a track in memory must not write the .logicx.
+disk_after = _project_mtime()
+ev.restored("545/the-project-on-disk-is-untouched",
+            disk_before is not None and disk_before == disk_after,
+            f"{PROJECT!r} mtime {disk_before!r} -> {disk_after!r}; None means the bundle could not be "
+            f"read, which is a failed measurement rather than a clean restore")
 
 ev.stop_recording(rec)
 d.close()
 out = ev.write()
 print(json.dumps(out, indent=1))
-sys.exit(0 if out.get("passed") else 1)
+sys.exit(0 if E.is_clean(out) else 1)

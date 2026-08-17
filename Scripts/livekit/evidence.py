@@ -435,6 +435,29 @@ class Evidence:
         }
 
 
+def is_clean(summary):
+    """Whether a run may be reported as passing.
+
+    Exists because every harness got this wrong the same way: `sys.exit(0 if out["passed"] else 1)`.
+    `passed` is a COUNT, not a boolean — 5-of-7 is truthy, so a harness with two red checks exited 0 and
+    reported success. The only value that failed was zero, i.e. a run where NOTHING passed. A harness
+    whose exit code cannot express failure is not an instrument.
+
+    Every dimension the evidence document tracks has to be clean, not just the check count: an unsettled
+    capture, a failed visual assertion, a restoration that did not happen, or a cached read presented as
+    live each invalidate the run on their own.
+    """
+    return (
+        summary.get("checks", 0) > 0
+        and summary.get("passed") == summary.get("checks")
+        and summary.get("visual_failed", 0) == 0
+        and summary.get("captures_unsettled", 0) == 0
+        and summary.get("captures_straddling_displays", 0) == 0
+        and summary.get("restorations_failed", 0) == 0
+        and summary.get("cached_reads_used_as_live", 0) == 0
+    )
+
+
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------

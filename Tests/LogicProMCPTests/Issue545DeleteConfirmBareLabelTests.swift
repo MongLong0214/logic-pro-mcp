@@ -113,3 +113,117 @@ struct Issue545DeleteConfirmBareLabelTests {
         #expect(!ModalReconciliation.preflightShouldPerform(kind: kind, clearMandatoryNewTrack: false))
     }
 }
+
+// MARK: - The shape that actually runs live
+
+/// Everything above classifies a fixture built with `AXSheets`. Logic never vends that attribute — it
+/// answers `-25205` for it, always — so `readModalSignals(runtime:)` returns through the sheet branch
+/// and `topLevelDialogRead` is never entered. Those tests therefore stay green with the #545 routing
+/// deleted, which is the identical defect that let the FIRST #545 fix pass six tests while changing
+/// nothing on the running path. This fixture builds what Logic actually presents: a top-level
+/// `AXWindow` with `AXModal == true` and no sheets, carrying a bare "Delete" and a "Cancel".
+private struct TopLevelDeleteConfirmFixture {
+    let runtime: AXLogicProElements.Runtime
+    let deletePresses: Locked545Counter
+}
+
+private func makeTopLevelDeleteConfirmFixture(
+    primaryButtonTitle: String
+) -> TopLevelDeleteConfirmFixture {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(545_900)
+    let modal = builder.element(545_901)
+    let primary = builder.element(545_902)
+    let cancel = builder.element(545_903)
+    let deletePresses = Locked545Counter()
+    let actionIssued = Locked545Flag()
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, modal)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [modal])
+    builder.setAttribute(modal, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(modal, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    builder.setAttribute(modal, kAXModalAttribute as String, true)
+    builder.setAttribute(modal, kAXDescriptionAttribute as String, "Delete Track and Regions?")
+    // Deliberately NO AXSheets attribute anywhere: that is the whole point of this fixture.
+    builder.setAttribute(primary, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(primary, kAXTitleAttribute as String, primaryButtonTitle)
+    builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+    builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+    builder.setChildren(modal, [primary, cancel])
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueResultHandler: { element, attribute in
+            // Once the dialog has been answered it is gone, so later reads of it fail the way a real
+            // dismissed AX element does. Without this the reconciler keeps seeing a dialog it pressed.
+            guard actionIssued.get(),
+                  CFEqual(element, modal),
+                  attribute == (kAXRoleAttribute as String)
+            else { return nil }
+            return .failure(AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue))
+        },
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            guard CFEqual(element, primary), action == (kAXPressAction as String) else { return false }
+            _ = deletePresses.next()
+            actionIssued.set()
+            return true
+        }
+    )
+    return TopLevelDeleteConfirmFixture(runtime: runtime, deletePresses: deletePresses)
+}
+
+@Test("a top-level modal delete-confirm is routed and pressed, not left on screen")
+func topLevelDeleteConfirmIsActionable() async {
+    let fixture = makeTopLevelDeleteConfirmFixture(primaryButtonTitle: "Delete")
+
+    let outcome = await AccessibilityChannel.reconcileAfterMutation(
+        isDeleteContext: true,
+        runtime: fixture.runtime,
+        witnessAttempts: 1,
+        witnessDelayNanoseconds: 0
+    )
+
+    // Mutation `top-level-delete-confirm-as-generic-blocker`: remove the `.deleteConfirm` arms from the
+    // top-level dialog switch and from `readRemainingModalSignals`. The dialog then falls through to
+    // `.blocking` -> `unknownSheet` and is left standing — the live #545 symptom — while every
+    // sheet-shaped test in this file stays green.
+    #expect(outcome.kind == .deleteConfirm)
+    #expect(outcome.actionAttempted)
+    #expect(fixture.deletePresses.current() == 1)
+}
+
+@Test("a top-level modal delete-confirm is NOT pressed outside a delete context")
+func topLevelDeleteConfirmIsNotPressedWithoutDeleteContext() async {
+    let fixture = makeTopLevelDeleteConfirmFixture(primaryButtonTitle: "Delete")
+
+    // The gate that makes routing this dialog safe at all. Recognising a destructive confirmation must
+    // never by itself be permission to answer one this server did not ask for.
+    let outcome = await AccessibilityChannel.reconcileAfterMutation(
+        isDeleteContext: false,
+        runtime: fixture.runtime,
+        witnessAttempts: 1,
+        witnessDelayNanoseconds: 0
+    )
+
+    #expect(fixture.deletePresses.current() == 0)
+    #expect(!outcome.actionAttempted)
+}
+
+
+/// File-private counters. `Issue538ModalWitnessTests` declares equivalents but they are `private` to
+/// that file, so these are named distinctly rather than widened — a shared helper would couple two
+/// suites that are deliberately independent.
+private final class Locked545Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    func next() -> Int { lock.lock(); defer { lock.unlock() }; value += 1; return value }
+    func current() -> Int { lock.lock(); defer { lock.unlock() }; return value }
+}
+
+private final class Locked545Flag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    func set() { lock.lock(); defer { lock.unlock() }; value = true }
+    func get() -> Bool { lock.lock(); defer { lock.unlock() }; return value }
+}
