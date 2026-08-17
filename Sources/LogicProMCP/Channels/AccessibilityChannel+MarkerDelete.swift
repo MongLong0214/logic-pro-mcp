@@ -688,7 +688,7 @@ extension AccessibilityChannel {
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> MarkerListItemCountRead {
-        switch findMarkerListNumberOfItemsNodes(in: window, runtime: runtime) {
+        switch AXLogicProElements.markerListNumberOfItemsNodes(in: window, runtime: runtime) {
         case .failure(let error):
             return .unreadable(error)
         case .success(let nodes) where nodes.isEmpty:
@@ -711,7 +711,7 @@ extension AccessibilityChannel {
                 } else {
                     return .unparseable(raw: "")
                 }
-                guard let parsed = parseMarkerListItemCount(raw) else {
+                guard let parsed = AXLogicProElements.parseMarkerListItemCount(raw) else {
                     return .unparseable(raw: raw)
                 }
                 return .parsed(parsed, raw: raw)
@@ -719,128 +719,6 @@ extension AccessibilityChannel {
         }
     }
 
-    /// Walks the already-bound Marker List window for AXStaticText nodes matching
-    /// `AXLocalePolicy.markerListNumberOfItemsLabel`, by AXDescription OR AXHelp — the same
-    /// two-attribute precedent `EventListReadbackCollector.readStaticText(help:)` uses for its
-    /// own "Number of Items" node. The table, button, and menu-button subtrees are skipped:
-    /// none of them can contain this witness (it sits under an AXGroup), and descending into
-    /// AXRows/AXChildren or the Edit control's own menu-negotiation subtree would couple this
-    /// witness to failure modes it exists to outvote, or to the unrelated menu route's own
-    /// read/retry discipline.
-    ///
-    /// Uniqueness can only be trusted when the entire searched subtree answered. A node that
-    /// will not answer might have been hiding a second "Number of Items" node — one whose
-    /// parent alone refuses to vend AXChildren, for instance — so finding exactly one match
-    /// elsewhere does NOT prove that match is unique. Any unreadable node anywhere in the
-    /// SEARCHED subtree therefore makes the whole search unreadable, regardless of how many
-    /// matches were already collected; only a walk that saw every candidate in scope can call
-    /// a single match unique.
-    private static func findMarkerListNumberOfItemsNodes(
-        in window: AXUIElement,
-        runtime: AXHelpers.Runtime
-    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
-        var matches: [AXUIElement] = []
-        var parents = [window]
-        var unreadable: AXHelpers.AXStatusError?
-        for _ in 0..<12 {
-            var next: [AXUIElement] = []
-            for parent in parents {
-                let children: [AXUIElement]
-                switch AXHelpers.childrenResult(parent, runtime: runtime) {
-                case .success(let observedChildren):
-                    children = observedChildren
-                case .failure(let error) where error.isDefinitiveAbsence:
-                    children = []
-                case .failure(let error):
-                    unreadable = unreadable ?? error
-                    children = []
-                }
-                for child in children {
-                    var childRole: String?
-                    switch AXHelpers.getAttributeResult(
-                        child, kAXRoleAttribute as String, runtime: runtime
-                    ) as Result<String?, AXHelpers.AXStatusError> {
-                    case .success(let role):
-                        childRole = role
-                        if role == (kAXStaticTextRole as String) {
-                            var matched = false
-                            switch AXHelpers.getAttributeResult(
-                                child, kAXDescriptionAttribute as String, runtime: runtime
-                            ) as Result<String?, AXHelpers.AXStatusError> {
-                            case .success(let description):
-                                matched = AXLocalePolicy.markerListNumberOfItemsLabel.matches(
-                                    description, mode: .exactStrict
-                                )
-                            case .failure(let error) where error.isDefinitiveAbsence:
-                                break
-                            case .failure(let error):
-                                unreadable = unreadable ?? error
-                            }
-                            if !matched {
-                                switch AXHelpers.getAttributeResult(
-                                    child, kAXHelpAttribute as String, runtime: runtime
-                                ) as Result<String?, AXHelpers.AXStatusError> {
-                                case .success(let help):
-                                    matched = AXLocalePolicy.markerListNumberOfItemsLabel.matches(
-                                        help, mode: .exactStrict
-                                    )
-                                case .failure(let error) where error.isDefinitiveAbsence:
-                                    break
-                                case .failure(let error):
-                                    unreadable = unreadable ?? error
-                                }
-                            }
-                            if matched {
-                                matches.append(child)
-                            }
-                        }
-                    case .failure(let error) where error.isDefinitiveAbsence:
-                        break
-                    case .failure(let error):
-                        unreadable = unreadable ?? error
-                    }
-                    // The independent count is not inside the Marker Table, and not inside a
-                    // button or menu button — Logic's own "Number of Items" text sits under an
-                    // AXGroup, never under a control. Do not descend into a projection we
-                    // already know can omit rows, or into the Edit control's OWN subtree: that
-                    // subtree's read health is coupled to the unrelated menu-route negotiation
-                    // (`AXShowMenu`/`AXCancel` observation), which has its own retry discipline
-                    // and must not be able to poison this witness by proxy.
-                    if childRole != (kAXTableRole as String),
-                       childRole != (kAXMenuButtonRole as String),
-                       childRole != (kAXButtonRole as String) {
-                        next.append(child)
-                    }
-                }
-            }
-            parents = next
-        }
-        // An unreadable node anywhere in this walk means uniqueness was never established,
-        // even when exactly one match was found: the part of the tree that would not answer
-        // could have been hiding a second candidate. Check this BEFORE looking at `matches`.
-        if let unreadable {
-            return .failure(unreadable)
-        }
-        return .success(matches)
-    }
-
-    /// Defensive parse of Logic's Number of Items value, following the same leading-token rule
-    /// as the Event List reader's `parseCount`: the value must OPEN with an ASCII digit run,
-    /// immediately followed by end-of-string or whitespace, with no further digits anywhere
-    /// after. `runs.count == 1` alone is not that rule — it accepts a single digit run
-    /// ANYWHERE in the string, so a value like `"Marker 2"` (a decoy or a differently-labelled
-    /// sibling) parses as `2` even though its single ASCII run is not the item count. That
-    /// manufactured number can look exactly like a genuine drop while the selection merely
-    /// moved. A failed parse is never published as zero.
-    private static func parseMarkerListItemCount(_ text: String) -> Int? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let first = trimmed.first, first.isASCII, first.isNumber else { return nil }
-        let leadingDigits = trimmed.prefix { $0.isASCII && $0.isNumber }
-        let rest = trimmed[leadingDigits.endIndex...]
-        guard rest.isEmpty || (rest.first?.isWhitespace ?? false) else { return nil }
-        guard !rest.contains(where: { $0.isASCII && $0.isNumber }) else { return nil }
-        return Int(leadingDigits)
-    }
 
     /// The terminal outcome of the fixed six-poll settle budget. Keeping these cases separate
     /// prevents a readable ambiguous inventory from being reported as an unreadable readback
