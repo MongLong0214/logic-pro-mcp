@@ -15,6 +15,16 @@ extension AccessibilityChannel {
     /// Track index is assigned by matching region Y-midpoint to the closest track-header
     /// Y-midpoint. If no track headers can be read (e.g. scrolled offscreen), returns
     /// index -1 so the caller can still see the regions.
+    /// What the AX region enumeration can see, and why it can never claim more.
+    ///
+    /// Logic exposes region layout items only for the part of the arrangement currently in view, so
+    /// `enumerateRegionItems` is scope-limited by construction. These two constants exist so the
+    /// readers that DEPEND on that limitation name the same thing the inventory payload does —
+    /// `midi.import_file` reported an empty region result as a definite failure while this file was
+    /// already publishing `complete: false` on every read (#576).
+    static let regionReadbackScope = "visible_arrange_area"
+    static let regionReadbackLimitReason = "logic_ax_viewport_only"
+
     static func defaultGetRegions(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
         switch enumerateRegionItems(runtime: runtime) {
         case .failure(let err):
@@ -24,8 +34,8 @@ extension AccessibilityChannel {
             return encodeResult(RegionInventoryPayload(
                 regions: regions,
                 complete: false,
-                scope: "visible_arrange_area",
-                reason: "logic_ax_viewport_only",
+                scope: regionReadbackScope,
+                reason: regionReadbackLimitReason,
                 returnedCount: regions.count,
                 debug: RegionInventoryPayload.Debug(
                     layoutItems: result.layoutItemCount,
