@@ -391,15 +391,26 @@ enum AXLocalePolicy {
         rationale: "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled)."
     )
 
-    /// #346/#350: primary destructive button on the "delete channel strips that
-    /// are assigned to tracks!" confirm sheet. KO variant is UNVERIFIED (no live
-    /// capture), so `variants` stays empty; KO detection degrades to the
-    /// structural `Delete `-prefix check (fail-closed — a wrong-title guess or
-    /// keyboard fallback is never fabricated).
+    /// #346/#350/#545: primary destructive button on the track-delete confirm sheets.
+    /// English forms are live-measured; non-English forms are NOT, so they are absent
+    /// rather than guessed and those locales degrade to fail-closed structural matching
+    /// (a wrong-title guess or keyboard fallback is never fabricated).
     static let deleteTracksPrimaryButton = LabelSet(
         canonical: "Delete Tracks and Content",
-        variants: [],
-        rationale: "Primary destructive button on the delete-channel-strips confirm sheet; reconciler presses only the classifier-bound AX element. KO UNVERIFIED → variants empty (fail-closed structural matching; no keyboard fallback)."
+        variants: ["Delete"],
+        rationale: """
+        Primary destructive button on a track-delete confirm sheet; the reconciler presses only the \
+        classifier-bound AX element. Logic uses more than one of these sheets and they do NOT share a \
+        button label: "Delete Tracks and Content" on the channel-strip sheet, and a bare "Delete" on \
+        "Delete Track and Regions?" (track carries regions) and "Delete Track and Cells?" (Live Loops \
+        cells) — both measured live on 12.3. The bare label is why #545 happened: the structural \
+        fallback tested `hasPrefix("Delete ")`, with a trailing space, which "Delete" does not satisfy, \
+        so those sheets classified as unknown and were left on screen. Accepting the bare label is safe \
+        because `decide` only confirms a delete when `isDeleteContext` is true and preflight never acts \
+        on `.deleteConfirm` at all.
+
+        NOT MEASURED: the KO and JA forms of this bare button. A revision of this set carried 삭제 and         削除, which were translated by hand rather than read from the live sheet — the one thing the         header of this file forbids, and forbids because a hand translation was already wrong here once         (New is 신규, not the 새로 만들기 a translator reaches for). Outside English the bare-label         sheets therefore still classify as unknown, which is the pre-#545 behaviour: fail-closed, dialog         left on screen. That is a real remaining gap, tracked with the other locale work in #519, and it         is stated rather than papered over with a guess that would silently press an unidentified         destructive button.
+        """
     )
 
     static let saveConfirmationButton = LabelSet(
