@@ -281,6 +281,26 @@ struct RegionInventoryPayload: Codable, Sendable {
     struct Debug: Codable, Sendable {
         let layoutItems: Int
         let nonRegion: Int
+        /// Every track in the project. Not viewport-limited, so it is the denominator a
+        /// completeness claim needs (#576).
+        let trackHeaders: Int?
+        /// How many of those are inside the visible bounds. Equal to `trackHeaders` means the
+        /// enumeration saw every track and an empty region result for any of them is genuine.
+        let trackHeadersInViewport: Int?
+
+        init(layoutItems: Int, nonRegion: Int, trackHeaders: Int? = nil, trackHeadersInViewport: Int? = nil) {
+            self.layoutItems = layoutItems
+            self.nonRegion = nonRegion
+            self.trackHeaders = trackHeaders
+            self.trackHeadersInViewport = trackHeadersInViewport
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case layoutItems
+            case nonRegion
+            case trackHeaders = "track_headers"
+            case trackHeadersInViewport = "track_headers_in_viewport"
+        }
     }
 
     let regions: [RegionInfo]
