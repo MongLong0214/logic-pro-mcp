@@ -227,7 +227,8 @@ extension AccessibilityChannel {
         observedWindowTitles: [String]?,
         observationBudgetMs: Int,
         witnessSummary: ModalReconcileWitnessSummary? = nil,
-        modalUnreadableReason: ModalReadFailure? = nil
+        modalUnreadableReason: ModalReadFailure? = nil,
+        modalSheetScanFailureDetail: ModalSheetScanFailureDetail? = nil
     ) -> String {
         var extras: [String: Any] = [
             "operation": "project.new",
@@ -258,6 +259,13 @@ extension AccessibilityChannel {
             extras["modal_observation"] = "incomplete"
             for (key, value) in modalUnreadableReason.envelopeExtras {
                 extras[key] = value
+            }
+            // See mergeReconcileExtras: a sheet-scan failure carrying no companion detail says so
+            // rather than omitting the field, because an omitted field reads as "no unreadable node".
+            if let modalSheetScanFailureDetail {
+                extras["reconciled_modal_unreadable_node"] = modalSheetScanFailureDetail.envelopeValue
+            } else if modalUnreadableReason.originatesInSheetScan {
+                extras["reconciled_modal_unreadable_node"] = ModalSheetScanFailureDetail.unrecordedEnvelopeValue
             }
         }
         return HonestContract.encodeStateB(
@@ -332,6 +340,10 @@ extension AccessibilityChannel {
         var mandatoryTrackCreateActionAttempted = false
         var mandatoryTrackCreateActionFailure: AXHelpers.AXActionError?
         var lastModalUnreadableReason: ModalReadFailure?
+        // #549: mirrors `lastModalUnreadableReason` at every site that sets/
+        // clears it, so the unknown-sheet envelope below can also name the
+        // exact node/scan behind the failure.
+        var lastModalSheetScanFailureDetail: ModalSheetScanFailureDetail?
         let attempts = max(1, observationAttempts)
         for attempt in 0..<attempts {
             try? await Task.sleep(nanoseconds: observationDelayNanoseconds)
@@ -349,12 +361,14 @@ extension AccessibilityChannel {
             if !outcome.modalObservationIsComplete {
                 if let unreadableReason = outcome.unreadableReason {
                     lastModalUnreadableReason = unreadableReason
+                    lastModalSheetScanFailureDetail = outcome.sheetScanFailureDetail
                 }
                 continue
             }
             // Do not carry a transient, already-resolved scan failure into a
             // later complete observation's final envelope.
             lastModalUnreadableReason = nil
+            lastModalSheetScanFailureDetail = nil
 
             switch outcome.kind {
             case .mandatoryNewTrack:
@@ -420,6 +434,7 @@ extension AccessibilityChannel {
                 // still ends in State B below without any unchecked action.
                 if let unreadableReason = outcome.unreadableReason {
                     lastModalUnreadableReason = unreadableReason
+                    lastModalSheetScanFailureDetail = outcome.sheetScanFailureDetail
                 }
                 guard attempt + 1 == attempts else { continue }
                 var extras: [String: Any] = [
@@ -435,6 +450,12 @@ extension AccessibilityChannel {
                     for (key, value) in lastModalUnreadableReason.envelopeExtras {
                         extras[key] = value
                     }
+                }
+                // See mergeReconcileExtras: an omitted field would read as "no unreadable node".
+                if let lastModalSheetScanFailureDetail {
+                    extras["reconciled_modal_unreadable_node"] = lastModalSheetScanFailureDetail.envelopeValue
+                } else if lastModalUnreadableReason?.originatesInSheetScan == true {
+                    extras["reconciled_modal_unreadable_node"] = ModalSheetScanFailureDetail.unrecordedEnvelopeValue
                 }
                 return .error(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
@@ -481,7 +502,8 @@ extension AccessibilityChannel {
                     witnessSummary: outcome.witnessSummary,
                     refusal: outcome.refusal,
                     actionFailure: outcome.actionFailure,
-                    unreadableReason: outcome.unreadableReason
+                    unreadableReason: outcome.unreadableReason,
+                    sheetScanFailureDetail: outcome.sheetScanFailureDetail
                 )
                 return .error(HonestContract.encodeStateB(
                     reason: .readbackUnavailable,
@@ -554,7 +576,8 @@ extension AccessibilityChannel {
             observedWindowTitles: observedWindowTitles(runtime: runtime),
             observationBudgetMs: attempts * Int(observationDelayNanoseconds / 1_000_000),
             witnessSummary: witnessSummary,
-            modalUnreadableReason: lastModalUnreadableReason
+            modalUnreadableReason: lastModalUnreadableReason,
+            modalSheetScanFailureDetail: lastModalSheetScanFailureDetail
         ))
     }
 
